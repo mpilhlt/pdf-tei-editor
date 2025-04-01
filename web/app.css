@@ -1,0 +1,144 @@
+body {
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    max-height: 100vh;
+}
+
+#container {
+    display: flex;
+    margin: 5px;
+    height: 98vh;
+    flex-grow: 1;
+    gap: 10px;
+    width: 100%;
+}
+
+#pdf-viewer {
+    width: 50%;
+    border: 1px solid #ccc;
+    position: relative;
+    overflow: hidden;
+}
+
+iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    /* Remove iframe border */
+}
+
+#xml-editor {
+    width: 50%;
+    border: 1px solid #ccc;
+}
+
+#xml-editor>div {
+    height: 100%;
+}
+
+#navigation {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    background-color: rgba(167, 158, 158, 0.8);
+    padding: 10px;
+    border-radius: 10px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+}
+
+#title {
+    font-weight: bold;
+    font-size: 2vh;
+    margin: 5px;
+}
+
+#document-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#biblstruct-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.highlight {
+    position: absolute;
+    background-color: rgba(255, 255, 0, 0.3);
+    /* Semi-transparent yellow */
+    border: 1px solid yellow;
+}
+
+
+#editor-switch-control {
+    display: flex;
+    align-items: center;
+    /* Vertically align items */
+    gap: 5px;
+}
+
+/* From Uiverse.io by namecho */
+.switch {
+    --button-width: 2.5em;
+    --button-height: 1.0em;
+    --toggle-diameter: 1.2em;
+    --button-toggle-offset: calc((var(--button-height) - var(--toggle-diameter)) / 2);
+    --toggle-shadow-offset: 10px;
+    --toggle-wider: 3em;
+    --color-grey: #cccccc;
+    --color-green: #4296f4;
+}
+
+.slider {
+    display: inline-block;
+    width: var(--button-width);
+    height: var(--button-height);
+    background-color: var(--color-grey);
+    border-radius: calc(var(--button-height) / 2);
+    position: relative;
+    transition: 0.3s all ease-in-out;
+}
+
+.slider::after {
+    content: "";
+    display: inline-block;
+    width: var(--toggle-diameter);
+    height: var(--toggle-diameter);
+    background-color: #fff;
+    border-radius: calc(var(--toggle-diameter) / 2);
+    position: absolute;
+    top: var(--button-toggle-offset);
+    transform: translateX(var(--button-toggle-offset));
+    box-shadow: var(--toggle-shadow-offset) 0 calc(var(--toggle-shadow-offset) * 4) rgba(0, 0, 0, 0.1);
+    transition: 0.3s all ease-in-out;
+}
+
+.switch input[type="checkbox"]:checked+.slider {
+    background-color: var(--color-green);
+}
+
+.switch input[type="checkbox"]:checked+.slider::after {
+    transform: translateX(calc(var(--button-width) - var(--toggle-diameter) - var(--button-toggle-offset)));
+    box-shadow: calc(var(--toggle-shadow-offset) * -1) 0 calc(var(--toggle-shadow-offset) * 4) rgba(0, 0, 0, 0.1);
+}
+
+.switch input[type="checkbox"] {
+    display: none;
+}
+
+.switch input[type="checkbox"]:active+.slider::after {
+    width: var(--toggle-wider);
+}
+
+.switch input[type="checkbox"]:checked:active+.slider::after {
+    transform: translateX(calc(var(--button-width) - var(--toggle-wider) - var(--button-toggle-offset)));
+}

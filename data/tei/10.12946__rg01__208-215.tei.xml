@@ -1,0 +1,536 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 ../../schema/xsd/document.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Gadamers Wahrheit für Juristen</title>
+        <author>
+          <persName>
+            <forename>Klaus</forename>
+            <surname>Lüderssen</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Max Planck Institute for Legal History and Legal Theory</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2002</date>
+        <idno type="DOI">10.12946/rg01/208-215</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Klaus Lüderssen. (2002). Gadamers Wahrheit für Juristen. Rechtsgeschichte - Legal History, 2002(01), 208-215. DOI: 10.12946/rg01/208-215</bibl>
+      </sourceDesc>
+    </fileDesc>
+  </teiHeader>
+<standOff><listBibl>
+    <biblStruct>
+      <monogr>
+        <title level="m">Das kulturelle Gedächtnis</title>
+        <author>
+          <persName>
+            <forename>Jan</forename>
+            <surname>Assmann</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1999</date>
+          <pubPlace>München</pubPlace>
+        </imprint>
+        <biblScope unit="page">128</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Wahrheit und Methode</title>
+        <author>
+          <persName>
+            <forename>Hans-Georg</forename>
+            <surname>Gadamer</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1990</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="volume">(= Hermeneutik I)</biblScope>
+        <biblScope unit="page">292</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Triviales und Aporetisches zur juristischen Herme- neutik</title>
+        <author>
+          <persName>
+            <forename>Dieter</forename>
+            <surname>Nörr</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <title level="m">Text und Applikation. Theologie, Jurisprudenz und Literaturwissenschaft im hermeneuti-</title>
+        <editor>
+          <persName>
+            <forename>Jean</forename>
+            <surname>Bollack</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <date>1975</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+        <biblScope unit="page">404ff., 404</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">schen Gespräch</title>
+        <editor>
+          <persName>
+            <forename>Manfred</forename>
+            <surname>Fuhrmann</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Hans Robert</forename>
+            <surname>Jauss</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Wolfhart</forename>
+            <surname>Pfannenberg</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <date>1981</date>
+          <pubPlace>München</pubPlace>
+        </imprint>
+        <biblScope unit="page">235 ff.</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Universalität durch integrierende Spezialisierung. Zur Gesamtausgabe der Schriften Gustav Radbruchs</title>
+        <author>
+          <persName>
+            <forename>Klaus</forename>
+            <surname>Lüderssen</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <title level="j">Archiv für Rechts- und Sozialphilosophie</title>
+        <imprint>
+          <date>1999</date>
+        </imprint>
+        <biblScope unit="volume">85</biblScope>
+        <biblScope unit="page">469 ff., 476</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Die Rezeption der Hermeneutik bei Karl Larenz und Josef Esser</title>
+        <author>
+          <persName>
+            <forename>Monika</forename>
+            <surname>Frommel</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1981</date>
+          <pubPlace>Ebelsbach</pubPlace>
+        </imprint>
+        <biblScope unit="page">58 ff.</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Hegels Dialektik</title>
+        <author>
+          <persName>
+            <forename>Nicolai</forename>
+            <surname>Hartmann</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1971</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">5</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Rechtsperson und Solidarität</title>
+        <author>
+          <persName>
+            <forename>Erhard</forename>
+            <surname>Denninger</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1967</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Hegels Ontologie und die Grundlegung einer Theorie der Geschichtlichkeit</title>
+        <author>
+          <persName>
+            <forename>Nicolai</forename>
+            <surname>Hartmann</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1932</date>
+          <pubPlace>Frankfurt/M</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Rechtstheorie</title>
+        <author>
+          <persName>
+            <forename>Bernd</forename>
+            <surname>Rüthers</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1999</date>
+          <pubPlace>München</pubPlace>
+        </imprint>
+        <biblScope unit="page">94</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Teoria generale della interpreta- zione</title>
+        <author>
+          <persName>
+            <forename>Emilio</forename>
+            <surname>Betti</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1962</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">5f.</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Die Hermeneutik als allgemeine Methodik der Geisteswissenschaf- ten</title>
+        <author>
+          <persName>
+            <forename>Emilio</forename>
+            <surname>Betti</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1959</date>
+          <pubPlace>Köln</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Wie ist nach dem Historismus noch Metaphy- sik möglich?</title>
+        <author>
+          <persName>
+            <forename>Jürgen</forename>
+            <surname>Habermas</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <title level="m">Sein, das verstanden werden kann, ist Sprache, Hommage an Hans-Georg Gada- mer</title>
+        <imprint>
+          <date>2001</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+        <biblScope unit="page">89 ff., 94</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Über die juristische Relevanz der Sozialwis- senschaften</title>
+        <author>
+          <persName>
+            <forename>Wolfgang</forename>
+            <surname>Naucke</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1972</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+        <biblScope unit="page">46</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Vorverständnis und Methodenwahl in der Rechtsfin- dung</title>
+        <author>
+          <persName>
+            <forename>Josef</forename>
+            <surname>Esser</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1970</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Juristisches Argumentieren im Wandel des Rechtsfindungskon- zepts unseres Jahrhunderts</title>
+        <author>
+          <persName>
+            <forename>Josef</forename>
+            <surname>Esser</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <date>1979</date>
+          <pubPlace>Heidelberg</pubPlace>
+        </imprint>
+        <biblScope unit="page">9</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Die Wut des Verstehens, Zur Kritik der Her- meneutik</title>
+        <author>
+          <persName>
+            <forename>Jochen</forename>
+            <surname>Hörisch</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1988</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Ästhetik und Rhetorik, Lektüren zu Paul de Man</title>
+        <editor>
+          <persName>
+            <forename>Karl Heinz</forename>
+            <surname>Bohrer</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <date>1973</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+        <biblScope unit="page">8</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Absolute In- terrogation - Metaphysik-Kritik und Sinn-Subversion bei Jacques Derrida</title>
+        <author>
+          <persName>
+            <forename>Christoph</forename>
+            <surname>Menke</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <title level="j">Philosophisches Jahrbuch</title>
+        <imprint>
+          <date>1990</date>
+        </imprint>
+        <biblScope unit="volume">97</biblScope>
+        <biblScope unit="page">53 ff., 55</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Dekonstruierte Disziplin, Hans Georg Gadamers Hermeneutik in der Literaturwis- senschaft</title>
+        <author>
+          <persName>
+            <forename>Hans Ulrich</forename>
+            <surname>Gumbrecht</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <title level="m">Hommage an Hans Georg Gadamer</title>
+        <biblScope unit="page">107 ff.</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Literary Criticism of Law</title>
+        <author>
+          <persName>
+            <forename>Guyora</forename>
+            <surname>Binder</surname>
+          </persName>
+        </author>
+        <author>
+          <persName>
+            <forename>Robert</forename>
+            <surname>Weisberg</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>2000</date>
+          <pubPlace>Princeton, New Jersey</pubPlace>
+        </imprint>
+        <biblScope unit="page">135</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Produktive Spiegelungen</title>
+        <author>
+          <persName>
+            <forename>Klaus</forename>
+            <surname>Lüderssen</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>2002</date>
+          <pubPlace>Baden-Baden</pubPlace>
+        </imprint>
+        <biblScope unit="page">61</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Aktenkundig und gerichtsnotorisch, Einführung in die historische Kriminalitäts- forschung</title>
+        <author>
+          <persName>
+            <forename>Gert</forename>
+            <surname>Schwerhoff</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1999</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">66</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Die Konstruktion der gesellschaftlichen Wirklichkeit. Zur Ontologie sozialer Tatsachen</title>
+        <author>
+          <persName>
+            <forename>John S.</forename>
+            <surname>Searle</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1997</date>
+          <pubPlace>Reinbek bei Hamburg</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Zeit und Erzählung</title>
+        <author>
+          <persName>
+            <forename>Paul</forename>
+            <surname>Ricœur</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1999</date>
+          <pubPlace>München</pubPlace>
+        </imprint>
+        <biblScope unit="volume">3: Die erzählte Zeit</biblScope>
+        <biblScope unit="page">248</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Die Unhintergehbarkeit von Individualität</title>
+        <author>
+          <persName>
+            <forename>Manfred</forename>
+            <surname>Frank</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1986</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Genesis und Geltung in der Jurisprudenz</title>
+        <author>
+          <persName>
+            <forename>Klaus</forename>
+            <surname>Lüderssen</surname>
+          </persName>
+        </author>
+        <imprint>
+          <date>1996</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+        <biblScope unit="page">69 ff.</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Empirisierende Subjektphilosophie und die Rechte des Individuums</title>
+        <author>
+          <persName>
+            <forename>Klaus</forename>
+            <surname>Lüderssen</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <title level="m">Zur Autonomie des Individuums - Liber amicorum Spiros Simitis</title>
+        <editor>
+          <persName>
+            <forename>Dieter</forename>
+            <surname>Simon</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Manfred</forename>
+            <surname>Weiss</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <date>2000</date>
+          <pubPlace>Baden-Baden</pubPlace>
+        </imprint>
+        <biblScope unit="page">227 ff.</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Wahrheit und Methode</title>
+        <author>
+          <persName>
+            <forename>Klaus</forename>
+            <surname>Lüderssen</surname>
+          </persName>
+        </author>
+        <biblScope unit="volume">(= Hermeneutik II)</biblScope>
+        <biblScope unit="page">410</biblScope>
+      </monogr>
+    </biblStruct>
+  </listBibl>
+</standOff></TEI>

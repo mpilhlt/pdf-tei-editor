@@ -1,0 +1,56 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 ../../schema/xsd/document.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Territoriale Amtskalender und Amtshandbücher im Alten Reich</title>
+        <author>
+          <persName>
+            <forename>Volker</forename>
+            <surname>Bauer</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Max Planck Institute for Legal History and Legal Theory</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2002</date>
+        <idno type="DOI">10.12946/rg01/071-089</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Volker Bauer. (2002). Territoriale Amtskalender und Amtshandbücher im Alten Reich. Rechtsgeschichte - Legal History, 2002(01), 071-089. DOI: 10.12946/rg01/071-089</bibl>
+      </sourceDesc>
+    </fileDesc>
+  </teiHeader>
+<standOff><listBibl>
+    <biblStruct>
+      <analytic>
+        <title level="a">Absolutismus und Öffentlichkeit. Politische Kommunikation in Deutschland zu Beginn des 18. Jahrhunderts</title>
+        <author>
+          <persName>
+            <forename>Volker</forename>
+            <surname>Bauer</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <title level="m">Repertorium territorialer Amtskalender und Amtshandbücher im Alten Reich. Adreß-, Hof-, Staatskalender und Staatshandbücher des 18. Jahrhunderts</title>
+        <title level="j">Genealogie</title>
+        <editor>
+          <persName>
+            <forename>Michael</forename>
+            <surname>Stolleis</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <date>1997-2002</date>
+          <pubPlace>Frankfurt a. M.</pubPlace>
+        </imprint>
+        <biblScope unit="volume">Bd. 9</biblScope>
+        <biblScope unit="issue">Heft 9-10</biblScope>
+        <biblScope unit="page">403 f.</biblScope>
+      </monogr>
+    </biblStruct>
+  </listBibl>
+</standOff></TEI>

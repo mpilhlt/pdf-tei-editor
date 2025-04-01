@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>PDF-TEI Editor</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="./bootstrap.js"></script>
+</head>
+
+<body>
+  <div id="container">
+    <div id="pdf-viewer">
+      <iframe id="pdfjs-viewer" src="../pdfjs/web/viewer.html">
+      </iframe>
+    </div>
+    <div id="xml-editor"></div>
+  </div>
+  <div id="navigation">
+    <div id="document-nav">
+      <select id="select-doc"></select>
+    </div>
+    <div id="editor-switch-control">
+      <span>View</span>
+      <label class="switch">
+        <input id="editor-switch" type="checkbox">
+        <span class="slider"></span>
+      </label>
+      <span>Edit</span>
+    </div>
+    <div id="biblstruct-nav">
+      <button id="prev-bibl" class="btn btn-primary">&lt;&lt;</button>
+      <span>&lt;biblStruct&gt;</span>
+      <button id="next-bibl" class="btn btn-primary">&gt;&gt;</button>
+    </div>
+  </div>
+</body>
+
+</html>

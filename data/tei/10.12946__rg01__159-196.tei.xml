@@ -1,0 +1,765 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 ../../schema/xsd/document.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Von der »Entstehung des öffentlichen Strafrechts« zur »Fabrikation des Verbrechens«</title>
+        <author>
+          <persName>
+            <forename>Karl</forename>
+            <surname>Härter</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Max Planck Institute for Legal History and Legal Theory</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2002</date>
+        <idno type="DOI">10.12946/rg01/159-196</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Karl Härter. (2002). Von der »Entstehung des öffentlichen Strafrechts« zur »Fabrikation des Verbrechens«. Rechtsgeschichte - Legal History, 2002(01), 159-196. DOI: 10.12946/rg01/159-196</bibl>
+      </sourceDesc>
+    </fileDesc>
+  </teiHeader>
+<standOff><listBibl>
+    <biblStruct>
+      <analytic>
+        <title level="a">Le pénal dans tous ses Etats. Justice, Etats et sociétés en Europe (XIIe-XXe siècles)</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Xavier</forename>
+            <surname>Rousseaux</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>René</forename>
+            <surname>Lévy</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>Facultés universitaires Saint-Louis</publisher>
+          <date>1997</date>
+          <pubPlace>Brüssel</pubPlace>
+        </imprint>
+        <biblScope unit="volume">74</biblScope>
+        <biblScope unit="page">462</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <monogr>
+        <title level="m">Criminalità e giustizia in Germania e in Italia. Pratiche giudiziarie e linguaggi giuridici tra tardo Medioevo ed età moderna / Kriminalität und Justiz in Deutschland und Italien. Rechtspraktiken und gerichtliche Diskurse in Spätmittelalter und Früher Neuzeit</title>
+        <editor>
+          <persName>
+            <forename>Marco</forename>
+            <surname>Bellabarba</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Gerd</forename>
+            <surname>Schwerhoff</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Andrea</forename>
+            <surname>Zorzi</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>Il mulino</publisher>
+          <date>2001</date>
+          <pubPlace>Bologna</pubPlace>
+        </imprint>
+        <biblScope unit="volume">11</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Kriminalitätsgeschichte. Beiträge zur Sozial- und Kulturgeschichte der Vormoderne</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Andreas</forename>
+            <surname>Blauert</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Gerd</forename>
+            <surname>Schwerhoff</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>uvk</publisher>
+          <date>2000</date>
+          <pubPlace>Konstanz</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Histoire du droit pénal en Europe</title>
+        <author>
+          <persName>
+            <forename>Renée</forename>
+            <surname>Martinage</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Presses Universitaires de France</publisher>
+          <date>1998</date>
+          <pubPlace>Paris</pubPlace>
+        </imprint>
+        <biblScope unit="volume">3401</biblScope>
+        <biblScope unit="page">127</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Aktenkundig und gerichtsnotorisch. Einführung in die Historische Kriminalitätsforschung</title>
+        <author>
+          <persName>
+            <forename>Gerd</forename>
+            <surname>Schwerhoff</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Edition Diskord</publisher>
+          <date>1999</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Kriminalität und abweichendes Verhalten. Deutschland im 18. und 19. Jahrhundert</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Helmut</forename>
+            <surname>Berding</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Diethelm</forename>
+            <surname>Klippel</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Günther</forename>
+            <surname>Lottes</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>Vandenhoeck &amp; Ruprecht</publisher>
+          <date>1999</date>
+          <pubPlace>Göttingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">206</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Benedict Carpzov. Neue Perspektiven zu einem umstrittenen sächsischen Juristen</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Günter</forename>
+            <surname>Jerouschek</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Wolfgang</forename>
+            <surname>Schild</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Walter</forename>
+            <surname>Gropp</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>Edition Diskord</publisher>
+          <date>2000</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="volume">2</biblScope>
+        <biblScope unit="page">320</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">&gt;&gt;Auss liebe der gerechtigkeit vnd umb gemeines nutz&lt;&lt;. Historische Beiträge zur Strafverfolgung</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Günter</forename>
+            <surname>Jerouschek</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Hinrich</forename>
+            <surname>Rüping</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>Edition Diskord</publisher>
+          <date>2000</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="volume">1</biblScope>
+        <biblScope unit="page">253</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Das Urfehdewesen im deutschen Südwesten im Spätmittelalter und in der frühen Neuzeit</title>
+        <author>
+          <persName>
+            <forename>Andreas</forename>
+            <surname>Blauert</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Bibliotheca-Academica-Verlag</publisher>
+          <date>2000</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="volume">7</biblScope>
+        <biblScope unit="page">199</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Friedrich Barbarossa hält Gericht. Zur Konfliktbewältigung im 12. Jahrhundert</title>
+        <author>
+          <persName>
+            <forename>Klaus</forename>
+            <surname>Richter</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Böhlau</publisher>
+          <date>1999</date>
+          <pubPlace>Köln</pubPlace>
+        </imprint>
+        <biblScope unit="volume">2</biblScope>
+        <biblScope unit="page">227</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Verbrechen und Strafe in der spätmittelalterlichen Chronistik Nürnbergs</title>
+        <author>
+          <persName>
+            <forename>Helmut</forename>
+            <surname>Martin</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Böhlau</publisher>
+          <date>1996</date>
+          <pubPlace>Köln</pubPlace>
+        </imprint>
+        <biblScope unit="volume">1</biblScope>
+        <biblScope unit="page">293</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Die Strafgerichtsbarkeit der Reichsstadt Augsburg 1156-1548</title>
+        <author>
+          <persName>
+            <forename>Reinhold</forename>
+            <surname>Schorer</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Böhlau</publisher>
+          <date>2001</date>
+          <pubPlace>Köln</pubPlace>
+        </imprint>
+        <biblScope unit="volume">3</biblScope>
+        <biblScope unit="page">221</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Eine Stadt vor Gericht. Recht und Alltag im spätmittelalterlichen Konstanz</title>
+        <author>
+          <persName>
+            <forename>Peter</forename>
+            <surname>Schuster</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Schöningh</publisher>
+          <date>2000</date>
+          <pubPlace>Paderborn</pubPlace>
+        </imprint>
+        <biblScope unit="page">353</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Konkurrierende Wahrheiten. Malefizprozesse vor dem Landgericht Perchtoldsdorf im 18. Jahrhundert</title>
+        <author>
+          <persName>
+            <forename>Andrea</forename>
+            <surname>Griesebner</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Böhlau</publisher>
+          <date>2000</date>
+          <pubPlace>Wien</pubPlace>
+        </imprint>
+        <biblScope unit="volume">3</biblScope>
+        <biblScope unit="page">350</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Alltag und Kriminalität. Disziplinierungsversuche im steirisch-österreichischen Grenzgebiet im 18. Jahrhundert</title>
+        <author>
+          <persName>
+            <forename>Martin</forename>
+            <surname>Scheutz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Oldenbourg</publisher>
+          <date>2001</date>
+          <pubPlace>Wien</pubPlace>
+        </imprint>
+        <biblScope unit="volume">38</biblScope>
+        <biblScope unit="page">599</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">&gt;&gt;Eine gelinde Regierungsart&lt;&lt;. Peinliche Strafjustiz im geistlichen Territorium. Das Hochstift Osnabrück (1716-1803)</title>
+        <author>
+          <persName>
+            <forename>Harriet</forename>
+            <surname>Rudolph</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>UVK</publisher>
+          <date>2001</date>
+          <pubPlace>Konstanz</pubPlace>
+        </imprint>
+        <biblScope unit="volume">5</biblScope>
+        <biblScope unit="page">407</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Crime, justice and discretion in England 1740-1820</title>
+        <author>
+          <persName>
+            <forename>Peter</forename>
+            <surname>King</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Oxford University Press</publisher>
+          <date>2000</date>
+          <pubPlace>Oxford</pubPlace>
+        </imprint>
+        <biblScope unit="page">383</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Das Milieu der Nacht. Obrigkeit und Randgruppen im spätmittelalterlichen London</title>
+        <author>
+          <persName>
+            <forename>Frank</forename>
+            <surname>Rexroth</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Vandenhoeck &amp; Ruprecht</publisher>
+          <date>1999</date>
+          <pubPlace>Göttingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">450</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Mythos Gegengesellschaft. Erkundungen in der Subkultur der Jauner</title>
+        <author>
+          <persName>
+            <forename>Wolfgang</forename>
+            <surname>Seidenspinner</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Waxmann</publisher>
+          <date>1998</date>
+          <pubPlace>Münster</pubPlace>
+        </imprint>
+        <biblScope unit="page">359</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">The Civilization of Crime. Violence in Town and Country since the Middle Ages</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Eric</forename>
+            <surname>Johnson</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Eric</forename>
+            <surname>Monkkonen</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>University of Illinois Press</publisher>
+          <date>1996</date>
+          <pubPlace>Urbana</pubPlace>
+        </imprint>
+        <biblScope unit="page">290</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Schlägereyen und Unglücksfälle. Zur historischen Psychologie und Typologie von Gewalt in der frühneuzeitlichen Eifel</title>
+        <author>
+          <persName>
+            <forename>Eva</forename>
+            <surname>Lacour</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Hänsel-Hohenhausen</publisher>
+          <date>2000</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+        <biblScope unit="page">210</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Selbstmord in der Frühen Neuzeit. Diskurs, Lebenswelt und kultureller Wandel am Beispiel der Herzogtümer Schleswig und Holstein</title>
+        <author>
+          <persName>
+            <forename>Vera</forename>
+            <surname>Lind</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Vandenhoeck &amp; Ruprecht</publisher>
+          <date>1999</date>
+          <pubPlace>Göttingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">518</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Devianz, Widerstand und Herrschaftspraxis in der Vormoderne. Studien zu Konflikten im südwestdeutschen Raum (15.-18. Jahrhundert)</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Mark</forename>
+            <surname>Häberlein</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>UVK</publisher>
+          <date>1999</date>
+          <pubPlace>Konstanz</pubPlace>
+        </imprint>
+        <biblScope unit="page">354</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Denunziation. Historische, juristische und psychologische Aspekte</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Günter</forename>
+            <surname>Jerouschek</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Inge</forename>
+            <surname>Marßolek</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Hedwig</forename>
+            <surname>Röckelein</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>Edition Diskord</publisher>
+          <date>1997</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">302</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Denunziation und Justiz. Historische Dimensionen eines sozialen Phänomens</title>
+      </analytic>
+      <monogr>
+        <editor>
+          <persName>
+            <forename>Friso</forename>
+            <surname>Ross</surname>
+          </persName>
+        </editor>
+        <editor>
+          <persName>
+            <forename>Achim</forename>
+            <surname>Landwehr</surname>
+          </persName>
+        </editor>
+        <imprint>
+          <publisher>Edition Diskord</publisher>
+          <date>2000</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">283</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Humanität und Staatsraison. Die Abschaffung der Folter in Europa und die Entwicklung des gemeinen Strafprozeß- und Beweisrechts seit dem hohen Mittelalter</title>
+        <author>
+          <persName>
+            <forename>Mathias</forename>
+            <surname>Schmoeckel</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Böhlau</publisher>
+          <date>2000</date>
+          <pubPlace>Köln</pubPlace>
+        </imprint>
+        <biblScope unit="page">668</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Gauner- und Diebslisten: Registrieren, Identifizieren und Fahnden im 18. Jahrhundert. Mit einem Repertorium gedruckter südwestdeutscher, schweizerischer und österreichischer Listen sowie einem Faksimile der Schäffer'-schen oder Sulzer Liste von 1784</title>
+        <author>
+          <persName>
+            <forename>Andreas</forename>
+            <surname>Blauert</surname>
+          </persName>
+        </author>
+        <author>
+          <persName>
+            <forename>Eva</forename>
+            <surname>Wiebel</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Klostermann</publisher>
+          <date>2001</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+        <biblScope unit="page">367</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Inszeniertes Töten. Eine Geschichte der Todesstrafe vom 17. bis zum 19. Jahrhundert</title>
+        <author>
+          <persName>
+            <forename>Jürgen</forename>
+            <surname>Martschukat</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Böhlau</publisher>
+          <date>2000</date>
+          <pubPlace>Köln</pubPlace>
+        </imprint>
+        <biblScope unit="page">365</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Crime and mentalities in early modern England</title>
+        <author>
+          <persName>
+            <forename>Malcolm</forename>
+            <surname>Gaskill</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Cambridge University Press</publisher>
+          <date>2000</date>
+          <pubPlace>Cambridge</pubPlace>
+        </imprint>
+        <biblScope unit="page">377</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Kriminelle Körper - Gestörte Gemüter. Die Normierung des Individuums in Gerichtsmedizin und Psychiatrie der Aufklärung</title>
+        <author>
+          <persName>
+            <forename>Maren</forename>
+            <surname>Lorenz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Hamburger Editionen</publisher>
+          <date>1999</date>
+          <pubPlace>Hamburg</pubPlace>
+        </imprint>
+        <biblScope unit="page">494</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Die Fabrikation des Verbrechens. Zur Geschichte der modernen Kriminalpolitik 1750-1850</title>
+        <author>
+          <persName>
+            <forename>Regula</forename>
+            <surname>Ludi</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>bibliotheca academica</publisher>
+          <date>1999</date>
+          <pubPlace>Tübingen</pubPlace>
+        </imprint>
+        <biblScope unit="page">611</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">La pena de infamia en el Derecho histórico español. Contribución al estudio de la tradición penal europea en el marco del ius commune</title>
+        <author>
+          <persName>
+            <forename>Aniceto</forename>
+            <surname>Masferrer Domingo</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Dykinson</publisher>
+          <date>2001</date>
+          <pubPlace>Madrid</pubPlace>
+        </imprint>
+        <biblScope unit="page">429</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Geschichte des Strafvollzugs. Von den Kerkern der Antike bis zur Gegenwart</title>
+        <author>
+          <persName>
+            <forename>Thomas</forename>
+            <surname>Krause</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Primus</publisher>
+          <date>1999</date>
+          <pubPlace>Darmstadt</pubPlace>
+        </imprint>
+        <biblScope unit="page">151</biblScope>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Die Todesstrafen im Kurfürstentum Trier in der frühen Neuzeit</title>
+        <author>
+          <persName>
+            <forename>Arno</forename>
+            <surname>Lott</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Lang</publisher>
+          <date>1998</date>
+          <pubPlace>Frankfurt am Main</pubPlace>
+        </imprint>
+        <biblScope unit="page">215</biblScope>
+      </monogr>
+    </biblStruct>
+  </listBibl>
+</standOff></TEI>

@@ -1,0 +1,175 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 ../../schema/xsd/document.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Gnade für niemand!</title>
+        <author>
+          <persName>
+            <forename>Bettina</forename>
+            <surname>Emmerich</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Max Planck Institute for Legal History and Legal Theory</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2002</date>
+        <idno type="DOI">10.12946/rg01/221-223</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Bettina Emmerich. (2002). Gnade für niemand!. Rechtsgeschichte - Legal History, 2002(01), 221-223. DOI: 10.12946/rg01/221-223</bibl>
+      </sourceDesc>
+    </fileDesc>
+  </teiHeader>
+<standOff><listBibl>
+    <biblStruct>
+      <analytic>
+        <title level="a">ich bin nichts. ich hab nichts. aber ich lach' mich tot</title>
+        <author>
+          <persName>
+            <forename>Matthias</forename>
+            <surname>Beltz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Beltz und Gerd Knebel</publisher>
+          <date>ca. 70</date>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Eigenes Konto. Wenn alles sich rechnet + niemand bezahlt. Ein postheroisches Kabarett</title>
+        <author>
+          <persName>
+            <forename>Matthias</forename>
+            <surname>Beltz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Transit Buch verlag</publisher>
+          <date>ca. 70</date>
+          <pubPlace>Berlin</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Gute Nacht, Europa, wo immer du auch bist</title>
+        <author>
+          <persName>
+            <forename>Matthias</forename>
+            <surname>Beltz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Goldmann</publisher>
+          <date>2000</date>
+          <pubPlace>München</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Notschlachten. Die sieben Weltverbrechen Ein Ethno-Kabarett</title>
+        <author>
+          <persName>
+            <forename>Matthias</forename>
+            <surname>Beltz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Transit Buch-verlag</publisher>
+          <date>1998</date>
+          <pubPlace>Berlin</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Deckname Dennis - Eine deutsche Realsatire von THOMAS FRICKEL</title>
+        <author>
+          <persName>
+            <forename>Thomas</forename>
+            <surname>Frickel</surname>
+          </persName>
+        </author>
+        <author>
+          <persName>
+            <forename>Matthias</forename>
+            <surname>Beltz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <date>1997</date>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Schlammbeißers Weltgefühl. Von der Aufdringlichkeit der Gegenwart</title>
+        <author>
+          <persName>
+            <forename>Matthias</forename>
+            <surname>Beltz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Ammann Verlag</publisher>
+          <date>1995</date>
+          <pubPlace>Zürich</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Die paar Tage noch</title>
+        <author>
+          <persName>
+            <forename>Matthias</forename>
+            <surname>Beltz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Ammann Verlag</publisher>
+          <date>1994</date>
+          <pubPlace>Zürich</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+    <biblStruct>
+      <analytic>
+        <title level="a">Gnade für niemand - Freispruch für alle</title>
+        <author>
+          <persName>
+            <forename>Matthias</forename>
+            <surname>Beltz</surname>
+          </persName>
+        </author>
+      </analytic>
+      <monogr>
+        <imprint>
+          <publisher>Ammann Verlag</publisher>
+          <date>1990</date>
+          <pubPlace>Zürich</pubPlace>
+        </imprint>
+      </monogr>
+    </biblStruct>
+  </listBibl>
+</standOff></TEI>

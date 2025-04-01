@@ -1,0 +1,692 @@
+{
+  "!top": [
+    "standOff",
+    "teiHeader"
+  ],
+  "analytic": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "author",
+      "availability",
+      "date",
+      "editor",
+      "idno",
+      "ptr",
+      "ref",
+      "respStmt",
+      "textLang",
+      "title"
+    ]
+  },
+  "author": {
+    "children": ["persName", "orgName"]
+  },
+  "authority": {
+    "children": ["orgName"]
+  },
+  "availability": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "default": [
+        "true",
+        "false"
+      ],
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "status": [
+        "free",
+        "unknown",
+        "restricted"
+      ],
+      "style": null,
+      "synch": null
+    },
+    "children": []
+  },
+  "bibl": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "default": [
+        "true",
+        "false"
+      ],
+      "exclude": null,
+      "generatedBy": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "sortKey": null,
+      "source": null,
+      "status": null,
+      "style": null,
+      "subtype": null,
+      "synch": null,
+      "type": null
+    },
+    "children": [
+      "author",
+      "availability",
+      "bibl",
+      "biblScope",
+      "citedRange",
+      "date",
+      "edition",
+      "editor",
+      "extent",
+      "forename",
+      "funder",
+      "idno",
+      "meeting",
+      "note",
+      "orgName",
+      "persName",
+      "ptr",
+      "pubPlace",
+      "publisher",
+      "ref",
+      "relatedItem",
+      "respStmt",
+      "series",
+      "sponsor",
+      "surname",
+      "textLang",
+      "title"
+    ]
+  },
+  "biblFull": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "default": [
+        "true",
+        "false"
+      ],
+      "exclude": null,
+      "generatedBy": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "sortKey": null,
+      "source": null,
+      "status": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "extent",
+      "fileDesc",
+      "publicationStmt",
+      "sourceDesc",
+      "titleStmt"
+    ]
+  },
+  "biblScope": {
+    "children": [],
+    "attrs": {
+      "unit": ["volume", "page", "chapter", "note"],
+      "from": null,
+      "to": null
+    }
+  },
+  "biblStruct": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "default": [
+        "true",
+        "false"
+      ],
+      "exclude": null,
+      "generatedBy": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "sortKey": null,
+      "source": null,
+      "status": null,
+      "style": null,
+      "subtype": null,
+      "synch": null,
+      "type": null
+    },
+    "children": [
+      "analytic",
+      "citedRange",
+      "monogr",
+      "note",
+      "ptr",
+      "ref",
+      "relatedItem",
+      "series"
+    ]
+  },
+  "citedRange": {
+    "children": [],
+    "attrs": {
+      "unit": ["volume", "page", "chapter", "note"],
+      "from": null,
+      "to": null
+    }
+  },
+  "date": {
+    "attrs": {
+      "from": null,
+      "to": null,
+      "type": null,
+      "unit": null,
+      "when": null
+    },
+    "children": []
+  },
+  "edition": {
+    "children": []
+  },
+  "editor": {
+    "children": ["persName", "orgName"]
+  },
+  "extent": {
+    "children": []
+  },
+  "fileDesc": {
+    "attrs": {},
+    "children": [
+      "extent",
+      "publicationStmt",
+      "sourceDesc",
+      "titleStmt"
+    ]
+  },
+  "forename": {
+    "children": [],
+    "attrs": {
+      "type": ["first", "middle"]
+    }
+  },
+  "funder": {
+    "children": []
+  },
+  "idno": {
+    "attrs": {
+      "calendar": null,
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "datingMethod": null,
+      "datingPoint": null,
+      "exclude": null,
+      "from": null,
+      "from-custom": null,
+      "from-iso": null,
+      "generatedBy": null,
+      "n": null,
+      "next": null,
+      "notAfter": null,
+      "notAfter-custom": null,
+      "notAfter-iso": null,
+      "notBefore": null,
+      "notBefore-custom": null,
+      "notBefore-iso": null,
+      "period": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "sortKey": null,
+      "source": null,
+      "style": null,
+      "subtype": null,
+      "synch": null,
+      "to": null,
+      "to-custom": null,
+      "to-iso": null,
+      "type": null,
+      "when": null,
+      "when-custom": null,
+      "when-iso": null
+    },
+    "children": [
+      "idno"
+    ]
+  },
+  "imprint": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "biblScope",
+      "date",
+      "note",
+      "pubPlace",
+      "publisher",
+      "respStmt"
+    ]
+  },
+  "licence": {
+    "children": []
+  },
+  "listBibl": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "default": [
+        "true",
+        "false"
+      ],
+      "exclude": null,
+      "generatedBy": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "sortKey": null,
+      "source": null,
+      "style": null,
+      "subtype": null,
+      "synch": null,
+      "type": null
+    },
+    "children": [
+      "bibl",
+      "biblFull",
+      "biblStruct",
+      "listBibl"
+    ]
+  },
+  "meeting": {
+    "children": []
+  },
+  "monogr": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "author",
+      "authority",
+      "availability",
+      "biblScope",
+      "edition",
+      "editor",
+      "extent",
+      "funder",
+      "idno",
+      "imprint",
+      "meeting",
+      "note",
+      "ptr",
+      "ref",
+      "respStmt",
+      "sponsor",
+      "textLang",
+      "title"
+    ]
+  },
+  "note": {
+    "children": []
+  },
+  "orgName": {
+    "children": []
+  },
+  "persName": {
+    "children": ["surname","forename"]
+  },
+  "ptr": {
+    "attrs": {
+      "cRef": null,
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "decls": null,
+      "evaluate": [
+        "all",
+        "one",
+        "none"
+      ],
+      "exclude": null,
+      "generatedBy": null,
+      "mimeType": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "subtype": null,
+      "synch": null,
+      "target": null,
+      "targetLang": null,
+      "type": null
+    },
+    "children": []
+  },
+  "pubPlace": {
+    "children": []
+  },
+  "publicationStmt": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "authority",
+      "availability",
+      "date",
+      "idno",
+      "ptr",
+      "pubPlace",
+      "publisher",
+      "ref"
+    ]
+  },
+  "publisher": {
+    "children": []
+  },
+  "ref": {
+    "children": []
+  },
+  "relatedItem": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "subtype": null,
+      "synch": null,
+      "target": null,
+      "type": null
+    },
+    "children": [
+      "bibl",
+      "biblFull",
+      "biblStruct",
+      "listBibl",
+      "ptr",
+      "ref"
+    ]
+  },
+  "respStmt": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "key": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "ref": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "note",
+      "orgName",
+      "persName"
+    ]
+  },
+  "series": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "availability",
+      "biblScope",
+      "editor",
+      "idno",
+      "note",
+      "ptr",
+      "ref",
+      "respStmt",
+      "textLang",
+      "title"
+    ]
+  },
+  "sourceDesc": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "default": [
+        "true",
+        "false"
+      ],
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "bibl",
+      "biblFull",
+      "biblStruct",
+      "listBibl"
+    ]
+  },
+  "sponsor": {
+    "children": []
+  },
+  "standOff": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "decls": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "subtype": null,
+      "synch": null,
+      "type": null
+    },
+    "children": [
+      "bibl",
+      "biblFull",
+      "biblStruct",
+      "listBibl"
+    ]
+  },
+  "surname": {
+    "children": []
+  },
+  "teiHeader": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "fileDesc"
+    ]
+  },
+  "textLang": {
+    "children": []
+  },
+  "title": {
+    "children": [],
+    "attrs": {
+      "level" : ["m", "a", "j", "s"]
+    }
+  },
+  "titleStmt": {
+    "attrs": {
+      "cert": null,
+      "copyOf": null,
+      "corresp": null,
+      "exclude": null,
+      "n": null,
+      "next": null,
+      "prev": null,
+      "rend": null,
+      "rendition": null,
+      "resp": null,
+      "sameAs": null,
+      "select": null,
+      "source": null,
+      "style": null,
+      "synch": null
+    },
+    "children": [
+      "author",
+      "editor",
+      "funder",
+      "meeting",
+      "respStmt",
+      "sponsor",
+      "title"
+    ]
+  }
+}
