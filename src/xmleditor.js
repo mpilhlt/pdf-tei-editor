@@ -3,9 +3,29 @@ import { EditorState, EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { syntaxTree } from "@codemirror/language";
+import { startCompletion } from "@codemirror/autocomplete";
+import { linter, lintGutter } from "@codemirror/lint";
 
+// load XSD
+(async () => {
+  try {
+    const xml_xsd = await (await fetch('/schema/xml.xsd')).text()
+    const tei_xsd = await (await fetch('/schema/tei.xsd')).text()
+    window.tei_xsd = [xml_xsd, tei_xsd];
+    console.log("XSD files loaded");
+  } catch( error ) {
+    console.error("Error loading XSD files:", error.message)
+  }
+})();
+
+/**
+ * 
+ * @param {Object} node 
+ * @param {EditorState} state 
+ * @returns {Array<>}
+ */
 function getParentTagNames(node, state) {
-  const tagNames=[];
+  const tagNames = [];
   let parentNode = node.parent;
   while (parentNode) {
     if (parentNode.name === "Element") {
@@ -17,8 +37,119 @@ function getParentTagNames(node, state) {
     }
     parentNode = parentNode.parent;
   }
-  return tagNames; 
+  return tagNames;
 }
+
+/**
+ * Given a data structure containing permissible children and attributes of
+ * nodes with a given tag, create the completionSource data for autocompletion
+ * @param {*} tagData 
+ * @returns 
+ */
+function createCompletionSource(tagData) {
+  return (context) => {
+    const state = context.state;
+    const pos = context.pos;
+    let node = syntaxTree(state).resolveInner(pos, -1);
+    let type = node.type.name;
+    let text = context.state.sliceDoc(node.from, context.pos);
+    let options = [];
+    const parentTags = getParentTagNames(node, state);
+    let completionType = "keyword";
+
+    switch (type) {
+      case "StartTag":
+        options = tagData[parentTags[0]]?.children || [];
+        break;
+      case "TagName":
+        options = tagData[parentTags[1]]?.children || [];
+        break;
+      case "OpenTag":
+      case "AttributeName":
+        options = Object.keys(tagData[parentTags[0]]?.attrs || {})
+          .map(displayLabel => ({
+            displayLabel,
+            label: `${displayLabel}=""`,
+            type: "property",
+            apply: (view, completion, from, to) => {
+              view.dispatch({
+                changes: { from, to, insert: completion.label },
+                selection: { anchor: from + completion.label.length - 1 }
+              });
+              // start new autocomplete
+              setTimeout(() => startCompletion(view), 20);
+            }
+          }));
+        break;
+      case "AttributeValue":
+        const attributeNode = node.prevSibling?.prevSibling;
+        if (!attributeNode) break;
+        const attributeTag = context.state.sliceDoc(attributeNode.from, attributeNode.to);
+        const attrs = tagData[parentTags[0]]?.attrs;
+        options = (attrs && attrs[attributeTag]) || [];
+        options = options.map(option => ({
+          label: option,
+          type: "property",
+          apply: (view, completion, from, to) => {
+            view.dispatch({
+              changes: { from, to, insert: completion.label },
+              selection: { anchor: to + completion.label.length + 1 }, // Move cursor after the closing quote
+            });
+          }
+        }));
+        break;
+    }
+
+    if (options.length === 0) {
+      return null;
+    }
+
+    // Suggest from cursor position for StartTag/OpenTag.
+    const from = ["StartTag", "OpenTag", "AttributeValue"].includes(type) ? pos : node.from;
+    const to = pos;
+
+    // convert string options to completionResult objects
+    options = options.map(label => typeof label === "string" ? ({ label, type: completionType }) : label);
+
+    return {
+      from, to, options,
+      validFor: /^[\w@:]*$/
+    };
+  };
+}
+
+function lintSource(view) {
+  // we don't do linting until xmllint has been loaded
+  if (!window.xmllint) return [];
+
+  // get text from document and lint it
+  const doc = view.state.doc;
+  const xml = doc.toString();
+  const config = {xml};
+  if (window.tei_xsd) {
+    config.schema = window.tei_xsd;
+  }
+  const {errors} =  xmllint.validateXML(config)
+
+  // convert xmllint errors to Diagnostic 
+  const diagnostics = errors.map( error => {
+    //"file_0.xml:26: parser error : Extra content at the end of the document"
+    let m = error.match(/^[^.]+\.xml:(\d+): (?:.+) : (.+)/)
+    if (!m) {
+      console.warn(error);
+      return null;
+    }
+    const [,lineNumber, message] = m;
+    const { from, to } = doc.line(parseInt(lineNumber))
+    const severity = "error"
+    return { from, to, severity, message };
+  }).filter(Boolean);
+  if (diagnostics.length > 0) {
+    console.warn(`${diagnostics.length} linter error(s) found.`)
+  }
+  return diagnostics;
+}
+
 
 /**
  * Extracts a list of nodes with a given tag name from an XML string.
@@ -38,6 +169,8 @@ function extractNodes(tagName) {
   });
   this.nodes = nodes; // Store the extracted nodes in the class property.
 }
+
+
 
 export class XMLEditor extends EventTarget {
 
@@ -59,9 +192,12 @@ export class XMLEditor extends EventTarget {
       basicSetup,
       xml(),
       xmlLanguage.data.of({
-        autocomplete: this.createCompletionSource(tagData)
-      })
+        autocomplete: createCompletionSource(tagData)
+      }),
+      linter(lintSource),
+      lintGutter()
     ];
+    let linterTimeout = null;
 
     this.state = EditorState.create({
       doc: "",
@@ -69,7 +205,7 @@ export class XMLEditor extends EventTarget {
         ...this.basicExtensions,
         EditorView.updateListener.of(update => {
           if (update.docChanged) {
-            this.xmlContent = update.state.doc.toString();
+            const xmlContent = update.state.doc.toString();
           }
         })
       ]
@@ -122,62 +258,6 @@ export class XMLEditor extends EventTarget {
     return this.xmlContent;
   }
 
-  createCompletionSource(tags) {
-    return (context) => {
-      const state = context.state;
-      const pos = context.pos;
-      let node = syntaxTree(state).resolveInner(pos, -1);
-      let type = node.type.name; 
-      let text = context.state.sliceDoc(node.from, context.pos);
-      let options = [];
-      const parentTags = getParentTagNames(node, state); 
-      let completionType = "keyword";
-  
-      switch (type) {
-        case "StartTag":
-          options = tags[parentTags[0]]?.children;
-          break;
-        case "TagName":
-          options = tags[parentTags[1]]?.children;
-          break;
-        case "OpenTag":
-          // OpenTag: Suggest attributes, or opening tags
-          options = Object.keys(tags[parentTags[0]]?.attrs || {}).concat(tags[parentTags[0]]?.children || []);
-          completionType = "property"; // Mixed types, but property is more relevant here
-          break;
-        case "AttributeName":
-          options = Object.keys(tags[parentTags[0]]?.attrs || {})
-            .map(displayLabel => ({displayLabel, label: `${displayLabel}=""`}))
-          completionType = "property";
-          break;
-        case "AttributeValue":
-          const attributeNode = node.prevSibling?.prevSibling; // Use optional chaining
-          if (!attributeNode) break; // Handle case where there is no previous sibling
-  
-          const attributeTag = context.state.sliceDoc(attributeNode.from, attributeNode.to);
-          const attrs = tags[parentTags[0]]?.attrs;
-          completionType = "property";
-          options = (attrs && attrs[attributeTag]) || [];
-          break;
-      }
-  
-      console.log({ type, text, parentTags, options });
-  
-      if (options.length === 0) {
-        return null;
-      }
-  
-      // Suggest from cursor position for StartTag/OpenTag.
-      const from = ["StartTag", "OpenTag"].includes(type) ? pos : node.from; 
-      
-      return {
-        from: from,  // Use the cursor position.
-        to: pos,     // End at the cursor position
-        options: options.map(label =>  typeof label === "string" ? ({ label, type: completionType }): label),
-        validFor: /^[\w@:]*$/  //Relax the validFor regex to allow triggering at the start
-      };
-    };
-  }
   /**
    * Sets the tag name to highlight and navigates, removing the previous highlight.
    * @param {string} tagName - The tag name to highlight.
@@ -190,7 +270,6 @@ export class XMLEditor extends EventTarget {
     }
     this.highlightNodeByIndex(this.currentIndex); // Highlight the first node after extracting.
   }
-
 
 
   /**

@@ -7,6 +7,11 @@ fetch('./importmap.json')
   script.textContent = JSON.stringify(importMap, null, 2);
   document.head.appendChild(script);
 
+  // xmllint 
+  const xmllintscript = document.createElement('script');
+  xmllintscript.src = '/node_modules/xmllint/xmllint.js'; 
+  document.body.appendChild(xmllintscript);
+
   // Now, load the main script that uses the import map
   const mainScript = document.createElement('script');
   mainScript.type = 'module';

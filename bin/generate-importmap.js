@@ -33,7 +33,6 @@ importMap.imports["style-mod"] = "/node_modules/style-mod/src/style-mod.js"
 importMap.imports["w3c-keyname"] = "/node_modules/w3c-keyname/index.js"
 importMap.imports["crelt"] = "/node_modules/crelt/index.js"
 
-
 console.log(importMap)
 
 // Write the import map to a file
