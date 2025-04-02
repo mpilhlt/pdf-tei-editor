@@ -1,8 +1,10 @@
 {
-  "!top": [
-    "standOff",
-    "teiHeader"
-  ],
+  "TEI": {
+    "children": [
+      "standOff",
+      "teiHeader"
+    ]
+  },
   "analytic": {
     "attrs": {
       "cert": null,

@@ -1,7 +1,43 @@
 import { basicSetup } from 'codemirror';
-import { EditorState, EditorSelection  } from "@codemirror/state";
+import { EditorState, EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
+import { syntaxTree } from "@codemirror/language";
+
+function getParentTagNames(node, state) {
+  const tagNames=[];
+  let parentNode = node.parent;
+  while (parentNode) {
+    if (parentNode.name === "Element") {
+      const tagPortion = state.doc.sliceString(parentNode.from, parentNode.to);
+      const match = tagPortion.match(/^<([a-zA-Z0-9:]+)/);
+      if (match) {
+        tagNames.push(match[1]); // Add the captured tag name to the list
+      }
+    }
+    parentNode = parentNode.parent;
+  }
+  return tagNames; 
+}
+
+/**
+ * Extracts a list of nodes with a given tag name from an XML string.
+ * @private
+ * @param {string} tagName - The tag name of the nodes to extract.
+ * @returns {Array<Node>} - An array of DOM nodes matching the tag name, with an added `search_index` property.
+ */
+function extractNodes(tagName) {
+  if (!this.xmlContent) {
+    throw new Error("No XML content loaded. Call loadXml() first.");
+  }
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(this.xmlContent, "application/xml");
+  const nodes = Array.from(xmlDoc.getElementsByTagName(tagName)).map((node, index) => {
+    node.search_index = index; // Store the index for faster lookup
+    return node;
+  });
+  this.nodes = nodes; // Store the extracted nodes in the class property.
+}
 
 export class XMLEditor extends EventTarget {
 
@@ -88,53 +124,60 @@ export class XMLEditor extends EventTarget {
 
   createCompletionSource(tags) {
     return (context) => {
-      let word = context.matchBefore(/\w*/);
-      console.log(context)
-      if (!word || word.from == word.to || !tags) return null;
-
       const state = context.state;
       const pos = context.pos;
-      const token = context.tokenBefore();
-      console.log(token)
-      // Determine context: are we inside a tag, after an attribute, etc.
-      let currentTag = null;
-
-      if (token && token.type === "tag") { //We're in a tag
-        currentTag = token.string.slice(1); // remove '<'
-      }
-
+      let node = syntaxTree(state).resolveInner(pos, -1);
+      let type = node.type.name; 
+      let text = context.state.sliceDoc(node.from, context.pos);
       let options = [];
-
-      if (currentTag && tags[currentTag]) {
-
-        //Provide attribute completions if inside tag and tag is present in schema
-        if (context.matchBefore(/ /)) {
-          //Providing attribute options
-          if (tags[currentTag].attrs) {
-            options = Object.keys(tags[currentTag].attrs).map(attr => ({ label: attr, type: "attribute" }))
-          }
-        } else {
-          //Otherwise provide tag options
-          options = Object.keys(tags).map(tag => ({ label: tag, type: "keyword" }))
-        }
-
-      } else {
-        // Provide tag completions (only at the top level for this example)
-        if (tags["!top"]) {
-          options = tags["!top"].map(tag => ({ label: tag, type: "keyword" }))
-        } else {
-          options = Object.keys(tags).map(tag => ({ label: tag, type: "keyword" }))
-        }
-
+      const parentTags = getParentTagNames(node, state); 
+      let completionType = "keyword";
+  
+      switch (type) {
+        case "StartTag":
+          options = tags[parentTags[0]]?.children;
+          break;
+        case "TagName":
+          options = tags[parentTags[1]]?.children;
+          break;
+        case "OpenTag":
+          // OpenTag: Suggest attributes, or opening tags
+          options = Object.keys(tags[parentTags[0]]?.attrs || {}).concat(tags[parentTags[0]]?.children || []);
+          completionType = "property"; // Mixed types, but property is more relevant here
+          break;
+        case "AttributeName":
+          options = Object.keys(tags[parentTags[0]]?.attrs || {})
+            .map(displayLabel => ({displayLabel, label: `${displayLabel}=""`}))
+          completionType = "property";
+          break;
+        case "AttributeValue":
+          const attributeNode = node.prevSibling?.prevSibling; // Use optional chaining
+          if (!attributeNode) break; // Handle case where there is no previous sibling
+  
+          const attributeTag = context.state.sliceDoc(attributeNode.from, attributeNode.to);
+          const attrs = tags[parentTags[0]]?.attrs;
+          completionType = "property";
+          options = (attrs && attrs[attributeTag]) || [];
+          break;
       }
+  
+      console.log({ type, text, parentTags, options });
+  
+      if (options.length === 0) {
+        return null;
+      }
+  
+      // Suggest from cursor position for StartTag/OpenTag.
+      const from = ["StartTag", "OpenTag"].includes(type) ? pos : node.from; 
+      
       return {
-        from: word.from,
-        options: options,
-        validFor: /^\w*$/
+        from: from,  // Use the cursor position.
+        to: pos,     // End at the cursor position
+        options: options.map(label =>  typeof label === "string" ? ({ label, type: completionType }): label),
+        validFor: /^[\w@:]*$/  //Relax the validFor regex to allow triggering at the start
       };
     };
   }
-
   /**
    * Sets the tag name to highlight and navigates, removing the previous highlight.
    * @param {string} tagName - The tag name to highlight.
@@ -148,25 +191,7 @@ export class XMLEditor extends EventTarget {
     this.highlightNodeByIndex(this.currentIndex); // Highlight the first node after extracting.
   }
 
-  /**
-   * Extracts a list of nodes with a given tag name from an XML string.
-   * @private
-   * @param {string} tagName - The tag name of the nodes to extract.
-   * @returns {Array<Node>} - An array of DOM nodes matching the tag name, with an added `search_index` property.
-   */
-  _extractNodes(tagName) {
-    if (!this.xmlContent) {
-      throw new Error("No XML content loaded. Call loadXml() first.");
-    }
 
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(this.xmlContent, "application/xml");
-    const nodes = Array.from(xmlDoc.getElementsByTagName(tagName)).map((node, index) => {
-      node.search_index = index; // Store the index for faster lookup
-      return node;
-    });
-    this.nodes = nodes; // Store the extracted nodes in the class property.
-  }
 
   /**
    * Highlights a given DOM node in the displayed XML content by positioning an overlay.

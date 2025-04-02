@@ -3,7 +3,7 @@ import { PDFJSViewer } from './pdfviewer.js'
 
 try {
   main()
-} catch(error) {
+} catch (error) {
   console.error(error)
 }
 
@@ -23,17 +23,18 @@ export async function main() {
     console.error('Error fetching JSON:', error);
   }
 
-  const pdfViewer = new PDFJSViewer('pdfjs-viewer', pdfPath).hide();
-  const xmlEditor = new XMLEditor('xml-editor', tagData).hide();
+  const pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath); //.hide();
+  const xmlEditor = new XMLEditor('xml-editor', tagData); //.hide();
 
   if (pdfPath && xmlPath) {
-    // PDF
-    await pdfViewer.load();
-    pdfViewer.show();
+
+    console.log(`PDF: ${pdfPath}\nXML: ${xmlPath}`);
 
     // XML Editor
-    await xmlEditor.loadXml(xmlPath)
-    xmlEditor.show();
+    xmlEditor.loadXml(xmlPath).then(() => xmlEditor.show());
+
+    // PDF
+    pdfViewer.load(pdfPath).then(() => pdfViewer.show());
 
     // start in edit mode
     document.getElementById('editor-switch').checked = true;
@@ -41,15 +42,6 @@ export async function main() {
     // Navigate using buttons
     document.getElementById('prev-bibl').addEventListener('click', () => xmlEditor.previousNode());
     document.getElementById('next-bibl').addEventListener('click', () => xmlEditor.nextNode());
-
-    // // navigate using keys in read-only mode
-    // document.addEventListener('keydown', (event) => {
-    //     if (event.key === 'ArrowLeft') {
-    //         xmlEditor.previousNode()
-    //     } else if (event.key === 'ArrowRight') {
-    //         xmlEditor.nextNode()
-    //     }
-    // });
 
     // when the selected biblStruct changes, show its source in the PDF
     xmlEditor.addEventListener(xmlEditor.EVENT_CURRENT_NODE_CHANGED, event => {
@@ -63,32 +55,30 @@ export async function main() {
     document.getElementById('next-bibl').style.display = 'none'
   }
 
-  // populate select box and load first document 
+  // file select box
   const selectBox = document.getElementById('select-doc');
-  const files = await populateSelectBox(selectBox, '/data/files.json')
-
-  function loadFilesFromSelectedId() {
-    const selectedFile = files.find(file => file.id === selectBox.value);
-    const pdf = selectedFile.pdf;
-    const xml = selectedFile.xml;
-    window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
-  }
-
-  // Add event listener to select box
-  selectBox.addEventListener('change', loadFilesFromSelectedId);
-
-  // toggle read/edit
-  document.getElementById('editor-switch').addEventListener('change', handleEditorSwitch);
-
-  // load the first entry if no query params
-  if (!xmlPath || !pdfPath) {
-    loadFilesFromSelectedId()
-  } else {
-    const fileFromUrl = files.find(file => file.pdf == pdfPath)
-    if (fileFromUrl) {
-      selectBox.selectedIndex = files.indexOf(fileFromUrl);
+  populateSelectBox(selectBox, '/data/files.json').then(files => {
+    function loadFilesFromSelectedId() {
+      const selectedFile = files.find(file => file.id === selectBox.value);
+      const pdf = selectedFile.pdf;
+      const xml = selectedFile.xml;
+      window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
     }
-  }
+    selectBox.addEventListener('change', loadFilesFromSelectedId);
+    if (!xmlPath || !pdfPath) {
+      // if no query params, load the first entry 
+      loadFilesFromSelectedId(files)
+    } else {
+      // otherwise align selection with url
+      const fileFromUrl = files.find(file => file.pdf == pdfPath)
+      if (fileFromUrl) {
+        selectBox.selectedIndex = files.indexOf(fileFromUrl);
+      }
+    }
+  });
+
+  // read/edit switch
+  document.getElementById('editor-switch').addEventListener('change', handleEditorSwitch);
 
   // helper functions
 
@@ -135,7 +125,7 @@ export async function main() {
         option.text = file.id;
         selectBox.appendChild(option);
       });
-
+      console.log('Loaded file data.')
       return files;
 
     } catch (error) {

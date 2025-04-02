@@ -142,31 +142,38 @@ export class PDFJSViewer {
    * @param {string?} pdfPath - The path to the PDF document. If given, used when `load()` is called without argument.
    * @throws {Error} If the iframe element is not found.
    */
-  constructor(iframeId, pdfPath) {
-    this.iframeId = iframeId;
+  constructor(containerDivId, pdfPath) {
     this.pdfPath = pdfPath;
-    this.pdfjsViewerIframe = document.getElementById(iframeId);
-
-    if (!this.pdfjsViewerIframe) {
-      throw new Error(`PDF.js viewer iframe not found (id='${iframeId}')`);
+    this.containerDiv = document.getElementById(containerDivId);
+    if (!this.containerDiv) {
+      throw new Error(`Cannot find element with id ${containerDivId}`);
     }
 
+    // create iframe for PDF.js
+    const iframe = document.createElement('iframe');
+    this.containerDiv.appendChild(iframe);
+    this.iframe = iframe;
+
+    // references to objects in iframe 
     this.iframeWindow = null;
     this.pdfViewer = null;
     this.pdfLinkService = null;
-    this.pdfDoc = null; // Store the PDF document
+    this.pdfDoc = null; 
     this.eventBus = null;
+
+    // promise which will resolve when PDF.js is ready
+    this.initializePromise = null; 
+    // will be true when PDF.js is ready
     this.isReadyFlag = false;
-    this.initializePromise = null; // Store the initialization promise
   }
 
   show() {
-    this.pdfjsViewerIframe.style.display = ''
+    this.iframe.style.display = ''
     return this;
   }
 
   hide(){
-    this.pdfjsViewerIframe.style.display = 'none'
+    this.iframe.style.display = 'none'
     return this;
   }
 
@@ -188,10 +195,10 @@ export class PDFJSViewer {
 
     if (!this.initializePromise) {
       this.initializePromise = new Promise((resolve, reject) => {
-        this.pdfjsViewerIframe.onload = async () => {
+        this.iframe.onload = async () => {
           console.log("PDF.js viewer loaded in iframe, initializing...");
           try {
-            this.iframeWindow = this.pdfjsViewerIframe.contentWindow;
+            this.iframeWindow = this.iframe.contentWindow;
             this.PDFViewerApplication = this.iframeWindow.PDFViewerApplication
             this.pdfViewer = this.PDFViewerApplication.pdfViewer;
             this.pdfLinkService = this.PDFViewerApplication.pdfLinkService;
@@ -201,7 +208,7 @@ export class PDFJSViewer {
               this.pdfViewer.currentScaleValue = 'page-fit';
             });
             this.PDFViewerApplication.initializedPromise.then(() => {
-              this.isReadyFlag = false;
+              this.isReadyFlag = true;
               console.log("PDF.js viewer initialized.");
               resolve();
             })
@@ -211,15 +218,14 @@ export class PDFJSViewer {
           }
         };
 
-        this.pdfjsViewerIframe.onerror = () => {
+        this.iframe.onerror = () => {
           this.isReadyFlag = false;
           reject(new Error("Error loading PDF.js viewer in iframe."));
         };
 
         // remove pdf.js's saved state since it interferes 
         window.addEventListener('beforeunload', () => localStorage.removeItem('pdfjs.history'))
-
-        this.pdfjsViewerIframe.src = `/pdfjs/web/viewer.html` + (this.pdfPath ? `?url=${this.pdfPath}` : '');
+        this.iframe.src = `/web/pdfjs/web/viewer.html` + (this.pdfPath ? `?url=${this.pdfPath}` : '');
       });
     }
     return this.initializePromise;
