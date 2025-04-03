@@ -24,8 +24,8 @@ export async function main() {
     console.error('Error fetching JSON:', error);
   }
 
-  const pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath); //.hide();
-  const xmlEditor = new XMLEditor('xml-editor', tagData);
+  const pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath);
+  const xmlEditor = new XMLEditor('xml-editor', tagData, 'biblStruct');
 
   if (pdfPath && xmlPath) {
 

@@ -6,200 +6,24 @@ import { syntaxTree } from "@codemirror/language";
 import { startCompletion } from "@codemirror/autocomplete";
 import { linter, lintGutter, forceLinting } from "@codemirror/lint";
 
-import { remote_xmllint } from './client.js'
-import { escapeRegExp } from './utils.js';
-
-const teiNsRegExp = new RegExp(escapeRegExp('{http://www.tei-c.org/ns/1.0}'),'g');
-
-
-// const xsd_docs = [];
-// const xsd_files = ['/schema/tei.xsd', '/schema/xml.xsd'];
-// load XSD
-// (async () => {
-//   try {
-//     for (let xsd_file of xsd_files) {
-//       xsd_docs.push(await(await fetch(xsd_file)).text())
-//     }
-//     console.log("XSD files loaded.");
-//   } catch( error ) {
-//     console.error("Error loading XSD files:", error.message)
-//   }
-// })();
-
-async function lintSource(view) {
-  // we don't do linting until xmllint and xsd files have been loaded
-  //if (!window.xmllint || xsd_docs.length < xsd_files.length) return [];
-
-  // get text from document and lint it
-  const doc = view.state.doc;
-  const xml = doc.toString();
-
-  // in-browser schema validation not yet working
-  //const config = {xml, schema: xsd_docs};
-  //const {errors} =  xmllint.validateXML(config)
-  //const xmlLint_error_re = /^(.+?)_(\d)\.(xml|xsd):(\d+): (.+?) : (.+)/
-  
-  // use remote xmllint
-  const xmlLint_error_re = /^(.*?)(xml|xsd):(\d+): (.+?) : (.+)/
-  const {errors} = await remote_xmllint(xml);
-
-  // convert xmllint errors to Diagnostic objects
-  const diagnostics = errors.map( error => {
-    //"file_0.xml:26: parser error : Extra content at the end of the document"
-    let m = error.match(xmlLint_error_re)
-    if (!m) {
-      // ignore all messages that cannot be parsed
-      return null;
-    }
-    //let [,, fileNumber, type, lineNumber, name, message] = m;
-    let [, fileNumber, type, lineNumber, name, message] = m;
-    fileNumber = parseInt(fileNumber) || null;
-    lineNumber = parseInt(lineNumber);
-    message = message.replaceAll(teiNsRegExp, 'tei:')
-    let from, to;
-    if (type === 'xml'){
-      ({ from, to } = doc.line(lineNumber));
-    } else {
-      from = to = lineNumber;
-    }
-    const severity = "error"
-    return { type, fileNumber, from, to, severity, name, message, lineNumber };
-  }).filter(Boolean);
-
-  // xsd errors are serious
-  const xsd_errors = diagnostics.filter(d => d.type == 'xsd');
-  if (xsd_errors.length > 0) {
-    xsd_errors.forEach(d => {
-      console.error(`${xsd_files[d.fileNumber]}, line ${d.lineNumber}: (${d.name}) ${d.message}`);
-    });
-  }
-
-  // xml errors are informational, dealt by linter
-  const xml_errors = diagnostics.filter(d => d.type == 'xml');
-  if (xml_errors.length > 0) {
-    console.log(`${xml_errors.length} linter error(s) found.`)
-    //xml_errors.forEach(d => {
-    //  console.log(`Line ${d.lineNumber}: ${d.message}`);
-    //});
-  }
-  return xml_errors;
-}
-
-/**
- * 
- * @param {Object} node 
- * @param {EditorState} state 
- * @returns {Array<>}
- */
-function getParentTagNames(node, state) {
-  const tagNames = [];
-  let parentNode = node.parent;
-  while (parentNode) {
-    if (parentNode.name === "Element") {
-      const tagPortion = state.doc.sliceString(parentNode.from, parentNode.to);
-      const match = tagPortion.match(/^<([a-zA-Z0-9:]+)/);
-      if (match) {
-        tagNames.push(match[1]); // Add the captured tag name to the list
-      }
-    }
-    parentNode = parentNode.parent;
-  }
-  return tagNames;
-}
-
-/**
- * Given a data structure containing permissible children and attributes of
- * nodes with a given tag, create the completionSource data for autocompletion
- * @param {*} tagData 
- * @returns 
- */
-function createCompletionSource(tagData) {
-  return (context) => {
-    const state = context.state;
-    const pos = context.pos;
-    let node = syntaxTree(state).resolveInner(pos, -1);
-    let type = node.type.name;
-    let text = context.state.sliceDoc(node.from, context.pos);
-    let options = [];
-    const parentTags = getParentTagNames(node, state);
-    let completionType = "keyword";
-
-    switch (type) {
-      case "StartTag":
-        options = tagData[parentTags[0]]?.children || [];
-        break;
-      case "TagName":
-        options = tagData[parentTags[1]]?.children || [];
-        break;
-      case "OpenTag":
-      case "AttributeName":
-        options = Object.keys(tagData[parentTags[0]]?.attrs || {})
-          .map(displayLabel => ({
-            displayLabel,
-            label: `${displayLabel}=""`,
-            type: "property",
-            apply: (view, completion, from, to) => {
-              view.dispatch({
-                changes: { from, to, insert: completion.label },
-                selection: { anchor: from + completion.label.length - 1 }
-              });
-              // start new autocomplete
-              setTimeout(() => startCompletion(view), 20);
-            }
-          }));
-        break;
-      case "AttributeValue":
-        const attributeNode = node.prevSibling?.prevSibling;
-        if (!attributeNode) break;
-        const attributeTag = context.state.sliceDoc(attributeNode.from, attributeNode.to);
-        const attrs = tagData[parentTags[0]]?.attrs;
-        options = (attrs && attrs[attributeTag]) || [];
-        options = options.map(option => ({
-          label: option,
-          type: "property",
-          apply: (view, completion, from, to) => {
-            view.dispatch({
-              changes: { from, to, insert: completion.label },
-              selection: { anchor: to + completion.label.length + 1 }, // Move cursor after the closing quote
-            });
-          }
-        }));
-        break;
-    }
-
-    if (options.length === 0) {
-      return null;
-    }
-
-    // Suggest from cursor position for StartTag/OpenTag.
-    const from = ["StartTag", "OpenTag", "AttributeValue"].includes(type) ? pos : node.from;
-    const to = pos;
-
-    // convert string options to completionResult objects
-    options = options.map(label => typeof label === "string" ? ({ label, type: completionType }) : label);
-
-    return {
-      from, to, options,
-      validFor: /^[\w@:]*$/
-    };
-  };
-}
+import { createCompletionSource } from './autocomplete.js'
+import { lintSource } from './lint.js'
 
 export class XMLEditor extends EventTarget {
-
   static EVENT_CURRENT_NODE_CHANGED = "currentNodeChanged";
 
   /**
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
    */
-  constructor(editorDivId, tagData) {
+  constructor(editorDivId, tagData, recordTag) {
     super();
     this.editorDiv = document.getElementById(editorDivId);
     this.nodes = []; // Stores the extracted nodes from the XML.
     this.xmlContent = "";
     this.currentIndex = 0;
     this.highlightedTag = null;
+    this.recordTag = recordTag;
 
     // the number of the current diagnostic, if any, otherwise null
     this.diagnosticIndex = null;
@@ -256,20 +80,35 @@ export class XMLEditor extends EventTarget {
       // treat argument as xml string
       xml = xmlPathOrString;
     }
+    
+    // provide each main record with an xml:id
+    if (this.recordTag) {
+      const parser = new DOMParser(); 
+      const xmlDoc = parser.parseFromString(xml, "application/xml");
+      this.nodes = Array.from(xmlDoc.getElementsByTagName(this.recordTag));
+      for (let [idx, node] of this.nodes.entries()) {
+        if (!node.hasAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:id")){
+          node.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:id", `biblStruct${idx}`)
+        }
+      }
+      xml = (new XMLSerializer()).serializeToString(xmlDoc)
+    }
+    
     this.xmlContent = xml;
+
+    // display xml in editor
     this.view.dispatch({
       changes: { from: 0, to: this.view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0)
     });
+
+    // run linting
     forceLinting(this.view);
 
-    // setup highlighting of nodes
-    const tagName = "biblStruct";
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(this.xmlContent, "application/xml");
-    this.nodes = Array.from(xmlDoc.getElementsByTagName(tagName));
+    // highlight first node
     this.resetIndex();
-    this.highlightNodeByIndex(0);
+    setTimeout(() => this.highlightNodeByIndex(0), 500);
+
     return this.xmlContent;
   }
 
@@ -282,20 +121,31 @@ export class XMLEditor extends EventTarget {
       this.view.dispatch({ selection: EditorSelection.range(0, 0) })
       return;
     }
-    // Find the start and end positions of the node in the editor
-    const start = this.xmlContent.indexOf(`<${node.tagName}`, this.xmlContent.indexOf(node.outerHTML))
-    const end = start + node.outerHTML.length;
 
-    if (start === -1 || end === -1) {
-      console.warn(`Node not found in editor content: ${node.tagName}`);
+    // Find the start and end positions of the node in the editor
+    const id = node.getAttribute("xml:id")
+    if (!id) {
+      console.error(`Node has no id`, node);
       return;
     }
 
-    // Dispatch a transaction to select the node in the editor
-    this.view.dispatch({
-      selection: EditorSelection.range(start, end),
-      scrollIntoView: true // Optional: Scroll the selection into view
-    });
+    const pos = this.xmlContent.indexOf(`xml:id="${id}"`)
+    if (pos == -1) {
+      console.error(`Cannot find node with xml:id="${id}"`)
+      return
+    }
+    const doc = this.view.state.doc;
+    if (doc.length > 0) {
+      let from = doc.lineAt(pos).from;
+      let to = doc.lineAt(from + node.outerHTML.length).to;
+  
+      // Dispatch a transaction to select the node in the editor
+      this.view.dispatch({
+        selection: EditorSelection.range(from, to),
+        scrollIntoView: true // Optional: Scroll the selection into view
+      });
+    }  
+    
   }
 
   /**
