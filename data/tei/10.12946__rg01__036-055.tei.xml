@@ -1,4 +1,7 @@
-<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 ../../schema/xsd/document.xsd">
+<TEI 
+  xmlns="http://www.tei-c.org/ns/1.0" 
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+  xsi:schemaLocation="http://www.tei-c.org/ns/1.0 ../../schema/tei.xsd">
   <teiHeader>
     <fileDesc>
       <titleStmt>

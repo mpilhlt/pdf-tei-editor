@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+
+from flask import Flask, request, jsonify, send_from_directory
+import subprocess
+import os
+import tempfile
+
+app = Flask(__name__, static_folder='..') 
+
+# Serve static files
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('..', path)
+
+# Hardcoded XSD path (modify this to your actual XSD file path)
+XSD_PATH = "schema/tei.xsd" 
+
+@app.route('/tei-lint', methods=['POST'])
+def tei_lint():
+    """
+    Receives a string (presumably TEI XML), runs xmllint against a predefined XSD,
+    and returns a JSON array of error messages.
+    """
+    try:
+        data = request.get_json()
+        tei_xml = data.get('xml_string')
+
+        if not tei_xml:
+            return jsonify({'error': 'No XML string provided in the request body.'}), 400
+
+        # Create a temporary file to store the XML
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".xml") as temp_xml_file:
+            temp_xml_path = temp_xml_file.name
+            temp_xml_file.write(tei_xml)
+
+        # Run xmllint using subprocess
+        command = [
+            "xmllint",
+            "--noout",  # Suppress output, we only want errors
+            "--schema", XSD_PATH,
+            temp_xml_path
+        ]
+
+        process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE)  # Capture both streams
+        stdout, stderr = process.communicate()
+        return_code = process.returncode
+
+        # Parse the output for error messages
+        error_messages = []
+        if stderr:
+             error_messages = stderr.decode("utf-8").strip().splitlines()
+             error_messages = [err.replace(temp_xml_path,"xml") for err in error_messages]
+        
+        # Cleanup the temporary file
+        os.unlink(temp_xml_path)
+        return jsonify({'errors': error_messages})
+
+    except FileNotFoundError:
+        return jsonify({'error': 'xmllint not found.  Ensure it is installed and in your PATH.'}), 500
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")  # Log the error for debugging
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """
+    Simple health check endpoint.
+    """
+    return jsonify({'status': 'ok'}), 200
+
+if __name__ == '__main__':
+    app.run(debug=True, port=3001)

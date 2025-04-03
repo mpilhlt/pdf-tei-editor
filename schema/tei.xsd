@@ -5,7 +5,8 @@
   xmlns:tei="http://www.tei-c.org/ns/1.0"
   elementFormDefault="qualified" 
   targetNamespace="http://www.tei-c.org/ns/1.0">
-  <xs:import namespace="http://www.w3.org/XML/1998/namespace" />
+  
+  <xs:import namespace="http://www.w3.org/XML/1998/namespace" schemaLocation="http://www.w3.org/2001/xml.xsd" />
   <!--
     Schema generated from ODD source 2024-11-23T21:55:32Z. . 
     TEI Edition: P5 Version 4.8.1. Last updated on 1st November 2024, revision 0a2bff95a 

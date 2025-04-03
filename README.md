@@ -6,12 +6,14 @@ A viewer/editor web app to compare the PDF source and TEI extraction/annotation 
 
 ```
 npm install
-bin/download-pdfjs
-npx serve
+./bin/download-pdfjs
 ```
 
-Then open http://localhost:3000/web/ 
+## Start the server
 
+```
+./bin/server
+```
 
-
+Then open http://localhost:3001/web/
 

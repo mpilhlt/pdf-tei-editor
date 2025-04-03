@@ -8,9 +8,9 @@ fetch('./importmap.json')
   document.head.appendChild(script);
 
   // xmllint 
-  const xmllintscript = document.createElement('script');
-  xmllintscript.src = '/node_modules/xmllint/xmllint.js'; 
-  document.body.appendChild(xmllintscript);
+  // const xmllintscript = document.createElement('script');
+  // xmllintscript.src = '/node_modules/xmllint/xmllint.js'; 
+  // document.body.appendChild(xmllintscript);
 
   // Now, load the main script that uses the import map
   const mainScript = document.createElement('script');

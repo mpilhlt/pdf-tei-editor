@@ -1,5 +1,6 @@
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
+import { $, $$ } from './utils.js'
 
 try {
   main()
@@ -24,14 +25,14 @@ export async function main() {
   }
 
   const pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath); //.hide();
-  const xmlEditor = new XMLEditor('xml-editor', tagData); //.hide();
+  const xmlEditor = new XMLEditor('xml-editor', tagData);
 
   if (pdfPath && xmlPath) {
 
     console.log(`PDF: ${pdfPath}\nXML: ${xmlPath}`);
 
     // XML Editor
-    xmlEditor.loadXml(xmlPath).then(() => xmlEditor.show());
+    xmlEditor.loadXml(xmlPath);
 
     // PDF
     pdfViewer.load(pdfPath).then(() => pdfViewer.show());
@@ -39,10 +40,10 @@ export async function main() {
     // start in edit mode
     document.getElementById('editor-switch').checked = true;
 
-    // Navigate using buttons
-    document.getElementById('prev-bibl').addEventListener('click', () => xmlEditor.previousNode());
-    document.getElementById('next-bibl').addEventListener('click', () => xmlEditor.nextNode());
-
+    // setup UI
+    $('#prev-bibl').addEventListener('click', () => xmlEditor.previousNode());
+    $('#next-bibl').addEventListener('click', () => xmlEditor.nextNode());
+       
     // when the selected biblStruct changes, show its source in the PDF
     xmlEditor.addEventListener(xmlEditor.EVENT_CURRENT_NODE_CHANGED, event => {
       handleBiblStructChange(pdfViewer, event.detail)
