@@ -1,3 +1,6 @@
+import { syntaxTree } from "@codemirror/language";
+import { startCompletion } from "@codemirror/autocomplete";
+
 /**
  * Walks the Lezer Syntax upwards to find all tag names
  * @param {Object} node 

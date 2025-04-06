@@ -1,6 +1,6 @@
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
-import { $, $$ } from './utils.js'
+import { $, $$, addBringToForegroundListener, makeDraggable } from './utils.js'
 
 try {
   main()
@@ -43,7 +43,7 @@ export async function main() {
     // setup UI
     $('#prev-bibl').addEventListener('click', () => xmlEditor.previousNode());
     $('#next-bibl').addEventListener('click', () => xmlEditor.nextNode());
-       
+
     // when the selected biblStruct changes, show its source in the PDF
     xmlEditor.addEventListener(xmlEditor.EVENT_CURRENT_NODE_CHANGED, event => {
       handleBiblStructChange(pdfViewer, event.detail)
@@ -80,6 +80,12 @@ export async function main() {
 
   // read/edit switch
   document.getElementById('editor-switch').addEventListener('change', handleEditorSwitch);
+
+  // bring clicked elements into foreground when clicked
+  addBringToForegroundListener(['#navigation', '.cm-panels']);
+
+  // make navigation draggable
+  makeDraggable($('#navigation'))
 
   // helper functions
 
@@ -143,3 +149,6 @@ export async function main() {
     }
   }
 }
+
+
+

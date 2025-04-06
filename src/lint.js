@@ -1,83 +1,123 @@
-import { escapeRegExp } from './utils.js';
 import { remote_xmllint } from './client.js'
-
-const teiNsRegExp = new RegExp(escapeRegExp('{http://www.tei-c.org/ns/1.0}'), 'g');
-
-
-// const xsd_docs = [];
-// const xsd_files = ['/schema/tei.xsd', '/schema/xml.xsd'];
-// load XSD
-// (async () => {
-//   try {
-//     for (let xsd_file of xsd_files) {
-//       xsd_docs.push(await(await fetch(xsd_file)).text())
-//     }
-//     console.log("XSD files loaded.");
-//   } catch( error ) {
-//     console.error("Error loading XSD files:", error.message)
-//   }
-// })();
+import { syntaxTree } from "@codemirror/language";
+import { EditorView } from "@codemirror/view";
 
 export async function lintSource(view) {
-  // we don't do linting until xmllint and xsd files have been loaded
-  //if (!window.xmllint || xsd_docs.length < xsd_files.length) return [];
-
-  // get text from document and lint it
+  // get text from document
   const doc = view.state.doc;
   const xml = doc.toString();
-
   if (xml == "") {
-    return;
+    return [];
   }
 
-  // in-browser schema validation not yet working
-  //const config = {xml, schema: xsd_docs};
-  //const {errors} =  xmllint.validateXML(config)
-  //const xmlLint_error_re = /^(.+?)_(\d)\.(xml|xsd):(\d+): (.+?) : (.+)/
-
-  // use remote xmllint
-  const xmlLint_error_re = /^(.*?)(xml|xsd):(\d+): (.+?) : (.+)/
   const { errors } = await remote_xmllint(xml);
 
   // convert xmllint errors to Diagnostic objects
   const diagnostics = errors.map(error => {
-    //"file_0.xml:26: parser error : Extra content at the end of the document"
-    let m = error.match(xmlLint_error_re)
-    if (!m) {
-      // ignore all messages that cannot be parsed
-      return null;
-    }
-    //let [,, fileNumber, type, lineNumber, name, message] = m;
-    let [, fileNumber, type, lineNumber, name, message] = m;
-    fileNumber = parseInt(fileNumber) || null;
-    lineNumber = parseInt(lineNumber);
-    message = message.replaceAll(teiNsRegExp, 'tei:')
     let from, to;
-    if (type === 'xml') {
-      ({ from, to } = doc.line(lineNumber));
+    if (error.line) {
+      ({from, to} = doc.line(error.line))
+      from += error.col
+
+    } else if (error.path) {
+      // {"reason": "Unexpected child with tag 'tei:imprint' at position 4. Tag 'tei:title' expected.", 
+      // "path": "/TEI/standOff/listBibl/biblStruct[8]/monogr"}  
+      const pos = resolveXPath(view, error.path)
+      if (!pos) {
+        console.warn(`Could not locate ${error.path} in syntax tree.`)
+        return null
+      }
+      ({ from, to } = pos);
     } else {
-      from = to = lineNumber;
+      console.warn("Invalid response from remote validation:", error)
+      return null
     }
-    const severity = "error"
-    return { type, fileNumber, from, to, severity, name, message, lineNumber };
+    return { from, to, severity: "error", message: error.reason };
   }).filter(Boolean);
 
-  // xsd errors are serious
-  const xsd_errors = diagnostics.filter(d => d.type == 'xsd');
-  if (xsd_errors.length > 0) {
-    xsd_errors.forEach(d => {
-      //console.error(`${xsd_files[d.fileNumber]}, line ${d.lineNumber}: (${d.name}) ${d.message}`);
-      console.error(`XSD, line ${d.lineNumber}: (${d.name}) ${d.message}`);
-    });
+  console.log(diagnostics)
+  if (diagnostics.length > 0) {
+    console.log(`${diagnostics.length} linter error(s) found.`)
+  }
+  return diagnostics;
+}
+
+/**
+ * Resolves a simple XPath-like expression against a CodeMirror 6 syntax tree
+ * to find the position of the target node.
+ *
+ * The XPath only supports direct and indexed children (e.g., "/TEI/standOff/listBibl/biblStruct[8]/monogr").
+ *
+ * @param view {EditorView} The CodeMirror 6 EditorView
+ * @param xpath The XPath-like expression to resolve.
+ * @returns The `from` and `to` positions of the matching node, or null if not found.
+ */
+function resolveXPath(view, xpath) {
+  const tree = syntaxTree(view.state);
+  const doc = view.state.doc;
+  const pathSegments = xpath.split("/").filter(segment => segment !== "");
+
+  let cursor = tree.topNode.cursor();
+  let foundNode = null;
+
+  function text(node, length = null) {
+    return doc.sliceString(node.from, length ? Math.min(node.from + length, node.to, doc.length) : node.to);
   }
 
-  // xml errors are informational, dealt by linter
-  const xml_errors = diagnostics.filter(d => d.type == 'xml');
-  if (xml_errors.length > 0) {
-    console.log(`${xml_errors.length} linter error(s) found.`)
-    //xml_errors.forEach(d => {
-    //  console.log(`Line ${d.lineNumber}: ${d.message}`);
-    //});
+  // function debugNode(node, textLength=10) {
+  //   return node ? `(${node.name}: "${text(node, textLength)}")`: "(null)";
+  // }
+
+  for (const segment of pathSegments) {
+    let index = 0;
+    let tagName = segment;
+
+    const match = segment.match(/^(.*?)\[(\d+)\]$/);
+    if (match) {
+      tagName = match[1];
+      index = parseInt(match[2], 10) - 1;
+      if (isNaN(index) || index < 0) {
+        console.error(`Invalid child index in ${segment}`);
+        return null;
+      }
+    }
+
+    let childIndex = 0;
+    let found = false;
+    //console.log("Next segment:" , tagName, index)
+    // move to first child of current cursor
+    if (!cursor.firstChild()) {
+      console.log("cursor has no children")
+      return null;
+    }
+
+    do {
+      //console.log('Current cursor node: ', debugNode(cursor))
+      if (cursor.name == "Element") {
+        const element = cursor.node;
+        //console.log('  - cursor[1][1]: ', debugNode(element.firstChild?.firstChild))
+        //console.log('  - cursor[1][2]: ', debugNode(element.firstChild?.firstChild?.nextSibling))
+        let tagNameNode = element.firstChild?.firstChild?.nextSibling;
+        if (tagNameNode.name === "TagName" && text(tagNameNode) === tagName) {
+          if (childIndex === index) {
+            found = true;
+            foundNode = element;
+            break;
+          }
+          childIndex++;
+        }
+      }
+    } while (cursor.nextSibling());
+
+    if (!found) {
+      return null; // No matching node found at this level
+    }
+    cursor = foundNode.cursor(); // move the cursor for the next level
   }
-  return xml_errors;
+
+  if (foundNode) {
+    return { from: foundNode.from, to: foundNode.to };
+  } else {
+    return null;
+  }
 }

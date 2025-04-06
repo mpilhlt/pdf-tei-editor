@@ -2,10 +2,7 @@ import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { syntaxTree } from "@codemirror/language";
-import { startCompletion } from "@codemirror/autocomplete";
 import { linter, lintGutter, forceLinting } from "@codemirror/lint";
-
 import { createCompletionSource } from './autocomplete.js'
 import { lintSource } from './lint.js'
 
@@ -34,7 +31,7 @@ export class XMLEditor extends EventTarget {
       xmlLanguage.data.of({
         autocomplete: createCompletionSource(tagData)
       }),
-      linter(lintSource, {autoPanel: true}),
+      linter(lintSource, {autoPanel: true, delay: 2000}),
       lintGutter()
     ];
     let linterTimeout = null;

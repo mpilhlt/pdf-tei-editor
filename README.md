@@ -5,6 +5,7 @@ A viewer/editor web app to compare the PDF source and TEI extraction/annotation 
 ## Installation
 
 ```
+uv sync
 npm install
 ./bin/download-pdfjs
 ```

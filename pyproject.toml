@@ -1,0 +1,13 @@
+[project]
+name = "pdf-tei-editor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "flask>=3.1.0",
+    "lxml>=5.3.1",
+    "requests>=2.32.3",
+    "routes>=2.5.1",
+    "xmlschema>=3.4.5",
+]

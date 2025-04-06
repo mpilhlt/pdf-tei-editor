@@ -1,3 +1,5 @@
 .venv
 node_modules
 pdfjs
+__pycache__
+.python-version

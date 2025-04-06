@@ -1,72 +1,52 @@
 #!/usr/bin/env python3
 
-from flask import Flask, request, jsonify, send_from_directory
-import subprocess
+from flask import Flask, send_from_directory, jsonify
 import os
-import tempfile
+import importlib.util
+from glob import glob
 
-app = Flask(__name__, static_folder='..') 
+web_root = os.path.dirname(os.path.dirname(__file__))
 
-# Serve static files
-@app.route('/<path:path>')
-def serve_static(path):
-    return send_from_directory('..', path)
+def create_app():
+    app = Flask(__name__, static_folder=web_root)
 
-# Hardcoded XSD path (modify this to your actual XSD file path)
-XSD_PATH = "schema/tei.xsd" 
+    # Dynamically register blueprints from the 'api' folder
+    api_folder = os.path.join(web_root, 'api')
+    for filename in os.listdir(api_folder):
+        if filename.endswith('.py') and filename != '__init__.py':
+            module_name = filename[:-3]  # Remove ".py" extension
+            module_path = os.path.join(api_folder, filename)
 
-@app.route('/tei-lint', methods=['POST'])
-def tei_lint():
-    """
-    Receives a string (presumably TEI XML), runs xmllint against a predefined XSD,
-    and returns a JSON array of error messages.
-    """
-    try:
-        data = request.get_json()
-        tei_xml = data.get('xml_string')
+            # Use importlib to dynamically import the module
+            spec = importlib.util.spec_from_file_location(module_name, module_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
 
-        if not tei_xml:
-            return jsonify({'error': 'No XML string provided in the request body.'}), 400
+            # Check if the module has a 'bp' attribute (blueprint instance)
+            if hasattr(module, 'bp'):
+                app.register_blueprint(module.bp)
+                print(f"Registered blueprint: {module_name}")  # Optional logging
+            else:
+                print(f"Warning: No blueprint ('bp' attribute) found in {module_name}")
 
-        # Create a temporary file to store the XML
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".xml") as temp_xml_file:
-            temp_xml_path = temp_xml_file.name
-            temp_xml_file.write(tei_xml)
+    # Serve static files
+    @app.route('/<path:path>')
+    def serve_static(path):
+        return send_from_directory(web_root, path)
+    
 
-        # Run xmllint using subprocess
-        command = [
-            "xmllint",
-            "--noout",  # Suppress output, we only want errors
-            "--schema", XSD_PATH,
-            temp_xml_path
-        ]
+    # Simple health check
+    @app.route('/api/health', methods=['GET'])
+    def health_check():
+        """
+        Simple health check endpoint.
+        """
+        return jsonify({'status': 'ok'}), 200
 
-        process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE)  # Capture both streams
-        stdout, stderr = process.communicate()
-        return_code = process.returncode
+    return app
 
-        # Parse the output for error messages
-        error_messages = []
-        if stderr:
-             error_messages = stderr.decode("utf-8").strip().splitlines()
-             error_messages = [err.replace(temp_xml_path,"xml") for err in error_messages]
-        
-        # Cleanup the temporary file
-        os.unlink(temp_xml_path)
-        return jsonify({'errors': error_messages})
-
-    except FileNotFoundError:
-        return jsonify({'error': 'xmllint not found.  Ensure it is installed and in your PATH.'}), 500
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")  # Log the error for debugging
-        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """
-    Simple health check endpoint.
-    """
-    return jsonify({'status': 'ok'}), 200
 
 if __name__ == '__main__':
-    app.run(debug=True, port=3001)
+    app = create_app()
+    reload_extra_files = glob('./api/*')
+    app.run(debug=True, port=3001, load_dotenv=True, extra_files=reload_extra_files)
