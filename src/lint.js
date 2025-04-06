@@ -35,7 +35,6 @@ export async function lintSource(view) {
     return { from, to, severity: "error", message: error.reason };
   }).filter(Boolean);
 
-  console.log(diagnostics)
   if (diagnostics.length > 0) {
     console.log(`${diagnostics.length} linter error(s) found.`)
   }

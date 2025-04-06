@@ -165,6 +165,10 @@ export class PDFJSViewer {
     this.initializePromise = null; 
     // will be true when PDF.js is ready
     this.isReadyFlag = false;
+    // promise which will resolve when the document is loaded
+    this.loadPromise = null;
+    // will be true when the current document is done loading
+    this.isLoadedFlag = false;
   }
 
   show() {
@@ -248,14 +252,25 @@ export class PDFJSViewer {
     }
     await this.isReady();
 
-    try {
-      this.pdfDoc = await this.iframeWindow.pdfjsLib.getDocument(pdfPath).promise;
-      this.pdfViewer.setDocument(this.pdfDoc);
-      this.pdfLinkService.setDocument(this.pdfDoc, null);
-      console.log("PDF loaded successfully.");
-    } catch (error) {
-      throw new Error(`Error loading PDF in iframe: ${error}`);
+    if (this.loadPromise) {
+      console.log("Already loading PDF, waiting for it to finish...");
+      await this.loadPromise; // Already loading, wait until this is done to reload
     }
+    this.isLoadedFlag = false;
+
+    this.loadPromise = new Promise(async (resolve, reject) => {
+      try {
+        this.pdfDoc = await this.iframeWindow.pdfjsLib.getDocument(pdfPath).promise;
+        this.pdfViewer.setDocument(this.pdfDoc);
+        this.pdfLinkService.setDocument(this.pdfDoc, null);
+        console.log("PDF loaded successfully.");
+        this.isLoadedFlag = true;
+        resolve();
+      } catch (error) {
+        reject(new Error(`Error loading PDF: ${error}`));
+      }
+    });
+    return this.loadPromise;
   }
 
   /**
@@ -286,46 +301,12 @@ export class PDFJSViewer {
     this.pdfViewer.currentScaleValue = zoomFactor;
   }
 
-  /**
-   * Scrolls a specific coordinate in a given page to a specified percentage of the iframe.
-   *
-   * This method scrolls the PDF viewer to a specific location on a given page,
-   * calculated as a percentage of the iframe's width and height.
-   *
-   * @param {number} pageNumber - The page number to scroll in (1-based).
-   * @param {number} xPercent - The horizontal percentage (0-100) of the iframe to scroll to.
-   * @param {number} yPercent - The vertical percentage (0-100) of the iframe to scroll to.
-   * @throws {Error} If the viewer hasn't been intialized.
-   * @throws {Error} If the specified page is not found.
-   */
-  async scrollToPercentage(pageNumber, xPercent, yPercent) {
-    await this.isReady();
-
-    const page = this.pdfViewer.getPageView(pageNumber - 1);
-
-    if (!page) {
-      throw new Error(`Page ${pageNumber} not found`);
-    }
-
-    const pageWidth = page.width;
-    const pageHeight = page.height;
-    const viewerWidth = this.pdfViewer.container.clientWidth;
-    const viewerHeight = this.pdfViewer.container.clientHeight;
-
-    const scrollX = (xPercent / 100) * pageWidth - (viewerWidth / 2);
-    const scrollY = (yPercent / 100) * pageHeight - (viewerHeight / 2);
-
-    this.pdfViewer.container.scrollTo({
-      top: scrollY,
-      left: scrollX,
-      behavior: 'smooth'
-    });
-  }
 
   /**
    * Searches for a string within the PDF document using the PDF.js Viewer's findController.
    *
-   * @param {string} query - The string to search for.
+   * @param {Array<string>|string} query - The search terms, either as a string or an array of strings.
+   * If an array is provided, the search will be performed for each term in the array.
    * @param {object?} options - An object with keys phraseSearch (true), caseSensitive (false), entireWord (true), 
    * highlightAll (false), findPrevious (false),
    * @returns {Promise<Array<{pageIndex: number, matchIndex: number}>>} - A promise that resolves with an array of objects,
@@ -334,7 +315,23 @@ export class PDFJSViewer {
    * @throws {Error} If there is an error during the search.
    */
   async search(query, options = {}) {
-    await this.isReady();
+
+    if (!query || query.length === 0) { 
+      console.warn("No search terms provided.");
+      return [];
+    }
+    
+    // wait for document to be loaded
+    if (!this.isLoadedFlag) {
+      await this.isReady();
+      if (!this.loadPromise) {
+        throw new Error("PDF document not loaded. Call load() first.");
+      }
+      console.log("Waiting for PDF document to load...");
+      await this.loadPromise;
+    }
+    
+    console.log(`Searching for "${query}"...`);
 
     const defaultOptions = {
       query,

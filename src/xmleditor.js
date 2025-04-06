@@ -104,16 +104,24 @@ export class XMLEditor extends EventTarget {
 
     // highlight first node
     this.resetIndex();
-    setTimeout(() => this.highlightNodeByIndex(0), 500);
+    setTimeout(() => this.focusNodeByIndex(0), 500);
 
     return this.xmlContent;
   }
 
   /**
-   * Highlights a given DOM node in the displayed XML content by positioning an overlay.
+   * Focuses on a given DOM node in the displayed XML content 
    * @param {Node} node - The DOM node to highlight.  If null, the overlay is hidden.
    */
-  highlightNode(node) {
+  focusNode(node) {
+
+    console.log("Focusing node", node);
+
+    if (node !== this.__lastNode) {
+      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_CURRENT_NODE_CHANGED, {detail: node}));
+      this.__lastNode = node;
+    }
+
     if (!node) {
       this.view.dispatch({ selection: EditorSelection.range(0, 0) })
       return;
@@ -149,18 +157,17 @@ export class XMLEditor extends EventTarget {
    * Highlights a node from the `nodes` array by its index.
    * @param {number} index - The index of the node to highlight.
    */
-  highlightNodeByIndex(index) {
+  focusNodeByIndex(index) {
     const node = this.nodes[index];
     if (!node) {
-      this.highlightNode(null); // Clear the highlight if node doesn't exist
+      this.focusNode(null); // Clear the highlight if node doesn't exist
       return;
     }
     try {
-      this.highlightNode(node);
+      this.focusNode(node);
     } catch (error) {
       console.error(error);
     }
-    this.dispatchEvent(new Event(XMLEditor.EVENT_CURRENT_NODE_CHANGED));
   }
 
   /**
@@ -170,7 +177,7 @@ export class XMLEditor extends EventTarget {
   nextNode() {
     if (this.currentIndex < this.nodes.length - 1) {
       this.currentIndex++;
-      this.highlightNodeByIndex(this.currentIndex);
+      this.focusNodeByIndex(this.currentIndex);
     }
   }
 
@@ -181,7 +188,7 @@ export class XMLEditor extends EventTarget {
   previousNode() {
     if (this.currentIndex > 0) {
       this.currentIndex--;
-      this.highlightNodeByIndex(this.currentIndex);
+      this.focusNodeByIndex(this.currentIndex);
     }
   }
 

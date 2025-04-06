@@ -78,7 +78,8 @@ iframe {
 
 
 #editor-switch-control {
-    display: flex;
+    display: none;
+    /* display: flex; */
     align-items: center;
     /* Vertically align items */
     gap: 5px;

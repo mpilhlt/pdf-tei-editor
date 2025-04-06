@@ -1,6 +1,7 @@
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
 import { $, $$, addBringToForegroundListener, makeDraggable } from './utils.js'
+import { get_file_list } from './client.js'
 
 try {
   main()
@@ -24,8 +25,8 @@ export async function main() {
     console.error('Error fetching JSON:', error);
   }
 
-  const pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath);
-  const xmlEditor = new XMLEditor('xml-editor', tagData, 'biblStruct');
+  const pdfViewer = window.pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath);
+  const xmlEditor = window.xmlEditor = new XMLEditor('xml-editor', tagData, 'biblStruct');
 
   if (pdfPath && xmlPath) {
 
@@ -45,12 +46,12 @@ export async function main() {
     $('#next-bibl').addEventListener('click', () => xmlEditor.nextNode());
 
     // when the selected biblStruct changes, show its source in the PDF
-    xmlEditor.addEventListener(xmlEditor.EVENT_CURRENT_NODE_CHANGED, event => {
+    xmlEditor.addEventListener(XMLEditor.EVENT_CURRENT_NODE_CHANGED, event => {
       handleBiblStructChange(pdfViewer, event.detail)
     });
 
     // highlight the first biblStruct
-    xmlEditor.highlightNodeByIndex(0);
+    xmlEditor.focusNodeByIndex(0);
   } else {
     document.getElementById('prev-bibl').style.display = 'none'
     document.getElementById('next-bibl').style.display = 'none'
@@ -58,7 +59,7 @@ export async function main() {
 
   // file select box
   const selectBox = document.getElementById('select-doc');
-  populateSelectBox(selectBox, '/data/files.json').then(files => {
+  populateSelectBox(selectBox).then(files => {
     function loadFilesFromSelectedId() {
       const selectedFile = files.find(file => file.id === selectBox.value);
       const pdf = selectedFile.pdf;
@@ -112,16 +113,18 @@ export async function main() {
   }
 
   async function handleBiblStructChange(pdfViewer, node) {
+    console.log("BiblStruct changed", node);
+    if (!node) {  
+      return;
+    }
     const searchTerms = getNodeText(node).filter(term => term.length > 2);
     const searchResult = await pdfViewer.search(searchTerms);
   }
 
   async function populateSelectBox(selectBox, filePath) {
     try {
-      // Fetch data from file
-      const response = await fetch(filePath);
-      const data = await response.json();
-      const files = data.files;
+      // Fetch data from api
+      const {files} = await get_file_list();
       // Clear existing options
       selectBox.innerHTML = '';
 
@@ -129,7 +132,7 @@ export async function main() {
       files.forEach(file => {
         const option = document.createElement('option');
         option.value = file.id;
-        option.text = file.id;
+        option.text = `${file.author}, ${file.title.substr(0,25)}... (${file.date})`;
         selectBox.appendChild(option);
       });
       console.log('Loaded file data.')

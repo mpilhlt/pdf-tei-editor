@@ -1,13 +1,10 @@
+from flask import Blueprint, jsonify, request, current_app
 import os
-import requests
 import re
 from xml.etree import ElementTree
 from xml.etree.ElementTree import ParseError
-from xmlschema import XMLSchema, XMLSchemaValidationError
-from flask import Blueprint, jsonify, request, current_app
+from xmlschema import XMLSchema
 from tempfile import NamedTemporaryFile
-from io import StringIO
-import json
 
 bp = Blueprint('validate', __name__, url_prefix='/api/')
 

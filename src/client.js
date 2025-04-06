@@ -46,6 +46,15 @@ async function callApi(endpoint, method, body = null) {
 }
 
 /**
+ * Gets a list of pdf/tei files from the server.
+ *
+ * @returns {Promise<Array<{id,pdf,xml}>>} - A promise that resolves to an array of objects with keys "id", "pdf", and "tei".
+ */
+export async function get_file_list(xmlString) {
+  return callApi('/file-list', 'GET');
+}
+
+/**
  * Lints a TEI XML string against the Flask API endpoint.
  *
  * @param {string} xmlString - The TEI XML string to validate.
