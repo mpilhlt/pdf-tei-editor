@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "postinstall": "./bin/download-pdfjs",
+    "start": "./bin/server"
+  },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",
     "@codemirror/commands": "^6.8.1",
