@@ -2,7 +2,8 @@ import { EditorView, ViewPlugin } from "@codemirror/view";
 
 /**
  * Links CodeMirror's syntax tree nodes representing XML elements with their corresponding DOM elements
- * parsed by DOMParser.  It attaches a `domNode` property to the syntax tree nodes.
+ * parsed by DOMParser by traversing both trees recursively and storing references to each other in 
+ * two Maps.
  *
  * @param {EditorView} view The CodeMirror EditorView instance.
  * @param {SyntaxNode} syntaxNode The root syntax node of the CodeMirror XML editor's syntax tree.
