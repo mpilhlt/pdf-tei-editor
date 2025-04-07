@@ -3,6 +3,7 @@ import os
 from lxml import etree
 from xml.etree import ElementTree
 from xml.etree.ElementTree import ParseError
+from pathlib import Path, PosixPath
 
 bp = Blueprint('files', __name__, url_prefix='/api/files')
 
@@ -37,13 +38,16 @@ def save():
         data = request.get_json()
         xml_string = data.get('xml_string')
         file_path = data.get('file_path')
-        if not file_path.starts_with('/data/'):
+        if not file_path.startswith('/data/'):
             return jsonify({'error': 'Invalid file path'}), 400
         if not xml_string:
             return jsonify({'error': 'No XML string provided'}), 400
+        
+        file_parts = file_path.split('/');
+        file_path = os.path.join(*file_parts[1:])  # Remove the leading slash
+        current_app.logger.info(f"Saving XML to {file_path}")
         with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(xml_string)
-        # Validate the XML file
+             f.write(xml_string)
         return jsonify({'result': 'ok'})
 
     except Exception as e:
