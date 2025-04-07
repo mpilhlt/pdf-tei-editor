@@ -26,7 +26,8 @@
       </sourceDesc>
     </fileDesc>
   </teiHeader>
-<standOff><listBibl>
+<standOff>
+  <listBibl>
     <biblStruct>
       <monogr>
         <title level="m">Tractatus logico-philosophicus</title>
@@ -534,6 +535,7 @@
     </biblStruct>
     <biblStruct>
       <monogr>
+        <title>Leviathan</title>
         <author>
           <persName>
             <forename>Iring</forename>
@@ -619,7 +621,10 @@
         <title level="a">Réponse de Mr. Hook aux considérations de Mr. Auzout, contenuë dans une Lettre écrite à l'Auteur des Philosophical Transactions [i. e. Henry Oldenburg]. Traduite d'Anglais</title>
       </analytic>
       <monogr>
-        <title level="j">Mémoires de l'Académie Royale des Sciences Depuis 1666 jusqu'à 1699</title>
+        <title level="s">Mémoires de l'Académie Royale des Sciences Depuis 1666 jusqu'à 1699</title>
+        <imprint>
+          <date></date>
+        </imprint>
         <biblScope unit="volume">7</biblScope>
         <biblScope unit="page">77-84</biblScope>
       </monogr>
@@ -896,6 +901,10 @@
             <surname>Littré</surname>
           </persName>
         </editor>
+        <imprint>
+          <pubPlace>Amsterdam</pubPlace>
+          <date>1962</date>
+        </imprint>
         <biblScope unit="volume">4</biblScope>
         <biblScope unit="page">396-457</biblScope>
       </monogr>
@@ -1162,10 +1171,8 @@
       </monogr>
     </biblStruct>
     <biblStruct>
-      <analytic>
-        <title level="a">Aufmerksamkeit</title>
-      </analytic>
       <monogr>
+        <title level="m">Aufmerksamkeit</title>
         <editor>
           <persName>
             <forename>Norbert</forename>
@@ -1191,10 +1198,8 @@
       </monogr>
     </biblStruct>
     <biblStruct>
-      <analytic>
-        <title level="a">Aufmerksamkeiten</title>
-      </analytic>
       <monogr>
+        <title level="m">Aufmerksamkeiten</title>
         <editor>
           <persName>
             <forename>Aleida</forename>
