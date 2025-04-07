@@ -66,17 +66,16 @@ export class XMLEditor extends EventTarget {
         this.xmlTree = new DOMParser().parseFromString(this.xmlContent, "application/xml");
       }
       catch (error) {
-        console.log("Document was updated but is not well-formed:", error.message)
+        //console.log("Document was updated but is not well-formed:", error.message)
         this.xmlContent = null;
         this.xmlTree = null;
         return;
       }
       const maps = linkSyntaxTreeWithDOM(this.view, this.syntaxTree.topNode, this.xmlTree);
-      console.log("maps", maps);
       const { syntaxToDom, domToSyntax } = maps;
       this.#syntaxToDom = syntaxToDom;
       this.#domToSyntax = domToSyntax;
-      console.log("Document was updated and is well-formed.")
+      //console.log("Document was updated and is well-formed.")
       this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
     }
   }
