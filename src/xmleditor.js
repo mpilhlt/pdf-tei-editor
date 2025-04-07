@@ -3,50 +3,48 @@ import { EditorState, EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { linter, lintGutter, forceLinting } from "@codemirror/lint";
-import { createCompletionSource } from './autocomplete.js'
-import { lintSource } from './lint.js'
+import { createCompletionSource } from './autocomplete.js';
+import { syntaxTree } from "@codemirror/language";
+import { lintSource } from './lint.js';
+import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
+
 
 export class XMLEditor extends EventTarget {
-  static EVENT_CURRENT_NODE_CHANGED = "currentNodeChanged";
+  static EVENT_SELECTION_CHANGED = "selectionChanged";
+  static EVENT_XML_CHANGED = "xmlChanged";
+
+  #syntaxToDom = null; // Maps syntax tree nodes to DOM nodes
+  #domToSyntax = null; // Maps DOM nodes to syntax tree nodes
 
   /**
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
    */
-  constructor(editorDivId, tagData, recordTag) {
+  constructor(editorDivId, tagData) {
     super();
     this.editorDiv = document.getElementById(editorDivId);
-    this.nodes = []; // Stores the extracted nodes from the XML.
+    if (!this.editorDiv) {
+      throw new Error(`Element with ID ${editorDivId} not found.`);
+    }
     this.xmlContent = "";
-    this.currentIndex = 0;
-    this.highlightedTag = null;
-    this.recordTag = recordTag;
+    this.xmlTree = null; // Stores the parsed XML tree.
+    this.syntaxTree = null; // Stores the CodeMirror syntax tree
 
-    // the number of the current diagnostic, if any, otherwise null
-    this.diagnosticIndex = null;
-
-    this.basicExtensions = [
+    // list of extensions to be used in the editor
+    const extensions = [
       basicSetup,
       xml(),
-      xmlLanguage.data.of({
-        autocomplete: createCompletionSource(tagData)
-      }),
-      linter(lintSource, {autoPanel: true, delay: 2000}),
-      lintGutter()
+      linter(lintSource, { autoPanel: true, delay: 2000 }),
+      lintGutter(),
+      selectionChangeListener(this.onSelectionChange.bind(this)),
+      EditorView.updateListener.of(this.onUpdate.bind(this))
     ];
-    let linterTimeout = null;
 
-    this.state = EditorState.create({
-      doc: "",
-      extensions: [
-        ...this.basicExtensions,
-        EditorView.updateListener.of(update => {
-          if (update.docChanged) {
-            const xmlContent = update.state.doc.toString();
-          }
-        })
-      ]
-    });
+    if (tagData) {
+      extensions.push(xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) }))
+    }
+
+    this.state = EditorState.create({ doc: "", extensions });
 
     this.view = new EditorView({
       state: this.state,
@@ -56,11 +54,58 @@ export class XMLEditor extends EventTarget {
     window.myeditor = this.view; // For debugging purposes
   }
 
+  onSelectionChange(selectionInfo) {
+    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: selectionInfo }))
+  }
+
+  onUpdate(update) {
+    if (update.docChanged) {
+      this.syntaxTree = syntaxTree(this.view.state);
+      this.xmlContent = update.state.doc.toString();
+      try {
+        this.xmlTree = new DOMParser().parseFromString(this.xmlContent, "application/xml");
+      }
+      catch (error) {
+        console.log("Document was updated but is not well-formed:", error.message)
+        this.xmlContent = null;
+        this.xmlTree = null;
+        return;
+      }
+      const maps = linkSyntaxTreeWithDOM(this.view, this.syntaxTree.topNode, this.xmlTree);
+      console.log("maps", maps);
+      const { syntaxToDom, domToSyntax } = maps;
+      this.#syntaxToDom = syntaxToDom;
+      this.#domToSyntax = domToSyntax;
+      console.log("Document was updated and is well-formed.")
+      this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
+    }
+  }
+
+  /**
+   * Returns the current XML content of the editor.
+   * @returns {string} - The current XML content.
+   */
+  getXml() {
+    return this.xmlContent;
+  }
+
+  getXmlTree() {
+    return this.xmlTree;
+  }
+
+  getSyntaxTree() {
+    return this.syntaxTree;
+  }
+
+  getView() {
+    return this.view;
+  }
+
   /**
    * Loads XML, either from a string or from a given path.
    * @async
    * @param {string} xmlPathOrString - The URL or path to the XML file, or an xml string
-   * @returns {Promise<string>} - A promise that resolves with the raw XML string.
+   * @returns {Promise} - A promise that resolves when the document is loaded.
    * @throws {Error} - If there's an error loading or parsing the XML.
    */
   async loadXml(xmlPathOrString) {
@@ -77,136 +122,87 @@ export class XMLEditor extends EventTarget {
       // treat argument as xml string
       xml = xmlPathOrString;
     }
-    
-    // provide each main record with an xml:id
-    if (this.recordTag) {
-      const parser = new DOMParser(); 
-      const xmlDoc = parser.parseFromString(xml, "application/xml");
-      this.nodes = Array.from(xmlDoc.getElementsByTagName(this.recordTag));
-      for (let [idx, node] of this.nodes.entries()) {
-        if (!node.hasAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:id")){
-          node.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:id", `biblStruct${idx}`)
-        }
-      }
-      xml = (new XMLSerializer()).serializeToString(xmlDoc)
-    }
-    
-    this.xmlContent = xml;
 
     // display xml in editor
     this.view.dispatch({
       changes: { from: 0, to: this.view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0)
     });
+  }
 
-    // run linting
+  async validateXml() {
     forceLinting(this.view);
+  }
 
-    // highlight first node
-    this.resetIndex();
-    setTimeout(() => this.focusNodeByIndex(0), 500);
+  getSyntaxNodeAt(pos) {
+    let syntaxNode = syntaxTree(this.view.state).resolveInner(pos, 1);
+    // find the element parent if necessary
+    while (syntaxNode && !['Element', 'Document'].includes(syntaxNode.name)) {
+      syntaxNode = syntaxNode.parent;
+    }
+    if (!syntaxNode) {
+      throw new Error(`No syntax node found at position ${pos}.`);
+    }
+    return syntaxNode;
+  }
 
-    return this.xmlContent;
+  getDomNodeAt(pos) {
+    let syntaxNode = this.getSyntaxNodeAt(pos);
+    // find the element parent if necessary
+    while (syntaxNode && !['Element', 'Document'].includes(syntaxNode.name)) {
+      syntaxNode = syntaxNode.parent;
+    }
+    const domNode = syntaxNode && this.#syntaxToDom.get(syntaxNode.from);
+    if (!domNode) {
+      throw new Error(`No DOM node found at position ${pos}`);
+    }
+    return domNode;
   }
 
   /**
-   * Focuses on a given DOM node in the displayed XML content 
-   * @param {Node} node - The DOM node to highlight.  If null, the overlay is hidden.
+   * Returns the first DOM node that matches the given XPath expression.
+   * @param {string} xpath 
+   * @returns {Node} The first matching DOM node.
+   * @throws {Error} If the XML tree is not loaded or if no nodes match the XPath expression.
    */
-  focusNode(node) {
-
-    console.log("Focusing node", node);
-
-    if (node !== this.__lastNode) {
-      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_CURRENT_NODE_CHANGED, {detail: node}));
-      this.__lastNode = node;
+  getDomNodeByXpath(xpath) {
+    if (!this.xmlTree) {
+      throw new Error("XML tree is not loaded.");
     }
-
-    if (!node) {
-      this.view.dispatch({ selection: EditorSelection.range(0, 0) })
-      return;
+    if (!xpath) {
+      throw new Error("XPath is not provided.");
     }
-
-    // Find the start and end positions of the node in the editor
-    const id = node.getAttribute("xml:id")
-    if (!id) {
-      console.error(`Node has no id`, node);
-      return;
-    }
-
-    const pos = this.xmlContent.indexOf(`xml:id="${id}"`)
-    if (pos == -1) {
-      console.error(`Cannot find node with xml:id="${id}"`)
-      return
-    }
-    const doc = this.view.state.doc;
-    if (doc.length > 0) {
-      let from = doc.lineAt(pos).from;
-      let to = doc.lineAt(from + node.outerHTML.length).to;
-  
-      // Dispatch a transaction to select the node in the editor
-      this.view.dispatch({
-        selection: EditorSelection.range(from, to),
-        scrollIntoView: true // Optional: Scroll the selection into view
-      });
-    }  
-    
-  }
-
-  /**
-   * Highlights a node from the `nodes` array by its index.
-   * @param {number} index - The index of the node to highlight.
-   */
-  focusNodeByIndex(index) {
-    const node = this.nodes[index];
-    if (!node) {
-      this.focusNode(null); // Clear the highlight if node doesn't exist
-      return;
-    }
-    try {
-      this.focusNode(node);
-    } catch (error) {
-      console.error(error);
+    // Create an XPath expression and evaluate it
+    function namespaceResolver(prefix) {
+      const namespaces = {
+        'tei': 'http://www.tei-c.org/ns/1.0',
+        'xml': 'http://www.w3.org/XML/1998/namespace'
+      };
+      return namespaces[prefix] || null;
+    }; 
+    const xpathResult = this.xmlTree.evaluate(xpath, this.xmlTree, namespaceResolver, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    if (xpathResult.snapshotLength > 0) {
+      return xpathResult.snapshotItem(0);
+    } else {
+      throw new Error(`No nodes found for XPath: ${xpath}`);
     }
   }
 
   /**
-   * Highlights the next node in the `nodes` array.
-   *  Moves to the next index and updates the highlight.
+   * Selects the DOM node that matches the given XPath expression in the editor.
+   * @param {string} xpath - The XPath expression to select.
    */
-  nextNode() {
-    if (this.currentIndex < this.nodes.length - 1) {
-      this.currentIndex++;
-      this.focusNodeByIndex(this.currentIndex);
+  selectByXpath(xpath) {
+    const node = this.getDomNodeByXpath(xpath)
+    const pos = this.#domToSyntax.get(node);
+    if (!pos) {
+      throw new Error(`No syntax node found for XPath: ${xpath}`);
     }
-  }
-
-  /**
-   * Highlights the previous node in the `nodes` array.
-   *  Moves to the previous index and updates the highlight.
-   */
-  previousNode() {
-    if (this.currentIndex > 0) {
-      this.currentIndex--;
-      this.focusNodeByIndex(this.currentIndex);
-    }
-  }
-
-  /**
-   * Resets the current index to 0, useful when re-extracting nodes.
-   */
-  resetIndex() {
-    this.currentIndex = 0;
-  }
-
-  /**
-   * Returns the currently highlighted node.
-   * @returns {Node | null} - The currently highlighted node, or null if no node is highlighted.
-   */
-  getCurrentNode() {
-    if (this.nodes.length === 0) {
-      return null;
-    }
-    return this.nodes[this.currentIndex] || null;
+    const syntaxNode = this.getSyntaxNodeAt(pos);
+    const { from, to } = syntaxNode;
+    this.view.dispatch({
+      selection: EditorSelection.range(from, to),
+      scrollIntoView: true
+    });
   }
 }

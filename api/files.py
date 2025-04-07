@@ -1,10 +1,10 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
-import json
-from collections import defaultdict
 from lxml import etree
 from xml.etree import ElementTree
 from xml.etree.ElementTree import ParseError
+
+bp = Blueprint('files', __name__, url_prefix='/api/files')
 
 file_types = {
     '.pdf': 'pdf',
@@ -12,6 +12,46 @@ file_types = {
     '.xml': 'xml'
 }
 
+@bp.route('/list', methods=['GET'])
+def list(): 
+    try:
+        file_data = create_file_data(['data/pdf', 'data/tei'])
+        for idx, file in enumerate(file_data):  
+            file_path = "." + file['xml']
+            metadata = get_tei_metadata(file_path)
+            if metadata:
+                file_data[idx].update(metadata)
+                
+        return jsonify({'files': file_data})
+    except Exception as e:
+        current_app.logger.exception(f"An unexpected error occurred.")
+        return jsonify({'error': f'Error: {str(e)}'}), 500
+    
+@bp.route('/save', methods=['POST'])
+def save():
+    """
+    Validates an XML document based on the contained schemaLocation URLs, downloads and caches them,
+    and returns a JSON array of error messages.
+    """
+    try:
+        data = request.get_json()
+        xml_string = data.get('xml_string')
+        file_path = data.get('file_path')
+        if not file_path.starts_with('/data/'):
+            return jsonify({'error': 'Invalid file path'}), 400
+        if not xml_string:
+            return jsonify({'error': 'No XML string provided'}), 400
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(xml_string)
+        # Validate the XML file
+        return jsonify({'result': 'ok'})
+
+    except Exception as e:
+        current_app.logger.exception(f"An unexpected error occurred.")  # Log the error for debugging
+        return jsonify({'error': f'Error: {str(e)}'}), 500
+
+
+# helper functions
 
 def create_file_data(directories):
     """
@@ -19,7 +59,7 @@ def create_file_data(directories):
     Each file is identified by its ID, which is the filename without the suffix.
     The JSON file contains the file ID and the paths to the files in each directory.
     """
-    files_in_dirs = defaultdict(list)
+    files_in_dirs = {}
     for directory in directories:
         files = os.listdir(directory)
         for file in files:
@@ -31,8 +71,11 @@ def create_file_data(directories):
                     break
             if file_type is None:
                 continue
-            file_path = os.path.join(directory, file)
-            files_in_dirs[file_id].append((file_type, '/' + os.path.relpath(file_path, '.')))
+            file_path = os.path.join(directory, file).replace('\\', '/')
+            if file_id not in files_in_dirs:
+                files_in_dirs[file_id] = []
+            files_in_dirs[file_id].append( (file_type, '/' +  os.path.relpath(file_path, '.').replace('\\', '/')) )
+            
     common_files = []
     for file_id, files in files_in_dirs.items():
         if len(files) != len(directories):
@@ -71,20 +114,7 @@ def get_tei_metadata(file_path):
         current_app.logger.error(f"Error reading TEI metadata from {file_path}: {str(e)}")
         return None
 
-bp = Blueprint('file-list', __name__, url_prefix='/api/')
 
-@bp.route('/file-list', methods=['GET'])
-def file_list(): 
-    try:
-        file_data = create_file_data(['data/pdf', 'data/tei'])
-        for idx, file in enumerate(file_data):  
-            file_path = "." + file['xml']
-            metadata = get_tei_metadata(file_path)
-            if metadata:
-                file_data[idx].update(metadata)
-                
-        return jsonify({'files': file_data})
-    except Exception as e:
-        current_app.logger.exception(f"An unexpected error occurred.")
-        return jsonify({'error': f'Error: {str(e)}'}), 500
+
+
 

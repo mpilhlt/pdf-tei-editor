@@ -229,7 +229,7 @@ export class PDFJSViewer {
 
         // remove pdf.js's saved state since it interferes 
         window.addEventListener('beforeunload', () => localStorage.removeItem('pdfjs.history'))
-        this.iframe.src = `/web/pdfjs/web/viewer.html` + (this.pdfPath ? `?url=${this.pdfPath}` : '');
+        this.iframe.src = `/web/pdfjs/web/viewer.html?url=` + (this.pdfPath ? this.pdfPath : '/web/empty.pdf');
       });
     }
     return this.initializePromise;

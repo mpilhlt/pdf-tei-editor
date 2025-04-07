@@ -57,11 +57,11 @@ export function makeDraggable(element) {
     element.style.userSelect = 'auto'; // Restore text selection
   });
 
-  document.addEventListener('mouseleave', () => {
-    if (isDragging) {
-      isDragging = false;
-      element.style.cursor = 'grab'; // Restore cursor after dragging
-      element.style.userSelect = 'auto'; // Restore text selection
-    }
-  });
+  // document.addEventListener('mouseleave', () => {
+  //   if (isDragging) {
+  //     isDragging = false;
+  //     element.style.cursor = 'grab'; // Restore cursor after dragging
+  //     element.style.userSelect = 'auto'; // Restore text selection
+  //   }
+  // });
 }

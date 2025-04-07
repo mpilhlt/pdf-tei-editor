@@ -1,7 +1,9 @@
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
 import { $, $$, addBringToForegroundListener, makeDraggable } from './utils.js'
-import { get_file_list } from './client.js'
+import { get_file_list, saveDocument } from './client.js'
+import { xml } from '@codemirror/lang-xml'
+
 
 try {
   main()
@@ -33,25 +35,29 @@ export async function main() {
     console.log(`PDF: ${pdfPath}\nXML: ${xmlPath}`);
 
     // XML Editor
-    xmlEditor.loadXml(xmlPath);
+    console.log("Loading XML data...");
+    xmlEditor.loadXml(xmlPath).then(() => {
+      console.log("Validating XML data with TEI XSD...");
+      xmlEditor.validateXml().catch(console.error); // todo find resolver
+      setTimeout(nextNode, 500);
+    });
 
     // PDF
     pdfViewer.load(pdfPath).then(() => pdfViewer.show());
 
     // start in edit mode
-    document.getElementById('editor-switch').checked = true;
+    //document.getElementById('editor-switch').checked = true;
 
-    // setup UI
-    $('#prev-bibl').addEventListener('click', () => xmlEditor.previousNode());
-    $('#next-bibl').addEventListener('click', () => xmlEditor.nextNode());
+    // setup navigation
+    $('#btn-prev-bibl').addEventListener('click', () => previousNode());
+    $('#btn-next-bibl').addEventListener('click', () => nextNode());
 
     // when the selected biblStruct changes, show its source in the PDF
-    xmlEditor.addEventListener(XMLEditor.EVENT_CURRENT_NODE_CHANGED, event => {
-      handleBiblStructChange(pdfViewer, event.detail)
+
+    xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
+      handleSelectionChange(event.detail)
     });
 
-    // highlight the first biblStruct
-    xmlEditor.focusNodeByIndex(0);
   } else {
     document.getElementById('prev-bibl').style.display = 'none'
     document.getElementById('next-bibl').style.display = 'none'
@@ -77,10 +83,19 @@ export async function main() {
         selectBox.selectedIndex = files.indexOf(fileFromUrl);
       }
     }
+
+    // configure save button
+    $('#btn-save-document').addEventListener('click', async () => {
+      const fileData = files[selectBox.selectedIndex];
+      if (confirm(`Do you want to save ${documentLabel(fileData)}?`)) {
+        await saveDocument(xmlEditor.getXml(), fileData.xml)
+      }
+    });
   });
 
+
   // read/edit switch
-  document.getElementById('editor-switch').addEventListener('change', handleEditorSwitch);
+  //$('editor-switch').addEventListener('change', handleEditorSwitch);
 
   // bring clicked elements into foreground when clicked
   addBringToForegroundListener(['#navigation', '.cm-panels']);
@@ -88,70 +103,135 @@ export async function main() {
   // make navigation draggable
   makeDraggable($('#navigation'))
 
-  // helper functions
+}
 
-  /**
-   * extract the text from text nodes
-   */
-  function getNodeText(node) {
-    return getTextNodes(node).map(node => node.textContent.trim()).filter(Boolean)
+// ==========================================================================================
+//
+// helper functions
+//
+// ==========================================================================================
+
+async function handleSelectionChange(ranges) {
+  if (ranges.length === 0 || ranges[0].empty) {
+    return;
   }
 
-  /**
-   * Recursively extract all text nodes contained in the given node into a flat list
-   */
-  function getTextNodes(node) {
-    let textNodes = [];
-    if (node.nodeType === Node.TEXT_NODE) {
-      textNodes.push(node);
-    } else {
-      for (let i = 0; i < node.childNodes.length; i++) {
-        textNodes = textNodes.concat(getTextNodes(node.childNodes[i]));
-      }
-    }
-    return textNodes;
+  const range = ranges[0];
+  const view = range.view;
+  const node = window.xmlEditor.getDomNodeAt(range.from);
+  const searchTerms = getNodeText(node).filter(term => term.length > 2);
+  await pdfViewer.search(searchTerms);
+}
+
+
+function documentLabel(fileData) {
+  return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
+}
+
+async function populateSelectBox(selectBox) {
+  try {
+    // Fetch data from api
+    const { files } = await get_file_list();
+    // Clear existing options
+    selectBox.innerHTML = '';
+
+    // Populate select box with options
+    files.forEach(fileData => {
+      const option = document.createElement('option');
+      option.value = fileData.id;
+      option.text = documentLabel(fileData)
+      selectBox.appendChild(option);
+    });
+    console.log('Loaded file data.')
+    return files;
+
+  } catch (error) {
+    console.error('Error fetching data:', error);
   }
+}
 
-  async function handleBiblStructChange(pdfViewer, node) {
-    console.log("BiblStruct changed", node);
-    if (!node) {  
-      return;
-    }
-    const searchTerms = getNodeText(node).filter(term => term.length > 2);
-    const searchResult = await pdfViewer.search(searchTerms);
+function handleEditorSwitch(event) {
+  const checked = event.target.checked;
+  if (checked) {
+    console.log("Edit mode")
+  } else {
+    console.log("Read-only mode")
   }
+}
 
-  async function populateSelectBox(selectBox, filePath) {
-    try {
-      // Fetch data from api
-      const {files} = await get_file_list();
-      // Clear existing options
-      selectBox.innerHTML = '';
+// this needs to be put into its own class
 
-      // Populate select box with options
-      files.forEach(file => {
-        const option = document.createElement('option');
-        option.value = file.id;
-        option.text = `${file.author}, ${file.title.substr(0,25)}... (${file.date})`;
-        selectBox.appendChild(option);
-      });
-      console.log('Loaded file data.')
-      return files;
+// the index of the currently selected node
+let currentIndex = 0;
+// the type of node containing the basic dataset record item
+const recordNodeTag = 'tei:biblStruct';
 
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    }
+
+function selectByIndex(index) {
+  if (index < 0 || index >= window.xmlEditor.xmlTree.getElementsByTagName("biblStruct").length) {
+    console.error("Index out of bounds");
+    return;
   }
-
-  function handleEditorSwitch(event) {
-    const checked = event.target.checked;
-    if (checked) {
-      console.log("Edit mode")
-    } else {
-      console.log("Read-only mode")
-    }
-  }
+  currentIndex = index;
+  window.xmlEditor.selectByXpath(`//${recordNodeTag}[${currentIndex}]`);
 }
 
 
 
+/**
+ * Highlights the next node in the `nodes` array.
+ *  Moves to the next index and updates the highlight.
+ */
+function nextNode() {
+  if (currentIndex < window.xmlEditor.xmlTree.getElementsByTagName("biblStruct").length - 1) {
+    currentIndex++;
+   selectByIndex(currentIndex);
+  }
+}
+
+/**
+ * Highlights the previous node in the `nodes` array.
+ *  Moves to the previous index and updates the highlight.
+ */
+function previousNode() {
+  if (currentIndex > 1) {
+    currentIndex--;
+    selectByIndex(currentIndex);
+  }
+}
+
+
+/**
+ * extract the text from text nodes
+ */
+function getNodeText(node) {
+  return getTextNodes(node).map(node => node.textContent.trim()).filter(Boolean)
+}
+
+/**
+ * Recursively extract all text nodes contained in the given node into a flat list
+ */
+function getTextNodes(node) {
+  let textNodes = [];
+  if (node.nodeType === Node.TEXT_NODE) {
+    textNodes.push(node);
+  } else {
+    for (let i = 0; i < node.childNodes.length; i++) {
+      textNodes = textNodes.concat(getTextNodes(node.childNodes[i]));
+    }
+  }
+  return textNodes;
+}
+
+function addIds() {
+  console.log(`Adding xml:id to each record of type ${this.recordTag}`);
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xml, "application/xml");
+  this.nodes = Array.from(xmlDoc.getElementsByTagName(this.recordTag));
+  for (let [idx, node] of this.nodes.entries()) {
+    if (!node.hasAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:id")) {
+      node.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:id", `biblStruct${idx}`)
+    }
+  }
+  xml = (new XMLSerializer()).serializeToString(xmlDoc)
+}

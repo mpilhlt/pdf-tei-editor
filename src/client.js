@@ -51,7 +51,7 @@ async function callApi(endpoint, method, body = null) {
  * @returns {Promise<Array<{id,pdf,xml}>>} - A promise that resolves to an array of objects with keys "id", "pdf", and "tei".
  */
 export async function get_file_list(xmlString) {
-  return callApi('/file-list', 'GET');
+  return callApi('/files/list', 'GET');
 }
 
 /**
@@ -62,4 +62,14 @@ export async function get_file_list(xmlString) {
  */
 export async function remote_xmllint(xmlString) {
   return callApi('/validate', 'POST', { xml_string: xmlString });
+}
+
+/**
+ * Saves the XML string to a file on the server.
+ * @param {string} xmlString 
+ * @param {string} filePath 
+ * @returns 
+ */
+export async function saveDocument(xmlString, filePath) {
+  return callApi('/files/save', 'POST', { xml_string: xmlString, file_path:filePath });
 }
