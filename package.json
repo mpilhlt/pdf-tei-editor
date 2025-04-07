@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "preinstall": "pip install -r requirements.txt",
     "postinstall": "./bin/download-pdfjs",
     "start": "./bin/server"
   },
