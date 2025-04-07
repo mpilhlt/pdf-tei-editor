@@ -46,11 +46,11 @@ export async function main() {
     pdfViewer.load(pdfPath).then(() => pdfViewer.show());
 
     // start in edit mode
-    //document.getElementById('editor-switch').checked = true;
+    //$('editor-switch').checked = true;
 
     // setup navigation
-    $('#btn-prev-bibl').addEventListener('click', () => previousNode());
-    $('#btn-next-bibl').addEventListener('click', () => nextNode());
+    $('#btn-prev-node').addEventListener('click', () => previousNode());
+    $('#btn-next-node').addEventListener('click', () => nextNode());
 
     // when the selected biblStruct changes, show its source in the PDF
 
@@ -59,12 +59,12 @@ export async function main() {
     });
 
   } else {
-    document.getElementById('prev-bibl').style.display = 'none'
-    document.getElementById('next-bibl').style.display = 'none'
+    $('#btn-prev-node').style.display = 'none'
+    $('#btn-next-node').style.display = 'none'
   }
 
   // file select box
-  const selectBox = document.getElementById('select-doc');
+  const selectBox = $('#select-doc');
   populateSelectBox(selectBox).then(files => {
     function loadFilesFromSelectedId() {
       const selectedFile = files.find(file => file.id === selectBox.value);
@@ -95,7 +95,7 @@ export async function main() {
 
 
   // read/edit switch
-  //$('editor-switch').addEventListener('change', handleEditorSwitch);
+  //$('#editor-switch').addEventListener('change', handleEditorSwitch);
 
   // bring clicked elements into foreground when clicked
   addBringToForegroundListener(['#navigation', '.cm-panels']);
