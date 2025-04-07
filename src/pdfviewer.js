@@ -212,8 +212,12 @@ export class PDFJSViewer {
               this.pdfViewer.currentScaleValue = 'page-fit';
             });
             this.PDFViewerApplication.initializedPromise.then(() => {
+              // enable hand tool
+              this.PDFViewerApplication.pdfCursorTools.switchTool(1);
+
+              // finish initialization
               this.isReadyFlag = true;
-              console.log("PDF.js viewer initialized.");
+              console.log("PDF.js viewer initialized.");            
               resolve();
             })
           } catch (error) {
