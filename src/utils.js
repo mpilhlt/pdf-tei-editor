@@ -1,5 +1,9 @@
 export function $(selector) {
-  return document.querySelector(selector)
+  const node = document.querySelector(selector)
+  if (!node) {
+    throw new Error(`Selector "${selector} does not find any element"`)
+  } 
+  return node
 }
 
 export function $$(selector) {

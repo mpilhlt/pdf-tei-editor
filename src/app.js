@@ -38,7 +38,7 @@ export async function main() {
     console.log("Loading XML data...");
     xmlEditor.loadXml(xmlPath).then(() => {
       console.log("Validating XML data with TEI XSD...");
-      xmlEditor.validateXml().catch(console.error); // todo find resolver
+      xmlEditor.validateXml();
       setTimeout(nextNode, 500);
     });
 
@@ -117,10 +117,13 @@ async function handleSelectionChange(ranges) {
   }
 
   const range = ranges[0];
-  const view = range.view;
   const node = window.xmlEditor.getDomNodeAt(range.from);
-  const searchTerms = getNodeText(node).filter(term => term.length > 2);
-  await pdfViewer.search(searchTerms);
+  // search terms must be more than three characters
+  const searchTerms = getNodeText(node).filter(term => term.length > 3);
+  // for maximum 10 search terms 
+  if (searchTerms.length < 10) {
+    await window.pdfViewer.search(searchTerms);
+  }
 }
 
 

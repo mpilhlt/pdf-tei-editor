@@ -1,4 +1,5 @@
 import { EditorView, ViewPlugin } from "@codemirror/view";
+import { syntaxTree } from "@codemirror/language";
 
 /**
  * Links CodeMirror's syntax tree nodes representing XML elements with their corresponding DOM elements
@@ -133,4 +134,86 @@ export function selectionChangeListener(onSelectionChange) {
       destroy() { }
     }
   );
+}
+
+
+/**
+ * Resolves a simple XPath-like expression against a CodeMirror 6 syntax tree
+ * to find the position of the target node.
+ *
+ * The XPath only supports direct and indexed children (e.g., "/TEI/standOff/listBibl/biblStruct[8]/monogr").
+ * TODO this can be replaced with xmlEditor::
+ * 
+ * @param view {EditorView} The CodeMirror 6 EditorView
+ * @param xpath The XPath-like expression to resolve.
+ * @returns The `from` and `to` positions of the matching node, or null if not found.
+ */
+export function resolveXPath(view, xpath) {
+  const tree = syntaxTree(view.state);
+  const doc = view.state.doc;
+  const pathSegments = xpath.split("/").filter(segment => segment !== "");
+
+  let cursor = tree.topNode.cursor();
+  let foundNode = null;
+
+  function text(node, length = null) {
+    return doc.sliceString(node.from, length ? Math.min(node.from + length, node.to, doc.length) : node.to);
+  }
+
+  // function debugNode(node, textLength=10) {
+  //   return node ? `(${node.name}: "${text(node, textLength)}")`: "(null)";
+  // }
+
+  for (const segment of pathSegments) {
+    let index = 0;
+    let tagName = segment;
+
+    const match = segment.match(/^(.*?)\[(\d+)\]$/);
+    if (match) {
+      tagName = match[1];
+      index = parseInt(match[2], 10) - 1;
+      if (isNaN(index) || index < 0) {
+        console.error(`Invalid child index in ${segment}`);
+        return null;
+      }
+    }
+
+    let childIndex = 0;
+    let found = false;
+    //console.log("Next segment:" , tagName, index)
+    // move to first child of current cursor
+    if (!cursor.firstChild()) {
+      console.log("cursor has no children")
+      return null;
+    }
+
+    do {
+      //console.log('Current cursor node: ', debugNode(cursor))
+      if (cursor.name == "Element") {
+        const element = cursor.node;
+        //console.log('  - cursor[1][1]: ', debugNode(element.firstChild?.firstChild))
+        //console.log('  - cursor[1][2]: ', debugNode(element.firstChild?.firstChild?.nextSibling))
+        let tagNameNode = element.firstChild?.firstChild?.nextSibling;
+        if (tagNameNode.name === "TagName" && text(tagNameNode) === tagName) {
+          if (childIndex === index) {
+            found = true;
+            foundNode = element;
+            break;
+          }
+          childIndex++;
+        }
+      }
+    } while (cursor.nextSibling());
+
+    if (!found) {
+      return null; // No matching node found at this level
+    }
+    cursor = foundNode.cursor(); // move the cursor for the next level
+  }
+
+  if (foundNode) {
+    return { from: foundNode.from, to: foundNode.to };
+  } else {
+    return null;
+  }
 }

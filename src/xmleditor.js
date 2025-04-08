@@ -15,6 +15,7 @@ export class XMLEditor extends EventTarget {
 
   #syntaxToDom = null; // Maps syntax tree nodes to DOM nodes
   #domToSyntax = null; // Maps DOM nodes to syntax tree nodes
+  #documentVersion = null; // internal counter to track changes in the document
 
   /**
    * Constructs an XMLEditor instance.
@@ -54,29 +55,39 @@ export class XMLEditor extends EventTarget {
     window.myeditor = this.view; // For debugging purposes
   }
 
+  getDocumentVersion() {
+    return this.#documentVersion;
+  }
+
   onSelectionChange(selectionInfo) {
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: selectionInfo }))
   }
 
   onUpdate(update) {
     if (update.docChanged) {
-      this.syntaxTree = syntaxTree(this.view.state);
+      this.#documentVersion += 1;
       this.xmlContent = update.state.doc.toString();
-      try {
-        this.xmlTree = new DOMParser().parseFromString(this.xmlContent, "application/xml");
-      }
-      catch (error) {
+      const doc = new DOMParser().parseFromString(this.xmlContent, "application/xml");
+      const errorNode = doc.querySelector("parsererror");
+      if (errorNode) {
         //console.log("Document was updated but is not well-formed:", error.message)
         this.xmlContent = null;
         this.xmlTree = null;
         return;
       }
-      const maps = linkSyntaxTreeWithDOM(this.view, this.syntaxTree.topNode, this.xmlTree);
-      const { syntaxToDom, domToSyntax } = maps;
-      this.#syntaxToDom = syntaxToDom;
-      this.#domToSyntax = domToSyntax;
       //console.log("Document was updated and is well-formed.")
-      this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
+      this.xmlTree = doc;
+      this.syntaxTree = syntaxTree(this.view.state);
+      try {
+        const maps = linkSyntaxTreeWithDOM(this.view, this.syntaxTree.topNode, this.xmlTree);
+        const { syntaxToDom, domToSyntax } = maps;
+        this.#syntaxToDom = syntaxToDom;
+        this.#domToSyntax = domToSyntax;
+        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
+      } catch (error) {
+        // since the xml document validated, this must be a bug, needd to look at this again
+        console.warn(error.message)
+      }
     }
   }
 
@@ -127,6 +138,7 @@ export class XMLEditor extends EventTarget {
       changes: { from: 0, to: this.view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0)
     });
+    this.#documentVersion = 0;
   }
 
   async validateXml() {
@@ -178,7 +190,7 @@ export class XMLEditor extends EventTarget {
         'xml': 'http://www.w3.org/XML/1998/namespace'
       };
       return namespaces[prefix] || null;
-    }; 
+    };
     const xpathResult = this.xmlTree.evaluate(xpath, this.xmlTree, namespaceResolver, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
     if (xpathResult.snapshotLength > 0) {
       return xpathResult.snapshotItem(0);
@@ -188,17 +200,26 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
-   * Selects the DOM node that matches the given XPath expression in the editor.
-   * @param {string} xpath - The XPath expression to select.
+   * Returns the first syntax node that matches the given XPath expression.
+   * @param {string} xpath 
+   * @returns {SyntaxNode} The first matching syntax node.
+   * @throws {Error} If the XML tree is not loaded, if no DOM node match the XPath expression, or no syntax node can be found for the DOM node.
    */
-  selectByXpath(xpath) {
+  getSyntaxNodeByXpath(xpath) {
     const node = this.getDomNodeByXpath(xpath)
     const pos = this.#domToSyntax.get(node);
     if (!pos) {
       throw new Error(`No syntax node found for XPath: ${xpath}`);
     }
-    const syntaxNode = this.getSyntaxNodeAt(pos);
-    const { from, to } = syntaxNode;
+    return this.getSyntaxNodeAt(pos);
+  }
+
+  /**
+   * Selects the DOM node that matches the given XPath expression in the editor.
+   * @param {string} xpath - The XPath expression to select.
+   */
+  selectByXpath(xpath) {
+    const { from, to } = this.getSyntaxNodeByXpath(xpath);
     this.view.dispatch({
       selection: EditorSelection.range(from, to),
       scrollIntoView: true
