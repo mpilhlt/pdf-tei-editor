@@ -4,11 +4,19 @@ import re
 from xml.etree import ElementTree
 from xml.etree.ElementTree import ParseError
 from xmlschema import XMLSchema
-from tempfile import NamedTemporaryFile
+
+def allow_only_localhost(f):
+    def decorated_function(*args, **kwargs):
+        target_host = request.headers.get('X-Forwarded-Host') or request.host
+        if target_host != 'localhost':
+            return 'Access denied. Only localhost is allowed.', 403
+        return f(*args, **kwargs)
+    return decorated_function
 
 bp = Blueprint('validate', __name__, url_prefix='/api/')
 
 @bp.route('/validate', methods=['POST'])
+@allow_only_localhost
 def validate_route():
     """
     Validates an XML document based on the contained schemaLocation URLs, downloads and caches them,

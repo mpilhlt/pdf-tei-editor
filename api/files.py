@@ -1,11 +1,16 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
 from lxml import etree
-from xml.etree import ElementTree
-from xml.etree.ElementTree import ParseError
-from pathlib import Path, PosixPath
 
 bp = Blueprint('files', __name__, url_prefix='/api/files')
+
+def allow_only_localhost(f):
+    def decorated_function(*args, **kwargs):
+        target_host = request.headers.get('X-Forwarded-Host') or request.host
+        if target_host != 'localhost':
+            return 'Access denied. Only localhost is allowed.', 403
+        return f(*args, **kwargs)
+    return decorated_function
 
 file_types = {
     '.pdf': 'pdf',
@@ -29,6 +34,7 @@ def list():
         return jsonify({'error': f'Error: {str(e)}'}), 500
     
 @bp.route('/save', methods=['POST'])
+@allow_only_localhost
 def save():
     """
     Validates an XML document based on the contained schemaLocation URLs, downloads and caches them,

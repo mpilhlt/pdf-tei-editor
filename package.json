@@ -1,7 +1,7 @@
 {
   "scripts": {
-    "preinstall": "pip install -r requirements.txt",
-    "postinstall": "./bin/download-pdfjs",
+    "ci": "pip install -r requirements.txt",
+    "postinstall": "python ./bin/download-pdfjs",
     "start": "./bin/server"
   },
   "dependencies": {
