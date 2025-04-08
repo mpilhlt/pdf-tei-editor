@@ -27,7 +27,7 @@ export async function main() {
     console.error('Error fetching JSON:', error);
   }
 
-  const pdfViewer = window.pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath);
+  const pdfViewer = window.pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath).hide();
   const xmlEditor = window.xmlEditor = new XMLEditor('xml-editor', tagData, 'biblStruct');
 
   if (pdfPath && xmlPath) {
@@ -38,8 +38,8 @@ export async function main() {
     console.log("Loading XML data...");
     xmlEditor.loadXml(xmlPath).then(() => {
       console.log("Validating XML data with TEI XSD...");
-      xmlEditor.validateXml();
-      setTimeout(nextNode, 500);
+      xmlEditor.validateXml(); // no way of knowing when this is finished at the moment
+      nextNode();
     });
 
     // PDF
@@ -126,7 +126,6 @@ async function handleSelectionChange(ranges) {
   }
 }
 
-
 function documentLabel(fileData) {
   return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
 }
@@ -169,38 +168,41 @@ let currentIndex = 0;
 // the type of node containing the basic dataset record item
 const recordNodeTag = 'tei:biblStruct';
 
-
-function selectByIndex(index) {
+async function selectByIndex(index) {
   if (index < 0 || index >= window.xmlEditor.xmlTree.getElementsByTagName("biblStruct").length) {
     console.error("Index out of bounds");
     return;
   }
   currentIndex = index;
-  window.xmlEditor.selectByXpath(`//${recordNodeTag}[${currentIndex}]`);
+  try {
+    window.xmlEditor.selectByXpath(`//${recordNodeTag}[${currentIndex}]`);
+  } catch(error) {
+    // this sometimes fails for unknown reasons
+    console.warn(error.message)
+  }
+  
 }
-
-
 
 /**
  * Highlights the next node in the `nodes` array.
  *  Moves to the next index and updates the highlight.
  */
-function nextNode() {
+async function nextNode() {
   if (currentIndex < window.xmlEditor.xmlTree.getElementsByTagName("biblStruct").length - 1) {
     currentIndex++;
-   selectByIndex(currentIndex);
   }
+  selectByIndex(currentIndex);
 }
 
 /**
  * Highlights the previous node in the `nodes` array.
  *  Moves to the previous index and updates the highlight.
  */
-function previousNode() {
+async function previousNode() {
   if (currentIndex > 1) {
     currentIndex--;
-    selectByIndex(currentIndex);
-  }
+  } 
+  selectByIndex(currentIndex);
 }
 
 

@@ -7,8 +7,9 @@ bp = Blueprint('files', __name__, url_prefix='/api/files')
 def allow_only_localhost(f):
     def decorated_function(*args, **kwargs):
         target_host = request.headers.get('X-Forwarded-Host') or request.host
+        target_host = target_host.split(":")[0]
         if target_host != 'localhost':
-            return 'Access denied. Only localhost is allowed.', 403
+            return {"error": f'Access denied from {target_host}. Only localhost is allowed.'}, 403
         return f(*args, **kwargs)
     return decorated_function
 

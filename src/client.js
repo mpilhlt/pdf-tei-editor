@@ -1,4 +1,5 @@
-const api_base_url = '/api';
+export let last_http_status = null;
+export const api_base_url = '/api';
 
 /**
  * A generic function to make API requests.
@@ -22,27 +23,23 @@ async function callApi(endpoint, method, body = null) {
     options.body = JSON.stringify(body);
   }
 
-  try {
-    const response = await fetch(url, options);
+  const response = await fetch(url, options);
+  last_http_status = response.status;
 
-    if (!response.ok) {
-      let errorMessage = `HTTP error! status: ${response.status}`;
-      try {
-        const errorData = await response.json();
-        if (errorData && errorData.error) {
-          errorMessage += ` - ${errorData.error}`;
-        }
-      } catch (jsonError) {
-        console.error("Failed to parse error response as JSON:", jsonError);
+  if (!response.ok) {
+    let errorMessage = `HTTP error ${response.status}`;
+    try {
+      const errorData = await response.json();
+      if (errorData && errorData.error) {
+        errorMessage += `: ${errorData.error}`;
       }
-      throw new Error(errorMessage);
+    } catch (jsonError) {
+      console.warn("Failed to parse error response as JSON:", jsonError);
     }
-
-    return await response.json();
-  } catch (error) {
-    console.error(`Error calling API endpoint ${endpoint}:`, error);
-    throw error;
+    throw new Error(errorMessage);
   }
+
+  return await response.json();
 }
 
 /**
@@ -71,5 +68,5 @@ export async function remote_xmllint(xmlString) {
  * @returns 
  */
 export async function saveDocument(xmlString, filePath) {
-  return callApi('/files/save', 'POST', { xml_string: xmlString, file_path:filePath });
+  return callApi('/files/save', 'POST', { xml_string: xmlString, file_path: filePath });
 }

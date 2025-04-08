@@ -34,7 +34,12 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     // make sure we have a tag name child
     const syntaxTagNode = syntaxNode.firstChild?.firstChild?.nextSibling;
     if (!syntaxTagNode || syntaxTagNode.name !== "TagName") {
-      throw new Error(`Expected a TagName child node in syntax tree. Found: ${getText(syntaxNode)}`);
+      const text = getText(syntaxNode);
+      if (text === "<") {
+        // hack
+        syntaxTagNode = syntaxTagNode.nextSibling
+      }
+      throw new Error(`Expected a TagName child node in syntax tree. Found: ${text}`);
     }
 
     const syntaxTagName = getText(syntaxTagNode)
@@ -80,7 +85,7 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
         syntaxChild = syntaxChild.nextSibling;
       }
       if (syntaxChild) {
-        console.warn("Syntax tree has more child elements than the DOM tree:", getText(syntaxChild));
+        throw new Error("Syntax tree has more child elements than the DOM tree:", getText(syntaxChild));
       }
     }
     if (!syntaxChild && domChild && domChild.nodeType === Node.ELEMENT_NODE) {
@@ -88,7 +93,7 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
         domChild = domChild.nextSibling;
       }
       if (domChild) {
-        console.warn("DOM tree has more child elements than the syntax tree:", getText(domChild));
+        throw new Error("DOM tree has more child elements than the syntax tree:", domChild.tagName);
       }
     }
     return {

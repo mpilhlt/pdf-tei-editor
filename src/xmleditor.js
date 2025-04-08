@@ -79,16 +79,24 @@ export class XMLEditor extends EventTarget {
       this.xmlTree = doc;
       this.syntaxTree = syntaxTree(this.view.state);
       try {
-        const maps = linkSyntaxTreeWithDOM(this.view, this.syntaxTree.topNode, this.xmlTree);
-        const { syntaxToDom, domToSyntax } = maps;
-        this.#syntaxToDom = syntaxToDom;
-        this.#domToSyntax = domToSyntax;
+        this.#updateMaps()
         this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
       } catch (error) {
-        // since the xml document validated, this must be a bug, needd to look at this again
-        console.warn(error.message)
+        // this might not succeed the first time for reasons unknown, try again
+        console.warn("Linking DOM and syntax tree failed, trying again...")
+        this.view.dispatch({
+          changes: { from: 0, to: this.view.state.doc.length, insert: this.getXml() },
+          selection: EditorSelection.cursor(0)
+        });
       }
     }
+  }
+
+  #updateMaps() {
+    const maps = linkSyntaxTreeWithDOM(this.view, this.syntaxTree.topNode, this.xmlTree);
+    const { syntaxToDom, domToSyntax } = maps;
+    this.#syntaxToDom = syntaxToDom;
+    this.#domToSyntax = domToSyntax;
   }
 
   /**
@@ -158,6 +166,9 @@ export class XMLEditor extends EventTarget {
   }
 
   getDomNodeAt(pos) {
+    if (!this.#syntaxToDom){
+      this.#updateMaps()
+    }
     let syntaxNode = this.getSyntaxNodeAt(pos);
     // find the element parent if necessary
     while (syntaxNode && !['Element', 'Document'].includes(syntaxNode.name)) {
@@ -206,6 +217,9 @@ export class XMLEditor extends EventTarget {
    * @throws {Error} If the XML tree is not loaded, if no DOM node match the XPath expression, or no syntax node can be found for the DOM node.
    */
   getSyntaxNodeByXpath(xpath) {
+    if (!this.#domToSyntax){
+      this.#updateMaps()
+    }
     const node = this.getDomNodeByXpath(xpath)
     const pos = this.#domToSyntax.get(node);
     if (!pos) {
