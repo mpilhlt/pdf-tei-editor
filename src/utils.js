@@ -2,7 +2,10 @@ export function $(selector) {
   const node = document.querySelector(selector)
   if (!node) {
     throw new Error(`Selector "${selector} does not find any element"`)
-  } 
+  }
+  // monkey-patch element to add convenience methods
+  node.hide = () => node.style.visibility = "hidden"
+  node.show = () => node.style.visibility = "visible"
   return node
 }
 

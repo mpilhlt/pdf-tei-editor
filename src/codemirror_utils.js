@@ -38,8 +38,9 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
       if (text === "<") {
         // hack
         syntaxTagNode = syntaxTagNode.nextSibling
+      } else {
+        throw new Error(`Expected a TagName child node in syntax tree. Found: ${text}`);
       }
-      throw new Error(`Expected a TagName child node in syntax tree. Found: ${text}`);
     }
 
     const syntaxTagName = getText(syntaxTagNode)

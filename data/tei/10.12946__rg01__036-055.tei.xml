@@ -28,11 +28,11 @@
   </teiHeader>
 <standOff>
   <listBibl>
-    <biblStruct>
+    <biblStruct status="verified"> 
       <monogr>
         <title level="m">Tractatus logico-philosophicus</title>
         <author>
-          <persName>
+          <persName> 
             <forename>Ludwig</forename>
             <surname>Wittgenstein</surname>
           </persName>

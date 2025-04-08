@@ -65,14 +65,17 @@ export async function main() {
 
   // file select box
   const selectBox = $('#select-doc');
-  populateSelectBox(selectBox).then(files => {
+  populateSelectBox(selectBox)
+    .then(files => {
     function loadFilesFromSelectedId() {
       const selectedFile = files.find(file => file.id === selectBox.value);
       const pdf = selectedFile.pdf;
       const xml = selectedFile.xml;
       window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
     }
+    // listen for changes in the selectbox
     selectBox.addEventListener('change', loadFilesFromSelectedId);
+
     if (!xmlPath || !pdfPath) {
       // if no query params, load the first entry 
       loadFilesFromSelectedId(files)
@@ -83,6 +86,9 @@ export async function main() {
         selectBox.selectedIndex = files.indexOf(fileFromUrl);
       }
     }
+
+    // show navigation 
+    $('#navigation').show()
 
     // configure save button
     $('#btn-save-document').addEventListener('click', async () => {

@@ -83,11 +83,11 @@ export class XMLEditor extends EventTarget {
         this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
       } catch (error) {
         // this might not succeed the first time for reasons unknown, try again
-        console.warn("Linking DOM and syntax tree failed, trying again...")
-        this.view.dispatch({
-          changes: { from: 0, to: this.view.state.doc.length, insert: this.getXml() },
-          selection: EditorSelection.cursor(0)
-        });
+        console.warn("Linking DOM and syntax tree failed:", error.message)
+        // setTimeout(() => this.view.dispatch({
+        //   changes: { from: 0, to: this.view.state.doc.length, insert: this.getXml() },
+        //   selection: EditorSelection.cursor(0)
+        // }), 1000)
       }
     }
   }

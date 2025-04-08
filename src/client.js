@@ -1,5 +1,5 @@
 export let last_http_status = null;
-export const api_base_url = '/api';
+const api_base_url = '/api';
 
 /**
  * A generic function to make API requests.
@@ -17,6 +17,7 @@ async function callApi(endpoint, method, body = null) {
     headers: {
       'Content-Type': 'application/json',
     },
+    keepAlive: true
   };
 
   if (body) {
@@ -43,7 +44,7 @@ async function callApi(endpoint, method, body = null) {
 }
 
 /**
- * Gets a list of pdf/tei files from the server.
+ * Gets a list of pdf/tei files from the server, including their relative paths
  *
  * @returns {Promise<Array<{id,pdf,xml}>>} - A promise that resolves to an array of objects with keys "id", "pdf", and "tei".
  */
