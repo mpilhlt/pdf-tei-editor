@@ -1,9 +1,10 @@
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
-import { $, $$, addBringToForegroundListener, makeDraggable } from './utils.js'
+import { $, addBringToForegroundListener, makeDraggable } from './utils.js'
 import { get_file_list, saveDocument } from './client.js'
 import { xml } from '@codemirror/lang-xml'
 
+let lastSelectedXmlNode = null;
 
 try {
   main()
@@ -52,53 +53,71 @@ export async function main() {
     $('#btn-prev-node').addEventListener('click', () => previousNode());
     $('#btn-next-node').addEventListener('click', () => nextNode());
 
-    // when the selected biblStruct changes, show its source in the PDF
-
+    // handle selection change
     xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
       handleSelectionChange(event.detail)
     });
 
+    // configure "verification" button
+    $('#btn-node-status').addEventListener('click', event => {
+      const btn = event.target
+      if (lastSelectedXmlNode) {
+        const status = lastSelectedXmlNode.getAttribute('status');
+        switch (status) {
+          case "verified":
+            lastSelectedXmlNode.removeAttribute("status")
+            break;
+          default:
+            lastSelectedXmlNode.setAttribute("status", "verified")
+        }
+      } else {
+        // if no status
+        lastSelectedXmlNode.setAttribute("status", "verified")
+      }
+      // update the editor content
+      window.xmlEditor.updateFromXmlTree()
+    })
+
   } else {
-    $('#btn-prev-node').style.display = 'none'
-    $('#btn-next-node').style.display = 'none'
+    $('#btn-prev-node').hide()
+    $('#btn-next-node').hide()
   }
 
-  // file select box
+  // configure file select box
   const selectBox = $('#select-doc');
   populateSelectBox(selectBox)
     .then(files => {
-    function loadFilesFromSelectedId() {
-      const selectedFile = files.find(file => file.id === selectBox.value);
-      const pdf = selectedFile.pdf;
-      const xml = selectedFile.xml;
-      window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
-    }
-    // listen for changes in the selectbox
-    selectBox.addEventListener('change', loadFilesFromSelectedId);
-
-    if (!xmlPath || !pdfPath) {
-      // if no query params, load the first entry 
-      loadFilesFromSelectedId(files)
-    } else {
-      // otherwise align selection with url
-      const fileFromUrl = files.find(file => file.pdf == pdfPath)
-      if (fileFromUrl) {
-        selectBox.selectedIndex = files.indexOf(fileFromUrl);
+      function loadFilesFromSelectedId() {
+        const selectedFile = files.find(file => file.id === selectBox.value);
+        const pdf = selectedFile.pdf;
+        const xml = selectedFile.xml;
+        window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
       }
-    }
+      // listen for changes in the selectbox
+      selectBox.addEventListener('change', loadFilesFromSelectedId);
 
-    // show navigation 
-    $('#navigation').show()
-
-    // configure save button
-    $('#btn-save-document').addEventListener('click', async () => {
-      const fileData = files[selectBox.selectedIndex];
-      if (confirm(`Do you want to save ${documentLabel(fileData)}?`)) {
-        await saveDocument(xmlEditor.getXml(), fileData.xml)
+      if (!xmlPath || !pdfPath) {
+        // if no query params, load the first entry 
+        loadFilesFromSelectedId(files)
+      } else {
+        // otherwise align selection with url
+        const fileFromUrl = files.find(file => file.pdf == pdfPath)
+        if (fileFromUrl) {
+          selectBox.selectedIndex = files.indexOf(fileFromUrl);
+        }
       }
+
+      // show navigation 
+      $('#navigation').show()
+
+      // configure save button
+      $('#btn-save-document').addEventListener('click', async () => {
+        const fileData = files[selectBox.selectedIndex];
+        if (confirm(`Do you want to save ${documentLabel(fileData)}?`)) {
+          await saveDocument(xmlEditor.getXml(), fileData.xml)
+        }
+      });
     });
-  });
-
 
   // read/edit switch
   //$('#editor-switch').addEventListener('change', handleEditorSwitch);
@@ -118,14 +137,34 @@ export async function main() {
 // ==========================================================================================
 
 async function handleSelectionChange(ranges) {
-  if (ranges.length === 0 || ranges[0].empty) {
-    return;
+
+  console.log(ranges)
+
+  if (ranges.length === 0) return;
+
+  // we care only for the first selected node
+  const range = ranges[0]
+  const selectedNode = range.node;
+  lastSelectedXmlNode = selectedNode;
+
+  if (!selectedNode) return;
+
+  // check status as "verified"
+  const statusButton = $('#btn-node-status')
+  const status = selectedNode.getAttribute('status');
+  statusButton.disabled = false
+  switch (status) {
+    case "verified":
+      statusButton.textContent = "Mark node as unverified"
+      break;
+    default:
+      statusButton.textContent = "Mark node as verified"
   }
 
-  const range = ranges[0];
-  const node = window.xmlEditor.getDomNodeAt(range.from);
+  // search node contents in the PDF
+
   // search terms must be more than three characters
-  const searchTerms = getNodeText(node).filter(term => term.length > 3);
+  const searchTerms = getNodeText(selectedNode).filter(term => term.length > 3);
   // for maximum 10 search terms 
   if (searchTerms.length < 10) {
     await window.pdfViewer.search(searchTerms);
@@ -175,18 +214,18 @@ let currentIndex = 0;
 const recordNodeTag = 'tei:biblStruct';
 
 async function selectByIndex(index) {
-  if (index < 0 || index >= window.xmlEditor.xmlTree.getElementsByTagName("biblStruct").length) {
+  if (index < 0 || index >= window.xmlEditor.getXmlTree().getElementsByTagName("biblStruct").length) {
     console.error("Index out of bounds");
     return;
   }
   currentIndex = index;
   try {
     window.xmlEditor.selectByXpath(`//${recordNodeTag}[${currentIndex}]`);
-  } catch(error) {
+  } catch (error) {
     // this sometimes fails for unknown reasons
     console.warn(error.message)
   }
-  
+
 }
 
 /**
@@ -194,7 +233,7 @@ async function selectByIndex(index) {
  *  Moves to the next index and updates the highlight.
  */
 async function nextNode() {
-  if (currentIndex < window.xmlEditor.xmlTree.getElementsByTagName("biblStruct").length - 1) {
+  if (currentIndex < window.xmlEditor.getXmlTree().getElementsByTagName("biblStruct").length - 1) {
     currentIndex++;
   }
   selectByIndex(currentIndex);
@@ -207,7 +246,7 @@ async function nextNode() {
 async function previousNode() {
   if (currentIndex > 1) {
     currentIndex--;
-  } 
+  }
   selectByIndex(currentIndex);
 }
 
