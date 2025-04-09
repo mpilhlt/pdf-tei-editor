@@ -1,4 +1,4 @@
-import { remote_xmllint, last_http_status } from './client.js'
+import { validateXml, last_http_status } from './client.js'
 import { $ } from './utils.js'
 import { resolveXPath } from './codemirror_utils.js'
 
@@ -35,7 +35,7 @@ export async function lintSource(view) {
   // send XML to remote validation service
   let validation_errors;
   try {
-    ({ errors: validation_errors } = await remote_xmllint(xml));
+    ({ errors: validation_errors } = await validateXml(xml));
   } catch (error) {
     // if the request fails, print a warning
     console.warn(error.message);

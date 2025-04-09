@@ -119,7 +119,7 @@ export class XMLEditor extends EventTarget {
     return serializer.serializeToString(this.#xmlTree);
   }
 
-  updateFromXmlTree(){
+  updateFromXmlTree() {
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: this.getXML() }
     });
@@ -143,7 +143,7 @@ export class XMLEditor extends EventTarget {
    * @param {boolean} findParentElement If true, find the next ancestor which is an Element or Document Node
    * @returns {SyntaxNode}
    */
-  getSyntaxNodeAt(pos, findParentElement=true) {
+  getSyntaxNodeAt(pos, findParentElement = true) {
     let syntaxNode = syntaxTree(this.#view.state).resolveInner(pos, 1);
     // find the element parent if necessary
     if (findParentElement) {
@@ -174,6 +174,45 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
+   * Returns the DOM nodes that matches the given XPath expression.
+   * @param {string} xpath 
+   * @returns {Array<Node>} An array of matching node snapshots.
+   * @throws {Error} If the XML tree is not loaded
+   */
+  getDomNodesByXpath(xpath) {
+    if (!this.#xmlTree) {
+      throw new Error("XML tree is not loaded.");
+    }
+    if (!xpath) {
+      throw new Error("XPath is not provided.");
+    }
+    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.#namespaceResolver, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    const result = []
+    let node;
+    while ((node = xpathResult.iterateNext())) {
+      result.push(node)
+    }
+    return result;
+  }
+
+  /**
+   * Returns the DOM nodes that matches the given XPath expression.
+   * @param {string} xpath 
+   * @returns {Array<Node>} An array of matching node snapshots.
+   * @throws {Error} If the XML tree is not loaded
+   */
+  countDomNodesByXpath(xpath) {
+    if (!this.#xmlTree) {
+      throw new Error("XML tree is not loaded.");
+    }
+    if (!xpath) {
+      throw new Error("XPath is not provided.");
+    }
+    xpath = `count(${xpath})`
+    return this.#xmlTree.evaluate(xpath, this.#xmlTree, this.#namespaceResolver, XPathResult.NUMBER_TYPE, null).numberValue;
+  }
+
+  /**
    * Returns the first DOM node that matches the given XPath expression.
    * @param {string} xpath 
    * @returns {Node} The first matching DOM node.
@@ -186,20 +225,10 @@ export class XMLEditor extends EventTarget {
     if (!xpath) {
       throw new Error("XPath is not provided.");
     }
-    // Create an XPath expression and evaluate it
-    function namespaceResolver(prefix) {
-      const namespaces = {
-        'tei': 'http://www.tei-c.org/ns/1.0',
-        'xml': 'http://www.w3.org/XML/1998/namespace'
-      };
-      return namespaces[prefix] || null;
-    };
-    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, namespaceResolver, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-    if (xpathResult.snapshotLength > 0) {
-      return xpathResult.snapshotItem(0);
-    } else {
-      throw new Error(`No nodes found for XPath: ${xpath}`);
-    }
+    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.#namespaceResolver, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+    const result = xpathResult.singleNodeValue;
+    console.warn(xpath, result)
+    return result
   }
 
   /**
@@ -213,6 +242,9 @@ export class XMLEditor extends EventTarget {
       this.#updateMaps()
     }
     const node = this.getDomNodeByXpath(xpath)
+    if (!node) {
+      throw new Error(`No XML node found for XPath: ${xpath}`);
+    }
     const pos = this.#domToSyntax.get(node);
     if (!pos) {
       throw new Error(`No syntax node found for XPath: ${xpath}`);
@@ -223,6 +255,7 @@ export class XMLEditor extends EventTarget {
   /**
    * Selects the DOM node that matches the given XPath expression in the editor.
    * @param {string} xpath - The XPath expression to select.
+   * @throws {Error} If the XML tree is not loaded, if no DOM node match the XPath expression, or no syntax node can be found for the DOM node.
    */
   selectByXpath(xpath) {
     const { from, to } = this.getSyntaxNodeByXpath(xpath);
@@ -297,6 +330,14 @@ export class XMLEditor extends EventTarget {
   //
   // private methods
   //
+
+  #namespaceResolver(prefix) {
+    const namespaces = {
+      'tei': 'http://www.tei-c.org/ns/1.0',
+      'xml': 'http://www.w3.org/XML/1998/namespace'
+    };
+    return namespaces[prefix] || null;
+  };
 
   #onSelectionChange(ranges) {
     // add the selected node in the XML-DOM tree to each range

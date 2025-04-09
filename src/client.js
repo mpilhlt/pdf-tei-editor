@@ -48,7 +48,7 @@ async function callApi(endpoint, method, body = null) {
  *
  * @returns {Promise<Array<{id,pdf,xml}>>} - A promise that resolves to an array of objects with keys "id", "pdf", and "tei".
  */
-export async function get_file_list(xmlString) {
+export async function getFileList(xmlString) {
   return callApi('/files/list', 'GET');
 }
 
@@ -58,7 +58,7 @@ export async function get_file_list(xmlString) {
  * @param {string} xmlString - The TEI XML string to validate.
  * @returns {Promise<Array<string>>} - A promise that resolves to an array of error messages,
  */
-export async function remote_xmllint(xmlString) {
+export async function validateXml(xmlString) {
   return callApi('/validate', 'POST', { xml_string: xmlString });
 }
 
@@ -71,3 +71,4 @@ export async function remote_xmllint(xmlString) {
 export async function saveDocument(xmlString, filePath) {
   return callApi('/files/save', 'POST', { xml_string: xmlString, file_path: filePath });
 }
+
