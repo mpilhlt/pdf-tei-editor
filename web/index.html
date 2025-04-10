@@ -21,12 +21,21 @@
       <select id="select-xpath"></select>
       <button id="btn-edit-xpath">XPath</button>
       <button id="btn-prev-node" disabled>&lt;&lt;</button>
+      <span id="selection-index"></span>
       <button id="btn-next-node" disabled>&gt;&gt;</button>
     </div>
     <div id="command-buttons">
       <button id="btn-node-status" disabled>Mark node as verified</button>
-      <button id="btn-save-document" disabled>Save Document</button>
+      <button id="btn-save-document" disabled>Validate & Save</button>
     </div>
   </div>
+  <!-- User message -->
+  <dialog id="dialog-message">
+    <div class="dialog-header">Title</div>
+    <div class="dialog-content">Message</div>
+    <div class="dialog-footer">
+      <button class="dialog-close">Close</button>
+    </div>
+  </dialog>
 </body>
 </html>

@@ -5,8 +5,9 @@ import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { linter, lintGutter, forceLinting } from "@codemirror/lint";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree } from "@codemirror/language";
-import { lintSource } from './lint.js';
+import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
+import { $ } from './utils.js';
 
 
 export class XMLEditor extends EventTarget {
@@ -21,6 +22,7 @@ export class XMLEditor extends EventTarget {
   #domToSyntax = null; // Maps DOM nodes to syntax tree nodes
   #xmlTree = null; // the xml document tree
   #syntaxTree = null; // the lezer syntax tree
+  #lintingNeedsRefresh = false;
 
   /**
    * Constructs an XMLEditor instance.
@@ -39,7 +41,7 @@ export class XMLEditor extends EventTarget {
     const extensions = [
       basicSetup,
       xml(),
-      linter(lintSource, { autoPanel: true, delay: 2000 }),
+      linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => true}),
       lintGutter(),
       selectionChangeListener(this.#onSelectionChange.bind(this)),
       EditorView.updateListener.of(this.#onUpdate.bind(this))
@@ -86,8 +88,40 @@ export class XMLEditor extends EventTarget {
     this.#documentVersion = 0;
   }
 
+  /**
+   * Triggers a validation and returns an array of Diagnostic objects, or an empty array if no
+   * validation errors were found
+   * @returns {Promise<Array>}
+   */
   async validateXml() {
-    forceLinting(this.#view);
+    if (isValidating()) {
+      // if a validation is ongoing, we can wait for it to finish and use the result
+      console.log("Validation is ongoing, waiting for it to finish")
+      return await anyCurrentValidation()
+    }
+    console.log("Triggering a validation")
+    // otherwise, we trigger the linting
+    let disabledState = validationIsDisabled()
+    disableValidation(false)
+    // await the new validation promise once it is available
+    const diagnostics = await new Promise(resolve => {
+      console.log("Waiting for validation to start...")
+        $('#btn-save-document').innerHTML = "Waiting for validation..."
+        $('#btn-save-document').disabled = true;
+      function checkIfValidating() {
+        if (isValidating()) {
+          let validationPromise = anyCurrentValidation();
+          validationPromise.then(result => {
+            resolve(result);
+          });
+        } else {
+          setTimeout(checkIfValidating, 100);
+        }
+      }
+      checkIfValidating();
+    });
+    disableValidation(disabledState)
+    return diagnostics
   }
 
   getDocumentVersion() {
@@ -227,7 +261,7 @@ export class XMLEditor extends EventTarget {
     }
     const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.#namespaceResolver, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     const result = xpathResult.singleNodeValue;
-    console.warn(xpath, result)
+    //console.warn(xpath, result)
     return result
   }
 

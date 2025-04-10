@@ -2,13 +2,19 @@ import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
 import { $, addBringToForegroundListener, makeDraggable } from './utils.js'
 import { getFileList, saveDocument } from './client.js'
-import { xml } from '@codemirror/lang-xml'
-import { UrlHash } from './browser-utils.js'
+import { UrlHash, showMessage } from './browser-utils.js'
+import { disableValidation } from './lint.js'
 
 // the last selected node, can be null
 let lastSelectedXmlNode = null;
 // the index of the currently selected node, 1-based
 let currentIndex = 1;
+// the xml editor
+let xmlEditor = null;
+// the pdf viewer
+let pdfViewer = null;
+// the path from which to load the autocompletion data
+const tagDataPath = '/data/tei.json'
 
 try {
   main()
@@ -23,49 +29,73 @@ export async function main() {
   const pdfPath = window.pdfPath = urlParams.get('pdf');
   const xmlPath = window.xmlPath = urlParams.get('xml');
 
-  let tagData;
-  try {
-    const res = await fetch('/data/tei.json');
-    tagData = await res.json();
-    console.log("Loaded autocompletion data");
-  } catch (error) {
-    console.error('Error fetching JSON:', error);
-  }
+  console.log(`Starting Application\nPDF: ${pdfPath}\nXML: ${xmlPath}`);
 
-  const pdfViewer = window.pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath).hide();
-  const xmlEditor = window.xmlEditor = new XMLEditor('xml-editor', tagData, 'biblStruct');
+  // disable regular validation so that we have more control over it
+  disableValidation(true)
 
-  if (pdfPath && xmlPath) {
+  // wait for UI to be fully set up
+  await Promise.all([
+    pdfPath ? loadPdfViewer(pdfPath) : null,
+    xmlPath ? loadXmlEditor(xmlPath, tagDataPath) : null,
+    configureNavigation()
+  ])
 
-    console.log(`PDF: ${pdfPath}\nXML: ${xmlPath}`);
-
-    // XML Editor
-    console.log("Loading XML data...");
-    xmlEditor.loadXml(xmlPath).then(() => {
-      console.log("Validating XML data with TEI XSD...");
-      xmlEditor.validateXml(); // no way of knowing when this is finished at the moment
-      setSelectionPathFromUrl()
-    });
-
-    // PDF
-    pdfViewer.load(pdfPath).then(() => pdfViewer.show());
-
+  if (xmlEditor) {
     // handle selection change
     xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
       handleSelectionChange(event.detail)
     });
 
-    // configure "verification" button
-    $('#btn-node-status').addEventListener('click', handleStatusUpdate)
+    // this triggers the initial selection
+    setSelectionXpathFromUrl()
+
+    // measure how long it takes to validate the document
+    const startTime = new Date().getTime();
+    xmlEditor.validateXml().then(() => {
+      const endTime = new Date().getTime();
+      const seconds = Math.round((endTime - startTime) / 1000);
+      // disable validation if it took longer than 3 seconds
+      console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it.":"."}`)
+      disableValidation(seconds > 3)
+     })
   }
 
-  // configure navigation UI
-  Promise.all([
-    populateFilesSelectbox(), 
+  console.log("Application ready.")
+}
+
+async function loadXmlEditor(xmlPath, tagDataPath) {
+  console.log("Initializing XML Editor...")
+  let tagData;
+  try {
+    console.log("Loading autocompletion data...");
+    const res = await fetch(tagDataPath);
+    tagData = await res.json();
+  } catch (error) {
+    console.error('Error fetching from', tagDataPath, ":", error);
+    return;
+  }
+  xmlEditor = window.xmlEditor = new XMLEditor('xml-editor', tagData);
+  console.log("Loading XML data...");
+  await xmlEditor.loadXml(xmlPath)
+}
+
+async function loadPdfViewer(pdfPath) {
+  pdfViewer = window.pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath).hide();
+  await pdfViewer.load(pdfPath)
+  pdfViewer.show()
+}
+
+
+async function configureNavigation() {
+
+  await Promise.all([
+    populateFilesSelectbox(),
     populateXpathSelectbox()
-  ]).then(() => {
-    $('#navigation').show()
-  })
+  ])
+
+  // when everything is configured, we can show the UI
+  $('#navigation').show()
 
   // bring clicked elements into foreground when clicked
   addBringToForegroundListener(['#navigation', '.cm-panels']);
@@ -73,43 +103,23 @@ export async function main() {
   // make navigation draggable
   makeDraggable($('#navigation'))
 
+  // configure "verification" button
+  $('#btn-node-status').addEventListener('click', handleStatusUpdate)
 }
 
-// ==========================================================================================
-//
-// helper functions
-//
-// ==========================================================================================
-
 async function handleSelectionChange(ranges) {
-
   if (ranges.length === 0) return;
 
   // we care only for the first selected node
   const range = ranges[0]
   const selectedNode = range.node;
   lastSelectedXmlNode = selectedNode;
+
   if (!selectedNode) return;
 
-  // check status as "verified"
-  const statusButton = $('#btn-node-status')
-  const status = selectedNode.getAttribute('status');
-  statusButton.disabled = false
-  switch (status) {
-    case "verified":
-      statusButton.textContent = "Mark node as unverified"
-      break;
-    default:
-      statusButton.textContent = "Mark node as verified"
-  }
-
-  // search node contents in the PDF
-
-  // search terms must be more than three characters
-  const searchTerms = getNodeText(selectedNode).filter(term => term.length > 3);
-  // for maximum 10 search terms 
-  if (searchTerms.length < 10) {
-    await window.pdfViewer.search(searchTerms);
+  checkVerifiedStatus(selectedNode)
+  if (pdfViewer) {
+    await searchNodeContentsInPdf(selectedNode)
   }
 }
 
@@ -126,6 +136,28 @@ function handleStatusUpdate() {
     // update the editor content
     window.xmlEditor.updateFromXmlTree()
     selectByIndex(currentIndex)
+  }
+}
+
+function checkVerifiedStatus(node) {
+  const statusButton = $('#btn-node-status')
+  const status = node.getAttribute('status');
+  statusButton.disabled = false
+  switch (status) {
+    case "verified":
+      statusButton.textContent = "Mark node as unverified"
+      break;
+    default:
+      statusButton.textContent = "Mark node as verified"
+  }
+}
+
+async function searchNodeContentsInPdf(node) {
+  // search terms must be more than three characters
+  const searchTerms = getNodeText(node).filter(term => term.length > 3);
+  // for maximum 10 search terms 
+  if (searchTerms.length < 10) {
+    await window.pdfViewer.search(searchTerms);
   }
 }
 
@@ -175,14 +207,28 @@ async function populateFilesSelectbox() {
     // configure save button
     $('#btn-save-document').addEventListener('click', async () => {
       const fileData = files[selectbox.selectedIndex];
-      if (confirm(`Do you want to save ${documentLabel(fileData)}?`)) {
-        await saveDocument(xmlEditor.getXml(), fileData.xml)
-      }
+      await validateAndSave(fileData.xml)
     });
 
   } catch (error) {
     console.error('Error populating files selectbox:', error);
   }
+}
+
+/**
+ * Triggers a validation of the document (or waits for an ongoing one to finish), and saves the document
+ * if validation was successful
+ * @param {StorageManager} filePath 
+ * @returns {Promise<void>}
+ */
+async function validateAndSave(filePath) {
+  let diagnostics = await xmlEditor.validateXml()
+  if (diagnostics.length) {
+    showMessage("There are validation errors in the document. The document has not been saved. Correct and try again.", "Validation Errors")
+    return diagnostics;
+  }
+  console.log("Saving XML on server...");
+  await saveDocument(xmlEditor.getXML(), filePath)
 }
 
 async function populateXpathSelectbox() {
@@ -238,7 +284,7 @@ async function populateXpathSelectbox() {
     });
 
     // update selectbox according to the URL hash
-    window.addEventListener('hashchange', setSelectionPathFromUrl);
+    window.addEventListener('hashchange', setSelectionXpathFromUrl);
 
     // setup click handlers
     $('#btn-prev-node').addEventListener('click', () => previousNode());
@@ -249,7 +295,10 @@ async function populateXpathSelectbox() {
   }
 }
 
-function setSelectionPathFromUrl() {
+/**
+ * Reads the selection xpath from the URL. If no is given, takes it from the selectbox value
+ */
+function setSelectionXpathFromUrl() {
   const xpath = UrlHash.get("xpath");
   if (xpath) {
     setSelectionXpath(xpath)
@@ -258,22 +307,25 @@ function setSelectionPathFromUrl() {
   }
 }
 
+/**
+ * Sets the xpath for selecting nodes, and selects the first
+ * @param {string} xpath The xpath identifying the node(s)
+ */
 function setSelectionXpath(xpath) {
-  console.log("Setting xpath", xpath)
   const selectbox = $('#select-xpath');
-  let index = Array.from(selectbox.options).findIndex(option => option.value === xpath)
-
-  // custom xpath
-  if (index === -1) {
-    index = selectbox.length - 1
-    selectbox[index].value = xpath
-    selectbox[index].text = `Custom: ${xpath}`
-    selectbox[index].disabled = false
+  if (selectbox.value !== xpath) {
+    console.log("Setting xpath", xpath)
+    let index = Array.from(selectbox.options).findIndex(option => option.value === xpath)
+    // custom xpath
+    if (index === -1) {
+      index = selectbox.length - 1
+      selectbox[index].value = xpath
+      selectbox[index].text = `Custom: ${xpath}`
+      selectbox[index].disabled = false
+    }
+    // update the selectbox
+    selectbox.selectedIndex = index;
   }
-
-  // update the selectbox
-  selectbox.selectedIndex = index;
-
   // select the first node
   selectByIndex(1)
 }
@@ -285,7 +337,6 @@ function getSelectionXpath() {
 function getSelectionXpathResultSize() {
   const xpath = getSelectionXpath()
   const count = window.xmlEditor.countDomNodesByXpath(xpath)
-  console.log("Selected xpath result nodes", xpath, count)
   return count
 }
 
@@ -297,9 +348,12 @@ function getSelectionXpathResultSize() {
 function selectByIndex(index) {
   const size = getSelectionXpathResultSize()
 
+  // show index
+  $('#selection-index').textContent = `(${index}/${size})`
+
   // disable navigation if we have no or just one result
   $('#btn-next-node').disabled = $('#btn-prev-node').disabled = size < 2;
-  
+
   // check if selection is within bounds
   if (index < 1 || index > size || size === 0) {
     console.warn(`Index out of bounds: ${index} of ${size} items`);
@@ -324,8 +378,7 @@ function selectByIndex(index) {
 }
 
 /**
- * Highlights the next node in the `nodes` array.
- *  Moves to the next index and updates the highlight.
+ * Selects the next node matching the current xpath 
  */
 function nextNode() {
   if (currentIndex < getSelectionXpathResultSize()) {
@@ -335,8 +388,7 @@ function nextNode() {
 }
 
 /**
- * Highlights the previous node in the `nodes` array.
- *  Moves to the previous index and updates the highlight.
+ * Selects the previous node matching the current xpath 
  */
 function previousNode() {
   if (currentIndex > 1) {
@@ -347,14 +399,16 @@ function previousNode() {
 
 
 /**
- * extract the text from text nodes
+ * Returns a list of non-empty text content from all text nodes contained in the given node
+ * @returns {Array<string>}
  */
 function getNodeText(node) {
   return getTextNodes(node).map(node => node.textContent.trim()).filter(Boolean)
 }
 
 /**
- * Recursively extract all text nodes contained in the given node into a flat list
+ * Recursively extracts all text nodes contained in the given node into a flat list
+ * @return {Array<Node>}
  */
 function getTextNodes(node) {
   let textNodes = [];
@@ -366,17 +420,4 @@ function getTextNodes(node) {
     }
   }
   return textNodes;
-}
-
-function addIds() {
-  console.log(`Adding xml:id to each record of type ${this.recordTag}`);
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xml, "application/xml");
-  this.nodes = Array.from(xmlDoc.getElementsByTagName(this.recordTag));
-  for (let [idx, node] of this.nodes.entries()) {
-    if (!node.hasAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:id")) {
-      node.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:id", `biblStruct${idx}`)
-    }
-  }
-  xml = (new XMLSerializer()).serializeToString(xmlDoc)
 }
