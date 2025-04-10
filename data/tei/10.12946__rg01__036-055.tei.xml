@@ -399,12 +399,13 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <analytic>
         <title level="a">The Concept of &gt;Fact&lt;: Legal Origins and Cultural Diffusion</title>
         <author>
           <persName>
-            <forename>Barbara J.</forename>
+            <forename>Barbara</forename>
+            <forename type="middle">J.</forename>
             <surname>Shapiro</surname>
           </persName>
         </author>
