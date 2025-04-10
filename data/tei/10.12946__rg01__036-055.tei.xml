@@ -1,7 +1,4 @@
-<TEI 
-  xmlns="http://www.tei-c.org/ns/1.0" 
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-  xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/tei.xsd">
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/tei.xsd">
   <teiHeader>
     <fileDesc>
       <titleStmt>
@@ -43,7 +40,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <analytic>
         <title level="a">Tatsache</title>
         <author>
@@ -55,7 +52,7 @@
       </analytic>
       <monogr>
         <title level="m">Historisches Wörterbuch der Philosophie</title>
-        <editor>
+        <editor> 
           <persName>
             <forename>Joachim</forename>
             <surname>Ritter</surname>
@@ -74,7 +71,7 @@
         <biblScope unit="volume">10</biblScope>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">Francis Bacon, the State and the Reform of Natural Philosophy</title>
         <author>
@@ -89,12 +86,13 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">A Culture of Fact: England, 1550-1720</title>
         <author>
           <persName>
             <forename>Barbara</forename>
+            <forename type="middle">J.</forename>
             <surname>Shapiro</surname>
           </persName>
         </author>
@@ -104,7 +102,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">Leviathan and the Air-Pump: Hobbes, Boyle and the Experimental Life</title>
         <author>
@@ -125,7 +123,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">Collectionneurs, amateurs et curieux</title>
         <author>
@@ -140,7 +138,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">How Experiments End</title>
         <author>
@@ -155,7 +153,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">The Uses of Experiment. Studies in the Natural Sciences</title>
         <editor>
@@ -182,7 +180,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">L'inventario del mondo: Catalogazione della natura e luoghi del sapere nella prima età moderna</title>
         <author>
@@ -197,7 +195,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">La Politique des grands nombres. Histoire de la raison statistique</title>
         <author>
@@ -212,7 +210,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">Possessing Nature: Museums, Collecting and Scientific Culture in Early Modern Italy</title>
         <author>
@@ -227,7 +225,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">Discipline and Experience: The Mathematical Way in the Scientific Revolution</title>
         <author>
@@ -242,7 +240,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">La Formation de la pratique scientifique: Le discours de l'expérience en France et en Angleterre, (1630-1820)</title>
         <author>
@@ -257,7 +255,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">The Progress of Experiment: Science and Therapeutic Reform in the United States, 1900-1990</title>
         <author>
@@ -272,7 +270,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">The Footnote: A Curious History</title>
         <author>
@@ -287,7 +285,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">A History of the Modern Fact: Problems of Knowledge in the Sciences of Wealth and Society</title>
         <author>
@@ -302,7 +300,7 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">Wonders and the Order of Nature, 1150-1750</title>
         <author>
@@ -323,13 +321,13 @@
         </imprint>
       </monogr>
     </biblStruct>
-    <biblStruct>
+    <biblStruct status="verified">
       <monogr>
         <title level="m">Sammeln als Wissen</title>
         <editor>
           <persName>
-            <forename>Anke te</forename>
-            <surname>Heesen</surname>
+            <forename>Anke</forename>
+            <surname>te Heesen</surname>
           </persName>
         </editor>
         <editor>
@@ -343,8 +341,8 @@
           <pubPlace>Göttingen</pubPlace>
         </imprint>
       </monogr>
-    </biblStruct>
-    <biblStruct>
+    </biblStruct> 
+    <biblStruct> 
       <monogr>
         <title level="m">The Works of Francis Bacon</title>
         <author>
@@ -623,7 +621,7 @@
       <monogr>
         <title level="s">Mémoires de l'Académie Royale des Sciences Depuis 1666 jusqu'à 1699</title>
         <imprint>
-          <date></date>
+          <date/>
         </imprint>
         <biblScope unit="volume">7</biblScope>
         <biblScope unit="page">77-84</biblScope>
