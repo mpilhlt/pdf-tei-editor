@@ -33,7 +33,7 @@ export async function anyCurrentValidation() {
  */
 export function disableValidation(value) {
   if (isDisabled !== value) {
-    console.log(`Validation ${value ? "disabled" : "enabled"}.`)
+    //console.log(`Validation ${value ? "disabled" : "enabled"}.`)
     isDisabled = value;
   }
 }
@@ -59,13 +59,13 @@ export async function lintSource(view) {
 
   // don't even try if server has rejected our query before
   if (isDisabled) {
-    console.log("Ignoring validation request: Validation is disabled")
+    //console.log("Ignoring validation request: Validation is disabled")
     return lastDiagnostics;
   }
 
   // if this is called while another validation is ongoing, return ok
   if (validationInProgress) {
-    console.log("Ignoring validation request: Validation is ongoing.")
+    //console.log("Ignoring validation request: Validation is ongoing.")
     return lastDiagnostics;
   }
 

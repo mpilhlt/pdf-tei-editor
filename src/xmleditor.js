@@ -99,7 +99,7 @@ export class XMLEditor extends EventTarget {
       console.log("Validation is ongoing, waiting for it to finish")
       return await anyCurrentValidation()
     }
-    console.log("Triggering a validation")
+    //console.log("Triggering a validation")
     // otherwise, we trigger the linting
     let disabledState = validationIsDisabled()
     disableValidation(false)

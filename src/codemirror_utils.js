@@ -32,7 +32,7 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     }
 
     // make sure we have a tag name child
-    const syntaxTagNode = syntaxNode.firstChild?.firstChild?.nextSibling;
+    let syntaxTagNode = syntaxNode.firstChild?.firstChild?.nextSibling;
     if (!syntaxTagNode || syntaxTagNode.name !== "TagName") {
       const text = getText(syntaxNode);
       if (text === "<") {

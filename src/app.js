@@ -154,11 +154,14 @@ function checkVerifiedStatus(node) {
 
 async function searchNodeContentsInPdf(node) {
   // search terms must be more than three characters
-  const searchTerms = getNodeText(node).filter(term => term.length > 3);
-  // for maximum 10 search terms 
-  if (searchTerms.length < 10) {
-    await window.pdfViewer.search(searchTerms);
-  }
+  let searchTerms = getNodeText(node)
+    .reduce((acc,term) => acc.concat(term.split(" ")),[])
+    .filter(term => term.length > 3)
+  
+  // unique
+  searchTerms = Array.from(new Set(searchTerms))
+  // start search
+  await window.pdfViewer.search(searchTerms);
 }
 
 function documentLabel(fileData) {

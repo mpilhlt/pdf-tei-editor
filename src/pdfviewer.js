@@ -3,139 +3,23 @@
  */
 
 /**
- * Clusters an array of highlighted divs based on geometric proximity and
- * uniqueness of text content.
- *
- * @param {HTMLElement[]} highlightedDivs - An array of highlighted div elements.
- * @returns {HTMLElement[]} - An array of clustered div elements.
- */
-function clusterHighlightedDivs(highlightedDivs) {
-  if (!highlightedDivs || highlightedDivs.length === 0) {
-    return []; // Return empty array if input is empty or null
-  }
-
-  /**
-   * Calculates the geometric distance between two HTML elements.
-   * @param {HTMLElement} el1 - The first element.
-   * @param {HTMLElement} el2 - The second element.
-   * @returns {number} The distance between the centers of the elements.
-   */
-  function calculateDistance(el1, el2) {
-    const rect1 = el1.getBoundingClientRect();
-    const rect2 = el2.getBoundingClientRect();
-    const centerX1 = rect1.left + rect1.width / 2;
-    const centerY1 = rect1.top + rect1.height / 2;
-    const centerX2 = rect2.left + rect2.width / 2;
-    const centerY2 = rect2.top + rect2.height / 2;
-    const distanceX = centerX2 - centerX1;
-    const distanceY = centerY2 - centerY1;
-    return Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-  }
-
-  // Remove duplicates, keeping the closest ones
-  const uniqueDivs = [];
-  const seenTexts = new Set();
-
-  for (const div of highlightedDivs) {
-    const text = div.textContent;
-
-    if (!seenTexts.has(text)) {
-      uniqueDivs.push(div);
-      seenTexts.add(text);
-    } else {
-      // Duplicate found.  Check if the existing one is farther away.
-      const existingIndex = uniqueDivs.findIndex(d => d.textContent === text);
-      const existingDiv = uniqueDivs[existingIndex];
-
-      // Calculate average distance of new div and existing div to all other divs
-      let newDivTotalDistance = 0;
-      let existingDivTotalDistance = 0;
-
-      for (const otherDiv of highlightedDivs) {
-        if (otherDiv !== div && otherDiv !== existingDiv) {
-          newDivTotalDistance += calculateDistance(div, otherDiv);
-          existingDivTotalDistance += calculateDistance(existingDiv, otherDiv);
-        }
-      }
-
-      const newDivAverageDistance = newDivTotalDistance / (highlightedDivs.length - 2);
-      const existingDivAverageDistance = existingDivTotalDistance / (highlightedDivs.length - 2);
-
-      // If the new div is closer on average, replace the existing one
-      if (newDivAverageDistance < existingDivAverageDistance) {
-        uniqueDivs[existingIndex] = div;
-      }
-    }
-  }
-
-
-  // Cluster based on geometric proximity. This is a simple, greedy clustering.
-  const clusters = [];
-  const unclustered = [...uniqueDivs]; // Create a copy so we can modify it
-
-  while (unclustered.length > 0) {
-    const currentCluster = [unclustered.shift()]; // Start a new cluster with the first unclustered div
-
-    // Find the closest div to the current cluster
-    let closestDiv = null;
-    let minDistance = Infinity;
-
-    for (let i = 0; i < unclustered.length; i++) {
-      const div = unclustered[i];
-      let distanceToCluster = 0;
-
-      // Calculate the average distance from the div to all divs in the current cluster
-      for (const clusterDiv of currentCluster) {
-        distanceToCluster += calculateDistance(div, clusterDiv);
-      }
-      distanceToCluster /= currentCluster.length;
-
-      if (distanceToCluster < minDistance) {
-        minDistance = distanceToCluster;
-        closestDiv = div;
-      }
-    }
-
-    //Add the closest div to this cluster if it's closer than other unclustered nodes are to it.
-    if (closestDiv) {
-      let closestToClosest = Infinity;
-      for (let i = 0; i < unclustered.length; i++) {
-        if (unclustered[i] === closestDiv) continue;
-
-        const distance = calculateDistance(closestDiv, unclustered[i]);
-
-        if (distance < closestToClosest) {
-          closestToClosest = distance;
-        }
-      }
-
-      if (minDistance < closestToClosest) {
-        currentCluster.push(closestDiv);
-        unclustered.splice(unclustered.indexOf(closestDiv), 1); // Remove from unclustered
-      } else {
-        //No good match for this cluster; break
-        clusters.push(currentCluster);
-        continue;
-      }
-    } else {
-      //No more divs to cluster
-    }
-
-    clusters.push(currentCluster);
-  }
-
-  //Flatten the clusters into a single array.  For more complex clustering scenarios you might want the clusters
-  return clusters.reduce((acc, cluster) => acc.concat(cluster), []);
-}
-
-
-/**
  * PDFJSViewer Class
  *
  * Provides an API for interacting with a PDF.js viewer embedded in an iframe,
  * assuming the viewer and PDF files are hosted on the same origin.
  */
 export class PDFJSViewer {
+
+  /**
+   * An array of {page, positions} objects with the best matches to the last search()
+   */
+  bestMatches = null;
+
+  /**
+   * The index of the currently highlighted best match
+   */
+  matchIndex = 0;
+
   /**
    * Constructor for the PDFJSViewer class.
    * @param {string} iframeId - The ID of the iframe element containing the PDF.js viewer.
@@ -158,11 +42,11 @@ export class PDFJSViewer {
     this.iframeWindow = null;
     this.pdfViewer = null;
     this.pdfLinkService = null;
-    this.pdfDoc = null; 
+    this.pdfDoc = null;
     this.eventBus = null;
 
     // promise which will resolve when PDF.js is ready
-    this.initializePromise = null; 
+    this.initializePromise = null;
     // will be true when PDF.js is ready
     this.isReadyFlag = false;
     // promise which will resolve when the document is loaded
@@ -176,7 +60,7 @@ export class PDFJSViewer {
     return this;
   }
 
-  hide(){
+  hide() {
     this.iframe.style.display = 'none'
     return this;
   }
@@ -217,7 +101,7 @@ export class PDFJSViewer {
 
               // finish initialization
               this.isReadyFlag = true;
-              console.log("PDF.js viewer initialized.");            
+              console.log("PDF.js viewer initialized.");
               resolve();
             })
           } catch (error) {
@@ -320,11 +204,11 @@ export class PDFJSViewer {
    */
   async search(query, options = {}) {
 
-    if (!query || query.length === 0) { 
+    if (!query || query.length === 0) {
       console.warn("No search terms provided.");
       return [];
     }
-    
+
     // wait for document to be loaded
     if (!this.isLoadedFlag) {
       await this.isReady();
@@ -334,8 +218,12 @@ export class PDFJSViewer {
       console.log("Waiting for PDF document to load...");
       await this.loadPromise;
     }
-    
-    console.log(`Searching for "${query}"...`);
+
+    if (!Array.isArray(query)) {
+      query = [query]
+    }
+
+    console.log("Searching for", query.map(q => `'${q}'`).join(", "), "...");
 
     const defaultOptions = {
       query,
@@ -352,60 +240,124 @@ export class PDFJSViewer {
     return new Promise((resolve) => {
       this.pdfViewer.eventBus.dispatch("find", options);
       this.pdfViewer.eventBus.on("updatefindcontrolstate", (event) => {
-        const result = [];
-        // Iterate through all matches and collect page and match indexes.
-        for (let i = 0; i < this.findController.pageMatches.length; i++) {
-          const pageMatches = this.findController.pageMatches[i];
-          for (let j = 0; j < pageMatches.length; j++) {
-            result.push({ pageIndex: i, matchIndex: j });
-          }
+        const bestMatches = this.#getBestMatches(query)
+        console.log(`Found ${bestMatches.length} best matches.`)
+        console.log(bestMatches)
+        this.bestMatches = bestMatches;
+        if (bestMatches.length) {
+          this.scrollToBestMatch()
         }
-        resolve(result);
+        resolve();
       },
         { once: true } // Remove the event listener after the first event
       );
     });
   }
 
-  async _waitForPageViewRendered(pageIndex){
+  async _waitForPageViewRendered(pageIndex) {
     return new Promise(async (resolve, reject) => {
       const pageView = await this.pdfViewer.getPageView(pageIndex);
-      if (pageView.renderingState === 3 ) { // RenderingStates.FINISHED
+      if (pageView.renderingState === 3) { // RenderingStates.FINISHED
         return resolve(pageView);
       }
-      pageView.eventBus.on("pagerendered", () => resolve(pageView), {once: true})
+      pageView.eventBus.on("pagerendered", () => resolve(pageView), { once: true })
     })
   }
 
-  async getHighlightedDivs(pageIndex) {
-    const pageView = await this._waitForPageViewRendered(pageIndex);
-    return Array.from(pageView.textLayer.div.getElementsByClassName('highlight'));
+  /**
+   * Scrolls to the best match wit the given index. 
+   * @param {number} index The index of the best match found, defaults to 0
+   */
+  scrollToBestMatch(index = 0) {
+    if (!this.bestMatches) {
+      throw new Error("No best matches - do a search first");
+    }
+
+    if (index < 0 || index > this.bestMatches.length) {
+      throw new Error(`Index out of bounds: ${index} of ${this.bestMatches.length}`);
+    }
+
+    try {
+      // The following relies on undocumented behavior. There seem to exist no API for switching between 
+      // the matches, and most of the internal stuff is hidden via private methods and properties so we 
+      // have to tweak what is available. 
+
+      // In the bestMatches lookup table, we have object containing the page and an array
+      // of indexes into the array contained in findController.pageMatches[pageIndex], which refer 
+      // to the position of the match in the page text.
+
+      const match = this.bestMatches[index]
+      const pageNumber = match.page;
+      const pageIndex = pageNumber - 1
+      const matchIndex = match.matchIndexes[0]
+
+      this.pdfViewer.scrollPageIntoView({ pageNumber })
+
+      // However, there seems to be no way of getting from the text position to the DOM element which provides 
+      // the highlighting of the match. This is provided by `pageView.textlayer.highlighter`, which has a property 
+      // `matches` containing an array of objects of this form:
+      //  [{ begin: { divIdx: 2, offset: 0 }, end: { divIdx: 2, offset: 6 }, ...] . If we know the match index,
+      // we can look up the corresponding Div element in the highlighter's textDivs property. 
+
+      const highlighter = this.pdfViewer.getPageView(pageIndex).textLayer.highlighter
+      let { matches, textDivs } = highlighter
+      const { divIdx, offset } = matches[matchIndex].begin
+      const element = textDivs[divIdx]
+
+      // Scroll the match into view by hacking `scrollMatchIntoView()`
+      this.findController._scrollMatches = true;
+      this.findController._selected.matchIdx = matchIndex;
+      this.findController._selected.pageIdx = pageIndex;
+      this.findController.scrollMatchIntoView({ element, pageIndex, matchIndex });
+    } catch (error) {
+      console.warn("Error computing the best match:", error.message)
+    }
   }
 
-
   /**
-   * Highlights a specific search result and scrolls it into view using the PDF.js Viewer's findController.
-   *
-   * @param {number} pageIndex - The index of the page containing the match (0-based).
-   * @param {number} matchIndex - The index of the match within the page's text content (0-based).
+   * Selects the best matches from the results of the previous search by comparing
+   * the number of matched words per page and whether the matched words appear closely
+   * clustered.  
+   * @param {Array} searchTerms The query search terms
+   * @returns {Array} An array of {pageIndex, matchIndexes, positions} objects
    */
-  async highlightAndScrollTo(pageIndex, matchIndex) {
-    await this.isReady();
+  #getBestMatches(searchTerms) {
+    const minNumMatches = Math.max(searchTerms.length - 3, 1)
+    const matches = this.pdfViewer.findController.pageMatches
+      .map((positions, idx) => ({
+        page: idx + 1,
+        positions
+      }))
+      .filter(match => match.positions.length >= minNumMatches)
 
-    //Ensure highlightAll is false so that it is not highlighted until the user goes to it.
-    this.pdfViewer.eventBus.dispatch("find", {
-      query: this.findController.state.query, //Preserve the existing query
-      phraseSearch: true,
-      caseSensitive: false,
-      entireWord: false,
-      highlightAll: false,
-      findPrevious: false,
-    });
+    function sortFn(a, b) {
+      return (
+        findClosestCluster(b.positions, searchTerms.length - 1).length -
+        findClosestCluster(a.positions, searchTerms.length - 1).length
+      )
+    }
 
-    // Set the current match index.
-    this.findController.updateMatchPosition(matchIndex, pageIndex);
+    // written by Codestral 22B
+    function findClosestCluster(arr, windowSize) {
+      let minDiff = Infinity;
+      let minCluster = [];
+      for (let i = 0; i <= arr.length - windowSize; i++) {
+        const _window = arr.slice(i, i + windowSize);
+        const diff = _window[_window.length - 1] - _window[0];
+        if (diff < minDiff) {
+          minDiff = diff;
+          minCluster = _window;
+        }
+      }
+      return minCluster;
+    }
 
-    // Scroll the match into view
-    this.findController.scrollToCurrentMatch();
+    return matches.sort(sortFn).map(match => {
+      // reduce to the clustered matches
+      const cluster = findClosestCluster(match.positions, minNumMatches);
+      match.matchIndexes = cluster.map(position => match.positions.indexOf(position))
+      match.positions = cluster
+      return match
+    }).filter(match => match.positions.length > 0)
   }
 }
