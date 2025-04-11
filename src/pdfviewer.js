@@ -237,16 +237,20 @@ export class PDFJSViewer {
     // override defaults with options
     options = Object.assign(defaultOptions, options)
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.pdfViewer.eventBus.dispatch("find", options);
       this.pdfViewer.eventBus.on("updatefindcontrolstate", (event) => {
+        // timeout to let the highlighter do its thing
         setTimeout(() => {
           const bestMatches = this.#getBestMatches(query)
           console.log(`Found ${bestMatches.length} best matches.`)
-          console.log(bestMatches)
           this.bestMatches = bestMatches;
           if (bestMatches.length) {
-            this.scrollToBestMatch()
+            if (bestMatches.length > 1){
+              // if we have several best matches, show them in the console so that the sorting algorithm can be improved
+              console.log({bestMatches})
+            }
+            this.scrollToBestMatch().catch(reject)
           }
           resolve();
         }, 100)
@@ -270,7 +274,7 @@ export class PDFJSViewer {
    * Scrolls to the best match wit the given index. 
    * @param {number} index The index of the best match found, defaults to 0
    */
-  scrollToBestMatch(index = 0) {
+  async scrollToBestMatch(index = 0) {
     if (!this.bestMatches) {
       throw new Error("No best matches - do a search first");
     }
@@ -279,41 +283,49 @@ export class PDFJSViewer {
       throw new Error(`Index out of bounds: ${index} of ${this.bestMatches.length}`);
     }
 
-    try {
-      // The following relies on undocumented behavior. There seem to exist no API for switching between 
-      // the matches, and most of the internal stuff is hidden via private methods and properties so we 
-      // have to tweak what is available. 
+    // The following relies on undocumented behavior. There seem to exist no API for switching between 
+    // the matches, and most of the internal stuff is hidden via private methods and properties so we 
+    // have to tweak what is available. 
 
-      // In the bestMatches lookup table, we have object containing the page and an array
-      // of indexes into the array contained in findController.pageMatches[pageIndex], which refer 
-      // to the position of the match in the page text.
+    // In the bestMatches lookup table, we have object containing the page and an array
+    // of indexes into the array contained in findController.pageMatches[pageIndex], which refer 
+    // to the position of the match in the page text.
 
-      const match = this.bestMatches[index]
-      const pageNumber = match.page;
-      const pageIndex = pageNumber - 1
-      const matchIndex = match.matchIndexes[0]
+    const match = this.bestMatches[index]
+    const pageNumber = match.page;
+    const pageIndex = pageNumber - 1
+    const matchIndex = match.matchIndexes[0]
 
-      this.pdfViewer.scrollPageIntoView({ pageNumber })
+    // load the page
+    this.pdfViewer.scrollPageIntoView({ pageNumber })
 
-      // However, there seems to be no way of getting from the text position to the DOM element which provides 
-      // the highlighting of the match. This is provided by `pageView.textlayer.highlighter`, which has a property 
-      // `matches` containing an array of objects of this form:
-      //  [{ begin: { divIdx: 2, offset: 0 }, end: { divIdx: 2, offset: 6 }, ...] . If we know the match index,
-      // we can look up the corresponding Div element in the highlighter's textDivs property. 
+    // we need the page to be rendered, so continue after a timeout
+    return new Promise((resolve,reject) => {
+      setTimeout(() => {
+        try {
 
-      const highlighter = this.pdfViewer.getPageView(pageIndex).textLayer.highlighter
-      let { matches, textDivs } = highlighter
-      const { divIdx, offset } = matches[matchIndex].begin
-      const element = textDivs[divIdx]
-
-      // Scroll the match into view by hacking `scrollMatchIntoView()`
-      this.findController._scrollMatches = true;
-      this.findController._selected.matchIdx = matchIndex;
-      this.findController._selected.pageIdx = pageIndex;
-      this.findController.scrollMatchIntoView({ element, pageIndex, matchIndex });
-    } catch (error) {
-      console.warn("Error computing the best match:", error.message)
-    }
+          // There seems to be no way of getting from the text position to the DOM element which provides 
+          // the highlighting of the match. This is provided by `pageView.textlayer.highlighter`, which has a property 
+          // `matches` containing an array of objects of this form:
+          //  [{ begin: { divIdx: 2, offset: 0 }, end: { divIdx: 2, offset: 6 }, ...] . If we know the match index,
+          // we can look up the corresponding Div element in the highlighter's textDivs property. 
+  
+          const highlighter = this.pdfViewer.getPageView(pageIndex).textLayer.highlighter
+          let { matches, textDivs } = highlighter
+          const { divIdx, offset } = matches[matchIndex].begin
+          const element = textDivs[divIdx]
+  
+          // Scroll the match into view by hacking `scrollMatchIntoView()`
+          this.findController._scrollMatches = true;
+          this.findController._selected.matchIdx = matchIndex;
+          this.findController._selected.pageIdx = pageIndex;
+          this.findController.scrollMatchIntoView({ element, pageIndex, matchIndex });
+        } catch (error) {
+          reject("Error computing the best match:", error.message)
+        }
+        resolve()
+      }, 100)
+    })
   }
 
   /**
@@ -325,17 +337,17 @@ export class PDFJSViewer {
   #getBestMatches(searchTerms) {
     // the number of matches on a page that need to be reached to be a candidate for a "best match"
     // calculated at 80% (since there might be hyphenated words that cannot be found) with a minimum of 3 matched terms
-    const minNumMatches = Math.max(Math.round(searchTerms.length *.8), 3)
+    const minNumMatches = Math.max(Math.round(searchTerms.length * .8), 3)
 
     // filter the page matches by this value
-    const {pageMatches} = this.pdfViewer.findController
+    const { pageMatches } = this.pdfViewer.findController
     const candidates = pageMatches.map((positions, idx) => ({ page: idx + 1, positions }))
     const bestMatches = candidates.filter(match => match.positions.length >= minNumMatches)
 
-    if(bestMatches.length === 0) {
+    if (bestMatches.length === 0) {
       // we did not find a best match, this should not occur, do log some diagnostics
       console.warn("No best match found.")
-      console.log({pageMatches, minNumMatches, candidates})
+      console.log({ pageMatches, minNumMatches, candidates })
     }
 
     // returns the cluster of values which are most densely spread, i.e. which have the

@@ -174,10 +174,11 @@ async function searchNodeContentsInPdf(node) {
   let searchTerms = getNodeText(node)
     // split all node text along whitespace and hypen/dash characters
     .reduce((acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
-    // search terms must be more than three characters to remove the most common "stop words"
-    // this might remove some false positives (hyphenated words) but the alternative would be
-    // to load language-specific stop words
-    .filter(term => term.length > 3)
+    // Search terms must be more than three characters or consist of digits. This is to remove 
+    // the most common "stop words" which would litter the search results with false positives.
+    // This incorrectly removes hyphenated word parts but the alternative would be to  have to 
+    // deal with language-specific stop words
+    .filter(term => term.match(/\d+/) ? true : term.length > 3)
 
   // make the list of search terms unique
   searchTerms = Array.from(new Set(searchTerms))
