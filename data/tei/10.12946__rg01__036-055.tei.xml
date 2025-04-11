@@ -405,7 +405,7 @@
         <author>
           <persName>
             <forename>Barbara</forename>
-            <forename type="middle">J.</forename>
+            <forename type="middle" full="init">J.</forename>
             <surname>Shapiro</surname>
           </persName>
         </author>
