@@ -43,6 +43,8 @@ async function callApi(endpoint, method, body = null) {
   return await response.json();
 }
 
+
+
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
  *

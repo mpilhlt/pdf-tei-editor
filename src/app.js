@@ -2,7 +2,7 @@ import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
 import { $, addBringToForegroundListener, makeDraggable } from './utils.js'
 import { getFileList, saveDocument } from './client.js'
-import { UrlHash, showMessage } from './browser-utils.js'
+import { UrlHash, showMessage, uploadFile } from './browser-utils.js'
 import { disableValidation } from './lint.js'
 
 // the last selected node, can be null
@@ -22,7 +22,10 @@ try {
   console.error(error)
 }
 
-export async function main() {
+/**
+ * The main application
+ */
+async function main() {
 
   // get info from URL 
   const urlParams = new URLSearchParams(window.location.search);
@@ -108,6 +111,9 @@ async function configureNavigation() {
 
   // allow to input node index
   $('#selection-index').addEventListener('click', onClickSelectionIndex)
+
+  // load new document
+  $('#btn-load-document').addEventListener('click', onClickLoadDocument)
 }
 
 async function handleSelectionChange(ranges) {
@@ -152,6 +158,17 @@ function onClickSelectionIndex() {
   }
 }
 
+
+async function onClickLoadDocument() {
+  try {
+    const {type,path} = await uploadFile('/api/upload');
+    console.log({type,path})
+  } catch (error) {
+    console.error('Error uploading file:', error);
+  }
+}
+
+
 function checkVerifiedStatus(node) {
   const statusButton = $('#btn-node-status')
   const status = node.getAttribute('status');
@@ -170,7 +187,7 @@ function checkVerifiedStatus(node) {
  * @param {Node} node 
  */
 async function searchNodeContentsInPdf(node) {
-  
+
   let searchTerms = getNodeText(node)
     // split all node text along whitespace and hypen/dash characters
     .reduce((acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
@@ -190,6 +207,10 @@ function documentLabel(fileData) {
   return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
 }
 
+
+/**
+ * Populates the selectbox for file loading
+ */
 async function populateFilesSelectbox() {
   const selectbox = $('#select-doc');
   try {
@@ -256,8 +277,10 @@ async function validateAndSave(filePath) {
   await saveDocument(xmlEditor.getXML(), filePath)
 }
 
+/**
+ * Populates the selectbox for the xpath expressions that control the navigation within the xml document
+ */
 async function populateXpathSelectbox() {
-
   const selectbox = $('#select-xpath');
   try {
     const data = [

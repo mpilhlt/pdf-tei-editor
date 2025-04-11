@@ -4,8 +4,10 @@ from flask import Flask, send_from_directory, jsonify, redirect
 import os, sys
 import importlib.util
 from glob import glob
+from dotenv import load_dotenv
 
 web_root = os.path.dirname(os.path.dirname(__file__))
+load_dotenv()
 
 def create_app():
     app = Flask(__name__, static_folder=web_root)
@@ -51,8 +53,14 @@ def create_app():
     return app
 
 if __name__ == '__main__':
+    # host and port default to localhost:3001 unless overridden by CLI arguments
     host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 3001
+    # start the server
     app = create_app()
     reload_extra_files = glob('./api/*')
-    app.run(host=host, port=port, debug=False, load_dotenv=False, extra_files=reload_extra_files)
+    app.run(host=host, 
+            port=port, 
+            debug=False, 
+            load_dotenv=True, 
+            extra_files=reload_extra_files)

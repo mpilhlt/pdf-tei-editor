@@ -223,6 +223,11 @@ export class PDFJSViewer {
       query = [query]
     }
 
+    if (query.length > 20) {
+      console.warn("Query too big, reducing to 20 entries");
+      query = query.slice(0, 20)
+    }
+
     console.log("Searching for", query.map(q => `'${q}'`).join(", "), "...");
 
     const defaultOptions = {
