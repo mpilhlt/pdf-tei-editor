@@ -240,14 +240,16 @@ export class PDFJSViewer {
     return new Promise((resolve) => {
       this.pdfViewer.eventBus.dispatch("find", options);
       this.pdfViewer.eventBus.on("updatefindcontrolstate", (event) => {
-        const bestMatches = this.#getBestMatches(query)
-        console.log(`Found ${bestMatches.length} best matches.`)
-        console.log(bestMatches)
-        this.bestMatches = bestMatches;
-        if (bestMatches.length) {
-          this.scrollToBestMatch()
-        }
-        resolve();
+        setTimeout(() => {
+          const bestMatches = this.#getBestMatches(query)
+          console.log(`Found ${bestMatches.length} best matches.`)
+          console.log(bestMatches)
+          this.bestMatches = bestMatches;
+          if (bestMatches.length) {
+            this.scrollToBestMatch()
+          }
+          resolve();
+        }, 100)
       },
         { once: true } // Remove the event listener after the first event
       );
@@ -316,29 +318,30 @@ export class PDFJSViewer {
 
   /**
    * Selects the best matches from the results of the previous search by comparing
-   * the number of matched words per page and whether the matched words appear closely
-   * clustered.  
+   * the length of the most densely clustered search terms.  
    * @param {Array} searchTerms The query search terms
    * @returns {Array} An array of {pageIndex, matchIndexes, positions} objects
    */
   #getBestMatches(searchTerms) {
-    const minNumMatches = Math.max(searchTerms.length - 3, 1)
-    const matches = this.pdfViewer.findController.pageMatches
-      .map((positions, idx) => ({
-        page: idx + 1,
-        positions
-      }))
-      .filter(match => match.positions.length >= minNumMatches)
+    // the number of matches on a page that need to be reached to be a candidate for a "best match"
+    // calculated at 80% (since there might be hyphenated words that cannot be found) with a minimum of 3 matched terms
+    const minNumMatches = Math.max(Math.round(searchTerms.length *.8), 3)
 
-    function sortFn(a, b) {
-      return (
-        findClosestCluster(b.positions, searchTerms.length - 1).length -
-        findClosestCluster(a.positions, searchTerms.length - 1).length
-      )
+    // filter the page matches by this value
+    const {pageMatches} = this.pdfViewer.findController
+    const candidates = pageMatches.map((positions, idx) => ({ page: idx + 1, positions }))
+    const bestMatches = candidates.filter(match => match.positions.length >= minNumMatches)
+
+    if(bestMatches.length === 0) {
+      // we did not find a best match, this should not occur, do log some diagnostics
+      console.warn("No best match found.")
+      console.log({pageMatches, minNumMatches, candidates})
     }
 
+    // returns the cluster of values which are most densely spread, i.e. which have the
+    // smallest distance of lowest and highest value in a given window
     // written by Codestral 22B
-    function findClosestCluster(arr, windowSize) {
+    function findDensestCluster(arr, windowSize) {
       let minDiff = Infinity;
       let minCluster = [];
       for (let i = 0; i <= arr.length - windowSize; i++) {
@@ -352,9 +355,18 @@ export class PDFJSViewer {
       return minCluster;
     }
 
-    return matches.sort(sortFn).map(match => {
-      // reduce to the clustered matches
-      const cluster = findClosestCluster(match.positions, minNumMatches);
+    // sort the pages according to cluster size, i.e. the page where the highest number
+    // of search terms appear the most densely clustered - this should be our citation
+    bestMatches.sort((a, b) => {
+      return (
+        findDensestCluster(b.positions, minNumMatches).length -
+        findDensestCluster(a.positions, minNumMatches).length
+      )
+    })
+
+    // return the page matches in this order, but only retain the densest cluster
+    return bestMatches.map(match => {
+      const cluster = findDensestCluster(match.positions, minNumMatches);
       match.matchIndexes = cluster.map(position => match.positions.indexOf(position))
       match.positions = cluster
       return match

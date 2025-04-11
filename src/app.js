@@ -8,7 +8,7 @@ import { disableValidation } from './lint.js'
 // the last selected node, can be null
 let lastSelectedXmlNode = null;
 // the index of the currently selected node, 1-based
-let currentIndex = 1;
+let currentIndex = null;
 // the xml editor
 let xmlEditor = null;
 // the pdf viewer
@@ -56,9 +56,9 @@ export async function main() {
       const endTime = new Date().getTime();
       const seconds = Math.round((endTime - startTime) / 1000);
       // disable validation if it took longer than 3 seconds
-      console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it.":"."}`)
+      console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
       disableValidation(seconds > 3)
-     })
+    })
   }
 
   console.log("Application ready.")
@@ -105,6 +105,9 @@ async function configureNavigation() {
 
   // configure "verification" button
   $('#btn-node-status').addEventListener('click', handleStatusUpdate)
+
+  // allow to input node index
+  $('#selection-index').addEventListener('click', onClickSelectionIndex)
 }
 
 async function handleSelectionChange(ranges) {
@@ -139,6 +142,16 @@ function handleStatusUpdate() {
   }
 }
 
+function onClickSelectionIndex() {
+  let index = prompt('Enter node index')
+  if (!index) return;
+  try {
+    selectByIndex(parseInt(index))
+  } catch (error) {
+    alert(error.message)
+  }
+}
+
 function checkVerifiedStatus(node) {
   const statusButton = $('#btn-node-status')
   const status = node.getAttribute('status');
@@ -152,13 +165,21 @@ function checkVerifiedStatus(node) {
   }
 }
 
+/**
+ * Given a Node in the XML, search and highlight its text content in the PDF Viewer
+ * @param {Node} node 
+ */
 async function searchNodeContentsInPdf(node) {
-  // search terms must be more than three characters
-  let searchTerms = getNodeText(node)
-    .reduce((acc,term) => acc.concat(term.split(" ")),[])
-    .filter(term => term.length > 3)
   
-  // unique
+  let searchTerms = getNodeText(node)
+    // split all node text along whitespace and hypen/dash characters
+    .reduce((acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
+    // search terms must be more than three characters to remove the most common "stop words"
+    // this might remove some false positives (hyphenated words) but the alternative would be
+    // to load language-specific stop words
+    .filter(term => term.length > 3)
+
+  // make the list of search terms unique
   searchTerms = Array.from(new Set(searchTerms))
   // start search
   await window.pdfViewer.search(searchTerms);
@@ -315,6 +336,14 @@ function setSelectionXpathFromUrl() {
  * @param {string} xpath The xpath identifying the node(s)
  */
 function setSelectionXpath(xpath) {
+  let index = 1;
+  // if the xpath has a final index, override our own and strip it from the selection xpath
+  const m = xpath.match(/(.+?)\[(\d+)\]$/)
+  if (m) {
+    xpath = m[1]
+    index = parseInt(m[2])
+  }
+
   const selectbox = $('#select-xpath');
   if (selectbox.value !== xpath) {
     console.log("Setting xpath", xpath)
@@ -330,11 +359,14 @@ function setSelectionXpath(xpath) {
     selectbox.selectedIndex = index;
   }
   // select the first node
-  selectByIndex(1)
+  if (index !== currentIndex) {
+    selectByIndex(index)
+  }
 }
 
 function getSelectionXpath() {
-  return $('#select-xpath').value;
+  let xpath = $('#select-xpath').value;
+  return xpath
 }
 
 function getSelectionXpathResultSize() {
@@ -344,12 +376,22 @@ function getSelectionXpathResultSize() {
 }
 
 /**
- * Selects the node identified by the xpath in the select box and the current index
+ * Selects the node identified by the xpath in the select box and the given index
  * @param {number} index 1-based index
  * @returns {void}
  */
 function selectByIndex(index) {
+
+  if (index === 0 || !Number.isInteger(index)) {
+    throw new Error("Invalid index (must be integer > 0)");
+  }
+
   const size = getSelectionXpathResultSize()
+
+  // check if selection is within bounds
+  if (index > size || size === 0) {
+    throw new Error(`Index out of bounds: ${index} of ${size} items`);
+  }
 
   // show index
   $('#selection-index').textContent = `(${index}/${size})`
@@ -357,23 +399,13 @@ function selectByIndex(index) {
   // disable navigation if we have no or just one result
   $('#btn-next-node').disabled = $('#btn-prev-node').disabled = size < 2;
 
-  // check if selection is within bounds
-  if (index < 1 || index > size || size === 0) {
-    console.warn(`Index out of bounds: ${index} of ${size} items`);
-    index = 1
-  }
-  currentIndex = index;
   let xpath = getSelectionXpath()
-
-  // if the xpath already has a final index, override our own
-  const m = xpath.match(/(.+?)\[(\d+)\]$/)
-  if (m) {
-    xpath = m[1]
-    currentIndex = parseInt(m[1])
-  }
+  currentIndex = index;
+  const xpathWithIndex = `${xpath}[${currentIndex}]`
 
   try {
-    window.xmlEditor.selectByXpath(`${xpath}[${currentIndex}]`);
+    window.xmlEditor.selectByXpath(xpathWithIndex);
+    UrlHash.set('xpath', xpathWithIndex)
   } catch (error) {
     // this sometimes fails for unknown reasons
     console.warn(error.message)
