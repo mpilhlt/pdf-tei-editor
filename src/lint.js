@@ -1,5 +1,5 @@
 import { validateXml, last_http_status } from './client.js'
-import { $ } from './utils.js'
+import { $ } from './browser-utils.js'
 import { resolveXPath } from './codemirror_utils.js'
 import { EditorView } from 'codemirror';
 

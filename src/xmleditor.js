@@ -7,7 +7,7 @@ import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree } from "@codemirror/language";
 import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
-import { $ } from './utils.js';
+import { $ } from './browser-utils.js';
 
 
 export class XMLEditor extends EventTarget {
@@ -22,7 +22,9 @@ export class XMLEditor extends EventTarget {
   #domToSyntax = null; // Maps DOM nodes to syntax tree nodes
   #xmlTree = null; // the xml document tree
   #syntaxTree = null; // the lezer syntax tree
-  #lintingNeedsRefresh = false;
+  #isReady = false;
+  #readyPromise = null;
+  #readyPromiseResolvers = null;
 
   /**
    * Constructs an XMLEditor instance.
@@ -41,7 +43,7 @@ export class XMLEditor extends EventTarget {
     const extensions = [
       basicSetup,
       xml(),
-      linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => true}),
+      linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => true }),
       lintGutter(),
       selectionChangeListener(this.#onSelectionChange.bind(this)),
       EditorView.updateListener.of(this.#onUpdate.bind(this))
@@ -57,6 +59,9 @@ export class XMLEditor extends EventTarget {
     });
   }
 
+  isReady() {
+    return this.#isReady
+  }
 
   /**
    * Loads XML, either from a string or from a given path.
@@ -66,6 +71,11 @@ export class XMLEditor extends EventTarget {
    * @throws {Error} - If there's an error loading or parsing the XML.
    */
   async loadXml(xmlPathOrString) {
+    this.#isReady = false;
+    this.#readyPromise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      this.#isReady = true;
+      resolve();
+    }, {once: true}))
     let xml;
     if (xmlPathOrString.trim().slice(0, 1) != "<") {
       // treat argument as path
@@ -80,7 +90,7 @@ export class XMLEditor extends EventTarget {
       xml = xmlPathOrString;
     }
 
-    // display xml in editor
+    // display xml in editor, this triggers the update handlers
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0)
@@ -106,8 +116,8 @@ export class XMLEditor extends EventTarget {
     // await the new validation promise once it is available
     const diagnostics = await new Promise(resolve => {
       console.log("Waiting for validation to start...")
-        $('#btn-save-document').innerHTML = "Waiting for validation..."
-        $('#btn-save-document').disabled = true;
+      $('#btn-save-document').innerHTML = "Waiting for validation..."
+      $('#btn-save-document').disabled = true;
       function checkIfValidating() {
         if (isValidating()) {
           let validationPromise = anyCurrentValidation();

@@ -2,7 +2,9 @@ export let last_http_status = null;
 const api_base_url = '/api';
 
 /**
- * A generic function to make API requests.
+ * A generic function to make API requests against the application backend. 
+ * Expects a JSON response which is an arbitrary value in case of success or a 
+ * `{errror: "Error message"}` object in case of an error handled by the API methods. 
  *
  * @param {string} endpoint - The API endpoint to call.
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
@@ -11,39 +13,39 @@ const api_base_url = '/api';
  *                           or rejects with an error message if the request fails.
  */
 async function callApi(endpoint, method, body = null) {
-  const url = `${api_base_url}${endpoint}`;
-  const options = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    keepAlive: true
-  };
-
-  if (body) {
-    options.body = JSON.stringify(body);
-  }
-
-  const response = await fetch(url, options);
-  last_http_status = response.status;
-
-  if (!response.ok) {
-    let errorMessage = `HTTP error ${response.status}`;
-    try {
-      const errorData = await response.json();
-      if (errorData && errorData.error) {
-        errorMessage += `: ${errorData.error}`;
-      }
-    } catch (jsonError) {
-      console.warn("Failed to parse error response as JSON:", jsonError);
+  try {
+    const url = `${api_base_url}${endpoint}`;
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      keepAlive: true
+    };
+    if (body) {
+      options.body = JSON.stringify(body);
     }
-    throw new Error(errorMessage);
+    // send request
+    const response = await fetch(url, options);
+    let result;
+    try {
+      result = await response.json()
+    } catch (jsonError) {
+      throw new Error("Failed to parse error response as JSON:", jsonError);
+    }
+    // simple error protocol
+    // we don't distinguish 400 and 500 errors for the moment, although this should probably be 
+    // handled as warning and error, respectively 
+    if (result && typeof result === "object" && result.error) {
+      throw new Error(result.error);
+    }
+    return result
+  } catch (error) {
+    alert(error.message)
+    // rethrow
+    throw error
   }
-
-  return await response.json();
 }
-
-
 
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
@@ -68,9 +70,18 @@ export async function validateXml(xmlString) {
  * Saves the XML string to a file on the server.
  * @param {string} xmlString 
  * @param {string} filePath 
- * @returns 
+ * @returns {Promise<Object>}
  */
-export async function saveDocument(xmlString, filePath) {
+export async function saveXml(xmlString, filePath) {
   return callApi('/files/save', 'POST', { xml_string: xmlString, file_path: filePath });
 }
 
+/**
+ * Extracts the references from the given PDF and returns  
+ * @param {string} pdfFileName The filename of the PDF to extract, which has been uploaded to the server earlier 
+ * @param {string?} doi The DOI of the document, if any
+ * @returns {Promise<Object>}
+ */
+export async function extractReferences(filename, doi = '') {
+  return callApi('/extract', 'POST', { pdf: filename, doi });
+}

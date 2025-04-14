@@ -4,58 +4,42 @@ import re
 from xml.etree import ElementTree
 from xml.etree.ElementTree import ParseError
 from xmlschema import XMLSchema
-
-def allow_only_localhost(f):
-    def decorated_function(*args, **kwargs):
-        target_host = request.headers.get('X-Forwarded-Host') or request.host
-        target_host = target_host.split(":")[0]
-        if target_host != 'localhost':
-            return {"error": f'Access denied from "{target_host}". Only "localhost" is allowed.'}, 403
-        return f(*args, **kwargs)
-    return decorated_function
+from lib.decorators import allow_only_localhost, handle_api_errors
+from lib.server_utils import ApiError
 
 bp = Blueprint('validate', __name__, url_prefix='/api/')
 
 @bp.route('/validate', methods=['POST'])
 @allow_only_localhost
+@handle_api_errors
 def validate_route():
     """
     Validates an XML document based on the contained schemaLocation URLs, downloads and caches them,
     and returns a JSON array of error messages.
     """
-    try:
-        data = request.get_json()
-        xml_string = data.get('xml_string')
-        error_messages = validate(xml_string)
-        return jsonify({'errors': error_messages})
-
-    except Exception as e:
-        current_app.logger.exception(f"An unexpected error occurred.")  # Log the error for debugging
-        return jsonify({'error': f'Error: {str(e)}'}), 500
-    
-
-# implementation adapted from https://github.com/FranklinChen/validate-xml-python/blob/master/validate.py3
-
+    data = request.get_json()
+    xml_string = data.get('xml_string')
+    error_messages = validate(xml_string)
+    return jsonify({'errors': error_messages})
 
 
 def extract_schema_locations(xml_string):
     schema_locations_match = re.search(r'schemaLocation="[^"]+"', xml_string)
-
     if schema_locations_match is None:
         return []
-    
     schema_locations_str = schema_locations_match.group(0) #extract the matched string
     results = []
     parts = re.split(r'\s+', schema_locations_str[16:-1]) #remove 'schemaLocation="' and '"'
-    
     while len(parts) >= 2:
         results.append({ "namespace": parts.pop(0), "schemaLocation": parts.pop(0) })
-
     return results
 
-def validate(xml_string):
 
-    # validate xml structure
+def validate(xml_string):
+    """
+    Validates an XML string using the schema declaration and schemaLocation in the xml document
+    Implementation adapted from https://github.com/FranklinChen/validate-xml-python/blob/master/validate.py3
+    """
     try:
         xmldoc = ElementTree.fromstring(xml_string)
     except ParseError as e:

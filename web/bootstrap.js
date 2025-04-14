@@ -1,7 +1,13 @@
-// load the importmap
-fetch('./importmap.json')
-.then(response => response.json())
-.then(importMap => {
+/**
+ * Script for bootstrapping the application:
+ * - loads the importmap for including unbundled library files
+ * - loads and calls the main application 
+ */
+
+(async () => {
+
+  let response = await fetch('./importmap.json')
+  let importMap = await response.json()
   const script = document.createElement('script');
   script.type = 'importmap';
   script.textContent = JSON.stringify(importMap, null, 2);
@@ -15,7 +21,9 @@ fetch('./importmap.json')
   // Now, load the main script that uses the import map
   const mainScript = document.createElement('script');
   mainScript.type = 'module';
-  mainScript.src = '/src/app.js'; 
+  mainScript.src = '/src/app.js';
   document.body.appendChild(mainScript);
-})
-.catch(error => console.error('Error loading import map:', error));
+
+})()
+
+

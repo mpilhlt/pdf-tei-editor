@@ -1,9 +1,11 @@
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
-import { $, addBringToForegroundListener, makeDraggable } from './utils.js'
-import { getFileList, saveDocument } from './client.js'
-import { UrlHash, showMessage, uploadFile } from './browser-utils.js'
+import *  as client from './client.js'
+import { $, UrlHash, showMessage, addBringToForegroundListener, makeDraggable } from './browser-utils.js'
+import { uploadFile } from './upload.js'
 import { disableValidation } from './lint.js'
+import { Spinner } from '../web/spinner.js' // included so that <custom-spinner> element is defined
+import { isDoi } from './utils.js'
 
 // the last selected node, can be null
 let lastSelectedXmlNode = null;
@@ -27,6 +29,10 @@ try {
  */
 async function main() {
 
+  const spinner = $('#spinner')
+  
+  spinner.show('Loading documents, please wait...')
+
   // get info from URL 
   const urlParams = new URLSearchParams(window.location.search);
   const pdfPath = window.pdfPath = urlParams.get('pdf');
@@ -38,12 +44,18 @@ async function main() {
   disableValidation(true)
 
   // wait for UI to be fully set up
-  await Promise.all([
-    pdfPath ? loadPdfViewer(pdfPath) : null,
-    xmlPath ? loadXmlEditor(xmlPath, tagDataPath) : null,
-    configureNavigation()
-  ])
-
+  try {
+    await Promise.all([
+      pdfPath ? loadPdfViewer(pdfPath) : null,
+      xmlPath ? loadXmlEditor(xmlPath, tagDataPath) : null,
+      configureNavigation()
+    ]).catch(e => {throw e;})
+  } catch(error) {
+    spinner.hide();
+    alert(error.message)
+    return
+  }
+  
   if (xmlEditor) {
     // handle selection change
     xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
@@ -64,6 +76,7 @@ async function main() {
     })
   }
 
+  $('#spinner').hide()
   console.log("Application ready.")
 }
 
@@ -161,11 +174,56 @@ function onClickSelectionIndex() {
 
 async function onClickLoadDocument() {
   try {
-    const {type,path} = await uploadFile('/api/upload');
-    console.log({type,path})
+    const {type, filename} = await uploadFile('/api/upload');
+    switch(type) {
+      case "xml":
+        alert("Loading XML documents not implemented yet.")
+        break
+      case "pdf":
+        extractFromPDF(filename)
+        break;
+    }
   } catch (error) {
     console.error('Error uploading file:', error);
   }
+}
+
+async function extractFromPDF(filename) {
+  let doi = ""
+  if (filename.match(/^10\./)) {
+    // treat as a DOI-like filename
+    // do we have URL-encoded filenames?
+    doi = filename.slice(0,-4)
+    if (decodeURIComponent(doi) !== doi) {
+      // filename is URL-encoded DOI
+      doi = decodeURIComponent(doi)
+    } else {
+      // custom decoding 
+      doi = doi.replace(/_{1,2}/,'/').replaceAll(/__/g, '/')
+    }  
+  }
+  const msg = "Please enter the DOI of the PDF, this will add metadata to the generated TEI document"
+  doi = prompt(msg, doi)
+  if (doi === null) {
+    return;
+  } else if (!isDoi(doi)) {
+    alert(`${doi} does not seem to be a DOI, please try again.`)
+    return;
+  }
+  const spinner = $('#spinner')
+  spinner.show('Extracting references, please wait')
+  try {
+    const {pdf, xml} = await client.extractReferences(filename, doi)
+    reloadApp({pdf, xml})
+  } catch(e) {
+    //
+  } finally {
+    spinner.hide();
+  }
+}
+
+function reloadApp({xml,pdf}) {
+  window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
 }
 
 
@@ -204,7 +262,10 @@ async function searchNodeContentsInPdf(node) {
 }
 
 function documentLabel(fileData) {
-  return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
+  if (fileData.author){
+    return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
+  }
+  return fileData.id
 }
 
 
@@ -215,7 +276,7 @@ async function populateFilesSelectbox() {
   const selectbox = $('#select-doc');
   try {
     // Fetch data from api
-    const { files } = await getFileList();
+    const { files } = await client.getFileList();
 
     // Clear existing options
     selectbox.innerHTML = '';
@@ -234,7 +295,7 @@ async function populateFilesSelectbox() {
       const selectedFile = files.find(file => file.id === selectbox.value);
       const pdf = selectedFile.pdf;
       const xml = selectedFile.xml;
-      window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
+      reloadApp({xml, pdf})
     }
     // listen for changes in the selectbox
     selectbox.addEventListener('change', loadFilesFromSelectedId);
@@ -274,7 +335,7 @@ async function validateAndSave(filePath) {
     return diagnostics;
   }
   console.log("Saving XML on server...");
-  await saveDocument(xmlEditor.getXML(), filePath)
+  await client.saveXml(xmlEditor.getXML(), filePath)
 }
 
 /**
@@ -405,6 +466,16 @@ function getSelectionXpathResultSize() {
  * @returns {void}
  */
 function selectByIndex(index) {
+
+  // Wait for editor to be ready
+  if (! xmlEditor.isReady()) {
+    console.warn("Editor not ready, deferring selection")
+    xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      console.warn("Editor is now ready")
+      selectByIndex(index)
+    }, {once: true})
+    return;
+  } 
 
   if (index === 0 || !Number.isInteger(index)) {
     throw new Error("Invalid index (must be integer > 0)");

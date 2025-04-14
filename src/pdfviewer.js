@@ -117,7 +117,8 @@ export class PDFJSViewer {
 
         // remove pdf.js's saved state since it interferes 
         window.addEventListener('beforeunload', () => localStorage.removeItem('pdfjs.history'))
-        this.iframe.src = `/web/pdfjs/web/viewer.html?url=` + (this.pdfPath ? this.pdfPath : '/web/empty.pdf');
+        const file = this.pdfPath ? this.pdfPath : '/web/empty.pdf'
+        this.iframe.src = `/web/pdfjs/web/viewer.html?file=${file}#pagemode=none`
       });
     }
     return this.initializePromise;
