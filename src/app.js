@@ -30,7 +30,7 @@ try {
 async function main() {
 
   const spinner = $('#spinner')
-  
+
   spinner.show('Loading documents, please wait...')
 
   // get info from URL 
@@ -49,13 +49,15 @@ async function main() {
       pdfPath ? loadPdfViewer(pdfPath) : null,
       xmlPath ? loadXmlEditor(xmlPath, tagDataPath) : null,
       configureNavigation()
-    ]).catch(e => {throw e;})
-  } catch(error) {
+    ]).catch(e => { throw e; })
+  } catch (error) {
     spinner.hide();
     alert(error.message)
-    return
+    throw error
   }
-  
+
+  console.log("All Editors/Viewers loaded.")
+
   if (xmlEditor) {
     // handle selection change
     xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
@@ -127,6 +129,9 @@ async function configureNavigation() {
 
   // load new document
   $('#btn-load-document').addEventListener('click', onClickLoadDocument)
+
+  // save current version
+  $('#btn-save-document').addEventListener('click', onClickSaveButton);
 }
 
 async function handleSelectionChange(ranges) {
@@ -174,8 +179,8 @@ function onClickSelectionIndex() {
 
 async function onClickLoadDocument() {
   try {
-    const {type, filename} = await uploadFile('/api/upload');
-    switch(type) {
+    const { type, filename } = await uploadFile('/api/upload');
+    switch (type) {
       case "xml":
         alert("Loading XML documents not implemented yet.")
         break
@@ -188,19 +193,24 @@ async function onClickLoadDocument() {
   }
 }
 
+async function onClickSaveButton() {
+  const xmlPath = $('#select-version').value;
+  await validateAndSave(xmlPath)
+}
+
 async function extractFromPDF(filename) {
   let doi = ""
   if (filename.match(/^10\./)) {
     // treat as a DOI-like filename
     // do we have URL-encoded filenames?
-    doi = filename.slice(0,-4)
+    doi = filename.slice(0, -4)
     if (decodeURIComponent(doi) !== doi) {
       // filename is URL-encoded DOI
       doi = decodeURIComponent(doi)
     } else {
       // custom decoding 
-      doi = doi.replace(/_{1,2}/,'/').replaceAll(/__/g, '/')
-    }  
+      doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/')
+    }
   }
   const msg = "Please enter the DOI of the PDF, this will add metadata to the generated TEI document"
   doi = prompt(msg, doi)
@@ -213,16 +223,16 @@ async function extractFromPDF(filename) {
   const spinner = $('#spinner')
   spinner.show('Extracting references, please wait')
   try {
-    const {pdf, xml} = await client.extractReferences(filename, doi)
-    reloadApp({pdf, xml})
-  } catch(e) {
+    const { pdf, xml } = await client.extractReferences(filename, doi)
+    reloadApp({ pdf, xml })
+  } catch (e) {
     //
   } finally {
     spinner.hide();
   }
 }
 
-function reloadApp({xml,pdf}) {
+function reloadApp({ xml, pdf }) {
   window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
 }
 
@@ -262,7 +272,7 @@ async function searchNodeContentsInPdf(node) {
 }
 
 function documentLabel(fileData) {
-  if (fileData.author){
+  if (fileData.author) {
     return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
   }
   return fileData.id
@@ -270,56 +280,73 @@ function documentLabel(fileData) {
 
 
 /**
- * Populates the selectbox for file loading
+ * Populates the selectbox for file name and version
  */
 async function populateFilesSelectbox() {
-  const selectbox = $('#select-doc');
-  try {
-    // Fetch data from api
-    const { files } = await client.getFileList();
 
-    // Clear existing options
-    selectbox.innerHTML = '';
+  // the selectboxes to populate
+  const fileSelectbox = $('#select-doc');
+  const versionSelectbox = $('#select-version');
 
-    // Populate select box with options
-    files.forEach(fileData => {
-      const option = document.createElement('option');
-      option.value = fileData.id;
-      option.text = documentLabel(fileData)
-      selectbox.appendChild(option);
-    });
+  // Fetch data from api
+  const { files } = await client.getFileList();
 
-    console.log('Loaded file data.');
+  console.log('Loaded file data.');
 
-    function loadFilesFromSelectedId() {
-      const selectedFile = files.find(file => file.id === selectbox.value);
-      const pdf = selectedFile.pdf;
-      const xml = selectedFile.xml;
-      reloadApp({xml, pdf})
-    }
-    // listen for changes in the selectbox
-    selectbox.addEventListener('change', loadFilesFromSelectedId);
+  // Clear existing options
+  fileSelectbox.innerHTML = versionSelectbox.innerHTML = '';
 
-    if (!window.xmlPath || !window.pdfPath) {
-      // if no query params, load the first entry 
-      loadFilesFromSelectedId(files)
-    } else {
-      // otherwise align selection with url
-      const fileFromUrl = files.find(file => file.pdf == pdfPath)
-      if (fileFromUrl) {
-        selectbox.selectedIndex = files.indexOf(fileFromUrl);
-      }
-    }
+  // Populate file select box 
+  files.forEach(fileData => {
+    const option = document.createElement('option');
+    option.value = fileData.id;
+    option.text = documentLabel(fileData)
+    fileSelectbox.appendChild(option);
+  });
 
-    // configure save button
-    $('#btn-save-document').addEventListener('click', async () => {
-      const fileData = files[selectbox.selectedIndex];
-      await validateAndSave(fileData.xml)
-    });
-
-  } catch (error) {
-    console.error('Error populating files selectbox:', error);
+  // if we have no paths in the URL, stop here and just load the first entry
+  if (!window.xmlPath || !window.pdfPath) {
+    loadFilesFromSelectedId()
+    return
   }
+
+  // align selectboxes with url query params
+  const fileData = files.find(file => file.pdf == pdfPath)
+  if (fileData) {
+    // select the filename
+    fileSelectbox.selectedIndex = files.indexOf(fileData);
+    
+    // populate the version selectbox depending on the selected file
+    if (fileData.versions) {
+      fileData.versions.forEach((version) => {
+        const option = document.createElement('option');
+        option.value = version.path;
+        option.text = version.label;
+        versionSelectbox.appendChild(option);
+      })
+
+      versionSelectbox.selectedIndex = fileData.versions.findIndex(version => version.path === xmlPath)
+    }
+  }
+
+  // listen for changes in the PDF selectbox
+  function loadFilesFromSelectedId() {
+    const selectedFile = files.find(file => file.id === fileSelectbox.value);
+    const pdf = selectedFile.pdf;
+    const xml = selectedFile.xml
+    reloadApp({ xml, pdf })
+  }
+  fileSelectbox.addEventListener('change', loadFilesFromSelectedId);
+
+  // listen for changes in the TEI version selectbox  
+  function loadFilesFromSelectedVersion() {
+    const selectedFile = files.find(file => file.id === fileSelectbox.value);
+    const pdf = selectedFile.pdf;
+    const xml = versionSelectbox.value
+    reloadApp({ xml, pdf })
+  }
+  versionSelectbox.addEventListener('change', loadFilesFromSelectedVersion);
+
 }
 
 /**
@@ -466,16 +493,15 @@ function getSelectionXpathResultSize() {
  * @returns {void}
  */
 function selectByIndex(index) {
-
   // Wait for editor to be ready
-  if (! xmlEditor.isReady()) {
+  if (!xmlEditor.isReady()) {
     console.warn("Editor not ready, deferring selection")
     xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
       console.warn("Editor is now ready")
       selectByIndex(index)
-    }, {once: true})
+    }, { once: true })
     return;
-  } 
+  }
 
   if (index === 0 || !Number.isInteger(index)) {
     throw new Error("Invalid index (must be integer > 0)");

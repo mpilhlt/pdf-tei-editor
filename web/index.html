@@ -9,15 +9,18 @@
 </head>
 
 <body>
+  <!-- spinner/blocker-->
   <custom-spinner id="spinner"></custom-spinner>
+  <!-- main layout-->
   <div id="container">
     <div id="pdf-viewer"></div>
     <div id="xml-editor"></div>
   </div>
+  <!-- floating navigation bar -->
   <div id="navigation">
     <div id="document-nav">
       <select id="select-doc"></select>
-      <button id="btn-load-document">New</button>
+      <select id="select-version"></select>
     </div>
     <div id="biblstruct-nav">
       <select id="select-xpath"></select>
@@ -27,8 +30,11 @@
       <button id="btn-next-node" disabled>&gt;&gt;</button>
     </div>
     <div id="command-buttons">
+      
       <button id="btn-node-status" disabled>Mark node as verified</button>
       <button id="btn-save-document" disabled>Validate & Save</button>
+      <button id="btn-load-document">New PDF</button>
+    
     </div>
   </div>
   <!-- User message -->

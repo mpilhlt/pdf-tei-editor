@@ -7,8 +7,8 @@ import re
 from pathlib import Path
 from shutil import move
 from lib.decorators import handle_api_errors
-from lib.server_utils import ApiError
-import datetime
+from lib.server_utils import ApiError, get_gold_tei_path, make_timestamp
+
 
 DOI_REGEX = r"^10.\d{4,9}/[-._;()/:A-Z0-9]+$"  # from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")  # set in .env
@@ -16,6 +16,7 @@ gemini_api_key = os.environ.get("GEMINI_API_KEY", "")  # set in .env
 # import llamore from GitHub source
 if os.path.isdir("llamore"):
     import sys
+
     sys.path.append("llamore/src")
     from llamore import GeminiExtractor
     from llamore import TeiBiblStruct
@@ -27,6 +28,7 @@ bp = Blueprint("extract", __name__, url_prefix="/api/extract")
 
 # the url of the TEI schema used
 TEI_SCHEMA_LOCATION = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/tei.xsd"
+
 
 @bp.route("", methods=["POST"])
 @handle_api_errors
@@ -41,43 +43,46 @@ def extract():
     pdf_filename = data.get("pdf")
     if pdf_filename == "":
         raise ApiError("Missing PDF file name")
-    
-    UPLOAD_DIR = current_app.config['UPLOAD_DIR']
-    WEB_ROOT = current_app.config['WEB_ROOT']
-    
+
+    UPLOAD_DIR = current_app.config["UPLOAD_DIR"]
+    WEB_ROOT = current_app.config["WEB_ROOT"]
+
     pdf_path = Path(os.path.join(UPLOAD_DIR, pdf_filename))
     if not pdf_path.exists():
-        raise ApiError(f'File {pdf_filename} has not been uploaded.')
+        raise ApiError(f"File {pdf_filename} has not been uploaded.")
 
     # handle DOI
-    doi = data.get("doi", '')
-    if doi != '':
-        # if a DOI is given, use the shortDOI (with the "10." prefix removed as filename
-        file_id = get_short_doi(doi)[3:]
+    doi = data.get("doi", "")
+    if doi != "":
+        # if a (file-system-encoded) DOI is given, use it
+        file_id = doi.replace("/", "__")
     else:
         # otherwise use filename of the upload
         file_id = Path(pdf_filename).stem
 
     # rename and move PDF
-    gold_pdf_path = os.path.join(WEB_ROOT, "data", "pdf", f"{file_id}.pdf")
+    gold_pdf_path = os.path.join(WEB_ROOT, "data", "pdf", file_id + ".pdf")
     move(pdf_path, gold_pdf_path)
 
-    # generate and save TEI via reference extraction using LLamore 
+    # generate TEI via reference extraction using LLamore
     tei_xml = tei_from_pdf(doi, gold_pdf_path)
 
-    # save TEI with a timestamp to avoid overwriting 
-    current_datetime = datetime.datetime.now()
-    timestamp = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
+    # save file
+    gold_tei_path = tei_path = get_gold_tei_path(file_id)
+    if os.path.exists(gold_tei_path):
+        # we already have a gold file, so save as a version, not as the original
+        version = make_timestamp().replace(" ", "_")
+        tei_path = os.path.join("data", "versions", version, file_id + ".tei.xml")
+        os.makedirs(os.path.dirname(tei_path), exist_ok=True)
 
-    gold_tei_path = os.path.join(WEB_ROOT, "data", "tei", f"{file_id}_{timestamp}.tei.xml") 
-    with open(gold_tei_path, "w", encoding="utf-8") as f:
+    with open(tei_path, "w", encoding="utf-8") as f:
         f.write(tei_xml)
-    
+
     # return result
     result = {
-        "id": file_id, 
-        "xml": Path('/' + os.path.relpath(gold_tei_path, WEB_ROOT)).as_posix(), 
-        "pdf": Path('/' + os.path.relpath(gold_pdf_path, WEB_ROOT)).as_posix()
+        "id": file_id,
+        "xml": Path("/" + os.path.relpath(tei_path, WEB_ROOT)).as_posix(),
+        "pdf": Path("/" + os.path.relpath(gold_pdf_path, WEB_ROOT)).as_posix(),
     }
     return jsonify(result)
 
@@ -87,24 +92,13 @@ def check_doi(doi):
         raise ValueError(f"{doi} is not a valid DOI string")
 
 
-def get_short_doi(doi):
-    check_doi(doi)
-    current_app.logger.info(f"Getting short doi for {doi} from crossref.org...")
-    url = f"https://shortdoi.org/{doi}?format=json"  #
-    response = requests.get(url)
-    response.raise_for_status()
-    data = response.json()
-    return data.get("ShortDOI")
-
-
 def tei_from_pdf(doi: str, pdf_path: str) -> str:
     # the TEI doc
     tei_doc = create_tei_doc(TEI_SCHEMA_LOCATION)
 
-    # create the header from doi metadata
-    if (doi != ''):
-        tei_header = create_tei_header_from_doi(doi)
-        tei_doc.append(tei_header)
+    # create the header
+    tei_header = create_tei_header(doi)
+    tei_doc.append(tei_header)
 
     # add the references as a listBibl element
     listBibl = extract_refs_from_pdf(pdf_path)
@@ -133,25 +127,35 @@ def create_tei_doc(schema_location: str) -> etree.Element:
     return tei
 
 
-def create_tei_header_from_doi(doi: str) -> etree.Element:
-    current_app.logger.info(f"Downloading metadata for {doi} from crossref.org...")
-    url = f"https://api.crossref.org/works/{doi}"
-    response = requests.get(url)
-    response.raise_for_status()
-    data = response.json()
+def create_tei_header(doi: str) -> etree.Element:
 
-    # metadata used
-    title = data["message"]["title"][0]
-    authors = [
-        {"given": author["given"], "family": author["family"]}
-        for author in data["message"]["author"]
-    ]
-    date = data["message"]["issued"]["date-parts"][0][0]
-    publisher = data["message"]["publisher"]
-    journal = data["message"]["container-title"][0]
-    volume = data["message"]["volume"]
-    issue = data["message"]["issue"]
-    pages = data["message"]["page"]
+    # defaults
+    authors = []
+    date = ""
+    publisher = ""
+    volume = ""
+    issue = ""
+    pages = ""
+
+    if doi != "":
+        current_app.logger.info(f"Downloading metadata for {doi} from crossref.org...")
+        url = f"https://api.crossref.org/works/{doi}"
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        # metadata used
+        title = data["message"]["title"][0]
+        authors = [
+            {"given": author["given"], "family": author["family"]}
+            for author in data["message"]["author"]
+        ]
+        date = data["message"]["issued"]["date-parts"][0][0]
+        publisher = data["message"]["publisher"]
+        journal = data["message"]["container-title"][0]
+        volume = data["message"]["volume"]
+        issue = data["message"]["issue"]
+        pages = data["message"]["page"]
 
     # <teiHeader>
     teiHeader = etree.Element("teiHeader")
@@ -186,4 +190,41 @@ def create_tei_header_from_doi(doi: str) -> etree.Element:
     sourceDesc = etree.SubElement(fileDesc, "sourceDesc")
     etree.SubElement(sourceDesc, "bibl").text = citation
 
+    # <encodingDesc>
+    """
+        <encodingDesc>
+            <appInfo>
+                <application version="1.24" ident="Xaira">
+                    <label>XAIRA Indexer</label>
+                    <ptr target="#P1"/>
+                </application>
+            </appInfo>
+        </encodingDesc>
+     """
+    encodingDesc = etree.SubElement(teiHeader, 'encodingDesc')
+    appInfo = etree.SubElement(encodingDesc, 'appInfo')
+    application1 = etree.SubElement(appInfo, 'application', version="1.0", ident="llamore")
+    etree.SubElement(application1, 'label').text = "https://github.com/mpilhlt/llamore"
+    application2 = etree.SubElement(appInfo, 'application', version="1.0", ident="pdf-tei-editor")
+    etree.SubElement(application2, 'label').text = "https://github.com/mpilhlt/pdf-tei-editor"
+    application3 = etree.SubElement(appInfo, 'application', version="1.0", ident="model")
+    etree.SubElement(application3, 'label').text = "Gemini 2.0/LineByLinePrompter"
+
+    # <revisionDesc>
+    """
+        <revisionDesc>
+            <change when="2024-10-27">
+                <name ref="#BJ">Bob Johnson</name>
+                <desc>Merged the initial manual transcription by Alice Higgins with the automatic transcription from OCR Engine v3.2.  Used Alice's transcription as the base and corrected errors in it using the OCR output. </desc>
+            </change>
+            <change when="2024-10-28">
+                <name ref="#BJ">Bob Johnson</name>
+                <desc>Performed final proofreading and validation of the TEI document.</desc>
+            </change>
+        </revisionDesc>        
+    """
+    revisionDesc = etree.SubElement(teiHeader, 'revisionDesc')
+    change = etree.SubElement(revisionDesc, 'change', when=make_timestamp())
+    etree.SubElement(change, 'desc').text = "Initial extraction"
+   
     return teiHeader
