@@ -4,7 +4,7 @@ import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { linter, lintGutter, forceLinting } from "@codemirror/lint";
 import { createCompletionSource } from './autocomplete.js';
-import { syntaxTree } from "@codemirror/language";
+import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
 import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
 import { $ } from './browser-utils.js';
@@ -24,7 +24,7 @@ export class XMLEditor extends EventTarget {
   #syntaxTree = null; // the lezer syntax tree
   #isReady = false;
   #readyPromise = null;
-  #readyPromiseResolvers = null;
+
 
   /**
    * Constructs an XMLEditor instance.
@@ -401,10 +401,10 @@ export class XMLEditor extends EventTarget {
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: ranges }))
   }
 
-  #onUpdate(update) {
+  async #onUpdate(update) {
     if (update.docChanged) {
       this.#documentVersion += 1;
-      this.#updateTrees()
+      await this.#updateTrees()
       try {
         this.#updateMaps()
         this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
@@ -415,18 +415,27 @@ export class XMLEditor extends EventTarget {
     }
   }
 
-  #updateTrees() {
+  async #updateTrees() {
     this.#editorContent = this.#view.state.doc.toString();
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
-      //console.log("Document was updated but is not well-formed:", error.message)
+      console.log("Document was updated but is not well-formed:", error.message)
       this.#editorContent = null;
       this.#xmlTree = null;
       return;
     }
-    //console.log("Document was updated and is well-formed.")
+    console.log("Document was updated and is well-formed.")
     this.#xmlTree = doc;
+
+    // the syntax tree construction is async, so we need to wait for it to complete
+    if (syntaxParserRunning(this.#view)){
+      console.log('Waiting for syntax tree to be ready...')
+      while (syntaxParserRunning(this.#view)) {
+        await new Promise(resolve => setTimeout(resolve, 200)) 
+      }
+      console.log('Syntax tree is ready.')
+    }
     this.#syntaxTree = syntaxTree(this.#view.state);
   }
 
