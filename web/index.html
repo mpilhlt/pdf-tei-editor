@@ -9,19 +9,26 @@
 </head>
 
 <body>
-  <!-- spinner/blocker-->
-  <custom-spinner id="spinner"></custom-spinner>
+
   <!-- main layout-->
   <div id="container">
-    <div id="pdf-viewer"></div>
-    <div id="xml-editor"></div>
+    <div id="document-nav">
+      <select id="select-doc"></select><br/>
+      Version: <select id="select-version"></select>
+      Diff: <select id="select-diff-version"></select>
+      <button id="btn-load-document">New PDF</button>
+    </div>
+    <div id="editors">
+      <div id="pdf-viewer"></div>
+      <div id="xml-editor"></div>
+    </div>
   </div>
+
+  <!-- spinner/blocker-->
+  <custom-spinner id="spinner"></custom-spinner>
+
   <!-- floating navigation bar -->
   <div id="navigation">
-    <div id="document-nav">
-      <select id="select-doc"></select>
-      <select id="select-version"></select>
-    </div>
     <div id="biblstruct-nav">
       <select id="select-xpath"></select>
       <button id="btn-edit-xpath">XPath</button>
@@ -32,9 +39,7 @@
     <div id="command-buttons">
       
       <button id="btn-node-status" disabled>Mark node as verified</button>
-      <button id="btn-save-document" disabled>Validate & Save</button>
-      <button id="btn-load-document">New PDF</button>
-    
+      <button id="btn-save-document" disabled>Validate & Save</button>  
     </div>
   </div>
   <!-- User message -->

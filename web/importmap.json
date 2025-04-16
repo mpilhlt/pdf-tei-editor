@@ -15,6 +15,7 @@
     "@codemirror/lang-xml": "/node_modules/@codemirror/lang-xml/dist/index.js",
     "@codemirror/commands": "/node_modules/@codemirror/commands/dist/index.js",
     "@codemirror/autocomplete": "/node_modules/@codemirror/autocomplete/dist/index.js",
+    "@codemirror/merge": "/node_modules/@codemirror/merge/dist/index.js",
     "style-mod": "/node_modules/style-mod/src/style-mod.js",
     "w3c-keyname": "/node_modules/w3c-keyname/index.js",
     "crelt": "/node_modules/crelt/index.js"

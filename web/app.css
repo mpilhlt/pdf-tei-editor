@@ -1,8 +1,7 @@
 body {
   font-family: sans-serif;
-  display: flex;
-  flex-direction: column;
-  max-height: 100vh;
+  height: calc(100vh - 50px); /* I have no idea why I need this offset */
+  width: calc(100vw - 40px);
 }
 
 .hidden {
@@ -11,11 +10,24 @@ body {
 
 #container {
   display: flex;
-  margin: 5px;
-  height: 98vh;
-  flex-grow: 1;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  width: 100%;
+}
+
+#document-nav{
+  height: 30px;
+  visibility: hidden;
+}
+
+#editors {
+  display: flex;
+  flex-direction: row;
+  margin: 0px;
   gap: 10px;
   width: 100%;
+  height: 100%
 }
 
 #pdf-viewer {

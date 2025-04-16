@@ -79,6 +79,7 @@ async function main() {
   }
 
   $('#spinner').hide()
+  $('#document-nav').show()
   console.log("Application ready.")
 }
 
@@ -285,8 +286,9 @@ function documentLabel(fileData) {
 async function populateFilesSelectbox() {
 
   // the selectboxes to populate
-  const fileSelectbox = $('#select-doc');
-  const versionSelectbox = $('#select-version');
+  const fileSelectbox = $('#select-doc')
+  const versionSelectbox = $('#select-version')
+  const diffSelectbox = $('#select-diff-version')
 
   // Fetch data from api
   const { files } = await client.getFileList();
@@ -323,9 +325,11 @@ async function populateFilesSelectbox() {
         option.value = version.path;
         option.text = version.label;
         versionSelectbox.appendChild(option);
+        diffSelectbox.appendChild(option.cloneNode(true))
       })
 
       versionSelectbox.selectedIndex = fileData.versions.findIndex(version => version.path === xmlPath)
+      diffSelectbox.selectedIndex = versionSelectbox.selectedIndex
     }
   }
 
@@ -347,6 +351,16 @@ async function populateFilesSelectbox() {
   }
   versionSelectbox.addEventListener('change', loadFilesFromSelectedVersion);
 
+  // listen for changes in the diff version selectbox  
+  async function loadDiff() {
+    const xmlPath = diffSelectbox.value
+    if (xmlPath !== versionSelectbox.value) {
+      xmlEditor.showDiffView(xmlPath)
+    } else {
+      loadFilesFromSelectedId()
+    }
+  }
+  diffSelectbox.addEventListener('change', loadDiff);
 }
 
 /**

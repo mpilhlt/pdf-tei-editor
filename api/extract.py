@@ -105,9 +105,23 @@ def tei_from_pdf(doi: str, pdf_path: str) -> str:
     standOff = etree.SubElement(tei_doc, "standOff")
     standOff.append(listBibl.getchildren()[0])
 
-    # serialize XML
-    tei_xml = etree.tostring(tei_doc, pretty_print=True, encoding="UTF-8").decode()
+    # serialize re-indented XML
+    remove_whitespace(tei_doc)
+    tei_xml = etree.tostring(tei_doc, pretty_print=False, encoding="UTF-8").decode()
+    import xml.dom.minidom
+    tei_xml = xml.dom.minidom.parseString(tei_xml).toprettyxml(indent="  ", encoding="utf-8").decode()
+    # remove xml declaration
+    tei_xml = "\n".join(tei_xml.split("\n")[1:])
     return tei_xml
+
+def remove_whitespace(element):
+    """Recursively removes all tails and texts from the tree."""
+    if element.text:
+        element.text = element.text.strip()
+    if element.tail:
+        element.tail = element.tail.strip()
+    for child in element:
+        remove_whitespace(child)
 
 
 def extract_refs_from_pdf(pdf_path: str) -> etree.Element:

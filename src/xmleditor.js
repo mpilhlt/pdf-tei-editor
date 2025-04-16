@@ -1,5 +1,6 @@
 import { basicSetup } from 'codemirror';
-import { EditorState, EditorSelection } from "@codemirror/state";
+import { EditorState, EditorSelection, StateEffect } from "@codemirror/state";
+import {unifiedMergeView} from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { linter, lintGutter, forceLinting } from "@codemirror/lint";
@@ -24,7 +25,7 @@ export class XMLEditor extends EventTarget {
   #syntaxTree = null; // the lezer syntax tree
   #isReady = false;
   #readyPromise = null;
-
+  #mergeViewExt = null; // will be created on-demand
 
   /**
    * Constructs an XMLEditor instance.
@@ -76,6 +77,19 @@ export class XMLEditor extends EventTarget {
       this.#isReady = true;
       resolve();
     }, {once: true}))
+
+    // fetch xml if path 
+    const xml = await this.#fetchXml(xmlPathOrString);
+
+    // display xml in editor, this triggers the update handlers
+    this.#view.dispatch({
+      changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
+      selection: EditorSelection.cursor(0)
+    });
+    this.#documentVersion = 0;
+  }
+
+  async #fetchXml(xmlPathOrString) {
     let xml;
     if (xmlPathOrString.trim().slice(0, 1) != "<") {
       // treat argument as path
@@ -89,13 +103,7 @@ export class XMLEditor extends EventTarget {
       // treat argument as xml string
       xml = xmlPathOrString;
     }
-
-    // display xml in editor, this triggers the update handlers
-    this.#view.dispatch({
-      changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
-      selection: EditorSelection.cursor(0)
-    });
-    this.#documentVersion = 0;
+    return xml
   }
 
   /**
@@ -133,6 +141,29 @@ export class XMLEditor extends EventTarget {
     disableValidation(disabledState)
     return diagnostics
   }
+
+  async showDiffView(xmlPathOrString){
+    if (this.#mergeViewExt) {
+      // remove it?
+    }
+
+    // fetch xml if path 
+    const xml = await this.#fetchXml(xmlPathOrString);
+    // create and display merge view
+    this.#mergeViewExt = unifiedMergeView({
+      original: xml,
+      diffConfig: {scanLimit: 50000, timeout: 20000}
+    })
+    this.#view.addEventListener
+    this.#view.dispatch({
+      effects: StateEffect.appendConfig.of([this.#mergeViewExt])
+    });
+  }
+
+  hideDiffView() {
+    alert("Not implemented")
+  }
+
 
   getDocumentVersion() {
     return this.#documentVersion;
@@ -420,7 +451,7 @@ export class XMLEditor extends EventTarget {
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
-      console.log("Document was updated but is not well-formed:", error.message)
+      console.log("Document was updated but is not well-formed")
       this.#editorContent = null;
       this.#xmlTree = null;
       return;
