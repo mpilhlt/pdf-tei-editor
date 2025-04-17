@@ -11,6 +11,8 @@ import { isDoi } from './utils.js'
 let lastSelectedXmlNode = null;
 // the index of the currently selected node, 1-based
 let currentIndex = null;
+// the current xpath
+let currentXpath = null;
 // the xml editor
 let xmlEditor = null;
 // the pdf viewer
@@ -147,30 +149,33 @@ async function handleSelectionChange(ranges) {
   // we care only for the first selected node
   const range = ranges[0]
   const selectedNode = range.node;
-  
-  
   lastSelectedXmlNode = selectedNode;
-
   if (!selectedNode) return;
-  const selectionTagName = getSelectionTagName().split(':').pop()
+
+  const selectionTagName = xpathInfo(getSelectionXpath()).tagName
+  const statusButton = $('#btn-node-status')
   if (selectedNode.tagName === selectionTagName) { 
-    checkVerifiedStatus(selectedNode)
+    statusButton.disabled = false
     if (pdfViewer) {
       await searchNodeContentsInPdf(selectedNode)
     }
+  } else {
+    statusButton.disabled = true
   }
-  
 }
 
 function handleStatusUpdate() {
   if (lastSelectedXmlNode) {
     const status = lastSelectedXmlNode.getAttribute('status');
     switch (status) {
+      case "unresolved":
+        lastSelectedXmlNode.setAttribute("status", "verified")
+        break;
       case "verified":
         lastSelectedXmlNode.removeAttribute("status")
         break;
       default:
-        lastSelectedXmlNode.setAttribute("status", "verified")
+        lastSelectedXmlNode.setAttribute("status", "unresolved")
     }
     // update the editor content
     window.xmlEditor.updateFromXmlTree()
@@ -247,19 +252,6 @@ function reloadApp({ xml, pdf }) {
   window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
 }
 
-
-function checkVerifiedStatus(node) {
-  const statusButton = $('#btn-node-status')
-  const status = node.getAttribute('status');
-  statusButton.disabled = false
-  switch (status) {
-    case "verified":
-      statusButton.textContent = "Mark node as unverified"
-      break;
-    default:
-      statusButton.textContent = "Mark node as verified"
-  }
-}
 
 /**
  * Given a Node in the XML, search and highlight its text content in the PDF Viewer
@@ -412,6 +404,10 @@ async function populateXpathSelectbox() {
         "label": "Unverified <biblStruct>"
       },
       {
+        "xpath": "//tei:biblStruct[@status='unresolved']",
+        "label": "Unresolved <biblStruct>"
+      },      
+      {
         "xpath": null,
         "label": "Custom XPath"
       }
@@ -484,8 +480,8 @@ function setSelectionXpath(xpath) {
   }
 
   const selectbox = $('#select-xpath');
+  
   if (selectbox.value !== xpath) {
-    console.log("Setting xpath", xpath)
     let index = Array.from(selectbox.options).findIndex(option => option.value === xpath)
     // custom xpath
     if (index === -1) {
@@ -497,25 +493,52 @@ function setSelectionXpath(xpath) {
     // update the selectbox
     selectbox.selectedIndex = index;
   }
-  // select the first node
-  if (index !== currentIndex) {
-    selectByIndex(index)
+
+  // update xpath
+  const xpathHasChanged = currentXpath !== xpath
+  const size = getXpathResultSize(xpath)
+  if (xpathHasChanged) {
+    currentXpath = xpath
+    console.log("Setting xpath", xpath)
+    updateIndexUI(index, size)
   }
+
+  // select the first node
+  if (size > 0 && (index !== currentIndex || xpathHasChanged)) {
+    selectByIndex(index)
+  } 
+}
+
+function updateIndexUI(index, size) {
+  $('#selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
+  $('#btn-next-node').disabled = $('#btn-prev-node').disabled = size < 2;
 }
 
 function getSelectionXpath() {
-  let xpath = $('#select-xpath').value;
-  return xpath
+  return currentXpath
 }
 
-function getSelectionTagName() {
-  return getSelectionXpath().split("/").pop()
+function xpathInfo(xpath) {
+  const xpathRegex = /^(.*?\/)?(?:(\w+):)?(\w+)(.*)?$/;
+  const match = xpath.match(xpathRegex);
+  if (match) {
+    return {
+      prefix: match[1] || "",  // Everything before the final tag name (or empty string)
+      namespace: match[2] || "", // Namespace (e.g., "tei") or empty string
+      tagName: match[3],      // Tag name (e.g., "biblStruct")
+      attributes: match[4] || ""   // Attribute selectors (e.g., "[@status='verified']") or empty string
+    };
+  } else {
+    return null;  // Indicate no match
+  }
+}
+
+function getXpathResultSize(xpath) {
+  return window.xmlEditor.countDomNodesByXpath(xpath)
 }
 
 function getSelectionXpathResultSize() {
-  const xpath = getSelectionXpath()
-  const count = window.xmlEditor.countDomNodesByXpath(xpath)
-  return count
+  return getXpathResultSize(getSelectionXpath())
 }
 
 /**
@@ -534,24 +557,13 @@ function selectByIndex(index) {
     return;
   }
 
-  if (index === 0 || !Number.isInteger(index)) {
-    throw new Error("Invalid index (must be integer > 0)");
-  }
-
-  const size = getSelectionXpathResultSize()
-
   // check if selection is within bounds
-  if (index > size || size === 0) {
+  const xpath = getSelectionXpath()
+  const size = getXpathResultSize(xpath)
+  if (index > size || size === 0 || index < 1) {
     throw new Error(`Index out of bounds: ${index} of ${size} items`);
   }
-
-  // show index
-  $('#selection-index').textContent = `(${index}/${size})`
-
-  // disable navigation if we have no or just one result
-  $('#btn-next-node').disabled = $('#btn-prev-node').disabled = size < 2;
-
-  let xpath = getSelectionXpath()
+  updateIndexUI(index, size)
   currentIndex = index;
   const xpathWithIndex = `${xpath}[${currentIndex}]`
 
