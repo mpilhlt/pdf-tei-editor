@@ -29,9 +29,7 @@ try {
  */
 async function main() {
 
-  const spinner = $('#spinner')
-
-  spinner.show('Loading documents, please wait...')
+  showSpinner('Loading documents, please wait...')
 
   // get info from URL 
   const urlParams = new URLSearchParams(window.location.search);
@@ -78,9 +76,17 @@ async function main() {
     })
   }
 
-  $('#spinner').hide()
+  hideSpinner()
   $('#document-nav').show()
   console.log("Application ready.")
+}
+
+function showSpinner(msg) {
+  $('#spinner').show(msg)
+}
+
+function hideSpinner() {
+  $('#spinner').hide()
 }
 
 async function loadXmlEditor(xmlPath, tagDataPath) {
@@ -141,14 +147,19 @@ async function handleSelectionChange(ranges) {
   // we care only for the first selected node
   const range = ranges[0]
   const selectedNode = range.node;
+  
+  
   lastSelectedXmlNode = selectedNode;
 
   if (!selectedNode) return;
-
-  checkVerifiedStatus(selectedNode)
-  if (pdfViewer) {
-    await searchNodeContentsInPdf(selectedNode)
+  const selectionTagName = getSelectionTagName().split(':').pop()
+  if (selectedNode.tagName === selectionTagName) { 
+    checkVerifiedStatus(selectedNode)
+    if (pdfViewer) {
+      await searchNodeContentsInPdf(selectedNode)
+    }
   }
+  
 }
 
 function handleStatusUpdate() {
@@ -221,15 +232,14 @@ async function extractFromPDF(filename) {
     alert(`${doi} does not seem to be a DOI, please try again.`)
     return;
   }
-  const spinner = $('#spinner')
-  spinner.show('Extracting references, please wait')
+  showSpinner('Extracting references, please wait')
   try {
     const { pdf, xml } = await client.extractReferences(filename, doi)
     reloadApp({ pdf, xml })
   } catch (e) {
     //
   } finally {
-    spinner.hide();
+    hideSpinner()
   }
 }
 
@@ -353,9 +363,12 @@ async function populateFilesSelectbox() {
 
   // listen for changes in the diff version selectbox  
   async function loadDiff() {
+    
     const xmlPath = diffSelectbox.value
     if (xmlPath !== versionSelectbox.value) {
-      xmlEditor.showDiffView(xmlPath)
+      showSpinner('Computing file differences, please wait...')
+      xmlEditor.showMergeView(xmlPath)
+      hideSpinner()
     } else {
       loadFilesFromSelectedId()
     }
@@ -493,6 +506,10 @@ function setSelectionXpath(xpath) {
 function getSelectionXpath() {
   let xpath = $('#select-xpath').value;
   return xpath
+}
+
+function getSelectionTagName() {
+  return getSelectionXpath().split("/").pop()
 }
 
 function getSelectionXpathResultSize() {

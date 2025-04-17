@@ -142,10 +142,9 @@ export class XMLEditor extends EventTarget {
     return diagnostics
   }
 
-  async showDiffView(xmlPathOrString){
-    if (this.#mergeViewExt) {
-      // remove it?
-    }
+  async showMergeView(xmlPathOrString){
+    // remove existing merge view
+    this.hideMergeView()
 
     // fetch xml if path 
     const xml = await this.#fetchXml(xmlPathOrString);
@@ -160,8 +159,10 @@ export class XMLEditor extends EventTarget {
     });
   }
 
-  hideDiffView() {
-    alert("Not implemented")
+  hideMergeView() {
+    if (this.#mergeViewExt) {
+      // remove it?
+    }
   }
 
 

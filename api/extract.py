@@ -238,7 +238,7 @@ def create_tei_header(doi: str) -> etree.Element:
         </revisionDesc>        
     """
     revisionDesc = etree.SubElement(teiHeader, 'revisionDesc')
-    change = etree.SubElement(revisionDesc, 'change', when=make_timestamp())
+    change = etree.SubElement(revisionDesc, 'change', when=make_timestamp().split(" ")[0])
     etree.SubElement(change, 'desc').text = "Initial extraction"
    
     return teiHeader
