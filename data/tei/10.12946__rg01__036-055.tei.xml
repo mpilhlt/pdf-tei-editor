@@ -36,7 +36,7 @@
       </appInfo>
     </encodingDesc>
     <revisionDesc>
-      <change when="2025-04-16 16:59:18">
+      <change when="2025-04-16">
         <desc>Initial extraction</desc>
       </change>
     </revisionDesc>
@@ -534,7 +534,7 @@
         <citedRange>91-94</citedRange>
       </biblStruct>
       <biblStruct source="fn15">
-        <monogr>
+        <analytic>
           <title level="a">Parasceve ad historiam naturalem, et experimentalem</title>
           <author>
             <persName>
@@ -542,10 +542,24 @@
               <surname>Bacon</surname>
             </persName>
           </author>
+        </analytic>
+        <monogr>
+          <title level="m">Lord Bacon's Works</title>
+          <editor>
+            <persName>
+              <forename>Basil</forename>
+              <surname>Montagu</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1825-34</date>
+            <pubPlace>London</pubPlace>
+          </imprint>
+          <biblScope unit="volume">11</biblScope>
         </monogr>
       </biblStruct>
       <biblStruct source="fn15">
-        <monogr>
+        <analytic>
           <title level="a">Advancement</title>
           <author>
             <persName>
@@ -553,7 +567,22 @@
               <surname>Bacon</surname>
             </persName>
           </author>
+        </analytic>
+        <monogr>
+          <title level="m">Lord Bacon's Works</title>
+          <editor>
+            <persName>
+              <forename>Basil</forename>
+              <surname>Montagu</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1825-34</date>
+            <pubPlace>London</pubPlace>
+          </imprint>
+          <biblScope unit="volume">2</biblScope>
         </monogr>
+        <citedRange>102-106</citedRange>
       </biblStruct>
       <biblStruct source="fn16">
         <monogr>
