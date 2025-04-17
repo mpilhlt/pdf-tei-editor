@@ -515,7 +515,7 @@ function updateIndexUI(index, size) {
 }
 
 function getSelectionXpath() {
-  return currentXpath
+  return currentXpath || $('#select-xpath').value;
 }
 
 function xpathInfo(xpath) {
