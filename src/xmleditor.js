@@ -202,7 +202,7 @@ export class XMLEditor extends EventTarget {
    * @returns {string} 
    */
   getXML() {
-    this.#serialize(this.#xmlTree)
+    return this.#serialize(this.#xmlTree)
   }
 
   /**

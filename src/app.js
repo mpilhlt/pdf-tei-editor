@@ -31,8 +31,12 @@ const tagDataPath = '/data/tei.json'
 
 // the index of the currently selected node, 1-based
 let currentIndex = null;
-// the current xpath
-let currentXpath = null;
+
+// the current xpath used for selection
+let selectionXpath = null;
+
+// the xpath of the cursor within the xml document
+let lastCursorXpath = null; 
 
 try {
   main()
@@ -157,6 +161,11 @@ async function configureNavigation() {
   $('#btn-save-document').addEventListener('click', onClickSaveButton);
 }
 
+/**
+ * Handles change of selection in the document
+ * @param {Array} ranges An array of object of the form {to, from, node}
+ * @returns 
+ */
 async function handleSelectionChange(ranges) {
   if (ranges.length === 0) return;
 
@@ -168,6 +177,7 @@ async function handleSelectionChange(ranges) {
   let selectedNode = range.node;
   if (!selectedNode) {
     lastSelectedXpathlNode = null;
+    lastCursorXpath = null; 
     return;
   }
 
@@ -177,18 +187,20 @@ async function handleSelectionChange(ranges) {
     selectedNode = selectedNode.parentNode
   }
 
-  console.log({selectedNode, xpathTagName})
-
   // update the buttons
   $$('.btn-node-status').forEach(btn => btn.disabled = !Boolean(selectedNode))
 
-  // do nothing if we cannot find a matching parent or the parent is the same as before
-  if (!selectedNode || lastSelectedXpathlNode === selectedNode) {
+  // the xpath of the current cursor position
+  const newCursorXpath = selectedNode && xmlEditor.getXPathForNode(selectedNode)
+
+  // do nothing if we cannot find a matching parent, or the parent is the same as before
+  if (!selectedNode || lastSelectedXpathlNode === selectedNode || newCursorXpath === lastCursorXpath) {
     return;
   }
   
   // remember new (parent) node
   lastSelectedXpathlNode = selectedNode;
+  lastCursorXpath = newCursorXpath
   
   if (pdfViewer) {
     await searchNodeContentsInPdf(selectedNode)
@@ -208,13 +220,14 @@ async function setNodeStatus(status) {
       if (!comment) {
         return
       }
-      const firstChild = lastSelectedXpathlNode.firstChild
-      if (firstChild.nodeType === Node.TEXT_NODE) {
-        // indentation text
-        lastSelectedXpathlNode.insertBefore(firstChild.cloneNode(), lastSelectedXpathlNode.firstChild)
-      }
       const commentNode = xmlEditor.getXmlTree().createComment(comment)
-      lastSelectedXpathlNode.insertBefore(commentNode, lastSelectedXpathlNode.firstChild.nextSibling)
+      const firstElementNode = Array.from(lastSelectedXpathlNode.childNodes).find(node => node.nodeType === Node.ELEMENT_NODE)
+      const insertBeforeNode = firstElementNode || lastSelectedXpathlNode.firstChild || lastSelectedXpathlNode
+      if (insertBeforeNode.previousSibling && insertBeforeNode.previousSibling.nodeType === Node.TEXT_NODE) {
+        // indentation text
+        lastSelectedXpathlNode.insertBefore(insertBeforeNode.previousSibling.cloneNode(), insertBeforeNode)
+      } 
+      lastSelectedXpathlNode.insertBefore(commentNode, insertBeforeNode.previousSibling)
       break;
     default:
       lastSelectedXpathlNode.setAttribute("status", status)
@@ -420,8 +433,10 @@ async function populateFilesSelectbox() {
 async function validateAndSave(filePath) {
   let diagnostics = await xmlEditor.validateXml()
   if (diagnostics.length) {
-    showMessage("There are validation errors in the document. The document has not been saved. Correct and try again.", "Validation Errors")
-    return diagnostics;
+    const doSave = confirm("There are validation errors in the document. Do you really want to save it?")
+    if (!doSave) {
+      return
+    }
   }
   console.log("Saving XML on server...");
   await client.saveXml(xmlEditor.getXML(), filePath)
@@ -538,10 +553,10 @@ function setSelectionXpath(xpath) {
   }
 
   // update xpath
-  const xpathHasChanged = currentXpath !== xpath
+  const xpathHasChanged = selectionXpath !== xpath
   const size = getXpathResultSize(xpath)
   if (xpathHasChanged) {
-    currentXpath = xpath
+    selectionXpath = xpath
     console.log("Setting xpath", xpath)
     updateIndexUI(index, size)
   }
@@ -558,7 +573,7 @@ function updateIndexUI(index, size) {
 }
 
 function getSelectionXpath() {
-  return currentXpath || $('#select-xpath').value;
+  return selectionXpath || $('#select-xpath').value;
 }
 
 function xpathInfo(xpath) {
