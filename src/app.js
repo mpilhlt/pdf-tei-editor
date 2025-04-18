@@ -1,24 +1,38 @@
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
 import *  as client from './client.js'
-import { $, UrlHash, showMessage, addBringToForegroundListener, makeDraggable } from './browser-utils.js'
+import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggable } from './browser-utils.js'
 import { uploadFile } from './upload.js'
 import { disableValidation } from './lint.js'
 import { Spinner } from '../web/spinner.js' // included so that <custom-spinner> element is defined
 import { isDoi } from './utils.js'
+import { xml } from '@codemirror/lang-xml'
 
-// the last selected node, can be null
+/**
+ * The XML editor
+ * @type {XMLEditor}
+ */
+let xmlEditor = null;
+
+/**
+ * The XML editor
+ * @type {PDFJSViewer}
+ */
+let pdfViewer = null;
+
+/**
+ * The last selected node, can be null
+ * @type {Node?}
+ */
 let lastSelectedXmlNode = null;
+
+// the path from which to load the autocompletion data
+const tagDataPath = '/data/tei.json'
+
 // the index of the currently selected node, 1-based
 let currentIndex = null;
 // the current xpath
 let currentXpath = null;
-// the xml editor
-let xmlEditor = null;
-// the pdf viewer
-let pdfViewer = null;
-// the path from which to load the autocompletion data
-const tagDataPath = '/data/tei.json'
 
 try {
   main()
@@ -130,8 +144,8 @@ async function configureNavigation() {
   // make navigation draggable
   makeDraggable($('#navigation'))
 
-  // configure "verification" button
-  $('#btn-node-status').addEventListener('click', handleStatusUpdate)
+  // configure "status" buttons
+  $$('.btn-node-status').forEach(btn => btn.addEventListener('click', evt => setNodeStatus(evt.target.dataset.status)))
 
   // allow to input node index
   $('#selection-index').addEventListener('click', onClickSelectionIndex)
@@ -153,34 +167,42 @@ async function handleSelectionChange(ranges) {
   if (!selectedNode) return;
 
   const selectionTagName = xpathInfo(getSelectionXpath()).tagName
-  const statusButton = $('#btn-node-status')
-  if (selectedNode.tagName === selectionTagName) { 
-    statusButton.disabled = false
-    if (pdfViewer) {
-      await searchNodeContentsInPdf(selectedNode)
-    }
-  } else {
-    statusButton.disabled = true
+  const tagNameMatches = selectedNode.tagName === selectionTagName
+  $$('.btn-node-status').forEach(btn => btn.disabled = !tagNameMatches)
+  if (tagNameMatches && pdfViewer) {
+    await searchNodeContentsInPdf(selectedNode)
   }
 }
 
-function handleStatusUpdate() {
-  if (lastSelectedXmlNode) {
-    const status = lastSelectedXmlNode.getAttribute('status');
-    switch (status) {
-      case "unresolved":
-        lastSelectedXmlNode.setAttribute("status", "verified")
-        break;
-      case "verified":
-        lastSelectedXmlNode.removeAttribute("status")
-        break;
-      default:
-        lastSelectedXmlNode.setAttribute("status", "unresolved")
-    }
-    // update the editor content
-    window.xmlEditor.updateFromXmlTree()
-    selectByIndex(currentIndex)
+async function setNodeStatus(status) {
+  if (!lastSelectedXmlNode) {
+    return
   }
+  switch (status) {
+    case "":
+      lastSelectedXmlNode.removeAttribute("status")
+      break;
+    case "comment":
+      const comment = prompt(`Please enter the comment to store in the ${lastSelectedXmlNode.tagName} node`)
+      if (!comment) {
+        return
+      }
+      const firstChild = lastSelectedXmlNode.firstChild
+      if (firstChild.nodeType === Node.TEXT_NODE) {
+        // indentation text
+        lastSelectedXmlNode.insertBefore(firstChild.cloneNode(), lastSelectedXmlNode.firstChild)
+      }
+      const commentNode = xmlEditor.getXmlTree().createComment(comment)
+      lastSelectedXmlNode.insertBefore(commentNode, lastSelectedXmlNode.firstChild.nextSibling)
+      break;
+    default:
+      lastSelectedXmlNode.setAttribute("status", status)
+  }
+  // update the editor content
+  await xmlEditor.updateEditorFromNode(lastSelectedXmlNode)
+
+  // reselect the current node when done
+  selectByIndex(currentIndex)
 }
 
 function onClickSelectionIndex() {
@@ -319,7 +341,7 @@ async function populateFilesSelectbox() {
   if (fileData) {
     // select the filename
     fileSelectbox.selectedIndex = files.indexOf(fileData);
-    
+
     // populate the version selectbox depending on the selected file
     if (fileData.versions) {
       fileData.versions.forEach((version) => {
@@ -355,7 +377,7 @@ async function populateFilesSelectbox() {
 
   // listen for changes in the diff version selectbox  
   async function loadDiff() {
-    
+
     const xmlPath = diffSelectbox.value
     if (xmlPath !== versionSelectbox.value) {
       showSpinner('Computing file differences, please wait...')
@@ -406,7 +428,7 @@ async function populateXpathSelectbox() {
       {
         "xpath": "//tei:biblStruct[@status='unresolved']",
         "label": "Unresolved <biblStruct>"
-      },      
+      },
       {
         "xpath": null,
         "label": "Custom XPath"
@@ -480,7 +502,7 @@ function setSelectionXpath(xpath) {
   }
 
   const selectbox = $('#select-xpath');
-  
+
   if (selectbox.value !== xpath) {
     let index = Array.from(selectbox.options).findIndex(option => option.value === xpath)
     // custom xpath
@@ -506,7 +528,7 @@ function setSelectionXpath(xpath) {
   // select the first node
   if (size > 0 && (index !== currentIndex || xpathHasChanged)) {
     selectByIndex(index)
-  } 
+  }
 }
 
 function updateIndexUI(index, size) {
@@ -519,6 +541,9 @@ function getSelectionXpath() {
 }
 
 function xpathInfo(xpath) {
+  if (!xpath) {
+    throw new Error("No xpath given")
+  }
   const xpathRegex = /^(.*?\/)?(?:(\w+):)?(\w+)(.*)?$/;
   const match = xpath.match(xpathRegex);
   if (match) {

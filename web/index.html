@@ -17,6 +17,7 @@
       Version: <select id="select-version"></select>
       Diff: <select id="select-diff-version"></select>
       <button id="btn-load-document">New PDF</button>
+      <button id="btn-save-document" disabled>Validate & Save</button>  
     </div>
     <div id="editors">
       <div id="pdf-viewer"></div>
@@ -30,16 +31,19 @@
   <!-- floating navigation bar -->
   <div id="navigation">
     <div id="biblstruct-nav">
+      <span class="navigation-text">Navigate by</span>
       <select id="select-xpath"></select>
-      <button id="btn-edit-xpath">XPath</button>
+      <button id="btn-edit-xpath">Custom XPath</button>
       <button id="btn-prev-node" disabled>&lt;&lt;</button>
-      <span id="selection-index"></span>
+      <span id="selection-index" class="navigation-text"></span>
       <button id="btn-next-node" disabled>&gt;&gt;</button>
     </div>
     <div id="command-buttons">
-      
-      <button id="btn-node-status" disabled>Change node status</button>
-      <button id="btn-save-document" disabled>Validate & Save</button>  
+      <span class="navigation-text">Mark node as</span>
+      <button class="btn-node-status" data-status="verified" disabled>Verified</button>
+      <button class="btn-node-status" data-status="unresolved" disabled>Unresolved</button>
+      <button class="btn-node-status" data-status="" disabled>Clear node</button>
+      <button class="btn-node-status" data-status="comment" disabled>Add comment</button>
     </div>
   </div>
   <!-- User message -->

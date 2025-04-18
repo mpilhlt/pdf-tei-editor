@@ -96,7 +96,7 @@ iframe {
   border: 1px solid yellow;
 }
 
-#selection-index {
+#navigation * {
   font-size: small;
 }
 

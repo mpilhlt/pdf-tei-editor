@@ -11,8 +11,13 @@ export function $(selector) {
   return node
 }
 
+/**
+ * Given a selector, return all matching DOM nodes in an array
+ * @param {string} selector The DOM selector
+ * @returns {Array}
+ */
 export function $$(selector) {
-  return document.querySelectorAll(selector)
+  return Array.from(document.querySelectorAll(selector))
 }
  
 export function addBringToForegroundListener(selectors) {

@@ -16,16 +16,25 @@ export class XMLEditor extends EventTarget {
   static EVENT_XML_CHANGED = "xmlChanged";
 
   // private members
+  /** @type {EditorView} */
   #view = null; // the EditorView instance
   #documentVersion = null; // internal counter to track changes in the document
   #editorContent = ''; // a cache of the raw text content of the editor
+  /** @type {Map} */
   #syntaxToDom = null; // Maps syntax tree nodes to DOM nodes
+  /** @type {Map} */
   #domToSyntax = null; // Maps DOM nodes to syntax tree nodes
+  /** @type {Document} */
   #xmlTree = null; // the xml document tree
+  /** @type {SyntaxNode} */
   #syntaxTree = null; // the lezer syntax tree
   #isReady = false;
+  /** @type {Promise} */
   #readyPromise = null;
+  /** @type {Object} */
   #mergeViewExt = null; // will be created on-demand
+  /**  @type {XMLSerializer} */
+  #serializer = null; // an XMLSerializer object or one with a compatible API
 
   /**
    * Constructs an XMLEditor instance.
@@ -58,6 +67,8 @@ export class XMLEditor extends EventTarget {
       state: EditorState.create({ doc: "", extensions }),
       parent: editorDiv
     });
+
+    this.#serializer = new XMLSerializer();
   }
 
   isReady() {
@@ -191,26 +202,81 @@ export class XMLEditor extends EventTarget {
    * @returns {string} 
    */
   getXML() {
-    const serializer = new XMLSerializer();
-    return serializer.serializeToString(this.#xmlTree);
+    this.#serialize(this.#xmlTree)
   }
 
-  updateFromXmlTree() {
-    this.#view.dispatch({
-      changes: { from: 0, to: this.#view.state.doc.length, insert: this.getXML() }
-    });
+  /**
+   * serializes the node (or the complete xmlTree if no node is given) to an XML string
+   */
+  #serialize(node) {
+    if (!(node && node instanceof Node)) {
+      throw new TypeError("No node provided")
+    }
+    return this.#serializer.serializeToString(node);
   }
 
+  async #waitForEditorUpdate(changes) {
+    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, resolve, { once: true }))
+    this.#view.dispatch({ changes });
+    await promise;
+  }
+
+  /**
+   * Updates the editor from a node in the XML Document. Returns a promise that resolves when
+   * the editor is updated
+   * @param {Node} node A XML DOM node
+   */
+  async updateEditorFromNode(node) {
+    const syntaxNode = this.getSyntaxNodeFromDomNode(node)
+    const xmlstring = this.#serialize(node).replace(/ xmlns=".+?"/, '')
+    const changes = { from: syntaxNode.from, to: syntaxNode.to, insert: xmlstring }
+    await this.#waitForEditorUpdate(changes);
+  }
+
+  /**
+   * Update the complete editor content from the XML Document. When dealing with small changes,
+   * use {@link updateEditorFromNode} instead.
+   */
+  async updateEditorFromXmlTree() {
+    const changes = { from: 0, to: this.#view.state.doc.length, insert: this.getXML() }
+    await this.#waitForEditorUpdate(changes);
+  }
+
+  /**
+   * Returns the internal syntax tree reprentation of the XML document
+   * @returns {Object}
+   */
   getSyntaxTree() {
     return this.#syntaxTree;
   }
 
-  getSyntaxNodeFromDomNode(domNode) {
+  /**
+   * Given a XML DOM node, return its position in the editor
+   * @param {Node} domNode The node in the XML DOM
+   * @returns {number}
+   */
+  getDomNodePosition(domNode) {
     return this.#domToSyntax.get(domNode)
   }
 
+  /**
+   * Given a node in the XML document, return the corresponding syntax tree object
+   * @param {Node} domNode A node in the XML DOM 
+   * @returns {Object} A SyntaxNode objectz
+   */
+  getSyntaxNodeFromDomNode(domNode) {
+    const pos = this.getDomNodePosition(domNode)
+    return this.getSyntaxNodeAt(pos)
+  }
+
+  /**
+   * Given a node in the syntax tree, return the corresponding node in the XML DOM
+   * @param {Object} syntaxNode The syntax node
+   * @returns {Node}
+   */
   getDomNodeFromSyntaxNode(syntaxNode) {
-    return this.#syntaxToDom.get(syntaxNode)
+    const pos = syntaxNode.from
+    return this.getDomNodeAt(pos)
   }
 
   /**
