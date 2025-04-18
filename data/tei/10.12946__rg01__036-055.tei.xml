@@ -631,18 +631,38 @@
       <biblStruct source="fn17">
         <analytic>
           <title level="a">A further Account of Mr. Boyle's Experimental History of Cold</title>
+          <author>
+            <persName>
+              <forename>Henry</forename>
+              <surname>Oldenburg</surname>
+            </persName>
+          </author>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="volume" from="I" to="I">I (1665-66)</biblScope>
+          <biblScope unit="page" from="46" to="52">46-52</biblScope>
         </monogr>
-        <citedRange>46-52</citedRange>
+        <citedRange from="47" to="47">47</citedRange>
       </biblStruct>
       <biblStruct source="fn17">
         <analytic>
           <title level="a">Preface</title>
+          <author>
+            <persName>
+              <forename>Henry</forename>
+              <surname>Oldenburg</surname>
+            </persName>
+          </author>          
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
+          <imprint>
+            <date/>
+          </imprint>
           <biblScope unit="volume">IX-X</biblScope>
         </monogr>
         <citedRange>1-3</citedRange>
@@ -669,7 +689,10 @@
       <biblStruct source="fn19">
         <monogr>
           <title level="m">Mémoires de l'Académie Royales des Sciences. Depuis 1666 jusqu'à 1699</title>
-          <biblScope unit="volume">2</biblScope>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="volume" from="3" to="4">3-4</biblScope>
         </monogr>
       </biblStruct>
       <biblStruct source="fn20">
@@ -678,9 +701,13 @@
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
-          <biblScope unit="volume">IX-X</biblScope>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="volume" from="IX" to="X">IX-X (1674-75)</biblScope>
+          <biblScope unit="page" from="41" to="47">41-47</biblScope>
         </monogr>
-        <citedRange>41-47</citedRange>
+        <citedRange>42</citedRange>
       </biblStruct>
       <biblStruct source="fn21">
         <analytic>
@@ -688,6 +715,10 @@
         </analytic>
         <monogr>
           <title level="m">Histoire et Mémoires de l'Académie Royale des Sciences</title>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="volume" from="2" to="2">2 (1686-99)</biblScope>
         </monogr>
       </biblStruct>
       <biblStruct source="fn21">
@@ -852,15 +883,20 @@
         </monogr>
         <citedRange>105-111</citedRange>
       </biblStruct>
-      <biblStruct source="fn31">
+      <biblStruct source="fn31" status="unresolved">
+        <!--How should "i.e. Henry Oldenburg" be encoded?-->
         <analytic>
           <title level="a">Réponse de Mr. Hook aux considérations de Mr. Auzout, contenuë dans une Lettre écrite à l'Auteur des Philosophical Transactions [i. e. Henry Oldenburg]. Traduite d'Anglais</title>
         </analytic>
         <monogr>
           <title level="m">Mémoires de l'Académie Royale des Sciences Depuis 1666 jusqu'à 1699</title>
-          <biblScope unit="volume">7</biblScope>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="volume" from="7" to="7">7</biblScope>
+          <biblScope unit="page" from="77" to="84">77-84</biblScope>
         </monogr>
-        <citedRange>77-84</citedRange>
+        <citedRange>77</citedRange>
       </biblStruct>
       <biblStruct source="fn31">
         <monogr>
@@ -873,15 +909,30 @@
         <citedRange>64-69</citedRange>
       </biblStruct>
       <biblStruct source="fn32">
-        <monogr>
-          <title level="m">Descriptio Globi Intellectualis</title>
+        <analytic>
+          <title level="a">Descriptio Globi Intellectualis</title>
           <author>
             <persName>
-              <forename>FRANCIS</forename>
-              <surname>BACON</surname>
+              <forename>Francis</forename>
+              <surname>Bacon</surname>
             </persName>
           </author>
+        </analytic>
+        <monogr>
+          <title level="m">Lord Bacon's Works</title>
+          <editor>
+            <persName>
+              <forename>Basil</forename>
+              <surname>Montagu</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1825-34</date>
+            <pubPlace>London</pubPlace>
+          </imprint>
+          <biblScope unit="volume">11</biblScope>
         </monogr>
+        <citedRange unit="page" from="11" to="11">11</citedRange>
       </biblStruct>
       <biblStruct source="fn33">
         <analytic>
