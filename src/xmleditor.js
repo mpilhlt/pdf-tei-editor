@@ -200,17 +200,23 @@ export class XMLEditor extends EventTarget {
    * @returns {string} 
    */
   getXML() {
-    return this.#serialize(this.#xmlTree)
+    return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
   }
 
   /**
    * serializes the node (or the complete xmlTree if no node is given) to an XML string
+   * @param {Node} node The node to serialize
+   * @param {boolean} [removeNamespaces=true] Whether to remove the namespace declaration in the output
    */
-  #serialize(node) {
+  #serialize(node, removeNamespaces=true) {
     if (!(node && node instanceof Node)) {
       throw new TypeError("No node provided")
     }
-    return this.#serializer.serializeToString(node);
+    let xmlstring = this.#serializer.serializeToString(node)
+    if (removeNamespaces) {
+      xmlstring = xmlstring.replace(/ xmlns=".+?"/, '')
+    }
+    return xmlstring
   }
 
   async #waitForEditorUpdate(changes) {
@@ -226,7 +232,7 @@ export class XMLEditor extends EventTarget {
    */
   async updateEditorFromNode(node) {
     const syntaxNode = this.getSyntaxNodeFromDomNode(node)
-    const xmlstring = this.#serialize(node).replace(/ xmlns=".+?"/, '')
+    const xmlstring = this.#serialize(node)
     const changes = { from: syntaxNode.from, to: syntaxNode.to, insert: xmlstring }
     await this.#waitForEditorUpdate(changes);
   }
@@ -242,13 +248,12 @@ export class XMLEditor extends EventTarget {
 
   /**
    * Updates the given node with the XML text from the editor
-   * NOT IMPLEMENTED YET
    * @param {Node} node A XML node
    */
   async updateNodeFromEditor(node){
-    throw new Error("Not implemented")
-    //   const syntaxNode = this.getSyntaxNodeFromDomNode(node)
-
+    const {to, from} = this.getSyntaxNodeFromDomNode(node)
+    node.outerHTML = this.#view.state.doc.sliceString(from, to)
+    this.#updateMaps()
   }
 
   /**
@@ -530,10 +535,11 @@ export class XMLEditor extends EventTarget {
    * @returns {Promise<void>}
    */
   async sync() {
-    await this.#updateTrees()
     try {
-      this.#updateMaps()
-      this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
+      if (await this.#updateTrees()) {
+        this.#updateMaps()
+        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));  
+      }
     } catch (error) {
       console.warn("Linking DOM and syntax tree failed:", error.message)
     }
@@ -541,7 +547,7 @@ export class XMLEditor extends EventTarget {
 
   /**
    * Synchronizes the syntax tree and the XML DOM
-   * @returns {Promise<void>}
+   * @returns {Promise<Boolean>} Returns true if the tree updates were successful and false if not
    */
   async #updateTrees() {
     this.#editorContent = this.#view.state.doc.toString();
@@ -551,7 +557,7 @@ export class XMLEditor extends EventTarget {
       console.log("Document was updated but is not well-formed")
       this.#editorContent = null;
       this.#xmlTree = null;
-      return;
+      return false;
     }
     console.log("Document was updated and is well-formed.")
     this.#xmlTree = doc;
@@ -565,6 +571,7 @@ export class XMLEditor extends EventTarget {
       console.log('Syntax tree is ready.')
     }
     this.#syntaxTree = syntaxTree(this.#view.state);
+    return true
   }
 
   /**

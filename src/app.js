@@ -186,7 +186,7 @@ async function configureNavigation() {
  * @returns 
  */
 async function handleSelectionChange(ranges) {
-  if (ranges.length === 0) return;
+  if (ranges.length === 0 || !xmlEditor.getXmlTree()) return;
 
   // we care only for the first selected node or node parent matching our xpath
   const xpathTagName = xpathInfo(getSelectionXpath()).tagName
@@ -236,7 +236,7 @@ async function setNodeStatus(status) {
     return
   }
   // update XML document from editor content
-  xmlEditor.sync()
+  xmlEditor.updateNodeFromEditor(lastSelectedXpathlNode)
 
   // set/remove the status attribute
   switch (status) {
@@ -627,7 +627,7 @@ function xpathInfo(xpath) {
 }
 
 function getXpathResultSize(xpath) {
-  return window.xmlEditor.countDomNodesByXpath(xpath)
+  return xmlEditor.countDomNodesByXpath(xpath)
 }
 
 function getSelectionXpathResultSize() {
