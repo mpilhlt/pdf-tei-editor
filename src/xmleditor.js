@@ -36,6 +36,7 @@ export class XMLEditor extends EventTarget {
   /**  @type {XMLSerializer} */
   #serializer = null; // an XMLSerializer object or one with a compatible API
 
+
   /**
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
@@ -175,7 +176,6 @@ export class XMLEditor extends EventTarget {
       // remove it?
     }
   }
-
 
   getDocumentVersion() {
     return this.#documentVersion;

@@ -24,7 +24,7 @@ let pdfViewer = null;
  * The last selected node, can be null
  * @type {Node?}
  */
-let lastSelectedXmlNode = null;
+let lastSelectedXpathlNode = null;
 
 // the path from which to load the autocompletion data
 const tagDataPath = '/data/tei.json'
@@ -160,46 +160,67 @@ async function configureNavigation() {
 async function handleSelectionChange(ranges) {
   if (ranges.length === 0) return;
 
-  // we care only for the first selected node
+  // we care only for the first selected node or node parent matching our xpath
+  const xpathTagName = xpathInfo(getSelectionXpath()).tagName
   const range = ranges[0]
-  const selectedNode = range.node;
-  lastSelectedXmlNode = selectedNode;
-  if (!selectedNode) return;
+  
+  /** @type {Node} */
+  let selectedNode = range.node;
+  if (!selectedNode) {
+    lastSelectedXpathlNode = null;
+    return;
+  }
 
-  const selectionTagName = xpathInfo(getSelectionXpath()).tagName
-  const tagNameMatches = selectedNode.tagName === selectionTagName
-  $$('.btn-node-status').forEach(btn => btn.disabled = !tagNameMatches)
-  if (tagNameMatches && pdfViewer) {
+  // find parent if tagname doesn't match
+  while (selectedNode) {
+    if (selectedNode.tagName === xpathTagName) break;
+    selectedNode = selectedNode.parentNode
+  }
+
+  console.log({selectedNode, xpathTagName})
+
+  // update the buttons
+  $$('.btn-node-status').forEach(btn => btn.disabled = !Boolean(selectedNode))
+
+  // do nothing if we cannot find a matching parent or the parent is the same as before
+  if (!selectedNode || lastSelectedXpathlNode === selectedNode) {
+    return;
+  }
+  
+  // remember new (parent) node
+  lastSelectedXpathlNode = selectedNode;
+  
+  if (pdfViewer) {
     await searchNodeContentsInPdf(selectedNode)
   }
 }
 
 async function setNodeStatus(status) {
-  if (!lastSelectedXmlNode) {
+  if (!lastSelectedXpathlNode) {
     return
   }
   switch (status) {
     case "":
-      lastSelectedXmlNode.removeAttribute("status")
+      lastSelectedXpathlNode.removeAttribute("status")
       break;
     case "comment":
-      const comment = prompt(`Please enter the comment to store in the ${lastSelectedXmlNode.tagName} node`)
+      const comment = prompt(`Please enter the comment to store in the ${lastSelectedXpathlNode.tagName} node`)
       if (!comment) {
         return
       }
-      const firstChild = lastSelectedXmlNode.firstChild
+      const firstChild = lastSelectedXpathlNode.firstChild
       if (firstChild.nodeType === Node.TEXT_NODE) {
         // indentation text
-        lastSelectedXmlNode.insertBefore(firstChild.cloneNode(), lastSelectedXmlNode.firstChild)
+        lastSelectedXpathlNode.insertBefore(firstChild.cloneNode(), lastSelectedXpathlNode.firstChild)
       }
       const commentNode = xmlEditor.getXmlTree().createComment(comment)
-      lastSelectedXmlNode.insertBefore(commentNode, lastSelectedXmlNode.firstChild.nextSibling)
+      lastSelectedXpathlNode.insertBefore(commentNode, lastSelectedXpathlNode.firstChild.nextSibling)
       break;
     default:
-      lastSelectedXmlNode.setAttribute("status", status)
+      lastSelectedXpathlNode.setAttribute("status", status)
   }
   // update the editor content
-  await xmlEditor.updateEditorFromNode(lastSelectedXmlNode)
+  await xmlEditor.updateEditorFromNode(lastSelectedXpathlNode)
 
   // reselect the current node when done
   selectByIndex(currentIndex)
