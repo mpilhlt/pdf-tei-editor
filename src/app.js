@@ -4,9 +4,11 @@ import *  as client from './client.js'
 import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggable } from './browser-utils.js'
 import { uploadFile } from './upload.js'
 import { disableValidation } from './lint.js'
-import { Spinner } from '../web/spinner.js' // included so that <custom-spinner> element is defined
 import { isDoi } from './utils.js'
-import { xml } from '@codemirror/lang-xml'
+
+// custom elements
+import { Spinner } from '../web/spinner.js'
+import { Switch } from '../web/switch.js' 
 
 /**
  * The XML editor
@@ -159,6 +161,9 @@ async function configureNavigation() {
 
   // save current version
   $('#btn-save-document').addEventListener('click', onClickSaveButton);
+
+  // auto-search switch
+  $('#switch-auto-search').addEventListener('change', evt => console.log(`Auto search is: ${evt.detail.checked}`))
 }
 
 /**
@@ -201,8 +206,13 @@ async function handleSelectionChange(ranges) {
   // remember new (parent) node
   lastSelectedXpathlNode = selectedNode;
   lastCursorXpath = newCursorXpath
+
+  // update URL, this is a hack
+  const {basename} = xpathInfo(lastCursorXpath)
+  UrlHash.set("xpath", `//tei:${basename}` )
   
-  if (pdfViewer) {
+  const autoSearchSwitch = $('#switch-auto-search')
+  if (pdfViewer && autoSearchSwitch.checked) {
     await searchNodeContentsInPdf(selectedNode)
   }
 }
@@ -580,15 +590,16 @@ function xpathInfo(xpath) {
   if (!xpath) {
     throw new Error("No xpath given")
   }
-  const xpathRegex = /^(.*?\/)?(?:(\w+):)?(\w+)(.*)?$/;
-  const match = xpath.match(xpathRegex);
+  const xpathRegex = /^(?:(\w+):)?(\w+)(.*)?$/;
+  const basename = xpath.split("/").pop()
+  const match = basename.match(xpathRegex);
+  const parentPath = xpath.slice(0, xpath.length - basename.length)  // Everything before the final tag name (or empty string)
+  const prefix =  match[1] || "" // Namespace prefix (e.g., "tei") or empty string
+  const tagName = match[2]  // Tag name (e.g., "biblStruct")
+  const attributeSelectors = match[3] || "" // Attribute selectors (e.g., "[@status='verified']") or empty string
+
   if (match) {
-    return {
-      prefix: match[1] || "",  // Everything before the final tag name (or empty string)
-      namespace: match[2] || "", // Namespace (e.g., "tei") or empty string
-      tagName: match[3],      // Tag name (e.g., "biblStruct")
-      attributes: match[4] || ""   // Attribute selectors (e.g., "[@status='verified']") or empty string
-    };
+    return { parentPath, prefix, tagName, attributeSelectors, basename };
   } else {
     return null;  // Indicate no match
   }
