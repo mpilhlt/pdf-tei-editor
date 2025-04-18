@@ -966,15 +966,26 @@
         </monogr>
         <citedRange>692-698, 703</citedRange>
       </biblStruct>
-      <biblStruct source="fn35">
-        <monogr>
-          <title level="m">Leviathan</title>
+      <biblStruct source="fn35" status="unresolved">
+         <!--shoud this be extracted? <monogr> data taken from fn 5 -->
+         <monogr>
+          <title level="m">Leviathan and the Air-Pump: Hobbes, Boyle and the Experimental Life</title>
           <author>
             <persName>
-              <forename>SHAPIN</forename>
-              <surname>SCHAFFER</surname>
+              <forename>Steven</forename>
+              <surname>Shapin</surname>
             </persName>
           </author>
+          <author>
+            <persName>
+              <forename>Simon</forename>
+              <surname>Schaffer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1985</date>
+            <pubPlace>Princeton</pubPlace>
+          </imprint>
         </monogr>
         <citedRange>25-30 et passim</citedRange>
       </biblStruct>
@@ -1058,49 +1069,13 @@
         </monogr>
         <citedRange>298</citedRange>
       </biblStruct>
-      <biblStruct source="fn38">
-        <monogr>
-          <title level="m">The Elements</title>
-          <author>
-            <persName>
-              <forename>Francis</forename>
-              <surname>Bacon</surname>
-            </persName>
-          </author>
-        </monogr>
-        <citedRange>72</citedRange>
-      </biblStruct>
-      <biblStruct source="fn39">
-        <monogr>
-          <title level="m">Culture of Fact</title>
-          <author>
-            <persName>
-              <forename>William</forename>
-            <surname>Blackstone</surname>
-            </persName>
-          </author>
-        </monogr>
-        <citedRange>44-45</citedRange>
-      </biblStruct>
-      <biblStruct source="fn40">
-        <monogr>
-          <title level="m">Francis Bacon</title>
-          <author>
-            <persName>
-              <forename>Julian</forename>
-              <surname>Martin</surname>
-            </persName>
-          </author>
-        </monogr>
-        <citedRange>164-170</citedRange>
-      </biblStruct>
       <biblStruct source="fn41">
         <monogr>
           <title level="m">An Essay Concerning Human Understanding</title>
           <author>
             <persName>
-              <forename>JOHN</forename>
-              <surname>LOCKE</surname>
+              <forename>John</forename>
+              <surname>Locke</surname>
             </persName>
           </author>
           <editor>
@@ -1113,9 +1088,10 @@
             <date>1959</date>
             <pubPlace>New York</pubPlace>
           </imprint>
-          <biblScope unit="volume">II</biblScope>
+          <biblScope unit="volume" from="II" to="II">II</biblScope>
         </monogr>
-        <citedRange>129</citedRange>
+        <citedRange unit="chapter" from="I" to="I">I</citedRange>
+        <citedRange unit="section" from="10" to="10">10</citedRange>
       </biblStruct>
       <biblStruct source="fn42">
         <monogr>
