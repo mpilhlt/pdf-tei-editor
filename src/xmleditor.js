@@ -3,7 +3,7 @@ import { EditorState, EditorSelection, StateEffect } from "@codemirror/state";
 import {unifiedMergeView} from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { linter, lintGutter, forceLinting } from "@codemirror/lint";
+import { linter, lintGutter, forEachDiagnostic } from "@codemirror/lint";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
 import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation } from './lint.js';
@@ -136,8 +136,6 @@ export class XMLEditor extends EventTarget {
     // await the new validation promise once it is available
     const diagnostics = await new Promise(resolve => {
       console.log("Waiting for validation to start...")
-      $('#btn-save-document').innerHTML = "Waiting for validation..."
-      $('#btn-save-document').disabled = true;
       function checkIfValidating() {
         if (isValidating()) {
           let validationPromise = anyCurrentValidation();
@@ -240,6 +238,17 @@ export class XMLEditor extends EventTarget {
   async updateEditorFromXmlTree() {
     const changes = { from: 0, to: this.#view.state.doc.length, insert: this.getXML() }
     await this.#waitForEditorUpdate(changes);
+  }
+
+  /**
+   * Updates the given node with the XML text from the editor
+   * NOT IMPLEMENTED YET
+   * @param {Node} node A XML node
+   */
+  async updateNodeFromEditor(node){
+    throw new Error("Not implemented")
+    //   const syntaxNode = this.getSyntaxNodeFromDomNode(node)
+
   }
 
   /**
@@ -501,18 +510,39 @@ export class XMLEditor extends EventTarget {
 
   async #onUpdate(update) {
     if (update.docChanged) {
+      // update document version
       this.#documentVersion += 1;
-      await this.#updateTrees()
-      try {
-        this.#updateMaps()
-        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
-      } catch (error) {
-        // todo: this often fails the first time for reasons unknown, needs to be investigated
-        console.warn("Linking DOM and syntax tree failed:", error.message)
-      }
+      
+      // update diagnostics
+      forEachDiagnostic(this.#view.state, (d, from, to) => {
+        d.from = from;
+        d.to = to;
+      });
+
+      // sync DOM with text content and syntax tree
+      await this.sync()
     }
   }
 
+
+  /**
+   * Synchronize xml document with the editor content
+   * @returns {Promise<void>}
+   */
+  async sync() {
+    await this.#updateTrees()
+    try {
+      this.#updateMaps()
+      this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
+    } catch (error) {
+      console.warn("Linking DOM and syntax tree failed:", error.message)
+    }
+  }
+
+  /**
+   * Synchronizes the syntax tree and the XML DOM
+   * @returns {Promise<void>}
+   */
   async #updateTrees() {
     this.#editorContent = this.#view.state.doc.toString();
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
@@ -537,11 +567,13 @@ export class XMLEditor extends EventTarget {
     this.#syntaxTree = syntaxTree(this.#view.state);
   }
 
+  /**
+   * Creates internal maps that link the syntax tree and the dom nodes
+   */
   #updateMaps() {
     const maps = linkSyntaxTreeWithDOM(this.#view, this.#syntaxTree.topNode, this.#xmlTree);
     const { syntaxToDom, domToSyntax } = maps;
     this.#syntaxToDom = syntaxToDom;
     this.#domToSyntax = domToSyntax;
   }
-
 }

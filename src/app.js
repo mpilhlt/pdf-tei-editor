@@ -3,8 +3,9 @@ import { PDFJSViewer } from './pdfviewer.js'
 import *  as client from './client.js'
 import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggable } from './browser-utils.js'
 import { uploadFile } from './upload.js'
-import { disableValidation } from './lint.js'
+import { disableValidation, validationEvents } from './lint.js'
 import { isDoi } from './utils.js'
+
 
 // custom elements
 import { Spinner } from '../web/spinner.js'
@@ -89,7 +90,7 @@ async function main() {
 
     // measure how long it takes to validate the document
     const startTime = new Date().getTime();
-    xmlEditor.validateXml().then(() => {
+    validateXml().then(() => {
       const endTime = new Date().getTime();
       const seconds = Math.round((endTime - startTime) / 1000);
       // disable validation if it took longer than 3 seconds
@@ -100,6 +101,7 @@ async function main() {
 
   hideSpinner()
   $('#document-nav').show()
+  $('#btn-save-document').enable()
   console.log("Application ready.")
 }
 
@@ -158,6 +160,18 @@ async function configureNavigation() {
 
   // load new document
   $('#btn-load-document').addEventListener('click', onClickLoadDocument)
+
+  // validate xml
+  const validateBtn = $('#btn-validate-document')
+  validateBtn.addEventListener('click', onClickValidateButton);
+  validationEvents.addEventListener(validationEvents.EVENT.START, () => {
+    validateBtn.innerHTML = "Validating XML..."
+    validateBtn.disable();
+  })
+  validationEvents.addEventListener(validationEvents.EVENT.END, () => {
+    validateBtn.innerHTML = "Validate"
+    validateBtn.enable();
+  })
 
   // save current version
   $('#btn-save-document').addEventListener('click', onClickSaveButton);
@@ -221,6 +235,10 @@ async function setNodeStatus(status) {
   if (!lastSelectedXpathlNode) {
     return
   }
+  // update XML document from editor content
+  xmlEditor.sync()
+
+  // set/remove the status attribute
   switch (status) {
     case "":
       lastSelectedXpathlNode.removeAttribute("status")
@@ -276,9 +294,14 @@ async function onClickLoadDocument() {
   }
 }
 
+async function onClickValidateButton() {
+  $('#btn-validate-document').disable()
+  await validateXml()
+}
+
 async function onClickSaveButton() {
   const xmlPath = $('#select-version').value;
-  await validateAndSave(xmlPath)
+  await saveXml(xmlPath)
 }
 
 async function extractFromPDF(filename) {
@@ -434,20 +457,18 @@ async function populateFilesSelectbox() {
   diffSelectbox.addEventListener('change', loadDiff);
 }
 
+async function validateXml() {
+  console.log("Validating XML...")
+  await xmlEditor.validateXml()
+}
+
 /**
  * Triggers a validation of the document (or waits for an ongoing one to finish), and saves the document
  * if validation was successful
  * @param {StorageManager} filePath 
  * @returns {Promise<void>}
  */
-async function validateAndSave(filePath) {
-  let diagnostics = await xmlEditor.validateXml()
-  if (diagnostics.length) {
-    const doSave = confirm("There are validation errors in the document. Do you really want to save it?")
-    if (!doSave) {
-      return
-    }
-  }
+async function saveXml(filePath) {
   console.log("Saving XML on server...");
   await client.saveXml(xmlEditor.getXML(), filePath)
 }
@@ -621,9 +642,9 @@ function getSelectionXpathResultSize() {
 function selectByIndex(index) {
   // Wait for editor to be ready
   if (!xmlEditor.isReady()) {
-    console.warn("Editor not ready, deferring selection")
+    console.log("Editor not ready, deferring selection")
     xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
-      console.warn("Editor is now ready")
+      console.log("Editor is now ready")
       selectByIndex(index)
     }, { once: true })
     return;

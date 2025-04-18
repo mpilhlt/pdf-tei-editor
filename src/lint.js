@@ -10,6 +10,25 @@ let validationPromise = null;
 let lastDiagnostics = [];
 
 /**
+ * A anonymous class singleton that emits events concerning the validation
+ */
+export const validationEvents = new (class extends EventTarget {
+  EVENT = {
+    START: "validation-start",
+    END: "validation-end"
+  }
+  constructor(){
+    super()
+  }
+  emitStartEvent() {
+    this.dispatchEvent(new Event(this.EVENT.START))
+  }
+  emitEndEvent() {
+    this.dispatchEvent(new Event(this.EVENT.END))
+  }
+})
+
+/**
  * Whether a validation is ongoing,
  * @returns {boolean}
  */
@@ -24,7 +43,7 @@ export function isValidating(){
  */
 export async function anyCurrentValidation() {
   //console.log("Current validation promise", validationPromise)
-  return validationPromise ? validationPromise : Promise.resolve([])
+  return isValidating() ? validationPromise : Promise.resolve([])
 }
 
 /**
@@ -68,9 +87,6 @@ export async function lintSource(view) {
     //console.log("Ignoring validation request: Validation is ongoing.")
     return lastDiagnostics;
   }
-
-  $('#btn-save-document').innerHTML = "Validating XML..."
-  $('#btn-save-document').disabled = true;
   
   validationInProgress = true;
   // promise that will resolve when the validation results are back from the server and the validation source is not outdated
@@ -78,7 +94,9 @@ export async function lintSource(view) {
     while (true) {
       validatedVersion = window.xmlEditor.getDocumentVersion();
       console.log(`Requesting validation for document version ${validatedVersion}...`)
+      validationEvents.emitStartEvent()
       let { errors: validationErrors } = await validateXml(xml);
+      validationEvents.emitEndEvent()
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`)
       // check if document has changed in the meantime
       if (validatedVersion != window.xmlEditor.getDocumentVersion()) {
@@ -124,10 +142,6 @@ export async function lintSource(view) {
     }
     return { from, to, severity: "error", message: error.reason };
   }).filter(Boolean);
-
-  // (re-)enable save button
-  $('#btn-save-document').innerHTML = "Validate & Save"
-  $('#btn-save-document').disabled = false;
 
   lastDiagnostics = diagnostics;
   return diagnostics;
