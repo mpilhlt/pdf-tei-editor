@@ -7,6 +7,15 @@ export function $(selector) {
   Object.assign(node, {
     hide: node.hide === undefined ? () => {node.style.visibility = "hidden"} : node.hide,
     show: node.show === undefined ? () => {node.style.visibility = "visible"} : node.show,
+    text: node.text === undefined ? (text) => {node.textContent = text; return node} : node.text,
+    html: node.html === undefined ? (html) => {node.innerHTML = html; return node} : node.html,
+    remove: node.remove === undefined ? () => {node.parentNode.removeChild(node)} : node.remove,
+    addClass: node.addClass === undefined ? (className) => {node.classList.add(className)} : node.addClass,
+    removeClass: node.removeClass === undefined ? (className) => {node.classList.remove(className)} : node.removeClass,
+    toggleClass: node.toggleClass === undefined ? (className) => {node.classList.toggle(className)} : node.toggleClass,
+    on: node.on === undefined ? (event, callback) => {node.addEventListener(event, callback)} : node.on,
+    off: node.off === undefined ? (event, callback) => {node.removeEventListener(event, callback)} : node.off,
+    once: node.once === undefined ? (event, callback) => {node.addEventListener(event, callback, { once: true })} : node.once,
     enable: node.disabled !== undefined ? () => { node.disabled = false } : undefined,
     disable: node.disabled !== undefined ? () => { node.disabled = true } : undefined
   })
