@@ -221,16 +221,23 @@ async function handleSelectionChange(ranges) {
   lastSelectedXpathlNode = selectedNode;
   lastCursorXpath = newCursorXpath
 
-  // update URL, this is a hack
+  // update URL
   const {basename} = xpathInfo(lastCursorXpath)
-  UrlHash.set("xpath", `//tei:${basename}` )
+  UrlHash.set("xpath", `//tei:${basename}` ) // the xpath from the DOM does not have a prefix
   
+  // trigger auto-search if enabled
   const autoSearchSwitch = $('#switch-auto-search')
   if (pdfViewer && autoSearchSwitch.checked) {
     await searchNodeContentsInPdf(selectedNode)
   }
 }
 
+/**
+ * Sets the status attribute of the last selected node, or removes it if the status is empty
+ * @param {string} status The new status, can be "verified", "unresolved", "comment" or ""
+ * @returns {Promise<void>}
+ * @throws {Error} If the status is not one of the allowed values
+ */
 async function setNodeStatus(status) {
   if (!lastSelectedXpathlNode) {
     return
@@ -244,18 +251,19 @@ async function setNodeStatus(status) {
       lastSelectedXpathlNode.removeAttribute("status")
       break;
     case "comment":
-      const comment = prompt(`Please enter the comment to store in the ${lastSelectedXpathlNode.tagName} node`)
-      if (!comment) {
-        return
-      }
-      const commentNode = xmlEditor.getXmlTree().createComment(comment)
-      const firstElementNode = Array.from(lastSelectedXpathlNode.childNodes).find(node => node.nodeType === Node.ELEMENT_NODE)
-      const insertBeforeNode = firstElementNode || lastSelectedXpathlNode.firstChild || lastSelectedXpathlNode
-      if (insertBeforeNode.previousSibling && insertBeforeNode.previousSibling.nodeType === Node.TEXT_NODE) {
-        // indentation text
-        lastSelectedXpathlNode.insertBefore(insertBeforeNode.previousSibling.cloneNode(), insertBeforeNode)
-      } 
-      lastSelectedXpathlNode.insertBefore(commentNode, insertBeforeNode.previousSibling)
+      throw new Error("Commenting not implemented yet")
+      // const comment = prompt(`Please enter the comment to store in the ${lastSelectedXpathlNode.tagName} node`)
+      // if (!comment) {
+      //   return
+      // }
+      // const commentNode = xmlEditor.getXmlTree().createComment(comment)
+      // const firstElementNode = Array.from(lastSelectedXpathlNode.childNodes).find(node => node.nodeType === Node.ELEMENT_NODE)
+      // const insertBeforeNode = firstElementNode || lastSelectedXpathlNode.firstChild || lastSelectedXpathlNode
+      // if (insertBeforeNode.previousSibling && insertBeforeNode.previousSibling.nodeType === Node.TEXT_NODE) {
+      //   // indentation text
+      //   lastSelectedXpathlNode.insertBefore(insertBeforeNode.previousSibling.cloneNode(), insertBeforeNode)
+      // } 
+      // lastSelectedXpathlNode.insertBefore(commentNode, insertBeforeNode.previousSibling)
       break;
     default:
       lastSelectedXpathlNode.setAttribute("status", status)
@@ -344,7 +352,7 @@ function reloadApp({ xml, pdf }) {
 
 /**
  * Given a Node in the XML, search and highlight its text content in the PDF Viewer
- * @param {Node} node 
+ * @param {Element} node 
  */
 async function searchNodeContentsInPdf(node) {
 
@@ -359,6 +367,17 @@ async function searchNodeContentsInPdf(node) {
 
   // make the list of search terms unique
   searchTerms = Array.from(new Set(searchTerms))
+
+  // add footnote
+  if (node.hasAttribute("source")) {
+    const source = node.getAttribute("source")
+    // get footnote number 
+    if (source.slice(0, 2) === "fn") {
+      // remove the doi prefix
+      searchTerms.unshift(source.slice(2) + " ")
+    }
+  }
+
   // start search
   await window.pdfViewer.search(searchTerms);
 }

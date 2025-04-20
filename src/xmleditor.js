@@ -3,10 +3,10 @@ import { EditorState, EditorSelection, StateEffect } from "@codemirror/state";
 import {unifiedMergeView} from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { linter, lintGutter, forEachDiagnostic } from "@codemirror/lint";
+import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
-import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation } from './lint.js';
+import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation, updateCachedDiagnostics } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
 import { $ } from './browser-utils.js';
 
@@ -131,17 +131,21 @@ export class XMLEditor extends EventTarget {
     }
     //console.log("Triggering a validation")
     // otherwise, we trigger the linting
+
+     // remove all diagnostics
+    this.clearDiagnostics();
+   
+    // save disabled state and enable validation
     let disabledState = validationIsDisabled()
     disableValidation(false)
+
     // await the new validation promise once it is available
     const diagnostics = await new Promise(resolve => {
       console.log("Waiting for validation to start...")
       function checkIfValidating() {
         if (isValidating()) {
           let validationPromise = anyCurrentValidation();
-          validationPromise.then(result => {
-            resolve(result);
-          });
+          validationPromise.then(resolve);
         } else {
           setTimeout(checkIfValidating, 100);
         }
@@ -152,6 +156,15 @@ export class XMLEditor extends EventTarget {
     return diagnostics
   }
 
+  /**
+   * Removes all diagnostics from the editor
+   */
+  clearDiagnostics() {
+    updateCachedDiagnostics([])
+    this.#view.dispatch(setDiagnostics(this.#view.state, []))
+  }
+
+  
   async showMergeView(xmlPathOrString){
     // remove existing merge view
     this.hideMergeView()
@@ -518,11 +531,24 @@ export class XMLEditor extends EventTarget {
       // update document version
       this.#documentVersion += 1;
       
-      // update diagnostics
+      // remove diagnostics that are in the range of the changes
+      const diagnostics = [];
+      const changedRangeValues = Object.values(update.changedRanges[0])
+      const minRange = Math.min(...changedRangeValues)
+      const maxRange = Math.max(...changedRangeValues) 
       forEachDiagnostic(this.#view.state, (d, from, to) => {
-        d.from = from;
-        d.to = to;
+        if (d.from > maxRange || d.to < minRange) {
+          // only keep diagnostics that are outside the changed range
+          d.from = from;
+          d.to = to;
+          diagnostics.push(d);
+        } else { 
+          console.log("Removing diagnostic", d)
+        }
       });
+      updateCachedDiagnostics(diagnostics)
+      // remove the diagnostics from the editor
+      this.#view.dispatch(setDiagnostics(this.#view.state, diagnostics));
 
       // sync DOM with text content and syntax tree
       await this.sync()

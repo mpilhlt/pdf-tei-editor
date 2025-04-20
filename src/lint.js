@@ -62,6 +62,14 @@ export function validationIsDisabled() {
 }
 
 /**
+ * Update the diagnostics list that is returned when the editor reqests a validation and the validation is disabled
+ * @param {Array<Object>} diagnostics The updated list of diagnostics
+ */
+export function updateCachedDiagnostics(diagnostics) {
+  lastDiagnostics = diagnostics;
+}
+
+/**
  * The ListSource function 
  * @param {EditorView} view The current editor object
  * @returns {Array<>} An array of Diagnostic objects, or empty if validation passed without errors
@@ -92,7 +100,7 @@ export async function lintSource(view) {
   // promise that will resolve when the validation results are back from the server and the validation source is not outdated
   validationPromise = new Promise(async (resolve, reject) => {
     while (true) {
-      validatedVersion = window.xmlEditor.getDocumentVersion();
+      validatedVersion = window.xmlEditor.getDocumentVersion(); // how to avoid this hard link?
       console.log(`Requesting validation for document version ${validatedVersion}...`)
       validationEvents.emitStartEvent()
       let { errors: validationErrors } = await validateXml(xml);
