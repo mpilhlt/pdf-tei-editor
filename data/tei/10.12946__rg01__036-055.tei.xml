@@ -1115,18 +1115,6 @@
         </monogr>
         <citedRange>126</citedRange>
       </biblStruct>
-      <biblStruct source="fn43">
-        <monogr>
-          <title level="m">Culture of Fact</title>
-          <author>
-            <persName>
-              <forename>SHAPIRO</forename>
-              <surname>BARBARA J.</surname>
-            </persName>
-          </author>
-        </monogr>
-        <citedRange>53-55</citedRange>
-      </biblStruct>
       <biblStruct source="fn44">
         <analytic>
           <title level="a">Histoire de renouvellement de l'Académie Royale des Sciences en M.DC.XCIX. et les éloges historiques</title>
@@ -1145,24 +1133,6 @@
         </monogr>
         <citedRange>25-26</citedRange>
       </biblStruct>
-      <biblStruct source="fn45">
-        <monogr>
-          <title level="m">Wonders</title>
-          <author>
-            <persName>
-              <forename>John</forename>
-            <surname>Locke</surname>
-            </persName>
-          </author>
-          <author>
-            <persName>
-              <forename>Alexander</forename>
-            <surname>Campbell Fraser</surname>
-            </persName>
-          </author>
-        </monogr>
-        <citedRange>240-246</citedRange>
-      </biblStruct>
       <biblStruct source="fn46">
         <monogr>
           <title level="m">Historia animalium liber I. De quadrupedibus uiuparis</title>
@@ -1176,51 +1146,6 @@
             <date>1551-87</date>
             <pubPlace>Zürich</pubPlace>
           </imprint>
-        </monogr>
-      </biblStruct>
-      <biblStruct source="fn47">
-        <monogr>
-          <title level="m">Sylva sylvarum</title>
-          <author>
-            <persName>
-              <forename>FRANCIS</forename>
-              <surname>BACON</surname>
-            </persName>
-          </author>
-        </monogr>
-      </biblStruct>
-      <biblStruct source="fn48">
-        <monogr>
-          <title level="m">Sylva sylvarum</title>
-          <author>
-            <persName>
-              <forename>Francis</forename>
-              <surname>Bacon</surname>
-            </persName>
-          </author>
-        </monogr>
-      </biblStruct>
-      <biblStruct source="fn49">
-        <analytic>
-          <title level="a">Advancement of Learning</title>
-          <author>
-            <persName>
-              <forename>Raymund</forename>
-            <surname>Schmidt</surname>
-            </persName>
-          </author>
-        </analytic>
-        <citedRange>48</citedRange>
-      </biblStruct>
-      <biblStruct source="fn50">
-        <monogr>
-          <title level="m">Elements</title>
-          <author>
-            <persName>
-              <forename>BACON</forename>
-              <surname>FRANCIS</surname>
-            </persName>
-          </author>
         </monogr>
       </biblStruct>
       <biblStruct source="fn51">
@@ -1314,7 +1239,7 @@
         </monogr>
         <citedRange>51-72</citedRange>
       </biblStruct>
-      <biblStruct source="fn53">
+      <biblStruct source="fn53" status="unresolved">
         <analytic>
           <title level="a">Examen continué de diverses eaux minerales</title>
         </analytic>
@@ -1340,27 +1265,8 @@
         <citedRange>415-419</citedRange>
       </biblStruct>
       <biblStruct source="fn53">
-        <monogr>
-          <title level="j">Philosophical Transactions</title>
-          <biblScope unit="volume">1666-99</biblScope>
-        </monogr>
-        <citedRange>41-120</citedRange>
-      </biblStruct>
-      <biblStruct source="fn53">
         <analytic>
-          <title level="a">Inquiries for Persia</title>
-        </analytic>
-        <monogr>
-          <title level="j">Philosophical Transactions</title>
-          <imprint>
-            <date>1667</date>
-          </imprint>
-        </monogr>
-        <citedRange>420-421</citedRange>
-      </biblStruct>
-      <biblStruct source="fn53">
-        <analytic>
-          <title level="a">Inquiries for Virginia and the Bermudas</title>
+          <title level="a">Inquiries for Persia, Inquiries for Virginia and the Bermudas</title>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
@@ -1382,17 +1288,6 @@
         </monogr>
         <citedRange>444</citedRange>
       </biblStruct>
-      <biblStruct source="fn54">
-        <monogr>
-          <title level="m">Novum organum</title>
-          <author>
-            <persName>
-              <forename>Francis</forename>
-              <surname>Bacon</surname>
-            </persName>
-          </author>
-        </monogr>
-      </biblStruct>
       <biblStruct source="fn55">
         <analytic>
           <title level="a">Distributio operis</title>
@@ -1403,6 +1298,21 @@
             </persName>
           </author>
         </analytic>
+        <monogr>
+          <title level="m">Lord Bacon's Works</title>
+          <editor>
+            <persName>
+              <forename>Basil</forename>
+              <surname>Montagu</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1825-34</date>
+            <pubPlace>London</pubPlace>
+          </imprint>
+          <biblScope unit="volume">9</biblScope>
+        </monogr>
+        <citedRange from="175" to="175">175</citedRange>
       </biblStruct>
       <biblStruct source="fn56">
         <analytic>
@@ -1518,11 +1428,11 @@
         </monogr>
         <citedRange>152-163</citedRange>
       </biblStruct>
-      <biblStruct source="fn57">
-        <analytic>
-          <title level="a">Liechtensteiner Exkurse III</title>
-        </analytic>
+      <biblStruct source="fn57" status="unresolved">
+        <!-- Serie annotieren? -->
         <monogr>
+          <title level="m">Aufmerksamkeit</title>
+          <title level="s">Liechtensteiner Exkurse</title>
           <editor>
             <persName>
               <forename>Norbert</forename>
@@ -1545,13 +1455,13 @@
             <date>1998</date>
             <pubPlace>Eggingen</pubPlace>
           </imprint>
+          <biblScope unit="volume" from="3" to="3">III</biblScope>
         </monogr>
       </biblStruct>
       <biblStruct source="fn57">
-        <analytic>
-          <title level="a">Archäologie der literarischen Kommunikation VII</title>
-        </analytic>
         <monogr>
+          <title level="m">Aufmerksamkeiten</title>
+          <title level="s">Archäologie der literarischen Kommunikation</title>
           <editor>
             <persName>
               <forename>Aleida</forename>
@@ -1568,6 +1478,7 @@
             <date>2001</date>
             <pubPlace>München</pubPlace>
           </imprint>
+          <biblScope unit="volume" from="7" to="7">VII</biblScope>
         </monogr>
       </biblStruct>
     </listBibl>
