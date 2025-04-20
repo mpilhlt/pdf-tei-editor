@@ -527,32 +527,34 @@ export class XMLEditor extends EventTarget {
   }
 
   async #onUpdate(update) {
-    if (update.docChanged) {
-      // update document version
-      this.#documentVersion += 1;
-      
-      // remove diagnostics that are in the range of the changes
-      const diagnostics = [];
-      const changedRangeValues = Object.values(update.changedRanges[0])
-      const minRange = Math.min(...changedRangeValues)
-      const maxRange = Math.max(...changedRangeValues) 
-      forEachDiagnostic(this.#view.state, (d, from, to) => {
-        if (d.from > maxRange || d.to < minRange) {
-          // only keep diagnostics that are outside the changed range
-          d.from = from;
-          d.to = to;
-          diagnostics.push(d);
-        } else { 
-          console.log("Removing diagnostic", d)
-        }
-      });
-      updateCachedDiagnostics(diagnostics)
-      // remove the diagnostics from the editor
-      this.#view.dispatch(setDiagnostics(this.#view.state, diagnostics));
-
-      // sync DOM with text content and syntax tree
-      await this.sync()
+    if (!update.docChanged) {
+      return
     }
+    
+    // update document version
+    this.#documentVersion += 1;
+    
+    // remove diagnostics that are in the range of the changes
+    const diagnostics = [];
+    const changedRangeValues = Object.values(update.changedRanges[0])
+    const minRange = Math.min(...changedRangeValues)
+    const maxRange = Math.max(...changedRangeValues) 
+    forEachDiagnostic(this.#view.state, (d, from, to) => {
+      if (d.from > maxRange || d.to < minRange) {
+        // only keep diagnostics that are outside the changed range
+        d.from = from;
+        d.to = to;
+        diagnostics.push(d);
+      } else { 
+        console.log("Removing diagnostic", d)
+      }
+    });
+    updateCachedDiagnostics(diagnostics)
+    // remove the diagnostics from the editor
+    this.#view.dispatch(setDiagnostics(this.#view.state, diagnostics));
+
+    // sync DOM with text content and syntax tree
+    await this.sync()
   }
 
 

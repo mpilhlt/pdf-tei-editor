@@ -97,6 +97,10 @@ async function main() {
       console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
       disableValidation(seconds > 3)
     })
+
+    xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, async () => { 
+      $('#btn-save-document').text('Save').enable()
+    })
   }
 
   hideSpinner()
@@ -310,6 +314,7 @@ async function onClickValidateButton() {
 async function onClickSaveButton() {
   const xmlPath = $('#select-version').value;
   await saveXml(xmlPath)
+  $('#btn-save-document').text('Saved').disable()
 }
 
 async function extractFromPDF(filename) {
