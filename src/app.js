@@ -8,7 +8,7 @@ import { isDoi } from './utils.js'
 
 // custom elements
 import '../web/spinner.js'
-import '../web/switch.js' 
+import '../web/switch.js'
 import '../web/list-editor.js'
 
 /**
@@ -39,7 +39,7 @@ let currentIndex = null;
 let selectionXpath = null;
 
 // the xpath of the cursor within the xml document
-let lastCursorXpath = null; 
+let lastCursorXpath = null;
 
 try {
   main()
@@ -58,6 +58,7 @@ async function main() {
   const urlParams = new URLSearchParams(window.location.search);
   const pdfPath = window.pdfPath = urlParams.get('pdf');
   const xmlPath = window.xmlPath = urlParams.get('xml');
+  const diffXmlPath = window.diffXmlPath = urlParams.get('diff');
 
   console.log(`Starting Application\nPDF: ${pdfPath}\nXML: ${xmlPath}`);
 
@@ -86,7 +87,7 @@ async function main() {
     });
 
     // this triggers the initial selection
-    setSelectionXpathFromUrl()
+    onHashChange()
 
     // measure how long it takes to validate the document
     const startTime = new Date().getTime();
@@ -98,7 +99,7 @@ async function main() {
       disableValidation(seconds > 3)
     })
 
-    xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, async () => { 
+    xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, async () => {
       $('#btn-save-document').text('Save').enable()
     })
   }
@@ -151,10 +152,13 @@ async function loadPdfViewer(pdfPath) {
 }
 
 
+/**
+ * Code to configure the initial state of the UI
+ */
 async function setupUI() {
 
   await Promise.all([
-    populateFilesSelectbox(),
+    populateFilesSelectboxes(),
     populateXpathSelectbox()
   ])
 
@@ -199,7 +203,7 @@ async function setupUI() {
 
   // edit prompt
   $('#btn-edit-prompt').addEventListener('click', () => $('#dlg-prompt-editor').showModal())
-  $('#prompt-editor').addEventListener('close', () => $('#dlg-prompt-editor').close() )
+  $('#prompt-editor').addEventListener('close', () => $('#dlg-prompt-editor').close())
 }
 
 /**
@@ -213,12 +217,12 @@ async function handleSelectionChange(ranges) {
   // we care only for the first selected node or node parent matching our xpath
   const xpathTagName = xpathInfo(getSelectionXpath()).tagName
   const range = ranges[0]
-  
+
   /** @type {Node} */
   let selectedNode = range.node;
   if (!selectedNode) {
     lastSelectedXpathlNode = null;
-    lastCursorXpath = null; 
+    lastCursorXpath = null;
     return;
   }
 
@@ -238,15 +242,15 @@ async function handleSelectionChange(ranges) {
   if (!selectedNode || lastSelectedXpathlNode === selectedNode || newCursorXpath === lastCursorXpath) {
     return;
   }
-  
+
   // remember new (parent) node
   lastSelectedXpathlNode = selectedNode;
   lastCursorXpath = newCursorXpath
 
   // update URL
-  const {basename} = xpathInfo(lastCursorXpath)
-  UrlHash.set("xpath", `//tei:${basename}` ) // the xpath from the DOM does not have a prefix
-  
+  const { basename } = xpathInfo(lastCursorXpath)
+  UrlHash.set("xpath", `//tei:${basename}`) // the xpath from the DOM does not have a prefix
+
   // trigger auto-search if enabled
   const autoSearchSwitch = $('#switch-auto-search')
   if (pdfViewer && autoSearchSwitch.checked) {
@@ -344,8 +348,8 @@ async function onClickExtractBtn() {
   }
   let doi;
   try {
-    doi = getDoiFromXml()  
-  } catch(error) {
+    doi = getDoiFromXml()
+  } catch (error) {
     console.warn(error.message)
   }
   extractFromPDF(fileData.pdf, doi)
@@ -360,10 +364,10 @@ async function onAutoSearchSwitchChange(evt) {
 }
 
 function getDoiFromXml() {
-  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent 
+  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
 }
 
-async function extractFromPDF(filename, doi="") {
+async function extractFromPDF(filename, doi = "") {
   if (doi === "") {
     if (filename.match(/^10\./)) {
       // treat as a DOI-like filename
@@ -384,7 +388,7 @@ async function extractFromPDF(filename, doi="") {
       return;
     } else if (!isDoi(doi)) {
       alert(`${doi} does not seem to be a DOI, please try again.`)
-      return  
+      return
     }
   }
   showSpinner('Extracting references, please wait')
@@ -446,7 +450,7 @@ function documentLabel(fileData) {
 /**
  * Populates the selectbox for file name and version
  */
-async function populateFilesSelectbox() {
+async function populateFilesSelectboxes() {
 
   // the selectboxes to populate
   const fileSelectbox = $('#select-doc')
@@ -491,7 +495,17 @@ async function populateFilesSelectbox() {
         diffSelectbox.appendChild(option.cloneNode(true))
       })
 
+      // set the version of the selectbox to the URL 
       versionSelectbox.selectedIndex = fileData.versions.findIndex(version => version.path === xmlPath)
+
+      // set the diff selectbox to the URL value, if given
+      if (UrlHash.get("diff")) {
+        const diffIndex = fileData.versions.findIndex(version => version.path === UrlHash.get("diff"))
+        if (diffIndex) {
+          // trigger the diff mode with a timeout
+          setTimeout(() => { diffSelectbox.selectedIndex = diffIndex; loadDiff() }, 1000)
+        }
+      }
       diffSelectbox.selectedIndex = versionSelectbox.selectedIndex
     }
   }
@@ -516,11 +530,13 @@ async function populateFilesSelectbox() {
 
   // listen for changes in the diff version selectbox  
   async function loadDiff() {
-
-    const xmlPath = diffSelectbox.value
-    if (xmlPath !== versionSelectbox.value) {
+    const diffXmlPath = diffSelectbox.value
+    if (UrlHash.get('diff') !== diffXmlPath) {
+      UrlHash.set('diff', diffXmlPath)
+    }
+    if (diffXmlPath !== versionSelectbox.value) {
       showSpinner('Computing file differences, please wait...')
-      xmlEditor.showMergeView(xmlPath)
+      await xmlEditor.showMergeView(diffXmlPath)
       hideSpinner()
     } else {
       loadFilesFromSelectedId()
@@ -604,7 +620,7 @@ async function populateXpathSelectbox() {
     });
 
     // update selectbox according to the URL hash
-    window.addEventListener('hashchange', setSelectionXpathFromUrl);
+    window.addEventListener('hashchange', onHashChange);
 
     // setup click handlers
     $('#btn-prev-node').addEventListener('click', () => previousNode());
@@ -616,11 +632,11 @@ async function populateXpathSelectbox() {
 }
 
 /**
- * Reads the selection xpath from the URL. If no is given, takes it from the selectbox value
+ * Calls when the URL hash values change. Handles selection xpath and diff xml path
  */
-function setSelectionXpathFromUrl() {
+function onHashChange() {
   const xpath = UrlHash.get("xpath");
-  if (xpath) {
+  if (xpath && xpath !== getSelectionXpath()) {
     setSelectionXpath(xpath)
   } else {
     setSelectionXpath(getSelectionXpath())
@@ -687,7 +703,7 @@ function xpathInfo(xpath) {
   const basename = xpath.split("/").pop()
   const match = basename.match(xpathRegex);
   const parentPath = xpath.slice(0, xpath.length - basename.length)  // Everything before the final tag name (or empty string)
-  const prefix =  match[1] || "" // Namespace prefix (e.g., "tei") or empty string
+  const prefix = match[1] || "" // Namespace prefix (e.g., "tei") or empty string
   const tagName = match[2]  // Tag name (e.g., "biblStruct")
   const attributeSelectors = match[3] || "" // Attribute selectors (e.g., "[@status='verified']") or empty string
 
