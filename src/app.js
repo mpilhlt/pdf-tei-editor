@@ -6,10 +6,10 @@ import { uploadFile } from './upload.js'
 import { disableValidation, validationEvents } from './lint.js'
 import { isDoi } from './utils.js'
 
-
 // custom elements
-import { Spinner } from '../web/spinner.js'
-import { Switch } from '../web/switch.js' 
+import '../web/spinner.js'
+import '../web/switch.js' 
+import '../web/list-editor.js'
 
 /**
  * The XML editor
@@ -69,7 +69,7 @@ async function main() {
     await Promise.all([
       pdfPath ? loadPdfViewer(pdfPath) : null,
       xmlPath ? loadXmlEditor(xmlPath, tagDataPath) : null,
-      configureNavigation()
+      setupUI()
     ]).catch(e => { throw e; })
   } catch (error) {
     spinner.hide();
@@ -103,6 +103,17 @@ async function main() {
     })
   }
 
+  // load & save prompt data
+  client.loadInstructions().then(data => {
+    const promptEditor = $('#prompt-editor');
+    promptEditor.data = data;
+    promptEditor.addEventListener('data-changed', evt => {
+      client.saveInstructions(evt.detail)
+    })
+    $('#btn-edit-prompt').enable()
+  })
+
+  // finish initialization
   hideSpinner()
   $('#document-nav').show()
   $('#btn-save-document').enable()
@@ -140,7 +151,7 @@ async function loadPdfViewer(pdfPath) {
 }
 
 
-async function configureNavigation() {
+async function setupUI() {
 
   await Promise.all([
     populateFilesSelectbox(),
@@ -165,6 +176,9 @@ async function configureNavigation() {
   // load new document
   $('#btn-load-document').addEventListener('click', onClickLoadDocument)
 
+  // extract from current PDF
+  $('#btn-extract').addEventListener('click', onClickExtractBtn)
+
   // validate xml
   const validateBtn = $('#btn-validate-document')
   validateBtn.addEventListener('click', onClickValidateButton);
@@ -181,7 +195,11 @@ async function configureNavigation() {
   $('#btn-save-document').addEventListener('click', onClickSaveButton);
 
   // auto-search switch
-  $('#switch-auto-search').addEventListener('change', evt => console.log(`Auto search is: ${evt.detail.checked}`))
+  $('#switch-auto-search').addEventListener('change', onAutoSearchSwitchChange)
+
+  // edit prompt
+  $('#btn-edit-prompt').addEventListener('click', () => $('#dlg-prompt-editor').showModal())
+  $('#prompt-editor').addEventListener('close', () => $('#dlg-prompt-editor').close() )
 }
 
 /**
@@ -317,27 +335,57 @@ async function onClickSaveButton() {
   $('#btn-save-document').text('Saved').disable()
 }
 
-async function extractFromPDF(filename) {
-  let doi = ""
-  if (filename.match(/^10\./)) {
-    // treat as a DOI-like filename
-    // do we have URL-encoded filenames?
-    doi = filename.slice(0, -4)
-    if (decodeURIComponent(doi) !== doi) {
-      // filename is URL-encoded DOI
-      doi = decodeURIComponent(doi)
-    } else {
-      // custom decoding 
-      doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/')
-    }
+async function onClickExtractBtn() {
+  const pdfPath = $('#select-doc').value;
+  const fileData = (await client.getFileList()).files.find(file => file.id === pdfPath)
+  if (!fileData) {
+    alert("No file selected")
+    return
   }
-  const msg = "Please enter the DOI of the PDF, this will add metadata to the generated TEI document"
-  doi = prompt(msg, doi)
-  if (doi === null) {
-    return;
-  } else if (!isDoi(doi)) {
-    alert(`${doi} does not seem to be a DOI, please try again.`)
-    return;
+  let doi;
+  try {
+    doi = getDoiFromXml()  
+  } catch(error) {
+    console.warn(error.message)
+  }
+  extractFromPDF(fileData.pdf, doi)
+}
+
+async function onAutoSearchSwitchChange(evt) {
+  const checked = evt.detail.checked
+  console.log(`Auto search is: ${checked}`)
+  if (checked) {
+    await searchNodeContentsInPdf(lastSelectedXpathlNode)
+  }
+}
+
+function getDoiFromXml() {
+  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent 
+}
+
+async function extractFromPDF(filename, doi="") {
+  if (doi === "") {
+    if (filename.match(/^10\./)) {
+      // treat as a DOI-like filename
+      // do we have URL-encoded filenames?
+      doi = filename.slice(0, -4)
+      if (decodeURIComponent(doi) !== doi) {
+        // filename is URL-encoded DOI
+        doi = decodeURIComponent(doi)
+      } else {
+        // custom decoding 
+        doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/')
+      }
+    }
+    const msg = "Please enter the DOI of the PDF, this will add metadata to the generated TEI document"
+    doi = prompt(msg, doi)
+    if (doi === null) {
+      // user cancelled
+      return;
+    } else if (!isDoi(doi)) {
+      alert(`${doi} does not seem to be a DOI, please try again.`)
+      return  
+    }
   }
   showSpinner('Extracting references, please wait')
   try {

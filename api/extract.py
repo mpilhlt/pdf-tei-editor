@@ -1,24 +1,26 @@
-from flask import Blueprint, request, jsonify, current_app
-from lxml import etree
-from glob import glob
 import os
 import requests
 import re
+from flask import Blueprint, request, jsonify, current_app
+from lxml import etree
+from glob import glob
 from pathlib import Path
 from shutil import move
 from lib.decorators import handle_api_errors
 from lib.server_utils import ApiError, get_gold_tei_path, make_timestamp
-
+import json
 
 DOI_REGEX = r"^10.\d{4,9}/[-._;()/:A-Z0-9]+$"  # from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")  # set in .env
 
+prompt_path = os.path.join(os.path.dirname(__file__), "..", "data", "prompt.json")
+
 # import llamore from GitHub source
 if os.path.isdir("llamore"):
     import sys
-
     sys.path.append("llamore/src")
     from llamore import GeminiExtractor
+    from llamore import LineByLinePrompter
     from llamore import TeiBiblStruct
 else:
     print("LLamore repo does not exist, extraction service is not available")
@@ -44,14 +46,10 @@ def extract():
     if pdf_filename == "":
         raise ApiError("Missing PDF file name")
 
-    UPLOAD_DIR = current_app.config["UPLOAD_DIR"]
-    WEB_ROOT = current_app.config["WEB_ROOT"]
+    # todo: if the header has been sent, use that 
+    # tei_header = data.get("teiHeader", None)
 
-    pdf_path = Path(os.path.join(UPLOAD_DIR, pdf_filename))
-    if not pdf_path.exists():
-        raise ApiError(f"File {pdf_filename} has not been uploaded.")
-
-    # handle DOI
+    # get file id from DOI or file name
     doi = data.get("doi", "")
     if doi != "":
         # if a (file-system-encoded) DOI is given, use it
@@ -60,9 +58,20 @@ def extract():
         # otherwise use filename of the upload
         file_id = Path(pdf_filename).stem
 
-    # rename and move PDF
-    gold_pdf_path = os.path.join(WEB_ROOT, "data", "pdf", file_id + ".pdf")
-    move(pdf_path, gold_pdf_path)
+    # file paths
+    UPLOAD_DIR = current_app.config["UPLOAD_DIR"]
+    WEB_ROOT = current_app.config["WEB_ROOT"]
+    GOLD_DIR = os.path.join(WEB_ROOT, "data", "pdf")
+
+    uplodad_pdf_path = Path(os.path.join(UPLOAD_DIR, pdf_filename))
+    gold_pdf_path = Path(os.path.join(GOLD_DIR, file_id + ".pdf"))
+
+    # check for uploaded file
+    if uplodad_pdf_path.exists():
+        # rename and move PDF
+        move(uplodad_pdf_path, gold_pdf_path)
+    elif not gold_pdf_path.exists():
+        raise ApiError(f"File {pdf_filename} has not been uploaded.")        
 
     # generate TEI via reference extraction using LLamore
     tei_xml = tei_from_pdf(doi, gold_pdf_path)
@@ -125,8 +134,25 @@ def remove_whitespace(element):
 
 
 def extract_refs_from_pdf(pdf_path: str) -> etree.Element:
+    """
+    Extract references from a PDF file using the Gemini API.
+    Args:
+        pdf_path (str): Path to the PDF file.
+    Returns:
+        etree.Element: XML element containing the extracted references.
+    """
     print(f"Extracting references from {pdf_path} via LLamore/Gemini")
-    extractor = GeminiExtractor(gemini_api_key)
+
+    class CustomPrompter(LineByLinePrompter):
+        # Override the user_prompt method to customize the prompt
+        def user_prompt(self, text= None, additional_instructions="In particular, follow these rules:\n\n") -> str:
+            with open(prompt_path, 'r', encoding="utf-8") as f:
+                instructions  = json.load(f)
+            additional_instructions += "\n\n".join([instruction.get('text') \
+                                                 for instruction in instructions if instruction.get('active')])
+            return super().user_prompt(text, additional_instructions)
+            
+    extractor = GeminiExtractor(api_key=gemini_api_key, prompter=CustomPrompter())
     references = extractor(pdf_path)
     parser = TeiBiblStruct()
     return etree.fromstring(parser.to_xml(references))
@@ -142,7 +168,6 @@ def create_tei_doc(schema_location: str) -> etree.Element:
 
 
 def create_tei_header(doi: str) -> etree.Element:
-
     # defaults
     authors = []
     date = ""
@@ -238,7 +263,8 @@ def create_tei_header(doi: str) -> etree.Element:
         </revisionDesc>        
     """
     revisionDesc = etree.SubElement(teiHeader, 'revisionDesc')
-    change = etree.SubElement(revisionDesc, 'change', when=make_timestamp().split(" ")[0])
-    etree.SubElement(change, 'desc').text = "Initial extraction"
+    timestamp = make_timestamp()
+    change = etree.SubElement(revisionDesc, 'change', when=timestamp.split(" ")[0])
+    etree.SubElement(change, 'desc').text = f"Extracted {timestamp}"
    
     return teiHeader

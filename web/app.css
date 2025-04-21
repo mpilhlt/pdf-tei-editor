@@ -100,6 +100,10 @@ iframe {
   font-size: small;
 }
 
+#dlg-prompt-editor {
+  height: 80vh;
+}
+
 /********************************************************************************
  * Dialogs
  ********************************************************************************/
@@ -111,10 +115,17 @@ dialog {
   border-radius: 5px;
   padding: 20px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  gap: 10px;
 }
 
 .dialog-header {
   font-size: 1.2em;
+  margin-bottom: 10px;
+}
+
+.dialog-body {
+  flex: 1;
+  overflow-y: auto;
   margin-bottom: 10px;
 }
 

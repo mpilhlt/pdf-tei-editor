@@ -77,11 +77,29 @@ export async function saveXml(xmlString, filePath) {
 }
 
 /**
- * Extracts the references from the given PDF and returns  
- * @param {string} pdfFileName The filename of the PDF to extract, which has been uploaded to the server earlier 
+ * Extracts the references from the given PDF and returns the XML with the extracted data
+ * @param {string} pdfFileName The filename of the PDF to extract
  * @param {string?} doi The DOI of the document, if any
  * @returns {Promise<Object>}
  */
 export async function extractReferences(filename, doi = '') {
   return callApi('/extract', 'POST', { pdf: filename, doi });
+}
+
+
+/**
+ * Returns the current prompt extraction instruction data
+ * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
+ */
+export async function loadInstructions() {
+  return callApi('/config/instructions', 'GET');
+}
+
+/**
+ * Returns the current prompt extraction instruction data
+ * @param {Array<Object>} instructions An array of {active,label,text} objects
+ * @returns {Promise<Object>}
+ */
+export async function saveInstructions(instructions) {
+  return callApi('/config/instructions', 'POST', instructions);
 }

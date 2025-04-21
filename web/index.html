@@ -16,9 +16,13 @@
       <select id="select-doc"></select><br/>
       Version: <select id="select-version"></select>
       Diff: <select id="select-diff-version"></select>
+      Extract from : 
       <button id="btn-load-document">New PDF</button>
-      <button id="btn-validate-document" disabled>Validate</button>  
-      <button id="btn-save-document" disabled>Save</button>  
+      <button id="btn-extract">Current PDF</button>
+      <button id="btn-validate-document" disabled>Validate XML</button>  
+      <button id="btn-save-document" disabled>Save XML</button> 
+      <button id="btn-edit-prompt" disabled>Edit prompt</button>  
+      
     </div>
     <div id="editors">
       <div id="pdf-viewer"></div>
@@ -48,6 +52,7 @@
     </div>
     <custom-switch id="switch-auto-search" label="Auto-search in PDF" label-on="On" label-off="off"/>
   </div>
+
   <!-- User message -->
   <dialog id="dialog-message">
     <div class="dialog-header">Title</div>
@@ -56,5 +61,15 @@
       <button class="dialog-close">Close</button>
     </div>
   </dialog>
+
+  <!-- Prompt editor -->
+   <dialog id="dlg-prompt-editor">
+    <div class="dialog-header">Edit LLM Prompt</div>
+    <div class="dialog-body">
+      <p>Below are the parts of the LLM prompt specific to the reference instruction. You can edit, add, remove, 
+        enable or disable different parts of the prompt, or change the order of the prompt fragments</p>
+      <json-list-editor id="prompt-editor"/>
+    </div>
+   </dialog>
 </body>
 </html>
