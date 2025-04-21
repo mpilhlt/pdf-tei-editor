@@ -204,6 +204,11 @@ async function setupUI() {
   // edit prompt
   $('#btn-edit-prompt').addEventListener('click', () => $('#dlg-prompt-editor').showModal())
   $('#prompt-editor').addEventListener('close', () => $('#dlg-prompt-editor').close())
+
+  // cleanup
+  $('#btn-cleanup').addEventListener('click', onClickBtnCleanup)
+  $('#btn-cleanup').disabled = $('#select-version').options.length < 2
+
 }
 
 /**
@@ -361,6 +366,20 @@ async function onAutoSearchSwitchChange(evt) {
   if (checked) {
     await searchNodeContentsInPdf(lastSelectedXpathlNode)
   }
+}
+
+async function onClickBtnCleanup() {
+  const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
+  if (!confirm(msg)) return;
+  const options = Array.from($('#select-version').options)
+  const filePathsToDelete = options
+    .slice(1) // skip the first option, which is the gold standard version  
+    .map(option => option.value)
+  if (filePathsToDelete.length > 0) {  
+    await client.deleteFiles(filePathsToDelete)
+  }
+  xmlPath = options[0].value
+  reloadApp({ xml: xmlPath, pdf: pdfPath })
 }
 
 function getDoiFromXml() {

@@ -19,6 +19,11 @@ body {
 #document-nav{
   height: 30px;
   visibility: hidden;
+  font-size: small;
+}
+
+#document-nav > button {
+  font-size: small;
 }
 
 #editors {

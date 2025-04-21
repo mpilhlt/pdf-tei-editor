@@ -22,544 +22,477 @@
         <bibl>Rainer Maria Kiesow. (2002). Ius sacrum. Giorgio Agamben und das nackte Recht. Rechtsgeschichte - Legal History, 2002(01), 056-070. DOI: 10.12946/rg01/056-070</bibl>
       </sourceDesc>
     </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="llamore">
+          <label>https://github.com/mpilhlt/llamore</label>
+        </application>
+        <application version="1.0" ident="pdf-tei-editor">
+          <label>https://github.com/mpilhlt/pdf-tei-editor</label>
+        </application>
+        <application version="1.0" ident="model">
+          <label>Gemini 2.0/LineByLinePrompter</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+    <revisionDesc>
+      <change when="2025-04-21">
+        <desc>Extracted 2025-04-21 20:14:54</desc>
+      </change>
+    </revisionDesc>
   </teiHeader>
-<standOff><listBibl>
-    <biblStruct>
-      <monogr>
-        <title level="m">Homo Sacer. Die souveräne Macht und das nackte Leben</title>
-        <author>
-          <persName>
-            <forename>GIORGIO</forename>
-            <surname>AGAMBEN</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>2002</date>
-          <pubPlace>Frankfurt am Main</pubPlace>
-        </imprint>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <analytic>
-        <title level="a">Biopolitik und Homo sacer. Zur Verzögerung einer Übersetzung von Giorgio Agamben</title>
-        <author>
-          <persName>
-            <forename>MANFRED</forename>
-            <surname>SCHNEIDER</surname>
-          </persName>
-        </author>
-      </analytic>
-      <monogr>
-        <title level="j">Frankfurter Rundschau</title>
-        <imprint>
-          <date>16. Februar 2001</date>
-        </imprint>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Sämtliche Erzählungen</title>
-        <author>
-          <persName>
-            <forename>FRANZ</forename>
-            <surname>KAFKA</surname>
-          </persName>
-        </author>
-        <imprint>
-          <publisher>Fischer Verlag</publisher>
-          <date>1970</date>
-          <pubPlace>Frankfurt</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>100 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Die Deportation des Menschen. Kafkas Erzählung »In der Strafkolonie« im europäischen Kontext</title>
-        <author>
-          <persName>
-            <forename>WALTER</forename>
-            <surname>MÜLLER-SEIDEL</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1986</date>
-          <pubPlace>Stuttgart</pubPlace>
-        </imprint>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <analytic>
-        <title level="a">Kafka Defended Against His Interpreters</title>
-        <author>
-          <persName>
-            <forename>GIORGIO</forename>
-            <surname>AGAMBEN</surname>
-          </persName>
-        </author>
-      </analytic>
-      <monogr>
-        <title level="m">Idea of Prose</title>
-        <imprint>
-          <date>1995</date>
-        </imprint>
-      </monogr>
-      <citedRange>137 f.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Sämtliche Erzählungen</title>
-        <author>
-          <persName>
-            <forename>FRANZ</forename>
-            <surname>KAFKA</surname>
-          </persName>
-        </author>
-      </monogr>
-      <citedRange>322 f.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Politische Theologie. Vier Kapitel zur Lehre von der Souveränität</title>
-        <author>
-          <persName>
-            <forename>CARL</forename>
-            <surname>SCHмітт</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1934</date>
-          <pubPlace>München und Leipzig</pubPlace>
-        </imprint>
-        <biblScope unit="volume">2</biblScope>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Vom Beruf unsrer Zeit für Gesetzgebung und Rechtswissenschaft</title>
-        <author>
-          <persName>
-            <forename>FRIEDRICH CARL</forename>
-            <surname>SAVIGNY</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1814</date>
-          <pubPlace>Heidelberg</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>30</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Der Prozeß</title>
-        <author>
-          <persName>
-            <forename>FRANZ</forename>
-            <surname>KAFKA</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1990</date>
-          <pubPlace>Frankfurt</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>205 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Kritik der praktischen Vernunft</title>
-        <author>
-          <persName>
-            <forename>IMMANUEL</forename>
-            <surname>KANT</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1983</date>
-          <pubPlace>Darmstadt</pubPlace>
-        </imprint>
-        <biblScope unit="volume">IV</biblScope>
-      </monogr>
-      <citedRange>136</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Das Kriminalrecht der Römer von Romulus bis auf Justinian</title>
-        <author>
-          <persName>
-            <forename>WILHELM</forename>
-            <surname>REIN</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1844</date>
-          <pubPlace>Leipzig</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>30 ff., 137 f.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Geist des römischen Rechts auf den verschiedenen Stufen seiner Entwicklung</title>
-        <author>
-          <persName>
-            <forename>RUDOLPH</forename>
-            <surname>von JHERING</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1852</date>
-          <pubPlace>Leipzig</pubPlace>
-        </imprint>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Römisches Strafrecht</title>
-        <author>
-          <persName>
-            <forename>THEODOR</forename>
-            <surname>MOMMSEN</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1899</date>
-          <pubPlace>Leipzig</pubPlace>
-        </imprint>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Zum ältesten Strafrecht der Kulturvölker. Fragen zur Rechtsvergleichung</title>
-        <author>
-          <persName>
-            <forename>HEINRICH</forename>
-            <surname>BRUNNER</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1905</date>
-          <pubPlace>Leipzig</pubPlace>
-        </imprint>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Das Tödtungsverbrechen im altrömischen Recht</title>
-        <author>
-          <persName>
-            <forename>E.</forename>
-            <surname>BRUNNENMEISTER</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1887</date>
-          <pubPlace>Leipzig</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>149 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Wirtschaft und Gesellschaft. Grundriss der verstehenden Soziologie</title>
-        <author>
-          <persName>
-            <forename>MAX</forename>
-            <surname>WEBER</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1956</date>
-          <pubPlace>Tübingen</pubPlace>
-        </imprint>
-        <biblScope unit="volume">2</biblScope>
-      </monogr>
-      <citedRange>389 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Römische Religionsgeschichte</title>
-        <author>
-          <persName>
-            <forename>KURT</forename>
-            <surname>LATTE</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1960</date>
-          <pubPlace>München</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>38 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Kleine Schriften zu Religion, Recht, Literatur und Sprache der Griechen und Römer</title>
-        <editor>
-          <persName>
-            <forename>GIGON</forename>
-            <surname>OLOF</surname>
-          </persName>
-        </editor>
-        <editor>
-          <persName>
-            <forename>BUCHWALD</forename>
-            <surname>WOLFGANG</surname>
-          </persName>
-        </editor>
-        <editor>
-          <persName>
-            <forename>KUNKEL</forename>
-            <surname>WOLFGANG</surname>
-          </persName>
-        </editor>
-        <imprint>
-          <date>1968</date>
-          <pubPlace>München</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>393 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Das römische Privatrecht</title>
-        <author>
-          <persName>
-            <forename>MAX</forename>
-            <surname>KASER</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1971</date>
-          <pubPlace>München</pubPlace>
-        </imprint>
-        <biblScope unit="volume">1</biblScope>
-      </monogr>
-      <citedRange>26 ff., 60 ff., 148 f., 169 f.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Untersuchungen zur Entwicklung des römischen Kriminalverfahrens in vorsullanischer Zeit</title>
-        <author>
-          <persName>
-            <forename>WOLFGANG</forename>
-            <surname>KUNKEL</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1962</date>
-          <pubPlace>München</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>41, 109</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Ein direktes Zeugnis für den privaten Mordprozeß im altrömischen Recht</title>
-        <title level="j">Zeitschrift der Savigny-Stiftung für Rechtsgeschichte, Romanistische Abteilung</title>
-        <author>
-          <persName>
-            <forename>WITTMANN</forename>
-            <surname>ROLAND</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1967</date>
-        </imprint>
-        <biblScope unit="volume">84</biblScope>
-      </monogr>
-      <citedRange>382 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Staatsordnung und Staatspraxis der römischen Republik</title>
-        <author>
-          <persName>
-            <forename>WOLFGANG</forename>
-            <surname>KUNKEL</surname>
-          </persName>
-        </author>
-        <author>
-          <persName>
-            <forename>WITTMANN</forename>
-            <surname>ROLAND</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1995</date>
-          <pubPlace>München</pubPlace>
-        </imprint>
-        <biblScope unit="volume">2</biblScope>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Exilica causa, quae adversus exulem agitur</title>
-        <author>
-          <persName>
-            <forename>GIULIANO</forename>
-            <surname>CRIFÒ</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1984</date>
-          <pubPlace>Rom</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>453 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Vitae necisque potestas: Le père, la cité, la mort</title>
-        <author>
-          <persName>
-            <forename>YAN</forename>
-            <surname>THOMAS</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1984</date>
-        </imprint>
-      </monogr>
-      <citedRange>499 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Contribution à l'étude de la peine de mort sous la république romaine</title>
-        <author>
-          <persName>
-            <forename>CLAIRE</forename>
-            <surname>LOVISI</surname>
-          </persName>
-        </author>
-        <imprint>
-          <date>1999</date>
-          <pubPlace>Paris</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>14-62</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <analytic>
-        <title level="a">Zur Kritik der Gewalt</title>
-        <author>
-          <persName>
-            <forename>WALTER</forename>
-            <surname>BENJAMIN</surname>
-          </persName>
-        </author>
-      </analytic>
-      <monogr>
-        <title level="m">Zur Kritik der Gewalt und andere Aufsätze</title>
-        <imprint>
-          <date>1965</date>
-          <pubPlace>Frankfurt am Main</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>29 ff., 63.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">In der Strafkolonie</title>
-        <author>
-          <persName>
-            <forename>FRANZ</forename>
-            <surname>KAFKA</surname>
-          </persName>
-        </author>
-      </monogr>
-      <citedRange>122.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Das Europa der Diktatur. Wirtschaft - Steuerung - Recht</title>
-        <author>
-          <persName>
-            <forename>GERD</forename>
-            <surname>BENDER</surname>
-          </persName>
-        </author>
-        <author>
-          <persName>
-            <forename>RAINER MARIA</forename>
-            <surname>KIESOW</surname>
-          </persName>
-        </author>
-        <author>
-          <persName>
-            <forename>DIETER</forename>
-            <surname>SIMON</surname>
-          </persName>
-        </author>
-        <imprint>
-          <publisher>Nomos</publisher>
-          <date>2002</date>
-          <pubPlace>Baden-Baden</pubPlace>
-        </imprint>
-      </monogr>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">In der Strafkolonie</title>
-        <author>
-          <persName>
-            <forename>FRANZ</forename>
-            <surname>KAFKA</surname>
-          </persName>
-        </author>
-      </monogr>
-      <citedRange>103.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <analytic>
-        <title level="a">Julius Hermann von Kirchmann (1802-1884). Der Philosoph als wahrer Rechtslehrer</title>
-        <author>
-          <persName>
-            <forename>RUDOLF</forename>
-            <surname>WIETHÖLTER</surname>
-          </persName>
-        </author>
-      </analytic>
-      <monogr>
-        <title level="m">Streitbare Juristen. Eine andere Tradition</title>
-        <imprint>
-          <date>1988</date>
-          <pubPlace>Baden-Baden</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>44 ff., 46, 52.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <analytic>
-        <title level="a">Sur quatre formules poétiques qui pourraient résumer la philosophie kantienne</title>
-        <author>
-          <persName>
-            <forename>GILLES</forename>
-            <surname>DELEUZE</surname>
-          </persName>
-        </author>
-      </analytic>
-      <monogr>
-        <title level="m">Critique et clinique</title>
-        <imprint>
-          <date>1993</date>
-          <pubPlace>Paris</pubPlace>
-        </imprint>
-      </monogr>
-      <citedRange>40 ff., 45 ff.</citedRange>
-    </biblStruct>
-    <biblStruct>
-      <monogr>
-        <title level="m">Sämtliche Erzählungen</title>
-        <author>
-          <persName>
-            <forename>FRANZ</forename>
-            <surname>KAFKA</surname>
-          </persName>
-        </author>
-      </monogr>
-      <citedRange>304 f.</citedRange>
-    </biblStruct>
-  </listBibl>
-</standOff></TEI>
+  <standOff>
+    <listBibl>
+      <biblStruct source="fn1">
+        <monogr>
+          <title level="m">Homo Sacer. Die souveräne Macht und das nackte Leben</title>
+          <author>
+            <persName>
+              <forename>Giorgio</forename>
+              <surname>Agamben</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2002</date>
+            <pubPlace>Frankfurt am Main</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn1">
+        <analytic>
+          <title level="a">Biopolitik und Homo sacer. Zur Verzögerung einer Übersetzung von Giorgio Agamben</title>
+          <author>
+            <persName>
+              <forename>Manfred</forename>
+              <surname>Schneider</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Frankfurter Rundschau</title>
+          <imprint>
+            <date>2001</date>
+          </imprint>
+          <biblScope unit="page">19</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <analytic>
+          <title level="a">Sämtliche Erzählungen</title>
+          <author>
+            <persName>
+              <forename>Franz</forename>
+              <surname>Kafka</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <imprint>
+            <publisher>Fischer Verlag</publisher>
+            <date>1970</date>
+            <pubPlace>Frankfurt</pubPlace>
+          </imprint>
+          <biblScope unit="page">100 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <monogr>
+          <title level="m">Die Deportation des Menschen. Kafkas Erzählung »In der Strafkolonie« im europäischen Kontext</title>
+          <author>
+            <persName>
+              <forename>Walter</forename>
+              <surname>Müller-Seidel</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1986</date>
+            <pubPlace>Stuttgart</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn3">
+        <analytic>
+          <title level="a">Kafka Defended Against His Interpreters</title>
+          <author>
+            <persName>
+              <forename>Giorgio</forename>
+              <surname>Agamben</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Idea of Prose</title>
+          <imprint>
+            <date>1995</date>
+          </imprint>
+          <biblScope unit="page">137 f.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn4">
+        <analytic>
+          <title level="a">Sämtliche Erzählungen</title>
+          <author>
+            <persName>
+              <forename>Franz</forename>
+              <surname>Kafka</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <imprint>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn5">
+        <monogr>
+          <title level="m">Politische Theologie. Vier Kapitel zur Lehre von der Souveränität</title>
+          <author>
+            <persName>
+              <forename>Carl</forename>
+              <surname>Schmitt</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1934</date>
+            <pubPlace>München und Leipzig</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn7">
+        <monogr>
+          <title level="m">Vom Beruf unsrer Zeit für Gesetzgebung und Rechtswissenschaft</title>
+          <author>
+            <persName>
+              <forename>Friedrich Carl</forename>
+              <surname>von Savigny</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1814</date>
+            <pubPlace>Heidelberg</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn10">
+        <analytic>
+          <title level="a">Kritik der praktischen Vernunft</title>
+          <author>
+            <persName>
+              <forename>Immanuel</forename>
+              <surname>Kant</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Werke</title>
+          <imprint>
+            <date>1983</date>
+            <pubPlace>Darmstadt</pubPlace>
+          </imprint>
+          <biblScope unit="volume">IV</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn9">
+        <analytic>
+          <title level="a">Der Prozeß</title>
+          <author>
+            <persName>
+              <forename>Franz</forename>
+              <surname>Kafka</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <imprint>
+            <date>1990</date>
+            <pubPlace>Frankfurt</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn13">
+        <monogr>
+          <title level="m">Das Kriminalrecht der Römer von Romulus bis auf Justinian</title>
+          <author>
+            <persName>
+              <forename>Wilhelm</forename>
+              <surname>Rein</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1844</date>
+            <pubPlace>Leipzig</pubPlace>
+          </imprint>
+          <biblScope unit="page">30 ff., 137 f.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn14">
+        <monogr>
+          <title level="m">Geist des römischen Rechts auf den verschiedenen Stufen seiner Entwicklung</title>
+          <author>
+            <persName>
+              <forename>Rudolph</forename>
+              <surname>von Jhering</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1852</date>
+            <pubPlace>Leipzig</pubPlace>
+          </imprint>
+          <biblScope unit="volume">I</biblScope>
+          <biblScope unit="page">279 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn15">
+        <monogr>
+          <title level="m">Römisches Strafrecht</title>
+          <author>
+            <persName>
+              <forename>Theodor</forename>
+              <surname>Mommsen</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1899</date>
+            <pubPlace>Leipzig</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn16">
+        <monogr>
+          <title level="m">Das Tödtungsverbrechen im altrömischen Recht</title>
+          <author>
+            <persName>
+              <forename>E.</forename>
+              <surname>Brunnenmeister</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1887</date>
+            <pubPlace>Leipzig</pubPlace>
+          </imprint>
+          <biblScope unit="page">149 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn17">
+        <monogr>
+          <title level="m">Wirtschaft und Gesellschaft. Grundriss der verstehenden Soziologie</title>
+          <author>
+            <persName>
+              <forename>Max</forename>
+              <surname>Weber</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1956</date>
+            <pubPlace>Tübingen</pubPlace>
+          </imprint>
+          <biblScope unit="volume">2</biblScope>
+          <biblScope unit="issue">4</biblScope>
+          <biblScope unit="page">389 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn18">
+        <monogr>
+          <title level="m">Römische Religionsgeschichte</title>
+          <author>
+            <persName>
+              <forename>Kurt</forename>
+              <surname>Latte</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1960</date>
+            <pubPlace>München</pubPlace>
+          </imprint>
+          <biblScope unit="page">38 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn19">
+        <monogr>
+          <title level="m">Das römische Privatrecht</title>
+          <author>
+            <persName>
+              <forename>Max</forename>
+              <surname>Kaser</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1971</date>
+            <pubPlace>München</pubPlace>
+          </imprint>
+          <biblScope unit="volume">1</biblScope>
+          <biblScope unit="page">26 ff., 60 ff., 148 f., 169 f.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn20">
+        <monogr>
+          <title level="m">Untersuchungen zur Entwicklung des römischen Kriminalverfahrens in vorsullanischer Zeit</title>
+          <author>
+            <persName>
+              <forename>Wolfgang</forename>
+              <surname>Kunkel</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1962</date>
+            <pubPlace>München</pubPlace>
+          </imprint>
+          <biblScope unit="page">41, 109</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn21">
+        <analytic>
+          <title level="a">Exilica causa, quae adversus exulem agitur</title>
+          <author>
+            <persName>
+              <forename>Giuliano</forename>
+              <surname>Crifò</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Du châtiment dans la cité: Supplices corporels et peine de mort dans le monde antique</title>
+          <imprint>
+            <date>1984</date>
+            <pubPlace>Rom</pubPlace>
+          </imprint>
+          <biblScope unit="page">453 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn22">
+        <analytic>
+          <title level="a">Vitae necisque potestas: Le père, la cité, la mort</title>
+          <author>
+            <persName>
+              <forename>Yan</forename>
+              <surname>Thomas</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Du châtiment</title>
+          <imprint>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn23">
+        <monogr>
+          <title level="m">Contribution à l'étude de la peine de mort sous la république romaine (509-149 av. J.-C.)</title>
+          <author>
+            <persName>
+              <forename>Claire</forename>
+              <surname>Lovisi</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1999</date>
+            <pubPlace>Paris</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn24">
+        <analytic>
+          <title level="a">Zur Kritik der Gewalt</title>
+          <author>
+            <persName>
+              <forename>Walter</forename>
+              <surname>Benjamin</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Zur Kritik der Gewalt und andere Aufsätze</title>
+          <imprint>
+            <date>1965</date>
+            <pubPlace>Frankfurt am Main</pubPlace>
+          </imprint>
+          <biblScope unit="page">29 ff., 63</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn31">
+        <analytic>
+          <title level="a">Sur quatre formules poétiques qui pourraient résumer la philosophie kantienne</title>
+          <author>
+            <persName>
+              <forename>Gilles</forename>
+              <surname>Deleuze</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Critique et clinique</title>
+          <imprint>
+            <date>1993</date>
+            <pubPlace>Paris</pubPlace>
+          </imprint>
+          <biblScope unit="page">40 ff., 45 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn32">
+        <analytic>
+          <title level="a">Sämtliche Erzählungen</title>
+          <author>
+            <persName>
+              <forename>Franz</forename>
+              <surname>Kafka</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <imprint>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn27">
+        <monogr>
+          <title level="m">Das Europa der Diktatur. Wirtschaft - Steuerung - Recht</title>
+          <author>
+            <persName>
+              <forename>Gerd</forename>
+              <surname>Bender</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename>Rainer Maria</forename>
+              <surname>Kiesow</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename>Dieter</forename>
+              <surname>Simon</surname>
+            </persName>
+          </author>
+          <imprint>
+            <publisher>Nomos</publisher>
+            <date>2002</date>
+            <pubPlace>Baden-Baden</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn30">
+        <analytic>
+          <title level="a">Julius Hermann von Kirchmann (1802-1884). Der Philosoph als wahrer Rechtslehrer</title>
+          <author>
+            <persName>
+              <forename>Rudolf</forename>
+              <surname>Wiethölter</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Streitbare Juristen. Eine andere Tradition</title>
+          <imprint>
+            <date>1988</date>
+            <pubPlace>Baden-Baden</pubPlace>
+          </imprint>
+          <biblScope unit="page">44 ff., 46, 52</biblScope>
+        </monogr>
+      </biblStruct>
+    </listBibl>
+  </standOff>
+</TEI>

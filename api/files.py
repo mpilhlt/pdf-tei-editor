@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
 from lxml import etree
-from lib.decorators import allow_only_localhost, handle_api_errors
+from lib.decorators import allow_only_secure_hosts, handle_api_errors
 from lib.server_utils import ApiError
 from pathlib import Path
 from glob import glob
@@ -27,7 +27,7 @@ def list():
 
 
 @bp.route("/save", methods=["POST"])
-@allow_only_localhost
+@allow_only_secure_hosts
 @handle_api_errors
 def save():
     """
@@ -41,8 +41,6 @@ def save():
         raise ApiError("Invalid file path")
     if not xml_string:
         raise ApiError("No XML string provided")
-    
-    # here we could add version info if we want
 
     # save the file
     file_parts = file_path.split("/")
@@ -50,6 +48,32 @@ def save():
     current_app.logger.info(f"Saving XML to {file_path}")
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(xml_string)
+    return jsonify({"result": "ok"})
+
+@bp.route("/delete", methods=["POST"])
+@allow_only_secure_hosts
+@handle_api_errors      
+def delete():
+    """
+    Delete the given files
+    """
+    files = request.get_json()
+    if not files:
+        raise ApiError("No files provided")
+    #if not type(files) is list: 
+    #    raise ApiError("Files should be a list")
+    for file_path in files: 
+        # validate input
+        if not file_path.startswith("/data/"):
+            raise ApiError("Invalid file path")
+        # delete the file 
+        file_parts = file_path.split("/")   
+        file_path = os.path.join(*file_parts[1:])
+        current_app.logger.info(f"Deleting file {file_path}")
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        else:
+            raise ApiError(f"File {file_path} does not exist")
     return jsonify({"result": "ok"})
 
 

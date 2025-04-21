@@ -2,7 +2,7 @@ from flask import request, jsonify, current_app
 from functools import wraps
 from lib.server_utils import ApiError
 
-def allow_only_localhost(f):
+def allow_only_secure_hosts(f):
     def decorated_function(*args, **kwargs):
         target_host = request.headers.get('X-Forwarded-Host') or request.host
         target_host = target_host.split(":")[0]

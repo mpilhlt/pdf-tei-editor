@@ -8,5 +8,10 @@
         "label": "Required monographic title",
         "active": true,
         "text": "A monograph must always have a title. If there is an author and an editor, the title of the book is the monographic title. "
+    },
+    {
+        "label": "No name capitalization",
+        "active": true,
+        "text": "Always properly capitalize names. Do not use small or all caps even if they appear in the document "
     }
 ]

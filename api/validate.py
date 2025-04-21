@@ -4,13 +4,13 @@ import re
 from xml.etree import ElementTree
 from xml.etree.ElementTree import ParseError
 from xmlschema import XMLSchema
-from lib.decorators import allow_only_localhost, handle_api_errors
+from lib.decorators import allow_only_secure_hosts, handle_api_errors
 from lib.server_utils import ApiError
 
 bp = Blueprint('validate', __name__, url_prefix='/api/')
 
 @bp.route('/validate', methods=['POST'])
-@allow_only_localhost
+@allow_only_secure_hosts
 @handle_api_errors
 def validate_route():
     """
