@@ -80,7 +80,7 @@ def extract():
     gold_tei_path = tei_path = get_gold_tei_path(file_id)
     if os.path.exists(gold_tei_path):
         # we already have a gold file, so save as a version, not as the original
-        version = make_timestamp().replace(" ", "_")
+        version = make_timestamp().replace(" ", "_").replace(":", "-")
         tei_path = os.path.join("data", "versions", version, file_id + ".tei.xml")
         os.makedirs(os.path.dirname(tei_path), exist_ok=True)
 

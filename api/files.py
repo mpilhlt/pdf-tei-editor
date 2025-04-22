@@ -106,7 +106,7 @@ def create_file_data():
             file_id_data[file_id] = {}
         if file_type not in file_id_data[file_id]:
             file_id_data[file_id][file_type] = []
-        file_id_data[file_id][file_type].append(file_path)
+        file_id_data[file_id][file_type].append(Path(file_path).as_posix())
 
     # create the files list
     file_list = []
