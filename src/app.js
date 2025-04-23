@@ -5,12 +5,15 @@ import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggabl
 import { uploadFile } from './upload.js'
 import { disableValidation, validationEvents } from './lint.js'
 import { isDoi } from './utils.js'
+import { ApplicationState } from './appstate.js'
 
 // custom elements
 import '../web/spinner.js'
 import '../web/switch.js'
 import '../web/list-editor.js'
 import { xml } from '@codemirror/lang-xml'
+
+const state = new ApplicationState();
 
 /**
  * The XML editor

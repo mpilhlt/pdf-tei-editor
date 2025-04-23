@@ -1,47 +1,42 @@
 
 // todo
-class ApplicationState {
-  #pdfPath = null
-  #xmlPath = null
-  #diffXmlPath = null
-  #pdfViewer = null
-  #xmlEditor = null
-  #lastSelectedXpathlNode = null
-  #currentIndex = null
-  #selectionXpath = null
-  #lastCursorXpath = null
-  #currentXpathResultSize = null
-  #currentXpathResultIndex = null
-  #lastSelectedXpathlNode = null
+export class ApplicationState {
+
+  /**
+   * The data on the files on the server which can be worked on
+   * @type {Array<Object>}
+   */
+  #fileData = null
+
+  // #pdfPath = null
+  // #xmlPath = null
+  // #diffXmlPath = null
+  // #pdfViewer = null
+  // #xmlEditor = null
+  // #lastSelectedXpathlNode = null
+  // #currentIndex = null
+  // #selectionXpath = null
+  // #lastCursorXpath = null
+  // #currentXpathResultSize = null
+  // #currentXpathResultIndex = null
+  // #lastSelectedXpathlNode = null
 
   constructor() {
   
   }
 
-  // pdf path
-  get pdfPath() { 
-    return this.#pdfPath
-  }
-
-  set pdfPath(path) {
-    if (path !== this.#pdfPath) {
-      this.#pdfPath = path
-      UrlHash.set('pdf', path)
+  /**
+   * Returns a promise that resolves with the file data, when available. Immediately resolves if the
+   * file data already has been loaded
+   * @param {boolean} refresh
+   * @returns {Array<Object>}
+   */
+  async getfileData(refresh=false) {
+    if (refresh || this.#fileData === null) {
+      const { files } = await client.getFileList();
+      this.#fileData = files
     }
-  }
-
-  get xmlPath() {
-    return this.#xmlPath
-  } 
-
-  set xmlPath(path) { 
-    this.#xmlPath = path
-  }
-  get diffXmlPath() {
-    return this.#diffXmlPath
-  } 
-  set diffXmlPath(path) { 
-    this.#diffXmlPath = path
+    return this.#fileData
   }
   
 }
