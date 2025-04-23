@@ -80,7 +80,7 @@ export class XMLEditor extends EventTarget {
    * Loads XML, either from a string or from a given path.
    * @async
    * @param {string} xmlPathOrString - The URL or path to the XML file, or an xml string
-   * @returns {Promise} - A promise that resolves when the document is loaded.
+   * @returns {Promise<void>} - A promise that resolves with no value when the document is fully loaded and the editor is ready. 
    * @throws {Error} - If there's an error loading or parsing the XML.
    */
   async loadXml(xmlPathOrString) {
@@ -99,6 +99,7 @@ export class XMLEditor extends EventTarget {
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
+    await this.#readyPromise;
   }
 
   async #fetchXml(xmlPathOrString) {
@@ -164,13 +165,19 @@ export class XMLEditor extends EventTarget {
     this.#view.dispatch(setDiagnostics(this.#view.state, []))
   }
 
-  
+  /**
+   * Loads and displays a merge view for the given XML file or string.
+   * @param {string} xmlPathOrString The URL or path to the XML file, or an xml string
+   * @returns {Promise<void>} A promise that resolves when the merge view is shown
+   * @throws {Error} If there's an error loading or parsing the XML.
+   */
   async showMergeView(xmlPathOrString){
     // remove existing merge view
     this.hideMergeView()
 
     // fetch xml if path 
     const xml = await this.#fetchXml(xmlPathOrString);
+    
     // create and display merge view
     this.#mergeViewExt = unifiedMergeView({
       original: xml,
@@ -180,12 +187,6 @@ export class XMLEditor extends EventTarget {
     this.#view.dispatch({
       effects: StateEffect.appendConfig.of([this.#mergeViewExt])
     });
-  }
-
-  hideMergeView() {
-    if (this.#mergeViewExt) {
-      // remove it?
-    }
   }
 
   getDocumentVersion() {

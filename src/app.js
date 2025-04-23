@@ -10,6 +10,7 @@ import { isDoi } from './utils.js'
 import '../web/spinner.js'
 import '../web/switch.js'
 import '../web/list-editor.js'
+import { xml } from '@codemirror/lang-xml'
 
 /**
  * The XML editor
@@ -41,6 +42,14 @@ let selectionXpath = null;
 // the xpath of the cursor within the xml document
 let lastCursorXpath = null;
 
+const spinner = $('#spinner')
+
+// get document paths from URL hash - are the global vars needed?
+let pdfPath = window.pdfPath = UrlHash.get('pdf');
+let xmlPath = window.xmlPath = UrlHash.get('xml');
+let diffXmlPath = window.diffXmlPath = UrlHash.get('diff');
+
+// run main app
 try {
   main()
 } catch (error) {
@@ -52,13 +61,9 @@ try {
  */
 async function main() {
 
-  showSpinner('Loading documents, please wait...')
+  //const appState = new ApplicationState()
 
-  // get info from URL 
-  const urlParams = new URLSearchParams(window.location.search);
-  const pdfPath = window.pdfPath = urlParams.get('pdf');
-  const xmlPath = window.xmlPath = urlParams.get('xml');
-  const diffXmlPath = window.diffXmlPath = urlParams.get('diff');
+  spinner.show('Loading documents, please wait...')
 
   console.log(`Starting Application\nPDF: ${pdfPath}\nXML: ${xmlPath}`);
 
@@ -66,12 +71,49 @@ async function main() {
   disableValidation(true)
 
   // wait for UI to be fully set up
+
+  async function loadXmlEditor(xmlPath, tagDataPath) {
+    console.log("Initializing XML Editor...")
+    let tagData;
+    try {
+      console.log("Loading autocompletion data...");
+      const res = await fetch(tagDataPath);
+      tagData = await res.json();
+    } catch (error) {
+      console.error('Error fetching from', tagDataPath, ":", error);
+      return;
+    }
+    xmlEditor = window.xmlEditor = new XMLEditor('xml-editor', tagData);
+    console.log("Loading XML data...");
+    await xmlEditor.loadXml(xmlPath)
+  }
+
+  async function loadPdfViewer(pdfPath) {
+    pdfViewer = window.pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath).hide();
+    await pdfViewer.load(pdfPath)
+    pdfViewer.show()
+  }
+
   try {
+    
+    // Fetch file data from api
+    const { files } = await client.getFileList();
+    if (!files || files.length === 0) {
+      throw new Error("No files found")
+    }
+    
+    // select default files
+    pdfPath = pdfPath || files[0].pdf
+    xmlPath = xmlPath || files[0].xml
+    diffXmlPath = diffXmlPath || files[0].xml
+    
+    // setup the UI
     await Promise.all([
-      pdfPath ? loadPdfViewer(pdfPath) : null,
-      xmlPath ? loadXmlEditor(xmlPath, tagDataPath) : null,
-      setupUI()
+      loadPdfViewer(pdfPath),
+      loadXmlEditor(xmlPath, tagDataPath),
+      setupUI(files),  
     ]).catch(e => { throw e; })
+
   } catch (error) {
     spinner.hide();
     alert(error.message)
@@ -115,54 +157,187 @@ async function main() {
   })
 
   // finish initialization
-  hideSpinner()
+  spinner.hide()
   $('#document-nav').show()
   $('#btn-save-document').enable()
   console.log("Application ready.")
 }
 
-function showSpinner(msg) {
-  $('#spinner').show(msg)
-}
-
-function hideSpinner() {
-  $('#spinner').hide()
-}
-
-async function loadXmlEditor(xmlPath, tagDataPath) {
-  console.log("Initializing XML Editor...")
-  let tagData;
-  try {
-    console.log("Loading autocompletion data...");
-    const res = await fetch(tagDataPath);
-    tagData = await res.json();
-  } catch (error) {
-    console.error('Error fetching from', tagDataPath, ":", error);
-    return;
-  }
-  xmlEditor = window.xmlEditor = new XMLEditor('xml-editor', tagData);
-  console.log("Loading XML data...");
-  await xmlEditor.loadXml(xmlPath)
-}
-
-async function loadPdfViewer(pdfPath) {
-  pdfViewer = window.pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath).hide();
-  await pdfViewer.load(pdfPath)
-  pdfViewer.show()
-}
-
-
 /**
  * Code to configure the initial state of the UI
  */
-async function setupUI() {
+async function setupUI(files) {
 
+  function documentLabel(fileData) {
+    if (fileData.author) {
+      return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
+    }
+    return fileData.id
+  }
+
+  // Populates the selectbox for file name and version
+  async function populateFilesSelectboxes(files) {
+
+    // the selectboxes to populate
+    const fileSelectbox = $('#select-doc')
+    const versionSelectbox = $('#select-version')
+    const diffSelectbox = $('#select-diff-version')
+
+    console.log('Loaded file data.');
+
+    // Clear existing options
+    fileSelectbox.innerHTML = versionSelectbox.innerHTML = '';
+
+    // Populate file select box 
+    files.forEach(fileData => {
+      const option = document.createElement('option');
+      option.value = fileData.id;
+      option.text = documentLabel(fileData)
+      fileSelectbox.appendChild(option);
+    });
+
+    // align selectboxes with url query params
+    const fileData = files.find(file => file.pdf == pdfPath)
+    if (fileData) {
+      // select the filename
+      fileSelectbox.selectedIndex = files.indexOf(fileData);
+
+      // populate the version selectbox depending on the selected file
+      if (fileData.versions) {
+        fileData.versions.forEach((version) => {
+          const option = document.createElement('option');
+          option.value = version.path;
+          option.text = version.label;
+          versionSelectbox.appendChild(option);
+          diffSelectbox.appendChild(option.cloneNode(true))
+        })
+      }
+    }
+
+    // listen for changes in the PDF selectbox
+    async function loadFilesFromSelectedId() {
+      const selectedFile = files.find(file => file.id === fileSelectbox.value);
+      const pdf = selectedFile.pdf
+      const xml = selectedFile.xml
+      const filesToLoad = {}
+      if (pdf && pdf !== pdfPath) {
+        filesToLoad.pdf = pdf
+      }
+      if (xml && xml !== xmlPath) {
+        filesToLoad.xml = xml
+      }
+      try {
+        await load(filesToLoad)
+      }
+      catch (error) { 
+        console.error(error)
+      }
+    }
+    fileSelectbox.addEventListener('change', loadFilesFromSelectedId);
+
+    // listen for changes in the version selectbox  
+    async function loadFilesFromSelectedVersion() {
+      const xml = versionSelectbox.value
+      if (xml !== xmlPath) {
+        try {
+          await load({ xml })
+        } catch (error) {
+          console.error(error)
+        }
+      }
+    }
+    versionSelectbox.addEventListener('change', loadFilesFromSelectedVersion);
+
+    // listen for changes in the diff version selectbox  
+    async function loadDiff() {
+      const diff = diffSelectbox.value
+      if (diff !== versionSelectbox.value  && diff !== diffXmlPath) {
+        try {
+          await load({ diff })
+        } catch (error) {
+          console.error(error)
+        }
+      }
+    }
+    diffSelectbox.addEventListener('change', loadDiff);
+  }
+
+  // Populates the selectbox for the xpath expressions that 
+  // control the navigation within the xml document
+  async function populateXpathSelectbox() {
+    const selectbox = $('#select-xpath');
+    try {
+      const data = [
+        {
+          "xpath": "//tei:biblStruct",
+          "label": "<biblStruct>"
+        },
+        {
+          "xpath": "//tei:biblStruct[@status='verified']",
+          "label": "Verified <biblStruct>"
+        },
+        {
+          "xpath": "//tei:biblStruct[not(@status='verified')]",
+          "label": "Unverified <biblStruct>"
+        },
+        {
+          "xpath": "//tei:biblStruct[@status='unresolved']",
+          "label": "Unresolved <biblStruct>"
+        },
+        {
+          "xpath": null,
+          "label": "Custom XPath"
+        }
+      ];
+
+      // Clear existing options
+      selectbox.innerHTML = '';
+
+      // Populate select box with options
+      data.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.xpath || ''
+        option.text = item.label
+        option.disabled = item.xpath === null
+        selectbox.appendChild(option);
+      });
+
+      // button to edit the xpath manually
+      $('#btn-edit-xpath').addEventListener('click', () => {
+        const custom = selectbox[selectbox.length - 1]
+        const xpath = prompt("Enter custom xpath", custom.value)
+        if (xpath && xpath.trim()) {
+          custom.value = xpath
+          custom.text = `Custom: ${xpath}`
+          selectbox.selectedIndex = selectbox.length - 1
+        }
+      })
+
+      // listen for changes in the selectbox
+      selectbox.addEventListener('change', () => {
+        // this triggers the selection via the window's `hashchange` event
+        UrlHash.set("xpath", selectbox.value)
+      });
+
+      // update selectbox according to the URL hash
+      window.addEventListener('hashchange', onHashChange);
+
+      // setup click handlers
+      $('#btn-prev-node').addEventListener('click', () => previousNode());
+      $('#btn-next-node').addEventListener('click', () => nextNode());
+
+    } catch (error) {
+      console.error('Error populating xpath selectbox:', error);
+    }
+  }
+
+  // populate the selectboxes
   await Promise.all([
-    populateFilesSelectboxes(),
+    populateFilesSelectboxes(files),
     populateXpathSelectbox()
   ])
 
-  // when everything is configured, we can show the UI
+  // when everything is configured, we can show the navigation
   $('#navigation').show()
 
   // bring clicked elements into foreground when clicked
@@ -183,7 +358,7 @@ async function setupUI() {
   // extract from current PDF
   $('#btn-extract').addEventListener('click', onClickExtractBtn)
 
-  // validate xml
+  // validate xml button
   const validateBtn = $('#btn-validate-document')
   validateBtn.addEventListener('click', onClickValidateButton);
   validationEvents.addEventListener(validationEvents.EVENT.START, () => {
@@ -209,57 +384,249 @@ async function setupUI() {
   $('#btn-cleanup').addEventListener('click', onClickBtnCleanup)
   $('#btn-cleanup').disabled = $('#select-version').options.length < 2
 
+  //
+  // UI event handlers
+  // 
+
+  async function onClickLoadDocument() {
+    try {
+      const { type, filename } = await uploadFile('/api/upload');
+      switch (type) {
+        case "xml":
+          alert("Loading XML documents not implemented yet.")
+          break
+        case "pdf":
+          try {
+            const doi = getDoiFromFilenameOrUserInput(filename)
+            const { xml, pdf } = await extractFromPDF(filename, doi)
+            await load({ xml, pdf })
+          } catch (error) {
+            console.error(error)
+          }
+
+          break;
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    }
+  }
+
+  async function onClickValidateButton() {
+    $('#btn-validate-document').disable()
+    await validateXml()
+  }
+
+  async function onClickSaveButton() {
+    const xmlPath = $('#select-version').value;
+    await saveXml(xmlPath)
+    $('#btn-save-document').text('Saved').disable()
+  }
+
+  async function onClickExtractBtn() {
+    const pdfPath = $('#select-doc').value;
+    const fileData = (await client.getFileList()).files.find(file => file.id === pdfPath)
+    if (!fileData) {
+      alert("No file selected")
+      return
+    }
+    let doi;
+    try {
+      doi = getDoiFromXml()
+    } catch (error) {
+      console.warn(error.message)
+    }
+    const filename = fileData.pdf
+    try {
+      doi = doi || getDoiFromFilenameOrUserInput(filename)
+      const { xml, pdf } = await extractFromPDF(filename, doi)
+      await load({ xml, pdf })
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  async function onAutoSearchSwitchChange(evt) {
+    const checked = evt.detail.checked
+    console.log(`Auto search is: ${checked}`)
+    if (checked) {
+      await searchNodeContentsInPdf(lastSelectedXpathlNode)
+    }
+  }
+
+  async function onClickBtnCleanup() {
+    const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
+    if (!confirm(msg)) return;
+    const options = Array.from($('#select-version').options)
+    const filePathsToDelete = options
+      .slice(1) // skip the first option, which is the gold standard version  
+      .map(option => option.value)
+    if (filePathsToDelete.length > 0) {
+      await client.deleteFiles(filePathsToDelete)
+    }
+    xmlPath = options[0].value
+    try {
+      await load({ xml: xmlPath, pdf: pdfPath })
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  function onClickSelectionIndex() {
+    let index = prompt('Enter node index')
+    if (!index) return;
+    try {
+      selectByIndex(parseInt(index))
+    } catch (error) {
+      alert(error.message)
+    }
+  }
+}
+
+//
+// commands
+// 
+
+/**
+ * Loads the given XML original, XML diff and/or PDF files into the editor and viewer 
+ * without reloading the app
+ * @param {Object} param0 The XML and PDF paths
+ * @param {string} param0.xml The path to the XML file
+ * @param {string} param0.pdf The path to the PDF file
+ * @param {string} param0.diff The path to the diff XML file
+ */
+async function load({ xml, pdf, diff }) {
+  const promises = []
+
+  // PDF 
+  if (pdf) {
+    promises.push(pdfViewer.load(pdf).then(() => {
+      // update the URL hash
+      UrlHash.set('pdf', pdf)
+      // update the selectbox
+      const selectbox = $('#select-doc')
+      const index = Array.from(selectbox.options).findIndex(option => option.value === pdf)
+      if (index >= 0) {
+        selectbox.selectedIndex = index
+      }
+      pdfPath = pdf
+    }))
+  }
+
+  // XML
+  if (xml) {
+    promises.push(xmlEditor.loadXml(xml).then(() => {
+      // update the URL hash 
+      UrlHash.set('xml', xml)
+      // update the selectbox
+      const selectbox = $('#select-version')
+      const index = Array.from(selectbox.options).findIndex(option => option.value === xml)
+      if (index >= 0) {
+        selectbox.selectedIndex = index
+      }
+      xmlPath = xml
+    }))
+  }
+
+  // diff XML
+  if (diff) {
+    const p = new Promise(async resolve => { 
+      spinner.show('Computing file differences, please wait...')
+      try {
+        await xmlEditor.loadXml(diff)
+      } finally {
+        spinner.hide()
+      }
+      // update the URL hash
+      UrlHash.set('diff', diff)
+      // update the selectbox
+      const selectbox = $('#select-diff-version')
+      const index = Array.from(selectbox.options).findIndex(option => option.value === diff)
+      if (index >= 0) {
+        selectbox.selectedIndex = index
+      }
+      diffXmlPath = diff
+      resolve()
+    })
+    if (xml && xml !== diff) {
+      // if we have a diff and an xml file, we need to wait until the original XML has loaded
+      promises.slice(-1)[0].then(() => p)
+    } else {  
+      // if we don't have an XML file, we can just load the diff
+      promises.push(p)
+    }
+  }
+  if (promises.length > 0) {
+    await Promise.all(promises)
+  }
 }
 
 /**
- * Handles change of selection in the document
- * @param {Array} ranges An array of object of the form {to, from, node}
- * @returns 
+ * Validates the XML document by calling the validation service
+ * @returns {Promise<void>}
  */
-async function handleSelectionChange(ranges) {
-  if (ranges.length === 0 || !xmlEditor.getXmlTree()) return;
+async function validateXml() {
+  console.log("Validating XML...")
+  await xmlEditor.validateXml()
+}
 
-  // we care only for the first selected node or node parent matching our xpath
-  const xpathTagName = xpathInfo(getSelectionXpath()).tagName
-  const range = ranges[0]
+/**
+ * Saves the current XML content to the server
+ * @param {string} filePath The path to the XML file
+ * @returns {Promise<void>}
+ */
+async function saveXml(filePath) {
+  console.log("Saving XML on server...");
+  await client.saveXml(xmlEditor.getXML(), filePath)
+}
 
-  /** @type {Node} */
-  let selectedNode = range.node;
-  if (!selectedNode) {
-    lastSelectedXpathlNode = null;
-    lastCursorXpath = null;
-    return;
+/**
+ * Given a Node in the XML, search and highlight its text content in the PDF Viewer
+ * @param {Element} node 
+ */
+async function searchNodeContentsInPdf(node) {
+
+  let searchTerms = getNodeText(node)
+    // split all node text along whitespace and hypen/dash characters
+    .reduce((acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
+    // Search terms must be more than three characters or consist of digits. This is to remove 
+    // the most common "stop words" which would litter the search results with false positives.
+    // This incorrectly removes hyphenated word parts but the alternative would be to  have to 
+    // deal with language-specific stop words
+    .filter(term => term.match(/\d+/) ? true : term.length > 3)
+
+  // make the list of search terms unique
+  searchTerms = Array.from(new Set(searchTerms))
+
+  // add footnote
+  if (node.hasAttribute("source")) {
+    const source = node.getAttribute("source")
+    // get footnote number 
+    if (source.slice(0, 2) === "fn") {
+      // remove the doi prefix
+      searchTerms.unshift(source.slice(2) + " ")
+    }
   }
 
-  // find parent if tagname doesn't match
-  while (selectedNode) {
-    if (selectedNode.tagName === xpathTagName) break;
-    selectedNode = selectedNode.parentNode
+  // start search
+  await window.pdfViewer.search(searchTerms);
+}
+
+/**
+ * Extracts references from the given PDF file
+ * @param {string} filename The name of the PDF file
+ * @param {string} doi The DOI of the PDF file
+ * @returns {Promise<{xml, pdf}>} An object with path to the xml and pdf files
+ * @throws {Error} If the DOI is not valid
+ */
+async function extractFromPDF(filename, doi = "") {
+  if (!filename) {
+    throw new Error("No filename given")
   }
-
-  // update the buttons
-  $$('.btn-node-status').forEach(btn => btn.disabled = !Boolean(selectedNode))
-
-  // the xpath of the current cursor position
-  const newCursorXpath = selectedNode && xmlEditor.getXPathForNode(selectedNode)
-
-  // do nothing if we cannot find a matching parent, or the parent is the same as before
-  if (!selectedNode || lastSelectedXpathlNode === selectedNode || newCursorXpath === lastCursorXpath) {
-    return;
-  }
-
-  // remember new (parent) node
-  lastSelectedXpathlNode = selectedNode;
-  lastCursorXpath = newCursorXpath
-
-  // update URL
-  const { basename } = xpathInfo(lastCursorXpath)
-  UrlHash.set("xpath", `//tei:${basename}`) // the xpath from the DOM does not have a prefix
-
-  // trigger auto-search if enabled
-  const autoSearchSwitch = $('#switch-auto-search')
-  if (pdfViewer && autoSearchSwitch.checked) {
-    await searchNodeContentsInPdf(selectedNode)
+  spinner.show('Extracting references, please wait')
+  try {
+    return await client.extractReferences(filename, doi)
+  } finally {
+    spinner.hide()
   }
 }
 
@@ -306,359 +673,73 @@ async function setNodeStatus(status) {
   selectByIndex(currentIndex)
 }
 
-function onClickSelectionIndex() {
-  let index = prompt('Enter node index')
-  if (!index) return;
-  try {
-    selectByIndex(parseInt(index))
-  } catch (error) {
-    alert(error.message)
-  }
-}
-
-
-async function onClickLoadDocument() {
-  try {
-    const { type, filename } = await uploadFile('/api/upload');
-    switch (type) {
-      case "xml":
-        alert("Loading XML documents not implemented yet.")
-        break
-      case "pdf":
-        extractFromPDF(filename)
-        break;
-    }
-  } catch (error) {
-    console.error('Error uploading file:', error);
-  }
-}
-
-async function onClickValidateButton() {
-  $('#btn-validate-document').disable()
-  await validateXml()
-}
-
-async function onClickSaveButton() {
-  const xmlPath = $('#select-version').value;
-  await saveXml(xmlPath)
-  $('#btn-save-document').text('Saved').disable()
-}
-
-async function onClickExtractBtn() {
-  const pdfPath = $('#select-doc').value;
-  const fileData = (await client.getFileList()).files.find(file => file.id === pdfPath)
-  if (!fileData) {
-    alert("No file selected")
-    return
-  }
-  let doi;
-  try {
-    doi = getDoiFromXml()
-  } catch (error) {
-    console.warn(error.message)
-  }
-  extractFromPDF(fileData.pdf, doi)
-}
-
-async function onAutoSearchSwitchChange(evt) {
-  const checked = evt.detail.checked
-  console.log(`Auto search is: ${checked}`)
-  if (checked) {
-    await searchNodeContentsInPdf(lastSelectedXpathlNode)
-  }
-}
-
-async function onClickBtnCleanup() {
-  const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
-  if (!confirm(msg)) return;
-  const options = Array.from($('#select-version').options)
-  const filePathsToDelete = options
-    .slice(1) // skip the first option, which is the gold standard version  
-    .map(option => option.value)
-  if (filePathsToDelete.length > 0) {  
-    await client.deleteFiles(filePathsToDelete)
-  }
-  xmlPath = options[0].value
-  reloadApp({ xml: xmlPath, pdf: pdfPath })
-}
-
-function getDoiFromXml() {
-  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
-}
-
-async function extractFromPDF(filename, doi = "") {
-  if (doi === "") {
-    if (filename.match(/^10\./)) {
-      // treat as a DOI-like filename
-      // do we have URL-encoded filenames?
-      doi = filename.slice(0, -4)
-      if (decodeURIComponent(doi) !== doi) {
-        // filename is URL-encoded DOI
-        doi = decodeURIComponent(doi)
-      } else {
-        // custom decoding 
-        doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/')
-      }
-    }
-    const msg = "Please enter the DOI of the PDF, this will add metadata to the generated TEI document"
-    doi = prompt(msg, doi)
-    if (doi === null) {
-      // user cancelled
-      return;
-    } else if (!isDoi(doi)) {
-      alert(`${doi} does not seem to be a DOI, please try again.`)
-      return
-    }
-  }
-  showSpinner('Extracting references, please wait')
-  try {
-    const { pdf, xml } = await client.extractReferences(filename, doi)
-    reloadApp({ pdf, xml })
-  } catch (e) {
-    //
-  } finally {
-    hideSpinner()
-  }
-}
-
-function reloadApp({ xml, pdf }) {
-  window.location.href = `${window.location.pathname}?pdf=${pdf}&xml=${xml}`;
-}
-
+//
+// update state
+//
 
 /**
- * Given a Node in the XML, search and highlight its text content in the PDF Viewer
- * @param {Element} node 
+ * Called when the URL hash changes
+ * @param {Event} evt The hashchange event
+ * @returns {void}
  */
-async function searchNodeContentsInPdf(node) {
-
-  let searchTerms = getNodeText(node)
-    // split all node text along whitespace and hypen/dash characters
-    .reduce((acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
-    // Search terms must be more than three characters or consist of digits. This is to remove 
-    // the most common "stop words" which would litter the search results with false positives.
-    // This incorrectly removes hyphenated word parts but the alternative would be to  have to 
-    // deal with language-specific stop words
-    .filter(term => term.match(/\d+/) ? true : term.length > 3)
-
-  // make the list of search terms unique
-  searchTerms = Array.from(new Set(searchTerms))
-
-  // add footnote
-  if (node.hasAttribute("source")) {
-    const source = node.getAttribute("source")
-    // get footnote number 
-    if (source.slice(0, 2) === "fn") {
-      // remove the doi prefix
-      searchTerms.unshift(source.slice(2) + " ")
-    }
-  }
-
-  // start search
-  await window.pdfViewer.search(searchTerms);
-}
-
-function documentLabel(fileData) {
-  if (fileData.author) {
-    return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
-  }
-  return fileData.id
-}
-
-
-/**
- * Populates the selectbox for file name and version
- */
-async function populateFilesSelectboxes() {
-
-  // the selectboxes to populate
-  const fileSelectbox = $('#select-doc')
-  const versionSelectbox = $('#select-version')
-  const diffSelectbox = $('#select-diff-version')
-
-  // Fetch data from api
-  const { files } = await client.getFileList();
-
-  console.log('Loaded file data.');
-
-  // Clear existing options
-  fileSelectbox.innerHTML = versionSelectbox.innerHTML = '';
-
-  // Populate file select box 
-  files.forEach(fileData => {
-    const option = document.createElement('option');
-    option.value = fileData.id;
-    option.text = documentLabel(fileData)
-    fileSelectbox.appendChild(option);
-  });
-
-  // if we have no paths in the URL, stop here and just load the first entry
-  if (!window.xmlPath || !window.pdfPath) {
-    loadFilesFromSelectedId()
-    return
-  }
-
-  // align selectboxes with url query params
-  const fileData = files.find(file => file.pdf == pdfPath)
-  if (fileData) {
-    // select the filename
-    fileSelectbox.selectedIndex = files.indexOf(fileData);
-
-    // populate the version selectbox depending on the selected file
-    if (fileData.versions) {
-      fileData.versions.forEach((version) => {
-        const option = document.createElement('option');
-        option.value = version.path;
-        option.text = version.label;
-        versionSelectbox.appendChild(option);
-        diffSelectbox.appendChild(option.cloneNode(true))
-      })
-
-      // set the version of the selectbox to the URL 
-      versionSelectbox.selectedIndex = fileData.versions.findIndex(version => version.path === xmlPath)
-
-      // set the diff selectbox to the URL value, if given
-      if (UrlHash.get("diff")) {
-        const diffIndex = fileData.versions.findIndex(version => version.path === UrlHash.get("diff"))
-        if (diffIndex) {
-          // trigger the diff mode with a timeout
-          setTimeout(() => { diffSelectbox.selectedIndex = diffIndex; loadDiff() }, 1000)
-        }
-      }
-      diffSelectbox.selectedIndex = versionSelectbox.selectedIndex
-    }
-  }
-
-  // listen for changes in the PDF selectbox
-  function loadFilesFromSelectedId() {
-    const selectedFile = files.find(file => file.id === fileSelectbox.value);
-    const pdf = selectedFile.pdf;
-    const xml = selectedFile.xml
-    reloadApp({ xml, pdf })
-  }
-  fileSelectbox.addEventListener('change', loadFilesFromSelectedId);
-
-  // listen for changes in the TEI version selectbox  
-  function loadFilesFromSelectedVersion() {
-    const selectedFile = files.find(file => file.id === fileSelectbox.value);
-    const pdf = selectedFile.pdf;
-    const xml = versionSelectbox.value
-    reloadApp({ xml, pdf })
-  }
-  versionSelectbox.addEventListener('change', loadFilesFromSelectedVersion);
-
-  // listen for changes in the diff version selectbox  
-  async function loadDiff() {
-    const diffXmlPath = diffSelectbox.value
-    if (UrlHash.get('diff') !== diffXmlPath) {
-      UrlHash.set('diff', diffXmlPath)
-    }
-    if (diffXmlPath !== versionSelectbox.value) {
-      showSpinner('Computing file differences, please wait...')
-      await xmlEditor.showMergeView(diffXmlPath)
-      hideSpinner()
-    } else {
-      loadFilesFromSelectedId()
-    }
-  }
-  diffSelectbox.addEventListener('change', loadDiff);
-}
-
-async function validateXml() {
-  console.log("Validating XML...")
-  await xmlEditor.validateXml()
-}
-
-/**
- * Triggers a validation of the document (or waits for an ongoing one to finish), and saves the document
- * if validation was successful
- * @param {StorageManager} filePath 
- * @returns {Promise<void>}
- */
-async function saveXml(filePath) {
-  console.log("Saving XML on server...");
-  await client.saveXml(xmlEditor.getXML(), filePath)
-}
-
-/**
- * Populates the selectbox for the xpath expressions that control the navigation within the xml document
- */
-async function populateXpathSelectbox() {
-  const selectbox = $('#select-xpath');
-  try {
-    const data = [
-      {
-        "xpath": "//tei:biblStruct",
-        "label": "<biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[@status='verified']",
-        "label": "Verified <biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[not(@status='verified')]",
-        "label": "Unverified <biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[@status='unresolved']",
-        "label": "Unresolved <biblStruct>"
-      },
-      {
-        "xpath": null,
-        "label": "Custom XPath"
-      }
-    ];
-
-    // Clear existing options
-    selectbox.innerHTML = '';
-
-    // Populate select box with options
-    data.forEach(item => {
-      const option = document.createElement('option');
-      option.value = item.xpath || ''
-      option.text = item.label
-      option.disabled = item.xpath === null
-      selectbox.appendChild(option);
-    });
-
-    // button to edit the xpath manually
-    $('#btn-edit-xpath').addEventListener('click', () => {
-      const custom = selectbox[selectbox.length - 1]
-      const xpath = prompt("Enter custom xpath", custom.value)
-      if (xpath && xpath.trim()) {
-        custom.value = xpath
-        custom.text = `Custom: ${xpath}`
-        selectbox.selectedIndex = selectbox.length - 1
-      }
-    })
-
-    // listen for changes in the selectbox
-    selectbox.addEventListener('change', () => {
-      // this triggers the selection via the window's `hashchange` event
-      UrlHash.set("xpath", selectbox.value)
-    });
-
-    // update selectbox according to the URL hash
-    window.addEventListener('hashchange', onHashChange);
-
-    // setup click handlers
-    $('#btn-prev-node').addEventListener('click', () => previousNode());
-    $('#btn-next-node').addEventListener('click', () => nextNode());
-
-  } catch (error) {
-    console.error('Error populating xpath selectbox:', error);
-  }
-}
-
-/**
- * Calls when the URL hash values change. Handles selection xpath and diff xml path
- */
-function onHashChange() {
+function onHashChange(evt) {
   const xpath = UrlHash.get("xpath");
   if (xpath && xpath !== getSelectionXpath()) {
     setSelectionXpath(xpath)
   } else {
     setSelectionXpath(getSelectionXpath())
+  }
+}
+
+/**
+  * Handles change of selection in the document
+  * @param {Array} ranges An array of object of the form {to, from, node}
+  * @returns 
+  */
+async function handleSelectionChange(ranges) {
+  if (ranges.length === 0 || !xmlEditor.getXmlTree()) return;
+
+  // we care only for the first selected node or node parent matching our xpath
+  const xpathTagName = xpathInfo(getSelectionXpath()).tagName
+  const range = ranges[0]
+
+  /** @type {Node} */
+  let selectedNode = range.node;
+  if (!selectedNode) {
+    lastSelectedXpathlNode = null;
+    lastCursorXpath = null;
+    return;
+  }
+
+  // find parent if tagname doesn't match
+  while (selectedNode) {
+    if (selectedNode.tagName === xpathTagName) break;
+    selectedNode = selectedNode.parentNode
+  }
+
+  // update the buttons
+  $$('.btn-node-status').forEach(btn => btn.disabled = !Boolean(selectedNode))
+
+  // the xpath of the current cursor position
+  const newCursorXpath = selectedNode && xmlEditor.getXPathForNode(selectedNode)
+
+  // do nothing if we cannot find a matching parent, or the parent is the same as before
+  if (!selectedNode || lastSelectedXpathlNode === selectedNode || newCursorXpath === lastCursorXpath) {
+    return;
+  }
+
+  // remember new (parent) node
+  lastSelectedXpathlNode = selectedNode;
+  lastCursorXpath = newCursorXpath
+
+  // update URL
+  const { basename } = xpathInfo(lastCursorXpath)
+  UrlHash.set("xpath", `//tei:${basename}`) // the xpath from the DOM does not have a prefix
+
+  // trigger auto-search if enabled
+  const autoSearchSwitch = $('#switch-auto-search')
+  if (pdfViewer && autoSearchSwitch.checked) {
+    await searchNodeContentsInPdf(selectedNode)
   }
 }
 
@@ -710,9 +791,38 @@ function updateIndexUI(index, size) {
   $('#btn-next-node').disabled = $('#btn-prev-node').disabled = size < 2;
 }
 
-function getSelectionXpath() {
-  return selectionXpath || $('#select-xpath').value;
+//
+// get info about state or documents
+// 
+
+function getDoiFromXml() {
+  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
 }
+
+function getDoiFromFilenameOrUserInput(filename) {
+  if (filename.match(/^10\./)) {
+    // treat as a DOI-like filename
+    // do we have URL-encoded filenames?
+    doi = filename.slice(0, -4)
+    if (decodeURIComponent(doi) !== doi) {
+      // filename is URL-encoded DOI
+      doi = decodeURIComponent(doi)
+    } else {
+      // custom decoding 
+      doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/')
+    }
+  }
+  const msg = "Please enter the DOI of the PDF. This will add metadata to the generated TEI document"
+  doi = prompt(msg, doi)
+  if (doi === null) {
+    // user cancelled
+    throw new Error("User cancelled DOI input")
+  } else if (!isDoi(doi)) {
+    alert(`${doi} does not seem to be a DOI, please try again.`)
+    throw new Error("Invalid DOI")
+  }
+}
+
 
 function xpathInfo(xpath) {
   if (!xpath) {
@@ -733,13 +843,23 @@ function xpathInfo(xpath) {
   }
 }
 
+function getSelectionXpath() {
+  return selectionXpath || $('#select-xpath').value;
+}
+
+
 function getXpathResultSize(xpath) {
   return xmlEditor.countDomNodesByXpath(xpath)
 }
 
+
 function getSelectionXpathResultSize() {
   return getXpathResultSize(getSelectionXpath())
 }
+
+//
+// navigation
+//
 
 /**
  * Selects the node identified by the xpath in the select box and the given index
@@ -795,7 +915,6 @@ function previousNode() {
   }
   selectByIndex(currentIndex);
 }
-
 
 /**
  * Returns a list of non-empty text content from all text nodes contained in the given node

@@ -159,7 +159,7 @@ export class PDFJSViewer {
         reject(new Error(`Error loading PDF: ${error}`));
       }
     });
-    return this.loadPromise;
+    await this.loadPromise;
   }
 
   /**
