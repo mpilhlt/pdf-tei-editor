@@ -5,15 +5,12 @@ import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggabl
 import { uploadFile } from './upload.js'
 import { disableValidation, validationEvents } from './lint.js'
 import { isDoi } from './utils.js'
-import { ApplicationState } from './appstate.js'
+//import { UiState } from './appstate.js'
 
 // custom elements
 import '../web/spinner.js'
 import '../web/switch.js'
 import '../web/list-editor.js'
-import { xml } from '@codemirror/lang-xml'
-
-const state = new ApplicationState();
 
 /**
  * The XML editor
@@ -166,108 +163,101 @@ async function main() {
   console.log("Application ready.")
 }
 
+// Populates the selectbox for file name and version
+async function populateFilesSelectboxes(files) {
+
+  // the selectboxes to populate
+  const fileSelectbox = $('#select-doc')
+  const versionSelectbox = $('#select-version')
+  const diffSelectbox = $('#select-diff-version')
+
+  console.log('Loaded file data.');
+
+  // Clear existing options
+  fileSelectbox.innerHTML = versionSelectbox.innerHTML =  diffSelectbox.innerHTML = '';
+
+  // Populate file select box 
+  files.forEach(fileData => {
+    const option = document.createElement('option');
+    option.value = fileData.id;
+    option.text = fileData.label
+    fileSelectbox.appendChild(option);
+  });
+
+  // align selectboxes with url query params
+  const fileData = files.find(file => file.pdf == pdfPath)
+  if (fileData) {
+    // select the filename
+    fileSelectbox.selectedIndex = files.indexOf(fileData);
+
+    // populate the version selectbox depending on the selected file
+    if (fileData.versions) {
+      fileData.versions.forEach((version) => {
+        const option = document.createElement('option');
+        option.value = version.path;
+        option.text = version.label;
+        versionSelectbox.appendChild(option);
+        diffSelectbox.appendChild(option.cloneNode(true))
+      })
+    }
+  }
+
+  // listen for changes in the PDF selectbox
+  async function loadFilesFromSelectedId() {
+    const selectedFile = files.find(file => file.id === fileSelectbox.value);
+    const pdf = selectedFile.pdf
+    const xml = selectedFile.xml
+    const filesToLoad = {}
+    if (pdf && pdf !== pdfPath) {
+      filesToLoad.pdf = pdf
+    }
+    if (xml && xml !== xmlPath) {
+      filesToLoad.xml = xml
+    }
+    try {
+      await load(filesToLoad)
+    }
+    catch (error) { 
+      console.error(error)
+    }
+  }
+  fileSelectbox.addEventListener('change', loadFilesFromSelectedId);
+
+  // listen for changes in the version selectbox  
+  async function loadFilesFromSelectedVersion() {
+    const xml = versionSelectbox.value
+    if (xml !== xmlPath) {
+      try {
+        await load({ xml })
+      } catch (error) {
+        console.error(error)
+      }
+    }
+  }
+  versionSelectbox.addEventListener('change', loadFilesFromSelectedVersion);
+
+  // listen for changes in the diff version selectbox  
+  async function loadDiff() {
+    const diff = diffSelectbox.value
+    if (diff !== versionSelectbox.value  && diff !== diffXmlPath) {
+      try {
+        await load({ diff })
+      } catch (error) {
+        console.error(error)
+      }
+    }
+  }
+  diffSelectbox.addEventListener('change', loadDiff);
+}
+
 /**
  * Code to configure the initial state of the UI
  */
 async function setupUI(files) {
 
-  function documentLabel(fileData) {
-    if (fileData.author) {
-      return `${fileData.author}, ${fileData.title.substr(0, 25)}... (${fileData.date})`;
-    }
-    return fileData.id
-  }
-
-  // Populates the selectbox for file name and version
-  async function populateFilesSelectboxes(files) {
-
-    // the selectboxes to populate
-    const fileSelectbox = $('#select-doc')
-    const versionSelectbox = $('#select-version')
-    const diffSelectbox = $('#select-diff-version')
-
-    console.log('Loaded file data.');
-
-    // Clear existing options
-    fileSelectbox.innerHTML = versionSelectbox.innerHTML = '';
-
-    // Populate file select box 
-    files.forEach(fileData => {
-      const option = document.createElement('option');
-      option.value = fileData.id;
-      option.text = documentLabel(fileData)
-      fileSelectbox.appendChild(option);
-    });
-
-    // align selectboxes with url query params
-    const fileData = files.find(file => file.pdf == pdfPath)
-    if (fileData) {
-      // select the filename
-      fileSelectbox.selectedIndex = files.indexOf(fileData);
-
-      // populate the version selectbox depending on the selected file
-      if (fileData.versions) {
-        fileData.versions.forEach((version) => {
-          const option = document.createElement('option');
-          option.value = version.path;
-          option.text = version.label;
-          versionSelectbox.appendChild(option);
-          diffSelectbox.appendChild(option.cloneNode(true))
-        })
-      }
-    }
-
-    // listen for changes in the PDF selectbox
-    async function loadFilesFromSelectedId() {
-      const selectedFile = files.find(file => file.id === fileSelectbox.value);
-      const pdf = selectedFile.pdf
-      const xml = selectedFile.xml
-      const filesToLoad = {}
-      if (pdf && pdf !== pdfPath) {
-        filesToLoad.pdf = pdf
-      }
-      if (xml && xml !== xmlPath) {
-        filesToLoad.xml = xml
-      }
-      try {
-        await load(filesToLoad)
-      }
-      catch (error) { 
-        console.error(error)
-      }
-    }
-    fileSelectbox.addEventListener('change', loadFilesFromSelectedId);
-
-    // listen for changes in the version selectbox  
-    async function loadFilesFromSelectedVersion() {
-      const xml = versionSelectbox.value
-      if (xml !== xmlPath) {
-        try {
-          await load({ xml })
-        } catch (error) {
-          console.error(error)
-        }
-      }
-    }
-    versionSelectbox.addEventListener('change', loadFilesFromSelectedVersion);
-
-    // listen for changes in the diff version selectbox  
-    async function loadDiff() {
-      const diff = diffSelectbox.value
-      if (diff !== versionSelectbox.value  && diff !== diffXmlPath) {
-        try {
-          await load({ diff })
-        } catch (error) {
-          console.error(error)
-        }
-      }
-    }
-    diffSelectbox.addEventListener('change', loadDiff);
-  }
-
   // Populates the selectbox for the xpath expressions that 
   // control the navigation within the xml document
-  async function populateXpathSelectbox() {
+  function populateXpathSelectbox() {
     const selectbox = $('#select-xpath');
     try {
       const data = [
@@ -335,10 +325,8 @@ async function setupUI(files) {
   }
 
   // populate the selectboxes
-  await Promise.all([
-    populateFilesSelectboxes(files),
-    populateXpathSelectbox()
-  ])
+  populateXpathSelectbox()
+  populateFilesSelectboxes(files).catch(error => console.error(error))
 
   // when everything is configured, we can show the navigation
   $('#navigation').show()
@@ -498,7 +486,13 @@ async function setupUI(files) {
  * @param {string} param0.diff The path to the diff XML file
  */
 async function load({ xml, pdf, diff }) {
-  const promises = []
+  
+  async function reloadSelectboxes () {
+    const { files } = await client.getFileList()
+    await populateFilesSelectboxes(files)
+  }
+  // always reload selectbox data
+  const promises = [reloadSelectboxes]
 
   // PDF 
   if (pdf) {
@@ -535,7 +529,7 @@ async function load({ xml, pdf, diff }) {
     const p = new Promise(async resolve => { 
       spinner.show('Computing file differences, please wait...')
       try {
-        await xmlEditor.loadXml(diff)
+        await xmlEditor.showMergeView(diff)
       } finally {
         spinner.hide()
       }
@@ -558,9 +552,8 @@ async function load({ xml, pdf, diff }) {
       promises.push(p)
     }
   }
-  if (promises.length > 0) {
-    await Promise.all(promises)
-  }
+  // await promises in parallel
+  await Promise.all(promises)
 }
 
 /**
@@ -627,7 +620,11 @@ async function extractFromPDF(filename, doi = "") {
   }
   spinner.show('Extracting references, please wait')
   try {
-    return await client.extractReferences(filename, doi)
+    let result = await client.extractReferences(filename, doi)
+    // reload the file selectboxes
+    const { files } = await client.getFileList()
+    await populateFilesSelectboxes(files)
+    return result
   } finally {
     spinner.hide()
   }

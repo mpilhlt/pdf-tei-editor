@@ -173,7 +173,7 @@ export class XMLEditor extends EventTarget {
    */
   async showMergeView(xmlPathOrString){
     // remove existing merge view
-    this.hideMergeView()
+    //this.hideMergeView()
 
     // fetch xml if path 
     const xml = await this.#fetchXml(xmlPathOrString);

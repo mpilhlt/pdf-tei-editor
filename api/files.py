@@ -20,6 +20,11 @@ def list():
         file_path = data.get("xml", None)
         if file_path is not None:
             metadata = get_tei_metadata(os.path.join(WEB_ROOT, file_path[1:]))
+            if 'author' in metadata:
+                label = f"{metadata.get('author', '')}, {metadata.get('title', '')[:25]}... ({metadata.get('date','')})"
+            else:
+                label = data['id']
+            metadata['label'] = label
             if metadata:
                 files_data[idx].update(metadata)
 
@@ -152,5 +157,5 @@ def get_tei_metadata(file_path):
     return {
         "author": author.text if author is not None else "",
         "title": title.text if title is not None else "",
-        "date": date.text if date is not None else "",
+        "date": date.text if date is not None else ""
     }
