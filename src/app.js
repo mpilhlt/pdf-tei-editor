@@ -96,23 +96,23 @@ async function main() {
   }
 
   try {
-    
+
     // Fetch file data from api
     const { files } = await client.getFileList();
     if (!files || files.length === 0) {
       throw new Error("No files found")
     }
-    
+
     // select default files
     pdfPath = pdfPath || files[0].pdf
     xmlPath = xmlPath || files[0].xml
     diffXmlPath = diffXmlPath || files[0].xml
-    
+
     // setup the UI
     await Promise.all([
       loadPdfViewer(pdfPath),
       loadXmlEditor(xmlPath, tagDataPath),
-      setupUI(files),  
+      setupUI(files),
     ]).catch(e => { throw e; })
 
   } catch (error) {
@@ -132,15 +132,24 @@ async function main() {
     // this triggers the initial selection
     onHashChange()
 
-    // measure how long it takes to validate the document
-    const startTime = new Date().getTime();
-    validateXml().then(() => {
-      const endTime = new Date().getTime();
-      const seconds = Math.round((endTime - startTime) / 1000);
-      // disable validation if it took longer than 3 seconds
-      console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
-      disableValidation(seconds > 3)
-    })
+    if (diffXmlPath !== xmlPath) {
+      // load the diff view
+      try {
+        await load({diff:diffXmlPath})
+      } catch (error) {
+        console.error("Error loading diff view:", error)
+      }
+    } else {
+      // measure how long it takes to validate the document
+      const startTime = new Date().getTime();
+      validateXml().then(() => {
+        const endTime = new Date().getTime();
+        const seconds = Math.round((endTime - startTime) / 1000);
+        // disable validation if it took longer than 3 seconds
+        console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
+        disableValidation(seconds > 3)
+      })
+    }
 
     xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, async () => {
       $('#btn-save-document').text('Save').enable()
@@ -175,7 +184,7 @@ async function populateFilesSelectboxes(files) {
   console.log('Loaded file data.');
 
   // Clear existing options
-  fileSelectbox.innerHTML = versionSelectbox.innerHTML =  diffSelectbox.innerHTML = '';
+  fileSelectbox.innerHTML = versionSelectbox.innerHTML = diffSelectbox.innerHTML = '';
 
   // Populate file select box 
   files.forEach(fileData => {
@@ -225,7 +234,7 @@ async function populateFilesSelectboxes(files) {
     try {
       await load(filesToLoad)
     }
-    catch (error) { 
+    catch (error) {
       console.error(error)
     }
   }
@@ -492,8 +501,8 @@ async function setupUI(files) {
  * @param {string} param0.diff The path to the diff XML file
  */
 async function load({ xml, pdf, diff }) {
-  
-  async function reloadSelectboxes () {
+
+  async function reloadSelectboxes() {
     const { files } = await client.getFileList()
     await populateFilesSelectboxes(files)
   }
@@ -534,7 +543,7 @@ async function load({ xml, pdf, diff }) {
   // diff XML
   if (diff) {
     const p = new Promise(async resolve => {
-      console.log({diff, xml, xmlPath})
+
       if (diff !== xmlPath) {
         console.log("Loading diff XML", diff)
         spinner.show('Computing file differences, please wait...')
@@ -543,10 +552,9 @@ async function load({ xml, pdf, diff }) {
         } finally {
           spinner.hide()
         }
-      } else { 
-        // if the diff is the same as the original XML, we need to hide the diff view
-        console.log("Hiding diff view")
-        xmlEditor.hideMergeView()
+      } else {
+        // if the diff is the same as the original XML, we need to hide the diff view, it it was shown
+        await xmlEditor.hideMergeView()
       }
       // update the URL hash
       UrlHash.set('diff', diff)
@@ -562,7 +570,7 @@ async function load({ xml, pdf, diff }) {
     if (xml && xml !== diff) {
       // if we have a diff and a new xml file, we need to wait until the original XML has loaded
       promises.slice(-1)[0].then(() => p)
-    } else {  
+    } else {
       // if we don't have a new XML file, we can just show the diff
       promises.push(p)
     }

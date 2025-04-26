@@ -1,6 +1,6 @@
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, StateEffect, Compartment } from "@codemirror/state";
-import {unifiedMergeView} from "@codemirror/merge"
+import { unifiedMergeView, getOriginalDoc} from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
@@ -8,7 +8,7 @@ import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
 import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation, updateCachedDiagnostics } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
-
+import { $$ } from './browser-utils.js';
 
 
 export class XMLEditor extends EventTarget {
@@ -35,6 +35,9 @@ export class XMLEditor extends EventTarget {
   #mergeViewExt = null
   /** @type {Object} */
   #mergeViewCompartment = null
+  /** @type {string} */
+  #original = null // the original XML document, when in merge view mode
+  #updateMergButtonsInterval = null // interval to update the merge buttons
   /**  @type {XMLSerializer} */
   #serializer = null; // an XMLSerializer object or one with a compatible API
 
@@ -130,22 +133,6 @@ export class XMLEditor extends EventTarget {
     await this.#readyPromise;
   }
 
-  async #fetchXml(xmlPathOrString) {
-    let xml;
-    if (xmlPathOrString.trim().slice(0, 1) != "<") {
-      // treat argument as path
-      try {
-        const response = await fetch(xmlPathOrString);
-        xml = await response.text();
-      } catch (error) {
-        throw new Error('Error loading or parsing XML: ' + error.message);
-      }
-    } else {
-      // treat argument as xml string
-      xml = xmlPathOrString;
-    }
-    return xml
-  }
 
   /**
    * Triggers a validation and returns an array of Diagnostic objects, or an empty array if no
@@ -201,36 +188,67 @@ export class XMLEditor extends EventTarget {
    */
   async showMergeView(xmlPathOrString){
     // remove existing merge view
-    this.hideMergeView()
+    await this.hideMergeView()
 
-    // fetch xml if path 
-    const xml = await this.#fetchXml(xmlPathOrString);
+    // fetch xml if it is a path 
+    const diff = await this.#fetchXml(xmlPathOrString);
     
-    // create and display merge view
+    // create and display merge view with the original 
     this.#mergeViewExt = unifiedMergeView({
-      original: xml,
+      original: diff,
       diffConfig: {scanLimit: 50000, timeout: 20000}
     })
     
     this.#view.dispatch({
        effects: this.#mergeViewCompartment.reconfigure([this.#mergeViewExt])
     });
+
+    // Overwrite the default button labels
+    this.#updateMergButtonsInterval = setInterval(() => {
+      $$('button[name="accept"]').forEach(b => b.innerHTML='Keep') 
+      $$('button[name="reject"]').forEach(b => b.innerHTML='Change') 
+    }, 200)
   }
 
-  hideMergeView(){
+  /**
+   * Checks if the merge view is active.
+   * @returns {boolean} Returns true if the merge view is active
+   */
+  isMergeViewActive() {
+    return this.#mergeViewExt != null
+  }
+
+  /**
+   * Removes the merge view from the editor and restores the original content.
+   * @returns {Promise<void>} A promise that resolves when the merge view is hidden
+   */
+  async hideMergeView() {
     if (this.#mergeViewExt) {
+      // stop updating the buttons
+      clearInterval(this.#updateMergButtonsInterval)
+      this.#updateMergButtonsInterval = null
+      // remove the merge view
       this.#view.dispatch({
         effects: this.#mergeViewCompartment.reconfigure([])
-     });
+      });
       this.#mergeViewExt = null;
+      this.#original = null;
     }
   }
 
-
+  /**
+   * REturns an integer that represents the current document version. This is incremented
+   * whenever the document is changed in the editor.
+   * @returns {number} The current document version
+   */
   getDocumentVersion() {
     return this.#documentVersion;
   }
 
+  /**
+   * Returns the current editor view.
+   * @returns {EditorView} The current editor view
+   */
   getView() {
     return this.#view;
   }
@@ -558,6 +576,22 @@ export class XMLEditor extends EventTarget {
   // private methods
   //
 
+  async #fetchXml(xmlPathOrString) {
+    let xml;
+    if (xmlPathOrString.trim().slice(0, 1) != "<") {
+      // treat argument as path
+      try {
+        const response = await fetch(xmlPathOrString);
+        xml = await response.text();
+      } catch (error) {
+        throw new Error('Error loading or parsing XML: ' + error.message);
+      }
+    } else {
+      // treat argument as xml string
+      xml = xmlPathOrString;
+    }
+    return xml
+  }  
 
   #onSelectionChange(ranges) {
     // add the selected node in the XML-DOM tree to each range
