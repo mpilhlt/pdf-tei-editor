@@ -1,5 +1,5 @@
 import { basicSetup } from 'codemirror';
-import { EditorState, EditorSelection, StateEffect } from "@codemirror/state";
+import { EditorState, EditorSelection, StateEffect, Compartment } from "@codemirror/state";
 import {unifiedMergeView} from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
@@ -8,7 +8,7 @@ import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
 import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation, updateCachedDiagnostics } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
-import { $ } from './browser-utils.js';
+
 
 
 export class XMLEditor extends EventTarget {
@@ -30,12 +30,13 @@ export class XMLEditor extends EventTarget {
   #syntaxTree = null; // the lezer syntax tree
   #isReady = false;
   /** @type {Promise} */
-  #readyPromise = null;
+  #readyPromise = null
   /** @type {Object} */
-  #mergeViewExt = null; // will be created on-demand
+  #mergeViewExt = null
+  /** @type {Object} */
+  #mergeViewCompartment = null
   /**  @type {XMLSerializer} */
   #serializer = null; // an XMLSerializer object or one with a compatible API
-
 
   /**
    * Constructs an XMLEditor instance.
@@ -47,8 +48,8 @@ export class XMLEditor extends EventTarget {
     if (!editorDiv) {
       throw new Error(`Element with ID ${editorDivId} not found.`);
     }
-    this.#xmlTree = null; // Stores the parsed XML tree.
-    this.#syntaxTree = null; // Stores the CodeMirror syntax tree
+
+    this.#mergeViewCompartment = new Compartment()
 
     // list of extensions to be used in the editor
     const extensions = [
@@ -57,7 +58,8 @@ export class XMLEditor extends EventTarget {
       linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => true }),
       lintGutter(),
       selectionChangeListener(this.#onSelectionChange.bind(this)),
-      EditorView.updateListener.of(this.#onUpdate.bind(this))
+      EditorView.updateListener.of(this.#onUpdate.bind(this)),
+      this.#mergeViewCompartment.of([]),
     ];
 
     if (tagData) {
@@ -173,7 +175,7 @@ export class XMLEditor extends EventTarget {
    */
   async showMergeView(xmlPathOrString){
     // remove existing merge view
-    //this.hideMergeView()
+    this.hideMergeView()
 
     // fetch xml if path 
     const xml = await this.#fetchXml(xmlPathOrString);
@@ -183,11 +185,21 @@ export class XMLEditor extends EventTarget {
       original: xml,
       diffConfig: {scanLimit: 50000, timeout: 20000}
     })
-    this.#view.addEventListener
+    
     this.#view.dispatch({
-      effects: StateEffect.appendConfig.of([this.#mergeViewExt])
+       effects: this.#mergeViewCompartment.reconfigure([this.#mergeViewExt])
     });
   }
+
+  hideMergeView(){
+    if (this.#mergeViewExt) {
+      this.#view.dispatch({
+        effects: this.#mergeViewCompartment.reconfigure([])
+     });
+      this.#mergeViewExt = null;
+    }
+  }
+
 
   getDocumentVersion() {
     return this.#documentVersion;
@@ -613,3 +625,4 @@ export class XMLEditor extends EventTarget {
     this.#domToSyntax = domToSyntax;
   }
 }
+

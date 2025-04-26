@@ -11,6 +11,7 @@ import { isDoi } from './utils.js'
 import '../web/spinner.js'
 import '../web/switch.js'
 import '../web/list-editor.js'
+import { diff } from '@codemirror/merge'
 
 /**
  * The XML editor
@@ -197,7 +198,11 @@ async function populateFilesSelectboxes(files) {
         option.value = version.path;
         option.text = version.label;
         versionSelectbox.appendChild(option);
-        diffSelectbox.appendChild(option.cloneNode(true))
+        const diffOption = option.cloneNode(true)
+        if (diffOption.value === diffXmlPath) {
+          diffOption.selected = true
+        }
+        diffSelectbox.appendChild(diffOption)
       })
     }
   }
@@ -214,6 +219,9 @@ async function populateFilesSelectboxes(files) {
     if (xml && xml !== xmlPath) {
       filesToLoad.xml = xml
     }
+    // reset diff
+    filesToLoad.diff = xml
+
     try {
       await load(filesToLoad)
     }
@@ -239,12 +247,10 @@ async function populateFilesSelectboxes(files) {
   // listen for changes in the diff version selectbox  
   async function loadDiff() {
     const diff = diffSelectbox.value
-    if (diff !== versionSelectbox.value  && diff !== diffXmlPath) {
-      try {
-        await load({ diff })
-      } catch (error) {
-        console.error(error)
-      }
+    try {
+      await load({ diff })
+    } catch (error) {
+      console.error(error)
     }
   }
   diffSelectbox.addEventListener('change', loadDiff);
@@ -511,6 +517,7 @@ async function load({ xml, pdf, diff }) {
 
   // XML
   if (xml) {
+    // load the XML file
     promises.push(xmlEditor.loadXml(xml).then(() => {
       // update the URL hash 
       UrlHash.set('xml', xml)
@@ -526,12 +533,20 @@ async function load({ xml, pdf, diff }) {
 
   // diff XML
   if (diff) {
-    const p = new Promise(async resolve => { 
-      spinner.show('Computing file differences, please wait...')
-      try {
-        await xmlEditor.showMergeView(diff)
-      } finally {
-        spinner.hide()
+    const p = new Promise(async resolve => {
+      console.log({diff, xml, xmlPath})
+      if (diff !== xmlPath) {
+        console.log("Loading diff XML", diff)
+        spinner.show('Computing file differences, please wait...')
+        try {
+          await xmlEditor.showMergeView(diff)
+        } finally {
+          spinner.hide()
+        }
+      } else { 
+        // if the diff is the same as the original XML, we need to hide the diff view
+        console.log("Hiding diff view")
+        xmlEditor.hideMergeView()
       }
       // update the URL hash
       UrlHash.set('diff', diff)
@@ -545,10 +560,10 @@ async function load({ xml, pdf, diff }) {
       resolve()
     })
     if (xml && xml !== diff) {
-      // if we have a diff and an xml file, we need to wait until the original XML has loaded
+      // if we have a diff and a new xml file, we need to wait until the original XML has loaded
       promises.slice(-1)[0].then(() => p)
     } else {  
-      // if we don't have an XML file, we can just load the diff
+      // if we don't have a new XML file, we can just show the diff
       promises.push(p)
     }
   }

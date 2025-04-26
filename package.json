@@ -16,5 +16,8 @@
     "glob": "^11.0.1",
     "rollup": "^4.38.0",
     "xmllint": "^0.1.1"
+  },
+  "resolutions": {
+    "@codemirror/state": "6.5.2"
   }
 }
