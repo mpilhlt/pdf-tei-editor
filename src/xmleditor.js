@@ -74,8 +74,34 @@ export class XMLEditor extends EventTarget {
     this.#serializer = new XMLSerializer();
   }
 
+  /**
+   * Resolves a namespace prefix used in the editor to its URI.
+   * @todo: should be configurable  by the user
+   * @param {string} prefix The namespace prefix to resolve.
+   * @returns {string|null} The namespace URI associated with the prefix, or null if not found.
+   */
+  namespaceResolver(prefix) {
+    const namespaces = {
+      'tei': 'http://www.tei-c.org/ns/1.0',
+      'xml': 'http://www.w3.org/XML/1998/namespace'
+    };
+    return namespaces[prefix] || null;
+  };
+
+  /**
+   * Returns the current state of the editor. If false await the promise returned from isReadyPromise()
+   * @returns {boolean} - Returns true if the editor is ready and the XML document is loaded
+   */
   isReady() {
     return this.#isReady
+  }
+
+  /**
+   * Returns a promise that resolves when the editor is ready and the XML document is loaded.
+   * @returns {Promise} - A promise that resolves when the editor is ready and the XML document is loaded
+   */
+  isReadyPromise() {
+    return this.#readyPromise
   }
 
   /**
@@ -217,6 +243,10 @@ export class XMLEditor extends EventTarget {
     return this.#editorContent;
   }
 
+  /**
+   * Returns the XML document tree.
+   * @returns {Document} - The XML document tree.
+   */
   getXmlTree() {
     return this.#xmlTree;
   }
@@ -245,11 +275,6 @@ export class XMLEditor extends EventTarget {
     return xmlstring
   }
 
-  async #waitForEditorUpdate(changes) {
-    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, resolve, { once: true }))
-    this.#view.dispatch({ changes });
-    await promise;
-  }
 
   /**
    * Updates the editor from a node in the XML Document. Returns a promise that resolves when
@@ -339,6 +364,11 @@ export class XMLEditor extends EventTarget {
     return syntaxNode;
   }
 
+  /**
+   * Returns the XML DOM node at the given position in the editor
+   * @param {number} pos 
+   * @returns {Node}
+   */
   getDomNodeAt(pos) {
     if (!this.#syntaxToDom) {
       this.#updateMaps()
@@ -368,7 +398,7 @@ export class XMLEditor extends EventTarget {
     if (!xpath) {
       throw new Error("XPath is not provided.");
     }
-    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.#namespaceResolver, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
     const result = []
     let node;
     while ((node = xpathResult.iterateNext())) {
@@ -391,7 +421,7 @@ export class XMLEditor extends EventTarget {
       throw new Error("XPath is not provided.");
     }
     xpath = `count(${xpath})`
-    return this.#xmlTree.evaluate(xpath, this.#xmlTree, this.#namespaceResolver, XPathResult.NUMBER_TYPE, null).numberValue;
+    return this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.NUMBER_TYPE, null).numberValue;
   }
 
   /**
@@ -407,7 +437,7 @@ export class XMLEditor extends EventTarget {
     if (!xpath) {
       throw new Error("XPath is not provided.");
     }
-    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.#namespaceResolver, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+    const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     const result = xpathResult.singleNodeValue;
     //console.warn(xpath, result)
     return result
@@ -509,17 +539,25 @@ export class XMLEditor extends EventTarget {
     return null; // Unable to traverse all the way to the document root. This typically happens if the node doesn't belong to a DOMParser generated document.
   }
 
+  /**
+   * Synchronize xml document with the editor content
+   * @returns {Promise<void>}
+   */
+  async sync() {
+    try {
+      if (await this.#updateTrees()) {
+        this.#updateMaps()
+        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));  
+      }
+    } catch (error) {
+      console.warn("Linking DOM and syntax tree failed:", error.message)
+    }
+  }  
+
   //
   // private methods
   //
 
-  #namespaceResolver(prefix) {
-    const namespaces = {
-      'tei': 'http://www.tei-c.org/ns/1.0',
-      'xml': 'http://www.w3.org/XML/1998/namespace'
-    };
-    return namespaces[prefix] || null;
-  };
 
   #onSelectionChange(ranges) {
     // add the selected node in the XML-DOM tree to each range
@@ -572,18 +610,13 @@ export class XMLEditor extends EventTarget {
 
 
   /**
-   * Synchronize xml document with the editor content
-   * @returns {Promise<void>}
+   * Given an changes object, waits for the editor to be updated and then resolves the promise
+   * @param {Object} changes The changes to apply to the editor
    */
-  async sync() {
-    try {
-      if (await this.#updateTrees()) {
-        this.#updateMaps()
-        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));  
-      }
-    } catch (error) {
-      console.warn("Linking DOM and syntax tree failed:", error.message)
-    }
+  async #waitForEditorUpdate(changes) {
+    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, resolve, { once: true }))
+    this.#view.dispatch({ changes });
+    await promise;
   }
 
   /**
