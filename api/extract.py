@@ -28,8 +28,8 @@ else:
 
 bp = Blueprint("extract", __name__, url_prefix="/api/extract")
 
-# the url of the TEI schema used
-TEI_SCHEMA_LOCATION = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/tei.xsd"
+# the url of the TEI schema used, needs to go into app config
+TEI_SCHEMA_LOCATION = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd"
 
 
 @bp.route("", methods=["POST"])

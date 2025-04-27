@@ -6,6 +6,7 @@ from xml.etree.ElementTree import ParseError
 from xmlschema import XMLSchema
 from lib.decorators import handle_api_errors
 from lib.server_utils import ApiError
+from urllib.error import HTTPError
 
 bp = Blueprint('validate', __name__, url_prefix='/api/')
 
@@ -69,7 +70,10 @@ def validate(xml_string):
         if not os.path.isfile(schema_cache_file):
             current_app.logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
             os.makedirs(schema_cache_dir, exist_ok=True)
-            schema = XMLSchema(schema_location) 
+            try:
+                schema = XMLSchema(schema_location)
+            except HTTPError:
+                raise ApiError(f"Failed to download schema for {namespace} from {schema_location} - check the URL")
             schema.export(target=schema_cache_dir, save_remote=True)
         else:
             current_app.logger.debug(f"Using cached version at {schema_cache_file}")
