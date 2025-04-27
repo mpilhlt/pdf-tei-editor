@@ -535,6 +535,8 @@ async function load({ xml, pdf, diff }) {
       const index = Array.from(selectbox.options).findIndex(option => option.value === xml)
       if (index >= 0) {
         selectbox.selectedIndex = index
+        // align diff selectbox
+        $('#select-diff-version').selectedIndex = index
       }
       xmlPath = xml
     }))
