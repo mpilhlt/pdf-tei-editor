@@ -2,17 +2,6 @@ from flask import request, jsonify, current_app
 from functools import wraps
 from lib.server_utils import ApiError
 
-def allow_only_secure_hosts(f):
-    def decorated_function(*args, **kwargs):
-        target_host = request.headers.get('X-Forwarded-Host') or request.host
-        target_host = target_host.split(":")[0]
-        if target_host != 'localhost':
-            return jsonify({"error": f'Access denied from {target_host}. Only localhost is allowed.'}), 403
-        return f(*args, **kwargs)
-    decorated_function.__name__ = f.__name__ # Preserve original function name for debugging
-    return decorated_function
-
-
 def handle_api_errors(f):
     """
     Decorator to handle API-specific and unexpected errors in API functions. If an (expected) API error is thrown,

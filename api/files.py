@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
 from lxml import etree
-from lib.decorators import allow_only_secure_hosts, handle_api_errors
+from lib.decorators import handle_api_errors
 from lib.server_utils import ApiError
 from pathlib import Path
 from glob import glob
@@ -32,7 +32,6 @@ def list():
 
 
 @bp.route("/save", methods=["POST"])
-@allow_only_secure_hosts
 @handle_api_errors
 def save():
     """
@@ -56,7 +55,6 @@ def save():
     return jsonify({"result": "ok"})
 
 @bp.route("/delete", methods=["POST"])
-@allow_only_secure_hosts
 @handle_api_errors      
 def delete():
     """

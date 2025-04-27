@@ -3,7 +3,7 @@ import os
 from werkzeug.utils import secure_filename
 from pathlib import Path
 import mimetypes
-from lib.decorators import allow_only_secure_hosts, handle_api_errors
+from lib.decorators import handle_api_errors
 from lib.server_utils import ApiError
 
 try:
@@ -18,7 +18,6 @@ bp = Blueprint('upload', __name__, url_prefix='/api/upload')
 ALLOWED_MIME_TYPES = {'application/pdf', 'application/xml', 'text/xml'}  # Use MIME types
 
 @bp.route('', methods=['POST'])
-@allow_only_secure_hosts
 @handle_api_errors
 def upload_file():
     """

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
-from lib.decorators import allow_only_secure_hosts, handle_api_errors
+from lib.decorators import handle_api_errors
 from lib.server_utils import ApiError
 import json
 
@@ -19,7 +19,6 @@ def get_instructions():
 
 @bp.route("/instructions", methods=["POST"])
 @handle_api_errors
-@allow_only_secure_hosts
 def save_instructions():
     data = request.get_json()
     with open(prompt_path, 'w', encoding='utf-8') as f:
