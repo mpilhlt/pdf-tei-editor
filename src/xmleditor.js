@@ -58,7 +58,7 @@ export class XMLEditor extends EventTarget {
     const extensions = [
       basicSetup,
       xml(),
-      linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => true }),
+      linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => false }),
       lintGutter(),
       selectionChangeListener(this.#onSelectionChange.bind(this)),
       EditorView.updateListener.of(this.#onUpdate.bind(this)),

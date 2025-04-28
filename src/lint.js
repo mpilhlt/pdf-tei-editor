@@ -1,6 +1,4 @@
 import { validateXml, last_http_status } from './client.js'
-import { $ } from './browser-utils.js'
-import { resolveXPath } from './codemirror_utils.js'
 import { EditorView } from 'codemirror';
 
 let validatedVersion = null;
@@ -57,6 +55,10 @@ export function disableValidation(value) {
   }
 }
 
+/**
+ * Returns whether the validation is disabled
+ * @returns {boolean}
+ */
 export function validationIsDisabled() {
   return isDisabled;
 }
@@ -95,15 +97,21 @@ export async function lintSource(view) {
     //console.log("Ignoring validation request: Validation is ongoing.")
     return lastDiagnostics;
   }
-  
   validationInProgress = true;
   // promise that will resolve when the validation results are back from the server and the validation source is not outdated
   validationPromise = new Promise(async (resolve, reject) => {
+    let validationErrors = [];
     while (true) {
       validatedVersion = window.xmlEditor.getDocumentVersion(); // how to avoid this hard link?
       console.log(`Requesting validation for document version ${validatedVersion}...`)
       validationEvents.emitStartEvent()
-      let { errors: validationErrors } = await validateXml(xml);
+      // send request to server
+      try {
+        ({ errors: validationErrors } = await validateXml(xml));
+      } catch (error) {
+        return reject(error);
+      }
+      // notify listeners that validation is done
       validationEvents.emitEndEvent()
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`)
       // check if document has changed in the meantime
@@ -115,40 +123,31 @@ export async function lintSource(view) {
     }
   });
 
-  let validation_errors;
+  let validationErrors;
   try {
-    validation_errors = await validationPromise;
+    validationErrors = await validationPromise;
   } catch (error) {
-    console.warn(error.message);
     // stop querying
-    if (last_http_status == 403) {
+    if (last_http_status >= 400) {
       isDisabled = true
     }
+    return lastDiagnostics
   } finally {
     validationInProgress = false;
     validationPromise = null;
   }
 
   // convert xmllint errors to Diagnostic objects
-  const diagnostics = validation_errors.map(error => {
+  const diagnostics = validationErrors.map(error => {
     let from, to;
-    if (error.line) {
+    if (error.line !== undefined && error.column !== undefined) {
       ({ from, to } = doc.line(error.line))
-      from += error.col
-    } else if (error.path) {
-      // {"reason": "Unexpected child with tag 'tei:imprint' at position 4. Tag 'tei:title' expected.", 
-      // "path": "/TEI/standOff/listBibl/biblStruct[8]/monogr"}  
-      const pos = resolveXPath(view, error.path)
-      if (!pos) {
-        console.warn(`Could not locate ${error.path} in syntax tree.`)
-        return null
-      }
-      ({ from, to } = pos);
+      from += error.column
     } else {
       console.warn("Invalid response from remote validation:", error)
       return null
     }
-    return { from, to, severity: "error", message: error.reason };
+    return { from, to, severity: "error", message: error.message };
   }).filter(Boolean);
 
   lastDiagnostics = diagnostics;

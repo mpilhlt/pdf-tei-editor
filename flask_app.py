@@ -7,7 +7,7 @@
 # object in case of an errors. 
 
 from flask import Flask, send_from_directory, jsonify, redirect
-import os, sys
+import os
 import importlib.util
 from glob import glob
 from dotenv import load_dotenv
@@ -30,10 +30,10 @@ for filename in os.listdir(api_folder):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        # Check if the module has a 'bp' attribute (blueprint instance)
+        # Dymnically register the blueprint if it exists
         if hasattr(module, 'bp'):
             app.register_blueprint(module.bp)
-            print(f"Registered blueprint: {module_name}")  # Optional logging
+            print(f"Registered blueprint: {module_name}")  
         else:
             print(f"Warning: No blueprint ('bp' attribute) found in {module_name}")
 

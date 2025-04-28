@@ -42,6 +42,7 @@ async function callApi(endpoint, method, body = null) {
     return result
   } catch (error) {
     alert(error.message)
+    last_http_status = error.status || 500;
     // rethrow
     throw error
   }

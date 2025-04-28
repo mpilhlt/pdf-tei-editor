@@ -1,9 +1,10 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
 import re
-from xml.etree import ElementTree
-from xml.etree.ElementTree import ParseError
-from xmlschema import XMLSchema
+from lxml import etree
+from lxml.etree import ElementTree as ET
+from lxml.etree import XMLSyntaxError, XMLSchema, XMLSchemaParseError, XMLSchemaValidateError, DocumentInvalid
+import xmlschema # too slow for validation but has some nice features like exporting a local copy of the schema
 from lib.decorators import handle_api_errors
 from lib.server_utils import ApiError
 from urllib.error import HTTPError
@@ -19,8 +20,8 @@ def validate_route():
     """
     data = request.get_json()
     xml_string = data.get('xml_string')
-    error_messages = validate(xml_string)
-    return jsonify({'errors': error_messages})
+    errors = validate(xml_string)
+    return jsonify({'errors': errors})
 
 
 def extract_schema_locations(xml_string):
@@ -38,18 +39,22 @@ def extract_schema_locations(xml_string):
 def validate(xml_string):
     """
     Validates an XML string using the schema declaration and schemaLocation in the xml document
-    Implementation adapted from https://github.com/FranklinChen/validate-xml-python/blob/master/validate.py3
     """
+    parser = etree.XMLParser()
+    errors = []
+    
     try:
-        xmldoc = ElementTree.fromstring(xml_string)
-    except ParseError as e:
+        xmldoc = etree.XML(xml_string, parser)
+    except XMLSyntaxError as e:
         # if xml is invalid, return right away
-        line, col = e.position
-        return [{
-            "reason": str(e),
-            "line": line,
-            "col": col
-        }]
+        for error in e.error_log:
+            line, column = e.position
+            errors.append({
+                "message": str(e),
+                "line": line,
+                "column": column
+            })
+        return errors
 
     # validate xml schema
     schema_locations = extract_schema_locations(xml_string)
@@ -57,7 +62,6 @@ def validate(xml_string):
         current_app.logger.debug(f'No schema location found in XML, skipping validation.')
         return []
     
-    errors = []
     for sl in schema_locations:
         namespace = sl['namespace']
         schema_location = sl['schemaLocation']
@@ -71,25 +75,27 @@ def validate(xml_string):
             current_app.logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
             os.makedirs(schema_cache_dir, exist_ok=True)
             try:
-                schema = XMLSchema(schema_location)
+                xmlschema.download_schemas(schema_location, target=schema_cache_dir, save_remote=True)
             except HTTPError:
                 raise ApiError(f"Failed to download schema for {namespace} from {schema_location} - check the URL")
-            schema.export(target=schema_cache_dir, save_remote=True)
+            except xmlschema.XMLSchemaParseError as e:
+                raise ApiError(f"Failed to parse schema for {namespace} from {schema_location}: {str(e)}")
         else:
             current_app.logger.debug(f"Using cached version at {schema_cache_file}")
-            schema = XMLSchema(schema_cache_file) 
-
+        
+        # Load the schema from the cache
+        schema_tree = etree.parse(schema_cache_file)
         try:
-            for error in schema.iter_errors(xml_string):
+            schema = XMLSchema(schema_tree)
+        except XMLSchemaParseError as e:
+            raise ApiError(f"Failed to load schema for {namespace} from {schema_cache_file}: {str(e)}")
+        try:
+            schema.assertValid(xmldoc)
+        except DocumentInvalid:
+            for error in schema.error_log:
                 errors.append({
-                    "reason": error.reason,
-                    "path": error.path
-                })
-        except ElementTree.ParseError as e:
-            line, col = e.position
-            errors.append({
-                "reason": str(e),
-                "line": line,
-                "col": col
+                    "message": error.message.replace("{http://www.tei-c.org/ns/1.0}", "tei:"), # todo generalize this
+                    "line": error.line,
+                    "column": error.column
             })
     return errors
