@@ -43,7 +43,7 @@
   </teiHeader>
   <standOff>
     <listBibl>
-      <biblStruct source="fn1" status="verified">
+      <biblStruct source="fn1">
         <monogr>
           <title level="m">Tractatus logico-philosophicus</title>
           <author>
@@ -57,8 +57,31 @@
             <pubPlace>London</pubPlace>
           </imprint>
         </monogr>
+        <citedRange>1.1</citedRange>
       </biblStruct>
-      <biblStruct source="fn2" status="verified">
+      <biblStruct source="fn2">
+        <analytic>
+          <title level="a">Fact</title>
+        </analytic>
+        <monogr>
+          <title level="m">Oxford English Dictionary</title>
+          <imprint>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Thatsache</title>
+        </analytic>
+        <monogr>
+          <title level="m">Grimms Wörterbuch</title>
+          <imprint>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
         <analytic>
           <title level="a">Tatsache I</title>
           <author>
