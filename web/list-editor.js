@@ -62,7 +62,6 @@ class JsonListEditor extends HTMLElement {
           .list-item label {
             flex-grow: 1;
             margin-right: 10px;
-            cursor: pointer;
           }
 
           .list-item input[type="text"],
@@ -72,7 +71,6 @@ class JsonListEditor extends HTMLElement {
             padding: 5px;
             border: 1px solid #ccc;
             border-radius: 4px;
-            cursor: pointer;
           }
 
           .list-item input[type="text"]:disabled,
@@ -198,7 +196,6 @@ class JsonListEditor extends HTMLElement {
     listItem.draggable = true;  // Make the list item draggable
     listItem.dataset.index = index; // Store index for drag operations
 
-
     // active
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -215,6 +212,7 @@ class JsonListEditor extends HTMLElement {
     label.disabled = !item.active;
     label.dataset.key = 'label';
     label.dataset.index = index;
+    label.draggable = false
 
     // text
     const textbox = document.createElement('textarea');
@@ -225,6 +223,7 @@ class JsonListEditor extends HTMLElement {
     textbox.disabled = !item.active;
     textbox.dataset.key = 'text';
     textbox.dataset.index = index;
+    textbox.draggable = false
 
     // action buttons
     const actions = document.createElement('div');
@@ -252,6 +251,7 @@ class JsonListEditor extends HTMLElement {
 
 
   handleDragStart(event) {
+    console.log(event)
     this._draggedItemIndex = parseInt(event.target.dataset.index, 10);
 
     if (isNaN(this._draggedItemIndex)) {

@@ -364,6 +364,7 @@ function setupUI() {
     UrlHash.remove("diff")
     diffXmlPath = xmlPath
     diffSelectbox.selectedIndex = versionSelectbox.selectedIndex
+    $$('#nav-diff > *').forEach(node => node.disabled = true)
   })
 
   // bring clicked elements into foreground when clicked
@@ -471,8 +472,10 @@ function setupUI() {
     const filename = fileData.pdf
     try {
       doi = doi || getDoiFromFilenameOrUserInput(filename)
-      const { xml, pdf } = await extractFromPDF(filename, doi)
-      await load({ xml, pdf })
+      let { xml, pdf } = await extractFromPDF(filename, doi)
+      let diff = xml
+      await reloadFileData()
+      await load({ pdf, diff })
     } catch (error) {
       console.error(error)
     }

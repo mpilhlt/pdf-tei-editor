@@ -1,5 +1,10 @@
 [
     {
+        "label": "No name capitalization",
+        "active": true,
+        "text": "Always properly capitalize names. Do not use small or all caps even if they appear in the document "
+    },
+    {
         "label": "Backreferences",
         "active": true,
         "text": "Do not list references which have already been mentioned in a previous footnote, if they refer to the same analytic item. \n\nExample: \"See Miller, Confessions (fn. 11).\" \n\nHowever, include them if they refer to the same monographic item mentioned previously, but to a different analytic. \n\nExample \"Bacon, \"Nova lux\". in \"Works\" (fn. 11), p 45-34"
@@ -7,11 +12,6 @@
     {
         "label": "Required monographic title",
         "active": true,
-        "text": "A monograph must always have a title. If there is an author and an editor, the title of the book is the monographic title. "
-    },
-    {
-        "label": "No name capitalization",
-        "active": true,
-        "text": "Always properly capitalize names. Do not use small or all caps even if they appear in the document "
+        "text": "A monograph must always have a title. A single analytic title without an additional monographic title does not exist. A book title is always the monographic title. For example, in \"Ludwig Wittgenstein, Tractatus logico-philosophicus, London 1922\", \"Tractatus logico-philosophicus\" is the monographic title, not the analytic."
     }
 ]
