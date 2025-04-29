@@ -1,9 +1,14 @@
+
+/**
+ * "Mini-jquery" - monkey-patches the element identified by the selector with some convenience methods.
+ * @param {string} selector 
+ * @returns {Element}
+ */
 export function $(selector) {
   const node = document.querySelector(selector)
   if (!node) {
     throw new Error(`Selector "${selector} does not find any element"`)
   }
-  // monkey-patch element to add convenience methods
   Object.assign(node, {
     hide: node.hide === undefined ? () => {node.style.visibility = "hidden"} : node.hide,
     show: node.show === undefined ? () => {node.style.visibility = "visible"} : node.show,
@@ -17,7 +22,8 @@ export function $(selector) {
     off: node.off === undefined ? (event, callback) => {node.removeEventListener(event, callback)} : node.off,
     once: node.once === undefined ? (event, callback) => {node.addEventListener(event, callback, { once: true })} : node.once,
     enable: node.disabled !== undefined ? () => { node.disabled = false } : undefined,
-    disable: node.disabled !== undefined ? () => { node.disabled = true } : undefined
+    disable: node.disabled !== undefined ? () => { node.disabled = true } : undefined,
+    click: handler => node.addEventListener('click', handler.bind(node))
   })
 
   return node

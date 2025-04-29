@@ -1,3 +1,5 @@
+// sorry for this horrible mess, this code will be refactored when I have a bit more time!
+
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
 import *  as client from './client.js'
@@ -26,6 +28,11 @@ let xmlEditor = null;
 let pdfViewer = null;
 
 /**
+ * The data about the pdf and xml files on the server
+ */
+let fileData = null;
+
+/**
  * The last selected node, can be null
  * @type {Node?}
  */
@@ -49,6 +56,11 @@ const spinner = $('#spinner')
 let pdfPath = window.pdfPath = UrlHash.get('pdf');
 let xmlPath = window.xmlPath = UrlHash.get('xml');
 let diffXmlPath = window.diffXmlPath = UrlHash.get('diff');
+
+// UI elements
+const fileSelectbox = $('#select-doc')
+const versionSelectbox = $('#select-version')
+const diffSelectbox = $('#select-diff-version')
 
 // run main app
 try {
@@ -98,23 +110,23 @@ async function main() {
   try {
 
     // Fetch file data from api
-    const { files } = await client.getFileList();
-    if (!files || files.length === 0) {
+    await reloadFileData()
+
+    if (!fileData || fileData.length === 0) {
       throw new Error("No files found")
     }
 
     // select default files
-    pdfPath = pdfPath || files[0].pdf
-    xmlPath = xmlPath || files[0].xml
-    diffXmlPath = diffXmlPath || files[0].xml
+    pdfPath = pdfPath || fileData[0].pdf
+    xmlPath = xmlPath || fileData[0].xml
+    diffXmlPath = diffXmlPath || fileData[0].xml
 
     // setup the UI
+    setupUI()
     await Promise.all([
       loadPdfViewer(pdfPath),
       loadXmlEditor(xmlPath, tagDataPath),
-      setupUI(files),
     ]).catch(e => { throw e; })
-
   } catch (error) {
     spinner.hide();
     alert(error.message)
@@ -135,7 +147,7 @@ async function main() {
     if (diffXmlPath !== xmlPath) {
       // load the diff view
       try {
-        await load({diff:diffXmlPath})
+        await load({ diff: diffXmlPath })
       } catch (error) {
         console.error("Error loading diff view:", error)
       }
@@ -173,69 +185,136 @@ async function main() {
   console.log("Application ready.")
 }
 
+
+async function reloadFileData() {
+  const { files } = await client.getFileList();
+  fileData = files
+}
+
 // Populates the selectbox for file name and version
-async function populateFilesSelectboxes(files) {
-
-  // the selectboxes to populate
-  const fileSelectbox = $('#select-doc')
-  const versionSelectbox = $('#select-version')
-  const diffSelectbox = $('#select-diff-version')
-
-  console.log('Loaded file data.');
+function populateFilesSelectboxes() {
 
   // Clear existing options
   fileSelectbox.innerHTML = versionSelectbox.innerHTML = diffSelectbox.innerHTML = '';
 
   // Populate file select box 
-  files.forEach(fileData => {
+  fileData.forEach(file => {
     const option = document.createElement('option');
-    option.value = fileData.id;
-    option.text = fileData.label
+    option.value = file.id;
+    option.text = file.label
+    if (file.pdf === pdfPath) {
+      option.selected = true
+      // populate the version and diff selectboxes depending on the selected file
+      if (file.versions) {
+        file.versions.forEach((version) => {
+          const option = document.createElement('option');
+          option.value = version.path;
+          option.text = version.label;
+          option.selected = (version.path === xmlPath)
+          versionSelectbox.appendChild(option);
+          const diffOption = option.cloneNode(true)
+          diffOption.selected = (diffOption.value === diffXmlPath)
+          diffSelectbox.appendChild(diffOption)
+        })
+      }
+    }
     fileSelectbox.appendChild(option);
   });
 
-  // align selectboxes with url query params
-  const fileData = files.find(file => file.pdf == pdfPath)
-  if (fileData) {
-    // select the filename
-    fileSelectbox.selectedIndex = files.indexOf(fileData);
+}
 
-    // populate the version selectbox depending on the selected file
-    if (fileData.versions) {
-      fileData.versions.forEach((version) => {
-        const option = document.createElement('option');
-        option.value = version.path;
-        option.text = version.label;
-        versionSelectbox.appendChild(option);
-        const diffOption = option.cloneNode(true)
-        if (diffOption.value === diffXmlPath) {
-          diffOption.selected = true
-        }
-        diffSelectbox.appendChild(diffOption)
-      })
-    }
+// Populates the selectbox for the xpath expressions that 
+// control the navigation within the xml document
+function populateXpathSelectbox() {
+  const selectbox = $('#select-xpath');
+  try {
+    const data = [
+      {
+        "xpath": "//tei:biblStruct",
+        "label": "<biblStruct>"
+      },
+      {
+        "xpath": "//tei:biblStruct[@status='verified']",
+        "label": "Verified <biblStruct>"
+      },
+      {
+        "xpath": "//tei:biblStruct[not(@status='verified')]",
+        "label": "Unverified <biblStruct>"
+      },
+      {
+        "xpath": "//tei:biblStruct[@status='unresolved']",
+        "label": "Unresolved <biblStruct>"
+      },
+      {
+        "xpath": null,
+        "label": "Custom XPath"
+      }
+    ];
+
+    // Clear existing options
+    selectbox.innerHTML = '';
+
+    // Populate select box with options
+    data.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.xpath || ''
+      option.text = item.label
+      option.disabled = item.xpath === null
+      selectbox.appendChild(option);
+    });
+
+    // button to edit the xpath manually
+    $('#btn-edit-xpath').addEventListener('click', () => {
+      const custom = selectbox[selectbox.length - 1]
+      const xpath = prompt("Enter custom xpath", custom.value)
+      if (xpath && xpath.trim()) {
+        custom.value = xpath
+        custom.text = `Custom: ${xpath}`
+        selectbox.selectedIndex = selectbox.length - 1
+      }
+    })
+
+    // listen for changes in the selectbox
+    selectbox.addEventListener('change', () => {
+      // this triggers the selection via the window's `hashchange` event
+      UrlHash.set("xpath", selectbox.value)
+    });
+
+  } catch (error) {
+    console.error('Error populating xpath selectbox:', error);
   }
+}
+
+/**
+ * Code to configure the initial state of the UI
+ */
+function setupUI() {
+
+  // populate the selectboxes
+  populateXpathSelectbox()
+  populateFilesSelectboxes()
 
   // listen for changes in the PDF selectbox
   async function loadFilesFromSelectedId() {
-    const selectedFile = files.find(file => file.id === fileSelectbox.value);
+    const selectedFile = fileData.find(file => file.id === fileSelectbox.value);
     const pdf = selectedFile.pdf
     const xml = selectedFile.xml
     const filesToLoad = {}
+
     if (pdf && pdf !== pdfPath) {
       filesToLoad.pdf = pdf
     }
     if (xml && xml !== xmlPath) {
       filesToLoad.xml = xml
     }
-    // reset diff
-    filesToLoad.diff = xml
 
-    try {
-      await load(filesToLoad)
-    }
-    catch (error) {
-      console.error(error)
+    if (Object.keys(filesToLoad).length > 0) {
+      try {
+        await load(filesToLoad)
+      }
+      catch (error) {
+        console.error(error)
+      }
     }
   }
   fileSelectbox.addEventListener('change', loadFilesFromSelectedId);
@@ -256,95 +335,36 @@ async function populateFilesSelectboxes(files) {
   // listen for changes in the diff version selectbox  
   async function loadDiff() {
     const diff = diffSelectbox.value
-    try {
-      await load({ diff })
-    } catch (error) {
-      console.error(error)
+    if (diff !== diffXmlPath) {
+      try {
+        await load({ diff })
+      } catch (error) {
+        console.error(error)
+      }
     }
   }
   diffSelectbox.addEventListener('change', loadDiff);
-}
 
-/**
- * Code to configure the initial state of the UI
- */
-async function setupUI(files) {
+  // update selectbox according to the URL hash
+  window.addEventListener('hashchange', onHashChange);
 
-  // Populates the selectbox for the xpath expressions that 
-  // control the navigation within the xml document
-  function populateXpathSelectbox() {
-    const selectbox = $('#select-xpath');
-    try {
-      const data = [
-        {
-          "xpath": "//tei:biblStruct",
-          "label": "<biblStruct>"
-        },
-        {
-          "xpath": "//tei:biblStruct[@status='verified']",
-          "label": "Verified <biblStruct>"
-        },
-        {
-          "xpath": "//tei:biblStruct[not(@status='verified')]",
-          "label": "Unverified <biblStruct>"
-        },
-        {
-          "xpath": "//tei:biblStruct[@status='unresolved']",
-          "label": "Unresolved <biblStruct>"
-        },
-        {
-          "xpath": null,
-          "label": "Custom XPath"
-        }
-      ];
-
-      // Clear existing options
-      selectbox.innerHTML = '';
-
-      // Populate select box with options
-      data.forEach(item => {
-        const option = document.createElement('option');
-        option.value = item.xpath || ''
-        option.text = item.label
-        option.disabled = item.xpath === null
-        selectbox.appendChild(option);
-      });
-
-      // button to edit the xpath manually
-      $('#btn-edit-xpath').addEventListener('click', () => {
-        const custom = selectbox[selectbox.length - 1]
-        const xpath = prompt("Enter custom xpath", custom.value)
-        if (xpath && xpath.trim()) {
-          custom.value = xpath
-          custom.text = `Custom: ${xpath}`
-          selectbox.selectedIndex = selectbox.length - 1
-        }
-      })
-
-      // listen for changes in the selectbox
-      selectbox.addEventListener('change', () => {
-        // this triggers the selection via the window's `hashchange` event
-        UrlHash.set("xpath", selectbox.value)
-      });
-
-      // update selectbox according to the URL hash
-      window.addEventListener('hashchange', onHashChange);
-
-      // setup click handlers
-      $('#btn-prev-node').addEventListener('click', () => previousNode());
-      $('#btn-next-node').addEventListener('click', () => nextNode());
-
-    } catch (error) {
-      console.error('Error populating xpath selectbox:', error);
-    }
-  }
-
-  // populate the selectboxes
-  populateXpathSelectbox()
-  populateFilesSelectboxes(files).catch(error => console.error(error))
-
-  // when everything is configured, we can show the navigation
-  $('#navigation').show()
+  // setup click handlers
+  $('#btn-prev-node').click(() => previousNode());
+  $('#btn-next-node').click(() => nextNode());
+  $('#btn-prev-diff').click(() => xmlEditor.goToPreviousDiff())
+  $('#btn-next-diff').click(() => xmlEditor.goToNextDiff())
+  $('#btn-diff-keep-all').click(() => {
+    xmlEditor.rejectAllDiffs()
+    UrlHash.remove("diff")
+    diffXmlPath = xmlPath
+    diffSelectbox.selectedIndex = versionSelectbox.selectedIndex    
+  })
+  $('#btn-diff-change-all').click(() =>{
+    xmlEditor.acceptAllDiffs()
+    UrlHash.remove("diff")
+    diffXmlPath = xmlPath
+    diffSelectbox.selectedIndex = versionSelectbox.selectedIndex
+  })
 
   // bring clicked elements into foreground when clicked
   addBringToForegroundListener(['#navigation', '.cm-panels']);
@@ -357,6 +377,13 @@ async function setupUI(files) {
 
   // allow to input node index
   $('#selection-index').addEventListener('click', onClickSelectionIndex)
+
+  // when everything is configured, we can show the navigation
+  $('#navigation').show()
+
+  //
+  // Document commands toolbar
+  //
 
   // load new document
   $('#btn-load-document').addEventListener('click', onClickLoadDocument)
@@ -471,6 +498,8 @@ async function setupUI(files) {
     }
     xmlPath = options[0].value
     try {
+      await reloadFileData()
+      populateFilesSelectboxes()
       await load({ xml: xmlPath, pdf: pdfPath })
     } catch (error) {
       console.error(error)
@@ -502,83 +531,80 @@ async function setupUI(files) {
  */
 async function load({ xml, pdf, diff }) {
 
-  async function reloadSelectboxes() {
-    const { files } = await client.getFileList()
-    await populateFilesSelectboxes(files)
-  }
-  // always reload selectbox data
-  const promises = [reloadSelectboxes]
+  const promises = []
 
   // PDF 
   if (pdf) {
-    promises.push(pdfViewer.load(pdf).then(() => {
-      // update the URL hash
-      UrlHash.set('pdf', pdf)
-      // update the selectbox
-      const selectbox = $('#select-doc')
-      const index = Array.from(selectbox.options).findIndex(option => option.value === pdf)
-      if (index >= 0) {
-        selectbox.selectedIndex = index
-      }
-      pdfPath = pdf
-    }))
+    console.log("Loading PDF", pdf)
+    promises.push(pdfViewer.load(pdf))
   }
 
   // XML
   if (xml) {
-    // load the XML file
-    promises.push(xmlEditor.loadXml(xml).then(() => {
-      // update the URL hash 
-      UrlHash.set('xml', xml)
-      // update the selectbox
-      const selectbox = $('#select-version')
-      const index = Array.from(selectbox.options).findIndex(option => option.value === xml)
-      if (index >= 0) {
-        selectbox.selectedIndex = index
-        // align diff selectbox
-        $('#select-diff-version').selectedIndex = index
-      }
-      xmlPath = xml
-    }))
+    console.log("Loading XML", xml)
+    promises.push(xmlEditor.loadXml(xml))
   }
 
   // diff XML
   if (diff) {
-    const p = new Promise(async resolve => {
-
-      if (diff !== xmlPath) {
-        console.log("Loading diff XML", diff)
-        spinner.show('Computing file differences, please wait...')
-        try {
-          await xmlEditor.showMergeView(diff)
-        } finally {
-          spinner.hide()
-        }
-      } else {
-        // if the diff is the same as the original XML, we need to hide the diff view, it it was shown
-        await xmlEditor.hideMergeView()
-      }
-      // update the URL hash
-      UrlHash.set('diff', diff)
-      // update the selectbox
-      const selectbox = $('#select-diff-version')
-      const index = Array.from(selectbox.options).findIndex(option => option.value === diff)
-      if (index >= 0) {
-        selectbox.selectedIndex = index
-      }
-      diffXmlPath = diff
-      resolve()
-    })
-    if (xml && xml !== diff) {
-      // if we have a diff and a new xml file, we need to wait until the original XML has loaded
-      promises.slice(-1)[0].then(() => p)
+    if (diff === xmlPath || diff === xml) {
+      // if the diff is the same as the original XML, we need to hide the diff view
+      $$('#nav-diff button').forEach(b => b.disabled = true)
+      diffXmlPath = xml
+      await xmlEditor.hideMergeView()
     } else {
-      // if we don't have a new XML file, we can just show the diff
-      promises.push(p)
+      const p = new Promise(async resolve => {
+        if (diff !== xmlPath) {
+          console.log("Loading diff XML", diff)
+          spinner.show('Computing file differences, please wait...')
+          try {
+            await xmlEditor.showMergeView(diff)
+            $$('#nav-diff button').forEach(b => b.disabled = false)
+          } finally {
+            spinner.hide()
+          }
+        }
+        resolve()
+      })
+      if (xml && xml !== diff) {
+        // if we have a diff and a new xml file, we need to wait until the original XML has loaded
+        promises.slice(-1)[0].then(() => p)
+      } else {
+        // if we don't have a new XML file, we can just show the diff
+        promises.push(p)
+      }
     }
-  }
+  } 
+
   // await promises in parallel
   await Promise.all(promises)
+
+  if (pdf) {
+    xmlPath = diffXmlPath = null
+    // update the URL hash
+    UrlHash.set('pdf', pdf)
+    UrlHash.remove('xml')
+    UrlHash.remove('diff')
+    UrlHash.remove('xpath')
+    pdfPath = pdf
+  }
+  if (xml) {
+    // update the URL hash 
+    UrlHash.set('xml', xml)
+    UrlHash.remove('diff')
+    UrlHash.remove('xpath')
+    diffXmlPath = xml
+    xmlPath = xml
+  }
+  if (diff) {
+    // update the URL hash
+    if (diff !== xml) {
+      UrlHash.set('diff', diff)
+    }
+    diffXmlPath = diff
+  } 
+  // update selectboxes in the toolbar
+  populateFilesSelectboxes()
 }
 
 /**
@@ -647,8 +673,8 @@ async function extractFromPDF(filename, doi = "") {
   try {
     let result = await client.extractReferences(filename, doi)
     // reload the file selectboxes
-    const { files } = await client.getFileList()
-    await populateFilesSelectboxes(files)
+    await reloadFileData()
+    populateFilesSelectboxes()
     return result
   } finally {
     spinner.hide()
@@ -874,7 +900,12 @@ function getSelectionXpath() {
 
 
 function getXpathResultSize(xpath) {
-  return xmlEditor.countDomNodesByXpath(xpath)
+  try {
+    return xmlEditor.countDomNodesByXpath(xpath)
+  } catch(e) {
+    return 0
+  }
+  
 }
 
 

@@ -1,6 +1,6 @@
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, StateEffect, Compartment } from "@codemirror/state";
-import { unifiedMergeView, getOriginalDoc} from "@codemirror/merge"
+import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, getOriginalDoc, rejectChunk } from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
@@ -119,7 +119,7 @@ export class XMLEditor extends EventTarget {
     this.#readyPromise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
       this.#isReady = true;
       resolve();
-    }, {once: true}))
+    }, { once: true }))
 
     // fetch xml if path 
     const xml = await this.#fetchXml(xmlPathOrString);
@@ -132,7 +132,6 @@ export class XMLEditor extends EventTarget {
     this.#documentVersion = 0;
     await this.#readyPromise;
   }
-
 
   /**
    * Triggers a validation and returns an array of Diagnostic objects, or an empty array if no
@@ -148,9 +147,9 @@ export class XMLEditor extends EventTarget {
     //console.log("Triggering a validation")
     // otherwise, we trigger the linting
 
-     // remove all diagnostics
+    // remove all diagnostics
     this.clearDiagnostics();
-   
+
     // save disabled state and enable validation
     let disabledState = validationIsDisabled()
     disableValidation(false)
@@ -186,27 +185,27 @@ export class XMLEditor extends EventTarget {
    * @returns {Promise<void>} A promise that resolves when the merge view is shown
    * @throws {Error} If there's an error loading or parsing the XML.
    */
-  async showMergeView(xmlPathOrString){
+  async showMergeView(xmlPathOrString) {
     // remove existing merge view
     await this.hideMergeView()
 
     // fetch xml if it is a path 
     const diff = await this.#fetchXml(xmlPathOrString);
-    
+
     // create and display merge view with the original 
     this.#mergeViewExt = unifiedMergeView({
       original: diff,
-      diffConfig: {scanLimit: 50000, timeout: 20000}
+      diffConfig: { scanLimit: 50000, timeout: 20000 }
     })
-    
+
     this.#view.dispatch({
-       effects: this.#mergeViewCompartment.reconfigure([this.#mergeViewExt])
+      effects: this.#mergeViewCompartment.reconfigure([this.#mergeViewExt])
     });
 
     // Overwrite the default button labels
     this.#updateMergButtonsInterval = setInterval(() => {
-      $$('button[name="accept"]').forEach(b => b.innerHTML='Keep') 
-      $$('button[name="reject"]').forEach(b => b.innerHTML='Change') 
+      $$('button[name="accept"]').forEach(b => b.innerHTML = 'Keep')
+      $$('button[name="reject"]').forEach(b => b.innerHTML = 'Change')
     }, 200)
   }
 
@@ -237,7 +236,56 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
-   * REturns an integer that represents the current document version. This is incremented
+   * Move the selection to the previous diff
+   */
+  goToPreviousDiff() {
+    if (!this.isMergeViewActive()) {
+      throw new Error("Not in merge view")
+    }
+    goToPreviousChunk(this.#view)
+  }
+
+  /**
+   * Moves the selection to the next diff
+   */
+  goToNextDiff() {
+    if (!this.isMergeViewActive()) {
+      throw new Error("Not in merge view")
+    }
+    goToNextChunk(this.#view)
+  }
+
+  acceptAllDiffs() {
+    if (!this.isMergeViewActive()) {
+      throw new Error("Not in merge view")
+    }
+    const state = this.#view.state;
+    //const originalDocument = getOriginalDoc(state);
+    const { chunks } = getChunks(state);
+    let changes = [];
+    for (const chunk of chunks) {
+      //const originalChunkText = originalDocument.sliceString(chunk.fromB, chunk.toB);
+      rejectChunk(this.#view, chunk.fromA )
+      // changes.push({
+      //   from: chunk.fromA, 
+      //   to: chunk.toA,
+      //   insert: originalChunkText
+      // });
+    }
+    this.hideMergeView()
+
+    // changes = changes.slice(0,3)
+    // console.log(changes)
+
+    // this.#view.dispatch({ changes });
+  }
+
+  rejectAllDiffs() {
+    this.hideMergeView()
+  }
+
+  /**
+   * Returns an integer that represents the current document version. This is incremented
    * whenever the document is changed in the editor.
    * @returns {number} The current document version
    */
@@ -278,23 +326,6 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
-   * serializes the node (or the complete xmlTree if no node is given) to an XML string
-   * @param {Node} node The node to serialize
-   * @param {boolean} [removeNamespaces=true] Whether to remove the namespace declaration in the output
-   */
-  #serialize(node, removeNamespaces=true) {
-    if (!(node && node instanceof Node)) {
-      throw new TypeError("No node provided")
-    }
-    let xmlstring = this.#serializer.serializeToString(node)
-    if (removeNamespaces) {
-      xmlstring = xmlstring.replace(/ xmlns=".+?"/, '')
-    }
-    return xmlstring
-  }
-
-
-  /**
    * Updates the editor from a node in the XML Document. Returns a promise that resolves when
    * the editor is updated
    * @param {Node} node A XML DOM node
@@ -319,8 +350,8 @@ export class XMLEditor extends EventTarget {
    * Updates the given node with the XML text from the editor
    * @param {Node} node A XML node
    */
-  async updateNodeFromEditor(node){
-    const {to, from} = this.getSyntaxNodeFromDomNode(node)
+  async updateNodeFromEditor(node) {
+    const { to, from } = this.getSyntaxNodeFromDomNode(node)
     node.outerHTML = this.#view.state.doc.sliceString(from, to)
     this.#updateMaps()
   }
@@ -363,7 +394,8 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
-   * Returns the syntax node at the given position, or its next Element or Document ancestor if the findParentElement parameter is true (default)
+   * Returns the syntax node at the given position, or its next Element or Document ancestor if the 
+   * findParentElement parameter is true (default).
    * @param {number} pos The cursor position in the document
    * @param {boolean} findParentElement If true, find the next ancestor which is an Element or Document Node
    * @returns {SyntaxNode}
@@ -462,7 +494,7 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
-   * Returns the first syntax node that matches the given XPath expression.
+   * Returns the first syntax node that matches the given XPath expression. Should be private?
    * @param {string} xpath 
    * @returns {SyntaxNode} The first matching syntax node.
    * @throws {Error} If the XML tree is not loaded, if no DOM node match the XPath expression, or no syntax node can be found for the DOM node.
@@ -565,17 +597,39 @@ export class XMLEditor extends EventTarget {
     try {
       if (await this.#updateTrees()) {
         this.#updateMaps()
-        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));  
+        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
       }
     } catch (error) {
       console.warn("Linking DOM and syntax tree failed:", error.message)
     }
-  }  
+  }
 
   //
-  // private methods
-  //
+  // private methods which are not part of the API and hide implementation details
+  // 
 
+  /**
+   * serializes the node (or the complete xmlTree if no node is given) to an XML string
+   * @param {Node} node The node to serialize
+   * @param {boolean} [removeNamespaces=true] Whether to remove the namespace declaration in the output
+   */
+  #serialize(node, removeNamespaces = true) {
+    if (!(node && node instanceof Node)) {
+      throw new TypeError("No node provided")
+    }
+    let xmlstring = this.#serializer.serializeToString(node)
+    if (removeNamespaces) {
+      xmlstring = xmlstring.replace(/ xmlns=".+?"/, '')
+    }
+    return xmlstring
+  }
+
+  /**
+   * Given a string, if the string is an xml string, return it, otherwise treat it as a path
+   * and load the xml string from this location
+   * @param {string} xmlPathOrString A path to an xml file, or an XML string
+   * @returns {string} The xml string
+   */
   async #fetchXml(xmlPathOrString) {
     let xml;
     if (xmlPathOrString.trim().slice(0, 1) != "<") {
@@ -591,8 +645,12 @@ export class XMLEditor extends EventTarget {
       xml = xmlPathOrString;
     }
     return xml
-  }  
+  }
 
+  /**
+   * Called when the selection in the editor changes
+   * @param {Array} ranges Array of range objects
+   */
   #onSelectionChange(ranges) {
     // add the selected node in the XML-DOM tree to each range
     if (ranges.length > 0) {
@@ -611,26 +669,47 @@ export class XMLEditor extends EventTarget {
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: ranges }))
   }
 
+
+  #updateTimeout = null
+
+  /**
+   * Called when the content of the editor changes, calls #updateActions() with 
+   * a 1000ms timeout so that the update actions only get triggered after 1 second of
+   * inactivity
+   * @param {Object} update Object containing data on the change
+   * @returns {void}
+   */
   async #onUpdate(update) {
     if (!update.docChanged) {
       return
     }
-    
+    if (this.#updateTimeout) {
+      clearTimeout(this.#updateTimeout)
+    }
+    this.#updateTimeout = setTimeout(() => this.#updateActions(update), 1000)
+  }
+
+  /**
+   * Called 1 second after the last change of the editor
+   * @param {Object} update The update object dispatched by the view
+   */
+  async #updateActions(update) {
+
     // update document version
     this.#documentVersion += 1;
-    
+
     // remove diagnostics that are in the range of the changes
     const diagnostics = [];
     const changedRangeValues = Object.values(update.changedRanges[0])
     const minRange = Math.min(...changedRangeValues)
-    const maxRange = Math.max(...changedRangeValues) 
+    const maxRange = Math.max(...changedRangeValues)
     forEachDiagnostic(this.#view.state, (d, from, to) => {
       if (d.from > maxRange || d.to < minRange) {
         // only keep diagnostics that are outside the changed range
         d.from = from;
         d.to = to;
         diagnostics.push(d);
-      } else { 
+      } else {
         console.log("Removing diagnostic", d)
       }
     });
@@ -671,10 +750,10 @@ export class XMLEditor extends EventTarget {
     this.#xmlTree = doc;
 
     // the syntax tree construction is async, so we need to wait for it to complete
-    if (syntaxParserRunning(this.#view)){
+    if (syntaxParserRunning(this.#view)) {
       console.log('Waiting for syntax tree to be ready...')
       while (syntaxParserRunning(this.#view)) {
-        await new Promise(resolve => setTimeout(resolve, 200)) 
+        await new Promise(resolve => setTimeout(resolve, 200))
       }
       console.log('Syntax tree is ready.')
     }

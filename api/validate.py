@@ -48,11 +48,10 @@ def validate(xml_string):
     except XMLSyntaxError as e:
         # if xml is invalid, return right away
         for error in e.error_log:
-            line, column = e.position
             errors.append({
-                "message": str(e),
-                "line": line,
-                "column": column
+                "message": error.message,
+                "line": error.line,
+                "column": error.column
             })
         return errors
 
