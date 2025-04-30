@@ -1,6 +1,6 @@
 [
     {
-        "label": "No name capitalization",
+        "label": "No small or all caps",
         "active": true,
         "text": "Always properly capitalize names. Do not use small or all caps even if they appear in the document "
     },
