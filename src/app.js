@@ -147,7 +147,7 @@ async function main() {
     if (diffXmlPath !== xmlPath) {
       // load the diff view
       try {
-        await load({ diff: diffXmlPath })
+        await showMergeView(diffXmlPath)
       } catch (error) {
         console.error("Error loading diff view:", error)
       }
@@ -290,60 +290,13 @@ function populateXpathSelectbox() {
  */
 function setupUI() {
 
-  // populate the selectboxes
+  // populate the selectboxes and setup change handlers
   populateXpathSelectbox()
   populateFilesSelectboxes()
 
-  // listen for changes in the PDF selectbox
-  async function loadFilesFromSelectedId() {
-    const selectedFile = fileData.find(file => file.id === fileSelectbox.value);
-    const pdf = selectedFile.pdf
-    const xml = selectedFile.xml
-    const filesToLoad = {}
-
-    if (pdf && pdf !== pdfPath) {
-      filesToLoad.pdf = pdf
-    }
-    if (xml && xml !== xmlPath) {
-      filesToLoad.xml = xml
-    }
-
-    if (Object.keys(filesToLoad).length > 0) {
-      try {
-        await load(filesToLoad)
-      }
-      catch (error) {
-        console.error(error)
-      }
-    }
-  }
-  fileSelectbox.addEventListener('change', loadFilesFromSelectedId);
-
-  // listen for changes in the version selectbox  
-  async function loadFilesFromSelectedVersion() {
-    const xml = versionSelectbox.value
-    if (xml !== xmlPath) {
-      try {
-        await load({ xml })
-      } catch (error) {
-        console.error(error)
-      }
-    }
-  }
-  versionSelectbox.addEventListener('change', loadFilesFromSelectedVersion);
-
-  // listen for changes in the diff version selectbox  
-  async function loadDiff() {
-    const diff = diffSelectbox.value
-    if (diff !== diffXmlPath) {
-      try {
-        await load({ diff })
-      } catch (error) {
-        console.error(error)
-      }
-    }
-  }
-  diffSelectbox.addEventListener('change', loadDiff);
+  fileSelectbox.addEventListener('change', onChangePdfSelectbox);
+  versionSelectbox.addEventListener('change', onChangeVersionSelectbox);
+  diffSelectbox.addEventListener('change', onChangeDiffSelectbox);
 
   // update selectbox according to the URL hash
   window.addEventListener('hashchange', onHashChange);
@@ -355,16 +308,11 @@ function setupUI() {
   $('#btn-next-diff').click(() => xmlEditor.goToNextDiff())
   $('#btn-diff-keep-all').click(() => {
     xmlEditor.rejectAllDiffs()
-    UrlHash.remove("diff")
-    diffXmlPath = xmlPath
-    diffSelectbox.selectedIndex = versionSelectbox.selectedIndex    
+    removeMergeView()
   })
-  $('#btn-diff-change-all').click(() =>{
+  $('#btn-diff-change-all').click(() => {
     xmlEditor.acceptAllDiffs()
-    UrlHash.remove("diff")
-    diffXmlPath = xmlPath
-    diffSelectbox.selectedIndex = versionSelectbox.selectedIndex
-    $$('#nav-diff > *').forEach(node => node.disabled = true)
+    removeMergeView()
   })
 
   // bring clicked elements into foreground when clicked
@@ -422,6 +370,58 @@ function setupUI() {
   // UI event handlers
   // 
 
+  // listen for changes in the PDF selectbox
+  async function onChangePdfSelectbox() {
+    const selectedFile = fileData.find(file => file.id === fileSelectbox.value);
+    const pdf = selectedFile.pdf
+    const xml = selectedFile.xml
+    const filesToLoad = {}
+
+    if (pdf && pdf !== pdfPath) {
+      filesToLoad.pdf = pdf
+    }
+    if (xml && xml !== xmlPath) {
+      filesToLoad.xml = xml
+    }
+
+    if (Object.keys(filesToLoad).length > 0) {
+      try {
+        await load(filesToLoad)
+      }
+      catch (error) {
+        console.error(error)
+      }
+    }
+  }
+
+
+  // listen for changes in the version selectbox  
+  async function onChangeVersionSelectbox() {
+    const xml = versionSelectbox.value
+    if (xml !== xmlPath) {
+      try {
+        await load({ xml })
+      } catch (error) {
+        console.error(error)
+      }
+    }
+  }  
+
+  // listen for changes in the diff version selectbox  
+  async function onChangeDiffSelectbox() {
+    const diff = diffSelectbox.value
+    const isDiff = diff && diff !== xmlPath
+    if (isDiff) {
+      try {
+        await showMergeView(diff)
+      } catch (error) {
+        console.error(error)
+      }
+    } else {
+      removeMergeView()
+    }
+  }
+
   async function onClickLoadDocument() {
     try {
       const { type, filename } = await uploadFile('/api/upload');
@@ -475,7 +475,8 @@ function setupUI() {
       let { xml, pdf } = await extractFromPDF(filename, doi)
       let diff = xml
       await reloadFileData()
-      await load({ pdf, diff })
+      await load({ pdf })
+      await showMergeView(diff)
     } catch (error) {
       console.error(error)
     }
@@ -532,7 +533,7 @@ function setupUI() {
  * @param {string} param0.pdf The path to the PDF file
  * @param {string} param0.diff The path to the diff XML file
  */
-async function load({ xml, pdf, diff }) {
+async function load({ xml, pdf }) {
 
   const promises = []
 
@@ -547,37 +548,6 @@ async function load({ xml, pdf, diff }) {
     console.log("Loading XML", xml)
     promises.push(xmlEditor.loadXml(xml))
   }
-
-  // diff XML
-  if (diff) {
-    if (diff === xmlPath || diff === xml) {
-      // if the diff is the same as the original XML, we need to hide the diff view
-      $$('#nav-diff button').forEach(b => b.disabled = true)
-      diffXmlPath = xml
-      await xmlEditor.hideMergeView()
-    } else {
-      const p = new Promise(async resolve => {
-        if (diff !== xmlPath) {
-          console.log("Loading diff XML", diff)
-          spinner.show('Computing file differences, please wait...')
-          try {
-            await xmlEditor.showMergeView(diff)
-            $$('#nav-diff button').forEach(b => b.disabled = false)
-          } finally {
-            spinner.hide()
-          }
-        }
-        resolve()
-      })
-      if (xml && xml !== diff) {
-        // if we have a diff and a new xml file, we need to wait until the original XML has loaded
-        promises.slice(-1)[0].then(() => p)
-      } else {
-        // if we don't have a new XML file, we can just show the diff
-        promises.push(p)
-      }
-    }
-  } 
 
   // await promises in parallel
   await Promise.all(promises)
@@ -599,13 +569,6 @@ async function load({ xml, pdf, diff }) {
     diffXmlPath = xml
     xmlPath = xml
   }
-  if (diff) {
-    // update the URL hash
-    if (diff !== xml) {
-      UrlHash.set('diff', diff)
-    }
-    diffXmlPath = diff
-  } 
   // update selectboxes in the toolbar
   populateFilesSelectboxes()
 }
@@ -845,6 +808,27 @@ function updateIndexUI(index, size) {
   $('#btn-next-node').disabled = $('#btn-prev-node').disabled = size < 2;
 }
 
+async function showMergeView(diff) {  
+  console.log("Loading diff XML", diff)
+  spinner.show('Computing file differences, please wait...')
+  try {
+    await xmlEditor.showMergeView(diff)
+  } finally {
+    spinner.hide()
+  }
+  diffXmlPath = diff
+  UrlHash.set('diff', diff)
+  diffSelectbox.selectedIndex = Array.from(diffSelectbox.options).findIndex(option => option.value === diff)
+  $$('#nav-diff button').forEach(node => node.disabled = false)
+}
+
+function removeMergeView() {
+  UrlHash.remove("diff")
+  diffXmlPath = xmlPath
+  diffSelectbox.selectedIndex = versionSelectbox.selectedIndex
+  $$('#nav-diff button').forEach(node => node.disabled = true)
+}
+
 //
 // get info about state or documents
 // 
@@ -905,10 +889,10 @@ function getSelectionXpath() {
 function getXpathResultSize(xpath) {
   try {
     return xmlEditor.countDomNodesByXpath(xpath)
-  } catch(e) {
+  } catch (e) {
     return 0
   }
-  
+
 }
 
 
