@@ -13,5 +13,10 @@
         "label": "Required monographic title",
         "active": true,
         "text": "A monograph must always have a title. A single analytic title without an additional monographic title does not exist. A book title is always the monographic title. For example, in \"Ludwig Wittgenstein, Tractatus logico-philosophicus, London 1922\", \"Tractatus logico-philosophicus\" is the monographic title, not the analytic."
+    },
+    {
+        "label": "Incomplete References",
+        "active": true,
+        "text": "When you encounter incomplete references such as in \"Vgl. die Artikel \u00bbFact\u00ab im Oxford English Dictionary und \u00bbThatsache\u00ab in Grimms W\u00f6rterbuch.\", extract the analytic titles (\"Fact\", \"Thatsache\") and monographic titles (\"Oxford English Dictionary\", \"Grimms W\u00f6rterbuch\")"
     }
 ]

@@ -497,6 +497,7 @@ function setupUI() {
     const filePathsToDelete = options
       .slice(1) // skip the first option, which is the gold standard version  
       .map(option => option.value)
+    removeMergeView()
     if (filePathsToDelete.length > 0) {
       await client.deleteFiles(filePathsToDelete)
     }

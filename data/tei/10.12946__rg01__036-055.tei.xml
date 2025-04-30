@@ -70,7 +70,7 @@
           </imprint>
         </monogr>
       </biblStruct>
-      <biblStruct>
+      <biblStruct source="fn2">
         <analytic>
           <title level="a">Thatsache</title>
         </analytic>
@@ -113,7 +113,7 @@
         </monogr>
         <citedRange unit="column">909-914</citedRange>
       </biblStruct>
-      <biblStruct status="verified">
+      <biblStruct source="fn4">
         <monogr>
           <title level="m">Francis Bacon, the State and the Reform of Natural Philosophy</title>
           <author>
@@ -128,7 +128,7 @@
           </imprint>
         </monogr>
       </biblStruct>
-      <biblStruct source="fn4" status="verified">
+      <biblStruct source="fn4">
         <monogr>
           <title level="m">A Culture of Fact: England, 1550-1720</title>
           <author>
