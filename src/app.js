@@ -3,42 +3,45 @@
 import { XMLEditor } from './xmleditor.js'
 import { PDFJSViewer } from './pdfviewer.js'
 import *  as client from './client.js'
-import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggable } from './browser-utils.js'
+import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggable } from './modules/browser-utils.js'
 import { uploadFile } from './upload.js'
 import { disableValidation, validationEvents } from './lint.js'
 import { isDoi } from './utils.js'
 
 // custom elements
-import './spinner.js'
-import './switch.js'
-import './list-editor.js'
+import './modules/spinner.js'
+import './modules/switch.js'
+import './modules/list-editor.js'
 
 // New application architecture
-import { App } from './class/app.js'
+import { App } from './modules/app.js'
 
 // plugins
 import { dialogPlugin, dialogComponent } from './components/dialog.js'  
+import { commandBarPlugin, commandBarComponent } from './components/command-bar.js'
 
 // Application instance
 const app = window.app = new class extends App {
   /**
-   * Provided by the dialog plugin
+   * A dialog widget for user interaction
    * @type {dialogComponent}
    */
   dialog;
 
+  /**
+   * The commandbar at the top of the application
+   * @type {commandBarComponent}
+   */
+  commandbar;
+
   constructor() {
     super();
-    this.plugin.register(dialogPlugin)
+    const plugins = [dialogPlugin, commandBarPlugin]
+    plugins.forEach(plugin => this.plugin.register(plugin))
   }
 }
 
 app.start()
-app.dialog.info("Welcome to our new editor!")
-
-
-
-
 
 
 /**
@@ -206,7 +209,6 @@ async function main() {
 
   // finish initialization
   spinner.hide()
-  $('#document-nav').show()
   $('#btn-save-document').enable()
   console.log("Application ready.")
 }

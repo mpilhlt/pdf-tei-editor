@@ -5,7 +5,7 @@
 import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js'
 
-import { App } from '../class/app.js'
+import { App } from '../modules/app.js'
 
 const html = `
 <sl-dialog label="Dialog" class="dialog-width" style="--width: 50vw;">

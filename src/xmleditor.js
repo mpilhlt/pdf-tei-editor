@@ -8,7 +8,7 @@ import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
 import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation, updateCachedDiagnostics } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
-import { $$ } from './browser-utils.js';
+import { $$ } from './modules/browser-utils.js';
 
 
 export class XMLEditor extends EventTarget {

@@ -16,13 +16,15 @@ body {
   width: 100%;
 }
 
-#document-nav{
+#command-bar{
   height: 30px;
-  visibility: hidden;
   font-size: small;
+  display: flex;
+  align-items: center;
+  gap: 10px;  
 }
 
-#document-nav > button {
+#command-bar > button {
   font-size: small;
 }
 
@@ -80,12 +82,6 @@ iframe {
   font-weight: bold;
   font-size: 2vh;
   margin: 5px;
-}
-
-#document-nav {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .highlight {
