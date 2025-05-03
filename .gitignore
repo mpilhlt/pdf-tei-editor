@@ -1,6 +1,7 @@
 .venv
 .env
 node_modules
+llamore
 pdfjs
 __pycache__
 .python-version
