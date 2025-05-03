@@ -5,9 +5,13 @@ import { $ } from '../modules/browser-utils.js'
 
 const commandBar = $('#command-bar')
 
+/**
+ * component API
+ */
 export const commandBarComponent = {
     add: element => commandBar.appendChild(element),
-    remove: element => commandBar.parentElement.removeChild(element)
+    addAt: (element, index) => commandBar.insertBefore(element, commandBar.childNodes[index]),
+    remove: element => commandBar.removeChild(element)
 }
 
 /**
@@ -19,6 +23,9 @@ function start(app) {
   app.registerComponent('command-bar', commandBarComponent, 'commandbar')
 }
 
+/**
+ * component plugin
+ */
 export const commandBarPlugin = {
     name: "command-bar",
     app: { start }

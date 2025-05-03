@@ -74,7 +74,7 @@ export class PDFJSViewer {
    * before calling other methods in the class. The PDF.js viewer must be hosted
    * on the same origin for this to work.
    *
-   * @returns {Promise<void>} - A promise that resolves when the viewer is ready.
+   * @returns {Promise<PDFJSViewer>} - A promise that resolves with the viewer instance when it is ready.
    */
   async isReady() {
     if (this.isReadyFlag) {
@@ -102,7 +102,7 @@ export class PDFJSViewer {
               // finish initialization
               this.isReadyFlag = true;
               console.log("PDF.js viewer initialized.");
-              resolve();
+              resolve(this);
             })
           } catch (error) {
             this.isReadyFlag = false;

@@ -1,16 +1,21 @@
+// npm modules
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, StateEffect, Compartment } from "@codemirror/state";
-import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, getOriginalDoc, rejectChunk } from "@codemirror/merge"
+import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
+// custom modules
 import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation, updateCachedDiagnostics } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
-import { $$ } from './modules/browser-utils.js';
+import { $$ } from './browser-utils.js';
 
-
+/**
+ * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
+ * tree in sync as far as possible, and provides linting and diffing.
+ */
 export class XMLEditor extends EventTarget {
   static EVENT_SELECTION_CHANGED = "selectionChanged";
   static EVENT_XML_CHANGED = "xmlChanged";
@@ -40,6 +45,8 @@ export class XMLEditor extends EventTarget {
   #updateMergButtonsInterval = null // interval to update the merge buttons
   /**  @type {XMLSerializer} */
   #serializer = null; // an XMLSerializer object or one with a compatible API
+  #autocompleteCompartment = null
+
 
   /**
    * Constructs an XMLEditor instance.
@@ -53,6 +60,7 @@ export class XMLEditor extends EventTarget {
     }
 
     this.#mergeViewCompartment = new Compartment()
+    this.#autocompleteCompartment = new Compartment()
 
     // list of extensions to be used in the editor
     const extensions = [
@@ -63,10 +71,11 @@ export class XMLEditor extends EventTarget {
       selectionChangeListener(this.#onSelectionChange.bind(this)),
       EditorView.updateListener.of(this.#onUpdate.bind(this)),
       this.#mergeViewCompartment.of([]),
+      this.#autocompleteCompartment.of([])
     ];
 
     if (tagData) {
-      extensions.push(xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) }))
+      this.startAutocomplete(tagData);
     }
 
     this.#view = new EditorView({
@@ -282,6 +291,22 @@ export class XMLEditor extends EventTarget {
 
   rejectAllDiffs() {
     this.hideMergeView()
+  }
+
+  /**
+   * Given a data object with information on the XML schema, start suggesting autocompletions
+   * @param {Object} tagData The autocompletion data - todo document format
+   */
+  startAutocomplete(tagData) {
+    const autocompleteExtension = xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) })
+    this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+  }
+
+  /**
+   * Stop suggestion autocompletions
+   */
+  stopAutocomplete() {
+    this.#autocompleteCompartment.reconfigure([])
   }
 
   /**

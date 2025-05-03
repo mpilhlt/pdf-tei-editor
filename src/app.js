@@ -1,12 +1,8 @@
-// sorry for this horrible mess, this code will be refactored when I have a bit more time!
-
-import { XMLEditor } from './xmleditor.js'
-import { PDFJSViewer } from './pdfviewer.js'
-import *  as client from './client.js'
-import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggable } from './modules/browser-utils.js'
-import { uploadFile } from './upload.js'
-import { disableValidation, validationEvents } from './lint.js'
-import { isDoi } from './utils.js'
+import *  as client from './modules/client.js'
+import { $, $$, UrlHash, addBringToForegroundListener, makeDraggable } from './modules/browser-utils.js'
+import { uploadFile } from './modules/upload.js'
+import { disableValidation, validationEvents } from './modules/lint.js'
+import { isDoi } from './modules/utils.js'
 
 // custom elements
 import './modules/spinner.js'
@@ -16,45 +12,12 @@ import './modules/list-editor.js'
 // New application architecture
 import { App } from './modules/app.js'
 
-// plugins
-import { dialogPlugin, dialogComponent } from './components/dialog.js'  
+// plugins (the components are only needed for IDE autocompletion)
+import { dialogPlugin, dialogComponent } from './components/dialog.js'
 import { commandBarPlugin, commandBarComponent } from './components/command-bar.js'
+import { pdfViewerPlugin, pdfViewerComponent  } from './components/pdfviewer.js'
+import { xmlEditorPlugin, xmlEditorComponent, XMLEditor } from './components/xmleditor.js'
 
-// Application instance
-const app = window.app = new class extends App {
-  /**
-   * A dialog widget for user interaction
-   * @type {dialogComponent}
-   */
-  dialog;
-
-  /**
-   * The commandbar at the top of the application
-   * @type {commandBarComponent}
-   */
-  commandbar;
-
-  constructor() {
-    super();
-    const plugins = [dialogPlugin, commandBarPlugin]
-    plugins.forEach(plugin => this.plugin.register(plugin))
-  }
-}
-
-app.start()
-
-
-/**
- * The XML editor
- * @type {XMLEditor}
- */
-let xmlEditor = null;
-
-/**
- * The XML editor
- * @type {PDFJSViewer}
- */
-let pdfViewer = null;
 
 /**
  * The data about the pdf and xml files on the server
@@ -66,9 +29,6 @@ let fileData = null;
  * @type {Node?}
  */
 let lastSelectedXpathlNode = null;
-
-// the path from which to load the autocompletion data
-const tagDataPath = '/data/tei.json'
 
 // the index of the currently selected node, 1-based
 let currentIndex = null;
@@ -91,127 +51,140 @@ const fileSelectbox = $('#select-doc')
 const versionSelectbox = $('#select-version')
 const diffSelectbox = $('#select-diff-version')
 
-// run main app
-try {
-  main()
-} catch (error) {
-  console.error(error)
-}
-
 /**
- * The main application
+ * Main application class
  */
-async function main() {
+class PdfTeiEditor extends App {
+  /**
+   * A dialog widget for user interaction
+   * @type {dialogComponent}
+   */
+  dialog;
 
-  //const appState = new ApplicationState()
+  /**
+   * The commandbar at the top of the application
+   * @type {commandBarComponent}
+   */
+  commandbar;
 
-  spinner.show('Loading documents, please wait...')
+  /**
+   * The PDFViewer component
+   * @type {pdfViewerComponent}
+   */
+  pdfviewer;
 
-  console.log(`Starting Application\nPDF: ${pdfPath}\nXML: ${xmlPath}`);
+  /**
+   * The XML editor component
+   * @type {xmlEditorComponent}
+   */
+  xmleditor;
 
-  // disable regular validation so that we have more control over it
-  disableValidation(true)
+  constructor() {
+    super();
+    const plugins = [dialogPlugin, commandBarPlugin, pdfViewerPlugin, xmlEditorPlugin]
+    plugins.forEach(plugin => this.plugin.register(plugin))
+  }
 
-  // wait for UI to be fully set up
+  async start() {
+    // this takes care of plugin initialization 
+    super.start()
 
-  async function loadXmlEditor(xmlPath, tagDataPath) {
-    console.log("Initializing XML Editor...")
-    let tagData;
+    // disable regular validation so that we have more control over it
+    disableValidation(true)
+
+    spinner.show('Loading documents, please wait...')
+    console.log(`Starting Application\nPDF: ${pdfPath}\nXML: ${xmlPath}`);
+
+    // wait for UI to be fully set up
     try {
-      console.log("Loading autocompletion data...");
-      const res = await fetch(tagDataPath);
-      tagData = await res.json();
-    } catch (error) {
-      console.error('Error fetching from', tagDataPath, ":", error);
-      return;
-    }
-    xmlEditor = window.xmlEditor = new XMLEditor('xml-editor', tagData);
-    console.log("Loading XML data...");
-    await xmlEditor.loadXml(xmlPath)
-  }
 
-  async function loadPdfViewer(pdfPath) {
-    pdfViewer = window.pdfViewer = new PDFJSViewer('pdf-viewer', pdfPath).hide();
-    await pdfViewer.load(pdfPath)
-    pdfViewer.show()
-  }
+      // Fetch file data from api
+      await reloadFileData()
 
-  try {
-
-    // Fetch file data from api
-    await reloadFileData()
-
-    if (!fileData || fileData.length === 0) {
-      throw new Error("No files found")
-    }
-
-    // select default files
-    pdfPath = pdfPath || fileData[0].pdf
-    xmlPath = xmlPath || fileData[0].xml
-    diffXmlPath = diffXmlPath || fileData[0].xml
-
-    // setup the UI
-    setupUI()
-    await Promise.all([
-      loadPdfViewer(pdfPath),
-      loadXmlEditor(xmlPath, tagDataPath),
-    ]).catch(e => { throw e; })
-  } catch (error) {
-    spinner.hide();
-    alert(error.message)
-    throw error
-  }
-
-  console.log("All Editors/Viewers loaded.")
-
-  if (xmlEditor) {
-    // handle selection change
-    xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
-      handleSelectionChange(event.detail)
-    });
-
-    // this triggers the initial selection
-    onHashChange()
-
-    if (diffXmlPath !== xmlPath) {
-      // load the diff view
-      try {
-        await showMergeView(diffXmlPath)
-      } catch (error) {
-        console.error("Error loading diff view:", error)
+      if (!fileData || fileData.length === 0) {
+        throw new Error("No files found")
       }
-    } else {
-      // measure how long it takes to validate the document
-      const startTime = new Date().getTime();
-      validateXml().then(() => {
-        const endTime = new Date().getTime();
-        const seconds = Math.round((endTime - startTime) / 1000);
-        // disable validation if it took longer than 3 seconds
-        console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
-        disableValidation(seconds > 3)
+
+      // select default files
+      pdfPath = pdfPath || fileData[0].pdf
+      xmlPath = xmlPath || fileData[0].xml
+      diffXmlPath = diffXmlPath || fileData[0].xml
+
+      // setup the UI
+      setupUI()
+      await Promise.all([
+        this.pdfviewer.load(pdfPath),
+        this.xmleditor.loadXml(xmlPath),
+      ]).catch(e => { throw e; })
+    } catch (error) {
+      spinner.hide();
+      alert(error.message)
+      throw error
+    }
+
+    console.log("All Editors/Viewers loaded.")
+
+    if (this.xmleditor) {
+      // handle selection change
+      this.xmleditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
+        handleSelectionChange(event.detail)
+      });
+
+      // this triggers the initial selection
+      onHashChange()
+
+      if (diffXmlPath !== xmlPath) {
+        // load the diff view
+        try {
+          await showMergeView(diffXmlPath)
+        } catch (error) {
+          console.error("Error loading diff view:", error)
+        }
+      } else {
+        // measure how long it takes to validate the document
+        const startTime = new Date().getTime();
+        validateXml().then(() => {
+          const endTime = new Date().getTime();
+          const seconds = Math.round((endTime - startTime) / 1000);
+          // disable validation if it took longer than 3 seconds
+          console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
+          disableValidation(seconds > 3)
+        })
+      }
+
+      this.xmleditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, async () => {
+        $('#btn-save-document').text('Save').enable()
       })
     }
 
-    xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, async () => {
-      $('#btn-save-document').text('Save').enable()
+    // load & save prompt data
+    client.loadInstructions().then(data => {
+      const promptEditor = $('#prompt-editor');
+      promptEditor.data = data;
+      promptEditor.addEventListener('data-changed', evt => {
+        client.saveInstructions(evt.detail)
+      })
+      $('#btn-edit-prompt').enable()
     })
+
+    // finish initialization
+    spinner.hide()
+    $('#btn-save-document').enable()
+    console.log("Application ready.")
   }
-
-  // load & save prompt data
-  client.loadInstructions().then(data => {
-    const promptEditor = $('#prompt-editor');
-    promptEditor.data = data;
-    promptEditor.addEventListener('data-changed', evt => {
-      client.saveInstructions(evt.detail)
-    })
-    $('#btn-edit-prompt').enable()
-  })
-
-  // finish initialization
-  spinner.hide()
-  $('#btn-save-document').enable()
-  console.log("Application ready.")
 }
+
+let app;
+// run main app 
+(async () => {
+  try {
+    // store app in global variable
+    app = window.app = new PdfTeiEditor()
+    await app.start()
+  } catch (error) {
+    console.error(error)
+  }
+})()
 
 
 async function reloadFileData() {
@@ -332,14 +305,14 @@ function setupUI() {
   // setup click handlers
   $('#btn-prev-node').click(() => previousNode());
   $('#btn-next-node').click(() => nextNode());
-  $('#btn-prev-diff').click(() => xmlEditor.goToPreviousDiff())
-  $('#btn-next-diff').click(() => xmlEditor.goToNextDiff())
+  $('#btn-prev-diff').click(() => app.xmleditor.goToPreviousDiff())
+  $('#btn-next-diff').click(() => app.xmleditor.goToNextDiff())
   $('#btn-diff-keep-all').click(() => {
-    xmlEditor.rejectAllDiffs()
+    app.xmleditor.rejectAllDiffs()
     removeMergeView()
   })
   $('#btn-diff-change-all').click(() => {
-    xmlEditor.acceptAllDiffs()
+    app.xmleditor.acceptAllDiffs()
     removeMergeView()
   })
 
@@ -433,7 +406,7 @@ function setupUI() {
         console.error(error)
       }
     }
-  }  
+  }
 
   // listen for changes in the diff version selectbox  
   async function onChangeDiffSelectbox() {
@@ -569,13 +542,13 @@ async function load({ xml, pdf }) {
   // PDF 
   if (pdf) {
     console.log("Loading PDF", pdf)
-    promises.push(pdfViewer.load(pdf))
+    promises.push(app.pdfviewer.load(pdf))
   }
 
   // XML
   if (xml) {
     console.log("Loading XML", xml)
-    promises.push(xmlEditor.loadXml(xml))
+    promises.push(app.xmleditor.loadXml(xml))
   }
 
   // await promises in parallel
@@ -608,7 +581,7 @@ async function load({ xml, pdf }) {
  */
 async function validateXml() {
   console.log("Validating XML...")
-  await xmlEditor.validateXml()
+  await app.xmleditor.validateXml()
 }
 
 /**
@@ -618,7 +591,7 @@ async function validateXml() {
  */
 async function saveXml(filePath) {
   console.log("Saving XML on server...");
-  await client.saveXml(xmlEditor.getXML(), filePath)
+  await client.saveXml(app.xmleditor.getXML(), filePath)
 }
 
 /**
@@ -687,7 +660,7 @@ async function setNodeStatus(status) {
     return
   }
   // update XML document from editor content
-  xmlEditor.updateNodeFromEditor(lastSelectedXpathlNode)
+  app.xmleditor.updateNodeFromEditor(lastSelectedXpathlNode)
 
   // set/remove the status attribute
   switch (status) {
@@ -713,7 +686,7 @@ async function setNodeStatus(status) {
       lastSelectedXpathlNode.setAttribute("status", status)
   }
   // update the editor content
-  await xmlEditor.updateEditorFromNode(lastSelectedXpathlNode)
+  await app.xmleditor.updateEditorFromNode(lastSelectedXpathlNode)
 
   // reselect the current node when done
   selectByIndex(currentIndex)
@@ -743,7 +716,7 @@ function onHashChange(evt) {
   * @returns 
   */
 async function handleSelectionChange(ranges) {
-  if (ranges.length === 0 || !xmlEditor.getXmlTree()) return;
+  if (ranges.length === 0 || !app.xmleditor.getXmlTree()) return;
 
   // we care only for the first selected node or node parent matching our xpath
   const xpathTagName = xpathInfo(getSelectionXpath()).tagName
@@ -767,7 +740,7 @@ async function handleSelectionChange(ranges) {
   $$('.btn-node-status').forEach(btn => btn.disabled = !Boolean(selectedNode))
 
   // the xpath of the current cursor position
-  const newCursorXpath = selectedNode && xmlEditor.getXPathForNode(selectedNode)
+  const newCursorXpath = selectedNode && app.xmleditor.getXPathForNode(selectedNode)
 
   // do nothing if we cannot find a matching parent, or the parent is the same as before
   if (!selectedNode || lastSelectedXpathlNode === selectedNode || newCursorXpath === lastCursorXpath) {
@@ -784,7 +757,7 @@ async function handleSelectionChange(ranges) {
 
   // trigger auto-search if enabled
   const autoSearchSwitch = $('#switch-auto-search')
-  if (pdfViewer && autoSearchSwitch.checked) {
+  if (autoSearchSwitch.checked) {
     await searchNodeContentsInPdf(selectedNode)
   }
 }
@@ -837,11 +810,11 @@ function updateIndexUI(index, size) {
   $('#btn-next-node').disabled = $('#btn-prev-node').disabled = size < 2;
 }
 
-async function showMergeView(diff) {  
+async function showMergeView(diff) {
   console.log("Loading diff XML", diff)
   spinner.show('Computing file differences, please wait...')
   try {
-    await xmlEditor.showMergeView(diff)
+    await app.xmleditor.showMergeView(diff)
   } finally {
     spinner.hide()
   }
@@ -863,7 +836,7 @@ function removeMergeView() {
 // 
 
 function getDoiFromXml() {
-  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
+  return app.xmleditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
 }
 
 function getDoiFromFilenameOrUserInput(filename) {
@@ -917,7 +890,7 @@ function getSelectionXpath() {
 
 function getXpathResultSize(xpath) {
   try {
-    return xmlEditor.countDomNodesByXpath(xpath)
+    return app.xmleditor.countDomNodesByXpath(xpath)
   } catch (e) {
     return 0
   }
@@ -940,9 +913,9 @@ function getSelectionXpathResultSize() {
  */
 function selectByIndex(index) {
   // Wait for editor to be ready
-  if (!xmlEditor.isReady()) {
+  if (!app.xmleditor.isReady()) {
     console.log("Editor not ready, deferring selection")
-    xmlEditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+    app.xmleditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
       console.log("Editor is now ready")
       selectByIndex(index)
     }, { once: true })
@@ -960,7 +933,7 @@ function selectByIndex(index) {
   const xpathWithIndex = `${xpath}[${currentIndex}]`
 
   try {
-    window.xmlEditor.selectByXpath(xpathWithIndex);
+    window.app.xmleditor.selectByXpath(xpathWithIndex);
     UrlHash.set('xpath', xpathWithIndex)
   } catch (error) {
     // this sometimes fails for unknown reasons

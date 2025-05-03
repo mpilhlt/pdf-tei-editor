@@ -194,16 +194,15 @@ export class App {
 
   }
 
-  start() {
+  async start() {
     this.#bus.emit('app:starting');
     this.plugin.invoke('app.start', this)
-    this.#bus.emit('app:started');
+    this.#bus.emit('app:plugins-installed');
   }
 
-  stop() {
+  async stop() {
     this.#bus.emit('app:stopping');
     this.plugin.invoke('app.stop', this)
-    this.#bus.emit('app:stopped');
   }
 
 
