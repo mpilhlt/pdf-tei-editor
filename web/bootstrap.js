@@ -6,12 +6,19 @@
 
 (async () => {
 
+  // importmap 
   let response = await fetch('./importmap.json')
   let importMap = await response.json()
   const script = document.createElement('script');
   script.type = 'importmap';
   script.textContent = JSON.stringify(importMap, null, 2);
   document.head.appendChild(script);
+
+  // shoelace css
+  const shoelaceCss = document.createElement('link');
+  shoelaceCss.rel = 'stylesheet';
+  shoelaceCss.href = '/node_modules/@shoelace-style/shoelace/dist/themes/light.css';
+  document.head.appendChild(shoelaceCss);
 
   // xmllint 
   // const xmllintscript = document.createElement('script');

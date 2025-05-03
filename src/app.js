@@ -7,13 +7,39 @@ import { $, $$, UrlHash, showMessage, addBringToForegroundListener, makeDraggabl
 import { uploadFile } from './upload.js'
 import { disableValidation, validationEvents } from './lint.js'
 import { isDoi } from './utils.js'
-//import { UiState } from './appstate.js'
 
 // custom elements
-import '../web/spinner.js'
-import '../web/switch.js'
-import '../web/list-editor.js'
-import { diff } from '@codemirror/merge'
+import './spinner.js'
+import './switch.js'
+import './list-editor.js'
+
+// New application architecture
+import { App } from './class/app.js'
+
+// plugins
+import { dialogPlugin, dialogComponent } from './components/dialog.js'  
+
+// Application instance
+const app = window.app = new class extends App {
+  /**
+   * Provided by the dialog plugin
+   * @type {dialogComponent}
+   */
+  dialog;
+
+  constructor() {
+    super();
+    this.plugin.register(dialogPlugin)
+  }
+}
+
+app.start()
+app.dialog.info("Welcome to our new editor!")
+
+
+
+
+
 
 /**
  * The XML editor
