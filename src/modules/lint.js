@@ -1,5 +1,5 @@
-import { validateXml, last_http_status } from './client.js'
 import { EditorView } from 'codemirror';
+import { app } from '../app.js'
 
 let validatedVersion = null;
 let isDisabled = false;
@@ -107,7 +107,7 @@ export async function lintSource(view) {
       validationEvents.emitStartEvent()
       // send request to server
       try {
-        ({ errors: validationErrors } = await validateXml(xml));
+        ({ errors: validationErrors } = await app.client.validateXml(xml));
       } catch (error) {
         return reject(error);
       }
@@ -128,7 +128,7 @@ export async function lintSource(view) {
     validationErrors = await validationPromise;
   } catch (error) {
     // stop querying
-    if (last_http_status >= 400) {
+    if (app.client.lastHttpStatus >= 400) {
       isDisabled = true
     }
     return lastDiagnostics

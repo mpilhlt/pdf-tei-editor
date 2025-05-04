@@ -1,5 +1,49 @@
-export let last_http_status = null;
+import { PdfTeiEditor } from '../app.js'
+
+// name of the component
+const name = "client"
+
+let lastHttpStatus = null;
+
 const api_base_url = '/api';
+
+/**
+ * component API
+ */
+const clientComponent = {
+  get lastHttpStatus() {
+    return lastHttpStatus
+  },
+  callApi,
+  getFileList,
+  validateXml,
+  saveXml,
+  extractReferences,
+  loadInstructions,
+  saveInstructions,
+  deleteFiles
+}
+
+/**
+ * Runs when the main app starts so the plugins can register the app components they supply
+ * @param {PdfTeiEditor} app The main application
+ */
+function start(app) {
+  app.registerComponent(name, clientComponent, name)
+  console.log("Client plugin installed.")
+}
+
+/**
+ * component plugin
+ */
+const clientPlugin = {
+  name,
+  app: { start }
+}
+
+export {clientComponent, clientPlugin}
+export default clientPlugin
+
 
 /**
  * A generic function to make API requests against the application backend. 
@@ -42,7 +86,7 @@ async function callApi(endpoint, method, body = null) {
     return result
   } catch (error) {
     window.app.dialog.error(error.message)
-    last_http_status = error.status || 500;
+    lastHttpStatus = error.status || 500;
     // rethrow
     throw error
   }
@@ -53,7 +97,7 @@ async function callApi(endpoint, method, body = null) {
  *
  * @returns {Promise<Array<{id,pdf,xml}>>} - A promise that resolves to an array of objects with keys "id", "pdf", and "tei".
  */
-export async function getFileList(xmlString) {
+async function getFileList(xmlString) {
   return callApi('/files/list', 'GET');
 }
 
@@ -63,7 +107,7 @@ export async function getFileList(xmlString) {
  * @param {string} xmlString - The TEI XML string to validate.
  * @returns {Promise<Array<string>>} - A promise that resolves to an array of error messages,
  */
-export async function validateXml(xmlString) {
+async function validateXml(xmlString) {
   return callApi('/validate', 'POST', { xml_string: xmlString });
 }
 
@@ -73,7 +117,7 @@ export async function validateXml(xmlString) {
  * @param {string} filePath 
  * @returns {Promise<Object>}
  */
-export async function saveXml(xmlString, filePath) {
+async function saveXml(xmlString, filePath) {
   return callApi('/files/save', 'POST', { xml_string: xmlString, file_path: filePath });
 }
 
@@ -83,7 +127,7 @@ export async function saveXml(xmlString, filePath) {
  * @param {string?} doi The DOI of the document, if any
  * @returns {Promise<Object>}
  */
-export async function extractReferences(filename, doi = '') {
+async function extractReferences(filename, doi = '') {
   return callApi('/extract', 'POST', { pdf: filename, doi });
 }
 
@@ -92,7 +136,7 @@ export async function extractReferences(filename, doi = '') {
  * Returns the current prompt extraction instruction data
  * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
  */
-export async function loadInstructions() {
+async function loadInstructions() {
   return callApi('/config/instructions', 'GET');
 }
 
@@ -101,7 +145,7 @@ export async function loadInstructions() {
  * @param {Array<Object>} instructions An array of {active,label,text} objects
  * @returns {Promise<Object>}
  */
-export async function saveInstructions(instructions) {
+async function saveInstructions(instructions) {
   if (!Array.isArray(instructions)) {
     throw new Error("Instructions must be an array");
   }
@@ -120,7 +164,7 @@ export async function saveInstructions(instructions) {
  * Deletes all extraction document versions with the given timestamps 
  * @returns {Promise<void>}
  */
-export async function deleteFiles(filePaths) {
+async function deleteFiles(filePaths) {
   if (!Array.isArray(filePaths)) {
     throw new Error("Timestamps must be an array");
   }

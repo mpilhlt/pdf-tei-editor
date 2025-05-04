@@ -14,18 +14,16 @@
   <div id="container">
 
     <div id="command-bar">
-      <select id="select-doc"></select><br/>
-      Version: <select id="select-version"></select>
-      Diff: <select id="select-diff-version"></select>
+      <select id="select-doc" name="pdf"></select><br/>
+      Version: <select id="select-version" name="xml"></select>
+      Diff: <select id="select-diff-version" name="diff"></select>
       Extract: 
-      <button id="btn-load-document">New</button>
-      <button id="btn-extract">Current</button>
+      <button id="btn-load-document" name="load">New</button>
+      <button id="btn-extract" name="extract">Current</button>
       <div> </div>
-      <button id="btn-validate-document" disabled>Validate</button>  
-      <button id="btn-save-document" disabled>Save</button> 
-      <button id="btn-edit-prompt" disabled>Edit prompt</button>
-      <button id="btn-cleanup" disabled>Cleanup</button>  
-      
+      <button id="btn-validate-document" name="validate" disabled>Validate</button>  
+      <button id="btn-save-document" name="save" disabled>Save</button> 
+      <button id="btn-cleanup" name="cleanup" disabled>Cleanup</button>  
     </div>
     <div id="editors">
       <div id="pdf-viewer"></div>
@@ -40,7 +38,7 @@
   <div id="navigation">
     <div class="doc-navigation-row">
       <span class="navigation-text">Navigate by</span>
-      <select id="select-xpath"></select>
+      <select id="select-xpath" name="xpath"></select>
       <button id="btn-edit-xpath">Custom XPath</button>
       <button id="btn-prev-node" disabled>&lt;&lt;</button>
       <span id="selection-index" class="navigation-text"></span>
@@ -63,15 +61,5 @@
       </span>
     </div>
   </div>
-
-  <!-- Prompt editor -->
-   <dialog id="dlg-prompt-editor">
-    <div class="dialog-header">Edit LLM Prompt</div>
-    <div class="dialog-body">
-      <p>Below are the parts of the LLM prompt specific to the reference instruction. You can edit, add, remove, 
-        enable or disable different parts of the prompt, or change the order of the prompt fragments</p>
-      <json-list-editor id="prompt-editor"/>
-    </div>
-   </dialog>
 </body>
 </html>

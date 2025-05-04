@@ -1,5 +1,5 @@
 import { PDFJSViewer } from '../modules/pdfviewer.js'
-import { App } from '../modules/app.js'
+import { app, PdfTeiEditor } from '../app.js'
 
 /**
  * component is an instance of PDFViewer
@@ -12,7 +12,7 @@ pdfViewerComponent.hide().isReady().then(()=>pdfViewerComponent.show())
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {App} app The main application
+ * @param {PdfTeiEditor} app The main application
  */
 function start(app) {
   console.log("PDFViewer plugin installed.")
