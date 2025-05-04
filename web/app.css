@@ -5,7 +5,7 @@ body {
 }
 
 .hidden {
-  display: none;
+  visibility: hidden;
 }
 
 #container {
@@ -58,24 +58,6 @@ iframe {
 
 #xml-editor>div {
   height: 100%;
-}
-
-#navigation {
-  visibility: hidden;
-  position: absolute;
-  display: flex;
-  justify-content: space-between;
-  flex-direction: column;
-  gap: 10px;
-  align-items: center;
-  width: auto;
-  height: auto;
-  padding: 20px;
-  top: 70vh;
-  left: 100px;
-  background-color: rgba(167, 158, 158, 0.8);
-  border-radius: 10px;
-  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
 }
 
 #title {

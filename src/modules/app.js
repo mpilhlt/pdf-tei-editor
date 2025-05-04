@@ -51,19 +51,20 @@ export class App {
 
     // Initialize state
     window.addEventListener('load', () => {
-      this.updateFromUrlHash();
+      this.updateStateFromUrlHash();
     });
 
     // Update properties when the URL hash changes
-    window.addEventListener('hashchange', () => {
-      this.updateFromUrlHash();
-    });
+    // we don't want this for the moment
+    // window.addEventListener('hashchange', () => {
+    //   this.updateStateFromUrlHash();
+    // });
   }
 
   /**
    * Updates the properties from the URL hash.
    */
-  updateFromUrlHash() {
+  updateStateFromUrlHash() {
     const urlParams = new URLSearchParams(window.location.hash.slice(1));
     for (const [key, value] of urlParams.entries()) {
       if (this.#urlHashParams[key] !== undefined) {
@@ -170,7 +171,12 @@ export class App {
           if (urlHashParam) {
             const url = new URL(window.location.href);
             const urlHashParams = new URLSearchParams(window.location.hash.slice(1));
-            urlHashParams.set(urlHashParam, value);
+            if (value) {
+              urlHashParams.set(urlHashParam, value)
+            } else {
+              urlHashParams.delete(urlHashParam)
+            }
+            
             url.hash = `#${urlHashParams.toString()}`;
             //window.history.replaceState({}, '', url);
             window.history.pushState({}, '', url);

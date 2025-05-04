@@ -223,6 +223,15 @@ export class UrlHash {
   }
 }
 
-
-
-
+/**
+ * Selects the option in the selectbox of which the value matches the given one
+ * @param {HTMLSelectElement} selectbox The selectbox
+ * @param {string} value The value to set
+ */
+function setSelectboxIndex(selectbox, value) {
+  const index = Array.from(selectbox.options).findIndex(o => o.value === value)
+  if (index == -1) {
+    throw new Error(`Cannot select value '${value}' in selectbox: no matching option`)
+  }
+  selectbox.selectedIndex = index;
+}

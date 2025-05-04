@@ -1,4 +1,4 @@
-import { $, UrlHash } from './modules/browser-utils.js'
+import { UrlHash } from './modules/browser-utils.js'
 
 // custom elements
 import {Spinner} from './modules/spinner.js'
@@ -16,7 +16,8 @@ import { xmlEditorPlugin, xmlEditorComponent, XMLEditor } from './components/xml
 import { clientPlugin, clientComponent } from './components/client.js'
 import { floatingPanelPlugin, floatingPanelComponent  } from './components/floating-panel.js'
 import { servicesPlugin, servicesComponent } from './components/services.js'
-import promptEditorPlugin, { promptEditorComponent } from './components/prompt-editor.js'
+import { promptEditorPlugin, promptEditorComponent } from './components/prompt-editor.js'
+import { PDFJSViewer } from './modules/pdfviewer.js'
 
 /**
  * Main application class
@@ -100,6 +101,13 @@ export class PdfTeiEditor extends App {
   diffXmlPath;
 
   /**
+   * The xpath expression used to navigate in the xmleditor
+   * @type {string}
+   * @emits "change:xpath"
+   */  
+  xpath;  
+
+  /**
    * Constructor (in case you couldn't tell)
    */
   constructor() {
@@ -112,7 +120,13 @@ export class PdfTeiEditor extends App {
     ]
     plugins.forEach(plugin => this.plugin.register(plugin))
 
-    this.spinner = $('#spinner')
+    // spinner/blocker
+    this.spinner = document.querySelector('#spinner')
+
+    // application states
+    this.registerState('pdfPath', null, 'pdfPath', 'pdf')
+    this.registerState('xmlPath', null, 'xmlPath', 'xml')
+    this.registerState('diffXmlPath', null, 'diffXmlPath', 'xml')
   }
 
   /**
@@ -139,16 +153,11 @@ export class PdfTeiEditor extends App {
       }
 
       // get document paths from URL hash or from the first entry of the selectboxes
-      let pdfPath = UrlHash.get('pdf') || this.commandbar.getByName("pdf").value
-      let xmlPath = UrlHash.get('xml') || this.commandbar.getByName("xml").value
-      
-      await Promise.all([
-        this.pdfviewer.load(pdfPath),
-        this.xmleditor.loadXml(xmlPath),
-      ]).catch(e => { throw e; })
+      let pdf = UrlHash.get('pdf') || this.commandbar.getByName("pdf").value
+      let xml = UrlHash.get('xml') || this.commandbar.getByName("xml").value
 
-      this.pdfPath = pdfPath
-      this.xmlPath = xmlPath
+      // lod the documents, this also sets the application state
+      await this.services.load({pdf, xml})
 
     } catch (error) {
       this.spinner.hide();
@@ -161,10 +170,10 @@ export class PdfTeiEditor extends App {
     // load diff
     let diffXmlPath = UrlHash.get('diff') || this.commandbar.getByName("diff").value
     if (diffXmlPath !== xmlPath) {
-      // load the diff view, no validation since this would overload the UI
+      // load the diff view, this also sets the application state
+      // no validation since this would overload the UI
       try {
         await this.services.showMergeView(diffXmlPath)
-        this.diffXmlPath = diffXmlPath
       } catch (error) {
         console.error("Error loading diff view:", error)
       }
@@ -182,20 +191,39 @@ export class PdfTeiEditor extends App {
 
     // finish initialization
     this.spinner.hide()
+    this.floatingPanel.show()
     console.log("Application ready.")
   }
 }
 
-// export the client instance
-export let app = null;
+/**
+ * The application instance
+ * @type {PdfTeiEditor}
+ */
+export let app;
 
 // instantiate and run app 
 (async () => {
   try {
-    // store app in global variable
+    // store app in global variable for debugging
     app = window.app = new PdfTeiEditor()
     await app.start()
   } catch (error) {
     console.error(error)
   }
 })()
+
+
+/**
+ * Called when the URL hash changes
+ * @param {Event} evt The hashchange event
+ * @returns {void}
+ */
+function onHashChange(evt) {
+  const xpath = UrlHash.get("xpath");
+  if (xpath && xpath !== getSelectionXpath()) {
+    setSelectionXpath(xpath)
+  } else {
+    setSelectionXpath(getSelectionXpath())
+  }
+}

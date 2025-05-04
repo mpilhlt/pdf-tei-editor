@@ -1,65 +1,21 @@
 <!DOCTYPE html>
 <html>
-
-<head>
-  <meta charset="utf-8">
-  <title>PDF-TEI Editor</title>
-  <link rel="stylesheet" href="app.css">
-  <script src="./bootstrap.js"></script>
-</head>
-
-<body>
-
-  <!-- main layout-->
-  <div id="container">
-
-    <div id="command-bar">
-      <select id="select-doc" name="pdf"></select><br/>
-      Version: <select id="select-version" name="xml"></select>
-      Diff: <select id="select-diff-version" name="diff"></select>
-      Extract: 
-      <button id="btn-load-document" name="load">New</button>
-      <button id="btn-extract" name="extract">Current</button>
-      <div> </div>
-      <button id="btn-validate-document" name="validate" disabled>Validate</button>  
-      <button id="btn-save-document" name="save" disabled>Save</button> 
-      <button id="btn-cleanup" name="cleanup" disabled>Cleanup</button>  
+  <head>
+    <meta charset="utf-8">
+    <title>PDF-TEI Editor</title>
+    <link rel="stylesheet" href="app.css">
+    <script src="./bootstrap.js"></script>
+  </head>
+  <body>
+    <!-- main layout-->
+    <div id="container">
+      <div id="command-bar"></div>
+      <div id="editors">
+        <div id="pdf-viewer"></div>
+        <div id="xml-editor"></div>
+      </div>
     </div>
-    <div id="editors">
-      <div id="pdf-viewer"></div>
-      <div id="xml-editor"></div>
-    </div>
-  </div>
-
-  <!-- spinner/blocker-->
-  <custom-spinner id="spinner"></custom-spinner>
-
-  <!-- floating navigation bar -->
-  <div id="navigation">
-    <div class="doc-navigation-row">
-      <span class="navigation-text">Navigate by</span>
-      <select id="select-xpath" name="xpath"></select>
-      <button id="btn-edit-xpath">Custom XPath</button>
-      <button id="btn-prev-node" disabled>&lt;&lt;</button>
-      <span id="selection-index" class="navigation-text"></span>
-      <button id="btn-next-node" disabled>&gt;&gt;</button>
-    </div>
-    <div class="doc-navigation-row">
-      <span class="navigation-text">Mark node as</span>
-      <button class="btn-node-status" data-status="verified" disabled>Verified</button>
-      <button class="btn-node-status" data-status="unresolved" disabled>Unresolved</button>
-      <button class="btn-node-status" data-status="" disabled>Clear node</button>
-      <!-- button class="btn-node-status" data-status="comment" disabled>Add comment</button-->
-    </div>
-    <div class="doc-navigation-row">
-      <custom-switch id="switch-auto-search" label="Find node" label-on="On" label-off="off"></custom-switch>
-      <span id="nav-diff">
-        <button id="btn-prev-diff" disabled>Prev. Diff</button>
-        <button id="btn-next-diff" disabled>Next Diff</button>
-        <button id="btn-diff-keep-all" disabled>Keep all</button>
-        <button id="btn-diff-change-all" disabled>Change all</button>
-      </span>
-    </div>
-  </div>
-</body>
+    <!-- spinner/blocker-->
+    <custom-spinner id="spinner"></custom-spinner>
+  </body>
 </html>

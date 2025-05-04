@@ -23,10 +23,15 @@ document.body.appendChild(dialog)
  */
 const promptEditor = $('#prompt-editor');
 
+// close
+promptEditor.addEventListener('close', () => dialog.close())
+
 /**
  * component API
  */
 export const promptEditorComponent = {
+  show: () => dialog.showModal(),
+  hide: () => dialog.close(),
   load: async () => {
     // load & save prompt data
     data = await this.client.loadInstructions()
@@ -43,20 +48,7 @@ export const promptEditorComponent = {
  */
 function start(app) {
   app.registerComponent(name, promptEditorComponent, "promptEditor")
-  
-  // add a button to the command bar
-  const button = document.createElement("button")
-  button.textContent = "Edit Prompt"
-  app.commandbar.add(button, "edit-prompt")
-
-  // show prompt editor
-  button.addEventListener("click", () => {
-    promptEditor.show()
-  })
-  // save the editor data when something changes
-  promptEditor.addEventListener('data-changed', evt => {
-    promptEditorComponent.save(evt.detail)  
-  })
+  addButtonToCommandBar()
   console.log("Prompt editor plugin installed.")
 }
 
@@ -70,3 +62,23 @@ const promptEditorPlugin = {
 
 export { promptEditorComponent, promptEditorPlugin }
 export default promptEditorPlugin
+
+function addButtonToCommandBar() {
+  // add a button to the command bar
+  const button = document.createElement("button")
+  button.textContent = "Edit Prompt"
+  app.commandbar.add(button, "edit-prompt")
+
+  // show dialog with prompt editor
+  button.addEventListener("click", () => {
+    dialog.showModal()
+  })
+
+  // hide dialog 
+  promptEditor.addEventListener("close", () => dialog.close())
+
+  // save the editor data when something changes
+  promptEditor.addEventListener('data-changed', evt => {
+    promptEditorComponent.save(evt.detail)
+  })  
+}

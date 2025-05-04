@@ -2,9 +2,25 @@
 
 import { app, PdfTeiEditor } from '../app.js'
 import { XMLEditor } from './xmleditor.js'
-import { $ } from '../modules/browser-utils.js'
+import { setSelectboxIndex } from '../modules/browser-utils.js'
 
-const commandBar = document.querySelector('#command-bar')
+const commandBarDiv = document.querySelector('#command-bar')
+
+const html = `
+<div id="command-bar">
+  <select id="select-doc" name="pdf"></select><br/>
+  Version: <select id="select-version" name="xml"></select>
+  Diff: <select id="select-diff-version" name="diff"></select>
+  Extract: 
+  <button id="btn-load-document" name="load">New</button>
+  <button id="btn-extract" name="extract">Current</button>
+  <div> </div>
+  <button id="btn-validate-document" name="validate" disabled>Validate</button>  
+  <button id="btn-save-document" name="save" disabled>Save</button> 
+  <button id="btn-cleanup" name="cleanup" disabled>Cleanup</button>  
+</div>
+`
+commandBarDiv.outerHTML = html.trim()
 
 /**
  * component API
@@ -13,24 +29,26 @@ export const commandBarComponent = {
   /**
    * Add an element
    * @param {Element} element 
+   * @param {string} name
    */
   add: (element, name) => {
     if (name) {
       element.name = name
     }
-    commandBar.appendChild(element)
+    commandBarDiv.appendChild(element)
   },
-  
+
   /**
    * Add an element at the specific index
    * @param {Element} element 
    * @param {Number} index 
+   * @param {string} name
   */
   addAt: (element, index, name) => {
     if (name) {
       element.name = name
-    }    
-    commandBar.insertBefore(element, commandBar.childNodes[index])
+    }
+    commandBarDiv.insertBefore(element, commandBarDiv.childNodes[index])
   },
 
   /**
@@ -39,21 +57,26 @@ export const commandBarComponent = {
    * @returns {Element}
    */
   getByName: name => {
-    const namedElems = commandBar.querySelectorAll(`[name="${name}"]`)
+    const namedElems = commandBarDiv.querySelectorAll(`[name="${name}"]`)
     if (namedElems.length === 1) {
       return namedElems[0]
     }
     throw new Error(`No or more than one child element with the name "${name}"`)
   },
-  
+
   /**
    * Updates data such as select box options
    */
   update: async () => {
     await reloadFileData()
-    populateFilesSelectboxes()
+    populateSelectboxes()
   }
 }
+
+// UI elements
+const pdfSelectbox = commandBarComponent.getByName('pdf')
+const xmlSelectbox = commandBarComponent.getByName('xml')
+const diffSelectbox = commandBarComponent.getByName('diff')
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
@@ -62,13 +85,25 @@ export const commandBarComponent = {
 function start(app) {
   app.registerComponent('command-bar', commandBarComponent, 'commandbar')
 
-  // configure prepopulated buttons
-  
+  // configure prepopulated elements
+  populateSelectboxes()
+  setupEventHandlers()
+
+  // bind selectboxes to app state
+  app.on("change:pdfPath", (value, old) => {
+    setSelectboxIndex(pdfSelectbox, value)
+  })
+  app.on("change:xmlPath", (value, old) => {
+    setSelectboxIndex(xmlSelectbox, value)
+  })
+  app.on("change:diffXmlPath", (value, old) => {
+    setSelectboxIndex(diffSelectbox, value)
+  })
+
   // enable save button on dirty editor
   app.xmleditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, event => {
     commandBarComponent.getByName('save').disabled = false
   });
-
   console.log("Command bar plugin installed.")
 }
 
@@ -82,33 +117,28 @@ export const commandBarPlugin = {
 
 export default commandBarPlugin
 
-
-
 //
 // setup the selectboxes
 //
 
-// UI elements
-const fileSelectbox = $('#select-doc')
-const versionSelectbox = $('#select-version')
-const diffSelectbox = $('#select-diff-version')
+
+
 
 /**
  * The data about the pdf and xml files on the server
  */
 let fileData = null;
 
-export async function reloadFileData() {
+async function reloadFileData() {
   const { files } = await app.client.getFileList();
   fileData = files
-  // updatae state
 }
 
 // Populates the selectbox for file name and version
-function populateFilesSelectboxes() {
+function populateSelectboxes() {
 
   // Clear existing options
-  fileSelectbox.innerHTML = versionSelectbox.innerHTML = diffSelectbox.innerHTML = '';
+  pdfSelectbox.innerHTML = xmlSelectbox.innerHTML = diffSelectbox.innerHTML = '';
 
   // Populate file select box 
   fileData.forEach(file => {
@@ -123,263 +153,177 @@ function populateFilesSelectboxes() {
           const option = document.createElement('option');
           option.value = version.path;
           option.text = version.label;
-          option.selected = (version.path === xmlPath)
-          versionSelectbox.appendChild(option);
+          option.selected = (version.path === app.xmlPath)
+          xmlSelectbox.appendChild(option);
           const diffOption = option.cloneNode(true)
-          diffOption.selected = (diffOption.value === diffXmlPath)
+          diffOption.selected = (version.path === app.diffXmlPath)
           diffSelectbox.appendChild(diffOption)
         })
       }
     }
-    fileSelectbox.appendChild(option);
-  });
-
+    pdfSelectbox.appendChild(option);
+  })
 }
 
-// Populates the selectbox for the xpath expressions that 
-// control the navigation within the xml document
-function populateXpathSelectbox() {
-  const selectbox = $('#select-xpath');
-  try {
-    const data = [
-      {
-        "xpath": "//tei:biblStruct",
-        "label": "<biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[@status='verified']",
-        "label": "Verified <biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[not(@status='verified')]",
-        "label": "Unverified <biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[@status='unresolved']",
-        "label": "Unresolved <biblStruct>"
-      },
-      {
-        "xpath": null,
-        "label": "Custom XPath"
-      }
-    ];
+//
+// UI event handlers
+// 
 
-    // Clear existing options
-    selectbox.innerHTML = '';
+function setupEventHandlers() {
 
-    // Populate select box with options
-    data.forEach(item => {
-      const option = document.createElement('option');
-      option.value = item.xpath || ''
-      option.text = item.label
-      option.disabled = item.xpath === null
-      selectbox.appendChild(option);
-    });
-
-    // button to edit the xpath manually
-    $('#btn-edit-xpath').addEventListener('click', () => {
-      const custom = selectbox[selectbox.length - 1]
-      const xpath = prompt("Enter custom xpath", custom.value)
-      if (xpath && xpath.trim()) {
-        custom.value = xpath
-        custom.text = `Custom: ${xpath}`
-        selectbox.selectedIndex = selectbox.length - 1
-      }
-    })
-
-    // listen for changes in the selectbox
-    selectbox.addEventListener('change', () => {
-      // this triggers the selection via the window's `hashchange` event
-      UrlHash.set("xpath", selectbox.value)
-    });
-
-  } catch (error) {
-    console.error('Error populating xpath selectbox:', error);
-  }
-}
-
-/**
- * Code to configure the initial state of the UI
- */
-function setupCommandBar() {
-
-  // populate the selectboxes and setup change handlers
-  populateXpathSelectbox()
-  populateFilesSelectboxes()
-
-  fileSelectbox.addEventListener('change', onChangePdfSelectbox);
-  versionSelectbox.addEventListener('change', onChangeVersionSelectbox);
+  // file selectboxes
+  pdfSelectbox.addEventListener('change', onChangePdfSelectbox);
+  xmlSelectbox.addEventListener('change', onChangeXmlSelectbox);
   diffSelectbox.addEventListener('change', onChangeDiffSelectbox);
 
-  // update selectbox according to the URL hash
-  window.addEventListener('hashchange', onHashChange);
-
   // load new document
-  $('#btn-load-document').addEventListener('click', onClickLoadDocument)
+  commandBarComponent.getByName('load').addEventListener('click', onClickLoadDocument)
 
   // extract from current PDF
-  $('#btn-extract').addEventListener('click', onClickExtractBtn)
+  commandBarComponent.getByName('extract').addEventListener('click', onClickExtractBtn)
 
   // validate xml button
-  const validateBtn = $('#btn-validate-document')
+  const validateBtn = commandBarComponent.getByName('validate')
   validateBtn.addEventListener('click', onClickValidateButton);
   validationEvents.addEventListener(validationEvents.EVENT.START, () => {
     validateBtn.innerHTML = "Validating XML..."
-    validateBtn.disable();
+    validateBtn.disabled = true;
   })
   validationEvents.addEventListener(validationEvents.EVENT.END, () => {
     validateBtn.innerHTML = "Validate"
-    validateBtn.enable();
+    validateBtn.disabled = false;
   })
 
   // save current version
-  $('#btn-save-document').addEventListener('click', onClickSaveButton);
-
-  // auto-search switch
-  $('#switch-auto-search').addEventListener('change', onAutoSearchSwitchChange)
-
-  // edit prompt
-  $('#btn-edit-prompt').addEventListener('click', () => $('#dlg-prompt-editor').showModal())
-  $('#prompt-editor').addEventListener('close', () => $('#dlg-prompt-editor').close())
+  commandBarComponent.getByName('save').addEventListener('click', onClickSaveButton);
 
   // cleanup
-  $('#btn-cleanup').addEventListener('click', onClickBtnCleanup)
-  $('#btn-cleanup').disabled = $('#select-version').options.length < 2
+  const cleanupBtn = commandBarComponent.getByName("cleanup")
+  cleanupBtn.addEventListener('click', onClickBtnCleanup)
+  cleanupBtn.disabled = xmlSelectbox.options.length < 2
+}
 
-  //
-  // UI event handlers
-  // 
 
-  // listen for changes in the PDF selectbox
-  async function onChangePdfSelectbox() {
-    const selectedFile = fileData.find(file => file.id === fileSelectbox.value);
-    const pdf = selectedFile.pdf
-    const xml = selectedFile.xml
-    const filesToLoad = {}
+// listen for changes in the PDF selectbox
+async function onChangePdfSelectbox() {
+  const selectedFile = fileData.find(file => file.id === pdfSelectbox.value);
+  const pdf = selectedFile.pdf
+  const xml = selectedFile.xml
+  const filesToLoad = {}
 
-    if (pdf && pdf !== pdfPath) {
-      filesToLoad.pdf = pdf
-    }
-    if (xml && xml !== xmlPath) {
-      filesToLoad.xml = xml
-    }
-
-    if (Object.keys(filesToLoad).length > 0) {
-      try {
-        await load(filesToLoad)
-      }
-      catch (error) {
-        console.error(error)
-      }
-    }
+  if (pdf && pdf !== pdfPath) {
+    filesToLoad.pdf = pdf
+  }
+  if (xml && xml !== xmlPath) {
+    filesToLoad.xml = xml
   }
 
-
-  // listen for changes in the version selectbox  
-  async function onChangeVersionSelectbox() {
-    const xml = versionSelectbox.value
-    if (xml !== xmlPath) {
-      try {
-        await load({ xml })
-      } catch (error) {
-        console.error(error)
-      }
-    }
-  }
-
-  // listen for changes in the diff version selectbox  
-  async function onChangeDiffSelectbox() {
-    const diff = diffSelectbox.value
-    const isDiff = diff && diff !== xmlPath
-    if (isDiff) {
-      try {
-        await showMergeView(diff)
-      } catch (error) {
-        console.error(error)
-      }
-    } else {
-      removeMergeView()
-    }
-  }
-
-  async function onClickLoadDocument() {
+  if (Object.keys(filesToLoad).length > 0) {
     try {
-      const { type, filename } = await uploadFile('/api/upload');
-      switch (type) {
-        case "xml":
-          window.app.dialog.error("Loading XML documents not implemented yet.")
-          break
-        case "pdf":
-          try {
-            const doi = getDoiFromFilenameOrUserInput(filename)
-            const { xml, pdf } = await extractFromPDF(filename, doi)
-            await load({ xml, pdf })
-          } catch (error) {
-            console.error(error)
-          }
-
-          break;
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error);
+      await app.services.load(filesToLoad)
+    }
+    catch (error) {
+      console.error(error)
     }
   }
+}
 
-  async function onClickValidateButton() {
-    $('#btn-validate-document').disable()
-    await validateXml()
-  }
 
-  async function onClickSaveButton() {
-    const xmlPath = $('#select-version').value;
-    await saveXml(xmlPath)
-    $('#btn-save-document').text('Saved').disable()
-  }
-
-  async function onClickExtractBtn() {
-    const pdfPath = $('#select-doc').value;
-    const fileData = (await app.client.getFileList()).files.find(file => file.id === pdfPath)
-    if (!fileData) {
-      window.app.dialog.error("No file selected")
-      return
-    }
-    let doi;
+// listen for changes in the version selectbox  
+async function onChangeXmlSelectbox() {
+  const xml = xmlSelectbox.value
+  if (xml !== xmlPath) {
     try {
-      doi = getDoiFromXml()
-    } catch (error) {
-      console.warn(error.message)
-    }
-    const filename = fileData.pdf
-    try {
-      doi = doi || getDoiFromFilenameOrUserInput(filename)
-      let { xml, pdf } = await extractFromPDF(filename, doi)
-      let diff = xml
-      await reloadFileData()
-      await load({ pdf })
-      await showMergeView(diff)
+      await app.services.load({ xml })
     } catch (error) {
       console.error(error)
     }
   }
+}
 
-  async function onClickBtnCleanup() {
-    const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
-    if (!confirm(msg)) return;
-    const options = Array.from($('#select-version').options)
-    const filePathsToDelete = options
-      .slice(1) // skip the first option, which is the gold standard version  
-      .map(option => option.value)
-    removeMergeView()
-    if (filePathsToDelete.length > 0) {
-      await app.client.deleteFiles(filePathsToDelete)
-    }
-    xmlPath = options[0].value
+// listen for changes in the diff version selectbox  
+async function onChangeDiffSelectbox() {
+  const diff = diffSelectbox.value
+  const isDiff = diff && diff !== xmlPath
+  if (isDiff) {
     try {
-      await reloadFileData()
-      populateFilesSelectboxes()
-      await load({ xml: xmlPath, pdf: pdfPath })
+      await app.services.showMergeView(diff)
     } catch (error) {
       console.error(error)
     }
+  } else {
+    app.services.removeMergeView()
+  }
+}
+
+async function onClickLoadDocument() {
+  try {
+    const { type, filename } = await app.client.uploadFile();
+    switch (type) {
+      case "xml":
+        window.app.dialog.error("Loading XML documents not implemented yet.")
+        break
+      case "pdf":
+        try {
+          const doi = app.services.getDoiFromFilenameOrUserInput(filename)
+          const { xml, pdf } = await app.services.extractFromPDF(filename, doi)
+          await load({ xml, pdf })
+        } catch (error) {
+          console.error(error)
+        }
+
+        break;
+    }
+  } catch (error) {
+    console.error('Error uploading file:', error);
+  }
+}
+
+async function onClickValidateButton() {
+  commandBarComponent.getByName('validate').disabled = true
+  await app.services.validateXml()
+}
+
+async function onClickSaveButton() {
+  const xmlPath = xmlSelectbox.value;
+  await app.services.saveXml(xmlPath)
+  commandBarComponent.getByName('save').disabled = true
+}
+
+async function onClickExtractBtn() {
+  let doi;
+  try {
+    doi = app.services.getDoiFromXml()
+  } catch (error) {
+    console.warn("Cannot get DOI from document:", error.message)
+  }
+  try {
+    doi = doi || app.services.getDoiFromFilenameOrUserInput(app.pdfPath)
+    let { xml } = await app.services.extractFromPDF(app.pdfPath, doi)
+    await reloadFileData()
+    await app.services.showMergeView(xml)
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+async function onClickBtnCleanup() {
+  const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
+  if (!confirm(msg)) return;
+  const options = Array.from(xmlSelectbox.options)
+  const filePathsToDelete = options
+    .slice(1) // skip the first option, which is the gold standard version  
+    .map(option => option.value)
+  app.services.removeMergeView()
+  if (filePathsToDelete.length > 0) {
+    await app.client.deleteFiles(filePathsToDelete)
+  }
+  try {
+    await reloadFileData()
+    populateSelectboxes()
+    // load the gold version
+    await load({ xml: options[0].value })
+  } catch (error) {
+    console.error(error)
   }
 }

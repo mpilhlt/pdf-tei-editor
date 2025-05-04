@@ -17,6 +17,7 @@ import { $$ } from './browser-utils.js';
  * tree in sync as far as possible, and provides linting and diffing.
  */
 export class XMLEditor extends EventTarget {
+
   static EVENT_SELECTION_CHANGED = "selectionChanged";
   static EVENT_XML_CHANGED = "xmlChanged";
 
@@ -47,10 +48,10 @@ export class XMLEditor extends EventTarget {
   #serializer = null; // an XMLSerializer object or one with a compatible API
   #autocompleteCompartment = null
 
-
   /**
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
+   * @param {Object?} tagData - Autocompletion data
    */
   constructor(editorDivId, tagData) {
     super();
@@ -264,6 +265,9 @@ export class XMLEditor extends EventTarget {
     goToNextChunk(this.#view)
   }
 
+  /**
+   * Accept all remaining changes in the document
+   */
   acceptAllDiffs() {
     if (!this.isMergeViewActive()) {
       throw new Error("Not in merge view")
@@ -289,6 +293,9 @@ export class XMLEditor extends EventTarget {
     // this.#view.dispatch({ changes });
   }
 
+  /**
+   * Reject all open changes in the diff. Equivalent to removing the merge view.
+   */
   rejectAllDiffs() {
     this.hideMergeView()
   }
