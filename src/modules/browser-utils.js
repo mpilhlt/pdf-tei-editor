@@ -223,17 +223,6 @@ export class UrlHash {
   }
 }
 
-// Non-blocking alert()
-export async function showMessage(message, title = "Information") {
-  const dialog = document.getElementById('dialog-message');
-  dialog.showModal();
-  dialog.querySelector('.dialog-header').textContent = title;
-  dialog.querySelector('.dialog-content').textContent = message;
-  const closeButton = dialog.querySelector('.dialog-close');
-  await new Promise(resolve => closeButton.addEventListener("click", resolve, { once: true }))
-  dialog.close()
-}
-
 
 
 

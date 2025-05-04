@@ -118,44 +118,43 @@ class PdfTeiEditor extends App {
       ]).catch(e => { throw e; })
     } catch (error) {
       spinner.hide();
-      alert(error.message)
+      this.dialog.error(error.message)
       throw error
     }
 
     console.log("All Editors/Viewers loaded.")
 
-    if (this.xmleditor) {
-      // handle selection change
-      this.xmleditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
-        handleSelectionChange(event.detail)
-      });
+    // handle selection change
+    this.xmleditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, event => {
+      handleSelectionChange(event.detail)
+    });
 
-      // this triggers the initial selection
-      onHashChange()
+    // this triggers the initial selection
+    onHashChange()
 
-      if (diffXmlPath !== xmlPath) {
-        // load the diff view
-        try {
-          await showMergeView(diffXmlPath)
-        } catch (error) {
-          console.error("Error loading diff view:", error)
-        }
-      } else {
-        // measure how long it takes to validate the document
-        const startTime = new Date().getTime();
-        validateXml().then(() => {
-          const endTime = new Date().getTime();
-          const seconds = Math.round((endTime - startTime) / 1000);
-          // disable validation if it took longer than 3 seconds
-          console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
-          disableValidation(seconds > 3)
-        })
+    if (diffXmlPath !== xmlPath) {
+      // load the diff view
+      try {
+        await showMergeView(diffXmlPath)
+      } catch (error) {
+        console.error("Error loading diff view:", error)
       }
-
-      this.xmleditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, async () => {
-        $('#btn-save-document').text('Save').enable()
+    } else {
+      // measure how long it takes to validate the document
+      const startTime = new Date().getTime();
+      validateXml().then(() => {
+        const endTime = new Date().getTime();
+        const seconds = Math.round((endTime - startTime) / 1000);
+        // disable validation if it took longer than 3 seconds
+        console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
+        disableValidation(seconds > 3)
       })
     }
+
+    this.xmleditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, async () => {
+      $('#btn-save-document').text('Save').enable()
+    })
+   
 
     // load & save prompt data
     client.loadInstructions().then(data => {
@@ -428,7 +427,7 @@ function setupUI() {
       const { type, filename } = await uploadFile('/api/upload');
       switch (type) {
         case "xml":
-          alert("Loading XML documents not implemented yet.")
+          window.app.dialog.error("Loading XML documents not implemented yet.")
           break
         case "pdf":
           try {
@@ -461,7 +460,7 @@ function setupUI() {
     const pdfPath = $('#select-doc').value;
     const fileData = (await client.getFileList()).files.find(file => file.id === pdfPath)
     if (!fileData) {
-      alert("No file selected")
+      window.app.dialog.error("No file selected")
       return
     }
     let doi;
@@ -518,7 +517,7 @@ function setupUI() {
     try {
       selectByIndex(parseInt(index))
     } catch (error) {
-      alert(error.message)
+      window.app.dialog.error(error.message)
     }
   }
 }
@@ -858,7 +857,7 @@ function getDoiFromFilenameOrUserInput(filename) {
     // user cancelled
     throw new Error("User cancelled DOI input")
   } else if (!isDoi(doi)) {
-    alert(`${doi} does not seem to be a DOI, please try again.`)
+    window.app.dialog.error(`${doi} does not seem to be a DOI, please try again.`)
     throw new Error("Invalid DOI")
   }
 }
