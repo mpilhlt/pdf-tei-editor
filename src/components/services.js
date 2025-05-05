@@ -65,7 +65,6 @@ async function load({ xml, pdf }) {
   if (xml) {
     console.log("Loading XML", xml)
     servicesComponent.removeMergeView()
-    app.diffXmlPath = xml
     promises.push(app.xmleditor.loadXml(xml))
   }
 
@@ -73,13 +72,14 @@ async function load({ xml, pdf }) {
   await Promise.all(promises)
 
   if (pdf) { 
-    app.xmlPath = app.diffXmlPath = null
     app.pdfPath = pdf
     // update selectboxes in the toolbar
-    app.commandbar.update()
+    await app.commandbar.update()
+    app.xmlPath = app.diffXmlPath = null
   }
   if (xml) {
     app.xmlPath = xml
+    app.diffXmlPath = xml
   }
 }
 

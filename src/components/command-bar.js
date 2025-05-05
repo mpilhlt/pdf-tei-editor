@@ -130,13 +130,17 @@ async function install(app) {
 
   // bind selectboxes to app state
   app.on("change:pdfPath", (value, old) => {
-    if (value) selectByValue(pdfSelectbox, value)
+    if (!value) return
+    selectByValue(pdfSelectbox, value)
+    cmp.update()
   })
   app.on("change:xmlPath", (value, old) => {
-    if (value) selectByValue(xmlSelectbox, value)
+    if (!value) return 
+    selectByValue(xmlSelectbox, value)
   })
   app.on("change:diffXmlPath", (value, old) => {
-    if (value) selectByValue(diffSelectbox, value)
+    if (!value) return
+    selectByValue(diffSelectbox, value)
   })
 
   // enable save button on dirty editor

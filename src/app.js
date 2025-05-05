@@ -140,6 +140,7 @@ export class PdfTeiEditor extends App {
     console.log(`Starting Application...`);
 
     this.spinner.show('Loading documents, please wait...')
+    let pdf, xml, diff
 
     // async operations
     try {
@@ -155,8 +156,9 @@ export class PdfTeiEditor extends App {
       this.xmleditor.disableValidation(true)
 
       // get document paths from URL hash or from the first entry of the selectboxes
-      let pdf = this.pdfPath || this.commandbar.selectedOption("pdf").value
-      let xml = this.xmlPath || this.commandbar.selectedOption("xml").value
+      pdf = this.pdfPath || this.commandbar.selectedOption("pdf").value
+      xml = this.xmlPath || this.commandbar.selectedOption("xml").value
+      diff = this.diffXmlPath || this.commandbar.getByName("diff").value
 
       // lod the documents, this also sets the application state
       await this.services.load({pdf, xml})
@@ -168,14 +170,13 @@ export class PdfTeiEditor extends App {
     }
 
     // two alternative initial states:
-    // a) showing a diff/merge view
+    // a) showing a diff/merge view if the diff param was given and is different from the xml param
     // b) if no diff, validate and select first match of xpath expression
 
-    let diffXmlPath = this.diffXmlPath || this.commandbar.getByName("diff").value
-    if (diffXmlPath !== this.xmlPath) {
+    if (diff !== xml) {
       // a) load the diff view
       try {
-        await this.services.showMergeView(diffXmlPath)
+        await this.services.showMergeView(diff)
       } catch (error) {
         console.error("Error loading diff view:", error)
       }

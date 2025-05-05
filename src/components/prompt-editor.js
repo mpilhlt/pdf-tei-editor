@@ -61,15 +61,15 @@ const promptEditor = componentNode.querySelector("json-list-editor")
  * component API
  */
 const promptEditorComponent = {
-  show: () => componentNode.showModal(),
-  hide: () => componentNode.close(),
-  load: async () => {
+  show: async () => {
     data = await this.client.loadInstructions()
     promptEditor.data = data;
+    componentNode.showModal()
   },
   save: async (data) => {
     this.client.saveInstructions(evt.detail)
-  }
+  },
+  hide: () => componentNode.close()
 }
 
 // event handling
