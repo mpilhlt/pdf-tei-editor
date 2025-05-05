@@ -32,7 +32,7 @@ const clientComponent = {
  */
 function start(app) {
   app.registerComponent(name, clientComponent, name)
-  console.log("Client plugin installed.")
+  console.log("Client component installed.")
 }
 
 /**

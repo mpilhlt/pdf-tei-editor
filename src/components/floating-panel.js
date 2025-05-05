@@ -1,13 +1,13 @@
 import { app, PdfTeiEditor } from '../app.js'
-import { setSelectboxIndex, makeDraggable, addBringToForegroundListener, UrlHash, $, $$ } from '../modules/browser-utils.js'
-import { $, $$ } from '../modules/browser-utils.js'
+import { selectByValue, $$ } from '../modules/browser-utils.js'
 
 // name of the component
-const name = "floating-panel"
+const componentId = "floating-panel"
 
+// component htmnl
 const html = `
   <style>
-    #navigation {
+    #${componentId} {
       position: absolute;
       display: flex;
       justify-content: space-between;
@@ -23,49 +23,64 @@ const html = `
       border-radius: 10px;
       box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
     }
+
+    #${componentId}  * {
+      font-size: small;
+    }
+
+    #${componentId} > div {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #${componentId} > div > * {
+      display: inline;
+    }      
   </style>
-  <div id="navigation">
-    <div class="doc-navigation-row">
+  <div id="${componentId}">
+    <div>
       <span class="navigation-text">Navigate by</span>
-      <select id="select-xpath" name="xpath"></select>
-      <button id="btn-edit-xpath">Custom XPath</button>
-      <button id="btn-prev-node" disabled>&lt;&lt;</button>
-      <span id="selection-index" class="navigation-text"></span>
-      <button id="btn-next-node" disabled>&gt;&gt;</button>
+      <select name="xpath"></select>
+      <button name="edit-xpath">Custom XPath</button>
+      <button name="prev-node" disabled>&lt;&lt;</button>
+      <span name="selection-index" class="navigation-text"></span>
+      <button name="next-node" disabled>&gt;&gt;</button>
     </div>
-    <div class="doc-navigation-row">
+    <div>
       <span class="navigation-text">Mark node as</span>
-      <button class="btn-node-status" data-status="verified" disabled>Verified</button>
-      <button class="btn-node-status" data-status="unresolved" disabled>Unresolved</button>
-      <button class="btn-node-status" data-status="" disabled>Clear node</button>
-      <!-- button class="btn-node-status" data-status="comment" disabled>Add comment</button-->
+      <button class="node-status" data-status="verified" disabled>Verified</button>
+      <button class="node-status" data-status="unresolved" disabled>Unresolved</button>
+      <button class="node-status" data-status="" disabled>Clear node</button>
+      <!-- button class="node-status" data-status="comment" disabled>Add comment</button-->
     </div>
-    <div class="doc-navigation-row">
-      <custom-switch id="switch-auto-search" label="Find node" label-on="On" label-off="off"></custom-switch>
-      <span id="nav-diff">
-        <button id="btn-prev-diff" disabled>Prev. Diff</button>
-        <button id="btn-next-diff" disabled>Next Diff</button>
-        <button id="btn-diff-keep-all" disabled>Keep all</button>
-        <button id="btn-diff-change-all" disabled>Change all</button>
+    <div>
+      <custom-switch name="switch-auto-search" label="Find node" label-on="On" label-off="off"></custom-switch>
+      <span name="nav-diff">
+        <button name="prev-diff" disabled>Prev. Diff</button>
+        <button name="next-diff" disabled>Next Diff</button>
+        <button name="diff-keep-all" disabled>Keep all</button>
+        <button name="diff-change-all" disabled>Change all</button>
       </span>
     </div>
   </div>
 `
+const div = document.createElement("div")
+div.innerHTML = html.trim()
+document.body.appendChild(div)
 
 /**
  * @type {Element}
  */
-const floatingPanelDiv = document.createElement("div")
-floatingPanelDiv.outerHTML = html.trim()
-document.body.appendChild(floatingPanelDiv)
+const componentNode = document.getElementById(componentId)
 
 /**
  * component API
  */
-export const floatingPaneComponent = {
+const cmp = {
 
-  show: () => floatingPanelDiv.classList.remove("hidden"),
-  hide: () => floatingPanelDiv.classList.add("hidden"),
+  show: () => componentNode.classList.remove("hidden"),
+  hide: () => componentNode.classList.add("hidden"),
 
   /**
    * Add an element to the given row
@@ -90,7 +105,7 @@ export const floatingPaneComponent = {
   addAt: (element, row, index, name) => {
     if (name) {
       element.name = name
-    } 
+    }
     const parent = getOrCreateRow(row)
     parent.insertBefore(element, parent.childNodes[index])
   },
@@ -101,7 +116,7 @@ export const floatingPaneComponent = {
    * @returns {Element}
    */
   getByName: name => {
-    const namedElems = floatingPanelDiv.querySelectorAll(`[name="${name}"]`)
+    const namedElems = componentNode.querySelectorAll(`[name="${name}"]`)
     if (namedElems.length === 1) {
       return namedElems[0]
     }
@@ -109,51 +124,57 @@ export const floatingPaneComponent = {
   },
 
   /**
+   * Attaches a click event handler to a named subelement of the component
+   * @param {string} name The name of the element
+   * @param {Function} handler The function to call when the element is clicked
+   */
+  clicked: (name, handler) => {
+    cmp.getByName(name).addEventListener('click', handler)
+  },
+
+  /**
    * Updates data such as select box options
    */
   update: () => {
-    
+    populateXpathSelectbox()
   }
 }
 
 // UI elements
-const xpathSelectbox = floatingPaneComponent.getByName("xpath")
+const xpathSelectbox = cmp.getByName("xpath")
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
 function start(app) {
-  app.registerComponent(name, floatingPaneComponent, "floatingPanel")
-  app.registerState("xpath", null, "xpath", "xpath")
+  app.registerComponent(componentId, cmp, "floatingPanel")
 
-  populateXpathSelectbox() 
+  populateXpathSelectbox()
   setupEventHandlers()
 
   // update selectbox when corresponding app state changes
-  app.on("change:xpath", onXpathChange)
+  app.on("change:xpath", onAppChangeXpath)
 
-  // set the corresponding app state from the hash or from the first selectbox entry
-  app.xpath = UrlHash.get('xpath') || xpathSelectbox.value
+  app.on("change:diffXmlPath", onAppChangeDiffXmlPath)
 
-  console.log("Floating panel plugin installed.")
+  console.log("Floating panel component installed.")
 }
 
 /**
  * component plugin
  */
 const floatingPanelPlugin = {
-  name,
+  name: componentId,
   app: { start }
 }
 
-export { floatingPaneComponent, floatingPanelPlugin }
+export { cmp as floatingPanelComponent, floatingPanelPlugin }
 export default floatingPanelPlugin
 
 //
 // helper methods
 //
-
 
 /**
  * Returns a div for the row with the given number. If the number is higher than the existing number of 
@@ -162,13 +183,12 @@ export default floatingPanelPlugin
  * @returns {Element}
  */
 function getOrCreateRow(row) {
-  if (floatingPanelDiv.childElementCount <= row) {
+  if (componentNode.childElementCount <= row) {
     const div = document.createElement('DIV')
-    div.classList.add("doc-navigation-row")
-    floatingPaneComponent.appendChild(div)
+    cmp.appendChild(div)
     return div
   }
-  return floatingPaneComponent.childNodes[row]
+  return cmp.childNodes[row]
 }
 
 /**
@@ -228,7 +248,7 @@ function setupEventHandlers() {
   });
 
   // button to edit the xpath manually
-  $('#btn-edit-xpath').click(() => {
+  cmp.clicked('edit-xpath', () => {
     const custom = xpathSelectbox[xpathSelectbox.length - 1]
     const xpath = prompt("Enter custom xpath", custom.value)
     if (xpath && xpath.trim()) {
@@ -239,45 +259,50 @@ function setupEventHandlers() {
   })
 
   // setup click handlers
-  $('#btn-prev-node').click(() => app.xmleditor.previousNode());
-  $('#btn-next-node').click(() => app.xmleditor.nextNode());
-  $('#btn-prev-diff').click(() => app.xmleditor.goToPreviousDiff())
-  $('#btn-next-diff').click(() => app.xmleditor.goToNextDiff())
+  cmp.clicked('prev-node', () => app.xmleditor.previousNode());
+  cmp.clicked('next-node', () => app.xmleditor.nextNode());
+  cmp.clicked('prev-diff', () => app.xmleditor.goToPreviousDiff())
+  cmp.clicked('next-diff', () => app.xmleditor.goToNextDiff())
 
-  $('#btn-diff-keep-all').click(() => {
+  cmp.clicked('diff-keep-all', () => {
     app.xmleditor.rejectAllDiffs()
     app.services.removeMergeView()
   })
-  $('#btn-diff-change-all').click(() => {
+  cmp.clicked('diff-change-all', () => {
     app.xmleditor.acceptAllDiffs()
     app.services.removeMergeView()
   })
 
   // bring clicked elements into foreground when clicked
-  addBringToForegroundListener(['#navigation', '.cm-panels']);
+  addBringToForegroundListener([`#${componentId}`, '.cm-panels']);
 
   // make navigation draggable
-  makeDraggable($('#navigation'))
+  makeDraggable(componentNode)
 
   // auto-search switch
-  $('#switch-auto-search').addEventListener('change', onAutoSearchSwitchChange)
+  cmp.getByName('switch-auto-search').addEventListener('change', onAutoSearchSwitchChange)
 
   // configure "status" buttons
-  $$('.btn-node-status').forEach(btn => btn.addEventListener('click', evt => setNodeStatus(evt.target.dataset.status)))
+  $$('.node-status').forEach(btn => btn.addEventListener('click', evt => setNodeStatus(evt.target.dataset.status)))
 
   // allow to input node index
-  $('#selection-index').click(onClickSelectionIndex)
+  cmp.clicked('selection-index', onClickSelectionIndex)
 }
 
-function onXpathChange(xpath, old){
+function onAppChangeXpath(xpath, old) {
+  console.warn("floatingPanel:change:xpath", xpath) // REMOVE
+
+  // enable the buttons if we have an selected xpath
+  $$('.node-status').forEach(btn => btn.disabled = !Boolean(xpath))
+
   if (!xpath) {
     return
   }
-  let {index, beforeIndex } = app.services.xpathInfo(xpath)
+  let { index, beforeIndex } = app.services.xpathInfo(xpath)
   try {
     // this sets the xpath selectbox to one of the existing values
-    setSelectboxIndex(xpathSelectbox, beforeIndex)
-  } catch(error) {
+    selectByValue(xpathSelectbox, beforeIndex)
+  } catch (error) {
     // the value does not exist, save it to the last option
     let lastIdx = xpathSelectbox.length - 1
     xpathSelectbox[lastIdx].value = xpath
@@ -287,8 +312,8 @@ function onXpathChange(xpath, old){
 
   // update counter
   let size = app.services.getXpathResultSize(xpath)
-  $('#selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
-  $('#btn-next-node').disabled = $('#btn-prev-node').disabled = size < 2;
+  cmp.clicked('selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
+  cmp.clicked('next-node').disabled = cmp.clicked('prev-node').disabled = size < 2;
 }
 
 /**
@@ -315,4 +340,76 @@ function onClickSelectionIndex() {
   } catch (error) {
     app.dialog.error(error.message)
   }
+}
+
+//
+// helper functions
+//
+
+function addBringToForegroundListener(selectors) {
+  document.addEventListener('click', function (event) {
+    let elements = [];
+    selectors.forEach(selector => elements = elements.concat(Array.from($$(selector))));
+    let targetElement = elements.find(elem => elem.contains(event.target))
+    if (targetElement) {
+      let highestZIndex = elements.reduce((acc, elem) => {
+        let zIndex = parseInt(window.getComputedStyle(elem).zIndex);
+        return zIndex > acc ? zIndex : acc;
+      }, 0);
+      targetElement.style.zIndex = highestZIndex + 1;
+    }
+  });
+}
+
+function makeDraggable(element) {
+  let isDragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+  const { height, width } = window.getComputedStyle(element);
+  element.style.cursor = 'grab';
+
+  element.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    const rect = element.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    element.style.cursor = 'grabbing'; // Change cursor while dragging
+    element.style.userSelect = 'none'; // Prevent text selection during drag
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const x = e.clientX - offsetX;
+    const y = e.clientY - offsetY;
+    element.style.left = x + 'px';
+    element.style.top = y + 'px';
+    element.style.right = (x + width) + 'px';
+    element.style.top = (y + height) + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+    element.style.cursor = 'grab'; // Restore cursor after dragging
+    element.style.userSelect = 'auto'; // Restore text selection
+  });
+
+  // document.addEventListener('mouseleave', () => {
+  //   if (isDragging) {
+  //     isDragging = false;
+  //     element.style.cursor = 'grab'; // Restore cursor after dragging
+  //     element.style.userSelect = 'auto'; // Restore text selection
+  //   }
+  // });
+}
+
+/**
+ * Called when the diffXmlPath state changes. Enables or disables the div navigation buttons
+ * based on whether 
+ * @param {string} value The new value of the diffXmlPath state
+ * @param {string} old 
+ */
+function onAppChangeDiffXmlPath(value, old) {
+  cmp.getByName("nav-diff")
+    .querySelectorAll("button")
+    .forEach(node => node.disabled = !(value && value !== app.xmlPath))
 }

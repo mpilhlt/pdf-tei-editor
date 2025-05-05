@@ -15,8 +15,18 @@ pdfViewerComponent.hide().isReady().then(()=>pdfViewerComponent.show())
  * @param {PdfTeiEditor} app The main application
  */
 function start(app) {
-  console.log("PDFViewer plugin installed.")
+  
   app.registerComponent('pdfviewer', pdfViewerComponent, 'pdfviewer')
+
+  app.on("change:xpath", (value, old) => {
+    console.warn(`TODO reimplement search node in PDF for  ${value}`)
+        // trigger auto-search if enabled, 
+        // const autoSearchSwitch = $('#switch-auto-search') // todo convert into state app
+        // if (autoSearchSwitch.checked) {
+        //   await app.services.searchNodeContentsInPdf(node)
+        // }
+  })
+  console.log("PDFViewer component installed.")
 }
 
 /**

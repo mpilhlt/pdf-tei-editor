@@ -8,22 +8,22 @@ import { disableValidation } from '../modules/lint.js'
 class NavXmlEditor extends XMLEditor {
 
   /**
-   * The last selected node, can be null
-   * @type {Node?}
-   */
-  lastSelectedXpathlNode = null;
-
-  /**
-   * The index of the currently selected node, 1-based
+   * The index of the currently selected primary node, 1-based
    * @type{Number}
    */
   currentIndex = null;
 
   /**
-   * The xpath of the cursor within the xml document
+   * The last selected primary node, can be null
+   * @type {Node?}
+   */
+  selectedNode = null;  
+
+  /**
+   * The xpath of the last selected primary node
    * @type {string}
    */
-  lastCursorXpath = null;
+  selectedXpath = null;
 
   /**
    * Constructs an XMLEditor instance.
@@ -43,17 +43,17 @@ class NavXmlEditor extends XMLEditor {
     */
   async onSelectionChange(event) {
     const ranges = event.detail
-    if (ranges.length === 0 || !app.xmleditor.getXmlTree()) return;
+    if (ranges.length === 0 || !app.xmleditor.getXmlTree() || !app.xpath) return;
 
-    // we care only for the first selected node or node parent matching our xpath
-    const xpathTagName = app.services.xpathInfo(getSelectionXpath()).tagName
+    // we care only for the first selected node or node parent matching our xpath final tag name
+    const xpathTagName = app.services.xpathInfo(app.xpath).tagName
     const range = ranges[0]
-
+    
     /** @type {Node} */
     let selectedNode = range.node;
     if (!selectedNode) {
-      this.lastSelectedXpathlNode = null;
-      this.lastCursorXpath = null;
+      this.selectedNode = null;
+      this.selectedXpath = null;
       return;
     }
 
@@ -63,22 +63,18 @@ class NavXmlEditor extends XMLEditor {
       selectedNode = selectedNode.parentNode
     }
 
-    // update the buttons
-    $$('.btn-node-status').forEach(btn => btn.disabled = !Boolean(selectedNode))
-
     // the xpath of the current cursor position
     const newCursorXpath = selectedNode && xmlEditorComponent.getXPathForNode(selectedNode)
 
     // do nothing if we cannot find a matching parent, or the parent is the same as before
-    if (!selectedNode || this.lastSelectedXpathlNode === selectedNode || newCursorXpath === this.lastCursorXpath) {
+    if (!selectedNode || this.selectedNode === selectedNode || newCursorXpath === this.selectedXpath) {
       return;
     }
 
     // remember new (parent) node
-    this.lastSelectedXpathlNode = selectedNode;
-    this.lastCursorXpath = newCursorXpath
+    this.selectedNode = selectedNode;
+    this.selectedXpath = newCursorXpath
   }
-
 
   /**
    * Selects the node identified by the xpath in the select box and the given index
@@ -164,7 +160,7 @@ const tagDataPath = '/data/tei.json'
  */
 async function start(app) {
   app.registerComponent('xmleditor', xmlEditorComponent, 'xmleditor')
-  console.log("XML Editor plugin installed.")
+  console.log("XML Editor component installed.")
 
   // load autocomplete data
   try {
@@ -194,7 +190,6 @@ export const xmlEditorPlugin = {
 export { XMLEditor }
 export default xmlEditorPlugin
 
-
 /**
  * Called when the app state "xpath" changes
  * @param {string|null} xpath The new xpath for selection
@@ -202,6 +197,7 @@ export default xmlEditorPlugin
  * @returns {void}
  */
 function onXpathChange(xpath, old) {
+  console.warn("xmleditor:change:xpath", xpath) // REMOVE
   if (!xpath) {
     return
   }
@@ -218,13 +214,17 @@ function onXpathChange(xpath, old) {
  * Called when the selection in the editor changes
  */
 async function onSelectionChange() {
+  
+  const node = xmlEditorComponent.selectedNode
+  const xpath = xmlEditorComponent.selectedXpath
+  
+  if (!xpath || !node )  {
+    console.warn("Could not determine xpath of last selected node")
+    return
+  }
+
   // update state from the xpath of the nearest selection node
-  const { basename } = app.services.xpathInfo(xmlEditorComponent.lastCursorXpath)
+  const { basename } = app.services.xpathInfo(xpath)
   app.xpath = `//tei:${basename}` // the xpath from the DOM does not have a prefix, todo unhardcode
 
-  // trigger auto-search if enabled, 
-  const autoSearchSwitch = $('#switch-auto-search') // todo convert into state app
-  if (autoSearchSwitch.checked) {
-    await app.services.searchNodeContentsInPdf(xmlEditorComponent.lastSelectedXpathlNode)
-  }
 }

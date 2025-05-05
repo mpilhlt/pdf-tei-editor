@@ -1,7 +1,7 @@
 /**
  * Adapted from code written by Gemini 2.0 Flash
  */
-class JsonListEditor extends HTMLElement {
+export class JsonListEditor extends HTMLElement {
   constructor() {
     super();
     this.shadow = this.attachShadow({ mode: 'open' });

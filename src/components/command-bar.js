@@ -2,30 +2,38 @@
 
 import { app, PdfTeiEditor } from '../app.js'
 import { XMLEditor } from './xmleditor.js'
-import { setSelectboxIndex } from '../modules/browser-utils.js'
+import { selectByValue, selectByData } from '../modules/browser-utils.js'
+import { validationEvents } from '../modules/lint.js' // Todo remove this dependency, use events instead
 
-const commandBarDiv = document.querySelector('#command-bar')
+const componentId = "command-bar"
 
+// component html
 const html = `
-<div id="command-bar">
-  <select id="select-doc" name="pdf"></select><br/>
-  Version: <select id="select-version" name="xml"></select>
-  Diff: <select id="select-diff-version" name="diff"></select>
+<div id="${componentId}">
+  <select name="pdf"></select><br/>
+  Version: <select name="xml"></select>
+  Diff: <select name="diff"></select>
   Extract: 
-  <button id="btn-load-document" name="load">New</button>
-  <button id="btn-extract" name="extract">Current</button>
+  <button name="load">New</button>
+  <button name="extract">Current</button>
   <div> </div>
-  <button id="btn-validate-document" name="validate" disabled>Validate</button>  
-  <button id="btn-save-document" name="save" disabled>Save</button> 
-  <button id="btn-cleanup" name="cleanup" disabled>Cleanup</button>  
+  <button name="validate" disabled>Validate</button>  
+  <button name="save" disabled>Save</button> 
+  <button name="cleanup" disabled>Cleanup</button>  
 </div>
 `
-commandBarDiv.outerHTML = html.trim()
+const div = document.createElement("div")
+div.innerHTML = html.trim()
+const targetNode = document.getElementById(componentId)
+targetNode.parentNode.replaceChild(div.firstChild,targetNode)
+
+// component node 
+const componentNode = document.getElementById(componentId)
 
 /**
  * component API
  */
-export const commandBarComponent = {
+const cmp = {
   /**
    * Add an element
    * @param {Element} element 
@@ -35,7 +43,7 @@ export const commandBarComponent = {
     if (name) {
       element.name = name
     }
-    commandBarDiv.appendChild(element)
+    componentNode.appendChild(element)
   },
 
   /**
@@ -48,7 +56,7 @@ export const commandBarComponent = {
     if (name) {
       element.name = name
     }
-    commandBarDiv.insertBefore(element, commandBarDiv.childNodes[index])
+    componentNode.insertBefore(element, componentNode.childNodes[index])
   },
 
   /**
@@ -57,7 +65,7 @@ export const commandBarComponent = {
    * @returns {Element}
    */
   getByName: name => {
-    const namedElems = commandBarDiv.querySelectorAll(`[name="${name}"]`)
+    const namedElems = componentNode.querySelectorAll(`[name="${name}"]`)
     if (namedElems.length === 1) {
       return namedElems[0]
     }
@@ -65,87 +73,135 @@ export const commandBarComponent = {
   },
 
   /**
-   * Updates data such as select box options
+   * Attaches a click event handler to a named subelement of the component
+   * @param {string} name The name of the element
+   * @param {Function} handler The function to call when the element is clicked
+   */
+  clicked: (name, handler) => {
+    cmp.getByName(name).addEventListener('click', handler)
+  },
+
+  /**
+   * Updates data such as select box options based on the application state
    */
   update: async () => {
+    populateSelectboxes()
+  },
+
+  /**
+   * Reloads data and then updates based on the application state
+   */
+  reload: async () => {
     await reloadFileData()
     populateSelectboxes()
+  },
+
+  /**
+   * Returns the option that is selected in the selectbox with the given name
+   * @param {string} name The name of the selectbox
+   * @returns {HTMLOptionElement}
+   */
+  selectedOption: name => {
+    const select = cmp.getByName(name)
+    if (!select || select.options === undefined) {
+      throw new Error(`Element with name "${name}" is not a selectbox`)
+    }
+    if (select.options.length === 0) {
+      throw new Error(`Element with name "${name}" has no options`)
+    }
+    return select.options[select.selectedIndex]
   }
 }
 
 // UI elements
-const pdfSelectbox = commandBarComponent.getByName('pdf')
-const xmlSelectbox = commandBarComponent.getByName('xml')
-const diffSelectbox = commandBarComponent.getByName('diff')
+const pdfSelectbox = cmp.getByName('pdf')
+const xmlSelectbox = cmp.getByName('xml')
+const diffSelectbox = cmp.getByName('diff')
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
 function start(app) {
-  app.registerComponent('command-bar', commandBarComponent, 'commandbar')
+  app.registerComponent(componentId, cmp, "commandbar")
 
   // configure prepopulated elements
-  populateSelectboxes()
   setupEventHandlers()
 
   // bind selectboxes to app state
   app.on("change:pdfPath", (value, old) => {
-    setSelectboxIndex(pdfSelectbox, value)
+    if (value) selectByValue(pdfSelectbox, value)
   })
   app.on("change:xmlPath", (value, old) => {
-    setSelectboxIndex(xmlSelectbox, value)
+    if (value) selectByValue(xmlSelectbox, value)
   })
   app.on("change:diffXmlPath", (value, old) => {
-    setSelectboxIndex(diffSelectbox, value)
+    if (value) selectByValue(diffSelectbox, value)
   })
 
   // enable save button on dirty editor
   app.xmleditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, event => {
-    commandBarComponent.getByName('save').disabled = false
+    cmp.getByName('save').disabled = false
   });
-  console.log("Command bar plugin installed.")
+  console.log("Command bar component installed.")
 }
 
 /**
  * component plugin
  */
-export const commandBarPlugin = {
-  name: "command-bar",
+const commandBarPlugin = {
+  name: componentId,
   app: { start }
 }
 
+export { cmp as commandBarComponent, commandBarPlugin }
 export default commandBarPlugin
 
 //
-// setup the selectboxes
+// helper functions
 //
-
-
-
 
 /**
  * The data about the pdf and xml files on the server
  */
 let fileData = null;
 
+/**
+ * Reloads the file data from the server
+ */
 async function reloadFileData() {
   const { files } = await app.client.getFileList();
   fileData = files
+  if (!fileData || fileData.length === 0) {
+    app.dialog.error("No files found")
+  }
 }
 
-// Populates the selectbox for file name and version
+/**
+ * Populates the selectboxes for file name and version
+ */
 function populateSelectboxes() {
+
+  if (fileData === null) {
+    throw new Error("You need to load the file data first")
+  }
 
   // Clear existing options
   pdfSelectbox.innerHTML = xmlSelectbox.innerHTML = diffSelectbox.innerHTML = '';
 
-  // Populate file select box 
+  // get items to be selected from app state or use first element
+  const pdfPath = app.pdfPath || fileData[0].pdf
+  const xmlPath = app.xmlPath || fileData[0].xml
+  const diffXmlPath = app.diffXmlPath || fileData[0].xml
+      
   fileData.forEach(file => {
+
+    // populate pdf select box 
     const option = document.createElement('option');
-    option.value = file.id;
+    option.value = file.pdf
     option.text = file.label
-    if (file.pdf === pdfPath) {
+
+    if (file.pdf === pdfPath ) {
       option.selected = true
       // populate the version and diff selectboxes depending on the selected file
       if (file.versions) {
@@ -153,10 +209,10 @@ function populateSelectboxes() {
           const option = document.createElement('option');
           option.value = version.path;
           option.text = version.label;
-          option.selected = (version.path === app.xmlPath)
+          option.selected = (version.path === xmlPath)
           xmlSelectbox.appendChild(option);
           const diffOption = option.cloneNode(true)
-          diffOption.selected = (version.path === app.diffXmlPath)
+          diffOption.selected = (version.path === diffXmlPath)
           diffSelectbox.appendChild(diffOption)
         })
       }
@@ -165,10 +221,9 @@ function populateSelectboxes() {
   })
 }
 
-//
-// UI event handlers
-// 
-
+/**
+ * Attaches the event handlers to the component subelements
+ */
 function setupEventHandlers() {
 
   // file selectboxes
@@ -177,14 +232,15 @@ function setupEventHandlers() {
   diffSelectbox.addEventListener('change', onChangeDiffSelectbox);
 
   // load new document
-  commandBarComponent.getByName('load').addEventListener('click', onClickLoadDocument)
+  cmp.clicked('load', onClickLoadDocument)
 
   // extract from current PDF
-  commandBarComponent.getByName('extract').addEventListener('click', onClickExtractBtn)
+  cmp.clicked('extract', onClickExtractBtn)
 
   // validate xml button
-  const validateBtn = commandBarComponent.getByName('validate')
+  const validateBtn = cmp.getByName('validate')
   validateBtn.addEventListener('click', onClickValidateButton);
+  // disable during an ongoing validation
   validationEvents.addEventListener(validationEvents.EVENT.START, () => {
     validateBtn.innerHTML = "Validating XML..."
     validateBtn.disabled = true;
@@ -195,26 +251,28 @@ function setupEventHandlers() {
   })
 
   // save current version
-  commandBarComponent.getByName('save').addEventListener('click', onClickSaveButton);
+  cmp.clicked('save', onClickSaveButton);
 
   // cleanup
-  const cleanupBtn = commandBarComponent.getByName("cleanup")
+  const cleanupBtn = cmp.getByName("cleanup")
   cleanupBtn.addEventListener('click', onClickBtnCleanup)
   cleanupBtn.disabled = xmlSelectbox.options.length < 2
 }
 
 
-// listen for changes in the PDF selectbox
+/**
+ * Called when the selection in the PDF selectbox changes
+ */
 async function onChangePdfSelectbox() {
-  const selectedFile = fileData.find(file => file.id === pdfSelectbox.value);
+  const selectedFile = fileData.find(file => file.pdf === pdfSelectbox.value);
   const pdf = selectedFile.pdf
   const xml = selectedFile.xml
   const filesToLoad = {}
 
-  if (pdf && pdf !== pdfPath) {
+  if (pdf && pdf !== app.pdfPath) {
     filesToLoad.pdf = pdf
   }
-  if (xml && xml !== xmlPath) {
+  if (xml && xml !== app.xmlPath) {
     filesToLoad.xml = xml
   }
 
@@ -229,10 +287,13 @@ async function onChangePdfSelectbox() {
 }
 
 
-// listen for changes in the version selectbox  
+/**
+ * Called when the selection in the XML selectbox changes
+ */
 async function onChangeXmlSelectbox() {
   const xml = xmlSelectbox.value
-  if (xml !== xmlPath) {
+  console.warn("xml:change", xml) // REMOVE
+  if (xml !== app.xmlPath) {
     try {
       await app.services.load({ xml })
     } catch (error) {
@@ -241,10 +302,13 @@ async function onChangeXmlSelectbox() {
   }
 }
 
-// listen for changes in the diff version selectbox  
+/**
+ * Called when the selection in the diff version selectbox  changes
+ */
 async function onChangeDiffSelectbox() {
   const diff = diffSelectbox.value
-  const isDiff = diff && diff !== xmlPath
+  console.warn("diff:change", diff) // REMOVE
+  const isDiff = diff && diff !== app.xmlPath
   if (isDiff) {
     try {
       await app.services.showMergeView(diff)
@@ -256,6 +320,9 @@ async function onChangeDiffSelectbox() {
   }
 }
 
+/**
+ * Called when the "Load" button is executed
+ */
 async function onClickLoadDocument() {
   try {
     const { type, filename } = await app.client.uploadFile();
@@ -279,17 +346,26 @@ async function onClickLoadDocument() {
   }
 }
 
+/**
+ * Called when the "Validate" button is executed
+ */
 async function onClickValidateButton() {
-  commandBarComponent.getByName('validate').disabled = true
+  cmp.getByName('validate').disabled = true
   await app.services.validateXml()
 }
 
+/**
+ * Called when the "Save" button is executed
+ */
 async function onClickSaveButton() {
   const xmlPath = xmlSelectbox.value;
   await app.services.saveXml(xmlPath)
-  commandBarComponent.getByName('save').disabled = true
+  cmp.getByName('save').disabled = true
 }
 
+/**
+ * Called when the "Extract" button is executed
+ */
 async function onClickExtractBtn() {
   let doi;
   try {
@@ -307,6 +383,9 @@ async function onClickExtractBtn() {
   }
 }
 
+/**
+ * Called when the "Cleanup" button is executed
+ */
 async function onClickBtnCleanup() {
   const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
   if (!confirm(msg)) return;

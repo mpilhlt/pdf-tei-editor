@@ -139,6 +139,7 @@ export class PDFJSViewer {
     if (!pdfPath) {
       throw new Error("No PDF path has been given.");
     }
+    
     await this.isReady();
 
     if (this.loadPromise) {

@@ -1,8 +1,8 @@
 /**
  * This component provides the core services that can be called programmatically or via user commands
  */
-import { isDoi } from './modules/utils.js'
 import { app, PdfTeiEditor } from '../app.js'
+import { UrlHash } from '../modules/browser-utils.js'
 
 // name of the component
 const name = "services"
@@ -30,7 +30,7 @@ const servicesComponent = {
  */
 function start(app) {
   app.registerComponent(name, servicesComponent, name)
-  console.log("Services plugin installed.")
+  console.log("Services component installed.")
 }
 
 /**
@@ -190,13 +190,11 @@ async function showMergeView(diff) {
     app.spinner.hide()
   }
   app.diffXmlPath = diff
-  $$('#nav-diff button').forEach(node => node.disabled = false) // todo move into floating panel component
 }
 
 function removeMergeView() {
   UrlHash.remove("diff")
   app.diffXmlPath = xmlPath
-  $$('#nav-diff button').forEach(node => node.disabled = true) // todo move into floating panel component
 }
 
 
@@ -325,4 +323,14 @@ function xpathInfo(xpath) {
   const beforeIndex = index ? xpath.slice(0, -finalSelector.length) : xpath
 
   return { parentPath, basename, prefix, tagName, finalSelector, index, beforeIndex };
+}
+
+//
+// helper methods
+//
+
+function isDoi(doi) {
+  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
+  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i  
+  return Boolean(doi.match(DOI_REGEX)) 
 }
