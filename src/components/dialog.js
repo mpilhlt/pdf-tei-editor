@@ -40,14 +40,14 @@ export const dialogComponent = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
-function start(app) {
+function install(app) {
   console.log("Dialog component installed.")
   app.registerComponent('dialog', dialogComponent, 'dialog')
 }
 
 export const dialogPlugin = {
   name: "dialog",
-  app: { start }
+  install
 }
 
 export default dialogPlugin

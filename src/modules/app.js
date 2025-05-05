@@ -69,8 +69,8 @@ export class App {
     for (const [key, value] of urlParams.entries()) {
       if (this.#urlHashParams[key] !== undefined) {
         const stateName = this.#urlHashParams[key];
-        // Update the property value using the setter
-        this.#state[stateName] = value;
+        // Update the property value using the setter, this also emits change events
+        this[stateName] = value;
       }
     }
   }
@@ -162,11 +162,12 @@ export class App {
       Object.defineProperty(this, name, {
         get: () => this.#state[name],
         set: (value) => {
+
           // do nothing if the value is the same
           if (this.#state[name] === value) {
             return;
           }
-
+          console.log("Setting", name, "to", value)
           // If a URL hash parameter has been registered, update the URL hash
           if (urlHashParam) {
             const url = new URL(window.location.href);
@@ -199,18 +200,6 @@ export class App {
     }
 
   }
-
-  async start() {
-    this.#bus.emit('app:starting');
-    this.plugin.invoke('app.start', this)
-    this.#bus.emit('app:plugins-installed');
-  }
-
-  async stop() {
-    this.#bus.emit('app:stopping');
-    this.plugin.invoke('app.stop', this)
-  }
-
 
   emit(event, ...args) {
     this.#bus.emit(event, ...args);

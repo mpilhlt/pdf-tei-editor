@@ -1,5 +1,6 @@
 import { app, PdfTeiEditor } from '../app.js'
 import { selectByValue, $$ } from '../modules/browser-utils.js'
+import { xpathInfo } from '../modules/utils.js'
 
 // name of the component
 const componentId = "floating-panel"
@@ -147,7 +148,7 @@ const xpathSelectbox = cmp.getByName("xpath")
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
-function start(app) {
+function install(app) {
   app.registerComponent(componentId, cmp, "floatingPanel")
 
   populateXpathSelectbox()
@@ -166,7 +167,7 @@ function start(app) {
  */
 const floatingPanelPlugin = {
   name: componentId,
-  app: { start }
+  install
 }
 
 export { cmp as floatingPanelComponent, floatingPanelPlugin }
@@ -283,14 +284,15 @@ function setupEventHandlers() {
   cmp.getByName('switch-auto-search').addEventListener('change', onAutoSearchSwitchChange)
 
   // configure "status" buttons
-  $$('.node-status').forEach(btn => btn.addEventListener('click', evt => setNodeStatus(evt.target.dataset.status)))
+  $$('.node-status').forEach(btn => btn.addEventListener('click', evt => {
+    cmp.setNodeStatus(cmp.selectedNode, evt.target.dataset.status)
+  }))
 
   // allow to input node index
   cmp.clicked('selection-index', onClickSelectionIndex)
 }
 
 function onAppChangeXpath(xpath, old) {
-  console.warn("floatingPanel:change:xpath", xpath) // REMOVE
 
   // enable the buttons if we have an selected xpath
   $$('.node-status').forEach(btn => btn.disabled = !Boolean(xpath))
@@ -298,7 +300,9 @@ function onAppChangeXpath(xpath, old) {
   if (!xpath) {
     return
   }
-  let { index, beforeIndex } = app.services.xpathInfo(xpath)
+
+  let { index, beforeIndex } = xpathInfo(xpath)
+
   try {
     // this sets the xpath selectbox to one of the existing values
     selectByValue(xpathSelectbox, beforeIndex)
@@ -310,10 +314,21 @@ function onAppChangeXpath(xpath, old) {
     xpathSelectbox[lastIdx].disabled = false
   }
 
-  // update counter
+  // update counter with index and size
+  app.xmleditor.whenReady().then(() => updateCounter(beforeIndex, index))
+}
+
+/**
+ * Given an xpath and an index, displays the index and the number of occurrences of the 
+ * xpath in the xml document. If none can be found, the index is displayed as 0.
+ * @param {string} xpath The xpath that will be counted
+ * @param {Number} index The index 
+ */
+function updateCounter(xpath, index) {
   let size = app.services.getXpathResultSize(xpath)
-  cmp.clicked('selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
-  cmp.clicked('next-node').disabled = cmp.clicked('prev-node').disabled = size < 2;
+  index = index || 1
+  cmp.getByName('selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
+  cmp.getByName('next-node').disabled = cmp.getByName('prev-node').disabled = size < 2;
 }
 
 /**
@@ -324,7 +339,8 @@ async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked
   console.log(`Auto search is: ${checked}`)
   if (checked) {
-    await app.services.searchNodeContentsInPdf(lastSelectedXpathlNode)
+    console.warn("Reimplement search in PDF")
+    //await app.services.searchNodeContentsInPdf(lastSelectedXpathlNode)
   }
 }
 

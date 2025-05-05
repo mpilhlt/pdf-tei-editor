@@ -101,7 +101,8 @@ export class PdfTeiEditor extends App {
   diffXmlPath;
 
   /**
-   * The xpath expression used to navigate in the xmleditor
+   * The xpath expression used to navigate in the xmleditor. It is updated
+   * when the selection changes and will update the selection when changed
    * @type {string}
    * @emits "change:xpath"
    */  
@@ -127,7 +128,7 @@ export class PdfTeiEditor extends App {
     // application states
     this.registerState('pdfPath', null, 'pdfPath', 'pdf')
     this.registerState('xmlPath', null, 'xmlPath', 'xml')
-    this.registerState('diffXmlPath', null, 'diffXmlPath', 'xml')
+    this.registerState('diffXmlPath', null, 'diffXmlPath', 'diff')
     this.registerState('xpath', null, 'xpath', 'xpath')
   }
 
@@ -135,26 +136,23 @@ export class PdfTeiEditor extends App {
    * Starts the application, configures plugins and the UI
    */
   async start() {
-    // this takes care of plugin initialization 
-    super.start()
-
+    
     console.log(`Starting Application...`);
-
-    // disable regular validation so that we have more control over it
-    this.xmleditor.disableValidation(true)
 
     this.spinner.show('Loading documents, please wait...')
 
-    // load files
+    // async operations
     try {
-      console.log("Waiting for PDF Viewer to be ready...")
-      await pdfViewerComponent.isReady()
 
+      // install components in parallel
+      const promises = this.plugin.invoke('install', this)
+      await Promise.all(promises)
+      
       console.log("Configuring application state from URL")
       this.updateStateFromUrlHash()
 
-      console.log("Loading file data...")
-      await this.commandbar.reload()
+      // disable regular validation so that we have more control over it
+      this.xmleditor.disableValidation(true)
 
       // get document paths from URL hash or from the first entry of the selectboxes
       let pdf = this.pdfPath || this.commandbar.selectedOption("pdf").value
@@ -171,7 +169,7 @@ export class PdfTeiEditor extends App {
 
     // two alternative initial states:
     // a) showing a diff/merge view
-    // b) no diff, then validate and select first match of xpath expression
+    // b) if no diff, validate and select first match of xpath expression
 
     let diffXmlPath = this.diffXmlPath || this.commandbar.getByName("diff").value
     if (diffXmlPath !== this.xmlPath) {
@@ -194,12 +192,13 @@ export class PdfTeiEditor extends App {
         this.xmleditor.disableValidation(seconds > 3)
       })
       
+      // the xpath of the (to be) selected node in the xml editor
       const xpath = UrlHash.get("xpath")
       if (xpath) {
         // this triggers the selection
         this.xpath = xpath
       } else {
-        this.floatingPanel.getByName('xpath').value
+        this.xpath = this.floatingPanel.getByName('xpath').value
       }
     }
 

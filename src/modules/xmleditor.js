@@ -55,6 +55,9 @@ export class XMLEditor extends EventTarget {
    */
   constructor(editorDivId, tagData) {
     super();
+
+    this.#markAsNotReady()
+
     const editorDiv = document.getElementById(editorDivId);
     if (!editorDiv) {
       throw new Error(`Element with ID ${editorDivId} not found.`);
@@ -102,7 +105,8 @@ export class XMLEditor extends EventTarget {
   };
 
   /**
-   * Returns the current state of the editor. If false await the promise returned from isReadyPromise()
+   * Returns the current state of the editor. If false await the promise returned from 
+   * isReadyPromise()
    * @returns {boolean} - Returns true if the editor is ready and the XML document is loaded
    */
   isReady() {
@@ -110,11 +114,20 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
-   * Returns a promise that resolves when the editor is ready and the XML document is loaded.
+   * Returns a promise that resolves when the editor is ready, the XML document is loaded and
+   * both syntax and xml trees are configured and synchronized
    * @returns {Promise} - A promise that resolves when the editor is ready and the XML document is loaded
    */
   isReadyPromise() {
     return this.#readyPromise
+  }
+
+  /**
+   * A method that returns a promise that resolves when the editor is ready
+   * @returns {Promise<void>}
+   */
+  async whenReady() {
+    return this.#isReady ? Promise.resolve() : this.#readyPromise
   }
 
   /**
@@ -125,11 +138,8 @@ export class XMLEditor extends EventTarget {
    * @throws {Error} - If there's an error loading or parsing the XML.
    */
   async loadXml(xmlPathOrString) {
-    this.#isReady = false;
-    this.#readyPromise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
-      this.#isReady = true;
-      resolve();
-    }, { once: true }))
+    // this created the isReadyPromise
+    this.#markAsNotReady()
 
     // fetch xml if path 
     const xml = await this.#fetchXml(xmlPathOrString);
@@ -140,7 +150,7 @@ export class XMLEditor extends EventTarget {
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
-    await this.#readyPromise;
+    await this.isReadyPromise();
   }
 
   /**
@@ -278,7 +288,7 @@ export class XMLEditor extends EventTarget {
     let changes = [];
     for (const chunk of chunks) {
       //const originalChunkText = originalDocument.sliceString(chunk.fromB, chunk.toB);
-      rejectChunk(this.#view, chunk.fromA )
+      rejectChunk(this.#view, chunk.fromA)
       // changes.push({
       //   from: chunk.fromA, 
       //   to: chunk.toA,
@@ -639,6 +649,19 @@ export class XMLEditor extends EventTarget {
   //
   // private methods which are not part of the API and hide implementation details
   // 
+
+  /**
+   * Marks the editor as not ready and reates the isReadyPromise if it does not already exist
+   * already exists 
+   */
+  #markAsNotReady() {
+    this.#isReady = false
+    this.#readyPromise = this.#readyPromise || new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      this.#isReady = true
+      this.#readyPromise = null
+      resolve();
+    }, { once: true }))
+  }
 
   /**
    * serializes the node (or the complete xmlTree if no node is given) to an XML string

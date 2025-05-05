@@ -87,7 +87,7 @@ promptEditor.addEventListener('data-changed', evt => {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
-function start(app) {
+function install(app) {
   app.registerComponent(componentId, promptEditorComponent, "promptEditor")
 
   // add a button to the command bar to show dialog with prompt editor
@@ -105,7 +105,7 @@ function start(app) {
  */
 const promptEditorPlugin = {
   name: componentId,
-  app: { start }
+  install
 }
 
 export { promptEditorComponent, promptEditorPlugin }

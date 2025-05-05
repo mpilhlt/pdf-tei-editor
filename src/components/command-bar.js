@@ -2,7 +2,7 @@
 
 import { app, PdfTeiEditor } from '../app.js'
 import { XMLEditor } from './xmleditor.js'
-import { selectByValue, selectByData } from '../modules/browser-utils.js'
+import { selectByValue, selectByData, UrlHash } from '../modules/browser-utils.js'
 import { validationEvents } from '../modules/lint.js' // Todo remove this dependency, use events instead
 
 const componentId = "command-bar"
@@ -122,7 +122,7 @@ const diffSelectbox = cmp.getByName('diff')
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
-function start(app) {
+async function install(app) {
   app.registerComponent(componentId, cmp, "commandbar")
 
   // configure prepopulated elements
@@ -140,9 +140,12 @@ function start(app) {
   })
 
   // enable save button on dirty editor
-  app.xmleditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, event => {
-    cmp.getByName('save').disabled = false
-  });
+  app.xmleditor.addEventListener(
+    XMLEditor.EVENT_XML_CHANGED, 
+    () => cmp.getByName('save').disabled = false
+  );
+  console.log("Loading file metadata...")
+  await cmp.reload()
   console.log("Command bar component installed.")
 }
 
@@ -151,7 +154,7 @@ function start(app) {
  */
 const commandBarPlugin = {
   name: componentId,
-  app: { start }
+  install
 }
 
 export { cmp as commandBarComponent, commandBarPlugin }
@@ -292,9 +295,9 @@ async function onChangePdfSelectbox() {
  */
 async function onChangeXmlSelectbox() {
   const xml = xmlSelectbox.value
-  console.warn("xml:change", xml) // REMOVE
   if (xml !== app.xmlPath) {
     try {
+      await app.services.removeMergeView()
       await app.services.load({ xml })
     } catch (error) {
       console.error(error)
@@ -307,9 +310,7 @@ async function onChangeXmlSelectbox() {
  */
 async function onChangeDiffSelectbox() {
   const diff = diffSelectbox.value
-  console.warn("diff:change", diff) // REMOVE
-  const isDiff = diff && diff !== app.xmlPath
-  if (isDiff) {
+  if (diff !== xmlSelectbox.value) {
     try {
       await app.services.showMergeView(diff)
     } catch (error) {

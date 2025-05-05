@@ -30,7 +30,7 @@ const clientComponent = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
-function start(app) {
+function install(app) {
   app.registerComponent(name, clientComponent, name)
   console.log("Client component installed.")
 }
@@ -40,7 +40,7 @@ function start(app) {
  */
 const clientPlugin = {
   name,
-  app: { start }
+  install
 }
 
 export {clientComponent, clientPlugin}

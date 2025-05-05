@@ -1,6 +1,10 @@
 import { app, PdfTeiEditor } from '../app.js'
 import { XMLEditor } from '../modules/xmleditor.js'
 import { disableValidation } from '../modules/lint.js'
+import { xpathInfo } from '../modules/utils.js'
+
+// the path to the autocompletion data
+const tagDataPath = '/data/tei.json'
 
 /**
  * This class adds node navigation to the XML Editor
@@ -8,10 +12,16 @@ import { disableValidation } from '../modules/lint.js'
 class NavXmlEditor extends XMLEditor {
 
   /**
+   * An xpath which identifies the topmost path to which selections of child nodes 
+   * "bubble up"
+   */
+  parentPath = null;
+
+  /**
    * The index of the currently selected primary node, 1-based
    * @type{Number}
    */
-  currentIndex = null;
+  currentIndex = 1;
 
   /**
    * The last selected primary node, can be null
@@ -33,7 +43,10 @@ class NavXmlEditor extends XMLEditor {
   constructor(editorDivId, tagData) {
     super(editorDivId, tagData) 
     // handle selection change
-    this.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, this.onSelectionChange);
+    this.addEventListener(
+      XMLEditor.EVENT_SELECTION_CHANGED, 
+      evt => this.whenReady().then(() => this.onSelectionChange(evt))
+    )
   }
 
   /**
@@ -43,13 +56,20 @@ class NavXmlEditor extends XMLEditor {
     */
   async onSelectionChange(event) {
     const ranges = event.detail
-    if (ranges.length === 0 || !app.xmleditor.getXmlTree() || !app.xpath) return;
 
-    // we care only for the first selected node or node parent matching our xpath final tag name
-    const xpathTagName = app.services.xpathInfo(app.xpath).tagName
+    if (ranges.length === 0 || !this.getXmlTree() || !this.parentPath) {
+      let msg = ['Cannot update selection node & xpath:']
+      ranges.length || msg.push("Selection is empty")
+      this.getXmlTree() || msg.push("XML Tree not ready")
+      this.parentPath ||msg.push("No parent path")
+      console.warn(msg.join("; "))
+      return
+    }
+
+    // we care only for the first selection
     const range = ranges[0]
-    
-    /** @type {Node} */
+
+    // if the selection does not contain a node, abort
     let selectedNode = range.node;
     if (!selectedNode) {
       this.selectedNode = null;
@@ -57,9 +77,10 @@ class NavXmlEditor extends XMLEditor {
       return;
     }
 
-    // find parent if tagname doesn't match
+    // we'll "bubble up" to the parent path by comparing tagnames (cheating)
+    const parentTagName = xpathInfo(this.parentPath).tagName.toLowerCase()
     while (selectedNode) {
-      if (selectedNode.tagName === xpathTagName) break;
+      if (selectedNode.tagName && selectedNode.tagName.toLowerCase() === parentTagName) break;
       selectedNode = selectedNode.parentNode
     }
 
@@ -82,33 +103,31 @@ class NavXmlEditor extends XMLEditor {
    * @returns {void}
    */
   selectByIndex(index) {
+    if (!this.parentPath) {
+      throw new Error("No parent path set. Cannot select by index")
+    }
+
     // Wait for editor to be ready
-    if (!app.xmleditor.isReady()) {
+    if (!this.isReady()) {
       console.log("Editor not ready, deferring selection")
-      app.xmleditor.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
         console.log("Editor is now ready")
-        selectByIndex(index)
+        this.selectByIndex(index)
       }, { once: true })
       return;
     }
 
     // check if selection is within bounds
-    const { index: oldIndex, beforeIndex: selectionXpath } = app.services.xpathInfo(xpath)
-    if (oldIndex === index) {
-      // nothing to do
-      return
-    }
-    const size = getXpathResultSize(selectionXpath)
+    const size = this.countDomNodesByXpath(this.parentPath)
     if (index > size || size === 0 || index < 1) {
       throw new Error(`Index out of bounds: ${index} of ${size} items`);
     }
     this.currentIndex = index;
 
-    const newXpath = `${selectionXpath}[${this.currentIndex}]`
+    const newXpath = `${this.parentPath}[${this.currentIndex}]`
 
     try {
-      xmlEditorComponent.selectByXpath(newXpath);
-      app.xpath = newXpath
+      this.selectByXpath(newXpath);
     } catch (error) {
       // this sometimes fails for unknown reasons
       console.warn(error.message)
@@ -119,10 +138,13 @@ class NavXmlEditor extends XMLEditor {
    * Selects the next node matching the current xpath 
    */
   nextNode() {
-    if (this.currentIndex < getXpathResultSize()) {
+    if (!this.parentPath) {
+      throw new Error("Cannot go to next node - no parent path set")
+    }
+    if (this.currentIndex < this.countDomNodesByXpath(this.parentPath)) {
       this.currentIndex++;
     }
-    selectByIndex(this.currentIndex);
+    this.selectByIndex(this.currentIndex);
   }
 
   /**
@@ -141,7 +163,48 @@ class NavXmlEditor extends XMLEditor {
    */
   disableValidation(value) {
     disableValidation(value)
-  }  
+  }
+
+  /**
+   * Sets the status attribute of the given node, or removes it if the status is empty
+   * @param {Node} node The node
+   * @param {string} status The new status, can be "verified", "unresolved", "comment" or ""
+   * @returns {Promise<void>}
+   * @throws {Error} If the status is not one of the allowed values
+   */
+  async setNodeStatus(node, status) {
+    if (!node) {
+      throw new Error("No node given")
+    }
+    // update XML document from editor content
+    this.updateNodeFromEditor(node)
+  
+    // set/remove the status attribute
+    switch (status) {
+      case "":
+        node.removeAttribute("status")
+        break;
+      case "comment":
+        throw new Error("Commenting not implemented yet")
+        // const comment = prompt(`Please enter the comment to store in the ${lastSelectedXpathlNode.tagName} node`)
+        // if (!comment) {
+        //   return
+        // }
+        // const commentNode = xmlEditor.getXmlTree().createComment(comment)
+        // const firstElementNode = Array.from(lastSelectedXpathlNode.childNodes).find(node => node.nodeType === Node.ELEMENT_NODE)
+        // const insertBeforeNode = firstElementNode || lastSelectedXpathlNode.firstChild || lastSelectedXpathlNode
+        // if (insertBeforeNode.previousSibling && insertBeforeNode.previousSibling.nodeType === Node.TEXT_NODE) {
+        //   // indentation text
+        //   lastSelectedXpathlNode.insertBefore(insertBeforeNode.previousSibling.cloneNode(), insertBeforeNode)
+        // } 
+        // lastSelectedXpathlNode.insertBefore(commentNode, insertBeforeNode.previousSibling)
+        break;
+      default:
+        node.setAttribute("status", status)
+    }
+    // update the editor content
+    await this.updateEditorFromNode(node)
+  }
 
 }
 
@@ -149,16 +212,14 @@ class NavXmlEditor extends XMLEditor {
  * component is an instance of NavXmlEditor
  * @type {NavXmlEditor}
  */
-export const xmlEditorComponent = new NavXmlEditor('xml-editor')
-
-// the path oto the autocompletion data
-const tagDataPath = '/data/tei.json'
+const xmlEditorComponent = new NavXmlEditor('xml-editor')
+const cmp = xmlEditorComponent;
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
-async function start(app) {
+async function install(app) {
   app.registerComponent('xmleditor', xmlEditorComponent, 'xmleditor')
   console.log("XML Editor component installed.")
 
@@ -166,28 +227,32 @@ async function start(app) {
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
-    xmlEditorComponent.startAutocomplete(tagData)
+    cmp.startAutocomplete(tagData)
     console.log("Loaded autocompletion data...");
   } catch (error) {
     console.error('Error fetching from', tagDataPath, ":", error);
   }
-  
-  // handle xpath change
-  app.on("change:xpath", onXpathChange)
+ 
+  // xpath state => selection
+  app.on("change:xpath", (value, old) => {
+    cmp.whenReady().then(() => onXpathChange(value, old))
+  })
 
-  // update state when editor selection changes
-  xmlEditorComponent.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, onSelectionChange);
+  // selection => xpath state
+  cmp.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
+    cmp.whenReady().then(() => onSelectionChange(evt))
+  });
 }
 
 /**
  * component plugin
  */
-export const xmlEditorPlugin = {
+const xmlEditorPlugin = {
   name: "xmleditor",
-  app: { start }
+  install
 }
 
-export { XMLEditor }
+export { XMLEditor, xmlEditorComponent, xmlEditorPlugin }
 export default xmlEditorPlugin
 
 /**
@@ -197,16 +262,15 @@ export default xmlEditorPlugin
  * @returns {void}
  */
 function onXpathChange(xpath, old) {
-  console.warn("xmleditor:change:xpath", xpath) // REMOVE
   if (!xpath) {
     return
   }
-  const { index, beforeIndex } = app.services.xpathInfo(xpath)
+  const { index, beforeIndex } = xpathInfo(xpath)
   // select the first node
   const size = app.services.getXpathResultSize(beforeIndex)
-  if (size > 0 && (index !== this.currentIndex)) {
-    this.currentIndex = index || 1
-    selectByIndex(this.currentIndex)
+  if (size > 0 && (index !== cmp.currentIndex)) {
+    cmp.parentPath = beforeIndex
+    cmp.selectByIndex(index || 1)
   }
 }
 
@@ -214,17 +278,13 @@ function onXpathChange(xpath, old) {
  * Called when the selection in the editor changes
  */
 async function onSelectionChange() {
-  
-  const node = xmlEditorComponent.selectedNode
-  const xpath = xmlEditorComponent.selectedXpath
-  
+  const node = cmp.selectedNode
+  const xpath = cmp.selectedXpath
   if (!xpath || !node )  {
     console.warn("Could not determine xpath of last selected node")
     return
   }
-
   // update state from the xpath of the nearest selection node
-  const { basename } = app.services.xpathInfo(xpath)
+  const { basename } = xpathInfo(xpath)
   app.xpath = `//tei:${basename}` // the xpath from the DOM does not have a prefix, todo unhardcode
-
 }

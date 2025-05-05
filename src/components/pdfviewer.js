@@ -13,8 +13,9 @@ pdfViewerComponent.hide().isReady().then(()=>pdfViewerComponent.show())
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
+ * @returns {Promise<void>}
  */
-function start(app) {
+async function install(app) {
   
   app.registerComponent('pdfviewer', pdfViewerComponent, 'pdfviewer')
 
@@ -27,6 +28,8 @@ function start(app) {
         // }
   })
   console.log("PDFViewer component installed.")
+  await pdfViewerComponent.isReady()
+  console.log("Waiting for PDF Viewer ready...")
 }
 
 /**
@@ -34,7 +37,7 @@ function start(app) {
  */
 export const pdfViewerPlugin = {
     name: "pdfviewer",
-    app: { start }
+    install
 }
 
 export default pdfViewerPlugin

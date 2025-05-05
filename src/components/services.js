@@ -3,6 +3,7 @@
  */
 import { app, PdfTeiEditor } from '../app.js'
 import { UrlHash } from '../modules/browser-utils.js'
+import { xpathInfo } from '../modules/utils.js'
 
 // name of the component
 const name = "services"
@@ -28,7 +29,7 @@ const servicesComponent = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
-function start(app) {
+function install(app) {
   app.registerComponent(name, servicesComponent, name)
   console.log("Services component installed.")
 }
@@ -38,13 +39,11 @@ function start(app) {
  */
 const servicesPlugin = {
   name,
-  app: { start }
+  install
 }
 
 export { servicesComponent, servicesPlugin }
 export default servicesPlugin
-
-
 
 /**
  * Loads the given XML and/or PDF file(s) into the editor and viewer 
@@ -65,6 +64,8 @@ async function load({ xml, pdf }) {
   // XML
   if (xml) {
     console.log("Loading XML", xml)
+    servicesComponent.removeMergeView()
+    app.diffXmlPath = xml
     promises.push(app.xmleditor.loadXml(xml))
   }
 
@@ -74,16 +75,13 @@ async function load({ xml, pdf }) {
   if (pdf) { 
     app.xmlPath = app.diffXmlPath = null
     app.pdfPath = pdf
+    // update selectboxes in the toolbar
+    app.commandbar.update()
   }
   if (xml) {
-    app.diffXmlPath = xml
     app.xmlPath = xml
   }
-  // update selectboxes in the toolbar
-  app.commandbar.update()
 }
-
-
 
 /**
  * Validates the XML document by calling the validation service
@@ -181,6 +179,10 @@ async function extractFromPDF(filename, doi = "") {
   }
 }
 
+/**
+ * Creates a diff between the current and the given document and shows a merge view
+ * @param {string} diff The path to the xml document with which to compare the current xml doc
+ */
 async function showMergeView(diff) {
   console.log("Loading diff XML", diff)
   app.spinner.show('Computing file differences, please wait...')
@@ -192,53 +194,13 @@ async function showMergeView(diff) {
   app.diffXmlPath = diff
 }
 
-function removeMergeView() {
-  UrlHash.remove("diff")
-  app.diffXmlPath = xmlPath
-}
-
-
 /**
- * Sets the status attribute of the last selected node, or removes it if the status is empty
- * @param {string} status The new status, can be "verified", "unresolved", "comment" or ""
- * @returns {Promise<void>}
- * @throws {Error} If the status is not one of the allowed values
+ * Removes all remaining diffs
  */
-async function setNodeStatus(status) {
-  if (!lastSelectedXpathlNode) {
-    return
-  }
-  // update XML document from editor content
-  app.xmleditor.updateNodeFromEditor(lastSelectedXpathlNode)
-
-  // set/remove the status attribute
-  switch (status) {
-    case "":
-      lastSelectedXpathlNode.removeAttribute("status")
-      break;
-    case "comment":
-      throw new Error("Commenting not implemented yet")
-      // const comment = prompt(`Please enter the comment to store in the ${lastSelectedXpathlNode.tagName} node`)
-      // if (!comment) {
-      //   return
-      // }
-      // const commentNode = xmlEditor.getXmlTree().createComment(comment)
-      // const firstElementNode = Array.from(lastSelectedXpathlNode.childNodes).find(node => node.nodeType === Node.ELEMENT_NODE)
-      // const insertBeforeNode = firstElementNode || lastSelectedXpathlNode.firstChild || lastSelectedXpathlNode
-      // if (insertBeforeNode.previousSibling && insertBeforeNode.previousSibling.nodeType === Node.TEXT_NODE) {
-      //   // indentation text
-      //   lastSelectedXpathlNode.insertBefore(insertBeforeNode.previousSibling.cloneNode(), insertBeforeNode)
-      // } 
-      // lastSelectedXpathlNode.insertBefore(commentNode, insertBeforeNode.previousSibling)
-      break;
-    default:
-      lastSelectedXpathlNode.setAttribute("status", status)
-  }
-  // update the editor content
-  await app.xmleditor.updateEditorFromNode(lastSelectedXpathlNode)
-
-  // reselect the current node when done
-  selectByIndex(currentIndex)
+function removeMergeView() {
+  app.xmleditor.hideMergeView()
+  app.diffXmlPath = app.xmlPath
+  UrlHash.remove("diff")
 }
 
 
@@ -278,52 +240,12 @@ function getXpathResultSize(xpath) {
   try {
     return app.xmleditor.countDomNodesByXpath(xpath)
   } catch (e) {
+    console.error(e)
     return 0
   }
 }
 
-/**
- * Returns information on the given xpath
- * @param {string} xpath An xpath expression
- * @returns {Object}
- */
-function xpathInfo(xpath) {
-  if (!xpath) {
-    throw new Error("No xpath given")
-  }
 
-  // the last segment of the xpath, with final selector
-  const basename = xpath.split("/").pop() 
-
-  // everything before the final tag name (or empty string)
-  const parentPath = xpath.slice(0, xpath.length - basename.length)  
-
-  // match the basename
-  const xpathRegex = /^(?:(\w+):)?(\w+)(.*)?$/;
-  const match = basename.match(xpathRegex);
-  
-  if (!match) {
-    throw new TypeError(`Cannot parse xpath: ${xpath}`)
-  }
-
-  // namespace prefix (e.g., "tei") or empty string
-  const prefix = match[1] || "" 
-  
-  // tag name (e.g., "biblStruct")
-  const tagName = match[2]  
-
-  // the final child/attribute selector (e.g., "[1]", "[@status='verified']") or empty string
-  const finalSelector = match[3] || "" 
-
-  // final index
-  const m = xpath.match(/(.+?)\[(\d+)\]$/)
-  const index = (m && !isNaN(parseInt(m[2]))) ? parseInt(m[2]) : null 
-  
-  // xpath without index
-  const beforeIndex = index ? xpath.slice(0, -finalSelector.length) : xpath
-
-  return { parentPath, basename, prefix, tagName, finalSelector, index, beforeIndex };
-}
 
 //
 // helper methods
