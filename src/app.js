@@ -3,7 +3,6 @@ import { UrlHash } from './modules/browser-utils.js'
 // custom elements
 import {Spinner} from './modules/spinner.js'
 import './modules/switch.js'
-import './modules/list-editor.js'
 
 // New application architecture
 import { App } from './modules/app.js'
