@@ -140,7 +140,7 @@ function edit(idx) {
   slMenuNode.childNodes[idx].checked = true
   const {label, text} = prompts[idx]
   slInputNode.value = label
-  slTextareaNode.value = text
+  slTextareaNode.value = Array.isArray(text) ? text.join("\n") : text
 }
 
 /**
@@ -200,7 +200,7 @@ function addMenuItem(idx, label){
 function saveCurrentPrompt() {
   prompts[currentIndex] = {
     label: slInputNode.value,
-    text: slTextareaNode.value
+    text: slTextareaNode.value.split("\n")
   }
   slMenuNode.childNodes[currentIndex].textContent = slInputNode.value
 }

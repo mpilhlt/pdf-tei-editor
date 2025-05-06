@@ -14,7 +14,7 @@ def get_instructions():
         with open(prompt_path, 'r', encoding='utf-8') as f:
             instructions = json.load(f)
     else:   
-        instructions = []
+        instructions = [{"label":"Default instructions", "text":[]}]
     return jsonify(instructions)
 
 @bp.route("/instructions", methods=["POST"])
