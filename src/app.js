@@ -140,12 +140,11 @@ export class PdfTeiEditor extends App {
     console.log(`Starting Application...`);
 
     this.spinner.show('Loading documents, please wait...')
-    let pdf, xml, diff
 
     // async operations
     try {
 
-      // install components in parallel
+      // install components in parallel and wait for all returned promises to resolve
       const promises = this.plugin.invoke('install', this)
       await Promise.all(promises)
       
@@ -156,57 +155,56 @@ export class PdfTeiEditor extends App {
       this.xmleditor.disableValidation(true)
 
       // get document paths from URL hash or from the first entry of the selectboxes
-      pdf = this.pdfPath || this.commandbar.selectedOption("pdf").value
-      xml = this.xmlPath || this.commandbar.selectedOption("xml").value
-      diff = this.diffXmlPath || this.commandbar.getByName("diff").value
-
-      // lod the documents, this also sets the application state
+      const pdf = this.pdfPath || this.commandbar.selectedOption("pdf").value
+      const xml = this.xmlPath || this.commandbar.selectedOption("xml").value
+    
+      // lod the documents
       await this.services.load({pdf, xml})
+
+      // two alternative initial states:
+      // a) if the diff param was given and is different from the xml param, show a diff/merge view 
+      // b) if no diff, try to validate the document and select first match of xpath expression
+
+      const diff = this.diffXmlPath || this.commandbar.getByName("diff").value
+      if (diff !== xml) {
+        // a) load the diff view
+        try {
+          await this.services.showMergeView(diff)
+        } catch (error) {
+          console.error("Error loading diff view:", error)
+        }
+      } else {
+        // b) validation & xpath selection
+
+        // measure how long it takes to validate the document
+        const startTime = new Date().getTime();
+        this.services.validateXml().then(() => {
+          const endTime = new Date().getTime();
+          const seconds = Math.round((endTime - startTime) / 1000);
+          // disable validation if it took longer than 3 seconds on slow servers
+          console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
+          this.xmleditor.disableValidation(seconds > 3)
+        })
+        
+        // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
+        const xpath = UrlHash.get("xpath")
+        if (xpath) {
+          this.xpath = xpath
+        } else {
+          this.xpath = this.floatingPanel.getByName('xpath').value
+        }
+      }
+
+      // finish initialization
+      this.spinner.hide()
+      this.floatingPanel.show()
+      console.log("Application ready.")
 
     } catch (error) {
       this.spinner.hide();
       this.dialog.error(error.message)
       throw error
     }
-
-    // two alternative initial states:
-    // a) showing a diff/merge view if the diff param was given and is different from the xml param
-    // b) if no diff, validate and select first match of xpath expression
-
-    if (diff !== xml) {
-      // a) load the diff view
-      try {
-        await this.services.showMergeView(diff)
-      } catch (error) {
-        console.error("Error loading diff view:", error)
-      }
-    } else {
-      // b) validation & xpath selection
-
-      // measure how long it takes to validate the document
-      const startTime = new Date().getTime();
-      this.services.validateXml().then(() => {
-        const endTime = new Date().getTime();
-        const seconds = Math.round((endTime - startTime) / 1000);
-        // disable validation if it took longer than 3 seconds
-        console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
-        this.xmleditor.disableValidation(seconds > 3)
-      })
-      
-      // the xpath of the (to be) selected node in the xml editor
-      const xpath = UrlHash.get("xpath")
-      if (xpath) {
-        // this triggers the selection
-        this.xpath = xpath
-      } else {
-        this.xpath = this.floatingPanel.getByName('xpath').value
-      }
-    }
-
-    // finish initialization
-    this.spinner.hide()
-    this.floatingPanel.show()
-    console.log("Application ready.")
   }
 }
 

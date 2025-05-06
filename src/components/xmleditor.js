@@ -256,7 +256,7 @@ export { XMLEditor, xmlEditorComponent, xmlEditorPlugin }
 export default xmlEditorPlugin
 
 /**
- * Called when the app state "xpath" changes
+ * Called when the app state "xpath" changes to update the selection
  * @param {string|null} xpath The new xpath for selection
  * @param {string|null} old The previous xpath
  * @returns {void}
@@ -275,13 +275,13 @@ function onXpathChange(xpath, old) {
 }
 
 /**
- * Called when the selection in the editor changes
+ * Called when the selection in the editor changes to update the cursor xpath
  */
 async function onSelectionChange() {
-  const node = cmp.selectedNode
   const xpath = cmp.selectedXpath
-  if (!xpath || !node )  {
-    console.warn("Could not determine xpath of last selected node")
+  if (!xpath)  {
+    // this usually means that the editor is not ready yet
+    //console.warn("Could not determine xpath of last selected node")
     return
   }
   // update state from the xpath of the nearest selection node
