@@ -20,17 +20,21 @@ const componentId = "prompt-editor"
 
 // add prompt-editor in a dialog 
 const html = `
-<sl-dialog id="${componentId}" label="Edit prompt" class="dialog-scrolling">
-  <p slot="header">Below are the parts of the LLM prompt specific to the reference instruction.</p>
-  <sl-dropdown>
-    <sl-input slot="trigger" caret></sl-input>
-    <sl-menu>
-      <sl-menu-item>Dropdown Item 1</sl-menu-item>
-      <sl-menu-item>Dropdown Item 2</sl-menu-item>
-      <sl-menu-item>Dropdown Item 3</sl-menu-item>
-    </sl-menu>
-  </sl-dropdown>
-  <sl-textarea></sl-texarea>
+<sl-dialog id="${componentId}" label="Edit prompt" class="dialog-big">
+  <p>Below are the parts of the LLM prompt specific to the reference instruction.</p>
+  <div class="dialog-form">
+    <sl-dropdown>
+      <sl-input slot="trigger" caret></sl-input>
+      <sl-menu>
+        <sl-menu-item>Dropdown Item 1</sl-menu-item>
+        <sl-menu-item>Dropdown Item 2</sl-menu-item>
+        <sl-menu-item>Dropdown Item 3</sl-menu-item>
+      </sl-menu>
+    </sl-dropdown>
+    <sl-textarea>
+      <slot name="prompt"></slot>
+    </sl-texarea>
+  </div>
   <sl-button slot="footer" variant="primary">Close</sl-button>
 </sl-dialog>
 `

@@ -60,4 +60,21 @@ iframe {
   height: 100%;
 }
 
+/* Shoelace library */
+
+.dialog-form {
+  display: flex; 
+  flex-direction: column;
+  gap:10px
+}
+
+.dialog-big {
+  --height: 75vh;
+}
+
+sl-dialog {
+  --header-spacing: var(--sl-spacing-small);
+  --body-spacing: var(--sl-spacing-small);
+  --footer-spacing: var(--sl-spacing-small);
+}
 
