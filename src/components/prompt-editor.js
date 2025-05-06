@@ -97,7 +97,7 @@ function install(app) {
   button.addEventListener("click", () => {
     componentNode.showModal()
   })
-  console.log("Prompt editor component installed.")
+  app.logger.info("Prompt editor component installed.")
 }
 
 /**

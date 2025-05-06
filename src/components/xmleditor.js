@@ -109,9 +109,9 @@ class NavXmlEditor extends XMLEditor {
 
     // Wait for editor to be ready
     if (!this.isReady()) {
-      console.log("Editor not ready, deferring selection")
+      app.logger.info("Editor not ready, deferring selection")
       this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
-        console.log("Editor is now ready")
+        app.logger.info("Editor is now ready")
         this.selectByIndex(index)
       }, { once: true })
       return;
@@ -221,14 +221,14 @@ const cmp = xmlEditorComponent;
  */
 async function install(app) {
   app.registerComponent('xmleditor', xmlEditorComponent, 'xmleditor')
-  console.log("XML Editor component installed.")
+  app.logger.info("XML Editor component installed.")
 
   // load autocomplete data
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
     cmp.startAutocomplete(tagData)
-    console.log("Loaded autocompletion data...");
+    app.logger.info("Loaded autocompletion data...");
   } catch (error) {
     console.error('Error fetching from', tagDataPath, ":", error);
   }

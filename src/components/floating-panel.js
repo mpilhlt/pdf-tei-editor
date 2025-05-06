@@ -159,7 +159,7 @@ function install(app) {
 
   app.on("change:diffXmlPath", onAppChangeDiffXmlPath)
 
-  console.log("Floating panel component installed.")
+  app.logger.info("Floating panel component installed.")
 }
 
 /**
@@ -337,7 +337,7 @@ function updateCounter(xpath, index) {
  */
 async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked
-  console.log(`Auto search is: ${checked}`)
+  app.logger.info(`Auto search is: ${checked}`)
   if (checked) {
     console.warn("Reimplement search in PDF")
     //await app.services.searchNodeContentsInPdf(lastSelectedXpathlNode)

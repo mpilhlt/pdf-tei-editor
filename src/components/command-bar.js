@@ -148,9 +148,9 @@ async function install(app) {
     XMLEditor.EVENT_XML_CHANGED, 
     () => cmp.getByName('save').disabled = false
   );
-  console.log("Loading file metadata...")
+  app.logger.info("Loading file metadata...")
   await cmp.reload()
-  console.log("Command bar component installed.")
+  app.logger.info("Command bar component installed.")
 }
 
 /**

@@ -32,7 +32,7 @@ const clientComponent = {
  */
 function install(app) {
   app.registerComponent(name, clientComponent, name)
-  console.log("Client component installed.")
+  app.logger.info("Client component installed.")
 }
 
 /**
@@ -198,16 +198,16 @@ async function deleteFiles(filePaths) {
  *       onProgress: (event) => {
  *         if (event.lengthComputable) {
  *           const percentComplete = (event.loaded / event.total) * 100;
- *           console.log(`Uploaded: ${percentComplete.toFixed(2)}%`);
+ *           app.logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
  *         } else {
- *           console.log("Total size is unknown");
+ *           app.logger.info("Total size is unknown");
  *         }
  *       } 
  *     });
  *
  *     if (response.ok) {
  *       const data = await response.json();
- *       console.log('Upload successful:', data);
+ *       app.logger.info('Upload successful:', data);
  *     } else {
  *       throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
  *     }

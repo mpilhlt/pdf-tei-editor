@@ -31,7 +31,7 @@ const servicesComponent = {
  */
 function install(app) {
   app.registerComponent(name, servicesComponent, name)
-  console.log("Services component installed.")
+  app.logger.info("Services component installed.")
 }
 
 /**
@@ -47,23 +47,25 @@ export default servicesPlugin
 
 /**
  * Loads the given XML and/or PDF file(s) into the editor and viewer 
- * @param {Object} param0 The XML and PDF paths
- * @param {string} param0.xml The path to the XML file
- * @param {string} param0.pdf The path to the PDF file
+ * @param {Object} param0 An Object with the following entries:
+ * @param {string?} param0.pdf The path to the PDF file
+ * @param {string?} param0.xml The path to the XML file
+ * @param {string?} param0.diff The path to the diffed XML file, if one exists, this will not be loaded but is needed
+ * 
  */
-async function load({ xml, pdf }) {
+async function load({ xml, pdf, diff }) {
 
   const promises = []
 
   // PDF 
   if (pdf) {
-    console.log("Loading PDF", pdf)
+    app.logger.info("Loading PDF", pdf)
     promises.push(app.pdfviewer.load(pdf))
   }
 
   // XML
   if (xml) {
-    console.log("Loading XML", xml)
+    app.logger.info("Loading XML", xml)
     servicesComponent.removeMergeView()
     promises.push(app.xmleditor.loadXml(xml))
   }
@@ -79,7 +81,7 @@ async function load({ xml, pdf }) {
   }
   if (xml) {
     app.xmlPath = xml
-    app.diffXmlPath = xml
+    app.diffXmlPath = diff || null
   }
 }
 
@@ -88,7 +90,7 @@ async function load({ xml, pdf }) {
  * @returns {Promise<void>}
  */
 async function validateXml() {
-  console.log("Validating XML...")
+  app.logger.info("Validating XML...")
   await app.xmleditor.validateXml()
 }
 
@@ -98,7 +100,7 @@ async function validateXml() {
  * @returns {Promise<void>}
  */
 async function saveXml(filePath) {
-  console.log("Saving XML on server...");
+  app.logger.info("Saving XML on server...");
   await app.client.saveXml(app.xmleditor.getXML(), filePath)
 }
 
@@ -184,7 +186,7 @@ async function extractFromPDF(filename, doi = "") {
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
 async function showMergeView(diff) {
-  console.log("Loading diff XML", diff)
+  app.logger.info("Loading diff XML", diff)
   app.spinner.show('Computing file differences, please wait...')
   try {
     await app.xmleditor.showMergeView(diff)

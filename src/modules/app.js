@@ -2,11 +2,21 @@ import EventEmitter from 'eventemitter3';
 import plugin from "./plugin.js"
 
 /**
- * App class that manages the application state, services, plugins and event bus.
- * All components of the class should be implemented as plugins, using the js-plugin libraryn
- * (@see https://www.npmjs.com/package/js-plugin)
+ * App class that manages the application state and application components. It provides
  * 
- * @property {plugin} plugin - The plugin manager for the application.
+ * - event/message bus based on https://www.npmjs.com/package/eventemitter3
+ * - a plugin mananger based on https://www.npmjs.com/package/js-plugin
+ * 
+ * Note:
+ *  - All components of the application must be implemented as "js-plugin"-style
+ *    plugins. They are attached as read-only properties of the application instance
+ *  - Application states are readable and writable properties of the application 
+ *    instance. When changed, they emit a message "change:<property name>" on the 
+ *    message bus. 
+ *  - If you want to see debug messages relating to state and component management,
+ *    implement a "logger" component that has a "debug(message, level)" method. The
+ *    messages are logged with level=1
+ * 
  */
 export class App {
 
@@ -61,19 +71,6 @@ export class App {
     // });
   }
 
-  /**
-   * Updates the properties from the URL hash.
-   */
-  updateStateFromUrlHash() {
-    const urlParams = new URLSearchParams(window.location.hash.slice(1));
-    for (const [key, value] of urlParams.entries()) {
-      if (this.#urlHashParams[key] !== undefined) {
-        const stateName = this.#urlHashParams[key];
-        // Update the property value using the setter, this also emits change events
-        this[stateName] = value;
-      }
-    }
-  }
 
   /**
    * Registers an application component. This can be a UI element or any arbitrary object that "does things"
@@ -114,11 +111,11 @@ export class App {
   }
 
   /**
-   * Returns the list of registered components.
+   * Returns the list of ids of registered components.
    * @returns {Array} 
    */
-  getComponents() {
-    return this.#components;
+  getComponentIds() {
+    return Object.keys(this.#components);
   }
   
   /**
@@ -167,7 +164,7 @@ export class App {
           if (this.#state[name] === value) {
             return;
           }
-          console.log("Setting", name, "to", value)
+          this.#debug(`Setting ${name} to ${JSON.stringify(value)}`)
           // If a URL hash parameter has been registered, update the URL hash
           if (urlHashParam) {
             const url = new URL(window.location.href);
@@ -185,6 +182,7 @@ export class App {
 
           // unless the event name is null, dispatch a custom event to notify listeners of the change
           if (eventName) {
+            this.#debug(`Emitting '${name}' with new value...`)
             this.#bus.emit(eventName, value, this.#state[name]);
           }
 
@@ -198,24 +196,74 @@ export class App {
     if (urlHashParam !== undefined) {
       this.#urlHashParams[urlHashParam] = name;
     }
-
   }
 
-  emit(event, ...args) {
-    this.#bus.emit(event, ...args);
+
+  /**
+   * Updates the properties from the URL hash.
+   */
+  updateStateFromUrlHash() {
+    const urlParams = new URLSearchParams(window.location.hash.slice(1));
+    for (const [key, value] of urlParams.entries()) {
+      if (this.#urlHashParams[key] !== undefined) {
+        const stateName = this.#urlHashParams[key];
+        // Update the property value using the setter, this also emits change events
+        this[stateName] = value;
+      }
+    }
+  }  
+
+  /**
+   * Emits a message/event with the given name and arguments
+   * @param {string} name The name of the message that is emitted
+   * @param  {...any} args The arguments emitted with the message
+   */
+  emit(name, ...args) {
+    this.#bus.emit(name, ...args);
   }
 
-  on(event, listener, context) {
-    this.#bus.on(event, listener, context);
+  /**
+   * Subscribes to the message with the given name and executes the listener when the
+   * message is emitted
+   * @param {string} name The name of the message to subscribe to
+   * @param {Function} listener The listener function
+   * @param {Object?} context An optional context object for the listener
+   */
+  on(name, listener, context) {
+    this.#bus.on(name, listener, context);
   }
 
-  once(event, listener, context) {
-    this.#bus.once(event, listener, context);
+  /**
+   * Subscribes to the message with the given name and executes the listener when the
+   * message is emitted, but only once
+   * @param {string} name The name of the message to subscribe to
+   * @param {Function} listener The listener function
+   * @param {Object?} context An optional context object for the listener
+   */  
+  once(name, listener, context) {
+    this.#bus.once(name, listener, context);
   }
 
-  off(event, listener, context) {
-    this.#bus.off(event, listener, context);
+  /**
+   * Unsubscribes the given listener function from message with the given name
+   * @param {string} name The name of the message to subscribe to
+   * @param {Function} listener The listener function
+   * @param {Object?} context An optional context object for the listener
+   */
+  off(name, listener, context) {
+    this.#bus.off(name, listener, context);
   }
 
+  /**
+   * If a logger component has been registered that provides a debug(message, level) method,
+   * log this message with debug level 2
+   * @param {*} msg The debug message
+   */
+  #debug(msg) {
+    const hasDebugMethod = 'logger' in this.#components && typeof this.logger.debug === "function" 
+    if (hasDebugMethod) {
+      this.logger.debug(msg, 1)
+    }
+  }
 }
 

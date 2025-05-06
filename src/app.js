@@ -1,5 +1,4 @@
 import { UrlHash } from './modules/browser-utils.js'
-import { PDFJSViewer } from './modules/pdfviewer.js'
 
 // custom elements
 import {Spinner} from './modules/spinner.js'
@@ -10,6 +9,7 @@ import './modules/list-editor.js'
 import { App } from './modules/app.js'
 
 // plugins (the components are only needed for IDE autocompletion)
+import { loggerPlugin, loggerComponent } from './components/logger.js'
 import { dialogPlugin, dialogComponent } from './components/dialog.js'
 import { pdfViewerPlugin, pdfViewerComponent  } from './components/pdfviewer.js'
 import { xmlEditorPlugin, xmlEditorComponent } from './components/xmleditor.js'
@@ -23,6 +23,13 @@ import { promptEditorPlugin, promptEditorComponent } from './components/prompt-e
  * Main application class
  */
 export class PdfTeiEditor extends App {
+
+  /**
+   * The logger for the application
+   * @type {loggerComponent}
+   */
+  logger;
+
   /**
    * A dialog widget for user interaction
    * @type {dialogComponent}
@@ -114,9 +121,13 @@ export class PdfTeiEditor extends App {
   constructor() {
     super();
 
-    // regitster plugins
+    // plugins
+    loggerComponent.info(`Installing plugins...`);
+    loggerComponent.setDebugLevel(1) // uncomment this to see more debug messages
     const plugins = [
-      dialogPlugin, pdfViewerPlugin, xmlEditorPlugin, clientPlugin, servicesPlugin, 
+      loggerPlugin, dialogPlugin, 
+      pdfViewerPlugin, xmlEditorPlugin, 
+      clientPlugin, servicesPlugin, 
       commandBarPlugin, floatingPanelPlugin, promptEditorPlugin
     ]
     plugins.forEach(plugin => this.plugin.register(plugin))
@@ -137,7 +148,7 @@ export class PdfTeiEditor extends App {
    */
   async start() {
     
-    console.log(`Starting Application...`);
+    loggerComponent.info(`Starting Application...`);
 
     this.spinner.show('Loading documents, please wait...')
 
@@ -148,7 +159,7 @@ export class PdfTeiEditor extends App {
       const promises = this.plugin.invoke('install', this)
       await Promise.all(promises)
       
-      console.log("Configuring application state from URL")
+      this.logger.info("Configuring application state from URL")
       this.updateStateFromUrlHash()
 
       // disable regular validation so that we have more control over it
@@ -157,15 +168,14 @@ export class PdfTeiEditor extends App {
       // get document paths from URL hash or from the first entry of the selectboxes
       const pdf = this.pdfPath || this.commandbar.selectedOption("pdf").value
       const xml = this.xmlPath || this.commandbar.selectedOption("xml").value
+      const diff = this.diffXmlPath || this.commandbar.getByName("diff").value
     
       // lod the documents
-      await this.services.load({pdf, xml})
+      await this.services.load({pdf, xml, diff})
 
       // two alternative initial states:
       // a) if the diff param was given and is different from the xml param, show a diff/merge view 
       // b) if no diff, try to validate the document and select first match of xpath expression
-
-      const diff = this.diffXmlPath || this.commandbar.getByName("diff").value
       if (diff !== xml) {
         // a) load the diff view
         try {
@@ -182,7 +192,7 @@ export class PdfTeiEditor extends App {
           const endTime = new Date().getTime();
           const seconds = Math.round((endTime - startTime) / 1000);
           // disable validation if it took longer than 3 seconds on slow servers
-          console.log(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
+          this.logger.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
           this.xmleditor.disableValidation(seconds > 3)
         })
         
@@ -198,7 +208,7 @@ export class PdfTeiEditor extends App {
       // finish initialization
       this.spinner.hide()
       this.floatingPanel.show()
-      console.log("Application ready.")
+      this.logger.info("Application ready.")
 
     } catch (error) {
       this.spinner.hide();
@@ -212,7 +222,7 @@ export class PdfTeiEditor extends App {
  * The application instance
  * @type {PdfTeiEditor}
  */
-export let app;
+let app;
 
 // instantiate and run app 
 (async () => {
@@ -224,3 +234,6 @@ export let app;
     console.error(error)
   }
 })()
+
+export {app, App}
+export default app

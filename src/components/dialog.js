@@ -41,7 +41,7 @@ export const dialogComponent = {
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  console.log("Dialog component installed.")
+  app.logger.info("Dialog component installed.")
   app.registerComponent('dialog', dialogComponent, 'dialog')
 }
 
