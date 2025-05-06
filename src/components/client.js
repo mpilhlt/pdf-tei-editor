@@ -151,12 +151,6 @@ async function saveInstructions(instructions) {
   if (!Array.isArray(instructions)) {
     throw new Error("Instructions must be an array");
   }
-  // Check if all objects in the array have the required properties
-  instructions.forEach(instruction => {
-    if (typeof instruction.active !== 'boolean' || typeof instruction.label !== 'string' || typeof instruction.text !== 'string') {
-      throw new Error("Each instruction must have 'active' (boolean), 'label' (string), and 'text' (string) properties");
-    }
-  });
   // Send the instructions to the server
   return callApi('/config/instructions', 'POST', instructions);
 }

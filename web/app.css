@@ -62,14 +62,8 @@ iframe {
 
 /* Shoelace library */
 
-.dialog-form {
-  display: flex; 
-  flex-direction: column;
-  gap:10px
-}
-
-.dialog-big {
-  --height: 75vh;
+:not(:defined) {
+  visibility: hidden;
 }
 
 sl-dialog {
@@ -77,4 +71,21 @@ sl-dialog {
   --body-spacing: var(--sl-spacing-small);
   --footer-spacing: var(--sl-spacing-small);
 }
+
+.dialog-big {
+  --width: 75vw;
+}
+
+.dialog-column {
+  display: flex; 
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialog-row {
+  display: flex block; 
+  flex-direction: row;
+  gap: 10px;
+}
+
 

@@ -192,3 +192,20 @@ export function selectByData(selectbox, key, value) {
   }
   selectbox.selectedIndex = index;
 }
+
+
+/**
+ * Removes all light DOM nodes that are slotted into a specific named slot
+ * of a given custom element.
+ *
+ * @param {HTMLElement} customElement - The custom element (or any HTML element acting as a container) whose slot content should be cleared.
+ * @param {string} slotName - The name of the slot to clear (the value of the `slot` attribute).
+ * @returns {void}
+ */
+export function clearSlot(customElement, slotName) {
+  // `> [slot="${slotName}"]` selects direct children (`>`) with the specified `slot` attribute.
+  const slottedNodes = customElement.querySelectorAll(`:scope > [slot="${slotName}"]`);
+  slottedNodes.forEach(node => {
+    node.remove();
+  });
+}

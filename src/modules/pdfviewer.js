@@ -98,12 +98,13 @@ export class PDFJSViewer {
             this.PDFViewerApplication.initializedPromise.then(() => {
               // enable hand tool
               this.PDFViewerApplication.pdfCursorTools.switchTool(1);
+            })
+            this.PDFViewerApplication.eventBus.on("metadataloaded", () => {
               // finish initialization
               this.isReadyFlag = true;
               console.log("PDF.js viewer initialized.");
               resolve(this);
             })
-            //this.PDFViewerApplication.eventBus.on("metadataloaded", () => {})
           } catch (error) {
             this.isReadyFlag = false;
             reject(error);
