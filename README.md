@@ -50,4 +50,14 @@ For LLamore to work, you currently need a Gemini API Key (got to <https://aistud
 
 For public deployments, the development server is inadequate. You need to put a real http server in front of the flask server. In addition, file uploads should be checked using the libmagic package to prevent malicious file content. This package depends on the native libmagic library, which is available on Linux via package manager. On Intel MacOS and Windows, use `uv add python-magic-bin`, on Apple Silicon Macs, use Homebrew and `brew install libmagic`. If the bindings are not available, the backend will only check for the correct file extension.
 
+## Application architecture
 
+The application has a modular and pluggable architecture that makes it easy to extend. It is also lightweight and does not involve 
+any particular framework.  The main application class provides 
+
+- an event/message bus based on https://www.npmjs.com/package/eventemitter3
+- a plugin mananger based on https://www.npmjs.com/package/js-plugin
+
+All of the app's functions are implemented as components in the form of plugins (see [app.js](/src/app.js)). New components can be easily added.
+
+The UI is build with WebComponents provided by https://shoelace.style

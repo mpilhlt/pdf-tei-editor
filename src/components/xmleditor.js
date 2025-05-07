@@ -267,10 +267,14 @@ function onXpathChange(xpath, old) {
   }
   const { index, beforeIndex } = xpathInfo(xpath)
   // select the first node
-  const size = app.services.getXpathResultSize(beforeIndex)
-  if (size > 0 && (index !== cmp.currentIndex)) {
-    cmp.parentPath = beforeIndex
-    cmp.selectByIndex(index || 1)
+  try {
+    const size = xmlEditorComponent.countDomNodesByXpath(xpath)
+    if (size > 0 && (index !== cmp.currentIndex)) {
+      cmp.parentPath = beforeIndex
+      cmp.selectByIndex(index || 1)
+    }
+  } catch (e) {
+    console.error(e)
   }
 }
 

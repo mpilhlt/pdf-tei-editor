@@ -14,7 +14,8 @@ import { pdfViewerPlugin, pdfViewerComponent  } from './components/pdfviewer.js'
 import { xmlEditorPlugin, xmlEditorComponent } from './components/xmleditor.js'
 import { clientPlugin, clientComponent } from './components/client.js'
 import { commandBarPlugin, commandBarComponent } from './components/command-bar.js'
-import { extractionUiPlugin, extractionUiComponent } from './components/extraction-ui.js'
+import { fileselectionPlugin, fileselectionComponent } from './components/file-selection.js'
+import { extractionPlugin, extractionComponent } from './components/extraction.js'
 import { servicesPlugin, servicesComponent } from './components/services.js'
 import { floatingPanelPlugin, floatingPanelComponent  } from './components/floating-panel.js'
 import { promptEditorPlugin, promptEditorComponent } from './components/prompt-editor.js'
@@ -61,16 +62,28 @@ export class PdfTeiEditor extends App {
   client;
 
   /**
-   * The floating panel containing navigation controls
-   * @type {floatingPanelComponent}
+   * UI and services for displaying and loading PDF and XML files on the server
+   * @type {fileselectionComponent}
    */
-  floatingPanel;
+  fileselection;
 
   /**
    * The core services (commands) of the app
    * @type {servicesComponent}
    */
-  services;
+  services;  
+  
+  /**
+   * Provides the extraction services
+   * @type {extractionComponent}
+   */
+  extraction;
+
+  /**
+   * The floating panel containing navigation controls
+   * @type {floatingPanelComponent}
+   */
+  floatingPanel;
 
   /**
    * A pop-up dialog which lets the user enter and edit additional instructions
@@ -80,11 +93,7 @@ export class PdfTeiEditor extends App {
   promptEditor;
 
 
-  /**
-   * Provides the extraction services
-   * @type {extractionComponent}
-   */
-  extractionUI;
+
 
   /**
    * The spinner which is shown with a message and blocking the UI while 

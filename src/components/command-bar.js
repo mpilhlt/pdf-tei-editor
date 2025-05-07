@@ -14,10 +14,7 @@ const commandBarComponent = {
   addAt,
   addBefore,
   getByName,
-  clicked,
-  selectedOption,
-  
-
+  clicked
 };
 
 /**
@@ -103,18 +100,3 @@ function clicked(name, handler) {
   getByName(name).addEventListener('click', handler);
 }
 
-/**
- * Returns the option that is selected in the selectbox with the given name
- * @param {string} name The name of the selectbox
- * @returns {HTMLOptionElement}
- */
-function selectedOption(name) {
-  const select = getByName(name);
-  if (!select || select.options === undefined) {
-    throw new Error(`Element with name "${name}" is not a selectbox`);
-  }
-  if (select.options.length === 0) {
-    throw new Error(`Element with name "${name}" has no options`);
-  }
-  return select.options[select.selectedIndex];
-}

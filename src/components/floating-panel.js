@@ -325,7 +325,13 @@ function onAppChangeXpath(xpath, old) {
  * @param {Number} index The index 
  */
 function updateCounter(xpath, index) {
-  let size = app.services.getXpathResultSize(xpath)
+  let size;
+  try {
+    size = app.xmleditor.countDomNodesByXpath(xpath)
+  } catch (e) {
+    console.error(e)
+    size = 0
+  }
   index = index || 1
   cmp.getByName('selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
   cmp.getByName('next-node').disabled = cmp.getByName('prev-node').disabled = size < 2;
