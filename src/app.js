@@ -181,8 +181,8 @@ export class PdfTeiEditor extends App {
       this.xmleditor.disableValidation(true)
 
       // get document paths from URL hash or from the first entry of the selectboxes
-      const pdf = this.pdfPath || this.commandbar.selectedOption("pdf").value
-      const xml = this.xmlPath || this.commandbar.selectedOption("xml").value
+      const pdf = this.pdfPath || this.commandbar.getByName("pdf").value
+      const xml = this.xmlPath || this.commandbar.getByName("xml").value
       const diff = this.diffXmlPath || this.commandbar.getByName("diff").value
     
       // lod the documents

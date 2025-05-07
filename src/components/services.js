@@ -189,7 +189,7 @@ async function onClickValidateButton() {
  * Called when the "Save" button is executed
  */
 async function onClickSaveButton() {
-  const xmlPath = bar.getByName('xml').value;
+  const xmlPath = app.commandbar.getByName('xml').value;
   await saveXml(xmlPath)
   bar.getByName('save').disabled = true
 }
