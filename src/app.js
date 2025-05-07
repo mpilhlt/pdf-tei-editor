@@ -13,8 +13,9 @@ import { dialogPlugin, dialogComponent } from './components/dialog.js'
 import { pdfViewerPlugin, pdfViewerComponent  } from './components/pdfviewer.js'
 import { xmlEditorPlugin, xmlEditorComponent } from './components/xmleditor.js'
 import { clientPlugin, clientComponent } from './components/client.js'
-import { servicesPlugin, servicesComponent } from './components/services.js'
 import { commandBarPlugin, commandBarComponent } from './components/command-bar.js'
+import { extractionUiPlugin, extractionUiComponent } from './components/extraction-ui.js'
+import { servicesPlugin, servicesComponent } from './components/services.js'
 import { floatingPanelPlugin, floatingPanelComponent  } from './components/floating-panel.js'
 import { promptEditorPlugin, promptEditorComponent } from './components/prompt-editor.js'
 
@@ -78,6 +79,13 @@ export class PdfTeiEditor extends App {
    */
   promptEditor;
 
+
+  /**
+   * Provides the extraction services
+   * @type {extractionComponent}
+   */
+  extractionUI;
+
   /**
    * The spinner which is shown with a message and blocking the UI while 
    * awaiting the result of a long-lasting server-side process
@@ -124,10 +132,8 @@ export class PdfTeiEditor extends App {
     loggerComponent.info(`Installing plugins...`);
     loggerComponent.setDebugLevel(1) // uncomment this to see more debug messages
     const plugins = [
-      loggerPlugin, dialogPlugin, 
-      pdfViewerPlugin, xmlEditorPlugin, 
-      clientPlugin, servicesPlugin, 
-      commandBarPlugin, floatingPanelPlugin, promptEditorPlugin
+      loggerPlugin, dialogPlugin, clientPlugin, pdfViewerPlugin, xmlEditorPlugin, 
+      commandBarPlugin, extractionUiPlugin, servicesPlugin, floatingPanelPlugin, promptEditorPlugin
     ]
     plugins.forEach(plugin => this.plugin.register(plugin))
 

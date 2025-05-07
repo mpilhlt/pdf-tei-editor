@@ -4,9 +4,19 @@
 import { app, PdfTeiEditor } from '../app.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { xpathInfo } from '../modules/utils.js'
+import { XMLEditor } from './xmleditor.js'
+import { selectByValue, selectByData, UrlHash } from '../modules/browser-utils.js'
+import { validationEvents } from '../modules/lint.js' // Todo remove this dependency, use events instead
 
 // name of the component
 const name = "services"
+
+const html =`
+  <button name="validate" disabled>Validate</button>  
+  <button name="save" disabled>Save</button> 
+  <button name="cleanup" disabled>Cleanup</button>  
+`
+
 
 /**
  * component API
@@ -31,6 +41,7 @@ const servicesComponent = {
  */
 function install(app) {
   app.registerComponent(name, servicesComponent, name)
+  setupEventListeners()
   app.logger.info("Services component installed.")
 }
 
@@ -44,6 +55,12 @@ const servicesPlugin = {
 
 export { servicesComponent, servicesPlugin }
 export default servicesPlugin
+
+//
+// Implementation
+//
+
+// API
 
 /**
  * Loads the given XML and/or PDF file(s) into the editor and viewer 
@@ -205,6 +222,74 @@ function removeMergeView() {
   UrlHash.remove("diff")
 }
 
+// event listeners
+
+function setupEventListeners() {
+  // validate xml button
+  const validateBtn = cmp.getByName('validate')
+  validateBtn.addEventListener('click', onClickValidateButton);
+  // disable during an ongoing validation
+  validationEvents.addEventListener(validationEvents.EVENT.START, () => {
+    validateBtn.innerHTML = "Validating XML..."
+    validateBtn.disabled = true;
+  })
+  validationEvents.addEventListener(validationEvents.EVENT.END, () => {
+    validateBtn.innerHTML = "Validate"
+    validateBtn.disabled = false;
+  })
+
+  // save current version
+  cmp.clicked('save', onClickSaveButton);
+
+  // cleanup
+  const cleanupBtn = cmp.getByName("cleanup")
+  cleanupBtn.addEventListener('click', onClickBtnCleanup)
+  cleanupBtn.disabled = xmlSelectbox.options.length < 2
+}
+
+
+
+/**
+ * Called when the "Validate" button is executed
+ */
+async function onClickValidateButton() {
+  cmp.getByName('validate').disabled = true
+  await validateXml()
+}
+
+/**
+ * Called when the "Save" button is executed
+ */
+async function onClickSaveButton() {
+  const xmlPath = xmlSelectbox.value;
+  await saveXml(xmlPath)
+  cmp.getByName('save').disabled = true
+}
+
+/**
+ * Called when the "Cleanup" button is executed
+ */
+async function onClickBtnCleanup() {
+  const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
+  if (!confirm(msg)) return;
+  const options = Array.from(xmlSelectbox.options)
+  const filePathsToDelete = options
+    .slice(1) // skip the first option, which is the gold standard version  
+    .map(option => option.value)
+  app.services.removeMergeView()
+  if (filePathsToDelete.length > 0) {
+    await app.client.deleteFiles(filePathsToDelete)
+  }
+  try {
+    await reloadFileData()
+    populateSelectboxes()
+    // load the gold version
+    await load({ xml: options[0].value })
+  } catch (error) {
+    console.error(error)
+  }
+}
+
 
 //
 // helper methods
@@ -246,12 +331,6 @@ function getXpathResultSize(xpath) {
     return 0
   }
 }
-
-
-
-//
-// helper methods
-//
 
 function isDoi(doi) {
   // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
