@@ -3,8 +3,8 @@
  */
 import { app, PdfTeiEditor } from '../app.js'
 import { UrlHash } from '../modules/browser-utils.js'
-import { UrlHash } from '../modules/browser-utils.js'
 import { validationEvents } from '../modules/lint.js' // Todo remove this dependency, use events instead
+import { XMLEditor } from './xmleditor.js'
 
 // name of the component
 const name = "services"
@@ -44,8 +44,6 @@ export default servicesPlugin
 
 // API
 
-const bar = app.commandbar
-
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
@@ -54,9 +52,10 @@ function install(app) {
   app.registerComponent(name, servicesComponent, name)
 
   // install controls on menubar
+  const bar = app.commandbar
   const div = document.createElement("div")
   div.innerHTML = html.trim()
-  div.childNodes.foreEach(elem =>bar.add(elem))
+  div.childNodes.forEach(elem =>bar.add(elem))
 
   // setup event listeners
 
@@ -72,7 +71,7 @@ function install(app) {
   })
 
   // save current version
-  bar.clicked('save', onClickSaveButton);
+  bar.onClick('save', onClickSaveButton);
 
   // cleanup versions
   const cleanupBtn = bar.getByName("cleanup")
@@ -136,7 +135,7 @@ async function load({ xml, pdf, diff }) {
  */
 async function validateXml() {
   app.logger.info("Validating XML...")
-  await validateXml()
+  await app.xmleditor.validateXml()
 }
 
 /**

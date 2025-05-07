@@ -125,12 +125,12 @@ async function saveXml(xmlString, filePath) {
 
 /**
  * Extracts the references from the given PDF and returns the XML with the extracted data
- * @param {string} pdfFileName The filename of the PDF to extract
- * @param {string?} doi The DOI of the document, if any
+ * @param {string} filename The filename of the PDF to extract
+ * @param {Object} options The options for the extractions, such as DOI, additional instructions, etc. 
  * @returns {Promise<Object>}
  */
-async function extractReferences(filename, doi = '') {
-  return callApi('/extract', 'POST', { pdf: filename, doi });
+async function extractReferences(filename, options) {
+  return callApi('/extract', 'POST', { pdf: filename, ...options});
 }
 
 

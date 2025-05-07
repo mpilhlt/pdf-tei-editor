@@ -193,19 +193,53 @@ export function selectByData(selectbox, key, value) {
   selectbox.selectedIndex = index;
 }
 
+/**
+ * Returns the first descendant having that name. Throws an error if none can be found unless you pass noError = true
+ * @param {Element} node The ancestor node
+ * @param {string} name The name to look for
+ * @param {Boolean} noError If true, return null instead of throwing an error if no ancestor with that name exists
+ * @returns {Element|null}
+ */
+export function getDescendantByName(node, name, noError) {
+  const descendant = node.querySelector(`[name="${name}]`)
+  if (!descendant) {
+    if (noError) return null
+    throw new Error(`No descendant with name "${name} exists`)
+  }
+  return descendant
+}
 
 /**
- * Removes all light DOM nodes that are slotted into a specific named slot
- * of a given custom element.
- *
- * @param {HTMLElement} customElement - The custom element (or any HTML element acting as a container) whose slot content should be cleared.
- * @param {string} slotName - The name of the slot to clear (the value of the `slot` attribute).
- * @returns {void}
+ * Creates and returns a random id that can be used for uniquely identifying a DOM node
+ * @returns {string}
  */
-export function clearSlot(customElement, slotName) {
-  // `> [slot="${slotName}"]` selects direct children (`>`) with the specified `slot` attribute.
-  const slottedNodes = customElement.querySelectorAll(`:scope > [slot="${slotName}"]`);
-  slottedNodes.forEach(node => {
-    node.remove();
-  });
+export function createRandomId() {
+  return "id-" + Math.random()*100
+}
+
+/**
+ * Parses the HTML and attaches it to a parent node (defaults to document.body), optionally assigning 
+ * a given or random id if the content is a single node. Returns the created elements. 
+ * @param {string} html The html that will be parsed and appended
+ * @param {Element?} parentNode The DOM parent element the parsed content will be added to. If not provided, the 
+ * content will be added to document.body 
+ * @param {string?} id The ID of the parsed content. If none is specified, a random ID will be assigned. 
+ * The ID will only be applied if the html consists of a single top node.
+ * @returns {Array<Element>} An array of elements that have been created and attached to the DOM 
+ */
+export function appendHtml(html, parentNode = document.body, id) {
+  const div = document.createElement("div")
+  div.innerHTML = html.trim()
+  div.childNodes.forEach(node => parentNode.appendChild(node))
+  if (id && div.childElementCount > 1) {
+    throw new Error("ID cannot be assigned to multi-node content")
+  }
+  if (div.childElementCount === 1) {
+    if (id) {
+      parentNode.firstChild.id = id
+    } else {
+      parentNode.firstChild.id = createRandomId()
+    }
+  }
+  return Array.from(parentNode.childNodes)
 }

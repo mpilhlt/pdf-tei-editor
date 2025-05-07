@@ -33,9 +33,12 @@ const html = `
   </div>
   <sl-button slot="footer" name="delete" disabled variant="danger">Delete prompt</sl-button>
   <sl-button slot="footer" name="duplicate" variant="secondary">Duplicate prompt</sl-button>
-  <sl-button slot="footer" name="close" variant="primary">Save &amp; Close</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Save &amp; Close</sl-button>
 </sl-dialog>
 `
+
+// the following should really be in install() but that wouldn't work because of the closures
+
 const div = document.createElement("div")
 div.innerHTML = html.trim()
 document.body.appendChild(div.firstChild)
@@ -55,7 +58,7 @@ const slTextareaNode = slDialogNode.querySelector('sl-textarea');
 const slInputNode = slDialogNode.querySelector('sl-input')
 
 /** @type {SlButton} */
-slDialogNode.querySelector('sl-button[name="close"]').addEventListener('click', close)
+slDialogNode.querySelector('sl-button[name="submit"]').addEventListener('click', submit)
 slDialogNode.querySelector('sl-button[name="duplicate"]').addEventListener('click', duplicate)
 const deleteBtn = slDialogNode.querySelector('sl-button[name="delete"]')
 deleteBtn.addEventListener('click', deletePrompt)
@@ -69,6 +72,7 @@ const cmp = {
   edit,
   duplicate,
   save,
+  submit,
   close,
   delete: deletePrompt
 }
@@ -82,10 +86,10 @@ function install(app) {
   app.registerComponent(componentId, cmp, "promptEditor")
 
   // add a button to the command bar to show dialog with prompt editor
-  const button = document.createElement("button")
+  const button = new SlButton
   button.textContent = "Edit Prompt"
-  app.commandbar.add(button, "edit-prompt")
   button.addEventListener("click", () => cmp.open())
+  app.commandbar.add(button, "edit-prompt")
 
   app.logger.info("Prompt editor component installed.")
 }
@@ -118,13 +122,14 @@ let currentIndex = 0
 
 /**
  * Opens the prompt editor dialog
+ * todo this needs to always reload the data since it might have changed on the server
  */
 async function open() {
   if (prompts === null){
     slMenuNode.childNodes.forEach(node => node.remove())
     prompts = await app.client.loadInstructions()
     for (const [idx, prompt] of prompts.entries()) {
-      addMenuItem(idx, prompt.label)
+      addSlMenuItem(idx, prompt.label)
     }
   }
   deleteBtn.disabled = prompts.length < 2
@@ -154,7 +159,7 @@ function duplicate(idx) {
   prompts.push(newPrompt)
   slMenuNode.childNodes[currentIndex].checked = false
   currentIndex = prompts.length - 1
-  addMenuItem(currentIndex, newPrompt.label)
+  addSlMenuItem(currentIndex, newPrompt.label)
   deleteBtn.disabled = false
   edit(currentIndex)
 }
@@ -170,8 +175,12 @@ async function save() {
 /**
  * Saves the data and closes the prompt editor
  */
-function close() {
+function submit() {
   save()
+  close()
+}
+
+function close() {
   slDialogNode.hide()
 }
 
@@ -189,7 +198,7 @@ function deletePrompt(idx){
 
 // helper methods
 
-function addMenuItem(idx, label){
+function addSlMenuItem(idx, label){
   const slMenuItem = new SlMenuItem()
   slMenuItem.type = "checkbox"
   slMenuItem.value = idx

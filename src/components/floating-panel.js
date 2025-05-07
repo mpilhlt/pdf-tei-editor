@@ -129,7 +129,7 @@ const cmp = {
    * @param {string} name The name of the element
    * @param {Function} handler The function to call when the element is clicked
    */
-  clicked: (name, handler) => {
+  onClick: (name, handler) => {
     cmp.getByName(name).addEventListener('click', handler)
   },
 
@@ -249,7 +249,7 @@ function setupEventHandlers() {
   });
 
   // button to edit the xpath manually
-  cmp.clicked('edit-xpath', () => {
+  cmp.onClick('edit-xpath', () => {
     const custom = xpathSelectbox[xpathSelectbox.length - 1]
     const xpath = prompt("Enter custom xpath", custom.value)
     if (xpath && xpath.trim()) {
@@ -260,16 +260,16 @@ function setupEventHandlers() {
   })
 
   // setup click handlers
-  cmp.clicked('prev-node', () => app.xmleditor.previousNode());
-  cmp.clicked('next-node', () => app.xmleditor.nextNode());
-  cmp.clicked('prev-diff', () => app.xmleditor.goToPreviousDiff())
-  cmp.clicked('next-diff', () => app.xmleditor.goToNextDiff())
+  cmp.onClick('prev-node', () => app.xmleditor.previousNode());
+  cmp.onClick('next-node', () => app.xmleditor.nextNode());
+  cmp.onClick('prev-diff', () => app.xmleditor.goToPreviousDiff())
+  cmp.onClick('next-diff', () => app.xmleditor.goToNextDiff())
 
-  cmp.clicked('diff-keep-all', () => {
+  cmp.onClick('diff-keep-all', () => {
     app.xmleditor.rejectAllDiffs()
     app.services.removeMergeView()
   })
-  cmp.clicked('diff-change-all', () => {
+  cmp.onClick('diff-change-all', () => {
     app.xmleditor.acceptAllDiffs()
     app.services.removeMergeView()
   })
@@ -289,7 +289,7 @@ function setupEventHandlers() {
   }))
 
   // allow to input node index
-  cmp.clicked('selection-index', onClickSelectionIndex)
+  cmp.onClick('selection-index', onClickSelectionIndex)
 }
 
 function onAppChangeXpath(xpath, old) {

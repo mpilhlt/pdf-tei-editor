@@ -9,12 +9,12 @@ const componentId = "command-bar"
 /**
  * component API
  */
-const commandBarComponent = {
+const cmp = {
   add,
   addAt,
   addBefore,
   getByName,
-  clicked
+  onClick
 };
 
 /**
@@ -25,7 +25,7 @@ const commandBarPlugin = {
   install
 }
 
-export { commandBarComponent, commandBarPlugin }
+export { cmp as commandBarComponent, commandBarPlugin }
 export default commandBarPlugin
 
 //
@@ -96,7 +96,7 @@ function getByName(name) {
  * @param {string} name The name of the element
  * @param {Function} handler The function to call when the element is clicked
  */
-function clicked(name, handler) {
+function onClick(name, handler) {
   getByName(name).addEventListener('click', handler);
 }
 

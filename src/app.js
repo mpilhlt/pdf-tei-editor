@@ -142,7 +142,8 @@ export class PdfTeiEditor extends App {
     loggerComponent.setDebugLevel(1) // uncomment this to see more debug messages
     const plugins = [
       loggerPlugin, dialogPlugin, clientPlugin, pdfViewerPlugin, xmlEditorPlugin, 
-      commandBarPlugin, extractionUiPlugin, servicesPlugin, floatingPanelPlugin, promptEditorPlugin
+      commandBarPlugin, fileselectionPlugin, servicesPlugin, 
+      floatingPanelPlugin, promptEditorPlugin, extractionPlugin,
     ]
     plugins.forEach(plugin => this.plugin.register(plugin))
 
