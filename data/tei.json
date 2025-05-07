@@ -651,7 +651,13 @@
       "synch": null
     },
     "children": [
-      "fileDesc"
+      "fileDesc",
+      "respStmt",
+      "titleStmt",
+      "editionStmt",
+      "publicationStmt",
+      "encodingDesc",
+      "revisionDesc"
     ]
   },
   "textLang": {

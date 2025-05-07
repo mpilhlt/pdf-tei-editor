@@ -1,4 +1,5 @@
-<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
   <teiHeader>
     <fileDesc>
       <titleStmt>
@@ -9,17 +10,26 @@
             <surname>Daston</surname>
           </persName>
         </author>
+        <respStmt>
+          <persName xml:id="cb">Christian Boulanger</persName>
+          <resp>Quality control</resp>
+        </respStmt>
+        <respStmt>
+          <persName xml:id="aw">Andreas Wagner</persName>
+          <resp>Quality control</resp>
+        </respStmt>
       </titleStmt>
       <publicationStmt>
         <publisher>Max Planck Institute for Legal History and Legal Theory</publisher>
         <availability>
-          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+          <licence target="https://creativecommons.org/licenses/by/4.0/" />
         </availability>
         <date type="publication">2002</date>
         <idno type="DOI">10.12946/rg01/036-055</idno>
       </publicationStmt>
       <sourceDesc>
-        <bibl>Lorraine Daston. (2002). Baconsche Tatsachen. Rechtsgeschichte - Legal History, 2002(01), 036-055. DOI: 10.12946/rg01/036-055</bibl>
+        <bibl>Lorraine Daston. (2002). Baconsche Tatsachen. Rechtsgeschichte - Legal History,
+          2002(01), 036-055. DOI: 10.12946/rg01/036-055</bibl>
       </sourceDesc>
     </fileDesc>
     <encodingDesc>
@@ -36,7 +46,10 @@
       </appInfo>
     </encodingDesc>
     <revisionDesc>
-      <change when="2025-04-16">
+      <change when="2025-05-07" who="#cb #aw">
+        <desc>Corrections</desc>
+      </change>
+      <change when="2025-04-16" who="#cb">
         <desc>Initial extraction</desc>
       </change>
     </revisionDesc>
@@ -57,7 +70,7 @@
             <pubPlace>London</pubPlace>
           </imprint>
         </monogr>
-        <citedRange>1.1</citedRange>
+        <citedRange from="1.1" to="1.1">1.1</citedRange>
       </biblStruct>
       <biblStruct source="fn2">
         <analytic>
@@ -66,7 +79,7 @@
         <monogr>
           <title level="m">Oxford English Dictionary</title>
           <imprint>
-            <date/>
+            <date />
           </imprint>
         </monogr>
       </biblStruct>
@@ -77,7 +90,31 @@
         <monogr>
           <title level="m">Grimms Wörterbuch</title>
           <imprint>
-            <date/>
+            <date />
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <monogr>
+          <title level="m">The Analogy of Religion, Natural and Revealed, to the Constitution and
+            Course of Nature</title>
+          <author>
+            <persName>
+              <roleName>Bischof</roleName>
+                <forename full="yes">Joseph</forename>
+                <surname>Butler</surname>
+            </persName>
+          </author>
+          <editor role="translator">
+            <persName>
+              <forename full="init" type="first">J.</forename>
+                <forename full="init" type="middle">J.</forename>
+                <surname>
+            Spalding</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1736</date>
           </imprint>
         </monogr>
       </biblStruct>
@@ -95,13 +132,13 @@
           <title level="m">Historisches Wörterbuch der Philosophie</title>
           <editor>
             <persName>
-              <forename>Joachim</forename>
+              <forename type="first">Joachim</forename>
               <surname>Ritter</surname>
             </persName>
           </editor>
           <editor>
             <persName>
-              <forename>Karlfried</forename>
+              <forename type="first">Karlfried</forename>
               <surname>Gründer</surname>
             </persName>
           </editor>
@@ -109,9 +146,10 @@
             <date>1971 ff.</date>
             <pubPlace>Darmstadt</pubPlace>
           </imprint>
-          <biblScope unit="volume">10</biblScope>
+          <extent>10 Bde.</extent>
+          <biblScope unit="volume" from="10" to="10">Bd. 10, St–T</biblScope>
+          <biblScope unit="column" from="909" to="914">Sp. 909–914</biblScope>
         </monogr>
-        <citedRange unit="column">909-914</citedRange>
       </biblStruct>
       <biblStruct source="fn4">
         <monogr>
@@ -140,7 +178,8 @@
           </author>
           <imprint>
             <date>2000</date>
-            <pubPlace>Ithaca, London</pubPlace>
+            <pubPlace>Ithaca</pubPlace>
+            <pubPlace>London</pubPlace>
           </imprint>
         </monogr>
       </biblStruct>
@@ -191,7 +230,8 @@
           </author>
           <imprint>
             <date>1987</date>
-            <pubPlace>Chicago, London</pubPlace>
+            <pubPlace>Chicago</pubPlace>
+            <pubPlace>London</pubPlace>
           </imprint>
         </monogr>
       </biblStruct>
@@ -224,7 +264,8 @@
       </biblStruct>
       <biblStruct source="fn5">
         <monogr>
-          <title level="m">L'inventario del mondo: Catalogazione della natura e luoghi del sapere nella prima età moderna</title>
+          <title level="m">L'inventario del mondo: Catalogazione della natura e luoghi del sapere
+            nella prima età moderna</title>
           <author>
             <persName>
               <forename>Giuseppe</forename>
@@ -254,7 +295,8 @@
       </biblStruct>
       <biblStruct source="fn5">
         <monogr>
-          <title level="m">Possessing Nature: Museums, Collecting and Scientific Culture in Early Modern Italy</title>
+          <title level="m">Possessing Nature: Museums, Collecting and Scientific Culture in Early
+            Modern Italy</title>
           <author>
             <persName>
               <forename>Paula</forename>
@@ -269,7 +311,8 @@
       </biblStruct>
       <biblStruct source="fn5">
         <monogr>
-          <title level="m">Discipline and Experience: The Mathematical Way in the Scientific Revolution</title>
+          <title level="m">Discipline and Experience: The Mathematical Way in the Scientific
+            Revolution</title>
           <author>
             <persName>
               <forename>Peter</forename>
@@ -278,13 +321,15 @@
           </author>
           <imprint>
             <date>1995</date>
-            <pubPlace>Chicago, London</pubPlace>
+            <pubPlace>Chicago</pubPlace>
+            <pubPlace>London</pubPlace>
           </imprint>
         </monogr>
       </biblStruct>
       <biblStruct source="fn5">
         <monogr>
-          <title level="m">La Formation de la pratique scientifique: Le discours de l'expérience en France et en Angleterre, (1630-1820)</title>
+          <title level="m">La Formation de la pratique scientifique: Le discours de l'expérience en
+            France et en Angleterre, (1630-1820)</title>
           <author>
             <persName>
               <forename>Christian</forename>
@@ -299,7 +344,8 @@
       </biblStruct>
       <biblStruct source="fn5">
         <monogr>
-          <title level="m">The Progress of Experiment: Science and Therapeutic Reform in the United States, 1900-1990</title>
+          <title level="m">The Progress of Experiment: Science and Therapeutic Reform in the United
+            States, 1900-1990</title>
           <author>
             <persName>
               <forename>Harry</forename>
@@ -329,7 +375,8 @@
       </biblStruct>
       <biblStruct source="fn5">
         <monogr>
-          <title level="m">A History of the Modern Fact: Problems of Knowledge in the Sciences of Wealth and Society</title>
+          <title level="m">A History of the Modern Fact: Problems of Knowledge in the Sciences of
+            Wealth and Society</title>
           <author>
             <persName>
               <forename>Mary</forename>
@@ -338,7 +385,8 @@
           </author>
           <imprint>
             <date>1998</date>
-            <pubPlace>Chicago, London</pubPlace>
+            <pubPlace>Chicago</pubPlace>
+            <pubPlace>London</pubPlace>
           </imprint>
         </monogr>
       </biblStruct>
@@ -369,13 +417,16 @@
           <editor>
             <persName>
               <forename>Anke</forename>
-              <surname>te Heesen</surname>
+              <nameLink>te</nameLink>
+              <surname>Heesen</surname>
             </persName>
           </editor>
           <editor>
             <persName>
-              <forename>E. C.</forename>
-              <surname>Spary</surname>
+              <forename type="first" full="init">E.</forename>
+              <forename type="middle" full="init">C.</forename>
+              <surname>
+            Spary</surname>
             </persName>
           </editor>
           <imprint>
@@ -385,12 +436,30 @@
         </monogr>
       </biblStruct>
       <biblStruct source="fn7">
-        <analytic>
-          <title level="a">Humanists, Scientists and Pliny: Changing Approaches to a Classical Author</title>
+        <monogr>
+          <title level="m">Historia naturalis</title>
           <author>
             <persName>
-              <forename>Charles G.</forename>
+              <surname>Plinius</surname>
+              <genName>der Ältere</genName>
+            </persName>
+          </author>
+          <imprint>
+            <date />
+          </imprint>
+        </monogr>
+        <citedRange unit="section" from="prefatio" to="prefatio">Prefatio</citedRange>
+      </biblStruct>
+      <biblStruct source="fn7">
+        <analytic>
+          <title level="a">Humanists, Scientists and Pliny: Changing Approaches to a Classical
+            Author</title>
+          <author>
+            <persName>
+              <forename>Charles</forename>
+              <forename type="middle">G.</forename>
               <surname>Nauert</surname>
+              <genName full="abb">Jr.</genName>
             </persName>
           </author>
         </analytic>
@@ -400,8 +469,62 @@
             <date>1979</date>
           </imprint>
           <biblScope unit="volume">84</biblScope>
+          <biblScope unit="page">72-85</biblScope>
         </monogr>
-        <citedRange>72-85</citedRange>
+      </biblStruct>
+      <biblStruct source="#bibl-8" xml:id="biblStruct-8a">
+        <monogr>
+          <title level="m">Novum organum</title>
+          <author>
+            <persName>
+              <forename full="yes">Francis</forename>
+                <surname>Bacon</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1620</date>
+          </imprint>
+        </monogr>
+        <citedRange unit="section" from="I.1" to="I.1">I. 1</citedRange>
+        <relatedItem type="otherEdition">
+          <ref target="#biblStruct-8b" />
+        </relatedItem>
+        <relatedItem type="otherEdition">
+          <ref target="#biblStruct-8c" />
+        </relatedItem>
+      </biblStruct>
+      <biblStruct source="#bibl-8" xml:id="biblStruct-8b">
+        <monogr>
+          <title level="m">The Works of Francis Bacon</title>
+          <author>
+            <persName>
+              <forename full="yes">Francis</forename>
+                <surname>Bacon</surname>
+            </persName>
+          </author>
+          <editor role="translator editor">
+            <persName>
+              <forename full="yes">James</forename>
+                <surname>Spedding</surname>
+            </persName>
+          </editor>
+          <editor role="translator editor">
+            <persName>
+              <forename full="yes">Robert Leslie</forename>
+                <surname>Ellis</surname>
+            </persName>
+          </editor>
+          <editor role="translator editor">
+            <persName>
+              <forename full="yes">Douglas Denon</forename>
+                <surname>Heath</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1863</date>
+          </imprint>
+          <biblScope unit="volume" from="8" to="8">Bd. 8</biblScope>
+        </monogr>
       </biblStruct>
       <biblStruct source="fn8">
         <monogr>
@@ -420,7 +543,8 @@
           </editor>
           <imprint>
             <date>1985</date>
-            <pubPlace>New York, London</pubPlace>
+            <pubPlace>New York</pubPlace>
+            <pubPlace>London</pubPlace>
           </imprint>
         </monogr>
         <citedRange from="39" to="39">39</citedRange>
@@ -430,25 +554,29 @@
           <title level="m">The Elements of the Common Lawes of England</title>
           <author>
             <persName>
-              <forename>Francis</forename>
-            <surname>Bacon</surname>
+              <forename full="yes">Francis</forename>
+                <surname>Bacon</surname>
             </persName>
           </author>
           <imprint>
+            <date type="firstEdition">1630</date>
             <date>1968</date>
-            <pubPlace>Amsterdam, New York</pubPlace>
+            <pubPlace>Amsterdam</pubPlace>
+            <pubPlace>New York</pubPlace>
           </imprint>
         </monogr>
-        <citedRange>65</citedRange>
+        <citedRange unit="rule" from="15" to="15">Regula 15</citedRange>
+        <citedRange unit="page" from="65" to="65">S. 65</citedRange>
       </biblStruct>
       <biblStruct source="fn10">
         <analytic>
-          <title level="a">The Concept of &gt;Fact&lt;: Legal Origins and Cultural Diffusion</title>
+          <title level="a">The Concept of ›Fact‹: Legal Origins and Cultural Diffusion</title>
           <author>
             <persName>
               <forename>Barbara</forename>
               <forename type="middle" full="init">J.</forename>
-              <surname>Shapiro</surname>
+              <surname>
+            Shapiro</surname>
             </persName>
           </author>
         </analytic>
@@ -483,7 +611,8 @@
             <date>1825-34</date>
             <pubPlace>London</pubPlace>
           </imprint>
-          <biblScope unit="volume">2</biblScope>
+          <extent>16 Bde.</extent>
+          <biblScope unit="volume" from="2" to="2">2</biblScope>
         </monogr>
         <citedRange>42</citedRange>
       </biblStruct>
@@ -492,15 +621,43 @@
           <title level="m">Über die Würde und den Fortgang der Wissenschaften</title>
           <author>
             <persName>
-              <forename>Johann H.</forename>
-            <surname>Pfingsten</surname>
+              <forename full="yes">Francis</forename>
+                <surname>Bacon</surname>
             </persName>
           </author>
+          <editor role="translator editor">
+            <persName>
+              <forename full="yes">Johann H.</forename>
+                <surname>Pfingsten</surname>
+            </persName>
+          </editor>
           <imprint>
             <date>1783</date>
             <pubPlace>Pest</pubPlace>
           </imprint>
         </monogr>
+      </biblStruct>
+      <biblStruct source="fn11">
+        <monogr>
+          <title level="m">Über die Würde und den Fortgang der Wissenschaften</title>
+          <author>
+            <persName>
+              <forename full="yes">Francis</forename>
+              <surname>Bacon</surname>
+            </persName>
+          </author>
+          <editor role="translator editor">
+            <persName>
+              <forename full="yes">Johann H.</forename>
+              <surname>Pfingsten</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1966</date>
+            <pubPlace>Darmstadt</pubPlace>
+          </imprint>
+        </monogr>
+        <citedRange unit="page" from="87" to="87">87</citedRange>
       </biblStruct>
       <biblStruct source="fn12">
         <analytic>
@@ -523,7 +680,8 @@
       </biblStruct>
       <biblStruct source="fn13">
         <monogr>
-          <title level="m">Cognitio Historica: Die Geschichte als Namensgeberin der frühneuzeitlichen Empirie</title>
+          <title level="m">Cognitio Historica: Die Geschichte als Namensgeberin der
+            frühneuzeitlichen Empirie</title>
           <author>
             <persName>
               <forename>Arno</forename>
@@ -538,23 +696,32 @@
       </biblStruct>
       <biblStruct source="fn14">
         <monogr>
-          <title level="m">Genres and Readers: Lucretius, Love Elegy, Pliny's Encyclopedia</title>
+          <title level="m">Genres and Readers: Lucretius, Love Elegy, Pliny’s Encyclopedia</title>
           <author>
             <persName>
-              <forename>Gian Biagio</forename>
-            <surname>Conte</surname>
+              <forename full="yes">Gian Biagio</forename>
+                <surname>Conte</surname>
             </persName>
           </author>
-          <respStmt>
-            <resp>Übersetzt von</resp>
-            <name>Glenn W. Most</name>
-           </respStmt>
+          <editor role="translator">
+            <persName>
+              <forename full="yes">Glenn W.</forename>
+                <surname>Most</surname>
+            </persName>
+          </editor>
+          <editor role="preface">
+            <persName>
+              <forename full="yes">Charles</forename>
+                <surname>Segal</surname>
+            </persName>
+          </editor>
           <imprint>
             <date>1994</date>
-            <pubPlace>Baltimore, London</pubPlace>
+            <pubPlace>Baltimore</pubPlace>
+            <pubPlace>London</pubPlace>
           </imprint>
         </monogr>
-        <citedRange>91-94</citedRange>
+        <citedRange unit="page" from="91" to="94">91-94</citedRange>
       </biblStruct>
       <biblStruct source="fn15">
         <analytic>
@@ -664,7 +831,7 @@
         <monogr>
           <title level="j">Philosophical Transactions</title>
           <imprint>
-            <date/>
+            <date />
           </imprint>
           <biblScope unit="volume" from="I" to="I">I (1665-66)</biblScope>
           <biblScope unit="page" from="46" to="52">46-52</biblScope>
@@ -679,12 +846,12 @@
               <forename>Henry</forename>
               <surname>Oldenburg</surname>
             </persName>
-          </author>          
+          </author>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
           <imprint>
-            <date/>
+            <date />
           </imprint>
           <biblScope unit="volume">IX-X</biblScope>
         </monogr>
@@ -702,7 +869,8 @@
       </biblStruct>
       <biblStruct source="fn19">
         <monogr>
-          <title level="m">Mémoire pour servir à l'histoire naturelle des animaux et des plantes. Par Messieurs de l'Académie Royale des Sciences</title>
+          <title level="m">Mémoire pour servir à l'histoire naturelle des animaux et des plantes.
+            Par Messieurs de l'Académie Royale des Sciences</title>
           <imprint>
             <date>1736</date>
             <pubPlace>Amsterdam</pubPlace>
@@ -713,19 +881,21 @@
         <monogr>
           <title level="m">Mémoires de l'Académie Royales des Sciences. Depuis 1666 jusqu'à 1699</title>
           <imprint>
-            <date/>
+            <date />
           </imprint>
           <biblScope unit="volume" from="3" to="4">3-4</biblScope>
         </monogr>
       </biblStruct>
       <biblStruct source="fn20">
         <analytic>
-          <title level="a">Some Observations and Experiments about Vitriol, tending to find out the Nature of that Substance and to give further Light in the Inquiry after the Principles and Properties of other Minerals</title>
+          <title level="a">Some Observations and Experiments about Vitriol, tending to find out the
+            Nature of that Substance and to give further Light in the Inquiry after the Principles
+            and Properties of other Minerals</title>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
           <imprint>
-            <date/>
+            <date />
           </imprint>
           <biblScope unit="volume" from="IX" to="X">IX-X (1674-75)</biblScope>
           <biblScope unit="page" from="41" to="47">41-47</biblScope>
@@ -734,12 +904,13 @@
       </biblStruct>
       <biblStruct source="fn21">
         <analytic>
-          <title level="a">diverses observations anatomiques diverses observations de physique générale</title>
+          <title level="a">diverses observations anatomiques diverses observations de physique
+            générale</title>
         </analytic>
         <monogr>
           <title level="m">Histoire et Mémoires de l'Académie Royale des Sciences</title>
           <imprint>
-            <date/>
+            <date />
           </imprint>
           <biblScope unit="volume" from="2" to="2">2 (1686-99)</biblScope>
         </monogr>
@@ -755,7 +926,8 @@
       </biblStruct>
       <biblStruct source="fn22">
         <analytic>
-          <title level="a">Uomini mestruati. Somiglianza e differenza fra i sessi in Europa in èta moderna</title>
+          <title level="a">Uomini mestruati. Somiglianza e differenza fra i sessi in Europa in èta
+            moderna</title>
           <author>
             <persName>
               <forename>GIANNA</forename>
@@ -793,7 +965,12 @@
       </biblStruct>
       <biblStruct source="fn24">
         <analytic>
-          <title level="a">The frequent Appearances of the Northern Lights in several Parts of Europe and America and the surprisingly beautiful Phaenomena that have been observed in some of them, such as Rainbow-Colours, Canopy, have very justly engaged Philosophers of the present Age in a Search after the Causes of them. An Account, by Mr. John Eames, F.R.S. of a Book entitled, Traite physique et historique de l'aurore boreale, par Mr. De Mairan. Suite des Memoires de l'Academie Royale des Sciences, Année MDCCXXXI</title>
+          <title level="a">The frequent Appearances of the Northern Lights in several Parts of
+            Europe and America and the surprisingly beautiful Phaenomena that have been observed in
+            some of them, such as Rainbow-Colours, Canopy, have very justly engaged Philosophers of
+            the present Age in a Search after the Causes of them. An Account, by Mr. John Eames,
+            F.R.S. of a Book entitled, Traite physique et historique de l'aurore boreale, par Mr. De
+            Mairan. Suite des Memoires de l'Academie Royale des Sciences, Année MDCCXXXI</title>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
@@ -819,7 +996,8 @@
       </biblStruct>
       <biblStruct source="fn26">
         <analytic>
-          <title level="a">An Extract of several Letters from Cotton Mather, D.D. to John Woodward, M.D. and Richard Waller, Esq.; S.R. Secr.</title>
+          <title level="a">An Extract of several Letters from Cotton Mather, D.D. to John Woodward,
+            M.D. and Richard Waller, Esq.; S.R. Secr.</title>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
@@ -832,7 +1010,8 @@
       </biblStruct>
       <biblStruct source="fn27">
         <analytic>
-          <title level="a">Strange Facts, Plain Facts and the Texture of Scientific Experience in the Enlightenment</title>
+          <title level="a">Strange Facts, Plain Facts and the Texture of Scientific Experience in
+            the Enlightenment</title>
           <author>
             <persName>
               <forename>Lorraine</forename>
@@ -882,7 +1061,10 @@
       </biblStruct>
       <biblStruct source="fn29">
         <analytic>
-          <title level="a">An Essay of Dr. John Wallis, Exhibiting His Hypothesis about the Flux and Reflux of the Sea, Taken from the Consideration of the Common Center of Gravity of the Earth and Moon; Together with an Appendix of the Same, Containing an Answer to Some Objections, Made by Severall Persons against That Hypothesis</title>
+          <title level="a">An Essay of Dr. John Wallis, Exhibiting His Hypothesis about the Flux and
+            Reflux of the Sea, Taken from the Consideration of the Common Center of Gravity of the
+            Earth and Moon; Together with an Appendix of the Same, Containing an Answer to Some
+            Objections, Made by Severall Persons against That Hypothesis</title>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
@@ -895,7 +1077,8 @@
       </biblStruct>
       <biblStruct source="fn30">
         <analytic>
-          <title level="a">Dr. Molineux's Historical Account of the late General Coughs and Colds; with some Observations on other Epidemickal Distempers</title>
+          <title level="a">Dr. Molineux's Historical Account of the late General Coughs and Colds;
+            with some Observations on other Epidemickal Distempers</title>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
@@ -907,14 +1090,17 @@
         <citedRange>105-111</citedRange>
       </biblStruct>
       <biblStruct source="fn31" status="unresolved">
-        <!--How should "i.e. Henry Oldenburg" be encoded?-->
+        <!--How
+        should "i.e. Henry Oldenburg" be encoded?-->
         <analytic>
-          <title level="a">Réponse de Mr. Hook aux considérations de Mr. Auzout, contenuë dans une Lettre écrite à l'Auteur des Philosophical Transactions [i. e. Henry Oldenburg]. Traduite d'Anglais</title>
+          <title level="a">Réponse de Mr. Hook aux considérations de Mr. Auzout, contenuë dans une
+            Lettre écrite à l'Auteur des Philosophical Transactions [i. e. Henry Oldenburg].
+            Traduite d'Anglais</title>
         </analytic>
         <monogr>
           <title level="m">Mémoires de l'Académie Royale des Sciences Depuis 1666 jusqu'à 1699</title>
           <imprint>
-            <date/>
+            <date />
           </imprint>
           <biblScope unit="volume" from="7" to="7">7</biblScope>
           <biblScope unit="page" from="77" to="84">77-84</biblScope>
@@ -978,7 +1164,8 @@
       </biblStruct>
       <biblStruct source="fn34">
         <analytic>
-          <title level="a">Mr. Newton's Answer to the precedent Letter [from Anthony Lucas], sent to the Publisher</title>
+          <title level="a">Mr. Newton's Answer to the precedent Letter [from Anthony Lucas], sent to
+            the Publisher</title>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
@@ -990,8 +1177,9 @@
         <citedRange>692-698, 703</citedRange>
       </biblStruct>
       <biblStruct source="fn35" status="unresolved">
-         <!--shoud this be extracted? <monogr> data taken from fn 5 -->
-         <monogr>
+        <!--shoud
+        this be extracted? <monogr> data taken from fn 5 -->
+        <monogr>
           <title level="m">Leviathan and the Air-Pump: Hobbes, Boyle and the Experimental Life</title>
           <author>
             <persName>
@@ -1058,7 +1246,8 @@
       </biblStruct>
       <biblStruct source="fn36">
         <analytic>
-          <title level="a">L'Ordo Judiciarius medioevale (Riflessioni su un modello puro di ordine isonomico)</title>
+          <title level="a">L'Ordo Judiciarius medioevale (Riflessioni su un modello puro di ordine
+            isonomico)</title>
           <author>
             <persName>
               <forename>A.</forename>
@@ -1140,7 +1329,8 @@
       </biblStruct>
       <biblStruct source="fn44">
         <analytic>
-          <title level="a">Histoire de renouvellement de l'Académie Royale des Sciences en M.DC.XCIX. et les éloges historiques</title>
+          <title level="a">Histoire de renouvellement de l'Académie Royale des Sciences en
+            M.DC.XCIX. et les éloges historiques</title>
           <author>
             <persName>
               <forename>BERNARD DE</forename>
@@ -1208,7 +1398,8 @@
           </author>
         </analytic>
         <monogr>
-          <title level="m">Der Aphorismus: Zur Geschichte, zu den Formen und Möglichkeiten einer literarischen Gattung</title>
+          <title level="m">Der Aphorismus: Zur Geschichte, zu den Formen und Möglichkeiten einer
+            literarischen Gattung</title>
           <editor>
             <persName>
               <forename>Gerhard</forename>
@@ -1239,7 +1430,8 @@
       </biblStruct>
       <biblStruct source="fn52">
         <analytic>
-          <title level="a">Bouquets de fleurs et colliers de perles: sur les recueils de formes brèves au XVIe-XVIIe siècles</title>
+          <title level="a">Bouquets de fleurs et colliers de perles: sur les recueils de formes
+            brèves au XVIe-XVIIe siècles</title>
           <author>
             <persName>
               <forename>Claudie</forename>
@@ -1301,7 +1493,8 @@
       </biblStruct>
       <biblStruct source="fn53">
         <analytic>
-          <title level="a">To Keep a Register of all changes of Wind and Weather at all hours by Night and Day ...</title>
+          <title level="a">To Keep a Register of all changes of Wind and Weather at all hours by
+            Night and Day ...</title>
         </analytic>
         <monogr>
           <title level="j">Philosophical Transactions</title>
@@ -1339,7 +1532,8 @@
       </biblStruct>
       <biblStruct source="fn56">
         <analytic>
-          <title level="a">Rechtsgeschichte als Kunstprodukt. Zur Entbehrlichkeit von &gt;&gt;Begriff&lt;« und »Tatsache«</title>
+          <title level="a">Rechtsgeschichte als Kunstprodukt. Zur Entbehrlichkeit von
+            &gt;&gt;Begriff&lt;« und »Tatsache«</title>
           <author>
             <persName>
               <forename>Michael</forename>
