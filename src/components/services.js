@@ -1,19 +1,50 @@
 /**
  * This component provides the core services that can be called programmatically or via user commands
  */
+
+import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
+import SlIcon from '@shoelace-style/shoelace/dist/components/icon/icon.js'
+import SlTooltip from '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js'
+
 import { app, PdfTeiEditor } from '../app.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { validationEvents } from '../modules/lint.js' // Todo remove this dependency, use events instead
 import { XMLEditor } from './xmleditor.js'
+import { notify } from '../modules/sl-utils.js'
 
 // name of the component
 const name = "services"
 
-const html = `
-  <sl-button name="validate" disabled>Validate</sl-button>  
-  <sl-button name="save" disabled>Save</sl-button> 
-  <sl-button name="cleanup" disabled>Cleanup</sl-button>  
+const commandBarHtml = `
+<sl-button-group label="Document" name="document-group">
+  <sl-tooltip content="Validate the document">
+    <sl-button name="validate" size="small" disabled>
+      <sl-icon name="file-earmark-check"></sl-icon>
+    </sl-button> 
+  </sl-tooltip>
+  <sl-tooltip content="Save document content to server">
+    <sl-button name="save" size="small" disabled>
+      <sl-icon name="save"></sl-icon>
+    </sl-button>
+  </sl-tooltip> 
+  <sl-tooltip content="Upload document">
+    <sl-button name="download" size="small" disabled>
+      <sl-icon name="cloud-upload"></sl-icon>
+    </sl-button>
+  </sl-tooltip>    
+  <sl-tooltip content="Download XML document">
+    <sl-button name="download" size="small" disabled>
+      <sl-icon name="cloud-download"></sl-icon>
+    </sl-button>
+  </sl-tooltip>   
+  <sl-tooltip content="Delete all document versions except 'Gold'">
+    <sl-button name="cleanup" size="small" disabled>
+      <sl-icon name="trash3"></sl-icon>
+    </sl-button>
+  </sl-tooltip>
+</sl-button>
 `
+
 
 /**
  * component API
@@ -42,6 +73,7 @@ export default servicesPlugin
 // Implementation
 //
 
+
 // API
 
 /**
@@ -54,7 +86,7 @@ function install(app) {
   // install controls on menubar
   const bar = app.commandbar
   const div = document.createElement("div")
-  div.innerHTML = html.trim()
+  div.innerHTML = commandBarHtml.trim()
   div.childNodes.forEach(elem =>bar.add(elem))
 
   // setup event listeners
@@ -76,15 +108,18 @@ function install(app) {
   // cleanup versions
   const cleanupBtn = bar.getByName("cleanup")
   cleanupBtn.addEventListener('click', onClickBtnCleanup)
-  app.on("fileselection:reloaded", () => {
-    cleanupBtn.disabled = bar.getByName("xml").childElementCount < 2
+  const xmlSelectBox = app.commandbar.getByName('xml')
+  app.on(app.fileselection.events.updated, () => {
+    cleanupBtn.disabled = xmlSelectBox.childElementCount < 2
   })
-  
+
   // enable save button on dirty editor
   app.xmleditor.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
     () => bar.getByName('save').disabled = false
   );
+
+
 
   app.logger.info("Services component installed.")
 }
@@ -121,11 +156,9 @@ async function load({ xml, pdf, diff }) {
     app.pdfPath = pdf
     // update selectboxes in the toolbar
     await app.fileselection.update()
-    app.xmlPath = app.diffXmlPath = null
   }
   if (xml) {
     app.xmlPath = xml
-    app.diffXmlPath = diff || null
   }
 }
 
@@ -135,7 +168,7 @@ async function load({ xml, pdf, diff }) {
  */
 async function validateXml() {
   app.logger.info("Validating XML...")
-  await app.xmleditor.validateXml()
+  return await app.xmleditor.validateXml()
 }
 
 /**
@@ -170,7 +203,7 @@ async function showMergeView(diff) {
  */
 function removeMergeView() {
   app.xmleditor.hideMergeView()
-  app.diffXmlPath = app.xmlPath
+  app.diffXmlPath = null
   UrlHash.remove("diff")
 }
 
@@ -181,8 +214,9 @@ function removeMergeView() {
  * Called when the "Validate" button is executed
  */
 async function onClickValidateButton() {
-  bar.getByName('validate').disabled = true
-  await validateXml()
+  app.commandbar.getByName('validate').disabled = true
+  const diagnostics = await validateXml()
+  notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`)
 }
 
 /**
@@ -191,7 +225,8 @@ async function onClickValidateButton() {
 async function onClickSaveButton() {
   const xmlPath = app.commandbar.getByName('xml').value;
   await saveXml(xmlPath)
-  bar.getByName('save').disabled = true
+  app.commandbar.getByName('save').disabled = true
+  notify("Document was saved.")
 }
 
 /**

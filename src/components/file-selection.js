@@ -11,20 +11,29 @@ import { app, PdfTeiEditor } from '../app.js'
 const componentId = "fileselection"
 
 // HTML elements
-const html = `
-<sl-select name="pdf"></sl-select>
-<span>Version:</span>
-<sl-select name="xml"></sl-select>
-<span>Diff:</span>
-<sl-select name="diff"></sl-select>
+const commandBarHtml = `
+<sl-select name="pdf" size="small" label="PDF"></sl-select>
+<sl-select name="xml" size="small" label="XML file version"></sl-select>
+<sl-select name="diff" size="small" label="Compare with version"></sl-select>
 `
+
+/**
+ * Component events
+ */
+const events = {
+  /** emitted when the file data is updated in the UI */
+  updated: componentId + ":updated",
+  /** emitted when new data is loaded from the server */
+  reloaded: componentId + ":reloaded"
+}
 
 /**
  * component API
  */
-const cmp = {
+const api = {
   reload,
-  update
+  update,
+  events
 }
 
 /**
@@ -35,7 +44,7 @@ const plugin = {
   install
 }
 
-export { cmp as fileselectionComponent, plugin as fileselectionPlugin }
+export { api as fileselectionComponent, plugin as fileselectionPlugin }
 export default plugin
 
 //
@@ -44,26 +53,21 @@ export default plugin
 
 // API
 
-const controls = {}
+let controls;
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
 async function install(app) {
-  app.registerComponent(componentId, cmp, "fileselection")
+  app.registerComponent(componentId, api, "fileselection")
 
   // install controls on menubar
-  const bar = app.commandbar
   const div = document.createElement("div")
-  div.innerHTML = html.trim()
-  div.childNodes.forEach(elem => {
-    if (elem.name) {
-      controls[elem.name] = elem
-    }
-    app.commandbar.add(elem)
-  })
- 
+  div.innerHTML = commandBarHtml.trim()
+  div.childNodes.forEach(elem => app.commandbar.add(elem))
+  controls = app.commandbar.controls()
+  
   // configure event handlers for these controls
   controls.pdf.addEventListener('sl-change', onChangePdfSelectbox);
   controls.xml.addEventListener('sl-change', onChangeXmlSelectbox);
@@ -80,7 +84,6 @@ async function install(app) {
     controls.xml.value = value
   })
   app.on("change:diffXmlPath", (value, old) => {
-    if (!value) return
     controls.diff.value = value
   })
 
@@ -97,7 +100,7 @@ async function install(app) {
 async function reload() {
   await reloadFileData();
   await populateSelectboxes();
-  app.emit(componentId + ":reloaded")
+  app.emit(events.reloaded)
 }
 
 /**
@@ -105,6 +108,7 @@ async function reload() {
  */
 async function update() {
   await populateSelectboxes();
+  app.emit(events.updated)
 }
 
 /**
@@ -116,6 +120,7 @@ let fileData = null;
  * Reloads the file data from the server
  */
 async function reloadFileData() {
+  app.logger.debug("Reloading file data")
   const { files } = await app.client.getFileList();
   fileData = files
   if (!fileData || fileData.length === 0) {
@@ -127,6 +132,7 @@ async function reloadFileData() {
  * Populates the selectboxes for file name and version
  */
 async function populateSelectboxes() {
+  app.logger.debug("Populating selectboxes")
 
   if (fileData === null) {
     await reloadFileData()
@@ -134,7 +140,7 @@ async function populateSelectboxes() {
 
   // Clear existing options
   for (const name of ["pdf", "xml", "diff"]) {
-    controls[name].childNodes.forEach(node => node.remove())
+    controls[name].innerHTML = ""
   }
 
   // get items to be selected from app state or use first element
@@ -144,25 +150,33 @@ async function populateSelectboxes() {
     const option = new SlOption()
     option.value = file.pdf
     option.textContent = file.label
+    option.size = "small"
     controls.pdf.appendChild(option);
+
     if (file.pdf === app.pdfPath) {
       // populate the version and diff selectboxes depending on the selected file
       if (file.versions) {
         file.versions.forEach((version) => {
-          const option = new SlOption()
+          // xml
+          let option = new SlOption()
+          option.size = "small"
           option.value = version.path;
           option.textContent = version.label;
           controls.xml.appendChild(option);
-          const diffOption = option.cloneNode(true)
-          controls.diff.appendChild(diffOption)
+          // diff 
+          option = new SlOption()
+          option.size = "small"
+          option.value = version.path;
+          option.textContent = version.label;
+          controls.diff.appendChild(option)
         })
       }
     }
     // Set selection
     controls.pdf.value = app.pdfPath || fileData[0].pdf
     controls.xml.value = app.xmlPath || fileData[0].xml
-    if (app.xmlPath) {
-      controls.diff.value = app.diffXmlPath || fileData[0].xml // || null?
+    if (app.diffXmlPath) {
+      controls.diff.value = app.diffXmlPath
     }
   })
 }
@@ -187,6 +201,7 @@ async function onChangePdfSelectbox() {
 
   if (Object.keys(filesToLoad).length > 0) {
     try {
+      app.services.removeMergeView()
       await app.services.load(filesToLoad)
     }
     catch (error) {
@@ -203,7 +218,7 @@ async function onChangeXmlSelectbox() {
   const xml = controls.xml.value
   if (xml !== app.xmlPath) {
     try {
-      await app.services.removeMergeView()
+      app.services.removeMergeView()
       await app.services.load({ xml })
     } catch (error) {
       console.error(error)
@@ -215,8 +230,9 @@ async function onChangeXmlSelectbox() {
  * Called when the selection in the diff version selectbox  changes
  */
 async function onChangeDiffSelectbox() {
+  console.warn("onChangeDiffSelectbox")
   const diff = controls.diff.value
-  if (diff !== controls.xml.value) {
+  if (diff && diff !== controls.xml.value) {
     try {
       await app.services.showMergeView(diff)
     } catch (error) {

@@ -117,7 +117,7 @@ const cmp = {
    * @returns {Element}
    */
   getByName: name => {
-    const namedElems = componentNode.querySelectorAll(`[name="${name}"]`)
+    const namedElems = componentNode.querySelectorAll(`[name="${name}"]:not(sl-icon)`) // we need to exclude sl-icon elements
     if (namedElems.length === 1) {
       return namedElems[0]
     }

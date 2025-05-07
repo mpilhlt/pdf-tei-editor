@@ -181,9 +181,9 @@ export class PdfTeiEditor extends App {
       this.xmleditor.disableValidation(true)
 
       // get document paths from URL hash or from the first entry of the selectboxes
-      const pdf = this.pdfPath || this.commandbar.getByName("pdf").value
-      const xml = this.xmlPath || this.commandbar.getByName("xml").value
-      const diff = this.diffXmlPath || this.commandbar.getByName("diff").value
+      const pdf = this.pdfPath 
+      const xml = this.xmlPath
+      const diff = this.diffXmlPath 
     
       // lod the documents
       await this.services.load({pdf, xml, diff})
@@ -191,7 +191,7 @@ export class PdfTeiEditor extends App {
       // two alternative initial states:
       // a) if the diff param was given and is different from the xml param, show a diff/merge view 
       // b) if no diff, try to validate the document and select first match of xpath expression
-      if (diff !== xml) {
+      if (diff && diff !== xml) {
         // a) load the diff view
         try {
           await this.services.showMergeView(diff)

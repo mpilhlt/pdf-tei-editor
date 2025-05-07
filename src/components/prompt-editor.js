@@ -63,7 +63,6 @@ slDialogNode.querySelector('sl-button[name="duplicate"]').addEventListener('clic
 const deleteBtn = slDialogNode.querySelector('sl-button[name="delete"]')
 deleteBtn.addEventListener('click', deletePrompt)
 
-
 /**
  * component API
  */
@@ -77,28 +76,12 @@ const cmp = {
   delete: deletePrompt
 }
 
-
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
- */
-function install(app) {
-  app.registerComponent(componentId, cmp, "promptEditor")
-
-  // add a button to the command bar to show dialog with prompt editor
-  const button = new SlButton
-  button.textContent = "Edit Prompt"
-  button.addEventListener("click", () => cmp.open())
-  app.commandbar.add(button, "edit-prompt")
-
-  app.logger.info("Prompt editor component installed.")
-}
-
 /**
  * component plugin
  */
 const promptEditorPlugin = {
   name: componentId,
+  deps: ['extraction'],
   install
 }
 
@@ -108,6 +91,25 @@ export default promptEditorPlugin
 //
 // Implementation
 //
+
+/**
+ * Runs when the main app starts so the plugins can register the app components they supply
+ * @param {PdfTeiEditor} app The main application
+ */
+function install(app) {
+  app.registerComponent(componentId, cmp, "promptEditor")
+
+  // add a button to the command bar to show dialog with prompt editor
+  const button = Object.assign(new SlButton, {
+    size: "small",
+    textContent: "Edit prompt",
+    name: "edit-prompt"
+  })  
+  button.addEventListener("click", () => cmp.open())
+  app.commandbar.getByName('extraction-group').appendChild(button)
+
+  app.logger.info("Prompt editor component installed.")
+}
 
 // API
 

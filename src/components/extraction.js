@@ -4,6 +4,7 @@
 
 import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
 import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
+import SlButtonGroup from '@shoelace-style/shoelace/dist/components/button-group/button-group.js'
 import SlTextarea from '@shoelace-style/shoelace/dist/components/textarea/textarea.js'
 import SlInput from '@shoelace-style/shoelace/dist/components/input/input.js'
 import SlSelect from '@shoelace-style/shoelace/dist/components/select/select.js'
@@ -18,9 +19,10 @@ const componentId = "extraction"
 
 // buttons to be added 
 const buttonsHtml = `
-<span>Extract:</span> 
-<sl-button name="extract-new">New</sl-button>
-<sl-button name="extract-current">Current</sl-button>
+<sl-button-group label="Extraction" name="extraction-group">
+  <sl-button name="extract-new" size="small">New</sl-button>
+  <sl-button name="extract-current" size="small">Current</sl-button>
+</sl-button-group>
 `
 
 const dialogHtml = `
@@ -154,7 +156,7 @@ async function promptForExtractionOptions(options) {
 
   // add dialog to DOM
   /** @type {SlDialog} */
-  const dialog = appendHtml(dialogHtml)
+  const dialog = appendHtml(dialogHtml)[0]
   
   // populate dialog
   /** @type {SlInput} */
@@ -181,7 +183,10 @@ async function promptForExtractionOptions(options) {
       resolve(null)
     }
     // user submits their input
+
     // todo : use proper FormData()
+    // see  https://shoelace.style/components/select#lazy-loading-options
+
     function submit() {
       dialog.remove()
       resolve({

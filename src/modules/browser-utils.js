@@ -218,28 +218,38 @@ export function createRandomId() {
 }
 
 /**
- * Parses the HTML and attaches it to a parent node (defaults to document.body), optionally assigning 
- * a given or random id if the content is a single node. Returns the created elements. 
+ * Parses the HTML and attaches it to a parent node (defaults to document.body).
+ * Returns an Array of the added top-level elements
  * @param {string} html The html that will be parsed and appended
  * @param {Element?} parentNode The DOM parent element the parsed content will be added to. If not provided, the 
  * content will be added to document.body 
- * @param {string?} id The ID of the parsed content. If none is specified, a random ID will be assigned. 
- * The ID will only be applied if the html consists of a single top node.
- * @returns {Array<Element>} An array of elements that have been created and attached to the DOM 
+ * @returns {Array<Element>} 
  */
-export function appendHtml(html, parentNode = document.body, id) {
+export function appendHtml(html, parentNode = document.body) {
   const div = document.createElement("div")
   div.innerHTML = html.trim()
   div.childNodes.forEach(node => parentNode.appendChild(node))
-  if (id && div.childElementCount > 1) {
-    throw new Error("ID cannot be assigned to multi-node content")
-  }
-  if (div.childElementCount === 1) {
-    if (id) {
-      parentNode.firstChild.id = id
-    } else {
-      parentNode.firstChild.id = createRandomId()
-    }
-  }
-  return Array.from(parentNode.childNodes)
+  return Array.from(div.childNodes)
 }
+
+/**
+ * Return a mapping of all named descendents of the given parent element 
+ * @param {Element} parentNode The parent element
+ * @param {Array<string>?} excludedTags An array of lower cased tag names that should be excluded
+ * @returns {Object} An object mapping the value of the 'name' attributes to the corresponding elements
+ */
+export function getNameMap(parentNode, exludedTags = []) {
+    const nameMap = {}
+    Array.from(parentNode.querySelectorAll('[name]'))
+      .filter(node => !exludedTags.includes(node.tagName.toLowerCase()) )
+      .forEach(node => {nameMap[node.name] = node})
+    return nameMap  
+}
+
+
+export function escapeHtml(html) {
+  const div = document.createElement('div');
+  div.textContent = html;
+  return div.innerHTML;
+}
+

@@ -2,7 +2,7 @@
  * This implements a horizonal menu/button bar onto which other components can add control elements
  */
 import { PdfTeiEditor } from '../app.js'
-import { selectByValue, selectByData } from '../modules/browser-utils.js';
+import { getNameMap } from '../modules/browser-utils.js';
 
 const componentId = "command-bar"
 
@@ -14,7 +14,8 @@ const cmp = {
   addAt,
   addBefore,
   getByName,
-  onClick
+  onClick,
+  controls: () => getNameMap(document.getElementById(componentId), ['sl-icon'])
 };
 
 /**
@@ -84,7 +85,7 @@ function addBefore(element, name) {
  * @returns {Element}
  */
 function getByName(name) {
-  const namedElems = componentNode.querySelectorAll(`[name="${name}"]`);
+  const namedElems = componentNode.querySelectorAll(`[name="${name}"]:not(sl-icon)`);
   if (namedElems.length === 1) {
     return namedElems[0];
   }
