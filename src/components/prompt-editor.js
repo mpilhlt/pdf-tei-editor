@@ -103,7 +103,7 @@ function install(app) {
   const button = Object.assign(new SlButton, {
     size: "small",
     textContent: "Edit prompt",
-    name: "edit-prompt"
+    name: "edit-prompt",
   })  
   button.addEventListener("click", () => cmp.open())
   app.commandbar.getByName('extraction-group').appendChild(button)

@@ -20,8 +20,16 @@ const componentId = "extraction"
 // buttons to be added 
 const buttonsHtml = `
 <sl-button-group label="Extraction" name="extraction-group">
-  <sl-button name="extract-new" size="small">New</sl-button>
-  <sl-button name="extract-current" size="small">Current</sl-button>
+  <sl-tooltip content="Upload a new PDF and extract references">
+    <sl-button name="extract-new" size="small">
+      <sl-icon name="filetype-pdf"></sl-icon>
+    </sl-button>
+  </sl-tooltip>
+  <sl-tooltip content="Extract from the current PDF into a new TEI version">
+    <sl-button name="extract-current" size="small">
+      <sl-icon name="clipboard2-plus"></sl-icon>
+    </sl-button>
+  </sl-tooltip>
 </sl-button-group>
 `
 

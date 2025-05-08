@@ -17,11 +17,6 @@ const name = "services"
 
 const commandBarHtml = `
 <sl-button-group label="Document" name="document-group">
-  <sl-tooltip content="Validate the document">
-    <sl-button name="validate" size="small" disabled>
-      <sl-icon name="file-earmark-check"></sl-icon>
-    </sl-button> 
-  </sl-tooltip>
   <sl-tooltip content="Save document content to server">
     <sl-button name="save" size="small" disabled>
       <sl-icon name="save"></sl-icon>
@@ -42,7 +37,19 @@ const commandBarHtml = `
       <sl-icon name="trash3"></sl-icon>
     </sl-button>
   </sl-tooltip>
-</sl-button>
+</sl-button-group>
+<sl-button-group label="TEI" name="document-group">
+  <sl-tooltip content="Validate the document">
+    <sl-button name="validate" size="small" disabled>
+      <sl-icon name="file-earmark-check"></sl-icon>
+    </sl-button> 
+  </sl-tooltip>
+  <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
+    <sl-button name="postprocess" size="small" disabled>
+      <sl-icon name="magic"></sl-icon>
+    </sl-button>
+  </sl-tooltip> 
+</sl-button-group>
 `
 
 

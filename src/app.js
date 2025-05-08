@@ -92,9 +92,6 @@ export class PdfTeiEditor extends App {
    */
   promptEditor;
 
-
-
-
   /**
    * The spinner which is shown with a message and blocking the UI while 
    * awaiting the result of a long-lasting server-side process
@@ -137,14 +134,10 @@ export class PdfTeiEditor extends App {
   constructor() {
     super();
 
-    // plugins
+    // register plugins
     loggerComponent.info(`Installing plugins...`);
     loggerComponent.setDebugLevel(1) // uncomment this to see more debug messages
-    const plugins = [
-      loggerPlugin, dialogPlugin, clientPlugin, pdfViewerPlugin, xmlEditorPlugin, 
-      commandBarPlugin, fileselectionPlugin, servicesPlugin, 
-      floatingPanelPlugin, promptEditorPlugin, extractionPlugin,
-    ]
+    const plugins = this.getPlugins()
     plugins.forEach(plugin => this.plugin.register(plugin))
 
     // spinner/blocker
@@ -156,6 +149,18 @@ export class PdfTeiEditor extends App {
     this.registerState('xmlPath', null, 'xmlPath', 'xml')
     this.registerState('diffXmlPath', null, 'diffXmlPath', 'diff')
     this.registerState('xpath', null, 'xpath', 'xpath')
+  }
+
+  /**
+   * Returns an array of plugin objects. Override to add additional ones.
+   * @returns {Array<Object>}
+   */
+  getPlugins() {
+    return [
+      loggerPlugin, dialogPlugin, clientPlugin, pdfViewerPlugin, xmlEditorPlugin, 
+      commandBarPlugin, fileselectionPlugin, servicesPlugin, 
+      floatingPanelPlugin, promptEditorPlugin, extractionPlugin,
+    ]
   }
 
   /**
