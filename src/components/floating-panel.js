@@ -1,6 +1,7 @@
 import { app, PdfTeiEditor } from '../app.js'
 import { selectByValue, $$ } from '../modules/browser-utils.js'
 import { xpathInfo } from '../modules/utils.js'
+import '../modules/switch.js'
 
 // name of the component
 const componentId = "floating-panel"

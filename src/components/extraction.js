@@ -103,7 +103,7 @@ async function extractFromCurrentPDF() {
   }
   try {
     doi = doi || getDoiFromFilename(app.pdfPath)
-    let { xml } = await extractFromPDF(app.pdfPath, doi)
+    let { xml } = await extractFromPDF(app.pdfPath, {doi})
     await reloadFileData()
     await app.services.showMergeView(xml)
   } catch (error) {
@@ -165,21 +165,21 @@ async function promptForExtractionOptions(options) {
   // add dialog to DOM
   /** @type {SlDialog} */
   const dialog = appendHtml(dialogHtml)[0]
-  
+  const form = dialog.querySelector("form")
+
   // populate dialog
   /** @type {SlInput} */
-  const doiInput = getDescendantByName(dialog, "doi")
+  const doiInput = form.querySelector('[name="doi"]')
   doiInput.value = options.doi
 
   // configure selectbox 
   /** @type {SlSelect} */
-  const selectbox = getDescendantByName(dialog, 'instructions')
-  const instrFromServer = await app.client.loadInstructions()
-  instructions = Array.isArray(instructions) ? instructions.concat(instrFromServer) : instrFromServer
-  for (const {label, text} of options.instructions) {
+  const selectbox = form.querySelector('[name="instructions"]')
+  const instructionsArr = await app.client.loadInstructions()
+  for (const [idx, {label, text}] of instructionsArr.entries()) {
     const slOption = new SlOption()
-    slOption.value = text.join("\n") // the instruction text is the value
-    slOption.textContent = label // the instruction label is also the option label 
+    slOption.value = idx 
+    slOption.textContent = label 
     selectbox.appendChild(slOption)
   }
 
@@ -199,13 +199,13 @@ async function promptForExtractionOptions(options) {
       dialog.remove()
       resolve({
         doi: doiInput.value,
-        instructions: selectbox.value
+        instructions: instructionsArr[selectbox.value].join("\n")
       })
     }
     // event listeners
     dialog.addEventListener("sl-request-close", cancel, { once: true })
-    getDescendantByName(dialog, "cancel").addEventListener("click", cancel, { once: true })
-    getDescendantByName(dialog, "submit").addEventListener("click", submit, { once: true })
+    form.querySelector('[name="cancel"]').addEventListener("click", cancel, { once: true })
+    form.querySelector('[name="submit"]').addEventListener("click", submit, { once: true })
     
     dialog.show()
   })
@@ -219,7 +219,7 @@ async function promptForExtractionOptions(options) {
     app.dialog.error(`${doi} does not seem to be a DOI, please try again.`)
     return 
   }
-
+console.log(options)
   return options
 }
 

@@ -114,13 +114,15 @@ async function validateXml(xmlString) {
 }
 
 /**
- * Saves the XML string to a file on the server.
+ * Saves the XML string to a file on the server, optionally as a new version
  * @param {string} xmlString 
  * @param {string} filePath 
+ * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<Object>}
  */
-async function saveXml(xmlString, filePath) {
-  return callApi('/files/save', 'POST', { xml_string: xmlString, file_path: filePath });
+async function saveXml(xmlString, filePath, saveAsNewVersion) {
+  return callApi('/files/save', 'POST', 
+    { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
 }
 
 /**

@@ -8,6 +8,15 @@ body {
   visibility: hidden;
 }
 
+.hbox-with-gap {
+  display: flex;
+  flex-direction: row;
+  margin: 0px;
+  padding: 0px;
+  gap: 10px;
+}
+
+
 #container {
   display: flex;
   flex-direction: column;
@@ -20,6 +29,7 @@ body {
   height: 50px;
   font-size: small;
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 10px;  
 }
@@ -98,7 +108,8 @@ sl-select::part(listbox) {
   width: max-content;
 }
 
-sl-option::part(label) {
+sl-option::part(label), 
+sl-menu-item::part(label) {
   font-size: smaller;
 }
 

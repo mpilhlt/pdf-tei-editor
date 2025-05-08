@@ -227,9 +227,13 @@ export function createRandomId() {
  */
 export function appendHtml(html, parentNode = document.body) {
   const div = document.createElement("div")
+  const nodeArr = []
   div.innerHTML = html.trim()
-  div.childNodes.forEach(node => parentNode.appendChild(node))
-  return Array.from(div.childNodes)
+  div.childNodes.forEach(node => {
+    parentNode.appendChild(node)
+    nodeArr.push(node)
+  })
+  return nodeArr
 }
 
 /**
@@ -238,12 +242,14 @@ export function appendHtml(html, parentNode = document.body) {
  * @param {Array<string>?} excludedTags An array of lower cased tag names that should be excluded
  * @returns {Object} An object mapping the value of the 'name' attributes to the corresponding elements
  */
-export function getNameMap(parentNode, exludedTags = []) {
+export function getNameMap(parentNode, exludedTags = ['sl-icon']) {
     const nameMap = {}
-    Array.from(parentNode.querySelectorAll('[name]'))
-      .filter(node => !exludedTags.includes(node.tagName.toLowerCase()) )
-      .forEach(node => {nameMap[node.name] = node})
-    return nameMap  
+    const nodes = Array.from(parentNode.querySelectorAll('[name]'))
+    nodes
+      .filter(node => !(exludedTags.includes(node.tagName.toLowerCase())))
+      .filter(node => Boolean(node.getAttribute('name')))
+      .forEach(node => {nameMap[node.getAttribute('name')] = node})
+    return nameMap 
 }
 
 

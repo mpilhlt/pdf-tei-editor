@@ -182,8 +182,16 @@ export class App {
 
           // unless the event name is null, dispatch a custom event to notify listeners of the change
           if (eventName) {
-            this.#debug(`Emitting '${name}' with new value...`)
+            this.#debug(`Emitting '${name}'...`)
             this.#bus.emit(eventName, value, this.#state[name]);
+          }
+
+          // notify plugins 
+          if (this.ext && this.ext.state[name]) {
+            this.#debug(`Invoking plugins with extension point '${this.ext.state[name]}'...`)
+            this.plugin.invoke(this.ext.state[name], {
+              value, old: this.#state[name]
+            })
           }
 
           // Update the state value

@@ -5,9 +5,11 @@
 import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
 import SlIcon from '@shoelace-style/shoelace/dist/components/icon/icon.js'
 import SlTooltip from '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js'
+import SlMenu from '@shoelace-style/shoelace/dist/components/menu/menu.js'
+import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
 
 import { app, PdfTeiEditor } from '../app.js'
-import { UrlHash } from '../modules/browser-utils.js'
+import { getNameMap, UrlHash } from '../modules/browser-utils.js'
 import { validationEvents } from '../modules/lint.js' // Todo remove this dependency, use events instead
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
@@ -15,48 +17,79 @@ import { notify } from '../modules/sl-utils.js'
 // name of the component
 const name = "services"
 
+
 const commandBarHtml = `
-<sl-button-group label="Document" name="document-group">
-  <sl-tooltip content="Save document content to server">
-    <sl-button name="save" size="small" disabled>
-      <sl-icon name="save"></sl-icon>
-    </sl-button>
-  </sl-tooltip> 
-  <sl-tooltip content="Upload document">
-    <sl-button name="download" size="small" disabled>
-      <sl-icon name="cloud-upload"></sl-icon>
-    </sl-button>
-  </sl-tooltip>    
-  <sl-tooltip content="Download XML document">
-    <sl-button name="download" size="small" disabled>
-      <sl-icon name="cloud-download"></sl-icon>
-    </sl-button>
-  </sl-tooltip>   
-  <sl-tooltip content="Delete all document versions except 'Gold'">
-    <sl-button name="cleanup" size="small" disabled>
-      <sl-icon name="trash3"></sl-icon>
-    </sl-button>
-  </sl-tooltip>
-</sl-button-group>
-<sl-button-group label="TEI" name="document-group">
-  <sl-tooltip content="Validate the document">
-    <sl-button name="validate" size="small" disabled>
-      <sl-icon name="file-earmark-check"></sl-icon>
-    </sl-button> 
-  </sl-tooltip>
-  <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
-    <sl-button name="postprocess" size="small" disabled>
-      <sl-icon name="magic"></sl-icon>
-    </sl-button>
-  </sl-tooltip> 
-</sl-button-group>
+<span class="hbox-with-gap">
+  <!-- Document button group -->
+  <sl-button-group label="Document" name="document-group">
+    <!-- save -->
+    <sl-tooltip content="Save document content to server">
+      <sl-button name="save-xml" size="small" disabled>
+        <sl-icon name="save"></sl-icon>
+      </sl-button>
+    </sl-tooltip>
+
+    <!-- duplicate -->
+    <sl-tooltip content="Duplicate current document to make changes">
+      <sl-button name="duplicate-xml" size="small" disabled>
+        <sl-icon name="copy"></sl-icon>
+      </sl-button>
+    </sl-tooltip>  
+    
+    <!-- upload, not implemented yet -->
+    <sl-tooltip content="Upload document">
+      <sl-button name="download" size="small" disabled>
+        <sl-icon name="cloud-upload"></sl-icon>
+      </sl-button>
+    </sl-tooltip>    
+
+    <!-- download, not implemented yet -->
+    <sl-tooltip content="Download XML document">
+      <sl-button name="download" size="small" disabled>
+        <sl-icon name="cloud-download"></sl-icon>
+      </sl-button>
+    </sl-tooltip>   
+
+    <!-- delete -->
+    <sl-button-group>
+      <sl-dropdown placement="bottom-end">
+        <sl-button name="delete" size="small" slot="trigger" size="small" caret>
+          <sl-icon name="trash3"></sl-icon>
+        </sl-button>
+        <sl-menu>
+          <sl-menu-item name="delete-current">Delete current version</sl-menu-item>
+          <sl-menu-item name="delete-all">Delete all versions</sl-menu-item>
+        </sl-menu>
+      </sl-dropdown>
+    </sl-button-group>
+  </sl-button-group>
+
+  <!-- TEI -->
+  <sl-button-group label="TEI" name="document-group">
+
+    <!-- validate -->
+    <sl-tooltip content="Validate the document">
+      <sl-button name="validate" size="small" disabled>
+        <sl-icon name="file-earmark-check"></sl-icon>
+      </sl-button> 
+    </sl-tooltip>
+
+    <!-- enhance TEI, not implemented yet -->
+    <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
+      <sl-button name="postprocess" size="small" disabled>
+        <sl-icon name="magic"></sl-icon>
+      </sl-button>
+    </sl-tooltip> 
+
+  </sl-button-group>
+</span>
 `
 
 
 /**
  * component API
  */
-const servicesComponent = {
+const api = {
   load,
   validateXml,
   saveXml,
@@ -68,13 +101,16 @@ const servicesComponent = {
 /**
  * component plugin
  */
-const servicesPlugin = {
+const plugin = {
   name,
-  install
+  install,
+  ui: {
+    elements: {}
+  }
 }
 
-export { servicesComponent, servicesPlugin }
-export default servicesPlugin
+export { plugin, api }
+export default plugin
 
 //
 // Implementation
@@ -88,15 +124,51 @@ export default servicesPlugin
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.registerComponent(name, servicesComponent, name)
+  app.registerComponent(name, api, name)
 
   // install controls on menubar
   const bar = app.commandbar
   const div = document.createElement("div")
   div.innerHTML = commandBarHtml.trim()
-  div.childNodes.forEach(elem =>bar.add(elem))
+  const span = div.firstChild
+  bar.add(span)
+  Object.assign(plugin.ui.elements, getNameMap(span, ['sl-icon']))  
 
-  // setup event listeners
+  // === Document button group ===
+
+  // save current version
+  bar.onClick('save-xml', onClickSaveButton);
+  // enable save button on dirty editor
+  app.xmleditor.addEventListener(
+    XMLEditor.EVENT_XML_CHANGED,
+    () => bar.getByName('save-xml').disabled = false
+  );
+
+  // delete
+  const delBtn = app.getUiElementByName("services.delete")
+  const delCurrBtn = app.getUiElementByName("services.delete-current")
+  delCurrBtn.addEventListener("click", deleteCurrentVersion)
+  const delAllBtn = app.getUiElementByName("services.delete-all")
+  delAllBtn.addEventListener('click', deleteAllVersions)
+  const xmlSelectbox = bar.getByName("xml")
+
+  // disable when only gold is left
+  app.on(app.fileselection.events.updated, () => {
+    delBtn.disabled = delAllBtn.disabled = delCurrBtn.disabled = xmlSelectbox.childElementCount < 2
+  })
+  app.on("change:xmlPath", xmlPath => {
+    // disable when the first entry (gold) is selected
+    delBtn.disabled = delAllBtn.disabled = delCurrBtn.disabled = 
+      xmlSelectbox.value === xmlSelectbox.firstChild?.value
+  })
+
+  // duplicate
+  const duplicateBtn = bar.getByName("duplicate-xml")
+  duplicateBtn.addEventListener("click", onClickDuplicateButton)
+  app.on("change:xmlPath", xmlPath => {duplicateBtn.disabled = !xmlPath})
+
+
+  // === TEI button group ===
 
   // validate xml button
   const validateBtn = bar.getByName('validate')
@@ -108,24 +180,6 @@ function install(app) {
   validationEvents.addEventListener(validationEvents.EVENT.END, () => {
     validateBtn.disabled = false;
   })
-
-  // save current version
-  bar.onClick('save', onClickSaveButton);
-
-  // cleanup versions
-  const cleanupBtn = bar.getByName("cleanup")
-  cleanupBtn.addEventListener('click', onClickBtnCleanup)
-  const xmlSelectBox = app.commandbar.getByName('xml')
-  app.on(app.fileselection.events.updated, () => {
-    cleanupBtn.disabled = xmlSelectBox.childElementCount < 2
-  })
-
-  // enable save button on dirty editor
-  app.xmleditor.addEventListener(
-    XMLEditor.EVENT_XML_CHANGED,
-    () => bar.getByName('save').disabled = false
-  );
-
 
 
   app.logger.info("Services component installed.")
@@ -179,15 +233,15 @@ async function validateXml() {
 }
 
 /**
- * Saves the current XML content to the server
- * @param {string} filePath The path to the XML file
+ * Saves the current XML content to the server, optionally as a new version
+ * @param {string} filePath The path to the XML file on the server
+ * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<void>}
  */
-async function saveXml(filePath) {
-  app.logger.info("Saving XML on server...");
-  await app.client.saveXml(app.xmleditor.getXML(), filePath)
+async function saveXml(filePath, saveAsNewVersion=false) {
+  app.logger.info(`Saving XML${saveAsNewVersion ? " as new version":""}...`);
+  return await app.client.saveXml(app.xmleditor.getXML(), filePath, saveAsNewVersion)
 }
-
 
 /**
  * Creates a diff between the current and the given document and shows a merge view
@@ -214,6 +268,72 @@ function removeMergeView() {
   UrlHash.remove("diff")
 }
 
+/**
+ * Called when the "Cleanup" button is executed
+ */
+async function deleteCurrentVersion(){
+  const xmlSelectbox = app.getUiElementByName("fileselection.xml")
+  const versionName = xmlSelectbox.selectedOptions[0].textContent
+  const msg = `Are you sure you want to delete the current version "${versionName}"?`
+  if (!confirm(msg)) return; // todo use dialog
+
+  app.services.removeMergeView()
+  
+  // delete files 
+  
+  if (xmlSelectbox.value.startsWith("/data/tei")) {
+    app.dialog.error("You cannot delete the gold version")
+    return
+  }
+  const filePathsToDelete = [xmlSelectbox.value]
+  console.warn(filePathsToDelete)
+  if (filePathsToDelete.length > 0) {
+    await app.client.deleteFiles(filePathsToDelete)
+  }
+  try {
+    // update the file data
+    await app.fileselection.reload()
+    // load the gold version
+    await load({ xml:xmlSelectbox.firstChild.value })
+    notify(`Version "${versionName}" has been deleted.`)
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+/**
+ * Called when the "delete-all" button is executed
+ */
+async function deleteAllVersions() {
+  const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
+  if (!confirm(msg)) return; // todo use dialog
+
+  app.services.removeMergeView()
+  
+  // delete files 
+  const xmlSelectbox = app.getUiElementByName("fileselection.xml")
+  const xmlPaths = Array.from(xmlSelectbox.childNodes).map(option => option.value)
+  const filePathsToDelete = xmlPaths.slice(1) // skip the first option, which is the gold standard version  
+  if (filePathsToDelete.length > 0) {
+    await app.client.deleteFiles(filePathsToDelete)
+  }
+  try {
+    // update the file data
+    await app.fileselection.reload()
+    // load the gold version
+    await load({ xml:xmlPaths[0] })
+    notify("All version have been deleted")
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+async function duplicate(xmlPath) {
+  let {path} = await saveXml(xmlPath, true)
+  app.fileselection.reload()
+  app.xmlPath = path
+}
+
 // event listeners
 
 
@@ -232,31 +352,16 @@ async function onClickValidateButton() {
 async function onClickSaveButton() {
   const xmlPath = app.commandbar.getByName('xml').value;
   await saveXml(xmlPath)
-  app.commandbar.getByName('save').disabled = true
+  app.commandbar.getByName('save-xml').disabled = true
   notify("Document was saved.")
 }
 
 /**
- * Called when the "Cleanup" button is executed
+ * Called when the "Save" button is executed
  */
-async function onClickBtnCleanup() {
-  const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
-  if (!confirm(msg)) return;
-
-  app.services.removeMergeView()
-  
-  // delete files 
-  const xmlPaths = Array.from(bar.getByName("xml").childNodes).map(option => option.value)
-  const filePathsToDelete = xmlPaths.slice(1) // skip the first option, which is the gold standard version  
-  if (filePathsToDelete.length > 0) {
-    await app.client.deleteFiles(filePathsToDelete)
-  }
-  try {
-    // update the file data
-    await app.fileselection.reload()
-    // load the gold version
-    await load({ xml:xmlPaths[0] })
-  } catch (error) {
-    console.error(error)
-  }
+async function onClickDuplicateButton() {
+  let xmlPath = app.commandbar.getByName('xml').value;
+  await duplicate(xmlPath)
+  app.commandbar.getByName('save-xml').disabled = true
+  notify("Document was duplicated. You are now editing the copy.")
 }
