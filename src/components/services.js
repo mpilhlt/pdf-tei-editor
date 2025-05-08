@@ -17,7 +17,6 @@ import { notify } from '../modules/sl-utils.js'
 // name of the component
 const name = "services"
 
-
 const commandBarHtml = `
 <span class="hbox-with-gap">
   <!-- Document button group -->
@@ -85,7 +84,6 @@ const commandBarHtml = `
 </span>
 `
 
-
 /**
  * component API
  */
@@ -94,7 +92,8 @@ const api = {
   validateXml,
   saveXml,
   showMergeView,
-  removeMergeView
+  removeMergeView,
+  searchNodeContentsInPdf
 }
 
 
@@ -269,7 +268,7 @@ function removeMergeView() {
 }
 
 /**
- * Called when the "Cleanup" button is executed
+ * Called when the "delete-all" button is executed
  */
 async function deleteCurrentVersion(){
   const xmlSelectbox = app.getUiElementByName("fileselection.xml")
@@ -286,7 +285,6 @@ async function deleteCurrentVersion(){
     return
   }
   const filePathsToDelete = [xmlSelectbox.value]
-  console.warn(filePathsToDelete)
   if (filePathsToDelete.length > 0) {
     await app.client.deleteFiles(filePathsToDelete)
   }
@@ -328,10 +326,46 @@ async function deleteAllVersions() {
   }
 }
 
-async function duplicate(xmlPath) {
+/**
+ * Saves the current file as a new version
+ * @param {string} xmlPath The path to the xml file to be duplicated as a new version
+ */
+async function duplicateXml(xmlPath) {
   let {path} = await saveXml(xmlPath, true)
   app.fileselection.reload()
   app.xmlPath = path
+}
+
+/**
+ * Given a Node in the XML, search and highlight its text content in the PDF Viewer
+ * @param {Element} node 
+ */
+async function searchNodeContentsInPdf(node) {
+
+  let searchTerms = getNodeText(node)
+    // split all node text along whitespace and hypen/dash characters
+    .reduce((acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
+    // Search terms must be more than three characters or consist of digits. This is to remove 
+    // the most common "stop words" which would litter the search results with false positives.
+    // This incorrectly removes hyphenated word parts but the alternative would be to  have to 
+    // deal with language-specific stop words
+    .filter(term => term.match(/\d+/) ? true : term.length > 3)
+
+  // make the list of search terms unique
+  searchTerms = Array.from(new Set(searchTerms))
+
+  // add footnote
+  if (node.hasAttribute("source")) {
+    const source = node.getAttribute("source")
+    // get footnote number 
+    if (source.slice(0, 2) === "fn") {
+      // remove the doi prefix
+      searchTerms.unshift(source.slice(2) + " ")
+    }
+  }
+
+  // start search
+  await app.pdfviewer.search(searchTerms);
 }
 
 // event listeners
@@ -361,7 +395,33 @@ async function onClickSaveButton() {
  */
 async function onClickDuplicateButton() {
   let xmlPath = app.commandbar.getByName('xml').value;
-  await duplicate(xmlPath)
+  await duplicateXml(xmlPath)
   app.commandbar.getByName('save-xml').disabled = true
   notify("Document was duplicated. You are now editing the copy.")
+}
+
+// helper methods
+
+/**
+ * Returns a list of non-empty text content from all text nodes contained in the given node
+ * @returns {Array<string>}
+ */
+function getNodeText(node) {
+  return getTextNodes(node).map(node => node.textContent.trim()).filter(Boolean)
+}
+
+/**
+ * Recursively extracts all text nodes contained in the given node into a flat list
+ * @return {Array<Node>}
+ */
+function getTextNodes(node) {
+  let textNodes = [];
+  if (node.nodeType === Node.TEXT_NODE) {
+    textNodes.push(node);
+  } else {
+    for (let i = 0; i < node.childNodes.length; i++) {
+      textNodes = textNodes.concat(getTextNodes(node.childNodes[i]));
+    }
+  }
+  return textNodes;
 }

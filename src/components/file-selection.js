@@ -272,9 +272,8 @@ async function onChangeXmlSelectbox() {
  * Called when the selection in the diff version selectbox  changes
  */
 async function onChangeDiffSelectbox() {
-  console.warn("onChangeDiffSelectbox")
   const diff = plugin.ui.elements.diff.value
-  if (diff && diff !== controls.xml.value) {
+  if (diff && diff !== plugin.ui.elements.xml.value) {
     try {
       await app.services.showMergeView(diff)
     } catch (error) {

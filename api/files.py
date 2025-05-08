@@ -88,6 +88,8 @@ def delete():
         current_app.logger.info(f"Deleting file {file_path}")
         if os.path.exists(file_path):
             os.remove(file_path)
+            if len(os.listdir(os.path.dirname(file_path))) == 0:
+                os.removedirs(os.path.dirname(file_path))
         else:
             raise ApiError(f"File {file_path} does not exist")
     return jsonify({"result": "ok"})

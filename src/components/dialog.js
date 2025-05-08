@@ -23,18 +23,22 @@ const button = dialog.querySelector('sl-button[slot="footer"]');
 button.addEventListener('click', () => dialog.hide());
 
 // define the component with its own API
-export const dialogComponent = {
-  info: (message) => {
-    dialog.setAttribute("label", "Information");
-    dialog.querySelector('#dialog-text').innerHTML = message
-    dialog.show()
-  },
-  error: (message) => {
-    dialog.setAttribute("label", "Error");
-    dialog.textContent = message
-    dialog.show()
-  }
+const api = {
+  info,
+  error
 }
+
+const plugin = {
+  name: "dialog",
+  install
+}
+
+export { api, plugin }
+export default plugin
+
+//
+// implementation
+//
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
@@ -42,12 +46,25 @@ export const dialogComponent = {
  */
 function install(app) {
   app.logger.info("Dialog component installed.")
-  app.registerComponent('dialog', dialogComponent, 'dialog')
+  app.registerComponent('dialog', api, 'dialog')
 }
 
-export const dialogPlugin = {
-  name: "dialog",
-  install
+/**
+ * Shows an informational dialog
+ * @param {string} message 
+ */
+function info(message) {
+  dialog.setAttribute("label", "Information");
+  dialog.querySelector('#dialog-text').innerHTML = message
+  dialog.show()
 }
 
-export default dialogPlugin
+/**
+ * Shows an error dialog
+ * @param {string} message 
+ */
+function error(message) {
+  dialog.setAttribute("label", "Error");
+  dialog.textContent = message
+  dialog.show()
+}

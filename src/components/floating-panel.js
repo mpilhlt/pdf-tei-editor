@@ -79,7 +79,7 @@ const componentNode = document.getElementById(componentId)
 /**
  * component API
  */
-const cmp = {
+const api = {
 
   show: () => componentNode.classList.remove("hidden"),
   hide: () => componentNode.classList.add("hidden"),
@@ -131,7 +131,7 @@ const cmp = {
    * @param {Function} handler The function to call when the element is clicked
    */
   onClick: (name, handler) => {
-    cmp.getByName(name).addEventListener('click', handler)
+    api.getByName(name).addEventListener('click', handler)
   },
 
   /**
@@ -142,107 +142,44 @@ const cmp = {
   }
 }
 
+/**
+ * component plugin
+ */
+const plugin = {
+  name: componentId,
+  install
+}
+
+export { api, plugin }
+export default plugin
+
+//
+// implementations
+//
+
 // UI elements
-const xpathSelectbox = cmp.getByName("xpath")
+const xpathSelectbox = api.getByName("xpath")
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.registerComponent(componentId, cmp, "floatingPanel")
+  app.registerComponent(componentId, api, "floatingPanel")
 
-  populateXpathSelectbox()
-  setupEventHandlers()
+  // populate the xpath selectbox
 
-  // update selectbox when corresponding app state changes
-  app.on("change:xpath", onAppChangeXpath)
+  // Clear existing options
+  xpathSelectbox.innerHTML = '';
 
-  app.on("change:diffXmlPath", onAppChangeDiffXmlPath)
-
-  app.logger.info("Floating panel component installed.")
-}
-
-/**
- * component plugin
- */
-const floatingPanelPlugin = {
-  name: componentId,
-  install
-}
-
-export { cmp as floatingPanelComponent, floatingPanelPlugin }
-export default floatingPanelPlugin
-
-//
-// helper methods
-//
-
-/**
- * Returns a div for the row with the given number. If the number is higher than the existing number of 
- * rows, a new one is created and returned.
- * @param {Number} row The number of the row to get or to create if it does not yet exist
- * @returns {Element}
- */
-function getOrCreateRow(row) {
-  if (componentNode.childElementCount <= row) {
-    const div = document.createElement('DIV')
-    cmp.appendChild(div)
-    return div
-  }
-  return cmp.childNodes[row]
-}
-
-/**
- * Populates the selectbox for the xpath expressions that  control the navigation within the xml document
- */
-function populateXpathSelectbox() {
-  try {
-    const data = [
-      {
-        "xpath": "//tei:biblStruct",
-        "label": "<biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[@status='verified']",
-        "label": "Verified <biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[not(@status='verified')]",
-        "label": "Unverified <biblStruct>"
-      },
-      {
-        "xpath": "//tei:biblStruct[@status='unresolved']",
-        "label": "Unresolved <biblStruct>"
-      },
-      {
-        "xpath": null,
-        "label": "Custom XPath"
-      }
-    ];
-
-    // Clear existing options
-    xpathSelectbox.innerHTML = '';
-
-    // Populate select box with options
-    data.forEach(item => {
-      const option = document.createElement('option');
-      option.value = item.xpath || ''
-      option.text = item.label
-      option.disabled = item.xpath === null
-      xpathSelectbox.appendChild(option);
-    });
-
-  } catch (error) {
-    console.error('Error populating xpath selectbox:', error);
-  }
-}
-
-
-/**
- * configures the event handlers for this component
- */
-function setupEventHandlers() {
+  // Populate select box with options
+  getSelectboxData().forEach(item => {
+    const option = document.createElement('option');
+    option.value = item.xpath || ''
+    option.text = item.label
+    option.disabled = item.xpath === null
+    xpathSelectbox.appendChild(option);
+  });
 
   // listen for changes in the selectbox
   xpathSelectbox.addEventListener('change', () => {
@@ -250,7 +187,7 @@ function setupEventHandlers() {
   });
 
   // button to edit the xpath manually
-  cmp.onClick('edit-xpath', () => {
+  api.onClick('edit-xpath', () => {
     const custom = xpathSelectbox[xpathSelectbox.length - 1]
     const xpath = prompt("Enter custom xpath", custom.value)
     if (xpath && xpath.trim()) {
@@ -261,16 +198,16 @@ function setupEventHandlers() {
   })
 
   // setup click handlers
-  cmp.onClick('prev-node', () => app.xmleditor.previousNode());
-  cmp.onClick('next-node', () => app.xmleditor.nextNode());
-  cmp.onClick('prev-diff', () => app.xmleditor.goToPreviousDiff())
-  cmp.onClick('next-diff', () => app.xmleditor.goToNextDiff())
+  api.onClick('prev-node', () => app.xmleditor.previousNode());
+  api.onClick('next-node', () => app.xmleditor.nextNode());
+  api.onClick('prev-diff', () => app.xmleditor.goToPreviousDiff())
+  api.onClick('next-diff', () => app.xmleditor.goToNextDiff())
 
-  cmp.onClick('diff-keep-all', () => {
+  api.onClick('diff-keep-all', () => {
     app.xmleditor.rejectAllDiffs()
     app.services.removeMergeView()
   })
-  cmp.onClick('diff-change-all', () => {
+  api.onClick('diff-change-all', () => {
     app.xmleditor.acceptAllDiffs()
     app.services.removeMergeView()
   })
@@ -282,17 +219,84 @@ function setupEventHandlers() {
   makeDraggable(componentNode)
 
   // auto-search switch
-  cmp.getByName('switch-auto-search').addEventListener('change', onAutoSearchSwitchChange)
+  api.getByName('switch-auto-search').addEventListener('change', onAutoSearchSwitchChange)
 
   // configure "status" buttons
   $$('.node-status').forEach(btn => btn.addEventListener('click', evt => {
-    cmp.setNodeStatus(cmp.selectedNode, evt.target.dataset.status)
+    api.setNodeStatus(api.selectedNode, evt.target.dataset.status)
   }))
 
   // allow to input node index
-  cmp.onClick('selection-index', onClickSelectionIndex)
+  api.onClick('selection-index', onClickSelectionIndex)
+
+  // update selectbox when corresponding app state changes
+  app.on("change:xpath", onAppChangeXpath)
+
+  app.on("change:diffXmlPath", onAppChangeDiffXmlPath)
+
+  app.logger.info("Floating panel component installed.")
 }
 
+/**
+ * Given an xpath and an index, displays the index and the number of occurrences of the 
+ * xpath in the xml document. If none can be found, the index is displayed as 0.
+ * @param {string} xpath The xpath that will be counted
+ * @param {Number} index The index 
+ */
+function updateCounter(xpath, index) {
+  let size;
+  try {
+    size = app.xmleditor.countDomNodesByXpath(xpath)
+  } catch (e) {
+    console.error(e)
+    size = 0
+  }
+  index = index || 1
+  api.getByName('selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
+  api.getByName('next-node').disabled = api.getByName('prev-node').disabled = size < 2;
+}
+
+
+/**
+ * Populates the selectbox for the xpath expressions that  control the navigation within the xml document
+ */
+function getSelectboxData() {
+  return [
+    {
+      "xpath": "//tei:biblStruct",
+      "label": "<biblStruct>"
+    },
+    {
+      "xpath": "//tei:biblStruct[@status='verified']",
+      "label": "Verified <biblStruct>"
+    },
+    {
+      "xpath": "//tei:biblStruct[not(@status='verified')]",
+      "label": "Unverified <biblStruct>"
+    },
+    {
+      "xpath": "//tei:biblStruct[@status='unresolved']",
+      "label": "Unresolved <biblStruct>"
+    },
+    {
+      "xpath": null,
+      "label": "Custom XPath"
+    }
+  ];
+}
+
+
+
+//
+// Event handlers
+//
+
+/**
+ * Called when the xpath app state changes
+ * @param {string} xpath 
+ * @param {string|null} old 
+ * @returns 
+ */
 function onAppChangeXpath(xpath, old) {
 
   // enable the buttons if we have an selected xpath
@@ -319,24 +323,7 @@ function onAppChangeXpath(xpath, old) {
   app.xmleditor.whenReady().then(() => updateCounter(beforeIndex, index))
 }
 
-/**
- * Given an xpath and an index, displays the index and the number of occurrences of the 
- * xpath in the xml document. If none can be found, the index is displayed as 0.
- * @param {string} xpath The xpath that will be counted
- * @param {Number} index The index 
- */
-function updateCounter(xpath, index) {
-  let size;
-  try {
-    size = app.xmleditor.countDomNodesByXpath(xpath)
-  } catch (e) {
-    console.error(e)
-    size = 0
-  }
-  index = index || 1
-  cmp.getByName('selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
-  cmp.getByName('next-node').disabled = cmp.getByName('prev-node').disabled = size < 2;
-}
+
 
 /**
  * Called when the switch for auto-search is toggled
@@ -345,9 +332,8 @@ function updateCounter(xpath, index) {
 async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked
   app.logger.info(`Auto search is: ${checked}`)
-  if (checked) {
-    console.warn("Reimplement search in PDF")
-    //await app.services.searchNodeContentsInPdf(lastSelectedXpathlNode)
+  if (checked && app.xmleditor.selectedNode) {
+    await app.services.searchNodeContentsInPdf(app.xmleditor.selectedNode)
   }
 }
 
@@ -365,9 +351,38 @@ function onClickSelectionIndex() {
   }
 }
 
+
+/**
+ * Called when the diffXmlPath state changes. Enables or disables the div navigation buttons
+ * based on whether 
+ * @param {string} value The new value of the diffXmlPath state
+ * @param {string} old 
+ */
+function onAppChangeDiffXmlPath(value, old) {
+  api.getByName("nav-diff")
+    .querySelectorAll("button")
+    .forEach(node => node.disabled = !(value && value !== app.xmlPath))
+}
+
 //
 // helper functions
 //
+
+/**
+ * Returns a div for the row with the given number. If the number is higher than the existing number of 
+ * rows, a new one is created and returned.
+ * @param {Number} row The number of the row to get or to create if it does not yet exist
+ * @returns {Element}
+ */
+function getOrCreateRow(row) {
+  if (componentNode.childElementCount <= row) {
+    const div = document.createElement('DIV')
+    api.appendChild(div)
+    return div
+  }
+  return api.childNodes[row]
+}
+
 
 function addBringToForegroundListener(selectors) {
   document.addEventListener('click', function (event) {
@@ -423,16 +438,4 @@ function makeDraggable(element) {
   //     element.style.userSelect = 'auto'; // Restore text selection
   //   }
   // });
-}
-
-/**
- * Called when the diffXmlPath state changes. Enables or disables the div navigation buttons
- * based on whether 
- * @param {string} value The new value of the diffXmlPath state
- * @param {string} old 
- */
-function onAppChangeDiffXmlPath(value, old) {
-  cmp.getByName("nav-diff")
-    .querySelectorAll("button")
-    .forEach(node => node.disabled = !(value && value !== app.xmlPath))
 }
