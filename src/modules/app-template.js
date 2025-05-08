@@ -9,13 +9,10 @@ import plugin from "./plugin.js"
  * 
  * Note:
  *  - All components of the application must be implemented as "js-plugin"-style
- *    plugins. They are attached as read-only properties of the application instance
+ *    plugins.
  *  - Application states are readable and writable properties of the application 
  *    instance. When changed, they emit a message "change:<property name>" on the 
  *    message bus. 
- *  - If you want to see debug messages relating to state and component management,
- *    implement a "logger" component that has a "debug(message, level)" method. The
- *    messages are logged with level=1
  * 
  */
 export class App {

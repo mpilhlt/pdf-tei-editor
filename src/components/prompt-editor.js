@@ -31,6 +31,7 @@ const html = `
     </div>
     <sl-textarea name="text" rows="20"></sl-texarea>
   </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
   <sl-button slot="footer" name="delete" disabled variant="danger">Delete prompt</sl-button>
   <sl-button slot="footer" name="duplicate" variant="secondary">Duplicate prompt</sl-button>
   <sl-button slot="footer" name="submit" variant="primary">Save &amp; Close</sl-button>
@@ -60,8 +61,19 @@ const slInputNode = slDialogNode.querySelector('sl-input')
 /** @type {SlButton} */
 slDialogNode.querySelector('sl-button[name="submit"]').addEventListener('click', submit)
 slDialogNode.querySelector('sl-button[name="duplicate"]').addEventListener('click', duplicate)
+slDialogNode.querySelector('sl-button[name="cancel"]').addEventListener('click', close)
 const deleteBtn = slDialogNode.querySelector('sl-button[name="delete"]')
 deleteBtn.addEventListener('click', deletePrompt)
+
+// button 
+
+const buttonHtml = `
+<sl-tooltip content="Edit the prompt instructions">
+  <sl-button name="edit-prompt" size="small">
+    <sl-icon name="pencil-square"></sl-icon>
+  </sl-button>
+</sl-tooltip>
+`
 
 /**
  * component API
@@ -100,11 +112,9 @@ function install(app) {
   app.registerComponent(componentId, api, "promptEditor")
 
   // add a button to the command bar to show dialog with prompt editor
-  const button = Object.assign(new SlButton, {
-    size: "small",
-    textContent: "Edit prompt",
-    name: "edit-prompt",
-  })  
+  const div = document.createElement('div')
+  div.innerHTML = buttonHtml.trim()
+  const button = div.firstChild
   button.addEventListener("click", () => api.open())
   app.commandbar.getByName('extraction-group').appendChild(button)
 

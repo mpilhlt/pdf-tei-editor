@@ -3,10 +3,10 @@ import { UrlHash } from '../modules/browser-utils.js'
 // custom elements
 import { Spinner } from '../modules/spinner.js'
 
-// New application architecture
+// Base class
 import { App } from '../modules/app-template.js'
 
-// plugins (the components are only needed for IDE autocompletion)
+// plugins 
 import { plugin as loggerPlugin, api as loggerApi, logLevel } from '../components/logger.js'
 import { plugin as dialogPlugin, api as dialogApi } from '../components/dialog.js'
 import { plugin as pdfViewerPlugin, api as pdfViewerApi } from '../components/pdfviewer.js'

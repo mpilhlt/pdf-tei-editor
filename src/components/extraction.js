@@ -35,12 +35,12 @@ const buttonsHtml = `
 
 const dialogHtml = `
 <sl-dialog label="Extract references">
-  <form>
-    <sl-input name="doi" label="DOI" help-text="Please enter the DOI of the document to add document metadata" name="doi"></input>
-    <sl-select name="instructions" label="Instructions" help-text="Choose the instruction set that is added to the prompt"><sl-select> 
-    <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-    <sl-button slot="footer" name="submit" variant="primary">Extract</sl-button>  
-  </form>
+  <div class="dialog-column">
+    <sl-select name="instructionIndex" label="Instructions" size="small" help-text="Choose the instruction set that is added to the prompt"></sl-select>  
+    <sl-input name="doi" label="DOI" size="small" help-text="Please enter the DOI of the document to add document metadata"></input>   
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Extract</sl-button>  
 </sl-dialog>
 `
 
@@ -104,7 +104,6 @@ async function extractFromCurrentPDF() {
   try {
     doi = doi || getDoiFromFilename(app.pdfPath)
     let { xml } = await extractFromPDF(app.pdfPath, {doi})
-    await reloadFileData()
     await app.services.showMergeView(xml)
   } catch (error) {
     console.error(error)
@@ -147,11 +146,12 @@ async function extractFromPDF(filename, options = {}) {
 
   // get DOI and instructions from user
   options = await promptForExtractionOptions(options)
+  if (options === null) return
 
   app.spinner.show('Extracting references, please wait')
   try {
     let result = await app.client.extractReferences(filename, options)
-    app.commandbar.update()
+    app.fileselection.reload()
     return result
   } finally {
     app.spinner.hide()
@@ -162,64 +162,68 @@ async function extractFromPDF(filename, options = {}) {
 
 async function promptForExtractionOptions(options) {
 
-  // add dialog to DOM
-  /** @type {SlDialog} */
-  const dialog = appendHtml(dialogHtml)[0]
-  const form = dialog.querySelector("form")
+  // load instructions
+  const instructionsData = await app.client.loadInstructions()
+  const instructions = [];
 
+  // add dialog to DOM
+  const dialog = appendHtml(dialogHtml)[0]
+  
   // populate dialog
-  /** @type {SlInput} */
-  const doiInput = form.querySelector('[name="doi"]')
+  const doiInput = dialog.querySelector('[name="doi"]')
   doiInput.value = options.doi
 
   // configure selectbox 
-  /** @type {SlSelect} */
-  const selectbox = form.querySelector('[name="instructions"]')
-  const instructionsArr = await app.client.loadInstructions()
-  for (const [idx, {label, text}] of instructionsArr.entries()) {
-    const slOption = new SlOption()
-    slOption.value = idx 
-    slOption.textContent = label 
-    selectbox.appendChild(slOption)
+  const selectbox = dialog.querySelector('[name="instructionIndex"]')
+  for (const [idx, {label, text}] of instructionsData.entries()) {
+    const option = Object.assign (new SlOption, {
+      value: String(idx),
+      textContent: label
+    })
+    instructions[idx] = text.join("\n")
+    selectbox.appendChild(option)
   }
+  selectbox.value = "0"
 
   // display the dialog and await the user's response
-  options = await new Promise(resolve => {
+  const formData = await new Promise(resolve => {
     // user cancels
     function cancel() {
       dialog.remove()
       resolve(null)
     }
     // user submits their input
-
-    // todo : use proper FormData()
-    // see  https://shoelace.style/components/select#lazy-loading-options
-
     function submit() {
       dialog.remove()
       resolve({
-        doi: doiInput.value,
-        instructions: instructionsArr[selectbox.value].join("\n")
+        'doi': dialog.querySelector('[name="doi"]').value,
+        'instructionIndex': parseInt(dialog.querySelector('[name="instructionIndex"]').value)
       })
     }
+
     // event listeners
     dialog.addEventListener("sl-request-close", cancel, { once: true })
-    form.querySelector('[name="cancel"]').addEventListener("click", cancel, { once: true })
-    form.querySelector('[name="submit"]').addEventListener("click", submit, { once: true })
+    dialog.querySelector('[name="cancel"]').addEventListener("click", cancel, { once: true })
+    dialog.querySelector('[name="submit"]').addEventListener("click", submit, { once: true })
     
     dialog.show()
   })
 
-  if (options === null) {
+  if (formData === null) {
     // user has cancelled the form
-    return
+    return null
   } 
 
-  if (options.doi !== "" && !isDoi(options.doi)) {
+  if (formData.doi == "" || !isDoi(formData.doi)) {
     app.dialog.error(`${doi} does not seem to be a DOI, please try again.`)
     return 
   }
-console.log(options)
+
+  Object.assign(options, {
+    doi: formData.doi,
+    instructions: instructions[formData.instructionIndex]
+  }) 
+
   return options
 }
 
