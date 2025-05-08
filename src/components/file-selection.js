@@ -9,11 +9,11 @@ import { getNameMap } from '../modules/browser-utils.js'
 
 
 // name of the component
-const componentId = "fileselection"
+const pluginId = "fileselection"
 
 // HTML elements
 const commandBarHtml = `
-<span id="${componentId}" class="hbox-with-gap">
+<span id="${pluginId}" class="hbox-with-gap">
   <sl-select name="pdf" size="small" label="PDF"></sl-select>
   <sl-select name="xml" size="small" label="XML file version"></sl-select>
   <sl-select name="diff" size="small" label="Compare with version"></sl-select>
@@ -24,9 +24,9 @@ const commandBarHtml = `
  */
 const events = {
   /** emitted when the file data is updated in the UI */
-  updated: componentId + ":updated",
+  updated: pluginId + ":updated",
   /** emitted when new data is loaded from the server */
-  reloaded: componentId + ":reloaded"
+  reloaded: pluginId + ":reloaded"
 }
 
 /**
@@ -42,7 +42,7 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name: componentId,
+  name: pluginId,
   install,
   state: {
     pdfPath,
@@ -54,7 +54,7 @@ const plugin = {
   }
 }
 
-export { api as fileselectionComponent, plugin as fileselectionPlugin }
+export { api, plugin }
 export default plugin
 
 //
@@ -68,7 +68,7 @@ export default plugin
  * @param {PdfTeiEditor} app The main application
  */
 async function install(app) {
-  app.registerComponent(componentId, api, "fileselection")
+  app.registerComponent(pluginId, api, "fileselection")
 
   // install controls on menubar
   const div = document.createElement("div")
@@ -76,7 +76,7 @@ async function install(app) {
   div.childNodes.forEach(elem => app.commandbar.add(elem))
 
   // define the UI elements of this plugin
-  const elements = getNameMap(document.getElementById(componentId), ['sl-icon'])
+  const elements = getNameMap(document.getElementById(pluginId), ['sl-icon'])
   plugin.ui.elements = elements
 
   // configure event handlers for these controls

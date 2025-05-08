@@ -8,16 +8,16 @@ import { App } from '../modules/app-template.js'
 
 // plugins (the components are only needed for IDE autocompletion)
 import { plugin as loggerPlugin, api as loggerApi, logLevel } from '../components/logger.js'
-import { plugin as dialogPlugin, api as dialogComponent } from '../components/dialog.js'
-import { plugin as pdfViewerPlugin, api as pdfViewerComponent } from '../components/pdfviewer.js'
-import { plugin as xmlEditorPlugin, api as xmlEditorComponent } from '../components/xmleditor.js'
-import { clientPlugin, clientComponent } from '../components/client.js'
-import { commandBarPlugin, commandBarComponent } from '../components/command-bar.js'
-import { fileselectionPlugin, fileselectionComponent } from '../components/file-selection.js'
-import { extractionPlugin, extractionComponent } from '../components/extraction.js'
-import { plugin as servicesPlugin, api as servicesComponent } from '../components/services.js'
-import { plugin as floatingPanelPlugin, api as floatingPanelComponent } from '../components/floating-panel.js'
-import { promptEditorPlugin, promptEditorComponent } from '../components/prompt-editor.js'
+import { plugin as dialogPlugin, api as dialogApi } from '../components/dialog.js'
+import { plugin as pdfViewerPlugin, api as pdfViewerApi } from '../components/pdfviewer.js'
+import { plugin as xmlEditorPlugin, api as xmlEditorApi } from '../components/xmleditor.js'
+import { plugin as clientPlugin, api as clientApi } from '../components/client.js'
+import { plugin as commandBarPlugin, api as commandBarApi } from '../components/command-bar.js'
+import { plugin as fileselectionPlugin, api as fileselectionApi } from '../components/file-selection.js'
+import { plugin as extractionPlugin, api as extractionApi } from '../components/extraction.js'
+import { plugin as servicesPlugin, api as servicesApi } from '../components/services.js'
+import { plugin as floatingPanelPlugin, api as floatingPanelApi } from '../components/floating-panel.js'
+import { plugin as promptEditorPlugin, api as promptEditorApi } from '../components/prompt-editor.js'
 
 //import { plugin as dummyLoggerPlugin } from '../components/logger-dummy.js'
 
@@ -67,7 +67,7 @@ class PdfTeiEditor extends App {
 
   /**
    * The logger for the application
-   * @type {loggerComponent}
+   * @type {loggerApi}
    */
   logger = loggerApi
 
@@ -78,62 +78,62 @@ class PdfTeiEditor extends App {
 
   /**
    * A dialog widget for user interaction
-   * @type {dialogComponent}
+   * @type {dialogApi}
    */
   dialog;
 
   /**
    * The commandbar at the top of the application
-   * @type {commandBarComponent}
+   * @type {commandBarApi}
    */
   commandbar;
 
   /**
    * The PDFViewer component
-   * @type {pdfViewerComponent}
+   * @type {pdfViewerApi}
    */
   pdfviewer;
 
   /**
    * The XML editor component
-   * @type {xmlEditorComponent}
+   * @type {xmlEditorApi}
    */
   xmleditor;
 
   /**
    * The http client for the app's API server
-   * @type {clientComponent}
+   * @type {clientApi}
    */
   client;
 
   /**
    * UI and services for displaying and loading PDF and XML files on the server
-   * @type {fileselectionComponent}
+   * @type {fileselectionApi}
    */
   fileselection;
 
   /**
    * The core services (commands) of the app
-   * @type {servicesComponent}
+   * @type {servicesApi}
    */
   services;
 
   /**
    * Provides the extraction services
-   * @type {extractionComponent}
+   * @type {extractionApi}
    */
   extraction;
 
   /**
    * The floating panel containing navigation controls
-   * @type {floatingPanelComponent}
+   * @type {floatingPanelApi}
    */
   floatingPanel;
 
   /**
    * A pop-up dialog which lets the user enter and edit additional instructions
    * sent to the LLM 
-   * @type {promptEditorComponent}
+   * @type {promptEditorApi}
    */
   promptEditor;
 

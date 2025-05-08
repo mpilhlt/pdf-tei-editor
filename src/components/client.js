@@ -11,7 +11,7 @@ const upload_route = '/api/upload'
 /**
  * component API
  */
-const clientComponent = {
+const api = {
   get lastHttpStatus() {
     return lastHttpStatus
   },
@@ -26,25 +26,27 @@ const clientComponent = {
   uploadFile
 }
 
+
+/**
+ * component plugin
+ */
+const plugin = {
+  name,
+  install
+}
+
+export { api, plugin }
+export default plugin
+
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.registerComponent(name, clientComponent, name)
+  app.registerComponent(name, api, name)
   app.logger.info("Client component installed.")
 }
 
-/**
- * component plugin
- */
-const clientPlugin = {
-  name,
-  install
-}
-
-export {clientComponent, clientPlugin}
-export default clientPlugin
 
 
 /**

@@ -4,44 +4,44 @@
 import { PdfTeiEditor } from '../app.js'
 import { getNameMap } from '../modules/browser-utils.js';
 
-const componentId = "command-bar"
+const pluginId = "command-bar"
 
 /**
  * component API
  */
-const cmp = {
+const api = {
   add,
   addAt,
   addBefore,
   getByName,
   onClick,
-  controls: () => getNameMap(document.getElementById(componentId), ['sl-icon'])
+  controls: () => getNameMap(document.getElementById(pluginId), ['sl-icon'])
 };
 
 /**
  * component plugin
  */
-const commandBarPlugin = {
-  name: componentId,
+const plugin = {
+  name: pluginId,
   install
 }
 
-export { cmp as commandBarComponent, commandBarPlugin }
-export default commandBarPlugin
+export { api, plugin }
+export default plugin
 
 //
 // implementations
 //
 
 // component node 
-const componentNode = document.getElementById(componentId)
+const componentNode = document.getElementById(pluginId)
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
 async function install(app) {
-  app.registerComponent(componentId, cmp, "commandbar")
+  app.registerComponent(pluginId, api, "commandbar")
   app.logger.info("Menubar component installed")
 }
 

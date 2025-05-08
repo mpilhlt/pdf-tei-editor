@@ -11,7 +11,7 @@ import SlSelect from '@shoelace-style/shoelace/dist/components/select/select.js'
 import SlOption from '@shoelace-style/shoelace/dist/components/option/option.js'
 
 import { app, PdfTeiEditor } from '../app.js'
-import { getDescendantByName, appendHtml } from '../modules/browser-utils.js'
+import { appendHtml } from '../modules/browser-utils.js'
 
 
 // name of the component
@@ -47,7 +47,7 @@ const dialogHtml = `
 /**
  * component API
  */
-const cmp = {
+const api = {
   extractFromCurrentPDF,
   extractFromNewPdf,
   extractFromPDF
@@ -61,7 +61,7 @@ const plugin = {
   install
 }
 
-export { cmp as extractionComponent, plugin as extractionPlugin }
+export { api , plugin }
 export default plugin
 
 //
@@ -75,7 +75,7 @@ export default plugin
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.registerComponent(componentId, cmp, "extraction")
+  app.registerComponent(componentId, api, "extraction")
 
   const bar = app.commandbar;
 

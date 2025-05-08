@@ -66,7 +66,7 @@ deleteBtn.addEventListener('click', deletePrompt)
 /**
  * component API
  */
-const cmp = {
+const api = {
   open,
   edit,
   duplicate,
@@ -79,14 +79,14 @@ const cmp = {
 /**
  * component plugin
  */
-const promptEditorPlugin = {
+const plugin = {
   name: componentId,
   deps: ['extraction'],
   install
 }
 
-export { cmp as promptEditorComponent, promptEditorPlugin }
-export default promptEditorPlugin
+export { api, plugin }
+export default plugin
 
 //
 // Implementation
@@ -97,7 +97,7 @@ export default promptEditorPlugin
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.registerComponent(componentId, cmp, "promptEditor")
+  app.registerComponent(componentId, api, "promptEditor")
 
   // add a button to the command bar to show dialog with prompt editor
   const button = Object.assign(new SlButton, {
@@ -105,7 +105,7 @@ function install(app) {
     textContent: "Edit prompt",
     name: "edit-prompt",
   })  
-  button.addEventListener("click", () => cmp.open())
+  button.addEventListener("click", () => api.open())
   app.commandbar.getByName('extraction-group').appendChild(button)
 
   app.logger.info("Prompt editor component installed.")
@@ -135,7 +135,7 @@ async function open() {
     }
   }
   deleteBtn.disabled = prompts.length < 2
-  cmp.edit(currentIndex)
+  api.edit(currentIndex)
   slDialogNode.show()
 }
 
@@ -228,7 +228,7 @@ function menuOnSelect(event) {
   const item = event.detail.item;
   slMenuNode.childNodes[currentIndex].checked = false
   currentIndex = item.value
-  cmp.edit(currentIndex)
+  api.edit(currentIndex)
 }
 
 /**
