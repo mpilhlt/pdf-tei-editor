@@ -1,22 +1,18 @@
 [
     {
-        "label": "No small or all caps",
-        "active": true,
-        "text": "Always properly capitalize names. Do not use small or all caps even if they appear in the document "
-    },
-    {
-        "label": "Backreferences",
-        "active": true,
-        "text": "Do not list references which have already been mentioned in a previous footnote, if they refer to the same analytic item. \n\nExample: \"See Miller, Confessions (fn. 11).\" \n\nHowever, include them if they refer to the same monographic item mentioned previously, but to a different analytic. \n\nExample \"Bacon, \"Nova lux\". in \"Works\" (fn. 11), p 45-34"
-    },
-    {
-        "label": "Required monographic title",
-        "active": true,
-        "text": "A monograph must always have a title. A single analytic title without an additional monographic title does not exist. A book title is always the monographic title. For example, in \"Ludwig Wittgenstein, Tractatus logico-philosophicus, London 1922\", \"Tractatus logico-philosophicus\" is the monographic title, not the analytic."
-    },
-    {
-        "label": "Incomplete References",
-        "active": true,
-        "text": "When you encounter incomplete references such as in \"Vgl. die Artikel \u00bbFact\u00ab im Oxford English Dictionary und \u00bbThatsache\u00ab in Grimms W\u00f6rterbuch.\", extract the analytic titles (\"Fact\", \"Thatsache\") and monographic titles (\"Oxford English Dictionary\", \"Grimms W\u00f6rterbuch\")"
+        "label": "Default prompt",
+        "text": [
+            "Always properly capitalize names. Do not use small or all caps even if they appear in the document. ",
+            "",
+            "Do not list references which have already been mentioned in a previous footnote, if they refer to the same analytic item. ",
+            "Example: \"See Miller, Confessions (fn. 11).\" ",
+            "",
+            "However, include them if they refer to the same monographic item mentioned previously, but to a different analytic. ",
+            "Example \"Bacon, \"Nova lux\". in \"Works\" (fn. 11), p 45-34.",
+            "",
+            "A monograph must always have a title. A single analytic title without an additional monographic title does not exist. A book title is always the monographic title. For example, in \"Ludwig Wittgenstein, Tractatus logico-philosophicus, London 1922\", \"Tractatus logico-philosophicus\" is the monographic title, not the analytic.",
+            "",
+            "When you encounter incomplete references such as in \"Vgl. die Artikel \u00bbFact\u00ab im Oxford English Dictionary und \u00bbThatsache\u00ab in Grimms W\u00f6rterbuch.\", extract the analytic titles (\"Fact\", \"Thatsache\") and monographic titles (\"Oxford English Dictionary\", \"Grimms W\u00f6rterbuch\")"
+        ]
     }
 ]

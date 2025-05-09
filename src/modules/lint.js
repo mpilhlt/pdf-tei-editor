@@ -1,5 +1,5 @@
-import { validateXml, last_http_status } from './client.js'
 import { EditorView } from 'codemirror';
+import { app } from '../app.js'
 
 let validatedVersion = null;
 let isDisabled = false;
@@ -102,12 +102,12 @@ export async function lintSource(view) {
   validationPromise = new Promise(async (resolve, reject) => {
     let validationErrors = [];
     while (true) {
-      validatedVersion = window.xmlEditor.getDocumentVersion(); // how to avoid this hard link?
+      validatedVersion = window.app.xmleditor.getDocumentVersion(); // rewrite this!
       console.log(`Requesting validation for document version ${validatedVersion}...`)
       validationEvents.emitStartEvent()
       // send request to server
       try {
-        ({ errors: validationErrors } = await validateXml(xml));
+        ({ errors: validationErrors } = await app.client.validateXml(xml));
       } catch (error) {
         return reject(error);
       }
@@ -115,7 +115,7 @@ export async function lintSource(view) {
       validationEvents.emitEndEvent()
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`)
       // check if document has changed in the meantime
-      if (validatedVersion != window.xmlEditor.getDocumentVersion()) {
+      if (validatedVersion != window.app.xmleditor.getDocumentVersion()) {
         console.log("Document has changed, restarting validation...")
       } else {
         return resolve(validationErrors)
@@ -128,7 +128,7 @@ export async function lintSource(view) {
     validationErrors = await validationPromise;
   } catch (error) {
     // stop querying
-    if (last_http_status >= 400) {
+    if (app.client.lastHttpStatus >= 400) {
       isDisabled = true
     }
     return lastDiagnostics

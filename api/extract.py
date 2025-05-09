@@ -41,8 +41,8 @@ def extract():
     if gemini_api_key == "":
         raise ApiError("No Gemini API key available.")
 
-    data = request.get_json()
-    pdf_filename = data.get("pdf")
+    options = request.get_json()
+    pdf_filename = options.get("pdf")
     if pdf_filename == "":
         raise ApiError("Missing PDF file name")
 
@@ -50,7 +50,7 @@ def extract():
     # tei_header = data.get("teiHeader", None)
 
     # get file id from DOI or file name
-    doi = data.get("doi", "")
+    doi = options.get("doi", "")
     if doi != "":
         # if a (file-system-encoded) DOI is given, use it
         file_id = doi.replace("/", "__")
@@ -74,7 +74,7 @@ def extract():
         raise ApiError(f"File {pdf_filename} has not been uploaded.")        
 
     # generate TEI via reference extraction using LLamore
-    tei_xml = tei_from_pdf(doi, gold_pdf_path)
+    tei_xml = tei_from_pdf(gold_pdf_path, options)
 
     # save file
     gold_tei_path = tei_path = get_gold_tei_path(file_id)
@@ -101,16 +101,17 @@ def check_doi(doi):
         raise ValueError(f"{doi} is not a valid DOI string")
 
 
-def tei_from_pdf(doi: str, pdf_path: str) -> str:
+def tei_from_pdf(pdf_path: str, options: dict = {}) -> str:
     # the TEI doc
     tei_doc = create_tei_doc(TEI_SCHEMA_LOCATION)
 
     # create the header
+    doi = options.get("doi", "")
     tei_header = create_tei_header(doi)
     tei_doc.append(tei_header)
 
     # add the references as a listBibl element
-    listBibl = extract_refs_from_pdf(pdf_path)
+    listBibl = extract_refs_from_pdf(pdf_path, options)
     standOff = etree.SubElement(tei_doc, "standOff")
     standOff.append(listBibl.getchildren()[0])
 
@@ -133,11 +134,12 @@ def remove_whitespace(element):
         remove_whitespace(child)
 
 
-def extract_refs_from_pdf(pdf_path: str) -> etree.Element:
+def extract_refs_from_pdf(pdf_path: str, options:dict = {}) -> etree.Element:
     """
     Extract references from a PDF file using the Gemini API.
     Args:
         pdf_path (str): Path to the PDF file.
+        options (dict): a dict of key-value pairs with extraction options
     Returns:
         etree.Element: XML element containing the extracted references.
     """
@@ -145,11 +147,11 @@ def extract_refs_from_pdf(pdf_path: str) -> etree.Element:
 
     class CustomPrompter(LineByLinePrompter):
         # Override the user_prompt method to customize the prompt
-        def user_prompt(self, text= None, additional_instructions="In particular, follow these rules:\n\n") -> str:
-            with open(prompt_path, 'r', encoding="utf-8") as f:
-                instructions  = json.load(f)
-            additional_instructions += "\n\n".join([instruction.get('text') \
-                                                 for instruction in instructions if instruction.get('active')])
+        def user_prompt(self, text= None, additional_instructions="") -> str:
+            instructions = options.get("instructions", None)
+
+            if instructions:
+                additional_instructions += "In particular, follow these rules:\n\n" + instructions
             return super().user_prompt(text, additional_instructions)
             
     extractor = GeminiExtractor(api_key=gemini_api_key, prompter=CustomPrompter())

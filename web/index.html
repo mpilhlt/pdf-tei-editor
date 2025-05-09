@@ -1,85 +1,19 @@
 <!DOCTYPE html>
 <html>
-
-<head>
-  <meta charset="utf-8">
-  <title>PDF-TEI Editor</title>
-  <link rel="stylesheet" href="app.css">
-  <script src="./bootstrap.js"></script>
-</head>
-
-<body>
-
-  <!-- main layout-->
-  <div id="container">
-    <div id="document-nav">
-      <select id="select-doc"></select><br/>
-      Version: <select id="select-version"></select>
-      Diff: <select id="select-diff-version"></select>
-      Extract: 
-      <button id="btn-load-document">New</button>
-      <button id="btn-extract">Current</button>
-      <div> </div>
-      <button id="btn-validate-document" disabled>Validate</button>  
-      <button id="btn-save-document" disabled>Save</button> 
-      <button id="btn-edit-prompt" disabled>Edit prompt</button>
-      <button id="btn-cleanup" disabled>Cleanup</button>  
-      
+  <head>
+    <meta charset="utf-8">
+    <title>PDF-TEI Editor</title>
+    <link rel="stylesheet" href="app.css">
+    <script src="./bootstrap.js"></script>
+  </head>
+  <body>
+    <!-- main layout-->
+    <div id="container">
+      <div id="command-bar"></div>
+      <div id="editors">
+        <div id="pdf-viewer"></div>
+        <div id="xml-editor"></div>
+      </div>
     </div>
-    <div id="editors">
-      <div id="pdf-viewer"></div>
-      <div id="xml-editor"></div>
-    </div>
-  </div>
-
-  <!-- spinner/blocker-->
-  <custom-spinner id="spinner"></custom-spinner>
-
-  <!-- floating navigation bar -->
-  <div id="navigation">
-    <div class="doc-navigation-row">
-      <span class="navigation-text">Navigate by</span>
-      <select id="select-xpath"></select>
-      <button id="btn-edit-xpath">Custom XPath</button>
-      <button id="btn-prev-node" disabled>&lt;&lt;</button>
-      <span id="selection-index" class="navigation-text"></span>
-      <button id="btn-next-node" disabled>&gt;&gt;</button>
-    </div>
-    <div class="doc-navigation-row">
-      <span class="navigation-text">Mark node as</span>
-      <button class="btn-node-status" data-status="verified" disabled>Verified</button>
-      <button class="btn-node-status" data-status="unresolved" disabled>Unresolved</button>
-      <button class="btn-node-status" data-status="" disabled>Clear node</button>
-      <!-- button class="btn-node-status" data-status="comment" disabled>Add comment</button-->
-    </div>
-    <div class="doc-navigation-row">
-      <custom-switch id="switch-auto-search" label="Find node" label-on="On" label-off="off"></custom-switch>
-      <span id="nav-diff">
-        <button id="btn-prev-diff" disabled>Prev. Diff</button>
-        <button id="btn-next-diff" disabled>Next Diff</button>
-        <button id="btn-diff-keep-all" disabled>Keep all</button>
-        <button id="btn-diff-change-all" disabled>Change all</button>
-      </span>
-    </div>
-  </div>
-
-  <!-- User message -->
-  <dialog id="dialog-message">
-    <div class="dialog-header">Title</div>
-    <div class="dialog-content">Message</div>
-    <div class="dialog-footer">
-      <button class="dialog-close">Close</button>
-    </div>
-  </dialog>
-
-  <!-- Prompt editor -->
-   <dialog id="dlg-prompt-editor">
-    <div class="dialog-header">Edit LLM Prompt</div>
-    <div class="dialog-body">
-      <p>Below are the parts of the LLM prompt specific to the reference instruction. You can edit, add, remove, 
-        enable or disable different parts of the prompt, or change the order of the prompt fragments</p>
-      <json-list-editor id="prompt-editor"/>
-    </div>
-   </dialog>
-</body>
+  </body>
 </html>

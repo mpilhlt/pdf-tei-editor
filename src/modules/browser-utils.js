@@ -38,63 +38,6 @@ export function $$(selector) {
   return Array.from(document.querySelectorAll(selector))
 }
 
-export function addBringToForegroundListener(selectors) {
-  document.addEventListener('click', function (event) {
-    let elements = [];
-    selectors.forEach(selector => elements = elements.concat(Array.from($$(selector))));
-    let targetElement = elements.find(elem => elem.contains(event.target))
-    if (targetElement) {
-      let highestZIndex = elements.reduce((acc, elem) => {
-        let zIndex = parseInt(window.getComputedStyle(elem).zIndex);
-        return zIndex > acc ? zIndex : acc;
-      }, 0);
-      targetElement.style.zIndex = highestZIndex + 1;
-    }
-  });
-}
-
-export function makeDraggable(element) {
-  let isDragging = false;
-  let offsetX = 0;
-  let offsetY = 0;
-  const { height, width } = window.getComputedStyle(element);
-  element.style.cursor = 'grab';
-
-  element.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    const rect = element.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
-    element.style.cursor = 'grabbing'; // Change cursor while dragging
-    element.style.userSelect = 'none'; // Prevent text selection during drag
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const x = e.clientX - offsetX;
-    const y = e.clientY - offsetY;
-    element.style.left = x + 'px';
-    element.style.top = y + 'px';
-    element.style.right = (x + width) + 'px';
-    element.style.top = (y + height) + 'px';
-  });
-
-  document.addEventListener('mouseup', () => {
-    isDragging = false;
-    element.style.cursor = 'grab'; // Restore cursor after dragging
-    element.style.userSelect = 'auto'; // Restore text selection
-  });
-
-  // document.addEventListener('mouseleave', () => {
-  //   if (isDragging) {
-  //     isDragging = false;
-  //     element.style.cursor = 'grab'; // Restore cursor after dragging
-  //     element.style.userSelect = 'auto'; // Restore text selection
-  //   }
-  // });
-}
-
-
 export class CookieStorage {
   /**
    * Constructor for CookieStorage.
@@ -223,17 +166,96 @@ export class UrlHash {
   }
 }
 
-// Non-blocking alert()
-export async function showMessage(message, title = "Information") {
-  const dialog = document.getElementById('dialog-message');
-  dialog.showModal();
-  dialog.querySelector('.dialog-header').textContent = title;
-  dialog.querySelector('.dialog-content').textContent = message;
-  const closeButton = dialog.querySelector('.dialog-close');
-  await new Promise(resolve => closeButton.addEventListener("click", resolve, { once: true }))
-  dialog.close()
+/**
+ * Selects the option in the selectbox of which the value property matches the given value
+ * @param {HTMLSelectElement} selectbox The selectbox
+ * @param {string} value The value to select
+ */
+export function selectByValue(selectbox, value) {
+  const index = Array.from(selectbox.options).findIndex(o => o.value === value)
+  if (index == -1) {
+    throw new Error(`No matching option with value '${value}' in selectbox with name '${selectbox.name}'`)
+  }
+  selectbox.selectedIndex = index;
+}
+
+/**
+ * Selects the option in the selectbox of which the given data property matches the given value
+ * @param {HTMLSelectElement} selectbox The selectbox
+ * @param {string} key The key of the dataset property
+ * @param {string} value The value to select
+ */
+export function selectByData(selectbox, key, value) {
+  const index = Array.from(selectbox.options).findIndex(o => o.dataset[key] === value)
+  if (index == -1) {
+    throw new Error(`No matching option with dataset.${key} value '${value}' in selectbox with name '${selectbox.name}'`)
+  }
+  selectbox.selectedIndex = index;
+}
+
+/**
+ * Returns the first descendant having that name. Throws an error if none can be found unless you pass noError = true
+ * @param {Element} node The ancestor node
+ * @param {string} name The name to look for
+ * @param {Boolean} noError If true, return null instead of throwing an error if no ancestor with that name exists
+ * @returns {Element|null}
+ */
+export function getDescendantByName(node, name, noError) {
+  const descendant = node.querySelector(`[name="${name}]`)
+  if (!descendant) {
+    if (noError) return null
+    throw new Error(`No descendant with name "${name} exists`)
+  }
+  return descendant
+}
+
+/**
+ * Creates and returns a random id that can be used for uniquely identifying a DOM node
+ * @returns {string}
+ */
+export function createRandomId() {
+  return "id-" + Math.random()*100
+}
+
+/**
+ * Parses the HTML and attaches it to a parent node (defaults to document.body).
+ * Returns an Array of the added top-level elements
+ * @param {string} html The html that will be parsed and appended
+ * @param {Element?} parentNode The DOM parent element the parsed content will be added to. If not provided, the 
+ * content will be added to document.body 
+ * @returns {Array<Element>} 
+ */
+export function appendHtml(html, parentNode = document.body) {
+  const div = document.createElement("div")
+  const nodeArr = []
+  div.innerHTML = html.trim()
+  div.childNodes.forEach(node => {
+    parentNode.appendChild(node)
+    nodeArr.push(node)
+  })
+  return nodeArr
+}
+
+/**
+ * Return a mapping of all named descendents of the given parent element 
+ * @param {Element} parentNode The parent element
+ * @param {Array<string>?} excludedTags An array of lower cased tag names that should be excluded
+ * @returns {Object} An object mapping the value of the 'name' attributes to the corresponding elements
+ */
+export function getNameMap(parentNode, exludedTags = ['sl-icon']) {
+    const nameMap = {}
+    const nodes = Array.from(parentNode.querySelectorAll('[name]'))
+    nodes
+      .filter(node => !(exludedTags.includes(node.tagName.toLowerCase())))
+      .filter(node => Boolean(node.getAttribute('name')))
+      .forEach(node => {nameMap[node.getAttribute('name')] = node})
+    return nameMap 
 }
 
 
-
+export function escapeHtml(html) {
+  const div = document.createElement('div');
+  div.textContent = html;
+  return div.innerHTML;
+}
 

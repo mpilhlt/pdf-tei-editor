@@ -5,8 +5,17 @@ body {
 }
 
 .hidden {
-  display: none;
+  visibility: hidden;
 }
+
+.hbox-with-gap {
+  display: flex;
+  flex-direction: row;
+  margin: 0px;
+  padding: 0px;
+  gap: 10px;
+}
+
 
 #container {
   display: flex;
@@ -16,14 +25,13 @@ body {
   width: 100%;
 }
 
-#document-nav{
-  height: 30px;
-  visibility: hidden;
+#command-bar{
+  height: 50px;
   font-size: small;
-}
-
-#document-nav > button {
-  font-size: small;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;  
 }
 
 #editors {
@@ -58,88 +66,68 @@ iframe {
   height: 100%;
 }
 
-#navigation {
+/* Shoelace library */
+
+:not(:defined) {
   visibility: hidden;
-  position: absolute;
-  display: flex;
-  justify-content: space-between;
+}
+
+sl-dialog {
+  --header-spacing: var(--sl-spacing-small);
+  --body-spacing: var(--sl-spacing-small);
+  --footer-spacing: var(--sl-spacing-small);
+}
+
+.dialog-big {
+  --width: 75vw;
+}
+
+.dialog-column {
+  display: flex; 
   flex-direction: column;
   gap: 10px;
-  align-items: center;
-  width: auto;
-  height: auto;
-  padding: 20px;
-  top: 70vh;
-  left: 100px;
-  background-color: rgba(167, 158, 158, 0.8);
-  border-radius: 10px;
-  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
 }
 
-#title {
-  font-weight: bold;
-  font-size: 2vh;
-  margin: 5px;
-}
-
-#document-nav {
-  display: flex;
-  align-items: center;
+.dialog-row {
+  display: flex block; 
+  flex-direction: row;
   gap: 10px;
 }
 
-.highlight {
-  position: absolute;
-  background-color: rgba(255, 255, 0, 0.3);
-  /* Semi-transparent yellow */
-  border: 1px solid yellow;
+sl-select::part(form-control-label) {
+  font-size: smaller;
+  color: var(--sl-color-gray-500)
 }
 
-#dlg-prompt-editor {
-  height: 80vh;
+sl-select::part(display-input) {
+  caret-color: transparent !important;
+  font-size: smaller;
 }
 
-#navigation * {
-  font-size: small;
+sl-select::part(listbox) {
+  width: max-content;
 }
 
-.doc-navigation-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+sl-option::part(label), 
+sl-menu-item::part(label) {
+  font-size: smaller;
 }
 
-.doc-navigation-row > * {
-  display: inline;
+#command-bar sl-button::part(base) {
+  margin-top: 12px;
 }
 
-
-/********************************************************************************
- * Dialogs
- ********************************************************************************/
-
-/* Basic styling for the dialog */
-dialog {
-  font: 1em sans-serif;
-  border: none;
-  border-radius: 5px;
-  padding: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-  gap: 10px;
+#command-bar sl-button-group[label]:before {
+  content: attr(label);
+  position: absolute; /* Or relative, depending on your context */
+  top: -3px;
+  left: 0;
+  color: var(--sl-color-gray-500);
+  font-size: smaller; /* Optional: Adjust font size for the label */
+  white-space: nowrap; /* Prevent wrapping */
+  display: block; /*Crucial for positioning and showing the content*/
 }
 
-.dialog-header {
-  font-size: 1.2em;
-  margin-bottom: 10px;
-}
-
-.dialog-body {
-  flex: 1;
-  overflow-y: auto;
-  margin-bottom: 10px;
-}
-
-.dialog-footer {
-  margin-top: 15px;
-  text-align: right;
+sl-button-group[label] {
+  position: relative; /* To contain the absolute positioning of the :before pseudo-element */
 }

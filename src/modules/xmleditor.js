@@ -1,17 +1,23 @@
+// npm modules
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, StateEffect, Compartment } from "@codemirror/state";
-import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, getOriginalDoc, rejectChunk } from "@codemirror/merge"
+import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
+// custom modules
 import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation, updateCachedDiagnostics } from './lint.js';
 import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
 import { $$ } from './browser-utils.js';
 
-
+/**
+ * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
+ * tree in sync as far as possible, and provides linting and diffing.
+ */
 export class XMLEditor extends EventTarget {
+
   static EVENT_SELECTION_CHANGED = "selectionChanged";
   static EVENT_XML_CHANGED = "xmlChanged";
 
@@ -40,19 +46,25 @@ export class XMLEditor extends EventTarget {
   #updateMergButtonsInterval = null // interval to update the merge buttons
   /**  @type {XMLSerializer} */
   #serializer = null; // an XMLSerializer object or one with a compatible API
+  #autocompleteCompartment = null
 
   /**
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
+   * @param {Object?} tagData - Autocompletion data
    */
   constructor(editorDivId, tagData) {
     super();
+
+    this.#markAsNotReady()
+
     const editorDiv = document.getElementById(editorDivId);
     if (!editorDiv) {
       throw new Error(`Element with ID ${editorDivId} not found.`);
     }
 
     this.#mergeViewCompartment = new Compartment()
+    this.#autocompleteCompartment = new Compartment()
 
     // list of extensions to be used in the editor
     const extensions = [
@@ -63,10 +75,11 @@ export class XMLEditor extends EventTarget {
       selectionChangeListener(this.#onSelectionChange.bind(this)),
       EditorView.updateListener.of(this.#onUpdate.bind(this)),
       this.#mergeViewCompartment.of([]),
+      this.#autocompleteCompartment.of([])
     ];
 
     if (tagData) {
-      extensions.push(xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) }))
+      this.startAutocomplete(tagData);
     }
 
     this.#view = new EditorView({
@@ -92,7 +105,8 @@ export class XMLEditor extends EventTarget {
   };
 
   /**
-   * Returns the current state of the editor. If false await the promise returned from isReadyPromise()
+   * Returns the current state of the editor. If false await the promise returned from 
+   * isReadyPromise()
    * @returns {boolean} - Returns true if the editor is ready and the XML document is loaded
    */
   isReady() {
@@ -100,11 +114,20 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
-   * Returns a promise that resolves when the editor is ready and the XML document is loaded.
+   * Returns a promise that resolves when the editor is ready, the XML document is loaded and
+   * both syntax and xml trees are configured and synchronized
    * @returns {Promise} - A promise that resolves when the editor is ready and the XML document is loaded
    */
   isReadyPromise() {
     return this.#readyPromise
+  }
+
+  /**
+   * A method that returns a promise that resolves when the editor is ready
+   * @returns {Promise<void>}
+   */
+  async whenReady() {
+    return this.#isReady ? Promise.resolve() : this.#readyPromise
   }
 
   /**
@@ -115,11 +138,8 @@ export class XMLEditor extends EventTarget {
    * @throws {Error} - If there's an error loading or parsing the XML.
    */
   async loadXml(xmlPathOrString) {
-    this.#isReady = false;
-    this.#readyPromise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
-      this.#isReady = true;
-      resolve();
-    }, { once: true }))
+    // this created the isReadyPromise
+    this.#markAsNotReady()
 
     // fetch xml if path 
     const xml = await this.#fetchXml(xmlPathOrString);
@@ -130,7 +150,7 @@ export class XMLEditor extends EventTarget {
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
-    await this.#readyPromise;
+    await this.isReadyPromise();
   }
 
   /**
@@ -255,6 +275,9 @@ export class XMLEditor extends EventTarget {
     goToNextChunk(this.#view)
   }
 
+  /**
+   * Accept all remaining changes in the document
+   */
   acceptAllDiffs() {
     if (!this.isMergeViewActive()) {
       throw new Error("Not in merge view")
@@ -265,7 +288,7 @@ export class XMLEditor extends EventTarget {
     let changes = [];
     for (const chunk of chunks) {
       //const originalChunkText = originalDocument.sliceString(chunk.fromB, chunk.toB);
-      rejectChunk(this.#view, chunk.fromA )
+      rejectChunk(this.#view, chunk.fromA)
       // changes.push({
       //   from: chunk.fromA, 
       //   to: chunk.toA,
@@ -280,8 +303,27 @@ export class XMLEditor extends EventTarget {
     // this.#view.dispatch({ changes });
   }
 
+  /**
+   * Reject all open changes in the diff. Equivalent to removing the merge view.
+   */
   rejectAllDiffs() {
     this.hideMergeView()
+  }
+
+  /**
+   * Given a data object with information on the XML schema, start suggesting autocompletions
+   * @param {Object} tagData The autocompletion data - todo document format
+   */
+  startAutocomplete(tagData) {
+    const autocompleteExtension = xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) })
+    this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+  }
+
+  /**
+   * Stop suggestion autocompletions
+   */
+  stopAutocomplete() {
+    this.#autocompleteCompartment.reconfigure([])
   }
 
   /**
@@ -607,6 +649,19 @@ export class XMLEditor extends EventTarget {
   //
   // private methods which are not part of the API and hide implementation details
   // 
+
+  /**
+   * Marks the editor as not ready and reates the isReadyPromise if it does not already exist
+   * already exists 
+   */
+  #markAsNotReady() {
+    this.#isReady = false
+    this.#readyPromise = this.#readyPromise || new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      this.#isReady = true
+      this.#readyPromise = null
+      resolve();
+    }, { once: true }))
+  }
 
   /**
    * serializes the node (or the complete xmlTree if no node is given) to an XML string

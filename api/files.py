@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 import os
 from lxml import etree
 from lib.decorators import handle_api_errors
-from lib.server_utils import ApiError
+from lib.server_utils import ApiError, make_timestamp
 from pathlib import Path
 from glob import glob
 
@@ -30,6 +30,14 @@ def list():
 
     return jsonify({"files": files_data})
 
+def save_file_path(file_path):
+    # Remove any non-alphabetic leading characters for safety
+    while not file_path[0].isalpha():
+        file_path = file_path[1:]
+    if not file_path.startswith("data/"):
+        raise ApiError("Invalid file path") 
+    return file_path
+
 
 @bp.route("/save", methods=["POST"])
 @handle_api_errors
@@ -37,22 +45,30 @@ def save():
     """
     Save the given xml as a file
     """
+    
+    # parameters
     data = request.get_json()
-    xml_string = data.get("xml_string")
-    file_path = data.get("file_path")
+    xml_string: str = data.get("xml_string")
+    file_path: str = save_file_path(data.get("file_path"))
+    save_as_new_version = data.get("new_version", False)
+    
     # validate input
-    if not file_path.startswith("/data/"):
-        raise ApiError("Invalid file path")
     if not xml_string:
         raise ApiError("No XML string provided")
 
     # save the file
-    file_parts = file_path.split("/")
-    file_path = os.path.join(*file_parts[1:])  # Remove the leading slash
-    current_app.logger.info(f"Saving XML to {file_path}")
+    if save_as_new_version:
+        file_id = Path(file_path).stem
+        version = make_timestamp().replace(" ", "_").replace(":", "-")
+        file_path = os.path.join("data", "versions", version, file_id + ".xml")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        current_app.logger.info(f"Saving XML as newe version to {file_path}")
+    else: 
+        current_app.logger.info(f"Saving current XML to {file_path}")
+    
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(xml_string)
-    return jsonify({"result": "ok"})
+    return jsonify({"path": "/" + file_path})
 
 @bp.route("/delete", methods=["POST"])
 @handle_api_errors      
@@ -67,14 +83,13 @@ def delete():
     #    raise ApiError("Files should be a list")
     for file_path in files: 
         # validate input
-        if not file_path.startswith("/data/"):
-            raise ApiError("Invalid file path")
+        file_path = save_file_path(file_path)
         # delete the file 
-        file_parts = file_path.split("/")   
-        file_path = os.path.join(*file_parts[1:])
         current_app.logger.info(f"Deleting file {file_path}")
         if os.path.exists(file_path):
             os.remove(file_path)
+            if len(os.listdir(os.path.dirname(file_path))) == 0:
+                os.removedirs(os.path.dirname(file_path))
         else:
             raise ApiError(f"File {file_path} does not exist")
     return jsonify({"result": "ok"})
