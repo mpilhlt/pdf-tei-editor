@@ -18,6 +18,7 @@ import { plugin as extractionPlugin, api as extractionApi } from '../components/
 import { plugin as servicesPlugin, api as servicesApi } from '../components/services.js'
 import { plugin as floatingPanelPlugin, api as floatingPanelApi } from '../components/floating-panel.js'
 import { plugin as promptEditorPlugin, api as promptEditorApi } from '../components/prompt-editor.js'
+import { plugin as teiWizardPlugin } from '../components/tei-wizard.js'
 
 //import { plugin as dummyLoggerPlugin } from '../components/logger-dummy.js'
 
@@ -62,6 +63,9 @@ class PdfTeiEditor extends App {
        * the "name" attribute
        */
       elements: "ui.elements"
+    },
+    tei: {
+      enhancement: "tei.enhancement"
     }
   }
 
@@ -204,7 +208,7 @@ class PdfTeiEditor extends App {
     return [
       loggerPlugin, dialogPlugin, clientPlugin, pdfViewerPlugin, xmlEditorPlugin,
       commandBarPlugin, fileselectionPlugin, servicesPlugin,
-      floatingPanelPlugin, promptEditorPlugin, extractionPlugin //, dummyLoggerPlugin
+      floatingPanelPlugin, promptEditorPlugin, extractionPlugin, teiWizardPlugin //, dummyLoggerPlugin
     ]
   }
 

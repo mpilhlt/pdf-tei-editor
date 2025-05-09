@@ -62,8 +62,8 @@ const html = `
       <span name="nav-diff">
         <button name="prev-diff" disabled>Prev. Diff</button>
         <button name="next-diff" disabled>Next Diff</button>
-        <button name="diff-keep-all" disabled>Keep all</button>
-        <button name="diff-change-all" disabled>Change all</button>
+        <button name="diff-keep-all" disabled>Reject all changes</button>
+        <button name="diff-change-all" disabled>Accept all changes</button>
       </span>
     </div>
   </div>
@@ -236,7 +236,7 @@ async function install(app) {
 
   app.on("change:diffXmlPath", onAppChangeDiffXmlPath)
 
-  app.logger.info("Floating panel component installed.")
+  app.logger.info("Floating panel plugin installed.")
 }
 
 /**
@@ -279,7 +279,7 @@ function onAppChangeXpath(xpath, old) {
     return
   }
 
-  let { index,  } = parseXPath(xpath)
+  let { index, pathBeforePredicates } = parseXPath(xpath)
 
   try {
     // this sets the xpath selectbox to one of the existing values
@@ -293,7 +293,7 @@ function onAppChangeXpath(xpath, old) {
   }
 
   // update counter with index and size
-  app.xmleditor.whenReady().then(() => updateCounter(indexParent, index))
+  app.xmleditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
 }
 
 

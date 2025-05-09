@@ -87,7 +87,7 @@ async function install(app) {
   app.logger.info("Loading file metadata...")
   await reload()
 
-  app.logger.info("Fileselection component installed.")
+  app.logger.info("Fileselection plugin installed.")
 }
 
 

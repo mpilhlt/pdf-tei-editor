@@ -118,7 +118,7 @@ function install(app) {
   button.addEventListener("click", () => api.open())
   app.commandbar.getByName('extraction-group').appendChild(button)
 
-  app.logger.info("Prompt editor component installed.")
+  app.logger.info("Prompt editor plugin installed.")
 }
 
 // API

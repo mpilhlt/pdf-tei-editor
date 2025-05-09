@@ -42,7 +42,7 @@ const componentNode = document.getElementById(pluginId)
  */
 async function install(app) {
   app.registerComponent(pluginId, api, "commandbar")
-  app.logger.info("Menubar component installed")
+  app.logger.info("Menubar plugin installed")
 }
 
 /**

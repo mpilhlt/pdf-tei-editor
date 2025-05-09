@@ -44,7 +44,7 @@ async function install(app) {
       await app.services.searchNodeContentsInPdf(node)
     }
   })
-  app.logger.info("PDFViewer component installed.")
+  app.logger.info("PDFViewer plugin installed.")
   await pdfViewerComponent.isReady()
   app.logger.info("PDF Viewer ready.")
   pdfViewerComponent.show()

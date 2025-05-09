@@ -73,9 +73,9 @@ const commandBarHtml = `
       </sl-button> 
     </sl-tooltip>
 
-    <!-- enhance TEI, not implemented yet -->
+    <!-- enhance TEI -->
     <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
-      <sl-button name="postprocess" size="small" disabled>
+      <sl-button name="tei-wizard" size="small">
         <sl-icon name="magic"></sl-icon>
       </sl-button>
     </sl-tooltip> 
@@ -180,8 +180,11 @@ function install(app) {
     validateBtn.disabled = false;
   })
 
+  // wizard
+  const wizardBtn = bar.getByName('tei-wizard')
+  wizardBtn.addEventListener("click", runTeiWizard)
 
-  app.logger.info("Services component installed.")
+  app.logger.info("Services plugin installed.")
 }
 
 /**
@@ -366,6 +369,23 @@ async function searchNodeContentsInPdf(node) {
 
   // start search
   await app.pdfviewer.search(searchTerms);
+}
+
+
+/**
+ * Invokes all TEI enhancement plugin enpoints
+ */
+async function runTeiWizard() {
+  const teiDoc = app.xmleditor.getXmlTree()
+  if (!teiDoc) return
+  const invocationResult = app.plugin.invoke(app.ext.tei.enhancement, teiDoc)
+  // todo check if there are any changes
+  const enhancedTeiDoc = (await Promise.all(invocationResult))[0]
+  const xmlstring = (new XMLSerializer()).serializeToString(enhancedTeiDoc).replace(/ xmlns=".+?"/, '')
+  app.xmleditor.showMergeView(xmlstring)
+  app.floatingPanel.getByName("nav-diff")
+    .querySelectorAll("button")
+    .forEach(node => node.disabled = false)
 }
 
 // event listeners

@@ -1,6 +1,6 @@
 import { app, PdfTeiEditor } from '../app.js'
 import { NavXmlEditor, XMLEditor  } from '../modules/navigatable-xmleditor.js'
-import { xpathInfo, parseXPath } from '../modules/utils.js'
+import { xpathInfo, parseXPath, isXPathSubset } from '../modules/utils.js'
 
 // the path to the autocompletion data
 const tagDataPath = '/data/tei.json'
@@ -29,7 +29,7 @@ export default plugin
  */
 async function install(app) {
   app.registerComponent('xmleditor', xmlEditorComponent, 'xmleditor')
-  app.logger.info("XML Editor component installed.")
+  app.logger.info("XML Editor plugin installed.")
 
   // load autocomplete data
   try {
@@ -87,11 +87,16 @@ async function onSelectionChange() {
     return
   }
   // update state from the xpath of the nearest selection node
-  const cursorXpath = parseXPath(api.selectedXpath)
-  const stateXpath = parseXPath(app.xpath)
-  //console.log({cursorXpath,stateXpath})
-  //console.warn("XPath expression: ", xpath, "\nParsing result", JSON.stringify(cursorXpath))
-  if (cursorXpath.tagName === stateXpath.tagName ) {
-    app.xpath = `//tei:${finalStep}` // the xpath from the DOM does not have a prefix, todo unhardcode
+
+  const cursorXpath = api.selectedXpath
+  const cursorParts = parseXPath(cursorXpath)
+  const stateParts = parseXPath(app.xpath)
+  
+  const normativeXpath = app.floatingPanel.getByName("xpath").value
+  const index = cursorParts.index
+
+  // todo: use isXPathsubset()
+  if (index !== null & cursorParts.tagName === stateParts.tagName ) {
+    app.xpath = `${normativeXpath}[${index}]`
   }
 }

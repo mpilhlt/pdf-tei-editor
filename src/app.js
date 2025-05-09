@@ -14,15 +14,13 @@ import { PdfTeiEditor, App } from "./modules/pdf-tei-editor.js";
 let app;
 
 // instantiate and run app 
-(async () => {
-  try {
-    // store app in global variable for debugging
-    app = window.app = new PdfTeiEditor()
-    await app.start()
-  } catch (error) {
-    console.error(error)
-  }
-})()
+try {
+  // store app in global variable for debugging
+  app = window.app = new PdfTeiEditor()
+  await app.start()
+} catch (error) {
+  console.error(error)
+}
 
 export {app, PdfTeiEditor, App}
 export default app

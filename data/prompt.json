@@ -1,6 +1,6 @@
 [
     {
-        "label": "Default prompt",
+        "label": "Default instructions",
         "text": [
             "Always properly capitalize names. Do not use small or all caps even if they appear in the document. ",
             "",

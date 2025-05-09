@@ -20,6 +20,7 @@ export function escapeRegExp(string) {
 /**
  * Parses a xpath expression into components 
  *
+ * @deprecated Use `parseXPath()` instead
  * @param {string} xpath An xpath expression
  * @returns {ParsedXPathStepComponentsSimple} An object containing the parsed components of the XPath step.
  */
@@ -63,6 +64,7 @@ export function xpathInfo(xpath) {
 
 /**
  * @typedef {object} ParsedXPathStepComponents
+ * @property {string} input - The XPath as passed in, for debugging purposes only
  * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child'). Includes the trailing separator if present, or is empty for relative paths starting with nodeTest.
  * @property {string} finalStep - The complete string representation of the last step, including node test and predicates (e.g., 'elementName[1]', '@attribute', 'text()').
  * @property {string} nodeTest - The core part of the XPath step before predicates (e.g., 'elementName', 'prefix:elementName', '@attribute', 'text()', '*', '.', '..').
@@ -296,6 +298,7 @@ export function parseXPath(xpath) {
   const finalPathBeforePredicates = parentPath + nodeTestString;
 
   return {
+    input: xpath, 
     parentPath: parentPath,
     finalStep: finalStepString,
     nodeTest: nodeTestString,
@@ -305,4 +308,80 @@ export function parseXPath(xpath) {
     index: finalIndex,
     pathBeforePredicates: finalPathBeforePredicates,
   };
+}
+
+/**
+ * Checks if the set of nodes selected by xpath1 is a subset of the
+ * set of nodes selected by xpath2, within the context of a specific
+ * XML document root node.
+ *
+ * @author Gemini 2.5 Flash
+ * @param {string} xpath1 The XPath expression whose result set is checked for being a subset.
+ * @param {string} xpath2 The XPath expression whose result set is checked for being a superset.
+ * @param {Document | Element} rootNode The XML document or element node within which to evaluate the XPath expressions.
+ * @param {XPathNSResolver | null} [namespaceResolver=null] An optional function to resolve namespaces (important for XML).
+ * @returns {boolean} True if every node selected by xpath1 is also selected by xpath2, false otherwise or if evaluation fails.
+ */
+export function isXPathSubset(xpath1, xpath2, rootNode, namespaceResolver = null) {
+  if (!rootNode) {
+      console.error("XPath subset check requires a root node (Document or Element).");
+      return false;
+  }
+
+  try {
+      // Evaluate the first XPath expression (potential subset)
+      const result1 = rootNode.evaluate(
+          xpath1,
+          rootNode, // Context node
+          namespaceResolver,
+          XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, // Get nodes as a snapshot
+          null // No need to reuse a result object
+      );
+
+      // If xpath1 selects no nodes, its result set is the empty set,
+      // which is a subset of any set, so return true.
+      if (result1.snapshotLength === 0) {
+          return true;
+      }
+
+      // Evaluate the second XPath expression (potential superset)
+      const result2 = rootNode.evaluate(
+          xpath2,
+          rootNode, // Context node
+          namespaceResolver,
+          XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, // Get nodes as a snapshot
+          null // No need to reuse a result object
+      );
+
+      // If xpath1 selected nodes, but xpath2 selected no nodes,
+      // xpath1's set cannot be a subset of xpath2's empty set.
+      if (result2.snapshotLength === 0) {
+           return false;
+      }
+
+
+      // Create a Set of nodes from the second result for efficient lookup
+      const nodes2Set = new Set();
+      for (let i = 0; i < result2.snapshotLength; i++) {
+          nodes2Set.add(result2.snapshotItem(i));
+      }
+
+      // Check if every node in the first result is present in the set of the second result
+      for (let i = 0; i < result1.snapshotLength; i++) {
+          const node1 = result1.snapshotItem(i);
+          if (!nodes2Set.has(node1)) {
+              // Found a node from xpath1 that is NOT in xpath2's set
+              return false;
+          }
+      }
+
+      // If the loop completed, all nodes from xpath1 were found in xpath2's set
+      return true;
+
+  } catch (error) {
+      // Handle potential errors during XPath evaluation (e.g., invalid syntax)
+      console.error(`Error evaluating XPath expressions: ${xpath1} or ${xpath2}`, error);
+      // If evaluation fails for either, we can't determine the subset relationship
+      return false;
+  }
 }

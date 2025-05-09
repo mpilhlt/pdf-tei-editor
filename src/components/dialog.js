@@ -45,7 +45,7 @@ export default plugin
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.logger.info("Dialog component installed.")
+  app.logger.info("Dialog plugin installed.")
   app.registerComponent('dialog', api, 'dialog')
 }
 

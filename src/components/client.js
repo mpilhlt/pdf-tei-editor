@@ -46,7 +46,7 @@ export default plugin
  */
 function install(app) {
   app.registerComponent(name, api, name)
-  app.logger.info("Client component installed.")
+  app.logger.info("Client plugin installed.")
 }
 
 

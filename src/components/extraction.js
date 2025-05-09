@@ -89,7 +89,7 @@ function install(app) {
   bar.onClick('extract-new', extractFromNewPdf)
   bar.onClick('extract-current', extractFromCurrentPDF)
 
-  app.logger.info("Prompt editor component installed.")
+  app.logger.info("Extraction plugin installed.")
 }
 
 /**

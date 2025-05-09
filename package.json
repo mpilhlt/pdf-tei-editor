@@ -17,7 +17,8 @@
     "codemirror": "^6.0.1",
     "eventemitter3": "^5.0.1",
     "glob": "^11.0.1",
-    "js-plugin": "^1.1.0"
+    "js-plugin": "^1.1.0",
+    "xml-formatter": "^3.6.5"
   },
   "resolutions": {
     "@codemirror/state": "6.5.2"
