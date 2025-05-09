@@ -1,5 +1,4 @@
-<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
   <teiHeader>
     <fileDesc>
       <titleStmt>
@@ -22,7 +21,7 @@
       <publicationStmt>
         <publisher>Max Planck Institute for Legal History and Legal Theory</publisher>
         <availability>
-          <licence target="https://creativecommons.org/licenses/by/4.0/" />
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
         </availability>
         <date type="publication">2002</date>
         <idno type="DOI">10.12946/rg01/036-055</idno>
@@ -52,6 +51,9 @@
       <change when="2025-04-16" who="#cb">
         <desc>Initial extraction</desc>
       </change>
+      <change when="2025-05-09">
+        <desc>Corrections</desc>
+      </change>
     </revisionDesc>
   </teiHeader>
   <standOff>
@@ -79,7 +81,7 @@
         <monogr>
           <title level="m">Oxford English Dictionary</title>
           <imprint>
-            <date />
+            <date/>
           </imprint>
         </monogr>
       </biblStruct>
@@ -90,7 +92,7 @@
         <monogr>
           <title level="m">Grimms Wörterbuch</title>
           <imprint>
-            <date />
+            <date/>
           </imprint>
         </monogr>
       </biblStruct>
@@ -101,15 +103,15 @@
           <author>
             <persName>
               <roleName>Bischof</roleName>
-                <forename full="yes">Joseph</forename>
-                <surname>Butler</surname>
+              <forename full="yes">Joseph</forename>
+              <surname>Butler</surname>
             </persName>
           </author>
           <editor role="translator">
             <persName>
               <forename full="init" type="first">J.</forename>
-                <forename full="init" type="middle">J.</forename>
-                <surname>
+              <forename full="init" type="middle">J.</forename>
+              <surname>
             Spalding</surname>
             </persName>
           </editor>
@@ -445,7 +447,7 @@
             </persName>
           </author>
           <imprint>
-            <date />
+            <date/>
           </imprint>
         </monogr>
         <citedRange unit="section" from="prefatio" to="prefatio">Prefatio</citedRange>
@@ -478,7 +480,7 @@
           <author>
             <persName>
               <forename full="yes">Francis</forename>
-                <surname>Bacon</surname>
+              <surname>Bacon</surname>
             </persName>
           </author>
           <imprint>
@@ -487,10 +489,10 @@
         </monogr>
         <citedRange unit="section" from="I.1" to="I.1">I. 1</citedRange>
         <relatedItem type="otherEdition">
-          <ref target="#biblStruct-8b" />
+          <ref target="#biblStruct-8b"/>
         </relatedItem>
         <relatedItem type="otherEdition">
-          <ref target="#biblStruct-8c" />
+          <ref target="#biblStruct-8c"/>
         </relatedItem>
       </biblStruct>
       <biblStruct source="#bibl-8" xml:id="biblStruct-8b">
@@ -499,25 +501,25 @@
           <author>
             <persName>
               <forename full="yes">Francis</forename>
-                <surname>Bacon</surname>
+              <surname>Bacon</surname>
             </persName>
           </author>
           <editor role="translator editor">
             <persName>
               <forename full="yes">James</forename>
-                <surname>Spedding</surname>
+              <surname>Spedding</surname>
             </persName>
           </editor>
           <editor role="translator editor">
             <persName>
               <forename full="yes">Robert Leslie</forename>
-                <surname>Ellis</surname>
+              <surname>Ellis</surname>
             </persName>
           </editor>
           <editor role="translator editor">
             <persName>
               <forename full="yes">Douglas Denon</forename>
-                <surname>Heath</surname>
+              <surname>Heath</surname>
             </persName>
           </editor>
           <imprint>
@@ -555,7 +557,7 @@
           <author>
             <persName>
               <forename full="yes">Francis</forename>
-                <surname>Bacon</surname>
+              <surname>Bacon</surname>
             </persName>
           </author>
           <imprint>
@@ -622,13 +624,13 @@
           <author>
             <persName>
               <forename full="yes">Francis</forename>
-                <surname>Bacon</surname>
+              <surname>Bacon</surname>
             </persName>
           </author>
           <editor role="translator editor">
             <persName>
               <forename full="yes">Johann H.</forename>
-                <surname>Pfingsten</surname>
+              <surname>Pfingsten</surname>
             </persName>
           </editor>
           <imprint>
@@ -685,7 +687,7 @@
           <author>
             <persName>
               <forename>Arno</forename>
-            <surname>Seifert</surname>
+              <surname>Seifert</surname>
             </persName>
           </author>
           <imprint>
@@ -700,19 +702,19 @@
           <author>
             <persName>
               <forename full="yes">Gian Biagio</forename>
-                <surname>Conte</surname>
+              <surname>Conte</surname>
             </persName>
           </author>
           <editor role="translator">
             <persName>
               <forename full="yes">Glenn W.</forename>
-                <surname>Most</surname>
+              <surname>Most</surname>
             </persName>
           </editor>
           <editor role="preface">
             <persName>
               <forename full="yes">Charles</forename>
-                <surname>Segal</surname>
+              <surname>Segal</surname>
             </persName>
           </editor>
           <imprint>
@@ -780,7 +782,7 @@
           <author>
             <persName>
               <forename>Thomas</forename>
-            <surname>Hobbes</surname>
+              <surname>Hobbes</surname>
             </persName>
           </author>
           <editor>
@@ -802,13 +804,13 @@
           <author>
             <persName>
               <forename>Iring</forename>
-            <surname>Fetscher</surname>
+              <surname>Fetscher</surname>
             </persName>
           </author>
           <editor>
             <persName>
               <forename>Walter</forename>
-            <surname>Euchner</surname>
+              <surname>Euchner</surname>
             </persName>
           </editor>
           <imprint>
@@ -831,7 +833,7 @@
         <monogr>
           <title level="j">Philosophical Transactions</title>
           <imprint>
-            <date />
+            <date/>
           </imprint>
           <biblScope unit="volume" from="I" to="I">I (1665-66)</biblScope>
           <biblScope unit="page" from="46" to="52">46-52</biblScope>
@@ -851,7 +853,7 @@
         <monogr>
           <title level="j">Philosophical Transactions</title>
           <imprint>
-            <date />
+            <date/>
           </imprint>
           <biblScope unit="volume">IX-X</biblScope>
         </monogr>
@@ -881,7 +883,7 @@
         <monogr>
           <title level="m">Mémoires de l'Académie Royales des Sciences. Depuis 1666 jusqu'à 1699</title>
           <imprint>
-            <date />
+            <date/>
           </imprint>
           <biblScope unit="volume" from="3" to="4">3-4</biblScope>
         </monogr>
@@ -895,7 +897,7 @@
         <monogr>
           <title level="j">Philosophical Transactions</title>
           <imprint>
-            <date />
+            <date/>
           </imprint>
           <biblScope unit="volume" from="IX" to="X">IX-X (1674-75)</biblScope>
           <biblScope unit="page" from="41" to="47">41-47</biblScope>
@@ -910,7 +912,7 @@
         <monogr>
           <title level="m">Histoire et Mémoires de l'Académie Royale des Sciences</title>
           <imprint>
-            <date />
+            <date/>
           </imprint>
           <biblScope unit="volume" from="2" to="2">2 (1686-99)</biblScope>
         </monogr>
@@ -1015,7 +1017,7 @@
           <author>
             <persName>
               <forename>Lorraine</forename>
-            <surname>Daston</surname>
+              <surname>Daston</surname>
             </persName>
           </author>
         </analytic>
@@ -1024,13 +1026,13 @@
           <editor>
             <persName>
               <forename>Suzanne</forename>
-            <surname>Marchand</surname>
+              <surname>Marchand</surname>
             </persName>
           </editor>
           <editor>
             <persName>
               <forename>Elizabeth</forename>
-            <surname>Lunbeck</surname>
+              <surname>Lunbeck</surname>
             </persName>
           </editor>
           <imprint>
@@ -1046,7 +1048,7 @@
           <author>
             <persName>
               <forename>M.</forename>
-            <surname>Perrault</surname>
+              <surname>Perrault</surname>
             </persName>
           </author>
         </analytic>
@@ -1089,8 +1091,7 @@
         </monogr>
         <citedRange>105-111</citedRange>
       </biblStruct>
-      <biblStruct source="fn31" status="unresolved">
-        <!--How
+      <biblStruct source="fn31" status="unresolved"><!--How
         should "i.e. Henry Oldenburg" be encoded?-->
         <analytic>
           <title level="a">Réponse de Mr. Hook aux considérations de Mr. Auzout, contenuë dans une
@@ -1100,7 +1101,7 @@
         <monogr>
           <title level="m">Mémoires de l'Académie Royale des Sciences Depuis 1666 jusqu'à 1699</title>
           <imprint>
-            <date />
+            <date/>
           </imprint>
           <biblScope unit="volume" from="7" to="7">7</biblScope>
           <biblScope unit="page" from="77" to="84">77-84</biblScope>
@@ -1176,8 +1177,7 @@
         </monogr>
         <citedRange>692-698, 703</citedRange>
       </biblStruct>
-      <biblStruct source="fn35" status="unresolved">
-        <!--shoud
+      <biblStruct source="fn35" status="unresolved"><!--shoud
         this be extracted? <monogr> data taken from fn 5 -->
         <monogr>
           <title level="m">Leviathan and the Air-Pump: Hobbes, Boyle and the Experimental Life</title>
@@ -1206,7 +1206,7 @@
           <author>
             <persName>
               <forename>Lorraine</forename>
-            <surname>Daston</surname>
+              <surname>Daston</surname>
             </persName>
           </author>
         </analytic>
@@ -1215,7 +1215,7 @@
           <editor>
             <persName>
               <forename>Allan</forename>
-            <surname>Megill</surname>
+              <surname>Megill</surname>
             </persName>
           </editor>
           <imprint>
@@ -1231,7 +1231,7 @@
           <author>
             <persName>
               <forename>S. F. C.</forename>
-            <surname>Milsom</surname>
+              <surname>Milsom</surname>
             </persName>
           </author>
         </analytic>
@@ -1251,7 +1251,7 @@
           <author>
             <persName>
               <forename>A.</forename>
-            <surname>Giuliani</surname>
+              <surname>Giuliani</surname>
             </persName>
           </author>
         </analytic>
@@ -1270,7 +1270,7 @@
           <author>
             <persName>
               <forename>William</forename>
-            <surname>Holdsworth</surname>
+              <surname>Holdsworth</surname>
             </persName>
           </author>
           <imprint>
@@ -1367,7 +1367,7 @@
           <author>
             <persName>
               <forename>E.</forename>
-            <surname>Littré</surname>
+              <surname>Littré</surname>
             </persName>
           </author>
         </analytic>
@@ -1376,7 +1376,7 @@
           <editor>
             <persName>
               <forename>E.</forename>
-            <surname>Littré</surname>
+              <surname>Littré</surname>
             </persName>
           </editor>
           <imprint>
@@ -1393,7 +1393,7 @@
           <author>
             <persName>
               <forename>Jürgen von</forename>
-            <surname>Stackelberg</surname>
+              <surname>Stackelberg</surname>
             </persName>
           </author>
         </analytic>
@@ -1403,7 +1403,7 @@
           <editor>
             <persName>
               <forename>Gerhard</forename>
-            <surname>Neumann</surname>
+              <surname>Neumann</surname>
             </persName>
           </editor>
           <imprint>
@@ -1419,7 +1419,7 @@
           <author>
             <persName>
               <forename>Linda</forename>
-            <surname>Bisello</surname>
+              <surname>Bisello</surname>
             </persName>
           </author>
           <imprint>
@@ -1435,7 +1435,7 @@
           <author>
             <persName>
               <forename>Claudie</forename>
-            <surname>Balavoine</surname>
+              <surname>Balavoine</surname>
             </persName>
           </author>
         </analytic>
@@ -1444,7 +1444,7 @@
           <editor>
             <persName>
               <forename>Jean</forename>
-            <surname>Lafond</surname>
+              <surname>Lafond</surname>
             </persName>
           </editor>
           <imprint>
@@ -1537,7 +1537,7 @@
           <author>
             <persName>
               <forename>Michael</forename>
-            <surname>Stolleis</surname>
+              <surname>Stolleis</surname>
             </persName>
           </author>
         </analytic>
@@ -1571,7 +1571,7 @@
           <author>
             <persName>
               <forename>Lemon L.</forename>
-            <surname>Uhl</surname>
+              <surname>Uhl</surname>
             </persName>
           </author>
           <imprint>
@@ -1586,7 +1586,7 @@
           <author>
             <persName>
               <forename>Michael</forename>
-            <surname>Fried</surname>
+              <surname>Fried</surname>
             </persName>
           </author>
           <imprint>
@@ -1601,7 +1601,7 @@
           <author>
             <persName>
               <forename>Jonathan</forename>
-            <surname>Crary</surname>
+              <surname>Crary</surname>
             </persName>
           </author>
           <imprint>
@@ -1616,7 +1616,7 @@
           <author>
             <persName>
               <forename>Roger</forename>
-            <surname>Chartier</surname>
+              <surname>Chartier</surname>
             </persName>
           </author>
         </analytic>
@@ -1635,7 +1635,7 @@
           <author>
             <persName>
               <forename>Adela</forename>
-            <surname>Pinch</surname>
+              <surname>Pinch</surname>
             </persName>
           </author>
           <imprint>
@@ -1645,27 +1645,26 @@
         </monogr>
         <citedRange>152-163</citedRange>
       </biblStruct>
-      <biblStruct source="fn57" status="unresolved">
-        <!-- Serie annotieren? -->
+      <biblStruct source="fn57" status="unresolved"><!-- Serie annotieren? -->
         <monogr>
           <title level="m">Aufmerksamkeit</title>
           <title level="s">Liechtensteiner Exkurse</title>
           <editor>
             <persName>
               <forename>Norbert</forename>
-            <surname>Haas</surname>
+              <surname>Haas</surname>
             </persName>
           </editor>
           <editor>
             <persName>
               <forename>Rainer</forename>
-            <surname>Nägele</surname>
+              <surname>Nägele</surname>
             </persName>
           </editor>
           <editor>
             <persName>
               <forename>Hans-Jörg</forename>
-            <surname>Rheinberger</surname>
+              <surname>Rheinberger</surname>
             </persName>
           </editor>
           <imprint>
@@ -1682,13 +1681,13 @@
           <editor>
             <persName>
               <forename>Aleida</forename>
-            <surname>Assmann</surname>
+              <surname>Assmann</surname>
             </persName>
           </editor>
           <editor>
             <persName>
               <forename>Jan</forename>
-            <surname>Assmann</surname>
+              <surname>Assmann</surname>
             </persName>
           </editor>
           <imprint>
