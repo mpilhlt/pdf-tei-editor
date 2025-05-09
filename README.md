@@ -2,6 +2,9 @@
 
 A viewer/editor web app to compare the PDF source and TEI extraction/annotation results
 
+![grafik](https://github.com/user-attachments/assets/864185f5-864a-439f-806c-537267470c46)
+
+
 ## Installation
 
 Install uv and nodejs/npm
