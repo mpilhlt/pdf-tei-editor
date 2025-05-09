@@ -1,6 +1,6 @@
 import { app, PdfTeiEditor } from '../app.js'
 import { NavXmlEditor, XMLEditor  } from '../modules/navigatable-xmleditor.js'
-import { xpathInfo } from '../modules/utils.js'
+import { xpathInfo, parseXPath } from '../modules/utils.js'
 
 // the path to the autocompletion data
 const tagDataPath = '/data/tei.json'
@@ -64,12 +64,12 @@ function onXpathChange(xpath, old) {
   if (!xpath) {
     return
   }
-  const { index, beforeIndex } = xpathInfo(xpath)
+  const { index, indexParent } = xpathInfo(xpath)
   // select the first node
   try {
     const size = xmlEditorComponent.countDomNodesByXpath(xpath)
     if (size > 0 && (index !== api.currentIndex)) {
-      api.parentPath = beforeIndex
+      api.parentPath = indexParent
       api.selectByIndex(index || 1)
     }
   } catch (e) {
@@ -81,13 +81,17 @@ function onXpathChange(xpath, old) {
  * Called when the selection in the editor changes to update the cursor xpath
  */
 async function onSelectionChange() {
-  const xpath = api.selectedXpath
-  if (!xpath)  {
+  if (!api.selectedXpath)  {
     // this usually means that the editor is not ready yet
     //console.warn("Could not determine xpath of last selected node")
     return
   }
   // update state from the xpath of the nearest selection node
-  const { basename } = xpathInfo(xpath)
-  app.xpath = `//tei:${basename}` // the xpath from the DOM does not have a prefix, todo unhardcode
+  const cursorXpath = parseXPath(api.selectedXpath)
+  const stateXpath = parseXPath(app.xpath)
+  //console.log({cursorXpath,stateXpath})
+  //console.warn("XPath expression: ", xpath, "\nParsing result", JSON.stringify(cursorXpath))
+  if (cursorXpath.tagName === stateXpath.tagName ) {
+    app.xpath = `//tei:${finalStep}` // the xpath from the DOM does not have a prefix, todo unhardcode
+  }
 }

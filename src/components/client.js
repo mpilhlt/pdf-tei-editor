@@ -23,7 +23,9 @@ const api = {
   loadInstructions,
   saveInstructions,
   deleteFiles,
-  uploadFile
+  uploadFile,
+  getConfigValue,
+  setConfigValue
 }
 
 
@@ -123,7 +125,7 @@ async function validateXml(xmlString) {
  * @returns {Promise<Object>}
  */
 async function saveXml(xmlString, filePath, saveAsNewVersion) {
-  return callApi('/files/save', 'POST', 
+  return callApi('/files/save', 'POST',
     { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
 }
 
@@ -134,9 +136,8 @@ async function saveXml(xmlString, filePath, saveAsNewVersion) {
  * @returns {Promise<Object>}
  */
 async function extractReferences(filename, options) {
-  return callApi('/extract', 'POST', { pdf: filename, ...options});
+  return callApi('/extract', 'POST', { pdf: filename, ...options });
 }
-
 
 /**
  * Returns the current prompt extraction instruction data
@@ -149,7 +150,7 @@ async function loadInstructions() {
 /**
  * Returns the current prompt extraction instruction data
  * @param {Array<Object>} instructions An array of {active,label,text} objects
- * @returns {Promise<Object>}
+ * @returns {Promise<Object>} The result object
  */
 async function saveInstructions(instructions) {
   if (!Array.isArray(instructions)) {
@@ -162,7 +163,7 @@ async function saveInstructions(instructions) {
 
 /**
  * Deletes all extraction document versions with the given timestamps 
- * @returns {Promise<void>}
+ * @returns {Promise<Object>} The result object
  */
 async function deleteFiles(filePaths) {
   if (!Array.isArray(filePaths)) {
@@ -170,6 +171,38 @@ async function deleteFiles(filePaths) {
   }
   return callApi('/files/delete', 'POST', filePaths);
 }
+
+
+/**
+ * Retrieves a configuration value from the server
+ */
+async function getConfigValue(key) {
+  if (typeof key !== "string" || key.length === 0) {
+    throw new Error("Key must be a non-empty string");
+  }
+  const path = `/config/get/${encodeURIComponent(key)}`;
+  const value = await callApi(path, 'GET');
+  return value;
+}
+
+/**
+ * Sets a configuration value on the server.
+ */
+async function setConfigValue(key, value) {
+  if (typeof key !== "string" || key.length === 0) {
+    throw new Error("Key must be a non-empty string");
+  }
+
+  const data = {
+    key: key,
+    value: value,
+  };
+
+  // The server is expected to return { result: "OK" } on success
+  const response = await callApi('/config/set', 'POST', data);
+  return response;
+}
+
 
 /**
  * Uploads a file selected by the user to a specified URL using `fetch()`.

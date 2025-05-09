@@ -3,9 +3,25 @@ export function escapeRegExp(string) {
 }
 
 /**
- * Returns information on the given xpath
+ * @typedef {object} ParsedXPathStepComponentsSimple
+ * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child').
+ * @property {string} finalStep - The core name part of the XPath step (e.g., 'elementName', 'prefix:elementName', 
+ *    '@attribute', 'text()', '*').
+ * @property {string} prefix - The namespace prefix associated with the 'finalStep' or the node test, 
+ *    if present (e.g., 'prefix' from 'prefix:elementName').
+ * @property {string} tagName - The local name part of the node test (e.g., 'elementName' from 'prefix:elementName', or 
+ *    'attribute' from '@attribute'). Note: May be empty for node tests that don't have a name like `text()`.
+ * @property {string} positionalPredicate - The final positional predicate
+ * @property {number} index - The primary numerical index extracted from a positional predicate like `[1]` or 
+ *    `[position()=n]`. Defaults to null if no explicit index predicate is found for the node type where position matters.
+ * @property {string} indexParent - The xpath leading up to, but not including any existing positional predicate
+ */
+
+/**
+ * Parses a xpath expression into components 
+ *
  * @param {string} xpath An xpath expression
- * @returns {Object}
+ * @returns {ParsedXPathStepComponentsSimple} An object containing the parsed components of the XPath step.
  */
 export function xpathInfo(xpath) {
   if (!xpath) {
@@ -13,34 +29,280 @@ export function xpathInfo(xpath) {
   }
 
   // the last segment of the xpath, with final selector
-  const basename = xpath.split("/").pop() 
+  const finalStep = xpath.split("/").pop()
 
   // everything before the final tag name (or empty string)
-  const parentPath = xpath.slice(0, xpath.length - basename.length)  
+  const parentPath = xpath.slice(0, xpath.length - finalStep.length)
 
-  // match the basename
+  // match the finalStep
   const xpathRegex = /^(?:(\w+):)?(\w+)(.*)?$/;
-  const match = basename.match(xpathRegex);
-  
+  const match = finalStep.match(xpathRegex);
+
   if (!match) {
     throw new TypeError(`Cannot parse xpath: ${xpath}`)
   }
 
   // namespace prefix (e.g., "tei") or empty string
-  const prefix = match[1] || "" 
-  
+  const prefix = match[1] || ""
+
   // tag name (e.g., "biblStruct")
-  const tagName = match[2]  
+  const tagName = match[2]
 
   // the final child/attribute selector (e.g., "[1]", "[@status='verified']") or empty string
-  const finalSelector = match[3] || "" 
+  const positionalPredicate = match[3] || ""
 
   // final index
   const m = xpath.match(/(.+?)\[(\d+)\]$/)
-  const index = (m && !isNaN(parseInt(m[2]))) ? parseInt(m[2]) : null 
-  
-  // xpath without index
-  const beforeIndex = index ? xpath.slice(0, -finalSelector.length) : xpath
+  const index = (m && !isNaN(parseInt(m[2]))) ? parseInt(m[2]) : null
 
-  return { parentPath, basename, prefix, tagName, finalSelector, index, beforeIndex };
+  // xpath without index
+  const indexParent = index ? xpath.slice(0, -positionalPredicate.length) : xpath
+
+  return { parentPath, finalStep, prefix, tagName, positionalPredicate, index, indexParent };
+}
+
+/**
+ * @typedef {object} ParsedXPathStepComponents
+ * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child'). Includes the trailing separator if present, or is empty for relative paths starting with nodeTest.
+ * @property {string} finalStep - The complete string representation of the last step, including node test and predicates (e.g., 'elementName[1]', '@attribute', 'text()').
+ * @property {string} nodeTest - The core part of the XPath step before predicates (e.g., 'elementName', 'prefix:elementName', '@attribute', 'text()', '*', '.', '..').
+ * @property {string} prefix - The namespace prefix associated with the node test, if present (e.g., 'prefix' from 'prefix:elementName'). Empty string if none.
+ * @property {string} tagName - The local name part of the node test (e.g., 'elementName' from 'prefix:elementName', 'attribute' from '@attribute'). For functions like text(), this will be the function name ('text()'). For wildcards, '*'. For self/parent, '.' or '..'. Empty string if the node test structure doesn't have a name part.
+ * @property {string} predicates - The full string containing all predicates associated with the last step (e.g., '[1][@id="xyz"]'). Empty string if none.
+ * @property {number | null} index - The primary numerical index extracted from the *first* positional predicate like `[1]` or `[position()=n]` found in the predicates. Defaults to null if no such predicate is found or can't be parsed.
+ * @property {string} pathBeforePredicates - The xpath leading up to, but not including any predicates for this step (i.e., parentPath + nodeTest).
+ */
+
+/**
+ * Parses an XPath expression focusing on the last step.
+ * Identifies the parent path, the full string representation of the last step,
+ * separates the node test from predicates, identifies node test components
+ * (prefix, local name/wildcard/function/special name), and extracts
+ * the index from the first simple positional predicate if present.
+ *
+ * @param {string} xpath An XPath expression (e.g., '/html/body/div[1]/span[@class="text"][position()=2]/text()')
+ * @returns {ParsedXPathStepComponents} An object containing the parsed components of the XPath step.
+ * @throws {Error} If the xpath is empty, ends in a separator, or cannot be parsed due to syntax errors (mismatched brackets, invalid node test).
+ */
+export function parseXPath(xpath) {
+  if (!xpath) {
+    throw new Error("No xpath given");
+  }
+
+  // --- Step 1: Find the split point for the last step ---
+  // Iterate backwards to find the last '/' or '//' that is outside quotes and brackets.
+  // This correctly identifies the full final step string including all its predicates.
+  let lastStepStartIndex = 0; // Assume relative path by default
+  let bracketDepth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let i = xpath.length - 1; i >= 0; i--) {
+    const char = xpath[i];
+
+    // Check for quotes first
+    if (char === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue; // Move to the next character
+    } else if (char === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue; // Move to the next character
+    }
+
+    // If not inside quotes, check for brackets and separators
+    if (!inSingleQuote && !inDoubleQuote) {
+      if (char === ']') {
+        bracketDepth++;
+      } else if (char === '[') {
+        bracketDepth--;
+        if (bracketDepth < 0) {
+           throw new Error(`Cannot parse xpath: Mismatched '[' detected near index ${i} in "${xpath}"`);
+        }
+      } else if (bracketDepth === 0) {
+        // Found a character outside quotes and depth-0 brackets
+        if (char === '/') {
+           // Found a separator
+           if (i > 0 && xpath[i-1] === '/') {
+               lastStepStartIndex = i - 1; // Start of //
+           } else {
+               lastStepStartIndex = i;     // Start of /
+           }
+           break; // Found the last separator, we can stop
+        }
+      }
+    }
+  }
+
+  // If bracketDepth is not zero at the end, quotes/brackets are mismatched.
+  if (bracketDepth !== 0) {
+       throw new Error(`Cannot parse xpath: Mismatched brackets detected in "${xpath}"`);
+  }
+
+  // --- Step 1.5: Determine parentPath and finalStepString based on the split point ---
+  let finalStepString;
+  let parentPath;
+  let separatorLength = 0; // Length of the separator found (1 for '/', 2 for '//')
+
+  // If lastStepStartIndex is > 0, the loop found the start of the separator ('/' or '//')
+  if (lastStepStartIndex > 0) {
+      // Determine if it was '/' or '//'
+      if (xpath[lastStepStartIndex] === '/') { // It must be a '/'
+           if (lastStepStartIndex > 0 && xpath[lastStepStartIndex - 1] === '/') {
+               separatorLength = 2; // Was '//', lastStepStartIndex was set to i-1
+           } else {
+               separatorLength = 1; // Was '/', lastStepStartIndex was set to i
+           }
+      } else {
+          // Should not happen based on loop logic finding '/' at depth 0
+          throw new Error(`Internal parsing error: Separator character expected at index ${lastStepStartIndex} in "${xpath}"`);
+      }
+       parentPath = xpath.substring(0, lastStepStartIndex + separatorLength);
+       finalStepString = xpath.substring(lastStepStartIndex + separatorLength);
+
+  } else if (xpath.startsWith('/') || xpath.startsWith('//')) {
+      // No separator found by the loop > index 0, but xpath starts with '/' or '//'.
+      // This means the whole path is the last step, but it's absolute or descendant.
+      // The separator is at the beginning.
+      if (xpath.startsWith('//')) {
+          separatorLength = 2;
+      } else { // Starts with single /
+          separatorLength = 1;
+      }
+       // parentPath includes the leading separator(s)
+       parentPath = xpath.substring(0, separatorLength);
+       // finalStepString is everything after the leading separator(s)
+       finalStepString = xpath.substring(separatorLength);
+
+  } else {
+      // No separator found > index 0, and doesn't start with / or //.
+      // It's a relative path step (e.g., "div", "@id", "../foo").
+      parentPath = "";
+      finalStepString = xpath;
+  }
+
+
+  // Handle the edge case where finalStepString is empty, which is not a valid step itself.
+  if (!finalStepString) {
+       // This happens for paths like '/', '/a/b/', '/a/b//'
+       throw new Error(`Cannot parse xpath: "${xpath}" results in an empty final step.`);
+  }
+
+
+  // --- Step 2: Split finalStepString into node test and predicates ---
+  // Find the index of the *first* '[' that is not inside quotes or brackets *within* finalStepString.
+  let predicatesStartIndex = finalStepString.length; // Assume no predicates initially
+  bracketDepth = 0; // Reset for scanning finalStepString
+  inSingleQuote = false; // Reset
+  inDoubleQuote = false; // Reset
+
+  for (let i = 0; i < finalStepString.length; i++) {
+      const char = finalStepString[i];
+
+      // Check for quotes
+      if (char === "'" && !inDoubleQuote) {
+          inSingleQuote = !inSingleQuote;
+          continue;
+      } else if (char === '"' && !inSingleQuote) {
+          inDoubleQuote = !inDoubleQuote;
+          continue;
+      }
+
+      // If not inside quotes, check for brackets
+      if (!inSingleQuote && !inDoubleQuote) {
+          if (char === '[') {
+              if (bracketDepth === 0) {
+                  // Found the first top-level predicate start
+                  predicatesStartIndex = i;
+                  break; // Stop scanning, found the split point
+              }
+              bracketDepth++;
+          } else if (char === ']') {
+               bracketDepth--;
+               // Basic check, more rigorous validation of predicate syntax isn't the goal here.
+               if (bracketDepth < 0) {
+                    throw new Error(`Cannot parse xpath: Mismatched ']' detected in predicates "${finalStepString.substring(predicatesStartIndex)}" from "${xpath}"`);
+               }
+          }
+      }
+  }
+
+   // Check for mismatched brackets within the predicates part (only if predicates exist)
+   if (predicatesStartIndex < finalStepString.length && bracketDepth !== 0) {
+        throw new Error(`Cannot parse xpath: Unbalanced brackets detected in predicates "${finalStepString.substring(predicatesStartIndex)}" from "${xpath}"`);
+   }
+
+
+  const nodeTestString = finalStepString.substring(0, predicatesStartIndex);
+  const predicates = finalStepString.substring(predicatesStartIndex);
+
+  // --- Step 3: Parse nodeTestString ---
+  // Regex specifically for the node test part (no predicates).
+  // Catches: @?, prefix:?, name, *, text(), node(), comment(), processing-instruction(), ., ..
+  // Group indices (mapping to nodeTestMatch array indices):
+  // [0]: Full match (same as nodeTestString)
+  // [1]: (@?)                                        --> nodeTestMatch[1] (isAttribute)
+  // [2]: ([a-zA-Z0-9-_.:*]+)                         --> nodeTestMatch[2] (prefix)
+  // [3]: ([a-zA-Z0-9-_.:*]+|\*)                      --> nodeTestMatch[3] (name/wildcard)
+  // [4]: (text\(\)|comment\(\)|processing-instruction\(\)|node\(\)) --> nodeTestMatch[4] (function name)
+  // [5]: (\.|\.\.)                                    --> nodeTestMatch[5] (. or ..)
+  const nodeTestRegex = /^(?:(@?)(?:(?:([a-zA-Z0-9-_.:*]+):)?([a-zA-Z0-9-_.:*]+|\*))|(text\(\)|comment\(\)|processing-instruction\(\)|node\(\))|(\.|\.\.))$/;
+  const nodeTestMatch = nodeTestString.match(nodeTestRegex);
+
+  if (!nodeTestMatch) {
+       // This means the nodeTestString part (e.g., "biblStruct" or "@id" or "text()")
+       // did not match any known node test pattern. This indicates a syntax error
+       // in the node test part itself.
+       throw new TypeError(`Cannot parse node test "${nodeTestString}" from XPath "${xpath}". Node test did not match expected pattern.`);
+  }
+
+  // Correctly assign variables based on the regex groups
+  // Use default values for safety if a group is unexpectedly missing
+  const matchedPrefix = nodeTestMatch[2] || '';   // Group 2: Optional prefix (if element/attribute)
+  const matchedName = nodeTestMatch[3]; // Group 3: Local name / wildcard (if element/attribute)
+  const matchedFunctionName = nodeTestMatch[4];   // Group 4: Function name (if node type function)
+  const matchedSpecialStep = nodeTestMatch[5];    // Group 5: '.' or '..'
+
+
+  // Determine the 'tagName' property value based on which part matched
+  let finalTagName = ''; // Initialise as empty string as requested
+  if (matchedSpecialStep) {
+      finalTagName = matchedSpecialStep; // Assigns '.', '..'
+  } else if (matchedFunctionName) {
+      finalTagName = matchedFunctionName; // Assigns 'text()', 'node()', etc.
+  } else if (matchedName !== undefined) {
+       finalTagName = matchedName; // Assigns 'elementName', 'attributeName', '*'
+  }
+  // If none matched (shouldn't happen for valid nodeTestString), finalTagName remains ''.
+
+
+  // --- Step 4: Extract index from predicates string ---
+  // Look for the *first* occurrence of [number] or [position()=number]
+  // within the 'predicates' string.
+  const indexRegex = /\[\s*(?:(\d+)|position\(\)\s*=\s*(\d+))\s*\]/;
+  const indexMatch = predicates.match(indexRegex);
+
+  let finalIndex = null; // Use a different variable name for the final property value
+  if (indexMatch) {
+      // indexMatch[1] is the number from [number]
+      // indexMatch[2] is the number from [position()=number]
+      const indexStr = indexMatch[1] || indexMatch[2];
+      const parsedIndex = parseInt(indexStr, 10);
+      if (!isNaN(parsedIndex)) {
+          finalIndex = parsedIndex;
+      }
+  }
+
+  // --- Step 5: Calculate pathBeforePredicates ---
+  const finalPathBeforePredicates = parentPath + nodeTestString;
+
+  return {
+    parentPath: parentPath,
+    finalStep: finalStepString,
+    nodeTest: nodeTestString,
+    prefix: matchedPrefix,
+    tagName: finalTagName,
+    predicates: predicates,
+    index: finalIndex,
+    pathBeforePredicates: finalPathBeforePredicates,
+  };
 }

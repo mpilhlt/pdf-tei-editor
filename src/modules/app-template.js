@@ -161,7 +161,7 @@ export class App {
           if (this.#state[name] === value) {
             return;
           }
-          this.#debug(`Setting ${name} to ${JSON.stringify(value)}`)
+          this.#debug(`Setting "${name}" to ${JSON.stringify(value)} (was ${JSON.stringify(this.#state[name])})`)
           // If a URL hash parameter has been registered, update the URL hash
           if (urlHashParam) {
             const url = new URL(window.location.href);
@@ -265,9 +265,8 @@ export class App {
    * @param {*} msg The debug message
    */
   #debug(msg) {
-    const hasDebugMethod = 'logger' in this.#components && typeof this.logger.debug === "function" 
-    if (hasDebugMethod) {
-      this.logger.debug(msg, 1)
+    if (typeof this.logger?.debug === "function" ) {
+      this.logger.debug(msg)
     }
   }
 }

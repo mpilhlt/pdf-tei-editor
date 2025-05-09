@@ -1,6 +1,7 @@
 import { app, PdfTeiEditor } from '../app.js'
 import { selectByValue, $$ } from '../modules/browser-utils.js'
-import { xpathInfo } from '../modules/utils.js'
+import { xpathInfo, parseXPath } from '../modules/utils.js'
+
 import '../modules/switch.js'
 
 // name of the component
@@ -164,7 +165,7 @@ const xpathSelectbox = api.getByName("xpath")
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
-function install(app) {
+async function install(app) {
   app.registerComponent(componentId, api, "floatingPanel")
 
   // populate the xpath selectbox
@@ -173,9 +174,10 @@ function install(app) {
   xpathSelectbox.innerHTML = '';
 
   // Populate select box with options
-  getSelectboxData().forEach(item => {
+  const selectBoxData = await app.client.getConfigValue("navigation.xpath.list")
+  selectBoxData.forEach(item => {
     const option = document.createElement('option');
-    option.value = item.xpath || ''
+    option.value = item.value || ''
     option.text = item.label
     option.disabled = item.xpath === null
     xpathSelectbox.appendChild(option);
@@ -257,35 +259,6 @@ function updateCounter(xpath, index) {
 }
 
 
-/**
- * Populates the selectbox for the xpath expressions that  control the navigation within the xml document
- */
-function getSelectboxData() {
-  return [
-    {
-      "xpath": "//tei:biblStruct",
-      "label": "<biblStruct>"
-    },
-    {
-      "xpath": "//tei:biblStruct[@status='verified']",
-      "label": "Verified <biblStruct>"
-    },
-    {
-      "xpath": "//tei:biblStruct[not(@status='verified')]",
-      "label": "Unverified <biblStruct>"
-    },
-    {
-      "xpath": "//tei:biblStruct[@status='unresolved']",
-      "label": "Unresolved <biblStruct>"
-    },
-    {
-      "xpath": null,
-      "label": "Custom XPath"
-    }
-  ];
-}
-
-
 
 //
 // Event handlers
@@ -306,11 +279,11 @@ function onAppChangeXpath(xpath, old) {
     return
   }
 
-  let { index, beforeIndex } = xpathInfo(xpath)
+  let { index,  } = parseXPath(xpath)
 
   try {
     // this sets the xpath selectbox to one of the existing values
-    selectByValue(xpathSelectbox, beforeIndex)
+    selectByValue(xpathSelectbox, indexParent)
   } catch (error) {
     // the value does not exist, save it to the last option
     let lastIdx = xpathSelectbox.length - 1
@@ -320,7 +293,7 @@ function onAppChangeXpath(xpath, old) {
   }
 
   // update counter with index and size
-  app.xmleditor.whenReady().then(() => updateCounter(beforeIndex, index))
+  app.xmleditor.whenReady().then(() => updateCounter(indexParent, index))
 }
 
 

@@ -36,6 +36,7 @@ const buttonsHtml = `
 const dialogHtml = `
 <sl-dialog label="Extract references">
   <div class="dialog-column">
+    <sl-select name="ModelIndex" label="Model" size="small" help-text="Choose the model configuration used for the extraction"></sl-select>
     <sl-select name="instructionIndex" label="Instructions" size="small" help-text="Choose the instruction set that is added to the prompt"></sl-select>  
     <sl-input name="doi" label="DOI" size="small" help-text="Please enter the DOI of the document to add document metadata"></input>   
   </div>
