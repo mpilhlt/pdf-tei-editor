@@ -8,11 +8,17 @@ import SlTooltip from '@shoelace-style/shoelace/dist/components/tooltip/tooltip.
 import SlMenu from '@shoelace-style/shoelace/dist/components/menu/menu.js'
 import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
 
-import { app, PdfTeiEditor } from '../app.js'
+import ui from '../ui.js'
+import { invoke, endpoints } from '../app.js'
 import { getNameMap, UrlHash } from '../modules/browser-utils.js'
 import { validationEvents } from '../modules/lint.js' // Todo remove this dependency, use events instead
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
+import { api as clientApi } from '../plugins/client.js'
+import { api as logger } from './logger.js'
+import { api as dialog } from './dialog.js'
+import { api as fileselection} from './file-selection.js'
+import { api as xmleditor } from './xmleditor.js'
 
 // name of the component
 const name = "services"
@@ -20,24 +26,24 @@ const name = "services"
 const commandBarHtml = `
 <span class="hbox-with-gap">
   <!-- Document button group -->
-  <sl-button-group label="Document" name="document-group">
+  <sl-button-group label="Document" name="documentActions">
     <!-- save -->
     <sl-tooltip content="Save document content to server">
-      <sl-button name="save-xml" size="small" disabled>
+      <sl-button name="saveXml" size="small" disabled>
         <sl-icon name="save"></sl-icon>
       </sl-button>
     </sl-tooltip>
 
     <!-- duplicate -->
     <sl-tooltip content="Duplicate current document to make changes">
-      <sl-button name="duplicate-xml" size="small" disabled>
+      <sl-button name="duplicateXml" size="small" disabled>
         <sl-icon name="copy"></sl-icon>
       </sl-button>
     </sl-tooltip>  
     
     <!-- upload, not implemented yet -->
     <sl-tooltip content="Upload document">
-      <sl-button name="download" size="small" disabled>
+      <sl-button name="upload" size="small" disabled>
         <sl-icon name="cloud-upload"></sl-icon>
       </sl-button>
     </sl-tooltip>    
@@ -45,7 +51,7 @@ const commandBarHtml = `
     <!-- download, not implemented yet -->
     <sl-tooltip content="Download XML document">
       <sl-button name="download" size="small" disabled>
-        <sl-icon name="cloud-download"></sl-icon>
+        <sl-icon name="cloudDownload"></sl-icon>
       </sl-button>
     </sl-tooltip>   
 
@@ -56,15 +62,15 @@ const commandBarHtml = `
           <sl-icon name="trash3"></sl-icon>
         </sl-button>
         <sl-menu>
-          <sl-menu-item name="delete-current">Delete current version</sl-menu-item>
-          <sl-menu-item name="delete-all">Delete all versions</sl-menu-item>
+          <sl-menu-item name="deleteCurrent">Delete current version</sl-menu-item>
+          <sl-menu-item name="deleteAll">Delete all versions</sl-menu-item>
         </sl-menu>
       </sl-dropdown>
     </sl-button-group>
   </sl-button-group>
 
   <!-- TEI -->
-  <sl-button-group label="TEI" name="document-group">
+  <sl-button-group label="TEI" name="teiActions">
 
     <!-- validate -->
     <sl-tooltip content="Validate the document">
@@ -75,7 +81,7 @@ const commandBarHtml = `
 
     <!-- enhance TEI -->
     <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
-      <sl-button name="tei-wizard" size="small">
+      <sl-button name="teiWizard" size="small">
         <sl-icon name="magic"></sl-icon>
       </sl-button>
     </sl-tooltip> 
@@ -85,7 +91,7 @@ const commandBarHtml = `
 `
 
 /**
- * component API
+ * plugin API
  */
 const api = {
   load,
@@ -123,22 +129,21 @@ export default plugin
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.registerComponent(name, api, name)
 
   // install controls on menubar
-  const bar = app.commandbar
+  const bar = app.ui.toolbar.toolbar
   const div = document.createElement("div")
   div.innerHTML = commandBarHtml.trim()
   const span = div.firstChild
-  bar.add(span)
-  Object.assign(plugin.ui.elements, getNameMap(span, ['sl-icon']))  
+  bar.appendChild(span)
+  Object.assign(ui.toolbar, getNameMap(span, ['sl-icon']))  
 
   // === Document button group ===
 
   // save current version
   bar.onClick('save-xml', onClickSaveButton);
   // enable save button on dirty editor
-  app.xmleditor.addEventListener(
+  xmleditor.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
     () => bar.getByName('save-xml').disabled = false
   );
@@ -152,7 +157,7 @@ function install(app) {
   const xmlSelectbox = bar.getByName("xml")
 
   // disable when only gold is left
-  app.on(app.fileselection.events.updated, () => {
+  app.on(fileselection.events.updated, () => {
     delBtn.disabled = delAllBtn.disabled = delCurrBtn.disabled = xmlSelectbox.childElementCount < 2
   })
   app.on("change:xmlPath", xmlPath => {
@@ -184,7 +189,7 @@ function install(app) {
   const wizardBtn = bar.getByName('tei-wizard')
   wizardBtn.addEventListener("click", runTeiWizard)
 
-  app.logger.info("Services plugin installed.")
+  logger.info("Services plugin installed.")
 }
 
 /**
@@ -201,15 +206,15 @@ async function load({ xml, pdf, diff }) {
 
   // PDF 
   if (pdf) {
-    app.logger.info("Loading PDF", pdf)
+    logger.info("Loading PDF", pdf)
     promises.push(app.pdfviewer.load(pdf))
   }
 
   // XML
   if (xml) {
-    app.logger.info("Loading XML", xml)
+    logger.info("Loading XML", xml)
     removeMergeView()
-    promises.push(app.xmleditor.loadXml(xml))
+    promises.push(xmleditor.loadXml(xml))
   }
 
   // await promises in parallel
@@ -218,7 +223,7 @@ async function load({ xml, pdf, diff }) {
   if (pdf) {
     app.pdfPath = pdf
     // update selectboxes in the toolbar
-    await app.fileselection.update()
+    await fileselection.update()
   }
   if (xml) {
     app.xmlPath = xml
@@ -230,8 +235,8 @@ async function load({ xml, pdf, diff }) {
  * @returns {Promise<void>}
  */
 async function validateXml() {
-  app.logger.info("Validating XML...")
-  return await app.xmleditor.validateXml()
+  logger.info("Validating XML...")
+  return await xmleditor.validateXml()
 }
 
 /**
@@ -241,8 +246,8 @@ async function validateXml() {
  * @returns {Promise<void>}
  */
 async function saveXml(filePath, saveAsNewVersion=false) {
-  app.logger.info(`Saving XML${saveAsNewVersion ? " as new version":""}...`);
-  return await app.client.saveXml(app.xmleditor.getXML(), filePath, saveAsNewVersion)
+  logger.info(`Saving XML${saveAsNewVersion ? " as new version":""}...`);
+  return await clientApi.saveXml(xmleditor.getXML(), filePath, saveAsNewVersion)
 }
 
 /**
@@ -250,12 +255,12 @@ async function saveXml(filePath, saveAsNewVersion=false) {
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
 async function showMergeView(diff) {
-  app.logger.info("Loading diff XML", diff)
-  app.spinner.show('Computing file differences, please wait...')
+  logger.info("Loading diff XML", diff)
+  ui.spinner.show('Computing file differences, please wait...')
   try {
-    await app.xmleditor.showMergeView(diff)
+    await xmleditor.showMergeView(diff)
   } finally {
-    app.spinner.hide()
+    ui.spinner.hide()
   }
   app.diffXmlPath = diff
 }
@@ -265,7 +270,7 @@ async function showMergeView(diff) {
  * Removes all remaining diffs
  */
 function removeMergeView() {
-  app.xmleditor.hideMergeView()
+  xmleditor.hideMergeView()
   app.diffXmlPath = null
   UrlHash.remove("diff")
 }
@@ -279,21 +284,21 @@ async function deleteCurrentVersion(){
   const msg = `Are you sure you want to delete the current version "${versionName}"?`
   if (!confirm(msg)) return; // todo use dialog
 
-  app.services.removeMergeView()
+  services.removeMergeView()
   
   // delete files 
   
   if (xmlSelectbox.value.startsWith("/data/tei")) {
-    app.dialog.error("You cannot delete the gold version")
+    dialog.error("You cannot delete the gold version")
     return
   }
   const filePathsToDelete = [xmlSelectbox.value]
   if (filePathsToDelete.length > 0) {
-    await app.client.deleteFiles(filePathsToDelete)
+    await clientApi.deleteFiles(filePathsToDelete)
   }
   try {
     // update the file data
-    await app.fileselection.reload()
+    await fileselection.reload()
     // load the gold version
     await load({ xml:xmlSelectbox.firstChild.value })
     notify(`Version "${versionName}" has been deleted.`)
@@ -309,18 +314,18 @@ async function deleteAllVersions() {
   const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
   if (!confirm(msg)) return; // todo use dialog
 
-  app.services.removeMergeView()
+  services.removeMergeView()
   
   // delete files 
   const xmlSelectbox = app.getUiElementByName("fileselection.xml")
   const xmlPaths = Array.from(xmlSelectbox.childNodes).map(option => option.value)
   const filePathsToDelete = xmlPaths.slice(1) // skip the first option, which is the gold standard version  
   if (filePathsToDelete.length > 0) {
-    await app.client.deleteFiles(filePathsToDelete)
+    await clientApi.deleteFiles(filePathsToDelete)
   }
   try {
     // update the file data
-    await app.fileselection.reload()
+    await fileselection.reload()
     // load the gold version
     await load({ xml:xmlPaths[0] })
     notify("All version have been deleted")
@@ -335,7 +340,7 @@ async function deleteAllVersions() {
  */
 async function duplicateXml(xmlPath) {
   let {path} = await saveXml(xmlPath, true)
-  app.fileselection.reload()
+  await fileselection.reload()
   app.xmlPath = path
 }
 
@@ -376,14 +381,14 @@ async function searchNodeContentsInPdf(node) {
  * Invokes all TEI enhancement plugin enpoints
  */
 async function runTeiWizard() {
-  const teiDoc = app.xmleditor.getXmlTree()
+  const teiDoc = xmleditor.getXmlTree()
   if (!teiDoc) return
-  const invocationResult = app.plugin.invoke(app.ext.tei.enhancement, teiDoc)
+  const invocationResult = invoke(endpoints.tei.enhancement, teiDoc)
   // todo check if there are any changes
-  const enhancedTeiDoc = (await Promise.all(invocationResult))[0]
+  const enhancedTeiDoc = invocationResult[0]
   const xmlstring = (new XMLSerializer()).serializeToString(enhancedTeiDoc).replace(/ xmlns=".+?"/, '')
-  app.xmleditor.showMergeView(xmlstring)
-  app.floatingPanel.getByName("nav-diff")
+  xmleditor.showMergeView(xmlstring)
+  ui.floatingPanel.diffNavigation
     .querySelectorAll("button")
     .forEach(node => node.disabled = false)
 }
@@ -395,7 +400,7 @@ async function runTeiWizard() {
  * Called when the "Validate" button is executed
  */
 async function onClickValidateButton() {
-  app.commandbar.getByName('validate').disabled = true
+  ui.toolbar.teiActions.validate.disabled = true
   const diagnostics = await validateXml()
   notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`)
 }
@@ -404,9 +409,10 @@ async function onClickValidateButton() {
  * Called when the "Save" button is executed
  */
 async function onClickSaveButton() {
-  const xmlPath = app.commandbar.getByName('xml').value;
+  
+  const xmlPath = ui.toolbar.xml.value;
   await saveXml(xmlPath)
-  app.commandbar.getByName('save-xml').disabled = true
+  ui.toolbar.saveXml.disabled = true
   notify("Document was saved.")
 }
 
@@ -414,9 +420,9 @@ async function onClickSaveButton() {
  * Called when the "Save" button is executed
  */
 async function onClickDuplicateButton() {
-  let xmlPath = app.commandbar.getByName('xml').value;
+  const xmlPath = ui.toolbar.xml.value;
   await duplicateXml(xmlPath)
-  app.commandbar.getByName('save-xml').disabled = true
+  ui.toolbar.saveXml.disabled = true
   notify("Document was duplicated. You are now editing the copy.")
 }
 

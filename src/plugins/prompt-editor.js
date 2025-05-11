@@ -11,7 +11,10 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
 import SlTextarea from '@shoelace-style/shoelace/dist/components/textarea/textarea.js'
 import SlInput from '@shoelace-style/shoelace/dist/components/input/input.js'
 
-import { app, PdfTeiEditor } from '../app.js'
+import { api as clientApi } from '../plugins/client.js'
+import { api as logger } from './logger.js'
+
+
 
 
 // name of the component
@@ -69,14 +72,14 @@ deleteBtn.addEventListener('click', deletePrompt)
 
 const buttonHtml = `
 <sl-tooltip content="Edit the prompt instructions">
-  <sl-button name="edit-prompt" size="small">
+  <sl-button name="editInstructions" size="small">
     <sl-icon name="pencil-square"></sl-icon>
   </sl-button>
 </sl-tooltip>
 `
 
 /**
- * component API
+ * plugin API
  */
 const api = {
   open,
@@ -109,16 +112,14 @@ export default plugin
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.registerComponent(componentId, api, "promptEditor")
-
   // add a button to the command bar to show dialog with prompt editor
   const div = document.createElement('div')
   div.innerHTML = buttonHtml.trim()
   const button = div.firstChild
   button.addEventListener("click", () => api.open())
-  app.commandbar.getByName('extraction-group').appendChild(button)
+  app.ui.toolbar['extractionActions'].appendChild(button)
 
-  app.logger.info("Prompt editor plugin installed.")
+  logger.info("Prompt editor plugin installed.")
 }
 
 // API
@@ -139,7 +140,7 @@ let currentIndex = 0
 async function open() {
   if (prompts === null){
     slMenuNode.childNodes.forEach(node => node.remove())
-    prompts = await app.client.loadInstructions()
+    prompts = await clientApi.loadInstructions()
     for (const [idx, prompt] of prompts.entries()) {
       addSlMenuItem(idx, prompt.label)
     }
@@ -181,7 +182,7 @@ function duplicate(idx) {
  */
 async function save() {
   saveCurrentPrompt()
-  app.client.saveInstructions(prompts)
+  clientApi.saveInstructions(prompts)
 }
 
 /**

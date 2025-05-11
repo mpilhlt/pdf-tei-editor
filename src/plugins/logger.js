@@ -1,10 +1,12 @@
 /**
- * This component provides a simple logging component which can be extended later
- * or replaced with a shim to an external library
+ * This plugin provides logging endpoints and an API to invoke them. The implementation uses
+ * console.* methods
  */
-import { app, App } from '../app.js'
 
-// name of the component
+import pluginManager from "../modules/plugin.js"
+import ep from '../endpoints.js'
+
+// name of the plugin
 const name = "logger"
 
 /**
@@ -27,14 +29,14 @@ const logLevel = {
 let currentLogLevel = logLevel.INFO 
 
 /**
- * Easy to use logging API which will also send log events to all registered log plugins 
+ * Easy to use logging API which will  send log events to all registered log plugins 
  */
 const api = {
-  setLogLevel: level => app.plugin.invoke(app.ext.log.setLogLevel, {level}),
-  debug: (message, level) => app.plugin.invoke(app.ext.log.debug, {message, level}),
-  info: message => app.plugin.invoke(app.ext.log.info, {message}),
-  warn: message => app.plugin.invoke(app.ext.log.warn, {message}),
-  fatal: message => app.plugin.invoke(app.ext.log.fatal, {message})
+  setLogLevel: level => pluginManager.invoke(ep.log.setLogLevel, {level}),
+  debug: (message, level) => pluginManager.invoke(ep.log.debug, {message, level}),
+  info: message => pluginManager.invoke(ep.log.info, {message}),
+  warn: message => pluginManager.invoke(ep.log.warn, {message}),
+  fatal: message => pluginManager.invoke(ep.log.fatal, {message})
 }
 
 /**

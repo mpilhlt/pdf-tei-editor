@@ -1,6 +1,9 @@
-import { app, PdfTeiEditor } from '../app.js'
+import { invoke } from '../app.js'
+import ui from '../ui.js'
 import { NavXmlEditor, XMLEditor  } from '../modules/navigatable-xmleditor.js'
 import { xpathInfo, parseXPath, isXPathSubset } from '../modules/utils.js'
+import { api as logger } from './logger.js'
+
 
 // the path to the autocompletion data
 const tagDataPath = '/data/tei.json'
@@ -20,7 +23,7 @@ const plugin = {
   install
 }
 
-export { XMLEditor, api, plugin}
+export { api, plugin}
 export default plugin
 
 /**
@@ -28,15 +31,12 @@ export default plugin
  * @param {PdfTeiEditor} app The main application
  */
 async function install(app) {
-  app.registerComponent('xmleditor', xmlEditorComponent, 'xmleditor')
-  app.logger.info("XML Editor plugin installed.")
-
   // load autocomplete data
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
     api.startAutocomplete(tagData)
-    app.logger.info("Loaded autocompletion data...");
+    logger.info("Loaded autocompletion data...");
   } catch (error) {
     console.error('Error fetching from', tagDataPath, ":", error);
   }
@@ -92,7 +92,7 @@ async function onSelectionChange() {
   const cursorParts = parseXPath(cursorXpath)
   const stateParts = parseXPath(app.xpath)
   
-  const normativeXpath = app.floatingPanel.getByName("xpath").value
+  const normativeXpath = ui.floatingPanel.xpath.value
   const index = cursorParts.index
 
   // todo: use isXPathsubset()

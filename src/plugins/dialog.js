@@ -5,22 +5,12 @@
 import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js'
 
-import { app, PdfTeiEditor } from '../app.js'
-
 const html = `
-<sl-dialog label="Dialog" class="dialog-width" style="--width: 50vw;">
+<sl-dialog label="Dialog" class="dialog-width" name="dialog" style="--width: 50vw;">
   <span id="dialog-text"></span>
-  <sl-button slot="footer" variant="primary">Close</sl-button>
+  <sl-button slot="footer" name="close" variant="primary">Close</sl-button>
 </sl-dialog>
 `
-
-// add dialog to DOM
-const elem = document.createElement("div");
-document.body.appendChild(elem);
-elem.innerHTML = html.trim();
-const dialog = elem.firstChild
-const button = dialog.querySelector('sl-button[slot="footer"]');
-button.addEventListener('click', () => dialog.hide());
 
 // define the component with its own API
 const api = {
@@ -40,13 +30,19 @@ export default plugin
 // implementation
 //
 
+let dialog
+
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.logger.info("Dialog plugin installed.")
-  app.registerComponent('dialog', api, 'dialog')
+  const elem = document.createElement("div");
+  document.body.appendChild(elem);
+  elem.innerHTML = html.trim();
+  dialog = elem.firstChild
+  const button = dialog.querySelector('sl-button[name="close"]');
+  button.addEventListener('click', () => dialog.hide());
 }
 
 /**

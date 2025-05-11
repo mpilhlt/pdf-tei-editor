@@ -3,8 +3,11 @@
  * and returns an enhanced version of the document
  */
 
-import { app, PdfTeiEditor } from '../app.js'
-//import { xmlFormat } from 'xml-formatter'
+import { api as logger } from './logger.js'
+import { api as xmleditor } from './xmleditor.js'
+
+//import { xmlFormat } from 'xml-formatter' // better than custom implementation?
+
 
 const plugin = {
   name: "tei-wizard",
@@ -31,7 +34,7 @@ let module;
 async function install(app) {
   // trick to self-inspect exported functions
   import('./tei-wizard.js').then(m => { module = m })
-  app.logger.info("TEI Wizard plugin installed.")
+  logger.info("TEI Wizard plugin installed.")
 }
 
 /**
@@ -81,7 +84,7 @@ export function tei_addRevisionChange(xmlDoc) {
   const xpathResult = xmlDoc.evaluate(
     xpathExpression,
     xmlDoc,
-    app.xmleditor.namespaceResolver,
+    xmleditor.namespaceResolver,
     XPathResult.FIRST_ORDERED_NODE_TYPE,
     null
   );

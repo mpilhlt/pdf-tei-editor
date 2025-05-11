@@ -1,4 +1,8 @@
-import { PdfTeiEditor } from '../app.js'
+/**
+ * Plugin providing a link to server-side methods
+ * This is not really a plugin as it does not implement any endpoints (yet)
+ */
+
 
 // name of the component
 const name = "client"
@@ -9,7 +13,7 @@ const api_base_url = '/api';
 const upload_route = '/api/upload'
 
 /**
- * component API
+ * plugin API
  */
 const api = {
   get lastHttpStatus() {
@@ -33,21 +37,11 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name,
-  install
+  name
 }
 
 export { api, plugin }
 export default plugin
-
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
- */
-function install(app) {
-  app.registerComponent(name, api, name)
-  app.logger.info("Client plugin installed.")
-}
 
 
 
@@ -91,7 +85,7 @@ async function callApi(endpoint, method, body = null) {
     }
     return result
   } catch (error) {
-    window.app.dialog.error(error.message)
+    window.dialog.error(error.message)
     lastHttpStatus = error.status || 500;
     // rethrow
     throw error
@@ -229,16 +223,16 @@ async function setConfigValue(key, value) {
  *       onProgress: (event) => {
  *         if (event.lengthComputable) {
  *           const percentComplete = (event.loaded / event.total) * 100;
- *           app.logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
+ *           logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
  *         } else {
- *           app.logger.info("Total size is unknown");
+ *           logger.info("Total size is unknown");
  *         }
  *       } 
  *     });
  *
  *     if (response.ok) {
  *       const data = await response.json();
- *       app.logger.info('Upload successful:', data);
+ *       logger.info('Upload successful:', data);
  *     } else {
  *       throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
  *     }

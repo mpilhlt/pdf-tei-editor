@@ -9,24 +9,28 @@ import SlTextarea from '@shoelace-style/shoelace/dist/components/textarea/textar
 import SlInput from '@shoelace-style/shoelace/dist/components/input/input.js'
 import SlSelect from '@shoelace-style/shoelace/dist/components/select/select.js'
 import SlOption from '@shoelace-style/shoelace/dist/components/option/option.js'
-
-import { app, PdfTeiEditor } from '../app.js'
+import { api as logger } from '../plugins/logger.js'
 import { appendHtml } from '../modules/browser-utils.js'
-
+import { api as clientApi } from './client.js'
+import { api as services } from './services.js'
+import { api as dialog } from './dialog.js'
+import { api as fileselection } from './file-selection.js'
+import { api as xmleditor } from './xmleditor.js'
+import ui from '../ui.js'
 
 // name of the component
-const componentId = "extraction"
+const pluginId = "extraction"
 
 // buttons to be added 
 const buttonsHtml = `
-<sl-button-group label="Extraction" name="extraction-group">
+<sl-button-group label="Extraction" name="extractionActions">
   <sl-tooltip content="Upload a new PDF and extract references">
-    <sl-button name="extract-new" size="small">
+    <sl-button name="extractNew" size="small">
       <sl-icon name="filetype-pdf"></sl-icon>
     </sl-button>
   </sl-tooltip>
   <sl-tooltip content="Extract from the current PDF into a new TEI version">
-    <sl-button name="extract-current" size="small">
+    <sl-button name="extractCurrent" size="small">
       <sl-icon name="clipboard2-plus"></sl-icon>
     </sl-button>
   </sl-tooltip>
@@ -46,7 +50,7 @@ const dialogHtml = `
 `
 
 /**
- * component API
+ * plugin API
  */
 const api = {
   extractFromCurrentPDF,
@@ -58,7 +62,8 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name: componentId,
+  deps: ['pdf-tei-editor'],
+  name: pluginId,
   install
 }
 
@@ -76,20 +81,17 @@ export default plugin
  * @param {PdfTeiEditor} app The main application
  */
 function install(app) {
-  app.registerComponent(componentId, api, "extraction")
-
-  const bar = app.commandbar;
 
   // install controls on menubar
-  const controls = document.createElement("div")
-  controls.innerHTML = buttonsHtml.trim()
-  controls.childNodes.forEach(elem => bar.add(elem))
+  const div = document.createElement("div")
+  div.innerHTML = buttonsHtml.trim()
+  div.childNodes.forEach(elem => ui.toolbar.appendChild(elem))
 
   // add event listeners
-  bar.onClick('extract-new', extractFromNewPdf)
-  bar.onClick('extract-current', extractFromCurrentPDF)
+  ui.toolbar.extractionActions.extractNew.addEventListener('click', extractFromNewPdf)
+  ui.toolbar.extractionActions.extractCurrent.addEventListener('click', extractFromCurrentPDF)
 
-  app.logger.info("Extraction plugin installed.")
+  logger.info("Extraction plugin installed.")
 }
 
 /**
@@ -105,7 +107,7 @@ async function extractFromCurrentPDF() {
   try {
     doi = doi || getDoiFromFilename(app.pdfPath)
     let { xml } = await extractFromPDF(app.pdfPath, {doi})
-    await app.services.showMergeView(xml)
+    await services.showMergeView(xml)
   } catch (error) {
     console.error(error)
   }
@@ -116,9 +118,9 @@ async function extractFromCurrentPDF() {
  */
 async function extractFromNewPdf() {
   try {
-    const { type, filename } = await app.client.uploadFile();
+    const { type, filename } = await clientApi.uploadFile();
     if (type !== "pdf") {
-      app.dialog.error("Extraction is only possible from PDF files")
+      dialog.error("Extraction is only possible from PDF files")
       return
     }
 
@@ -127,7 +129,7 @@ async function extractFromNewPdf() {
     await load({ xml, pdf })
 
   } catch (error) {
-    app.dialog.error(error.message)
+    dialog.error(error.message)
     console.error(error);
   }
 }
@@ -149,13 +151,13 @@ async function extractFromPDF(filename, options = {}) {
   options = await promptForExtractionOptions(options)
   if (options === null) return
 
-  app.spinner.show('Extracting references, please wait')
+  ui.spinner.show('Extracting references, please wait')
   try {
-    let result = await app.client.extractReferences(filename, options)
-    app.fileselection.reload()
+    let result = await clientApi.extractReferences(filename, options)
+    await fileselection.reload()
     return result
   } finally {
-    app.spinner.hide()
+    ui.spinner.hide()
   }
 }
 
@@ -164,7 +166,7 @@ async function extractFromPDF(filename, options = {}) {
 async function promptForExtractionOptions(options) {
 
   // load instructions
-  const instructionsData = await app.client.loadInstructions()
+  const instructionsData = await clientApi.loadInstructions()
   const instructions = [];
 
   // add dialog to DOM
@@ -216,7 +218,7 @@ async function promptForExtractionOptions(options) {
   } 
 
   if (formData.doi == "" || !isDoi(formData.doi)) {
-    app.dialog.error(`${doi} does not seem to be a DOI, please try again.`)
+    dialog.error(`${doi} does not seem to be a DOI, please try again.`)
     return 
   }
 
@@ -229,7 +231,7 @@ async function promptForExtractionOptions(options) {
 }
 
 function getDoiFromXml() {
-  return app.xmleditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
+  return xmleditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
 }
 
 function getDoiFromFilename(filename) {

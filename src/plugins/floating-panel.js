@@ -1,16 +1,21 @@
 import { app, PdfTeiEditor } from '../app.js'
 import { selectByValue, $$ } from '../modules/browser-utils.js'
-import { xpathInfo, parseXPath } from '../modules/utils.js'
+import { parseXPath } from '../modules/utils.js'
+import { api as clientApi } from '../plugins/client.js'
+import { api as logger } from '../plugins/logger.js'
+import { api as services } from './services.js'
+import { api as dialog } from './dialog.js'
+import { api as xmleditor } from './xmleditor.js'
 
 import '../modules/switch.js'
 
 // name of the component
-const componentId = "floating-panel"
+const pluginId = "floating-panel"
 
 // component htmnl
 const html = `
   <style>
-    #${componentId} {
+    #${pluginId} {
       position: absolute;
       display: flex;
       justify-content: space-between;
@@ -27,30 +32,30 @@ const html = `
       box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
     }
 
-    #${componentId}  * {
+    #${pluginId}  * {
       font-size: small;
     }
 
-    #${componentId} > div {
+    #${pluginId} > div {
       display: flex;
       align-items: center;
       gap: 10px;
     }
 
-    #${componentId} > div > * {
+    #${pluginId} > div > * {
       display: inline;
     }      
   </style>
-  <div id="${componentId}">
+  <div id="${pluginId}" name="floatingPanel>
     <div>
       <span class="navigation-text">Navigate by</span>
       <select name="xpath"></select>
-      <button name="edit-xpath">Custom XPath</button>
-      <button name="prev-node" disabled>&lt;&lt;</button>
-      <span name="selection-index" class="navigation-text"></span>
-      <button name="next-node" disabled>&gt;&gt;</button>
+      <button name="editXpath">Custom XPath</button>
+      <button name="previousNode" disabled>&lt;&lt;</button>
+      <span name="selectionIndex" class="navigation-text"></span>
+      <button name="nextNode" disabled>&gt;&gt;</button>
     </div>
-    <div>
+    <div name="markNodeButtons">
       <span class="navigation-text">Mark node as</span>
       <button class="node-status" data-status="verified" disabled>Verified</button>
       <button class="node-status" data-status="unresolved" disabled>Unresolved</button>
@@ -58,12 +63,12 @@ const html = `
       <!-- button class="node-status" data-status="comment" disabled>Add comment</button-->
     </div>
     <div>
-      <custom-switch name="switch-auto-search" label="Find node" label-on="On" label-off="off"></custom-switch>
-      <span name="nav-diff">
-        <button name="prev-diff" disabled>Prev. Diff</button>
-        <button name="next-diff" disabled>Next Diff</button>
-        <button name="diff-keep-all" disabled>Reject all changes</button>
-        <button name="diff-change-all" disabled>Accept all changes</button>
+      <custom-switch name="switchAutoSearch" label="Find node" label-on="On" label-off="off"></custom-switch>
+      <span name="diffNavigation">
+        <button name="prevDiff" disabled>Prev. Diff</button>
+        <button name="nextDiff" disabled>Next Diff</button>
+        <button name="diffKeepAll" disabled>Reject all changes</button>
+        <button name="diffChangeAll" disabled>Accept all changes</button>
       </span>
     </div>
   </div>
@@ -75,10 +80,10 @@ document.body.appendChild(div)
 /**
  * @type {Element}
  */
-const componentNode = document.getElementById(componentId)
+const componentNode = document.getElementById(pluginId)
 
 /**
- * component API
+ * plugin API
  */
 const api = {
 
@@ -147,7 +152,7 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name: componentId,
+  name: pluginId,
   install
 }
 
@@ -166,7 +171,7 @@ const xpathSelectbox = api.getByName("xpath")
  * @param {PdfTeiEditor} app The main application
  */
 async function install(app) {
-  app.registerComponent(componentId, api, "floatingPanel")
+
 
   // populate the xpath selectbox
 
@@ -174,7 +179,7 @@ async function install(app) {
   xpathSelectbox.innerHTML = '';
 
   // Populate select box with options
-  const selectBoxData = await app.client.getConfigValue("navigation.xpath.list")
+  const selectBoxData = await clientApi.getConfigValue("navigation.xpath.list")
   selectBoxData.forEach(item => {
     const option = document.createElement('option');
     option.value = item.value || ''
@@ -200,22 +205,22 @@ async function install(app) {
   })
 
   // setup click handlers
-  api.onClick('prev-node', () => app.xmleditor.previousNode());
-  api.onClick('next-node', () => app.xmleditor.nextNode());
-  api.onClick('prev-diff', () => app.xmleditor.goToPreviousDiff())
-  api.onClick('next-diff', () => app.xmleditor.goToNextDiff())
+  api.onClick('prev-node', () => xmleditor.previousNode());
+  api.onClick('next-node', () => xmleditor.nextNode());
+  api.onClick('prev-diff', () => xmleditor.goToPreviousDiff())
+  api.onClick('next-diff', () => xmleditor.goToNextDiff())
 
   api.onClick('diff-keep-all', () => {
-    app.xmleditor.rejectAllDiffs()
-    app.services.removeMergeView()
+    xmleditor.rejectAllDiffs()
+    services.removeMergeView()
   })
   api.onClick('diff-change-all', () => {
-    app.xmleditor.acceptAllDiffs()
-    app.services.removeMergeView()
+    xmleditor.acceptAllDiffs()
+    services.removeMergeView()
   })
 
   // bring clicked elements into foreground when clicked
-  addBringToForegroundListener([`#${componentId}`, '.cm-panels']);
+  addBringToForegroundListener([`#${pluginId}`, '.cm-panels']);
 
   // make navigation draggable
   makeDraggable(componentNode)
@@ -236,7 +241,7 @@ async function install(app) {
 
   app.on("change:diffXmlPath", onAppChangeDiffXmlPath)
 
-  app.logger.info("Floating panel plugin installed.")
+  logger.info("Floating panel plugin installed.")
 }
 
 /**
@@ -248,7 +253,7 @@ async function install(app) {
 function updateCounter(xpath, index) {
   let size;
   try {
-    size = app.xmleditor.countDomNodesByXpath(xpath)
+    size = xmleditor.countDomNodesByXpath(xpath)
   } catch (e) {
     console.error(e)
     size = 0
@@ -293,7 +298,7 @@ function onAppChangeXpath(xpath, old) {
   }
 
   // update counter with index and size
-  app.xmleditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
+  xmleditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
 }
 
 
@@ -304,9 +309,9 @@ function onAppChangeXpath(xpath, old) {
  */
 async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked
-  app.logger.info(`Auto search is: ${checked}`)
-  if (checked && app.xmleditor.selectedNode) {
-    await app.services.searchNodeContentsInPdf(app.xmleditor.selectedNode)
+  logger.info(`Auto search is: ${checked}`)
+  if (checked && xmleditor.selectedNode) {
+    await services.searchNodeContentsInPdf(xmleditor.selectedNode)
   }
 }
 
@@ -318,9 +323,9 @@ function onClickSelectionIndex() {
   let index = prompt('Enter node index')
   if (!index) return;
   try {
-    app.xmleditor.selectByIndex(parseInt(index))
+    xmleditor.selectByIndex(parseInt(index))
   } catch (error) {
-    app.dialog.error(error.message)
+    dialog.error(error.message)
   }
 }
 

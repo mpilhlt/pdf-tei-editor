@@ -1,5 +1,8 @@
 import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { app, PdfTeiEditor } from '../app.js'
+import { api as logger } from './logger.js'
+import { api as services } from './services.js'
+import { api as xmleditor } from './xmleditor.js'
 
 /**
  * component is an instance of PDFViewer
@@ -10,7 +13,7 @@ const pdfViewerComponent = new PDFJSViewer('pdf-viewer')
 pdfViewerComponent.hide()
 
 /**
- * Component API
+ * plugin API
  */
 const api = pdfViewerComponent;
 
@@ -35,17 +38,16 @@ export default plugin
  * @returns {Promise<void>}
  */
 async function install(app) {
-  app.registerComponent('pdfviewer', pdfViewerComponent, 'pdfviewer')
   app.on("change:xpath", async (value, old) => {
     // trigger auto-search if enabled, 
     const autoSearchSwitch = app.floatingPanel.getByName("switch-auto-search")
-    const node = app.xmleditor.selectedNode
+    const node = xmleditor.selectedNode
     if (autoSearchSwitch.checked && node) {
-      await app.services.searchNodeContentsInPdf(node)
+      await services.searchNodeContentsInPdf(node)
     }
   })
-  app.logger.info("PDFViewer plugin installed.")
+  logger.info("PDFViewer plugin installed.")
   await pdfViewerComponent.isReady()
-  app.logger.info("PDF Viewer ready.")
+  logger.info("PDF Viewer ready.")
   pdfViewerComponent.show()
 }
