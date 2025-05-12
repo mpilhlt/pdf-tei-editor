@@ -1,10 +1,13 @@
 /**
  * This implements the UI for the file selection
  */
+/** 
+ * @import { ApplicationState } from '../app.js' 
+ */
 
-/** @import {ApplicationState} from '../app.js' */
 import ui from '../ui.js'
-import { logger, client, services, dialog, SlOption } from '../app.js'
+import { SlOption } from '../ui.js'
+import { logger, client, services, dialog } from '../app.js'
 
 // name of the component
 const pluginId = "fileselection"
@@ -22,8 +25,7 @@ const commandBarHtml = `
  */
 const api = {
   reload,
-  update,
-  events
+  update
 }
 
 /**
@@ -55,7 +57,7 @@ async function install(state) {
   // install controls on menubar
   const div = document.createElement("div")
   div.innerHTML = commandBarHtml.trim()
-  div.childNodes.forEach(elem => ui.toolbar.appendChild(elem))
+  div.childNodes.forEach(elem => ui.toolbar.self.appendChild(elem))
 
   // configure event handlers for these controls
   ui.toolbar.pdf.addEventListener('sl-change', () => onChangePdfSelectbox(state));
@@ -63,7 +65,7 @@ async function install(state) {
   ui.toolbar.diff.addEventListener('sl-change', () => onChangeDiffSelectbox(state));
 
   logger.info("Loading file metadata...")
-  await reload()
+  await reload(state)
 
   logger.info("Fileselection plugin installed.")
 }
@@ -74,15 +76,15 @@ async function install(state) {
  */
 async function update(state) {
   await populateSelectboxes(state);
-  ui.toolbar.pdf.value = state.pdfPath
-  ui.toolbar.xml.value = state.xmlPath
-  ui.toolbar.diff.value = state.diffXmlPath
+  ui.toolbar.pdf.value = state.pdfPath || ""
+  ui.toolbar.xml.value = state.xmlPath || ""
+  ui.toolbar.diff.value = state.diffXmlPath || ""
 }
 
 
 /**
  * Reloads data and then updates based on the application state
- * @type {ApplicationState} state
+ * @param {ApplicationState} state
  */
 async function reload(state) {
   await reloadFileData();
@@ -91,16 +93,16 @@ async function reload(state) {
 
 /**
  * The data about the pdf and xml files on the server
+ * @type {Array<object>}
  */
-let fileData = null;
+let fileData;
 
 /**
  * Reloads the file data from the server
  */
 async function reloadFileData() {
   logger.debug("Reloading file data")
-  const { files } = await client.getFileList();
-  fileData = files
+  fileData = await client.getFileList();
   if (!fileData || fileData.length === 0) {
     dialog.error("No files found")
   }
@@ -108,7 +110,7 @@ async function reloadFileData() {
 
 /**
  * Populates the selectboxes for file name and version
- * @type {ApplicationState} state
+ * @param {ApplicationState} state
  */
 async function populateSelectboxes(state) {
   logger.debug("Populating selectboxes")
@@ -144,12 +146,14 @@ async function populateSelectboxes(state) {
         file.versions.forEach((version) => {
           // xml
           let option = new SlOption()
+          // @ts-ignore
           option.size = "small"
           option.value = version.path;
           option.textContent = version.label;
           ui.toolbar.xml.appendChild(option);
           // diff 
           option = new SlOption()
+          // @ts-ignore
           option.size = "small"
           option.value = version.path;
           option.textContent = version.label;
@@ -160,9 +164,9 @@ async function populateSelectboxes(state) {
   })
 
   // update selection
-  ui.toolbar.pdf.value = state.pdfPath
-  ui.toolbar.xml.value = state.xmlPath
-  ui.toolbar.diff.value = state.diffXmlPath
+  ui.toolbar.pdf.value = state.pdfPath || ''
+  ui.toolbar.xml.value = state.xmlPath || ''
+  ui.toolbar.diff.value = state.diffXmlPath || ''
 
 }
 
@@ -170,7 +174,7 @@ async function populateSelectboxes(state) {
 
 /**
  * Called when the selection in the PDF selectbox changes
- * @type {ApplicationState} state
+ * @param {ApplicationState} state
  */
 async function onChangePdfSelectbox(state) {
   const selectedFile = fileData.find(file => file.pdf === ui.toolbar.pdf.value);
@@ -188,7 +192,8 @@ async function onChangePdfSelectbox(state) {
   if (Object.keys(filesToLoad).length > 0) {
     try {
       services.removeMergeView()
-      await services.load(filesToLoad)
+      // @ts-ignore
+      await services.load(state, filesToLoad)
     }
     catch (error) {
       console.error(error)
@@ -199,14 +204,14 @@ async function onChangePdfSelectbox(state) {
 
 /**
  * Called when the selection in the XML selectbox changes
- * @type {ApplicationState} state
+ * @param {ApplicationState} state
  */
 async function onChangeXmlSelectbox(state) {
   const xml = ui.toolbar.xml.value
-  if (xml !== state.xmlPath) {
+  if (xml && typeof xml == "string" && xml !== state.xmlPath) {
     try {
       services.removeMergeView()
-      await services.load({ xml })
+      await services.load(state, { xml })
     } catch (error) {
       console.error(error)
     }
@@ -215,11 +220,11 @@ async function onChangeXmlSelectbox(state) {
 
 /**
  * Called when the selection in the diff version selectbox  changes
- * @type {ApplicationState} state
+ * @param {ApplicationState} state
  */
 async function onChangeDiffSelectbox(state) {
   const diff = ui.toolbar.diff.value
-  if (diff && diff !== ui.toolbar.xml.value) {
+  if (diff && typeof diff == "string" && diff !== ui.toolbar.xml.value) {
     try {
       await services.showMergeView(diff)
     } catch (error) {

@@ -20,10 +20,13 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
  */
 
 /**
- * Imports
+ * Import type definitions from plugins
+ * 
+ * @import {dialogComponent} from './plugins/dialog.js'
  * @import {promptEditorComponent} from './plugins/prompt-editor.js'
  * @import {floatingPanelComponent} from './plugins/floating-panel.js'
- * @import {documentActionsComponent, teiServicesComponents, extractionActionsComponent} from './plugins/services.js'
+ * @import {documentActionsComponent, teiServicesComponents} from './plugins/services.js'
+ * @import {extractionActionsComponent, extractionOptionsComponent} from './plugins/extraction.js'
  */
 
 /**
@@ -34,13 +37,15 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
  * @property {HTMLDivElement} pdfViewer
  * @property {HTMLDivElement} xmlEditor
  * @property {Spinner} spinner 
- * @property {SlDialog} dialog 
- * @property {promptEditorComponent} promptEditor
+ * @property {dialogComponent} dialog 
+ * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
+ * @property {extractionOptionsComponent} extractionOptions - A dialog to choose the options for the instructiopns
  */
 
 /**
- * The main toolbar
+ * The main toolbar with controls added by the plugins
  * @typedef {object} toolbarComponent
+ * @property {HTMLDivElement} self
  * @property {SlSelect} pdf - The selectbox for the pdf document
  * @property {SlSelect} xml - The selectbox for the xml document
  * @property {SlSelect} diff - The selectbox for the xml-diff document
@@ -51,11 +56,13 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
 
 /**
  * This variable is Proxy for the document node, which has the next-level named elements as virtual properties
- * with that name, which are again a Proxy
+ * with that name, which are again a Proxy. The virtual property "self" is a reference to the node for the 
+ * purpose of documenting the node type, which must be "object" for a `@typedef`.
  * @type{namedElementsTree}
  */
 // @ts-ignore
 const ui = accessNamedDescendentsAsProperties(document);
 
-export { SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu, SlMenuItem, Spinner }
+export { SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu, 
+    SlMenuItem, Spinner }
 export default ui;

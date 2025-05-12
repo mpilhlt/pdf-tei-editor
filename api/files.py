@@ -28,7 +28,7 @@ def list():
             if metadata:
                 files_data[idx].update(metadata)
 
-    return jsonify({"files": files_data})
+    return jsonify(files_data)
 
 def save_file_path(file_path):
     # Remove any non-alphabetic leading characters for safety

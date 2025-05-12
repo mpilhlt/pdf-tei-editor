@@ -2,10 +2,21 @@
  * This application plugin implements a dialog registered as the "diaolog" property of the app
  */
 
+import { SlButton, SlDialog } from '../ui.js'
+import ui from '../ui.js'
+
+/** @import { ApplicationState } from '../app.js' */
+
+/**
+ * @typedef {object} dialogComponent
+ * @property {SlDialog} self
+ * @property {HTMLSpanElement} message
+ * @property {SlButton} closeBtn
+ */
 
 const html = `
 <sl-dialog label="Dialog" class="dialog-width" name="dialog" style="--width: 50vw;">
-  <span id="dialog-text"></span>
+  <span name="message"></span>
   <sl-button slot="footer" name="close" variant="primary">Close</sl-button>
 </sl-dialog>
 `
@@ -28,19 +39,16 @@ export default plugin
 // implementation
 //
 
-let dialog
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} app The main application
  */
 function install(app) {
   const elem = document.createElement("div");
   document.body.appendChild(elem);
   elem.innerHTML = html.trim();
-  dialog = elem.firstChild
-  const button = dialog.querySelector('sl-button[name="close"]');
-  button.addEventListener('click', () => dialog.hide());
+  ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.self.hide());
 }
 
 /**
@@ -48,9 +56,9 @@ function install(app) {
  * @param {string} message 
  */
 function info(message) {
-  dialog.setAttribute("label", "Information");
-  dialog.querySelector('#dialog-text').innerHTML = message
-  dialog.show()
+  ui.dialog.self.setAttribute("label", "Information");
+  ui.dialog.message.innerHTML = message
+  ui.dialog.self.show()
 }
 
 /**
@@ -58,7 +66,7 @@ function info(message) {
  * @param {string} message 
  */
 function error(message) {
-  dialog.setAttribute("label", "Error");
-  dialog.textContent = message
-  dialog.show()
+  ui.dialog.self.setAttribute("label", "Error");
+  ui.dialog.message.innerHTML = message
+  ui.dialog.self.show()
 }

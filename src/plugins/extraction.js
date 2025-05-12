@@ -1,15 +1,26 @@
 /**
  * This implements the UI and the services for extracting references from the current or a new PDF
  */
-/** @import { ApplicationState } from '../app.js' */
-import { invoke, updateState,  endpoints, logger, client, services, dialog, fileselection,  xmlEditor} from '../app.js'
+
+/** 
+ * @import { ApplicationState } from '../app.js' 
+ * @import { SlButton, SlInput } from '../ui.js'
+ */
+import { SlSelect } from '@shoelace-style/shoelace'
+import { invoke, endpoints, logger, client, services, dialog, fileselection,  xmlEditor} from '../app.js'
 import { appendHtml } from '../modules/browser-utils.js'
 import ui from '../ui.js'
 
 // name of the component
 const pluginId = "extraction"
 
-// buttons to be added 
+/**
+ * Extraction actions button group
+ * @typedef {object} extractionActionsComponent
+ * @property {SlButton} extractNew 
+ * @property {SlButton} extractCurrent
+ * @property {SlButton} editInstructions - added by prompt-editor plugin
+ */
 const buttonsHtml = `
 <sl-button-group label="Extraction" name="extractionActions">
   <sl-tooltip content="Upload a new PDF and extract references">
@@ -25,10 +36,17 @@ const buttonsHtml = `
 </sl-button-group>
 `
 
+/**
+ * Extraction options dialog
+ * @typedef {object} extractionOptionsComponent
+ * @property {SlSelect} modelIndex 
+ * @property {SlSelect} instructionIndex
+ * @property {SlInput} doi 
+ */
 const dialogHtml = `
-<sl-dialog label="Extract references">
+<sl-dialog name="extractionOptions" label="Extract references">
   <div class="dialog-column">
-    <sl-select name="ModelIndex" label="Model" size="small" help-text="Choose the model configuration used for the extraction"></sl-select>
+    <sl-select name="modelIndex" label="Model" size="small" help-text="Choose the model configuration used for the extraction"></sl-select>
     <sl-select name="instructionIndex" label="Instructions" size="small" help-text="Choose the instruction set that is added to the prompt"></sl-select>  
     <sl-input name="doi" label="DOI" size="small" help-text="Please enter the DOI of the document to add document metadata"></input>   
   </div>
@@ -73,7 +91,7 @@ function install(state) {
   // install controls on menubar
   const div = document.createElement("div")
   div.innerHTML = buttonsHtml.trim()
-  div.childNodes.forEach(elem => ui.toolbar.appendChild(elem))
+  div.childNodes.forEach(elem => ui.toolbar.self.appendChild(elem))
 
   // add event listeners
   ui.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state))
@@ -114,7 +132,7 @@ async function extractFromNewPdf(state) {
 
     const doi = getDoiFromFilename(filename)
     const { xml, pdf } = await extractFromPDF(filename, {doi})
-    await load({ xml, pdf })
+    await services.load(state, { xml, pdf })
 
   } catch (error) {
     dialog.error(error.message)

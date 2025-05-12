@@ -1,6 +1,8 @@
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 
+/** @import {SyntaxNode} from '@lezer/common' */
+
 /**
  * Links CodeMirror's syntax tree nodes representing XML elements with their corresponding DOM elements
  * parsed by DOMParser by traversing both trees recursively and storing references to each other in 
@@ -86,7 +88,7 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
         syntaxChild = syntaxChild.nextSibling;
       }
       if (syntaxChild) {
-        throw new Error("Syntax tree has more child elements than the DOM tree:", getText(syntaxChild));
+        throw new Error("Syntax tree has more child elements than the DOM tree:" + getText(syntaxChild));
       }
     }
     if (!syntaxChild && domChild && domChild.nodeType === Node.ELEMENT_NODE) {
@@ -162,6 +164,11 @@ export function resolveXPath(view, xpath) {
   let cursor = tree.topNode.cursor();
   let foundNode = null;
 
+  /**
+   * @param {SyntaxNode} node 
+   * @param {Number?} length 
+   * @returns {string}
+   */
   function text(node, length = null) {
     return doc.sliceString(node.from, length ? Math.min(node.from + length, node.to, doc.length) : node.to);
   }
@@ -200,7 +207,7 @@ export function resolveXPath(view, xpath) {
         //console.log('  - cursor[1][1]: ', debugNode(element.firstChild?.firstChild))
         //console.log('  - cursor[1][2]: ', debugNode(element.firstChild?.firstChild?.nextSibling))
         let tagNameNode = element.firstChild?.firstChild?.nextSibling;
-        if (tagNameNode.name === "TagName" && text(tagNameNode) === tagName) {
+        if (tagNameNode && tagNameNode.name === "TagName" && text(tagNameNode) === tagName) {
           if (childIndex === index) {
             found = true;
             foundNode = element;
@@ -211,7 +218,7 @@ export function resolveXPath(view, xpath) {
       }
     } while (cursor.nextSibling());
 
-    if (!found) {
+    if (!found || !foundNode) {
       return null; // No matching node found at this level
     }
     cursor = foundNode.cursor(); // move the cursor for the next level

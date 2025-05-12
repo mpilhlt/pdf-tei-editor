@@ -14,7 +14,7 @@ const name = "logger"
  */
 const logLevel = {
   SUPPRESS : 0,
-  FATAL: 1,
+  CRITICAL: 1,
   WARN: 2,
   INFO: 3,
   DEBUG: 4,
@@ -32,11 +32,41 @@ let currentLogLevel = logLevel.INFO
  * Easy to use logging API which will  send log events to all registered log plugins 
  */
 const api = {
+  /**
+   * Sets the log level {@see logLevel}
+   * @param {Number} level The log level
+   * @returns {void}
+   */
   setLogLevel: level => pluginManager.invoke(ep.log.setLogLevel, {level}),
-  debug: (message, level) => pluginManager.invoke(ep.log.debug, {message, level}),
+
+  /**
+   * Logs a debug message, with varying levels of verbosity
+   * @param {string} message The debug message
+   * @param {Number} level The log level, which is normally either DEBUG (4) or VERBOSE (5)
+   * @returns {void}
+   */
+  debug: (message, level = logLevel.DEBUG) => pluginManager.invoke(ep.log.debug, {message, level}),
+
+  /**
+   * Logs an informational message
+   * @param {string} message 
+   * @returns {void}
+   */
   info: message => pluginManager.invoke(ep.log.info, {message}),
+
+  /**
+   * Logs an warning message
+   * @param {string} message 
+   * @returns {void}
+   */
   warn: message => pluginManager.invoke(ep.log.warn, {message}),
-  fatal: message => pluginManager.invoke(ep.log.fatal, {message})
+
+  /**
+   * Logs an message about a critical or fatal error
+   * @param {string} message 
+   * @returns {void}
+   */
+  critical: message => pluginManager.invoke(ep.log.fatal, {message})
 }
 
 /**
@@ -50,7 +80,7 @@ const plugin = {
     debug,
     info,
     warn,
-    fatal
+    critical
   }
 }
 
@@ -137,8 +167,8 @@ function warn({message}) {
  * @param {any} options.message - The message or object to log.
  * @returns {void}
  */
-function fatal({message}) {
-  if (currentLogLevel >= logLevel.FATAL) {
+function critical({message}) {
+  if (currentLogLevel >= logLevel.CRITICAL) {
     console.error(message)
   }
 }

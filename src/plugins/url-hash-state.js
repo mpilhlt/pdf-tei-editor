@@ -19,6 +19,7 @@ const plugin = {
 //
 // exports 
 //
+export {plugin}
 export default plugin
 
 //

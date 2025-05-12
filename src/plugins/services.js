@@ -2,10 +2,15 @@
  * This component provides the core services that can be called programmatically or via user commands
  */
 
-/** @import { ApplicationState } from '../app.js' */
+/** 
+ * @import { ApplicationState } from '../app.js' 
+ * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
+ */
+
 import ui from '../ui.js'
-import { invoke, updateState, endpoints, client, logger, dialog, fileselection, xmlEditor, pdfViewer } from '../app.js'
-import { getNameMap, UrlHash } from '../modules/browser-utils.js'
+import { invoke, updateState, endpoints, client, logger, dialog, 
+  fileselection, xmlEditor, pdfViewer, services } from '../app.js'
+import { UrlHash } from '../modules/browser-utils.js'
 import { validationEvents } from '../modules/lint.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
@@ -16,6 +21,7 @@ const name = "services"
 /**
  * Document actions button group
  * @typedef {object} documentActionsComponent
+ * @property {SlButtonGroup} self
  * @property {SlButton} saveXml 
  * @property {SlButton} duplicateXml
  * @property {SlButton} upload
@@ -29,19 +35,10 @@ const name = "services"
 /**
  * TEI actions button group
  * @typedef {object} teiServicesComponents
+ * @property {SlButtonGroup} self
  * @property {SlButton} validate 
  * @property {SlButton} teiWizard
  */
-
-/**
- * Extraction actions button group
- * @typedef {object} extractionActionsComponent
- * @property {SlButton} extractNew 
- * @property {SlButton} extractCurrent
- * @property {SlButton} editInstructions - added by prompt-editor plugin
- */
-
-
 
 const toolbarActionsHtml = `
 <span class="hbox-with-gap">
@@ -145,45 +142,43 @@ export default plugin
 function install(state) {
 
   const tb = ui.toolbar
-
+  
   // install controls on menubar
   const div = document.createElement("div")
   div.innerHTML = toolbarActionsHtml.trim()
-  const span = div.firstChild
-  tb.appendChild(span)
+  // @ts-ignore
+  tb.appendChild(div.firstChild)
 
   // === Document button group ===
 
+  const da = ui.toolbar.documentActions
   // save current version
-  tb.saveXml.addEventListener('click', () => onClickSaveButton(state));
+  da.saveXml.addEventListener('click', () => onClickSaveButton(state));
   // enable save button on dirty editor
   xmlEditor.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
-    () =>  tb.saveXml.disabled = false
+    () =>  da.saveXml.disabled = false
   );
-
   // delete
-  tb.documentActions.deleteCurrent.addEventListener("click", deleteCurrentVersion)
-  tb.documentActions.deleteAll.addEventListener('click', deleteAllVersions)
-  
+  da.deleteCurrent.addEventListener("click", () => deleteCurrentVersion(state))
+  da.deleteAll.addEventListener('click', () => deleteAllVersions(state))
   // duplicate
-  ui.toolbar.documentActions.duplicateXml.addEventListener("click", onClickDuplicateButton)
+  da.duplicateXml.addEventListener("click", () => onClickDuplicateButton(state))
 
   // === TEI button group ===
 
+  const ta = ui.toolbar.teiActions
   // validate xml button
-  const validateBtn = ui.toolbar.documentActions.validate
-  validateBtn.addEventListener('click', onClickValidateButton);
+  ta.validate.addEventListener('click', onClickValidateButton);
   // disable during an ongoing validation
   validationEvents.addEventListener(validationEvents.EVENT.START, () => {
-    validateBtn.disabled = true;
+    ta.validate.disabled = true;
   })
   validationEvents.addEventListener(validationEvents.EVENT.END, () => {
-    validateBtn.disabled = false;
+    ta.validate.disabled = false;
   })
-
   // wizard
-  ui.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard)
+  ta.teiWizard.addEventListener("click", runTeiWizard)
 
   logger.info("Services plugin installed.")
 }
@@ -197,6 +192,7 @@ async function update(state) {
   const da = ui.toolbar.documentActions
   da.delete.disabled = da.deleteAll.disabled = da.deleteCurrent.disabled = 
     ui.toolbar.xml.childElementCount < 2 || 
+    // @ts-ignore
     ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
 
   // Allow duplicate only if we have an xml path
@@ -206,26 +202,23 @@ async function update(state) {
 /**
  * Loads the given XML and/or PDF file(s) into the editor and viewer 
  * @param {ApplicationState} state
- * @param {Object} files An Object with the following entries:
- * @param {string?} files.pdf The path to the PDF file
- * @param {string?} files.xml The path to the XML file
- * @param {string?} files.diff The path to the diffed XML file, if one exists, this will not be loaded but is needed
- * 
+ * @param {Object} files An Object with one or more of the keys "xml" and "pdf"
  */
-async function load(state, { xml, pdf, diff }) {
+async function load(state, { xml, pdf }) {
 
   const promises = []
 
   // PDF 
   if (pdf) {
-    logger.info("Loading PDF", pdf)
+    logger.info("Loading PDF: " + pdf)
     promises.push(pdfViewer.load(pdf))
   }
 
   // XML
   if (xml) {
-    logger.info("Loading XML", xml)
+    logger.info("Loading XML: " + xml)
     removeMergeView()
+    state.diffXmlPath = null
     promises.push(xmlEditor.loadXml(xml))
   }
 
@@ -235,16 +228,18 @@ async function load(state, { xml, pdf, diff }) {
   if (pdf) {
     state.pdfPath = pdf
     // update selectboxes in the toolbar
-    await fileselection.update()
+    await fileselection.update(state)
   }
   if (xml) {
     state.xmlPath = xml
   }
+  // notify plugins
+  updateState(state)
 }
 
 /**
  * Validates the XML document by calling the validation service
- * @returns {Promise<void>}
+ * @returns {Promise<object[]>}
  */
 async function validateXml() {
   logger.info("Validating XML...")
@@ -267,14 +262,13 @@ async function saveXml(filePath, saveAsNewVersion=false) {
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
 async function showMergeView(diff) {
-  logger.info("Loading diff XML", diff)
+  logger.info("Loading diff XML: " + diff)
   ui.spinner.show('Computing file differences, please wait...')
   try {
     await xmlEditor.showMergeView(diff)
   } finally {
     ui.spinner.hide()
   }
-  state.diffXmlPath = diff
 }
 
 
@@ -283,16 +277,15 @@ async function showMergeView(diff) {
  */
 function removeMergeView() {
   xmlEditor.hideMergeView()
-  state.diffXmlPath = null
   UrlHash.remove("diff")
 }
 
 /**
  * Called when the "delete-all" button is executed
+ * @param {ApplicationState} state
  */
-async function deleteCurrentVersion(){
-  const xmlSelectbox = state.getUiElementByName("fileselection.xml")
-  const versionName = xmlSelectbox.selectedOptions[0].textContent
+async function deleteCurrentVersion(state){
+  const versionName = ui.toolbar.xml.selectedOptions[0].textContent
   const msg = `Are you sure you want to delete the current version "${versionName}"?`
   if (!confirm(msg)) return; // todo use dialog
 
@@ -300,19 +293,22 @@ async function deleteCurrentVersion(){
   
   // delete files 
   
-  if (xmlSelectbox.value.startsWith("/data/tei")) {
+  // @ts-ignore
+  if (ui.toolbar.xml.value.startsWith("/data/tei")) {
     dialog.error("You cannot delete the gold version")
     return
   }
-  const filePathsToDelete = [xmlSelectbox.value]
+  const filePathsToDelete = [ui.toolbar.xml.value]
   if (filePathsToDelete.length > 0) {
     await client.deleteFiles(filePathsToDelete)
   }
   try {
     // update the file data
-    await fileselection.reload()
+    await fileselection.reload(state)
     // load the gold version
-    await load({ xml:xmlSelectbox.firstChild.value })
+    // @ts-ignore
+    const xml = ui.toolbar.xml.firstChild?.value 
+    await load(state, { xml })
     notify(`Version "${versionName}" has been deleted.`)
   } catch (error) {
     console.error(error)
@@ -321,8 +317,9 @@ async function deleteCurrentVersion(){
 
 /**
  * Called when the "delete-all" button is executed
+ * @param {ApplicationState} state
  */
-async function deleteAllVersions() {
+async function deleteAllVersions(state) {
   const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
   if (!confirm(msg)) return; // todo use dialog
 
@@ -352,7 +349,7 @@ async function deleteAllVersions() {
  */
 async function duplicateXml(xmlPath) {
   let {path} = await saveXml(xmlPath, true)
-  await fileselection.reload()
+  await fileselection.reload(state)
   state.xmlPath = path
 }
 
@@ -385,7 +382,7 @@ async function searchNodeContentsInPdf(node) {
   }
 
   // start search
-  await state.pdfviewer.search(searchTerms);
+  await pdfViewer.search(searchTerms);
 }
 
 
@@ -421,10 +418,10 @@ async function onClickValidateButton() {
  * Called when the "Save" button is executed
  */
 async function onClickSaveButton() {
-  
   const xmlPath = ui.toolbar.xml.value;
+  // @ts-ignore
   await saveXml(xmlPath)
-  ui.toolbar.saveXml.disabled = true
+  ui.toolbar.documentActions.saveXml.disabled = true
   notify("Document was saved.")
 }
 
@@ -433,8 +430,9 @@ async function onClickSaveButton() {
  */
 async function onClickDuplicateButton() {
   const xmlPath = ui.toolbar.xml.value;
+  // @ts-ignore
   await duplicateXml(xmlPath)
-  ui.toolbar.saveXml.disabled = true
+  ui.toolbar.documentActions.saveXml.disabled = true
   notify("Document was duplicated. You are now editing the copy.")
 }
 
@@ -442,10 +440,12 @@ async function onClickDuplicateButton() {
 
 /**
  * Returns a list of non-empty text content from all text nodes contained in the given node
+ * @param {Element} node
  * @returns {Array<string>}
  */
 function getNodeText(node) {
-  return getTextNodes(node).map(node => node.textContent.trim()).filter(Boolean)
+  // @ts-ignore
+  return getTextNodes(node).map(node => node.textContent?.trim()).filter(Boolean)
 }
 
 /**

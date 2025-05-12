@@ -23,30 +23,30 @@ export class XMLEditor extends EventTarget {
 
   // private members
   /** @type {EditorView} */
-  #view = null; // the EditorView instance
-  #documentVersion = null; // internal counter to track changes in the document
+  #view; // the EditorView instance
+  #documentVersion = 0; // internal counter to track changes in the document
   #editorContent = ''; // a cache of the raw text content of the editor
   /** @type {Map} */
-  #syntaxToDom = null; // Maps syntax tree nodes to DOM nodes
+  #syntaxToDom; // Maps syntax tree nodes to DOM nodes
   /** @type {Map} */
-  #domToSyntax = null; // Maps DOM nodes to syntax tree nodes
+  #domToSyntax; // Maps DOM nodes to syntax tree nodes
   /** @type {Document} */
-  #xmlTree = null; // the xml document tree
+  #xmlTree; // the xml document tree
   /** @type {SyntaxNode} */
   #syntaxTree = null; // the lezer syntax tree
   #isReady = false;
   /** @type {Promise} */
-  #readyPromise = null
+  #readyPromise;
   /** @type {Object} */
   #mergeViewExt = null
   /** @type {Object} */
   #mergeViewCompartment = null
   /** @type {string} */
-  #original = null // the original XML document, when in merge view mode
-  #updateMergButtonsInterval = null // interval to update the merge buttons
+  #original // the original XML document, when in merge view mode
+  #updateMergButtonsInterval; // interval to update the merge buttons
   /**  @type {XMLSerializer} */
-  #serializer = null; // an XMLSerializer object or one with a compatible API
-  #autocompleteCompartment = null
+  #serializer; // an XMLSerializer object or one with a compatible API
+  #autocompleteCompartment;
 
   /**
    * Constructs an XMLEditor instance.
@@ -94,14 +94,14 @@ export class XMLEditor extends EventTarget {
    * Resolves a namespace prefix used in the editor to its URI.
    * @todo: should be configurable  by the user
    * @param {string} prefix The namespace prefix to resolve.
-   * @returns {string|null} The namespace URI associated with the prefix, or null if not found.
+   * @returns {string} The namespace URI associated with the prefix, or empty if not found.
    */
   namespaceResolver(prefix) {
     const namespaces = {
       'tei': 'http://www.tei-c.org/ns/1.0',
       'xml': 'http://www.w3.org/XML/1998/namespace'
     };
-    return namespaces[prefix] || null;
+    return namespaces[prefix] || '';
   };
 
   /**
@@ -156,7 +156,7 @@ export class XMLEditor extends EventTarget {
   /**
    * Triggers a validation and returns an array of Diagnostic objects, or an empty array if no
    * validation errors were found
-   * @returns {Promise<Array>}
+   * @returns {Promise<object[]>}
    */
   async validateXml() {
     if (isValidating()) {
@@ -502,7 +502,7 @@ export class XMLEditor extends EventTarget {
   /**
    * Returns the DOM nodes that matches the given XPath expression.
    * @param {string} xpath 
-   * @returns {Array<Node>} An array of matching node snapshots.
+   * @returns {Number} An array of matching node snapshots.
    * @throws {Error} If the XML tree is not loaded
    */
   countDomNodesByXpath(xpath) {
@@ -519,7 +519,7 @@ export class XMLEditor extends EventTarget {
   /**
    * Returns the first DOM node that matches the given XPath expression.
    * @param {string} xpath 
-   * @returns {Node} The first matching DOM node.
+   * @returns {Node|null} The first matching DOM node.
    * @throws {Error} If the XML tree is not loaded or if no nodes match the XPath expression.
    */
   getDomNodeByXpath(xpath) {

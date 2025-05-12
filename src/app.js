@@ -25,13 +25,13 @@ import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
 /**
- * The application state, which is passe
+ * The application state, which is often passed to the plugin endpoints
  * 
  * @typedef {object} ApplicationState
- * @property {string} pdfPath
- * @property {string} xmlPath
- * @property {string} diffXmlPath
- * @property {string} xpath
+ * @property {string?} pdfPath
+ * @property {string?} xmlPath
+ * @property {string?} diffXmlPath
+ * @property {string?} xpath
  */
 /**
  * @type{ApplicationState}
@@ -59,7 +59,7 @@ for (const plugin of plugins) {
  * Utility method to invoke plugin endpoints and await the fulfilment of any returned promises
  * @param {string} endpoint 
  * @param {*} param 
- * @returns {Promise<void>}
+ * @returns {Promise<*>}
  */
 async function invoke(endpoint, param) {
  return await Promise.all(pluginManager.invoke(endpoint, param))
@@ -68,10 +68,10 @@ async function invoke(endpoint, param) {
 /**
  * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
  * @param {ApplicationState} state The application state object
- * @param {Object} changes For each change in the state, provide a key-value pair in this object
+ * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
  * @returns {Promise<void>}
  */
-async function updateState(state, changes) {
+async function updateState(state, changes={}) {
   Object.assign(state, changes)
   return await invoke(ep.state.update, state)
 }
@@ -88,6 +88,6 @@ await invoke(ep.start, state)
 //
 // Exports
 // 
-export { state, ep as endpoints, invoke, update }
+export { state, ep as endpoints, invoke, updateState }
 export { logger, dialog, pdfViewer, xmlEditor, client,fileselection, extraction,
   services, floatingPanel, promptEditor }

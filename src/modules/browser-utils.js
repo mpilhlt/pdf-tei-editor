@@ -9,23 +9,6 @@ export function $(selector) {
   if (!node) {
     throw new Error(`Selector "${selector} does not find any element"`)
   }
-  Object.assign(node, {
-    hide: node.hide === undefined ? () => { node.style.visibility = "hidden" } : node.hide,
-    show: node.show === undefined ? () => { node.style.visibility = "visible" } : node.show,
-    text: node.text === undefined ? (text) => { node.textContent = text; return node } : node.text,
-    html: node.html === undefined ? (html) => { node.innerHTML = html; return node } : node.html,
-    remove: node.remove === undefined ? () => { node.parentNode.removeChild(node) } : node.remove,
-    addClass: node.addClass === undefined ? (className) => { node.classList.add(className) } : node.addClass,
-    removeClass: node.removeClass === undefined ? (className) => { node.classList.remove(className) } : node.removeClass,
-    toggleClass: node.toggleClass === undefined ? (className) => { node.classList.toggle(className) } : node.toggleClass,
-    on: node.on === undefined ? (event, callback) => { node.addEventListener(event, callback) } : node.on,
-    off: node.off === undefined ? (event, callback) => { node.removeEventListener(event, callback) } : node.off,
-    once: node.once === undefined ? (event, callback) => { node.addEventListener(event, callback, { once: true }) } : node.once,
-    enable: node.disabled !== undefined ? () => { node.disabled = false } : undefined,
-    disable: node.disabled !== undefined ? () => { node.disabled = true } : undefined,
-    click: handler => node.addEventListener('click', handler.bind(node))
-  })
-
   return node
 }
 
@@ -83,7 +66,7 @@ export class CookieStorage {
    * @returns {boolean}
    */
   static has(key) {
-    return this.get(key) !== null;
+    return this['get'](key) !== null;
   }
 
   /**
@@ -220,6 +203,9 @@ export function getDescendantByName(node, name, noError) {
  * @returns {Array<Element>} 
  */
 export function appendHtml(html, parentNode = document.body) {
+  if (!parentNode) {
+    throw new TypeError("No parent node")
+  }
   const div = document.createElement("div")
   const nodeArr = []
   div.innerHTML = html.trim()
@@ -231,25 +217,13 @@ export function appendHtml(html, parentNode = document.body) {
 }
 
 /**
- * Return a mapping of all named descendents of the given parent element 
- * @param {Element} parentNode The parent element
- * @param {Array<string>?} excludedTags An array of lower cased tag names that should be excluded
- * @returns {Object} An object mapping the value of the 'name' attributes to the corresponding elements
+ * Escapes the given text to valid html
+ * @param {string} text 
+ * @returns {string} The escaped text
  */
-export function getNameMap(parentNode, exludedTags = ['sl-icon']) {
-  const nameMap = {}
-  const nodes = Array.from(parentNode.querySelectorAll('[name]'))
-  nodes
-    .filter(node => !(exludedTags.includes(node.tagName.toLowerCase())))
-    .filter(node => Boolean(node.getAttribute('name')))
-    .forEach(node => { nameMap[node.getAttribute('name')] = node })
-  return nameMap
-}
-
-
-export function escapeHtml(html) {
+export function escapeHtml(text) {
   const div = document.createElement('div');
-  div.textContent = html;
+  div.textContent = text;
   return div.innerHTML;
 }
 
@@ -259,21 +233,28 @@ export function escapeHtml(html) {
  * named nodes are excluded.  If duplicate names are found, the first
  * occurrence is used.
  *
- * @param {Node} node The starting node to search from.
+ * @param {Element} node The starting node to search from.
  * @returns {Object<string, Node>} An object mapping name attribute values to their respective nodes.
  */
 function findNamedDescendants(node) {
   const results = {};
 
+  /**
+   * Recursive function that adds to the results object
+   * @param {Element} currentNode 
+   * @returns {void}
+   */
   function traverse(currentNode) {
     if (!currentNode || !currentNode.childNodes) {
       return;
     }
 
     for (let i = 0; i < currentNode.childNodes.length; i++) {
+      /** @type {Element} */
+      // @ts-ignore
       const childNode = currentNode.childNodes[i];
-
-      if (childNode.nodeType === Node.ELEMENT_NODE) { // Check if it's an element (important to avoid text nodes)
+      // Check if it's an element (important to avoid text nodes)
+      if (childNode.nodeType === Node.ELEMENT_NODE) { 
 
         const nameAttribute = childNode.getAttribute("name");
 
@@ -289,22 +270,32 @@ function findNamedDescendants(node) {
     }
   }
   traverse(node);
+  // @ts-ignore
   return results;
 }
 
 /**
- * Modifies a node to access named descendant elements through their name
- * @param {Node} node The node to modify
+ * Modifies a node to access named descendant elements through virtual properties of their name. 
+ * Also adds a virtual property "self" that allows JSDoc annotations of parent elements
+ * 
+ * @param {Element} node The node to modify
  */
 export function accessNamedDescendentsAsProperties(node) {
   return new Proxy({ node }, {
     get: function (target, name, receiver) {
+      // returns the node itself, this is a trick to allow to annotate the type of a typedef
+      if (name === "self") {
+        return node
+      }
+
       if (name in target) {
         return Reflect.get(target, name, receiver);
       }
-      const namedDescendants = findNamedDescendants(node)
-      if (name in namedDescendants) {
-        return namedDescendants[name];
+      if (typeof name == "string") {
+        const namedDescendants = findNamedDescendants(node)
+        if (name in namedDescendants) {
+          return namedDescendants[name];
+        }
       }
       // property does not exist
       return undefined
