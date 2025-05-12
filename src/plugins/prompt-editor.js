@@ -11,16 +11,28 @@ import { SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../
 // name of the component
 const pluginId = "prompt-editor"
 
-// add prompt-editor in a dialog 
-const html = `
-<sl-dialog id="${pluginId}" label="Edit prompt" class="dialog-big">
+/**
+ * Prompt editor
+ * @typedef {object} promptEditorComponent
+ * @property {SlInput} label
+ * @property {SlMenu} labelMenu
+ * @property {SlTextarea} text
+ * @property {SlButton} cancel
+ * @property {SlButton} delete
+ * @property {SlButton} duplicate
+ * @property {SlButton} submit
+ */
+
+// editor dialog
+const editorHtml = `
+<sl-dialog name="promptEditor" label="Edit prompt" class="dialog-big">
   <p>Below are the parts of the LLM prompt specific to the reference instruction.</p>
   <div class="dialog-column">
     <div class="dialog-row">
       <sl-input name="label" help-text="A short description of the prompt additions"></sl-input>
       <sl-dropdown>
         <sl-button slot="trigger" caret></sl-button>
-        <sl-menu></sl-menu>
+        <sl-menu name="labelMenu"></sl-menu>
       </sl-dropdown>
     </div>
     <sl-textarea name="text" rows="20"></sl-texarea>
@@ -32,35 +44,7 @@ const html = `
 </sl-dialog>
 `
 
-// the following should really be in install() but that wouldn't work because of the closures
-
-const div = document.createElement("div")
-div.innerHTML = html.trim()
-document.body.appendChild(div.firstChild)
-
-/** @type {SlDialog} */
-const slDialogNode = document.getElementById(pluginId);
-slDialogNode.addEventListener("sl-request-close", dialogOnRequestClose)
-
-/** @type {SlMenu} */
-const slMenuNode = slDialogNode.querySelector('sl-dropdown sl-menu');
-slMenuNode.addEventListener('sl-select', menuOnSelect);
-
-/** @type {SlTextarea} */
-const slTextareaNode = slDialogNode.querySelector('sl-textarea');
-
-/** @type {SlInput} */
-const slInputNode = slDialogNode.querySelector('sl-input')
-
-/** @type {SlButton} */
-slDialogNode.querySelector('sl-button[name="submit"]').addEventListener('click', submit)
-slDialogNode.querySelector('sl-button[name="duplicate"]').addEventListener('click', duplicate)
-slDialogNode.querySelector('sl-button[name="cancel"]').addEventListener('click', close)
-const deleteBtn = slDialogNode.querySelector('sl-button[name="delete"]')
-deleteBtn.addEventListener('click', deletePrompt)
-
-// button 
-
+// button, documented in services.js
 const buttonHtml = `
 <sl-tooltip content="Edit the prompt instructions">
   <sl-button name="editInstructions" size="small">
@@ -100,17 +84,27 @@ export default plugin
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} app The main application
  */
 function install(app) {
-  // add a button to the command bar to show dialog with prompt editor
-  const div = document.createElement('div')
-  div.innerHTML = buttonHtml.trim()
-  const button = div.firstChild
-  button.addEventListener("click", () => api.open())
-  app.ui.toolbar['extractionActions'].appendChild(button)
+  // add prompt editor component
+  const editorDiv = document.createElement("div")
+  editorDiv.innerHTML = editorHtml.trim()
+  document.body.appendChild(editorDiv.firstChild)
+  const pe = ui.promptEditor
+  pe.addEventListener("sl-request-close", dialogOnRequestClose)
+  pe.labelMenu.addEventListener('sl-select', menuOnSelect);
+  pe.submit.addEventListener('click', submit)
+  pe.duplicate.addEventListener('click', duplicate)
+  pe.cancel.addEventListener('click', close)
+  pe.delete.addEventListener('click', deletePrompt)
 
-  logger.info("Prompt editor plugin installed.")
+  // add a button to the command bar to show dialog with prompt editor
+  const buttonDiv = document.createElement('div')
+  buttonDiv.innerHTML = buttonHtml.trim()
+  const button = buttonDiv.firstChild
+  button.addEventListener("click", () => api.open())
+  ui.toolbar.extractionActions.appendChild(button)
 }
 
 // API
@@ -130,15 +124,15 @@ let currentIndex = 0
  */
 async function open() {
   if (prompts === null){
-    slMenuNode.childNodes.forEach(node => node.remove())
+    ui.promptEditor.labelMenu.childNodes.forEach(node => node.remove())
     prompts = await client.loadInstructions()
     for (const [idx, prompt] of prompts.entries()) {
       addSlMenuItem(idx, prompt.label)
     }
   }
-  deleteBtn.disabled = prompts.length < 2
+  ui.promptEditor.delete.disabled = prompts.length < 2
   api.edit(currentIndex)
-  slDialogNode.show()
+  ui.promptEditor.show()
 }
 
 /**
@@ -146,10 +140,10 @@ async function open() {
  * @param {Number} idx 
  */
 function edit(idx) {
-  slMenuNode.childNodes[idx].checked = true
+  ui.promptEditor.labelMenu.childNodes[idx].checked = true
   const {label, text} = prompts[idx]
-  slInputNode.value = label
-  slTextareaNode.value = Array.isArray(text) ? text.join("\n") : text
+  ui.promptEditor.label.value = label
+  ui.promptEditor.text.value = Array.isArray(text) ? text.join("\n") : text
 }
 
 /**
@@ -161,10 +155,10 @@ function duplicate(idx) {
   const newPrompt = Object.assign({}, prompts[currentIndex])
   newPrompt.label += " (Copy)"
   prompts.push(newPrompt)
-  slMenuNode.childNodes[currentIndex].checked = false
+  ui.promptEditor.labelMenu.childNodes[currentIndex].checked = false
   currentIndex = prompts.length - 1
   addSlMenuItem(currentIndex, newPrompt.label)
-  deleteBtn.disabled = false
+  ui.promptEditor.delete.disabled = false
   edit(currentIndex)
 }
 
@@ -184,18 +178,26 @@ function submit() {
   close()
 }
 
+/**
+ * Closes the prompt editor
+ */
 function close() {
-  slDialogNode.hide()
+  ui.promptEditor.hide()
 }
 
+/**
+ * Deletes the prompt with the given index 
+ * @param {Number} idx 
+ * @returns {void}
+ */
 function deletePrompt(idx){
   if (prompts.length < 2) {
     throw new Error("There must at least be one prompt entry")
   }
   if(!confirm("Do you really want to delete this prompt?"))return
-  slMenuNode.removeChild(slMenuNode.childNodes[currentIndex])
+  ui.promptEditor.labelMenu.removeChild(ui.promptEditor.labelMenu.childNodes[currentIndex])
   prompts.splice(currentIndex, 1)
-  deleteBtn.disabled = prompts.length < 2
+  ui.promptEditor.delete.disabled = prompts.length < 2
   currentIndex--
   edit(currentIndex)
 }
@@ -207,15 +209,15 @@ function addSlMenuItem(idx, label){
   slMenuItem.type = "checkbox"
   slMenuItem.value = idx
   slMenuItem.textContent = label
-  slMenuNode.appendChild(slMenuItem)     
+  ui.promptEditor.labelMenu.appendChild(slMenuItem)     
 }
 
 function saveCurrentPrompt() {
-  prompts[currentIndex] = {
-    label: slInputNode.value,
-    text: slTextareaNode.value.split("\n")
-  }
-  slMenuNode.childNodes[currentIndex].textContent = slInputNode.value
+  const label = ui.promptEditor.label.value
+  const text = ui.promptEditor.text.value.split("\n")
+  prompts[currentIndex] = {label, text}
+  // update menu item
+  ui.promptEditor.labelMenu.childNodes[currentIndex].textContent = label
 }
 
 // Event listeners
@@ -228,7 +230,7 @@ function saveCurrentPrompt() {
 function menuOnSelect(event) {
   saveCurrentPrompt()
   const item = event.detail.item;
-  slMenuNode.childNodes[currentIndex].checked = false
+  ui.promptEditor.labelMenu.childNodes[currentIndex].checked = false
   currentIndex = item.value
   api.edit(currentIndex)
 }

@@ -4,7 +4,7 @@
 
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
-import { invoke, endpoints, client, logger, dialog, fileselection, xmlEditor } from '../app.js'
+import { invoke, updateState, endpoints, client, logger, dialog, fileselection, xmlEditor, pdfViewer } from '../app.js'
 import { getNameMap, UrlHash } from '../modules/browser-utils.js'
 import { validationEvents } from '../modules/lint.js'
 import { XMLEditor } from './xmleditor.js'
@@ -13,7 +13,37 @@ import { notify } from '../modules/sl-utils.js'
 // name of the plugin
 const name = "services"
 
-const commandBarHtml = `
+/**
+ * Document actions button group
+ * @typedef {object} documentActionsComponent
+ * @property {SlButton} saveXml 
+ * @property {SlButton} duplicateXml
+ * @property {SlButton} upload
+ * @property {SlButton} download
+ * @property {SlButton} delete
+ * @property {SlButton} deleteCurrent 
+ * @property {SlButton} deleteCurrent 
+ * @property {SlButton} deleteAll
+ */
+
+/**
+ * TEI actions button group
+ * @typedef {object} teiServicesComponents
+ * @property {SlButton} validate 
+ * @property {SlButton} teiWizard
+ */
+
+/**
+ * Extraction actions button group
+ * @typedef {object} extractionActionsComponent
+ * @property {SlButton} extractNew 
+ * @property {SlButton} extractCurrent
+ * @property {SlButton} editInstructions - added by prompt-editor plugin
+ */
+
+
+
+const toolbarActionsHtml = `
 <span class="hbox-with-gap">
   <!-- Document button group -->
   <sl-button-group label="Document" name="documentActions">
@@ -99,9 +129,7 @@ const api = {
 const plugin = {
   name,
   install,
-  ui: {
-    elements: {}
-  }
+  state: { update }
 }
 
 export { plugin, api }
@@ -111,61 +139,40 @@ export default plugin
 // Implementation
 //
 
-
-// API
-
 /**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} state
  */
-function install(app) {
+function install(state) {
+
+  const tb = ui.toolbar
 
   // install controls on menubar
-  const bar = app.ui.toolbar.toolbar
   const div = document.createElement("div")
-  div.innerHTML = commandBarHtml.trim()
+  div.innerHTML = toolbarActionsHtml.trim()
   const span = div.firstChild
-  bar.appendChild(span)
-  Object.assign(ui.toolbar, getNameMap(span, ['sl-icon']))  
+  tb.appendChild(span)
 
   // === Document button group ===
 
   // save current version
-  bar.onClick('save-xml', onClickSaveButton);
+  tb.saveXml.addEventListener('click', () => onClickSaveButton(state));
   // enable save button on dirty editor
   xmlEditor.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
-    () => bar.getByName('save-xml').disabled = false
+    () =>  tb.saveXml.disabled = false
   );
 
   // delete
-  const delBtn = app.getUiElementByName("services.delete")
-  const delCurrBtn = app.getUiElementByName("services.delete-current")
-  delCurrBtn.addEventListener("click", deleteCurrentVersion)
-  const delAllBtn = app.getUiElementByName("services.delete-all")
-  delAllBtn.addEventListener('click', deleteAllVersions)
-  const xmlSelectbox = bar.getByName("xml")
-
-  // disable when only gold is left
-  app.on(fileselection.events.updated, () => {
-    delBtn.disabled = delAllBtn.disabled = delCurrBtn.disabled = xmlSelectbox.childElementCount < 2
-  })
-  app.on("change:xmlPath", xmlPath => {
-    // disable when the first entry (gold) is selected
-    delBtn.disabled = delAllBtn.disabled = delCurrBtn.disabled = 
-      xmlSelectbox.value === xmlSelectbox.firstChild?.value
-  })
-
+  tb.documentActions.deleteCurrent.addEventListener("click", deleteCurrentVersion)
+  tb.documentActions.deleteAll.addEventListener('click', deleteAllVersions)
+  
   // duplicate
-  const duplicateBtn = bar.getByName("duplicate-xml")
-  duplicateBtn.addEventListener("click", onClickDuplicateButton)
-  app.on("change:xmlPath", xmlPath => {duplicateBtn.disabled = !xmlPath})
-
+  ui.toolbar.documentActions.duplicateXml.addEventListener("click", onClickDuplicateButton)
 
   // === TEI button group ===
 
   // validate xml button
-  const validateBtn = bar.getByName('validate')
+  const validateBtn = ui.toolbar.documentActions.validate
   validateBtn.addEventListener('click', onClickValidateButton);
   // disable during an ongoing validation
   validationEvents.addEventListener(validationEvents.EVENT.START, () => {
@@ -176,28 +183,43 @@ function install(app) {
   })
 
   // wizard
-  const wizardBtn = bar.getByName('tei-wizard')
-  wizardBtn.addEventListener("click", runTeiWizard)
+  ui.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard)
 
   logger.info("Services plugin installed.")
 }
 
 /**
+ * Invoked on application state change
+ * @param {ApplicationState} state
+ */
+async function update(state) {
+  // disable deletion if there are no versions or gold is selected
+  const da = ui.toolbar.documentActions
+  da.delete.disabled = da.deleteAll.disabled = da.deleteCurrent.disabled = 
+    ui.toolbar.xml.childElementCount < 2 || 
+    ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
+
+  // Allow duplicate only if we have an xml path
+  da.duplicateXml.disabled = !Boolean(state.xmlPath)
+}
+
+/**
  * Loads the given XML and/or PDF file(s) into the editor and viewer 
- * @param {Object} param0 An Object with the following entries:
- * @param {string?} param0.pdf The path to the PDF file
- * @param {string?} param0.xml The path to the XML file
- * @param {string?} param0.diff The path to the diffed XML file, if one exists, this will not be loaded but is needed
+ * @param {ApplicationState} state
+ * @param {Object} files An Object with the following entries:
+ * @param {string?} files.pdf The path to the PDF file
+ * @param {string?} files.xml The path to the XML file
+ * @param {string?} files.diff The path to the diffed XML file, if one exists, this will not be loaded but is needed
  * 
  */
-async function load({ xml, pdf, diff }) {
+async function load(state, { xml, pdf, diff }) {
 
   const promises = []
 
   // PDF 
   if (pdf) {
     logger.info("Loading PDF", pdf)
-    promises.push(app.pdfviewer.load(pdf))
+    promises.push(pdfViewer.load(pdf))
   }
 
   // XML
@@ -211,12 +233,12 @@ async function load({ xml, pdf, diff }) {
   await Promise.all(promises)
 
   if (pdf) {
-    app.pdfPath = pdf
+    state.pdfPath = pdf
     // update selectboxes in the toolbar
     await fileselection.update()
   }
   if (xml) {
-    app.xmlPath = xml
+    state.xmlPath = xml
   }
 }
 
@@ -252,7 +274,7 @@ async function showMergeView(diff) {
   } finally {
     ui.spinner.hide()
   }
-  app.diffXmlPath = diff
+  state.diffXmlPath = diff
 }
 
 
@@ -261,7 +283,7 @@ async function showMergeView(diff) {
  */
 function removeMergeView() {
   xmlEditor.hideMergeView()
-  app.diffXmlPath = null
+  state.diffXmlPath = null
   UrlHash.remove("diff")
 }
 
@@ -269,7 +291,7 @@ function removeMergeView() {
  * Called when the "delete-all" button is executed
  */
 async function deleteCurrentVersion(){
-  const xmlSelectbox = app.getUiElementByName("fileselection.xml")
+  const xmlSelectbox = state.getUiElementByName("fileselection.xml")
   const versionName = xmlSelectbox.selectedOptions[0].textContent
   const msg = `Are you sure you want to delete the current version "${versionName}"?`
   if (!confirm(msg)) return; // todo use dialog
@@ -307,7 +329,7 @@ async function deleteAllVersions() {
   services.removeMergeView()
   
   // delete files 
-  const xmlSelectbox = app.getUiElementByName("fileselection.xml")
+  const xmlSelectbox = state.getUiElementByName("fileselection.xml")
   const xmlPaths = Array.from(xmlSelectbox.childNodes).map(option => option.value)
   const filePathsToDelete = xmlPaths.slice(1) // skip the first option, which is the gold standard version  
   if (filePathsToDelete.length > 0) {
@@ -331,7 +353,7 @@ async function deleteAllVersions() {
 async function duplicateXml(xmlPath) {
   let {path} = await saveXml(xmlPath, true)
   await fileselection.reload()
-  app.xmlPath = path
+  state.xmlPath = path
 }
 
 /**
@@ -363,7 +385,7 @@ async function searchNodeContentsInPdf(node) {
   }
 
   // start search
-  await app.pdfviewer.search(searchTerms);
+  await state.pdfviewer.search(searchTerms);
 }
 
 

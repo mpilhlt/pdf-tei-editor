@@ -2,31 +2,28 @@
  * PDF Viewer Plugin
  */
 
-
 /** @import { ApplicationState } from '../app.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
-import { invoke, logger, services, xmlEditor } from '../app.js'
+import { invoke, updateState, logger, services, xmlEditor } from '../app.js'
 import ui from '../ui.js'
 
 /**
- * component is an instance of PDFViewer
+ * Expose the PDFViewer API
  * @type {PDFJSViewer}
  */
-const pdfViewerComponent = new PDFJSViewer('pdf-viewer')
+const api = new PDFJSViewer('pdf-viewer')
+
 // hide it until ready
-pdfViewerComponent.hide()
+api.hide()
+
 
 /**
- * plugin API
- */
-const api = pdfViewerComponent;
-
-/**
- * component plugin
+ * plugin object
  */
 const plugin = {
-    name: "pdfviewer",
-    install
+  name: "pdfviewer",
+  install,
+  state: { update }
 }
 
 export { plugin, api }
@@ -37,21 +34,27 @@ export default plugin
 //
 
 /**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install(app) {
-  app.on("change:xpath", async (value, old) => {
-    // trigger auto-search if enabled, 
-    const autoSearchSwitch = app.floatingPanel.getByName("switch-auto-search")
-    const node = xmlEditor.selectedNode
-    if (autoSearchSwitch.checked && node) {
-      await services.searchNodeContentsInPdf(node)
-    }
-  })
-  logger.info("PDFViewer plugin installed.")
-  await pdfViewerComponent.isReady()
+async function install(state) {
+  await api.isReady()
   logger.info("PDF Viewer ready.")
-  pdfViewerComponent.show()
+  api.show()
+}
+
+let lastNode = null; 
+
+/**
+ * @param {ApplicationState} state
+ * @returns {Promise<void>}
+ */
+async function update(state) {
+  // trigger auto-search if enabled and if a new node has been selected
+  const autoSearchSwitch = ui.floatingPanel.switchAutoSearch
+  const node = xmlEditor.selectedNode
+  if (autoSearchSwitch.checked && node && node !== lastNode) {
+    await services.searchNodeContentsInPdf(node)
+    lastNode = node
+  }
 }

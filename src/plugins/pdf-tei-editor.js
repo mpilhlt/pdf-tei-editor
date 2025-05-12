@@ -5,7 +5,7 @@
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
 import ep from '../endpoints.js'
-import { invoke, xmlEditor, logger, services, dialog } from '../app.js'
+import { invoke, updateState,  xmlEditor, logger, services, dialog } from '../app.js'
 import { Spinner } from '../ui.js'
 import { updateStateFromUrlHash } from './url-hash-state.js'
 

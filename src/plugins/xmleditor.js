@@ -42,7 +42,7 @@ async function install(app) {
   }
  
   // xpath state => selection
-  app.on("change:xpath", (value, old) => {
+  state.on("change:xpath", (value, old) => {
     api.whenReady().then(() => onXpathChange(value, old))
   })
 
@@ -97,6 +97,6 @@ async function onSelectionChange() {
 
   // todo: use isXPathsubset()
   if (index !== null & cursorParts.tagName === stateParts.tagName ) {
-    app.xpath = `${normativeXpath}[${index}]`
+    state.xpath = `${normativeXpath}[${index}]`
   }
 }

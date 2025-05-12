@@ -5,32 +5,31 @@
  * @license 
  */
 
-
 import pluginManager from "./modules/plugin.js"
 import ep from './endpoints.js'
 
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
 import { plugin as urlHashStatePlugin } from './plugins/url-hash-state.js'
-import { plugin as dialogPlugin, api as dialog } from '../plugins/dialog.js'
-import { plugin as pdfViewerPlugin, api as pdfViewer } from '../plugins/pdfviewer.js'
-import { plugin as xmlEditorPlugin, api as xmlEditor } from '../plugins/xmleditor.js'
-import { plugin as clientPlugin, api as client } from '../plugins/client.js'
-import { plugin as fileselectionPlugin, api as fileselection } from '../plugins/file-selection.js'
-import { plugin as extractionPlugin, api as extraction } from '../plugins/extraction.js'
-import { plugin as servicesPlugin, api as services } from '../plugins/services.js'
-import { plugin as floatingPanelPlugin, api as floatingPanel } from '../plugins/floating-panel.js'
-import { plugin as promptEditorPlugin, api as promptEditor } from '../plugins/prompt-editor.js'
-import { plugin as teiWizardPlugin } from '../plugins/tei-wizard.js'
+import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
+import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
+import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
+import { plugin as clientPlugin, api as client } from './plugins/client.js'
+import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
+import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
+import { plugin as servicesPlugin, api as services } from './plugins/services.js'
+import { plugin as floatingPanelPlugin, api as floatingPanel } from './plugins/floating-panel.js'
+import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
+import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 
-//import { plugin as dummyLoggerPlugin } from '../components/logger-dummy.js'
+//import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
 /**
  * The application state, which is passe
  * 
  * @typedef {object} ApplicationState
  * @property {string} pdfPath
- * @property {string} xnlPath
+ * @property {string} xmlPath
  * @property {string} diffXmlPath
  * @property {string} xpath
  */
@@ -56,8 +55,25 @@ for (const plugin of plugins) {
   pluginManager.register(plugin)
 }
 
+/**
+ * Utility method to invoke plugin endpoints and await the fulfilment of any returned promises
+ * @param {string} endpoint 
+ * @param {*} param 
+ * @returns {Promise<void>}
+ */
 async function invoke(endpoint, param) {
  return await Promise.all(pluginManager.invoke(endpoint, param))
+}
+
+/**
+ * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
+ * @param {ApplicationState} state The application state object
+ * @param {Object} changes For each change in the state, provide a key-value pair in this object
+ * @returns {Promise<void>}
+ */
+async function updateState(state, changes) {
+  Object.assign(state, changes)
+  return await invoke(ep.state.update, state)
 }
 
 // log level
@@ -72,6 +88,6 @@ await invoke(ep.start, state)
 //
 // Exports
 // 
-export { state, ep as endpoints, invoke }
+export { state, ep as endpoints, invoke, update }
 export { logger, dialog, pdfViewer, xmlEditor, client,fileselection, extraction,
   services, floatingPanel, promptEditor }

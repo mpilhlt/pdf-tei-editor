@@ -2,7 +2,7 @@
  * This implements the UI and the services for extracting references from the current or a new PDF
  */
 /** @import { ApplicationState } from '../app.js' */
-import { invoke, endpoints, logger, client, services, dialog, fileselection,  xmlEditor} from '../app.js'
+import { invoke, updateState,  endpoints, logger, client, services, dialog, fileselection,  xmlEditor} from '../app.js'
 import { appendHtml } from '../modules/browser-utils.js'
 import ui from '../ui.js'
 
@@ -66,9 +66,9 @@ export default plugin
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} state
  */
-function install(app) {
+function install(state) {
 
   // install controls on menubar
   const div = document.createElement("div")
@@ -76,16 +76,15 @@ function install(app) {
   div.childNodes.forEach(elem => ui.toolbar.appendChild(elem))
 
   // add event listeners
-  ui.toolbar.extractionActions.extractNew.addEventListener('click', extractFromNewPdf)
-  ui.toolbar.extractionActions.extractCurrent.addEventListener('click', extractFromCurrentPDF)
-
-  logger.info("Extraction plugin installed.")
+  ui.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state))
+  ui.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state))
 }
 
 /**
  * Extract references from the currently loaded PDF
+ * @param {ApplicationState} state
  */
-async function extractFromCurrentPDF() {
+async function extractFromCurrentPDF(state) {
   let doi;
   try {
     doi = getDoiFromXml()
@@ -93,8 +92,8 @@ async function extractFromCurrentPDF() {
     console.warn("Cannot get DOI from document:", error.message)
   }
   try {
-    doi = doi || getDoiFromFilename(app.pdfPath)
-    let { xml } = await extractFromPDF(app.pdfPath, {doi})
+    doi = doi || getDoiFromFilename(state.pdfPath)
+    let { xml } = await extractFromPDF(state.pdfPath, {doi})
     await services.showMergeView(xml)
   } catch (error) {
     console.error(error)
@@ -103,8 +102,9 @@ async function extractFromCurrentPDF() {
 
 /**
  * Upload a new PDF and extract from it
+ * @param {ApplicationState} state
  */
-async function extractFromNewPdf() {
+async function extractFromNewPdf(state) {
   try {
     const { type, filename } = await client.uploadFile();
     if (type !== "pdf") {
@@ -142,7 +142,7 @@ async function extractFromPDF(filename, options = {}) {
   ui.spinner.show('Extracting references, please wait')
   try {
     let result = await client.extractReferences(filename, options)
-    await fileselection.reload()
+    await fileselection.reload()  // todo uncouple
     return result
   } finally {
     ui.spinner.hide()

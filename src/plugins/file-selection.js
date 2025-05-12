@@ -4,7 +4,7 @@
 
 /** @import {ApplicationState} from '../app.js' */
 import ui from '../ui.js'
-import { logger, client, services, dialog } from '../app.js'
+import { logger, client, services, dialog, SlOption } from '../app.js'
 
 // name of the component
 const pluginId = "fileselection"
@@ -48,9 +48,9 @@ export default plugin
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} state
  */
-async function install(app) {
+async function install(state) {
 
   // install controls on menubar
   const div = document.createElement("div")
@@ -58,9 +58,9 @@ async function install(app) {
   div.childNodes.forEach(elem => ui.toolbar.appendChild(elem))
 
   // configure event handlers for these controls
-  ui.toolbar.pdf.addEventListener('sl-change', onChangePdfSelectbox);
-  ui.toolbar.xml.addEventListener('sl-change', onChangeXmlSelectbox);
-  ui.toolbar.diff.addEventListener('sl-change', onChangeDiffSelectbox);
+  ui.toolbar.pdf.addEventListener('sl-change', () => onChangePdfSelectbox(state));
+  ui.toolbar.xml.addEventListener('sl-change', () => onChangeXmlSelectbox(state));
+  ui.toolbar.diff.addEventListener('sl-change', () => onChangeDiffSelectbox(state));
 
   logger.info("Loading file metadata...")
   await reload()
@@ -73,26 +73,20 @@ async function install(app) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
+  await populateSelectboxes(state);
   ui.toolbar.pdf.value = state.pdfPath
-  ui.toolbar.xml.value = state.xnlPath
+  ui.toolbar.xml.value = state.xmlPath
   ui.toolbar.diff.value = state.diffXmlPath
 }
 
 
 /**
  * Reloads data and then updates based on the application state
+ * @type {ApplicationState} state
  */
 async function reload(state) {
-  await reloadFileData(state);
+  await reloadFileData();
   await populateSelectboxes(state);
-}
-
-/**
- * Updates data such as select box options based on the application state
- */
-async function update(state) {
-  await populateSelectboxes(state);
-
 }
 
 /**
@@ -102,9 +96,8 @@ let fileData = null;
 
 /**
  * Reloads the file data from the server
- * @type {ApplicationState} state
  */
-async function reloadFileData(state) {
+async function reloadFileData() {
   logger.debug("Reloading file data")
   const { files } = await client.getFileList();
   fileData = files
@@ -145,7 +138,7 @@ async function populateSelectboxes(state) {
 
     ui.toolbar.pdf.appendChild(option);
 
-    if (file.pdf === app.pdfPath) {
+    if (file.pdf === state.pdfPath) {
       // populate the version and diff selectboxes depending on the selected file
       if (file.versions) {
         file.versions.forEach((version) => {
@@ -177,17 +170,18 @@ async function populateSelectboxes(state) {
 
 /**
  * Called when the selection in the PDF selectbox changes
+ * @type {ApplicationState} state
  */
-async function onChangePdfSelectbox() {
+async function onChangePdfSelectbox(state) {
   const selectedFile = fileData.find(file => file.pdf === ui.toolbar.pdf.value);
   const pdf = selectedFile.pdf
   const xml = selectedFile.xml
   const filesToLoad = {}
 
-  if (pdf && pdf !== app.pdfPath) {
+  if (pdf && pdf !== state.pdfPath) {
     filesToLoad.pdf = pdf
   }
-  if (xml && xml !== app.xmlPath) {
+  if (xml && xml !== state.xmlPath) {
     filesToLoad.xml = xml
   }
 
@@ -205,10 +199,11 @@ async function onChangePdfSelectbox() {
 
 /**
  * Called when the selection in the XML selectbox changes
+ * @type {ApplicationState} state
  */
-async function onChangeXmlSelectbox() {
+async function onChangeXmlSelectbox(state) {
   const xml = ui.toolbar.xml.value
-  if (xml !== app.xmlPath) {
+  if (xml !== state.xmlPath) {
     try {
       services.removeMergeView()
       await services.load({ xml })
@@ -220,8 +215,9 @@ async function onChangeXmlSelectbox() {
 
 /**
  * Called when the selection in the diff version selectbox  changes
+ * @type {ApplicationState} state
  */
-async function onChangeDiffSelectbox() {
+async function onChangeDiffSelectbox(state) {
   const diff = ui.toolbar.diff.value
   if (diff && diff !== ui.toolbar.xml.value) {
     try {
