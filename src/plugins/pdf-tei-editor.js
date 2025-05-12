@@ -5,14 +5,9 @@
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
 import ep from '../endpoints.js'
-import { invoke } from '../app.js'
-import { Spinner } from '../modules/spinner.js'
+import { invoke, xmlEditor, logger, services, dialog } from '../app.js'
+import { Spinner } from '../ui.js'
 import { updateStateFromUrlHash } from './url-hash-state.js'
-import { api as xmleditor } from '../plugins/xmleditor.js'
-import { api as logger } from '../plugins/logger.js'
-import { api as services } from '../plugins/services.js'
-import { api as dialog } from '../plugins/dialog.js'
-import { api as xmleditor } from './xmleditor.js'
 
 // plugin name
 const name = "pdf-tei-editor"
@@ -70,7 +65,7 @@ async function start(state) {
     updateStateFromUrlHash(state)
 
     // disable regular validation so that we have more control over it
-    xmleditor.disableValidation(true)
+    xmlEditor.disableValidation(true)
 
     // get document paths from URL hash or from the first entry of the selectboxes
     const defaultFile = ui.toolbar.pdf.firstChild.dataset
@@ -101,7 +96,7 @@ async function start(state) {
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
         logger.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
-        xmleditor.disableValidation(seconds > 3)
+        xmlEditor.disableValidation(seconds > 3)
       })
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection

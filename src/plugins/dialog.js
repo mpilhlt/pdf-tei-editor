@@ -2,8 +2,6 @@
  * This application plugin implements a dialog registered as the "diaolog" property of the app
  */
 
-import '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
-import '@shoelace-style/shoelace/dist/components/button/button.js'
 
 const html = `
 <sl-dialog label="Dialog" class="dialog-width" name="dialog" style="--width: 50vw;">

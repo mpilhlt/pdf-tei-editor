@@ -1,21 +1,9 @@
 /**
  * This implements the UI and the services for extracting references from the current or a new PDF
  */
-
-import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
-import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
-import SlButtonGroup from '@shoelace-style/shoelace/dist/components/button-group/button-group.js'
-import SlTextarea from '@shoelace-style/shoelace/dist/components/textarea/textarea.js'
-import SlInput from '@shoelace-style/shoelace/dist/components/input/input.js'
-import SlSelect from '@shoelace-style/shoelace/dist/components/select/select.js'
-import SlOption from '@shoelace-style/shoelace/dist/components/option/option.js'
-import { api as logger } from '../plugins/logger.js'
+/** @import { ApplicationState } from '../app.js' */
+import { invoke, endpoints, logger, client, services, dialog, fileselection,  xmlEditor} from '../app.js'
 import { appendHtml } from '../modules/browser-utils.js'
-import { api as clientApi } from './client.js'
-import { api as services } from './services.js'
-import { api as dialog } from './dialog.js'
-import { api as fileselection } from './file-selection.js'
-import { api as xmleditor } from './xmleditor.js'
 import ui from '../ui.js'
 
 // name of the component
@@ -118,7 +106,7 @@ async function extractFromCurrentPDF() {
  */
 async function extractFromNewPdf() {
   try {
-    const { type, filename } = await clientApi.uploadFile();
+    const { type, filename } = await client.uploadFile();
     if (type !== "pdf") {
       dialog.error("Extraction is only possible from PDF files")
       return
@@ -153,7 +141,7 @@ async function extractFromPDF(filename, options = {}) {
 
   ui.spinner.show('Extracting references, please wait')
   try {
-    let result = await clientApi.extractReferences(filename, options)
+    let result = await client.extractReferences(filename, options)
     await fileselection.reload()
     return result
   } finally {
@@ -166,7 +154,7 @@ async function extractFromPDF(filename, options = {}) {
 async function promptForExtractionOptions(options) {
 
   // load instructions
-  const instructionsData = await clientApi.loadInstructions()
+  const instructionsData = await client.loadInstructions()
   const instructions = [];
 
   // add dialog to DOM
@@ -231,7 +219,7 @@ async function promptForExtractionOptions(options) {
 }
 
 function getDoiFromXml() {
-  return xmleditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
+  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
 }
 
 function getDoiFromFilename(filename) {

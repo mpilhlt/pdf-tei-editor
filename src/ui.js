@@ -1,7 +1,18 @@
 import { accessNamedDescendentsAsProperties } from './modules/browser-utils.js';
-import { Spinner } from '../modules/spinner.js'
-import SlSelect from '@shoelace-style/shoelace/dist/components/select/select.js'
-import { SlDialog } from '@shoelace-style/shoelace/dist/components/dialog/dialog.js';
+export { Spinner } from '../modules/spinner.js'
+export { SlSelect} from '@shoelace-style/shoelace/dist/components/select/select.js'
+export { SlDialog} from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
+export { SlButton} from '@shoelace-style/shoelace/dist/components/button/button.js'
+export { SlButtonGroup } from '@shoelace-style/shoelace/dist/components/button-group/button-group.js'
+export { SlTextarea } from '@shoelace-style/shoelace/dist/components/textarea/textarea.js'
+export { SlInput } from '@shoelace-style/shoelace/dist/components/input/input.js'
+export { SlSelect } from '@shoelace-style/shoelace/dist/components/select/select.js'
+export { SlOption } from '@shoelace-style/shoelace/dist/components/option/option.js'
+export { SlIcon } from '@shoelace-style/shoelace/dist/components/icon/icon.js'
+export { SlTooltip } from '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js'
+export { SlMenu } from '@shoelace-style/shoelace/dist/components/menu/menu.js'
+export { SlMenuItem } from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
+
 
 /**
  * The UI of the application as a a typed object structure, which can then be traversed. In this structure, 

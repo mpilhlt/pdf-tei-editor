@@ -3,26 +3,17 @@
  * LLM prompt
  */
 
-import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
-import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
-import SlDropdown from '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js'
-import SlMenu from '@shoelace-style/shoelace/dist/components/menu/menu.js'
-import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
-import SlTextarea from '@shoelace-style/shoelace/dist/components/textarea/textarea.js'
-import SlInput from '@shoelace-style/shoelace/dist/components/input/input.js'
-
-import { api as clientApi } from '../plugins/client.js'
-import { api as logger } from './logger.js'
-
-
-
+/** @import { ApplicationState } from '../app.js' */
+import ui from '../ui.js'
+import { logger, client } from '../app.js'
+import { SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../ui.js'
 
 // name of the component
-const componentId = "prompt-editor"
+const pluginId = "prompt-editor"
 
 // add prompt-editor in a dialog 
 const html = `
-<sl-dialog id="${componentId}" label="Edit prompt" class="dialog-big">
+<sl-dialog id="${pluginId}" label="Edit prompt" class="dialog-big">
   <p>Below are the parts of the LLM prompt specific to the reference instruction.</p>
   <div class="dialog-column">
     <div class="dialog-row">
@@ -48,7 +39,7 @@ div.innerHTML = html.trim()
 document.body.appendChild(div.firstChild)
 
 /** @type {SlDialog} */
-const slDialogNode = document.getElementById(componentId);
+const slDialogNode = document.getElementById(pluginId);
 slDialogNode.addEventListener("sl-request-close", dialogOnRequestClose)
 
 /** @type {SlMenu} */
@@ -95,7 +86,7 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name: componentId,
+  name: pluginId,
   deps: ['extraction'],
   install
 }
@@ -140,7 +131,7 @@ let currentIndex = 0
 async function open() {
   if (prompts === null){
     slMenuNode.childNodes.forEach(node => node.remove())
-    prompts = await clientApi.loadInstructions()
+    prompts = await client.loadInstructions()
     for (const [idx, prompt] of prompts.entries()) {
       addSlMenuItem(idx, prompt.label)
     }
@@ -182,7 +173,7 @@ function duplicate(idx) {
  */
 async function save() {
   saveCurrentPrompt()
-  clientApi.saveInstructions(prompts)
+  client.saveInstructions(prompts)
 }
 
 /**

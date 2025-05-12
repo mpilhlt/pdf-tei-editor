@@ -2,25 +2,15 @@
  * This component provides the core services that can be called programmatically or via user commands
  */
 
-import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
-import SlIcon from '@shoelace-style/shoelace/dist/components/icon/icon.js'
-import SlTooltip from '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js'
-import SlMenu from '@shoelace-style/shoelace/dist/components/menu/menu.js'
-import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
-
+/** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
-import { invoke, endpoints } from '../app.js'
+import { invoke, endpoints, client, logger, dialog, fileselection, xmlEditor } from '../app.js'
 import { getNameMap, UrlHash } from '../modules/browser-utils.js'
-import { validationEvents } from '../modules/lint.js' // Todo remove this dependency, use events instead
+import { validationEvents } from '../modules/lint.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
-import { api as clientApi } from '../plugins/client.js'
-import { api as logger } from './logger.js'
-import { api as dialog } from './dialog.js'
-import { api as fileselection} from './file-selection.js'
-import { api as xmleditor } from './xmleditor.js'
 
-// name of the component
+// name of the plugin
 const name = "services"
 
 const commandBarHtml = `
@@ -143,7 +133,7 @@ function install(app) {
   // save current version
   bar.onClick('save-xml', onClickSaveButton);
   // enable save button on dirty editor
-  xmleditor.addEventListener(
+  xmlEditor.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
     () => bar.getByName('save-xml').disabled = false
   );
@@ -214,7 +204,7 @@ async function load({ xml, pdf, diff }) {
   if (xml) {
     logger.info("Loading XML", xml)
     removeMergeView()
-    promises.push(xmleditor.loadXml(xml))
+    promises.push(xmlEditor.loadXml(xml))
   }
 
   // await promises in parallel
@@ -236,7 +226,7 @@ async function load({ xml, pdf, diff }) {
  */
 async function validateXml() {
   logger.info("Validating XML...")
-  return await xmleditor.validateXml()
+  return await xmlEditor.validateXml()
 }
 
 /**
@@ -247,7 +237,7 @@ async function validateXml() {
  */
 async function saveXml(filePath, saveAsNewVersion=false) {
   logger.info(`Saving XML${saveAsNewVersion ? " as new version":""}...`);
-  return await clientApi.saveXml(xmleditor.getXML(), filePath, saveAsNewVersion)
+  return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
 }
 
 /**
@@ -258,7 +248,7 @@ async function showMergeView(diff) {
   logger.info("Loading diff XML", diff)
   ui.spinner.show('Computing file differences, please wait...')
   try {
-    await xmleditor.showMergeView(diff)
+    await xmlEditor.showMergeView(diff)
   } finally {
     ui.spinner.hide()
   }
@@ -270,7 +260,7 @@ async function showMergeView(diff) {
  * Removes all remaining diffs
  */
 function removeMergeView() {
-  xmleditor.hideMergeView()
+  xmlEditor.hideMergeView()
   app.diffXmlPath = null
   UrlHash.remove("diff")
 }
@@ -294,7 +284,7 @@ async function deleteCurrentVersion(){
   }
   const filePathsToDelete = [xmlSelectbox.value]
   if (filePathsToDelete.length > 0) {
-    await clientApi.deleteFiles(filePathsToDelete)
+    await client.deleteFiles(filePathsToDelete)
   }
   try {
     // update the file data
@@ -321,7 +311,7 @@ async function deleteAllVersions() {
   const xmlPaths = Array.from(xmlSelectbox.childNodes).map(option => option.value)
   const filePathsToDelete = xmlPaths.slice(1) // skip the first option, which is the gold standard version  
   if (filePathsToDelete.length > 0) {
-    await clientApi.deleteFiles(filePathsToDelete)
+    await client.deleteFiles(filePathsToDelete)
   }
   try {
     // update the file data
@@ -381,13 +371,13 @@ async function searchNodeContentsInPdf(node) {
  * Invokes all TEI enhancement plugin enpoints
  */
 async function runTeiWizard() {
-  const teiDoc = xmleditor.getXmlTree()
+  const teiDoc = xmlEditor.getXmlTree()
   if (!teiDoc) return
   const invocationResult = invoke(endpoints.tei.enhancement, teiDoc)
   // todo check if there are any changes
   const enhancedTeiDoc = invocationResult[0]
   const xmlstring = (new XMLSerializer()).serializeToString(enhancedTeiDoc).replace(/ xmlns=".+?"/, '')
-  xmleditor.showMergeView(xmlstring)
+  xmlEditor.showMergeView(xmlstring)
   ui.floatingPanel.diffNavigation
     .querySelectorAll("button")
     .forEach(node => node.disabled = false)

@@ -1,6 +1,6 @@
 import { XMLEditor } from "./xmleditor.js";
 import { disableValidation } from '../modules/lint.js'
-import { xpathInfo } from '../modules/utils.js'
+import { parseXPath } from '../modules/utils.js'
 
 export {XMLEditor}
 
@@ -76,7 +76,7 @@ export class NavXmlEditor extends XMLEditor {
     }
 
     // we'll "bubble up" to the parent path by comparing tagnames (cheating)
-    const parentTagName = xpathInfo(this.parentPath).tagName.toLowerCase()
+    const parentTagName = parseXPath(this.parentPath).tagName.toLowerCase()
     while (selectedNode) {
       if (selectedNode.tagName && selectedNode.tagName.toLowerCase() === parentTagName) break;
       selectedNode = selectedNode.parentNode

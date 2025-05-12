@@ -1,8 +1,12 @@
+/**
+ * PDF Viewer Plugin
+ */
+
+
+/** @import { ApplicationState } from '../app.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
-import { app, PdfTeiEditor } from '../app.js'
-import { api as logger } from './logger.js'
-import { api as services } from './services.js'
-import { api as xmleditor } from './xmleditor.js'
+import { invoke, logger, services, xmlEditor } from '../app.js'
+import ui from '../ui.js'
 
 /**
  * component is an instance of PDFViewer
@@ -41,7 +45,7 @@ async function install(app) {
   app.on("change:xpath", async (value, old) => {
     // trigger auto-search if enabled, 
     const autoSearchSwitch = app.floatingPanel.getByName("switch-auto-search")
-    const node = xmleditor.selectedNode
+    const node = xmlEditor.selectedNode
     if (autoSearchSwitch.checked && node) {
       await services.searchNodeContentsInPdf(node)
     }

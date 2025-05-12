@@ -7,26 +7,23 @@
 
 
 import pluginManager from "./modules/plugin.js"
-import {default as loggerPlugin, api as loggerApi, logLevel} from './plugins/logger.js'
-import urlHashStatePlugin from './plugins/url-hash-state.js'
-
 import ep from './endpoints.js'
 
-
-// import { plugin as dialogPlugin, api as dialogApi } from '../plugins/dialog.js'
-// import { plugin as pdfViewerPlugin, api as pdfViewerApi } from '../plugins/pdfviewer.js'
-// import { plugin as xmlEditorPlugin, api as xmlEditorApi } from '../plugins/xmleditor.js'
-// import { plugin as clientPlugin, api as clientApi } from '../plugins/client.js'
-// import { plugin as commandBarPlugin, api as commandBarApi } from '../plugins/command-bar.js'
-// import { plugin as fileselectionPlugin, api as fileselectionApi } from '../plugins/file-selection.js'
-// import { plugin as extractionPlugin, api as extractionApi } from '../plugins/extraction.js'
-// import { plugin as servicesPlugin, api as servicesApi } from '../plugins/services.js'
-// import { plugin as floatingPanelPlugin, api as floatingPanelApi } from '../plugins/floating-panel.js'
-// import { plugin as promptEditorPlugin, api as promptEditorApi } from '../plugins/prompt-editor.js'
-// import { plugin as teiWizardPlugin } from '../plugins/tei-wizard.js'
+// plugins
+import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
+import { plugin as urlHashStatePlugin } from './plugins/url-hash-state.js'
+import { plugin as dialogPlugin, api as dialog } from '../plugins/dialog.js'
+import { plugin as pdfViewerPlugin, api as pdfViewer } from '../plugins/pdfviewer.js'
+import { plugin as xmlEditorPlugin, api as xmlEditor } from '../plugins/xmleditor.js'
+import { plugin as clientPlugin, api as client } from '../plugins/client.js'
+import { plugin as fileselectionPlugin, api as fileselection } from '../plugins/file-selection.js'
+import { plugin as extractionPlugin, api as extraction } from '../plugins/extraction.js'
+import { plugin as servicesPlugin, api as services } from '../plugins/services.js'
+import { plugin as floatingPanelPlugin, api as floatingPanel } from '../plugins/floating-panel.js'
+import { plugin as promptEditorPlugin, api as promptEditor } from '../plugins/prompt-editor.js'
+import { plugin as teiWizardPlugin } from '../plugins/tei-wizard.js'
 
 //import { plugin as dummyLoggerPlugin } from '../components/logger-dummy.js'
-
 
 /**
  * The application state, which is passe
@@ -47,7 +44,11 @@ let state = {
   xpath: null,
 }
 
-const plugins = [loggerPlugin, urlHashStatePlugin]
+const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin, 
+  pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
+  extractionPlugin, servicesPlugin, floatingPanelPlugin, promptEditorPlugin,
+  teiWizardPlugin
+]
 
 // register plugins
 for (const plugin of plugins) {
@@ -68,8 +69,9 @@ await invoke(ep.install, state)
 // start the application 
 await invoke(ep.start, state)
 
-
 //
 // Exports
 // 
 export { state, ep as endpoints, invoke }
+export { logger, dialog, pdfViewer, xmlEditor, client,fileselection, extraction,
+  services, floatingPanel, promptEditor }

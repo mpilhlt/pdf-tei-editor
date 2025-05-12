@@ -1,13 +1,8 @@
-import { app, PdfTeiEditor } from '../app.js'
+/** @import { ApplicationState } from '../app.js' */
+import { invoke, client, logger, services, dialog, xmlEditor } from '../app.js'
 import { selectByValue, $$ } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
-import { api as clientApi } from '../plugins/client.js'
-import { api as logger } from '../plugins/logger.js'
-import { api as services } from './services.js'
-import { api as dialog } from './dialog.js'
-import { api as xmleditor } from './xmleditor.js'
-
-import '../modules/switch.js'
+import ui from '../ui.js'
 
 // name of the component
 const pluginId = "floating-panel"
@@ -95,6 +90,7 @@ const api = {
    * @param {Element} element 
    * @param {Number} row 
    * @param {string} name
+   * @deprecated
    */
   add: (element, row, name) => {
     if (name) {
@@ -109,6 +105,7 @@ const api = {
    * @param {Number} row 
    * @param {Number} index 
    * @param {string} name
+   * @deprecated
    */
   addAt: (element, row, index, name) => {
     if (name) {
@@ -122,6 +119,7 @@ const api = {
    * Returns the child element of that name
    * @param {string} name The name of the child element
    * @returns {Element}
+   * @deprecated
    */
   getByName: name => {
     const namedElems = componentNode.querySelectorAll(`[name="${name}"]:not(sl-icon)`) // we need to exclude sl-icon elements
@@ -135,6 +133,7 @@ const api = {
    * Attaches a click event handler to a named subelement of the component
    * @param {string} name The name of the element
    * @param {Function} handler The function to call when the element is clicked
+   * @deprecated
    */
   onClick: (name, handler) => {
     api.getByName(name).addEventListener('click', handler)
@@ -179,7 +178,7 @@ async function install(app) {
   xpathSelectbox.innerHTML = '';
 
   // Populate select box with options
-  const selectBoxData = await clientApi.getConfigValue("navigation.xpath.list")
+  const selectBoxData = await client.getConfigValue("navigation.xpath.list")
   selectBoxData.forEach(item => {
     const option = document.createElement('option');
     option.value = item.value || ''
@@ -205,17 +204,17 @@ async function install(app) {
   })
 
   // setup click handlers
-  api.onClick('prev-node', () => xmleditor.previousNode());
-  api.onClick('next-node', () => xmleditor.nextNode());
-  api.onClick('prev-diff', () => xmleditor.goToPreviousDiff())
-  api.onClick('next-diff', () => xmleditor.goToNextDiff())
+  api.onClick('prev-node', () => xmlEditor.previousNode());
+  api.onClick('next-node', () => xmlEditor.nextNode());
+  api.onClick('prev-diff', () => xmlEditor.goToPreviousDiff())
+  api.onClick('next-diff', () => xmlEditor.goToNextDiff())
 
   api.onClick('diff-keep-all', () => {
-    xmleditor.rejectAllDiffs()
+    xmlEditor.rejectAllDiffs()
     services.removeMergeView()
   })
   api.onClick('diff-change-all', () => {
-    xmleditor.acceptAllDiffs()
+    xmlEditor.acceptAllDiffs()
     services.removeMergeView()
   })
 
@@ -253,7 +252,7 @@ async function install(app) {
 function updateCounter(xpath, index) {
   let size;
   try {
-    size = xmleditor.countDomNodesByXpath(xpath)
+    size = xmlEditor.countDomNodesByXpath(xpath)
   } catch (e) {
     console.error(e)
     size = 0
@@ -298,7 +297,7 @@ function onAppChangeXpath(xpath, old) {
   }
 
   // update counter with index and size
-  xmleditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
+  xmlEditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
 }
 
 
@@ -310,8 +309,8 @@ function onAppChangeXpath(xpath, old) {
 async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked
   logger.info(`Auto search is: ${checked}`)
-  if (checked && xmleditor.selectedNode) {
-    await services.searchNodeContentsInPdf(xmleditor.selectedNode)
+  if (checked && xmlEditor.selectedNode) {
+    await services.searchNodeContentsInPdf(xmlEditor.selectedNode)
   }
 }
 
@@ -323,7 +322,7 @@ function onClickSelectionIndex() {
   let index = prompt('Enter node index')
   if (!index) return;
   try {
-    xmleditor.selectByIndex(parseInt(index))
+    xmlEditor.selectByIndex(parseInt(index))
   } catch (error) {
     dialog.error(error.message)
   }

@@ -2,17 +2,9 @@
  * This implements the UI for the file selection
  */
 
+/** @import {ApplicationState} from '../app.js' */
 import ui from '../ui.js'
-import { app, PdfTeiEditor } from '../app.js'
-import { getNameMap } from '../modules/browser-utils.js'
-import { api as clientApi } from '../plugins/client.js'
-import { api as logger } from '../plugins/logger.js'
-import { api as services } from './services.js'
-import { api as dialog } from './dialog.js'
-
-import SlSelect from '@shoelace-style/shoelace/dist/components/select/select.js'
-import SlOption from '@shoelace-style/shoelace/dist/components/option/option.js'
-
+import { logger, client, services, dialog } from '../app.js'
 
 // name of the component
 const pluginId = "fileselection"
@@ -78,7 +70,7 @@ async function install(app) {
 
 /**
  * 
- * @param {import('../app.js').ApplicationState} state 
+ * @param {ApplicationState} state 
  */
 async function update(state) {
   ui.toolbar.pdf.value = state.pdfPath
@@ -110,11 +102,11 @@ let fileData = null;
 
 /**
  * Reloads the file data from the server
- * @type {import('../app.js').ApplicationState} state
+ * @type {ApplicationState} state
  */
 async function reloadFileData(state) {
   logger.debug("Reloading file data")
-  const { files } = await clientApi.getFileList();
+  const { files } = await client.getFileList();
   fileData = files
   if (!fileData || fileData.length === 0) {
     dialog.error("No files found")
@@ -123,7 +115,7 @@ async function reloadFileData(state) {
 
 /**
  * Populates the selectboxes for file name and version
- * @type {import('../app.js').ApplicationState} state
+ * @type {ApplicationState} state
  */
 async function populateSelectboxes(state) {
   logger.debug("Populating selectboxes")
@@ -187,7 +179,7 @@ async function populateSelectboxes(state) {
  * Called when the selection in the PDF selectbox changes
  */
 async function onChangePdfSelectbox() {
-  const selectedFile = fileData.find(file => file.pdf === .elements.pdf.value);
+  const selectedFile = fileData.find(file => file.pdf === ui.toolbar.pdf.value);
   const pdf = selectedFile.pdf
   const xml = selectedFile.xml
   const filesToLoad = {}

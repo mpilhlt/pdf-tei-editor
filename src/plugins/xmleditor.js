@@ -1,7 +1,7 @@
 import { invoke } from '../app.js'
 import ui from '../ui.js'
 import { NavXmlEditor, XMLEditor  } from '../modules/navigatable-xmleditor.js'
-import { xpathInfo, parseXPath, isXPathSubset } from '../modules/utils.js'
+import { parseXPath, isXPathSubset } from '../modules/utils.js'
 import { api as logger } from './logger.js'
 
 
@@ -64,12 +64,12 @@ function onXpathChange(xpath, old) {
   if (!xpath) {
     return
   }
-  const { index, indexParent } = xpathInfo(xpath)
+  const { index, pathBeforePredicates } = parseXPath(xpath)
   // select the first node
   try {
     const size = xmlEditorComponent.countDomNodesByXpath(xpath)
     if (size > 0 && (index !== api.currentIndex)) {
-      api.parentPath = indexParent
+      api.parentPath = pathBeforePredicates
       api.selectByIndex(index || 1)
     }
   } catch (e) {
