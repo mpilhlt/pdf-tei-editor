@@ -11,6 +11,7 @@ import SlSelect from '@shoelace-style/shoelace/dist/components/select/select.js'
 import SlOption from '@shoelace-style/shoelace/dist/components/option/option.js'
 import SlIcon from '@shoelace-style/shoelace/dist/components/icon/icon.js'
 import SlTooltip from '@shoelace-style/shoelace/dist/components/tooltip/tooltip.js'
+import SlDropdown from '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
 import SlMenu from '@shoelace-style/shoelace/dist/components/menu/menu.js'
 import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
 
@@ -98,6 +99,6 @@ updateUi()
 export {
   updateUi, appendHtml,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
-  SlMenuItem, SlSelect, Spinner, Switch
+  SlMenuItem, SlSelect, SlDropdown, Spinner, Switch
 }
 export default ui;

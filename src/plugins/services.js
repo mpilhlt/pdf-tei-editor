@@ -48,7 +48,7 @@ export default plugin
  * @property {SlButton} duplicateXml
  * @property {SlButton} upload
  * @property {SlButton} download
- * @property {SlButton} delete
+ * @property {SlButton} deleteBtn
  * @property {SlButton} deleteCurrent 
  * @property {SlButton} deleteCurrent 
  * @property {SlButton} deleteAll
@@ -97,7 +97,7 @@ const toolbarActionsHtml = `
     <!-- delete -->
     <sl-button-group>
       <sl-dropdown placement="bottom-end">
-        <sl-button name="delete" size="small" slot="trigger" size="small" caret>
+        <sl-button name="deleteBtn" size="small" slot="trigger" size="small" caret>
           <sl-icon name="trash3"></sl-icon>
         </sl-button>
         <sl-menu>
@@ -106,6 +106,7 @@ const toolbarActionsHtml = `
         </sl-menu>
       </sl-dropdown>
     </sl-button-group>
+    
   </sl-button-group>
 
   <!-- TEI -->
@@ -153,9 +154,11 @@ function install(state) {
     XMLEditor.EVENT_XML_CHANGED,
     () =>  da.saveXml.disabled = false
   );
+
   // delete
   da.deleteCurrent.addEventListener("click", () => deleteCurrentVersion(state))
   da.deleteAll.addEventListener('click', () => deleteAllVersions(state))
+  
   // duplicate
   da.duplicateXml.addEventListener("click", () => onClickDuplicateButton(state))
 
@@ -176,10 +179,12 @@ function install(state) {
 async function update(state) {
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
-  da.delete.disabled = da.deleteAll.disabled = da.deleteCurrent.disabled = 
+  
+  da.deleteBtn.disabled = da.deleteAll.disabled = da.deleteCurrent.disabled = (
     ui.toolbar.xml.childElementCount < 2 || 
     // @ts-ignore
     ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
+  )
 
   // Allow duplicate only if we have an xml path
   da.duplicateXml.disabled = !Boolean(state.xmlPath)

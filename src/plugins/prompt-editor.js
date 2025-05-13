@@ -121,7 +121,7 @@ let currentIndex = 0
  * todo this needs to always reload the data since it might have changed on the server
  */
 async function open() {
-  if (prompts === null){
+  if (!prompts){
     ui.promptEditor.labelMenu.childNodes.forEach(node => node.remove())
     prompts = await client.loadInstructions()
     for (const [idx, prompt] of prompts.entries()) {

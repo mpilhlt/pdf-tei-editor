@@ -243,10 +243,11 @@ function updateCachedDiagnostics(diagnostics) {
  * @param {ViewUpdate} update 
  */
 function removeDiagnosticsInChangedRanges(update) {
-  console.warn(update)
   const viewState = xmlEditor.getView().state
   const diagnostics = []
-  const changedRangeValues = Object.values(update.changedRanges[0]) // todo this does not seem to be in the docs???
+  // @ts-ignore
+  // update.changedRanges is not in the documentation but exists in the object
+  const changedRangeValues = Object.values(update.changedRanges[0]) 
   const minRange = Math.min(...changedRangeValues)
   const maxRange = Math.max(...changedRangeValues)
   forEachDiagnostic(viewState, (d, from, to) => {

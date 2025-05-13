@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../app.js' 
  * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
  */
-import { client, services, dialog, fileselection, xmlEditor } from '../app.js'
+import { client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
 import { SlSelect, SlOption, appendHtml } from '../ui.js'
 import ui from '../ui.js'
 
@@ -111,6 +111,7 @@ async function extractFromCurrentPDF(state) {
     if (state.pdfPath) {
       let { xml } = await extractFromPDF(state, { doi })
       await services.showMergeView(xml)
+      updateState(state, {diffXmlPath: xml})
     }
   } catch (error) {
     console.error(error)

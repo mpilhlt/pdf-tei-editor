@@ -38,20 +38,7 @@ body {
   max-height: 50px;
 }
 
-#toolbar sl-button::part(base) {
-  margin-top: 18px;
-}
 
-#toolbar sl-button-group[label]:before {
-  content: attr(label);
-  position: absolute; /* Or relative, depending on your context */
-  top: 2px;
-  left: 0;
-  color: var(--sl-color-gray-500);
-  font-size: smaller; /* Optional: Adjust font size for the label */
-  white-space: nowrap; /* Prevent wrapping */
-  display: block; /*Crucial for positioning and showing the content*/
-}
 
 #editors {
   display: flex;
@@ -89,6 +76,21 @@ iframe {
 
 :not(:defined) {
   visibility: hidden;
+}
+
+#toolbar sl-button-group[label] sl-button::part(base) {
+  margin-top: 18px;
+}
+
+#toolbar sl-button-group[label]:before {
+  content: attr(label);
+  position: absolute; /* Or relative, depending on your context */
+  top: 2px;
+  left: 0;
+  color: var(--sl-color-gray-500);
+  font-size: smaller; /* Optional: Adjust font size for the label */
+  white-space: nowrap; /* Prevent wrapping */
+  display: block; /*Crucial for positioning and showing the content*/
 }
 
 sl-dialog {
@@ -131,7 +133,6 @@ sl-option::part(label),
 sl-menu-item::part(label) {
   font-size: smaller;
 }
-
 
 
 sl-button-group[label] {
