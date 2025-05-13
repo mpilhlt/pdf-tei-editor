@@ -393,7 +393,7 @@ async function searchNodeContentsInPdf(node) {
 async function runTeiWizard() {
   const teiDoc = xmlEditor.getXmlTree()
   if (!teiDoc) return
-  const invocationResult = invoke(endpoints.tei.enhancement, teiDoc)
+  const invocationResult = await invoke(endpoints.tei.enhancement, teiDoc)
   // todo check if there are any changes
   const enhancedTeiDoc = invocationResult[0]
   const xmlstring = (new XMLSerializer()).serializeToString(enhancedTeiDoc).replace(/ xmlns=".+?"/, '')

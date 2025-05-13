@@ -1,6 +1,7 @@
 import { accessNamedDescendentsAsProperties } from './modules/browser-utils.js';
 
 import { Spinner } from './modules/spinner.js'
+import { Switch } from './modules/switch.js';
 import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
 import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
 import SlButtonGroup from '@shoelace-style/shoelace/dist/components/button-group/button-group.js'
@@ -97,6 +98,6 @@ updateUi()
 export {
   updateUi, appendHtml,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
-  SlMenuItem, Spinner, SlSelect
+  SlMenuItem, SlSelect, Spinner, Switch
 }
 export default ui;
