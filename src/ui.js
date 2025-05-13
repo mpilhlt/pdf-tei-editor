@@ -64,5 +64,5 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
 const ui = accessNamedDescendentsAsProperties(document);
 
 export { SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu, 
-    SlMenuItem, Spinner }
+    SlMenuItem, Spinner, SlSelect }
 export default ui;

@@ -46,6 +46,24 @@ const endpoints = {
      * Function signature: (xml: string) => string
      */
     enhancement: "tei.enhancement"
+  },
+  validation: {
+    /**
+     * Enpoint that triggers validation 
+     * Function signature: ({type:string, text:string}) => Diagnostic. Currently, only `type` "xml" is supportet
+     */
+    validate: "validation.validate",
+    /**
+     * Endpoint to configure validation
+     * Function signature: ({mode:string=auto}) => void . Supported modes: "auto", "manual". 
+     */
+    configure:"validation.configure",
+    /**
+     * Endpoint to inform implementing plugins that a validation is in progress and that they must wait for it to
+     * end to perform certain actions
+     * Function signature: (promise:Promise<Diagnostics[]>) => void - Invoked with a promise that resolves when validation is done
+     */
+    inProgress: "validation.inProgress"
   }
 }
 

@@ -16,12 +16,12 @@ bp = Blueprint('validate', __name__, url_prefix='/api/')
 def validate_route():
     """
     Validates an XML document based on the contained schemaLocation URLs, downloads and caches them,
-    and returns a JSON array of error messages.
+    and returns a JSON array of Diagnostic objects as expected by @codemirror/lint.
     """
     data = request.get_json()
     xml_string = data.get('xml_string')
     errors = validate(xml_string)
-    return jsonify({'errors': errors})
+    return jsonify(errors)
 
 
 def extract_schema_locations(xml_string):

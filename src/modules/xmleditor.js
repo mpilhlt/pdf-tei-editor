@@ -1,15 +1,19 @@
-// npm modules
+/**
+ * @import {SyntaxNode, Tree} from '@lezer/common'
+ * @import {Extension, Range} from '@codemirror/state'
+ * @import {ViewUpdate} from '@codemirror/view'
+ */
+
 import { basicSetup } from 'codemirror';
-import { EditorState, EditorSelection, StateEffect, Compartment } from "@codemirror/state";
+import { EditorState, EditorSelection, Compartment } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
 import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
-import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
 // custom modules
-import { lintSource, isValidating, anyCurrentValidation, validationIsDisabled, disableValidation, updateCachedDiagnostics } from './lint.js';
-import { selectionChangeListener, linkSyntaxTreeWithDOM } from './codemirror_utils.js';
+
+import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror_utils.js';
 import { $$ } from './browser-utils.js';
 
 /**
@@ -18,35 +22,85 @@ import { $$ } from './browser-utils.js';
  */
 export class XMLEditor extends EventTarget {
 
+  /**
+   * @event SectionChangedEvent
+   * @type {ViewUpdate}
+   */
+  /** @type {string} */  
   static EVENT_SELECTION_CHANGED = "selectionChanged";
+
+  /**
+   * @event XmlChangedEvent
+   * @type {ViewUpdate}
+   */
+  /** @type {string} */  
   static EVENT_XML_CHANGED = "xmlChanged";
+  
+  /**
+   * @event EditorUpdateEvent
+   * @type {ViewUpdate}
+   */
+  /** @type {string} */
+  static EVENT_EDITOR_UPDATE ="editorUpdate"
+
+  /**
+   * @event EditorUpdateDelayedEvent
+   * @type {ViewUpdate}
+   */
+  /** @type {string} */
+  static EVENT_EDITOR_DELAYED_UPDATE ="editorUpdateDelayed"
 
   // private members
+
   /** @type {EditorView} */
-  #view; // the EditorView instance
-  #documentVersion = 0; // internal counter to track changes in the document
-  #editorContent = ''; // a cache of the raw text content of the editor
+  #view // the EditorView instance
+
+  #documentVersion = 0 // internal counter to track changes in the document
+
+  #editorContent = '' // a cache of the raw text content of the editor
+
   /** @type {Map} */
   #syntaxToDom; // Maps syntax tree nodes to DOM nodes
+
   /** @type {Map} */
   #domToSyntax; // Maps DOM nodes to syntax tree nodes
-  /** @type {Document} */
-  #xmlTree; // the xml document tree
-  /** @type {SyntaxNode} */
-  #syntaxTree = null; // the lezer syntax tree
-  #isReady = false;
-  /** @type {Promise} */
-  #readyPromise;
+
+  /** @type {Document|null} */
+  #xmlTree; // the xml document tree or null if xml text is invalid
+
+  /** @type {Tree} */
+  #syntaxTree // the lezer syntax tree
+
+  #isReady = false
+
+  /** @type {Promise | null} */
+  #readyPromise
+
   /** @type {Object} */
-  #mergeViewExt = null
+  #mergeViewExt
+
   /** @type {Object} */
-  #mergeViewCompartment = null
+  #mergeViewCompartment
+
   /** @type {string} */
   #original // the original XML document, when in merge view mode
-  #updateMergButtonsInterval; // interval to update the merge buttons
+
+  #updateMergButtonsInterval // interval to update the merge buttons
+
   /**  @type {XMLSerializer} */
   #serializer; // an XMLSerializer object or one with a compatible API
-  #autocompleteCompartment;
+
+  /** @type {Compartment} */
+  #autocompleteCompartment
+
+  /** @type {Compartment} */
+  #linterCompartment
+
+  /** @type {Compartment} */
+  #updateListenerCompartment
+
+  /** @type {Compartment} */
+  #selectionChangeCompartment
 
   /**
    * Constructs an XMLEditor instance.
@@ -65,15 +119,17 @@ export class XMLEditor extends EventTarget {
 
     this.#mergeViewCompartment = new Compartment()
     this.#autocompleteCompartment = new Compartment()
+    this.#linterCompartment = new Compartment()
+    this.#updateListenerCompartment = new Compartment()
+    this.#selectionChangeCompartment = new Compartment()
 
     // list of extensions to be used in the editor
     const extensions = [
       basicSetup,
       xml(),
-      linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => false }),
-      lintGutter(),
-      selectionChangeListener(this.#onSelectionChange.bind(this)),
-      EditorView.updateListener.of(this.#onUpdate.bind(this)),
+      this.#linterCompartment.of([]),
+      this.#selectionChangeCompartment.of([]),
+      this.#updateListenerCompartment.of([]),
       this.#mergeViewCompartment.of([]),
       this.#autocompleteCompartment.of([])
     ];
@@ -86,23 +142,66 @@ export class XMLEditor extends EventTarget {
       state: EditorState.create({ doc: "", extensions }),
       parent: editorDiv
     });
-
     this.#serializer = new XMLSerializer();
+    this.addSelectionChangeListener(this.#onSelectionChange.bind(this))
+    this.addUpdateListener(this.#onUpdate.bind(this))
   }
 
   /**
    * Resolves a namespace prefix used in the editor to its URI.
    * @todo: should be configurable  by the user
-   * @param {string} prefix The namespace prefix to resolve.
-   * @returns {string} The namespace URI associated with the prefix, or empty if not found.
+   * @param {string|null} prefix The namespace prefix to resolve.
+   * @returns {string|null} The namespace URI associated with the prefix, or empty if not found.
    */
   namespaceResolver(prefix) {
     const namespaces = {
       'tei': 'http://www.tei-c.org/ns/1.0',
       'xml': 'http://www.w3.org/XML/1998/namespace'
-    };
-    return namespaces[prefix] || '';
+    }
+    return namespaces[prefix] || null;
   };
+
+  /**
+   * Add one or more linter extensions to the editor
+   * @param {Extension} extension 
+   */
+  addLinter(extension) {
+    if (!isExtension(extension)) {
+      throw new TypeError("Argument must have the Extension interface")
+    }
+    const extensions = this.#linterCompartment.get(this.#view.state) || []
+    this.#view.dispatch({
+      effects: this.#linterCompartment.reconfigure([extensions, extension])
+    });
+  }
+
+  /**
+   * Adds an update listener
+   * @param {(update:ViewUpdate) => void} listener 
+   */
+  addUpdateListener(listener){
+    if (typeof listener != "function"){
+      throw new TypeError("Argument must be a function")
+    }
+    const listeners = this.#updateListenerCompartment.get(this.#view.state) || []
+    this.#view.dispatch({
+      effects: this.#updateListenerCompartment.reconfigure([listeners, EditorView.updateListener.of(listener) ])
+    })
+  }
+
+  /**
+   * Adds an selection change listener
+   * @param {(ranges:Range[]) => void} listener 
+   */
+  addSelectionChangeListener(listener) {
+    if (typeof listener != "function"){
+      throw new TypeError("Argument must be a function")
+    }
+    const listeners = this.#selectionChangeCompartment.get(this.#view.state) || []
+    this.#view.dispatch({
+      effects: this.#selectionChangeCompartment.reconfigure([listeners, selectionChangeListener(listener)])
+    })
+  }
 
   /**
    * Returns the current state of the editor. If false await the promise returned from 
@@ -116,7 +215,7 @@ export class XMLEditor extends EventTarget {
   /**
    * Returns a promise that resolves when the editor is ready, the XML document is loaded and
    * both syntax and xml trees are configured and synchronized
-   * @returns {Promise} - A promise that resolves when the editor is ready and the XML document is loaded
+   * @returns {Promise | null} - A promise that resolves when the editor is ready and the XML document is loaded
    */
   isReadyPromise() {
     return this.#readyPromise
@@ -151,52 +250,6 @@ export class XMLEditor extends EventTarget {
     });
     this.#documentVersion = 0;
     await this.isReadyPromise();
-  }
-
-  /**
-   * Triggers a validation and returns an array of Diagnostic objects, or an empty array if no
-   * validation errors were found
-   * @returns {Promise<object[]>}
-   */
-  async validateXml() {
-    if (isValidating()) {
-      // if a validation is ongoing, we can wait for it to finish and use the result
-      console.log("Validation is ongoing, waiting for it to finish")
-      return await anyCurrentValidation()
-    }
-    //console.log("Triggering a validation")
-    // otherwise, we trigger the linting
-
-    // remove all diagnostics
-    this.clearDiagnostics();
-
-    // save disabled state and enable validation
-    let disabledState = validationIsDisabled()
-    disableValidation(false)
-
-    // await the new validation promise once it is available
-    const diagnostics = await new Promise(resolve => {
-      console.log("Waiting for validation to start...")
-      function checkIfValidating() {
-        if (isValidating()) {
-          let validationPromise = anyCurrentValidation();
-          validationPromise.then(resolve);
-        } else {
-          setTimeout(checkIfValidating, 100);
-        }
-      }
-      checkIfValidating();
-    });
-    disableValidation(disabledState)
-    return diagnostics
-  }
-
-  /**
-   * Removes all diagnostics from the editor
-   */
-  clearDiagnostics() {
-    updateCachedDiagnostics([])
-    this.#view.dispatch(setDiagnostics(this.#view.state, []))
   }
 
   /**
@@ -251,7 +304,7 @@ export class XMLEditor extends EventTarget {
         effects: this.#mergeViewCompartment.reconfigure([])
       });
       this.#mergeViewExt = null;
-      this.#original = null;
+      this.#original = '';
     }
   }
 
@@ -284,9 +337,9 @@ export class XMLEditor extends EventTarget {
     }
     const state = this.#view.state;
     //const originalDocument = getOriginalDoc(state);
-    const { chunks } = getChunks(state);
+    const { chunks } = getChunks(state) || {};
     let changes = [];
-    for (const chunk of chunks) {
+    for (const chunk of chunks || []) {
       //const originalChunkText = originalDocument.sliceString(chunk.fromB, chunk.toB);
       rejectChunk(this.#view, chunk.fromA)
       // changes.push({
@@ -353,24 +406,27 @@ export class XMLEditor extends EventTarget {
 
   /**
    * Returns the XML document tree.
-   * @returns {Document} - The XML document tree.
+   * @returns {Document|null} - The XML document tree.
    */
   getXmlTree() {
     return this.#xmlTree;
   }
 
   /**
-   * Returns the string representation of the XML tree
+   * Returns the string representation of the XML tree, if one exists
    * @returns {string} 
    */
   getXML() {
-    return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
+    if ( this.#xmlTree) {
+      return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
+    }
+    return ''
   }
 
   /**
    * Updates the editor from a node in the XML Document. Returns a promise that resolves when
    * the editor is updated
-   * @param {Node} node A XML DOM node
+   * @param {Element} node A XML DOM node
    */
   async updateEditorFromNode(node) {
     const syntaxNode = this.getSyntaxNodeFromDomNode(node)
@@ -390,7 +446,7 @@ export class XMLEditor extends EventTarget {
 
   /**
    * Updates the given node with the XML text from the editor
-   * @param {Node} node A XML node
+   * @param {Element} node A XML node
    */
   async updateNodeFromEditor(node) {
     const { to, from } = this.getSyntaxNodeFromDomNode(node)
@@ -408,7 +464,7 @@ export class XMLEditor extends EventTarget {
 
   /**
    * Given a XML DOM node, return its position in the editor
-   * @param {Node} domNode The node in the XML DOM
+   * @param {Element} domNode The node in the XML DOM
    * @returns {number}
    */
   getDomNodePosition(domNode) {
@@ -417,7 +473,7 @@ export class XMLEditor extends EventTarget {
 
   /**
    * Given a node in the XML document, return the corresponding syntax tree object
-   * @param {Node} domNode A node in the XML DOM 
+   * @param {Element} domNode A node in the XML DOM 
    * @returns {Object} A SyntaxNode objectz
    */
   getSyntaxNodeFromDomNode(domNode) {
@@ -428,7 +484,7 @@ export class XMLEditor extends EventTarget {
   /**
    * Given a node in the syntax tree, return the corresponding node in the XML DOM
    * @param {Object} syntaxNode The syntax node
-   * @returns {Node}
+   * @returns {Element}
    */
   getDomNodeFromSyntaxNode(syntaxNode) {
     const pos = syntaxNode.from
@@ -447,6 +503,7 @@ export class XMLEditor extends EventTarget {
     // find the element parent if necessary
     if (findParentElement) {
       while (syntaxNode && !['Element', 'Document'].includes(syntaxNode.name)) {
+        // @ts-ignore
         syntaxNode = syntaxNode.parent;
       }
     }
@@ -459,7 +516,7 @@ export class XMLEditor extends EventTarget {
   /**
    * Returns the XML DOM node at the given position in the editor
    * @param {number} pos 
-   * @returns {Node}
+   * @returns {Element}
    */
   getDomNodeAt(pos) {
     if (!this.#syntaxToDom) {
@@ -468,6 +525,7 @@ export class XMLEditor extends EventTarget {
     let syntaxNode = this.getSyntaxNodeAt(pos);
     // find the element parent if necessary
     while (syntaxNode && !['Element', 'Document'].includes(syntaxNode.name)) {
+      // @ts-ignore
       syntaxNode = syntaxNode.parent;
     }
     const domNode = syntaxNode && this.#syntaxToDom.get(syntaxNode.from);
@@ -490,6 +548,7 @@ export class XMLEditor extends EventTarget {
     if (!xpath) {
       throw new Error("XPath is not provided.");
     }
+    // @ts-ignore
     const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
     const result = []
     let node;
@@ -513,6 +572,7 @@ export class XMLEditor extends EventTarget {
       throw new Error("XPath is not provided.");
     }
     xpath = `count(${xpath})`
+    // @ts-ignore
     return this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.NUMBER_TYPE, null).numberValue;
   }
 
@@ -529,6 +589,7 @@ export class XMLEditor extends EventTarget {
     if (!xpath) {
       throw new Error("XPath is not provided.");
     }
+    // @ts-ignore
     const xpathResult = this.#xmlTree.evaluate(xpath, this.#xmlTree, this.namespaceResolver, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
     const result = xpathResult.singleNodeValue;
     //console.warn(xpath, result)
@@ -573,7 +634,7 @@ export class XMLEditor extends EventTarget {
    * Generates an XPath expression to locate a given XML node within an XML document.
    * @author Gemini 2.0
    *
-   * @param {Node} node The XML node to generate the XPath for.  Must be a descendant
+   * @param {Element} node The XML node to generate the XPath for.  Must be a descendant
    *                  of a document created by DOMParser.parseFromString.  If null or
    *                  undefined, returns null.
    * @returns {string|null} An XPath expression that uniquely identifies the node,
@@ -591,9 +652,12 @@ export class XMLEditor extends EventTarget {
     if (node.nodeType === Node.ATTRIBUTE_NODE) {
       // XPaths for attributes are a bit different.  We need to find the parent
       // element first, then add the attribute name to the path.
-      const parentPath = getXPathForNode(node.ownerElement);
-      if (parentPath) {
-        return parentPath + '/@' + node.name;
+      // @ts-ignore
+      /** @type {Attr} */ const attrNode = node
+      const ownerNode = attrNode.ownerElement;
+      if (ownerNode) {
+        const parentPath = this.getXPathForNode(ownerNode);
+        return parentPath + '/@' + attrNode.name;
       } else {
         return null; // Could not determine parent's path.
       }
@@ -621,6 +685,7 @@ export class XMLEditor extends EventTarget {
       }
 
       path = '/' + segment + path;
+      // @ts-ignore
       current = current.parentNode;
     }
 
@@ -656,16 +721,20 @@ export class XMLEditor extends EventTarget {
    */
   #markAsNotReady() {
     this.#isReady = false
-    this.#readyPromise = this.#readyPromise || new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
-      this.#isReady = true
-      this.#readyPromise = null
-      resolve();
-    }, { once: true }))
+    this.#readyPromise = this.#readyPromise || 
+      /** @type {Promise<void>} */(new Promise(resolve => {
+        this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+          this.#isReady = true
+          this.#readyPromise = null
+          resolve();
+        }, { once: true })
+      }
+    ))
   }
 
   /**
    * serializes the node (or the complete xmlTree if no node is given) to an XML string
-   * @param {Node} node The node to serialize
+   * @param {Element|Document} node The node to serialize
    * @param {boolean} [removeNamespaces=true] Whether to remove the namespace declaration in the output
    */
   #serialize(node, removeNamespaces = true) {
@@ -683,7 +752,7 @@ export class XMLEditor extends EventTarget {
    * Given a string, if the string is an xml string, return it, otherwise treat it as a path
    * and load the xml string from this location
    * @param {string} xmlPathOrString A path to an xml file, or an XML string
-   * @returns {string} The xml string
+   * @returns {Promise<string>} The xml string
    */
   async #fetchXml(xmlPathOrString) {
     let xml;
@@ -703,77 +772,75 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
+   * @typedef {Range} RangeWithNode
+   * @property {Element?} node
+   * @property {string?} xpath
+   */
+
+  /**
    * Called when the selection in the editor changes
-   * @param {Array} ranges Array of range objects
+   * @param {Range[]} ranges Array of range objects
+   * @fires SelectionChangedEvent
    */
   #onSelectionChange(ranges) {
+    let rangesWithNode = []
     // add the selected node in the XML-DOM tree to each range
     if (ranges.length > 0) {
-      for (const range of ranges) {
+      /** @type {RangeWithNode[]} */
+      rangesWithNode = ranges.map(range => {
         try {
-          const domNode = this.getDomNodeAt(ranges[0].from);
-          range.node = domNode
-          range.xpath = this.getXPathForNode(domNode)
+          const node = this.getDomNodeAt(ranges[0].from);
+          const xpath = this.getXPathForNode(node)
+          return Object.assign({node, xpath}, range)
         } catch (e) {
-          // ignore errors
+          console.warn(e)
+          return range
         }
-      }
-    }
+      })
+    }  
 
     // inform the listeners
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: ranges }))
+    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: rangesWithNode }))
   }
-
 
   #updateTimeout = null
 
   /**
-   * Called when the content of the editor changes, calls #updateActions() with 
-   * a 1000ms timeout so that the update actions only get triggered after 1 second of
-   * inactivity
+   * Called when the content of the editor changes, emits events
+   * @fires {}
    * @param {Object} update Object containing data on the change
-   * @returns {void}
+   * @returns {Promise<void>}
    */
   async #onUpdate(update) {
     if (!update.docChanged) {
       return
     }
+
+    // inform the listeners
+    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_UPDATE, { detail: update }))
+
     if (this.#updateTimeout) {
       clearTimeout(this.#updateTimeout)
     }
-    this.#updateTimeout = setTimeout(() => this.#updateActions(update), 1000)
+    // @ts-ignore
+    this.#updateTimeout = setTimeout(() => this.#delayedUpdateActions(update), 1000) // todo make configurable
   }
 
   /**
-   * Called 1 second after the last change of the editor
+   * Called 1 second after the last change of the editor, i.e. any action executed here are not
+   * executed while the user is typing. Syncs the Syntax and DOM trees.
    * @param {Object} update The update object dispatched by the view
    */
-  async #updateActions(update) {
+  async #delayedUpdateActions(update) {
 
     // update document version
     this.#documentVersion += 1;
 
-    // remove diagnostics that are in the range of the changes
-    const diagnostics = [];
-    const changedRangeValues = Object.values(update.changedRanges[0])
-    const minRange = Math.min(...changedRangeValues)
-    const maxRange = Math.max(...changedRangeValues)
-    forEachDiagnostic(this.#view.state, (d, from, to) => {
-      if (d.from > maxRange || d.to < minRange) {
-        // only keep diagnostics that are outside the changed range
-        d.from = from;
-        d.to = to;
-        diagnostics.push(d);
-      } else {
-        console.log("Removing diagnostic", d)
-      }
-    });
-    updateCachedDiagnostics(diagnostics)
-    // remove the diagnostics from the editor
-    this.#view.dispatch(setDiagnostics(this.#view.state, diagnostics));
-
     // sync DOM with text content and syntax tree
     await this.sync()
+
+    // inform the listeners
+    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, { detail: update }))
   }
 
 
@@ -797,7 +864,6 @@ export class XMLEditor extends EventTarget {
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
       console.log("Document was updated but is not well-formed")
-      this.#editorContent = null;
       this.#xmlTree = null;
       return false;
     }
@@ -820,6 +886,9 @@ export class XMLEditor extends EventTarget {
    * Creates internal maps that link the syntax tree and the dom nodes
    */
   #updateMaps() {
+    if (!(this.#xmlTree && this.#syntaxTree)) {
+      throw new Error("XML or Syntax tree missing")
+    }
     const maps = linkSyntaxTreeWithDOM(this.#view, this.#syntaxTree.topNode, this.#xmlTree);
     const { syntaxToDom, domToSyntax } = maps;
     this.#syntaxToDom = syntaxToDom;

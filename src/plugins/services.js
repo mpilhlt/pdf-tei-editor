@@ -9,9 +9,8 @@
 
 import ui from '../ui.js'
 import { invoke, updateState, endpoints, client, logger, dialog, 
-  fileselection, xmlEditor, pdfViewer, services } from '../app.js'
+  fileselection, xmlEditor, pdfViewer, services, validation } from '../app.js'
 import { UrlHash } from '../modules/browser-utils.js'
-import { validationEvents } from '../modules/lint.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
 
@@ -126,7 +125,8 @@ const api = {
 const plugin = {
   name,
   install,
-  state: { update }
+  state: { update },
+  validation: { inProgress }
 }
 
 export { plugin, api }
@@ -153,7 +153,7 @@ function install(state) {
 
   const da = ui.toolbar.documentActions
   // save current version
-  da.saveXml.addEventListener('click', () => onClickSaveButton(state));
+  da.saveXml.addEventListener('click', () => onClickSaveButton());
   // enable save button on dirty editor
   xmlEditor.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
@@ -170,17 +170,9 @@ function install(state) {
   const ta = ui.toolbar.teiActions
   // validate xml button
   ta.validate.addEventListener('click', onClickValidateButton);
-  // disable during an ongoing validation
-  validationEvents.addEventListener(validationEvents.EVENT.START, () => {
-    ta.validate.disabled = true;
-  })
-  validationEvents.addEventListener(validationEvents.EVENT.END, () => {
-    ta.validate.disabled = false;
-  })
+
   // wizard
   ta.teiWizard.addEventListener("click", runTeiWizard)
-
-  logger.info("Services plugin installed.")
 }
 
 /**
@@ -197,6 +189,18 @@ async function update(state) {
 
   // Allow duplicate only if we have an xml path
   da.duplicateXml.disabled = !Boolean(state.xmlPath)
+}
+
+
+/**
+ * Invoked when a plugin starts a validation
+ * @param {Promise} validationPromise 
+ */
+async function inProgress(validationPromise) {
+  // do not start validation if another one is going on
+  ui.toolbar.teiActions.validate.disabled = true
+  await validationPromise
+  ui.toolbar.teiActions.validate.disabled = false
 }
 
 /**
@@ -243,14 +247,14 @@ async function load(state, { xml, pdf }) {
  */
 async function validateXml() {
   logger.info("Validating XML...")
-  return await xmlEditor.validateXml()
+  return await validation.validateXml()
 }
 
 /**
  * Saves the current XML content to the server, optionally as a new version
  * @param {string} filePath The path to the XML file on the server
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
- * @returns {Promise<void>}
+ * @returns {Promise<{path:string}>} An object with a path property, containing the path to the saved version
  */
 async function saveXml(filePath, saveAsNewVersion=false) {
   logger.info(`Saving XML${saveAsNewVersion ? " as new version":""}...`);
@@ -326,17 +330,17 @@ async function deleteAllVersions(state) {
   services.removeMergeView()
   
   // delete files 
-  const xmlSelectbox = state.getUiElementByName("fileselection.xml")
-  const xmlPaths = Array.from(xmlSelectbox.childNodes).map(option => option.value)
+  // @ts-ignore
+  const xmlPaths = Array.from(ui.toolbar.xml.childNodes).map(option => option.value)
   const filePathsToDelete = xmlPaths.slice(1) // skip the first option, which is the gold standard version  
   if (filePathsToDelete.length > 0) {
     await client.deleteFiles(filePathsToDelete)
   }
   try {
     // update the file data
-    await fileselection.reload()
+    await fileselection.reload(state)
     // load the gold version
-    await load({ xml:xmlPaths[0] })
+    await load(state, { xml:xmlPaths[0] })
     notify("All version have been deleted")
   } catch (error) {
     console.error(error)
@@ -345,10 +349,13 @@ async function deleteAllVersions(state) {
 
 /**
  * Saves the current file as a new version
- * @param {string} xmlPath The path to the xml file to be duplicated as a new version
+ * @param {ApplicationState} state
  */
-async function duplicateXml(xmlPath) {
-  let {path} = await saveXml(xmlPath, true)
+async function duplicateXml(state) {
+  if (!state.xmlPath) {
+    throw new TypeError("State does not contain an xml path")
+  }
+  let {path} = await saveXml(state.xmlPath, true)
   await fileselection.reload(state)
   state.xmlPath = path
 }
@@ -361,12 +368,12 @@ async function searchNodeContentsInPdf(node) {
 
   let searchTerms = getNodeText(node)
     // split all node text along whitespace and hypen/dash characters
-    .reduce((acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
+    .reduce( (/**@type {string[]}*/acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
     // Search terms must be more than three characters or consist of digits. This is to remove 
     // the most common "stop words" which would litter the search results with false positives.
     // This incorrectly removes hyphenated word parts but the alternative would be to  have to 
     // deal with language-specific stop words
-    .filter(term => term.match(/\d+/) ? true : term.length > 3)
+    .filter(term => term.match(/\d+/) ? true : term.length > 3);
 
   // make the list of search terms unique
   searchTerms = Array.from(new Set(searchTerms))
@@ -375,7 +382,7 @@ async function searchNodeContentsInPdf(node) {
   if (node.hasAttribute("source")) {
     const source = node.getAttribute("source")
     // get footnote number 
-    if (source.slice(0, 2) === "fn") {
+    if (source?.slice(0, 2) === "fn") {
       // remove the doi prefix
       searchTerms.unshift(source.slice(2) + " ")
     }
@@ -397,7 +404,7 @@ async function runTeiWizard() {
   const enhancedTeiDoc = invocationResult[0]
   const xmlstring = (new XMLSerializer()).serializeToString(enhancedTeiDoc).replace(/ xmlns=".+?"/, '')
   xmlEditor.showMergeView(xmlstring)
-  ui.floatingPanel.diffNavigation
+  ui.floatingPanel.diffNavigation.self
     .querySelectorAll("button")
     .forEach(node => node.disabled = false)
 }
@@ -427,11 +434,10 @@ async function onClickSaveButton() {
 
 /**
  * Called when the "Save" button is executed
+ * @param {ApplicationState} state
  */
-async function onClickDuplicateButton() {
-  const xmlPath = ui.toolbar.xml.value;
-  // @ts-ignore
-  await duplicateXml(xmlPath)
+async function onClickDuplicateButton(state) {
+  await duplicateXml(state)
   ui.toolbar.documentActions.saveXml.disabled = true
   notify("Document was duplicated. You are now editing the copy.")
 }

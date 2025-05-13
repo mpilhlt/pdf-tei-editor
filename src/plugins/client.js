@@ -3,6 +3,9 @@
  * This is not really a plugin as it does not implement any endpoints (yet)
  */
 
+/**
+ * @import { Diagnostic } from '@codemirror/lint'
+ */
 import { api as dialog } from './dialog.js'
 
 // name of the component
@@ -104,7 +107,7 @@ async function getFileList() {
  * Lints a TEI XML string against the Flask API endpoint.
  *
  * @param {string} xmlString - The TEI XML string to validate.
- * @returns {Promise<Array<string>>} - A promise that resolves to an array of error messages,
+ * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
  */
 async function validateXml(xmlString) {
   return await  callApi('/validate', 'POST', { xml_string: xmlString });

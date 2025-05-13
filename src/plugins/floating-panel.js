@@ -1,6 +1,9 @@
-/** @import { ApplicationState } from '../app.js' */
+/** 
+ * @import { ApplicationState } from '../app.js'
+ * @import { Switch } from '../modules/switch.js'
+ */
 import { invoke, updateState,  client, logger, services, dialog, xmlEditor } from '../app.js'
-import { selectByValue, $$ } from '../modules/browser-utils.js'
+import { $$ } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
 import ui from '../ui.js'
 
@@ -10,7 +13,8 @@ const pluginId = "floating-panel"
 /**
  * Floating panel
  * @typedef {object} floatingPanelComponent
- * @property {HTMLButtonElement} xpath
+ * @property {HTMLDivElement} self
+ * @property {HTMLSelectElement} xpath
  * @property {HTMLButtonElement} editXpath
  * @property {HTMLButtonElement} previousNode
  * @property {HTMLSpanElement} selectionIndex
@@ -24,6 +28,7 @@ const pluginId = "floating-panel"
 /**
  * Diff Navigation
  * @typedef {object} diffNavigationComponent
+ * @property {HTMLDivElement} self
  * @property {HTMLButtonElement} prevDiff
  * @property {HTMLButtonElement} nextDiff
  * @property {HTMLButtonElement} diffKeepAll
@@ -95,24 +100,13 @@ const div = document.createElement("div")
 div.innerHTML = html.trim()
 document.body.appendChild(div)
 
-/**
- * @type {HTMLDivElement}
- */
-const panelNode = document.getElementById(pluginId)
 
 /**
  * plugin API
  */
 const api = {
-
-  show: () => panelNode.classList.remove("hidden"),
-  hide: () => panelNode.classList.add("hidden"),
-
-  /**
-   * Updates data such as select box options
-   * @type {ApplicationState} state
-   */
-  update: (state) => populateui.toolbar.xml(state)
+  show: () => ui.floatingPanel.self.classList.remove("hidden"),
+  hide: () => ui.floatingPanel.self.classList.add("hidden"),
 }
 
 /**
@@ -136,7 +130,7 @@ export default plugin
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @type {ApplicationState} state
+ * @param {ApplicationState} state
  */
 async function install(state) {
 
@@ -144,36 +138,41 @@ async function install(state) {
   addBringToForegroundListener([`#${pluginId}`, '.cm-panels']);
 
   // make navigation draggable
-  makeDraggable(panelNode)
+  makeDraggable(ui.floatingPanel.self)
 
   // populate the xpath selectbox
+  const xp = ui.floatingPanel.xpath
 
   // Clear existing options
-  ui.toolbar.xml.innerHTML = '';
+  xp.innerHTML = '';
 
   // Populate select box with options
+
+  /**
+   * @type {{value:string, label:string}[]}
+   */
   const selectBoxData = await client.getConfigValue("navigation.xpath.list")
   selectBoxData.forEach(item => {
     const option = document.createElement('option');
     option.value = item.value || ''
     option.text = item.label
-    option.disabled = item.xpath === null
-    ui.toolbar.xml.appendChild(option);
+    option.disabled = item.value === null
+    xp.appendChild(option);
   });
 
   // listen for changes in the selectbox
-  ui.toolbar.xml.addEventListener('change', async () => {
-    await updateState(state, { xpath: ui.toolbar.xml.value })
+  xp.addEventListener('change', async () => {
+    await updateState(state, { xpath: xp.value })
   });
 
   // button to edit the xpath manually
   ui.floatingPanel.editXpath.addEventListener('click', () => {
-    const custom = ui.toolbar.xml[ui.toolbar.xml.length - 1]
+    const custom = xp.options[xp.length - 1]
     const xpath = prompt("Enter custom xpath", custom.value)
     if (xpath && xpath.trim()) {
       custom.value = xpath
       custom.text = `Custom: ${xpath}`
-      ui.toolbar.xml.selectedIndex = ui.toolbar.xml.length - 1
+      xp.selectedIndex = xp.length - 1
     }
   })
 
@@ -191,12 +190,16 @@ async function install(state) {
     xmlEditor.acceptAllDiffs()
     services.removeMergeView()
   })
+  
+  // @ts-ignore
   fp.switchAutoSearch.addEventListener('change', onAutoSearchSwitchChange) // toggle search of node in the PDF
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex) // allow to input node index
 
   // configure "status" buttons
   $$('.node-status').forEach(btn => btn.addEventListener('click', evt => {
-    xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status)
+    if (xmlEditor.selectedNode) {
+      xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status)
+    }
   }))
 
   // update selectbox when corresponding app state changes
@@ -211,35 +214,37 @@ async function update(state) {
 
   // show the xpath selector
   if (state.xpath) {
-    let { index, pathBeforePredicates } = parseXPath(xpath)
+    let { index, pathBeforePredicates } = parseXPath(state.xpath)
 
-    const optionValues = Array.from(ui.floatingPanel.xpath.childNodes).map(node => node.value)
+    const optionValues = Array.from(ui.floatingPanel.xpath.options).map(node => node.value)
     if (pathBeforePredicates in optionValues) {
       // this sets the xpath selectbox to one of the existing values
-      ui.floatingPanel.xpath = pathBeforePredicates
+      ui.floatingPanel.xpath.selectedIndex = optionValues.indexOf(pathBeforePredicates)
     } else {
       // the value does not exist, save it to the last option
-      let lastIdx = ui.floatingPanel.xpath.length - 1
-      ui.floatingPanel.xpath[lastIdx].value = xpath
-      ui.floatingPanel.xpath[lastIdx].text = `Custom: ${xpath}`
-      ui.floatingPanel.xpath[lastIdx].disabled = false
+      let lastIdx = ui.floatingPanel.xpath.options.length - 1
+      ui.floatingPanel.xpath.options[lastIdx].value = state.xpath
+      ui.floatingPanel.xpath.options[lastIdx].text = `Custom: ${state.xpath}`
+      ui.floatingPanel.xpath.options[lastIdx].disabled = false
     }
     // update counter with index and size
     xmlEditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
   }
 
   // configure node status buttons
-  ui.floatingPanel.markNodeButtons.querySelector("button").forEach(btn => btn.disabled = !Boolean(state.xpath))
+  ui.floatingPanel.markNodeButtons.querySelectorAll("button").forEach(btn => btn.disabled = !Boolean(state.xpath))
 
   // configure diff navigation buttons
-  ui.floatingPanel.diffNavigation.querySelectorAll("button").forEach(node => node.disabled = !(value && value !== state.xmlPath))
+  ui.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
+    node.disabled = !(node.value && node.value !== state.xmlPath)
+  })
 }
 
 /**
  * Given an xpath and an index, displays the index and the number of occurrences of the 
  * xpath in the xml document. If none can be found, the index is displayed as 0.
  * @param {string} xpath The xpath that will be counted
- * @param {Number} index The index 
+ * @param {Number | null} index The index or null if the result set is empty
  */
 function updateCounter(xpath, index) {
   let size;
@@ -261,7 +266,7 @@ function updateCounter(xpath, index) {
 
 /**
  * Called when the switch for auto-search is toggled
- * @param {Event} evt 
+ * @param {CustomEvent} evt 
  */
 async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked

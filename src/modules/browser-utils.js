@@ -303,3 +303,21 @@ export function accessNamedDescendentsAsProperties(node) {
   });
 }
 
+// Function to serialize the XML DOM back to a string (for demonstration)
+export function serializeXmlToString(xmlDoc) {
+  // Check if xmlDoc is actually a document node before trying to serialize
+  if (!xmlDoc || typeof xmlDoc.serializeToString !== 'function') {
+    console.error("Invalid document object passed to serializeXmlToString");
+    // Attempt to return a string representation if possible, or indicate error
+    try {
+      if (xmlDoc.documentElement) {
+        return new XMLSerializer().serializeToString(xmlDoc.documentElement);
+      }
+    } catch (e) {
+      console.error("Could not serialize even documentElement:", e);
+    }
+    return "[Invalid XML Document]";
+  }
+  const serializer = new XMLSerializer();
+  return serializer.serializeToString(xmlDoc);
+}

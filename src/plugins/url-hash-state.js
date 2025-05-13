@@ -1,10 +1,18 @@
 /**
- * This component provides a simple logging component which can be extended later
- * or replaced with a shim to an external library
+ * This component sets all string properties of the application state as hash parameters of the URL
+ * This might have to be changed later in case we do not want to show all string properties in the app state
+ */
+
+/** 
+ * @import { ApplicationState } from '../app.js' 
  */
 
 // name of the plugin
 const name = "url-hash-state"
+
+const api = {
+  updateState: updateStateFromUrlHash
+}
 
 /**
  * component plugin
@@ -19,7 +27,7 @@ const plugin = {
 //
 // exports 
 //
-export {plugin}
+export {plugin, api}
 export default plugin
 
 //
@@ -28,7 +36,7 @@ export default plugin
 
 /**
  * 
- * @param {import("../app").ApplicationState} state 
+ * @param {ApplicationState} state 
  */
 export function updateUrlHashfromState(state) {
   const url = new URL(window.location.href);
@@ -50,12 +58,13 @@ export function updateUrlHashfromState(state) {
 
 /**
  * Updates the state from the URL hash.
+ * @param {ApplicationState} state
  */
-export function updateStateFromUrlHash(state) {
+function updateStateFromUrlHash(state) {
   const urlParams = new URLSearchParams(window.location.hash.slice(1));
   for (const [key, value] of urlParams.entries()) {
     if (key in state) {
-      state.key = value
+      state[key] = value
     }
   }
 } 

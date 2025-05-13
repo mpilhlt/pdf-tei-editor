@@ -1,5 +1,4 @@
 import { XMLEditor } from "./xmleditor.js";
-import { disableValidation } from '../modules/lint.js'
 import { parseXPath } from '../modules/utils.js'
 
 export {XMLEditor}
@@ -24,7 +23,7 @@ export class NavXmlEditor extends XMLEditor {
 
   /**
    * The last selected primary node, can be null
-   * @type {Node?}
+   * @type {Element?}
    */
   selectedNode = null;
 
@@ -92,7 +91,7 @@ export class NavXmlEditor extends XMLEditor {
     }
 
     // the xpath of the current cursor position
-    const newCursorXpath = selectedNode && app.xmleditor.getXPathForNode(selectedNode)
+    const newCursorXpath = selectedNode && this.getXPathForNode(selectedNode)
 
     // do nothing if we cannot find a matching parent, or the parent is the same as before
     if (!selectedNode || this.selectedNode === selectedNode || newCursorXpath === this.selectedXpath) {
@@ -165,16 +164,8 @@ export class NavXmlEditor extends XMLEditor {
   }
 
   /**
-   * Disables the validation, i.e. any validation triggered returns an empty array
-   * @param {boolean} value 
-   */
-  disableValidation(value) {
-    disableValidation(value)
-  }
-
-  /**
    * Sets the status attribute of the given node, or removes it if the status is empty
-   * @param {Node} node The node
+   * @param {Element} node The node
    * @param {string} status The new status, can be "verified", "unresolved", "comment" or ""
    * @returns {Promise<void>}
    * @throws {Error} If the status is not one of the allowed values

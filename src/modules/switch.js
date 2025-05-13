@@ -140,7 +140,10 @@ const html = `
   </label>
 </div>
 `
-
+/**
+ * A Switch
+ * @event {CustomEvent}
+ */
 export class Switch extends HTMLElement {
   constructor() {
     super();
@@ -154,14 +157,16 @@ export class Switch extends HTMLElement {
     const elem = document.createElement('div');
     elem.innerHTML=html
     this.elem = elem
-    this.shadow.appendChild(elem);    
+    this.shadow.appendChild(elem);
 
-    this.checkbox = this.shadow.querySelector('input[type="checkbox"]'); // Get the checkbox element.
+    /** @type {HTMLInputElement} */
+    // @ts-ignore
+    this.checkbox = this.shadow.querySelector('input[type="checkbox"]'); 
     // Observe changes to the "checked" attribute
     this.observer = new MutationObserver((mutations) => {
         mutations.forEach(mutation => {
             if (mutation.attributeName === 'checked') {
-              this.checked = this.checkbox.checked;
+              this.checked = this.checkbox.checked || false;
             }
         });
     });
@@ -181,7 +186,7 @@ export class Switch extends HTMLElement {
   set checked(value) {
     if (value !== this.#oldChecked) {
       this.checkbox.checked = value
-      this.elem.setAttribute('checked', value)
+      this.elem.setAttribute('checked', value ? "checked": '')
       this.dispatchEvent(new CustomEvent('change', {
         detail: { checked: value }
       }));
@@ -221,14 +226,6 @@ export class Switch extends HTMLElement {
     if (unchecked) {
       unchecked.textContent = this.getAttribute("label-off") || "";
     }
-  }
-
-  show() {
-    this.container.classList.remove('hidden');
-  }
-
-  hide() {
-    this.container.classList.add('hidden');
   }
 
   static get observedAttributes() {

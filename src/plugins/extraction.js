@@ -4,11 +4,11 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlButton, SlInput } from '../ui.js'
+ * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
  */
-import { SlSelect } from '@shoelace-style/shoelace'
-import { invoke, endpoints, logger, client, services, dialog, fileselection,  xmlEditor} from '../app.js'
+import { invoke, endpoints, logger, client, services, dialog, fileselection, xmlEditor } from '../app.js'
 import { appendHtml } from '../modules/browser-utils.js'
+import { SlSelect, SlOption } from '../ui.js'
 import ui from '../ui.js'
 
 // name of the component
@@ -17,6 +17,7 @@ const pluginId = "extraction"
 /**
  * Extraction actions button group
  * @typedef {object} extractionActionsComponent
+ * @property {SlButtonGroup} self
  * @property {SlButton} extractNew 
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
@@ -73,7 +74,7 @@ const plugin = {
   install
 }
 
-export { api , plugin }
+export { api, plugin }
 export default plugin
 
 //
@@ -111,8 +112,10 @@ async function extractFromCurrentPDF(state) {
   }
   try {
     doi = doi || getDoiFromFilename(state.pdfPath)
-    let { xml } = await extractFromPDF(state.pdfPath, {doi})
-    await services.showMergeView(xml)
+    if (state.pdfPath) {
+      let { xml } = await extractFromPDF(state, { doi })
+      await services.showMergeView(xml)
+    }
   } catch (error) {
     console.error(error)
   }
@@ -131,7 +134,7 @@ async function extractFromNewPdf(state) {
     }
 
     const doi = getDoiFromFilename(filename)
-    const { xml, pdf } = await extractFromPDF(filename, {doi})
+    const { xml, pdf } = await extractFromPDF(state, { doi })
     await services.load(state, { xml, pdf })
 
   } catch (error) {
@@ -141,26 +144,24 @@ async function extractFromNewPdf(state) {
 }
 
 /**
- * Extracts references from the given PDF file
- * @param {string} filename The name of the PDF file
- * @param {{doi:string, instructions:string}?} options Optional default option object passed to the extraction service,
+ * Extracts references from the given PDF file, letting the user choose the extraction options
+ * @param {ApplicationState} state
+ * @param {{doi:string}?} defaultOptions Optional default option object passed to the extraction service,
  * user will be prompted to choose own ones.
- * @returns {Promise<{xml, pdf}>} An object with path to the xml and pdf files
- * @throws {Error} If the DOI is not valid
+ * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
+ * @throws {Error} If the DOI is not valid or the user aborts the dialog
  */
-async function extractFromPDF(filename, options = {}) {
-  if (!filename) {
-    throw new Error("No filename given")
-  }
+async function extractFromPDF(state, defaultOptions) {
+  if(!state.pdfPath) throw new Error("Missing PDF path")
 
   // get DOI and instructions from user
-  options = await promptForExtractionOptions(options)
-  if (options === null) return
+  const options = await promptForExtractionOptions(defaultOptions)
+  if (options === null) throw new Error("User abort")
 
   ui.spinner.show('Extracting references, please wait')
   try {
-    let result = await client.extractReferences(filename, options)
-    await fileselection.reload()  // todo uncouple
+    let result = await client.extractReferences(state.pdfPath, options)
+    await fileselection.reload(state)  // todo uncouple
     return result
   } finally {
     ui.spinner.hide()
@@ -169,6 +170,11 @@ async function extractFromPDF(filename, options = {}) {
 
 // utilities
 
+/**
+ * 
+ * @param {{doi:string}?} options Optional default option object
+ * @returns 
+ */
 async function promptForExtractionOptions(options) {
 
   // load instructions
@@ -176,16 +182,22 @@ async function promptForExtractionOptions(options) {
   const instructions = [];
 
   // add dialog to DOM
-  const dialog = appendHtml(dialogHtml)[0]
-  
-  // populate dialog
-  const doiInput = dialog.querySelector('[name="doi"]')
-  doiInput.value = options.doi
+  const optionsDialog = appendHtml(dialogHtml)[0]
 
+  // populate dialog
+  /** @type {SlInput|null} */
+  const doiInput = optionsDialog.querySelector('[name="doi"]')
+  if (!doiInput) throw new Error("Missing DOM element")
+  if (options && typeof options =="object" && 'doi' in options) {
+    doiInput.value = options.doi
+  }
+  
   // configure selectbox 
-  const selectbox = dialog.querySelector('[name="instructionIndex"]')
-  for (const [idx, {label, text}] of instructionsData.entries()) {
-    const option = Object.assign (new SlOption, {
+  /** @type {SlSelect|null} */
+  const selectbox = optionsDialog.querySelector('[name="instructionIndex"]')
+  if (!selectbox) throw new Error("Missing DOM element")
+  for (const [idx, { label, text }] of instructionsData.entries()) {
+    const option = Object.assign(new SlOption, {
       value: String(idx),
       textContent: label
     })
@@ -198,42 +210,45 @@ async function promptForExtractionOptions(options) {
   const formData = await new Promise(resolve => {
     // user cancels
     function cancel() {
-      dialog.remove()
+      optionsDialog.remove()
       resolve(null)
     }
     // user submits their input
     function submit() {
-      dialog.remove()
+      optionsDialog.remove()
       resolve({
-        'doi': dialog.querySelector('[name="doi"]').value,
-        'instructionIndex': parseInt(dialog.querySelector('[name="instructionIndex"]').value)
+        // @ts-ignore
+        'doi': optionsDialog.querySelector('[name="doi"]').value,
+        // @ts-ignore
+        'instructionIndex': parseInt(optionsDialog.querySelector('[name="instructionIndex"]').value)
       })
     }
 
     // event listeners
-    dialog.addEventListener("sl-request-close", cancel, { once: true })
-    dialog.querySelector('[name="cancel"]').addEventListener("click", cancel, { once: true })
-    dialog.querySelector('[name="submit"]').addEventListener("click", submit, { once: true })
-    
-    dialog.show()
+    optionsDialog.addEventListener("sl-request-close", cancel, { once: true })
+    // @ts-ignore
+    optionsDialog.querySelector('[name="cancel"]').addEventListener("click", cancel, { once: true })
+    // @ts-ignore
+    optionsDialog.querySelector('[name="submit"]').addEventListener("click", submit, { once: true })
+
+    // @ts-ignore
+    optionsDialog.show()
   })
 
   if (formData === null) {
     // user has cancelled the form
     return null
-  } 
-
-  if (formData.doi == "" || !isDoi(formData.doi)) {
-    dialog.error(`${doi} does not seem to be a DOI, please try again.`)
-    return 
   }
 
-  Object.assign(options, {
+  if (formData.doi == "" || !isDoi(formData.doi)) {
+    dialog.error(`${formData.doi} does not seem to be a DOI, please try again.`)
+    return
+  }
+
+  return Object.assign({
     doi: formData.doi,
     instructions: instructions[formData.instructionIndex]
-  }) 
-
-  return options
+  }, options)
 }
 
 function getDoiFromXml() {

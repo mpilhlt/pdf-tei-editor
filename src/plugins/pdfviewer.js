@@ -11,10 +11,10 @@ import ui from '../ui.js'
  * Expose the PDFViewer API
  * @type {PDFJSViewer}
  */
-const api = new PDFJSViewer('pdf-viewer')
+const pdfViewer = new PDFJSViewer('pdf-viewer')
 
 // hide it until ready
-api.hide()
+pdfViewer.hide()
 
 
 /**
@@ -26,7 +26,7 @@ const plugin = {
   state: { update }
 }
 
-export { plugin, api }
+export { plugin, pdfViewer as api }
 export default plugin
 
 //
@@ -38,9 +38,9 @@ export default plugin
  * @returns {Promise<void>}
  */
 async function install(state) {
-  await api.isReady()
+  await pdfViewer.isReady()
   logger.info("PDF Viewer ready.")
-  api.show()
+  pdfViewer.show()
 }
 
 let lastNode = null; 

@@ -5,9 +5,9 @@
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
 import ep from '../endpoints.js'
-import { invoke, updateState,  xmlEditor, logger, services, dialog } from '../app.js'
+import { updateState,  logger, services, dialog, validation, floatingPanel, urlHash } from '../app.js'
 import { Spinner } from '../ui.js'
-import { updateStateFromUrlHash } from './url-hash-state.js'
+import { UrlHash } from '../modules/browser-utils.js'
 
 // plugin name
 const name = "pdf-tei-editor"
@@ -46,6 +46,7 @@ let spinner
 function install(state) {
   // spinner/blocker
   spinner = new Spinner
+  // @ts-ignore
   spinner.name = "spinner"
   document.body.appendChild(spinner)
 }
@@ -62,19 +63,20 @@ async function start(state) {
   try {
 
     logger.info("Configuring application state from URL")
-    updateStateFromUrlHash(state)
+    urlHash.updateState(state)
 
     // disable regular validation so that we have more control over it
-    xmlEditor.disableValidation(true)
+    validation.disableValidation(true)
 
     // get document paths from URL hash or from the first entry of the selectboxes
+    // @ts-ignore
     const defaultFile = ui.toolbar.pdf.firstChild.dataset
     const pdf = state.pdfPath || defaultFile.pdf
     const xml = state.xmlPath || defaultFile.xml
     const diff = state.diffXmlPath
 
     // lod the documents
-    await services.load({ pdf, xml, diff })
+    await services.load(state, { pdf, xml, diff })
 
     // two alternative initial states:
     // a) if the diff param was given and is different from the xml param, show a diff/merge view 
@@ -84,7 +86,7 @@ async function start(state) {
       try {
         await services.showMergeView(diff)
       } catch (error) {
-        logger.warn("Error loading diff view:", error)
+        logger.warn("Error loading diff view: " + error.message)
       }
     } else {
       // b) validation & xpath selection
@@ -96,7 +98,7 @@ async function start(state) {
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
         logger.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
-        xmlEditor.disableValidation(seconds > 3)
+        validation.disableValidation(seconds > 3)
       })
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
@@ -107,12 +109,12 @@ async function start(state) {
         state.xpath = ui.floatingPanel.xpath.value
       }
       // update the UI
-      invoke(ep.state.update)
+      updateState(state)
     }
 
     // finish initialization
     spinner.hide()
-    ui.floatingPanel.show()
+    floatingPanel.show()
     logger.info("Application ready.")
 
   } catch (error) {

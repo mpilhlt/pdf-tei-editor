@@ -1,11 +1,16 @@
+/**
+ * @import {SyntaxNode} from '@lezer/common'
+ * @import {EditorState} from '@codemirror/state'
+ */
+
 import { syntaxTree } from "@codemirror/language";
 import { startCompletion } from "@codemirror/autocomplete";
 
 /**
  * Walks the Lezer Syntax upwards to find all tag names
- * @param {Object} node 
+ * @param {SyntaxNode} node 
  * @param {EditorState} state 
- * @returns {Array<>}
+ * @returns {string[]}
  */
 function getParentTagNames(node, state) {
   const tagNames = [];

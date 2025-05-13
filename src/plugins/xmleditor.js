@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../app.js' 
  */
 
-import { invoke, update, xmlEditor } from '../app.js'
+import { invoke, updateState, xmlEditor } from '../app.js'
 import ui from '../ui.js'
 import { NavXmlEditor, XMLEditor  } from '../modules/navigatable-xmleditor.js'
 import { parseXPath, isXPathSubset } from '../modules/utils.js'
@@ -59,7 +59,7 @@ async function install(state) {
  */
 async function update(state) {
   // xpath state => selection
-  if (state.xpath) {
+  if (!state.xpath) {
     return
   }
   await xmlEditor.whenReady()
@@ -76,12 +76,13 @@ async function update(state) {
   }
 }
 
+
 /**
  * Called when the selection in the editor changes to update the cursor xpath
  * @param {ApplicationState} state
  */
 async function onSelectionChange(state) {
-  if (!api.selectedXpath)  {
+  if (!(api.selectedXpath && state.xpath)) {
     // this usually means that the editor is not ready yet
     //console.warn("Could not determine xpath of last selected node")
     return

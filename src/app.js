@@ -10,10 +10,11 @@ import ep from './endpoints.js'
 
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
-import { plugin as urlHashStatePlugin } from './plugins/url-hash-state.js'
+import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
 import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
 import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
 import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
+import { plugin as validationPlugin, api as validation } from './plugins/validation.js'
 import { plugin as clientPlugin, api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
 import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
@@ -28,10 +29,10 @@ import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
  * The application state, which is often passed to the plugin endpoints
  * 
  * @typedef {object} ApplicationState
- * @property {string?} pdfPath
- * @property {string?} xmlPath
- * @property {string?} diffXmlPath
- * @property {string?} xpath
+ * @property {string?} pdfPath - The path to the PDF file in the viewer
+ * @property {string?} xmlPath - The path to the XML file in the editor
+ * @property {string?} diffXmlPath - The path to an XML file which is used to create a diff, if any
+ * @property {string?} xpath - The current xpath used to select a node in the editor
  */
 /**
  * @type{ApplicationState}
@@ -40,11 +41,11 @@ let state = {
   pdfPath: null,
   xmlPath: null,
   diffXmlPath: null,
-  xpath: null,
+  xpath: null
 }
 
 const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin, 
-  pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
+  pdfViewerPlugin, xmlEditorPlugin, validationPlugin, clientPlugin, fileselectionPlugin,
   extractionPlugin, servicesPlugin, floatingPanelPlugin, promptEditorPlugin,
   teiWizardPlugin
 ]
@@ -89,5 +90,5 @@ await invoke(ep.start, state)
 // Exports
 // 
 export { state, ep as endpoints, invoke, updateState }
-export { logger, dialog, pdfViewer, xmlEditor, client,fileselection, extraction,
-  services, floatingPanel, promptEditor }
+export { logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
+  services, floatingPanel, promptEditor, urlHash }

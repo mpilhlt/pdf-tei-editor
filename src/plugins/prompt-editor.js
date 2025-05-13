@@ -14,6 +14,7 @@ const pluginId = "prompt-editor"
 /**
  * Prompt editor
  * @typedef {object} promptEditorComponent
+ * @property {SlDialog} self
  * @property {SlInput} label
  * @property {SlMenu} labelMenu
  * @property {SlTextarea} text
@@ -59,7 +60,7 @@ const buttonHtml = `
 const api = {
   open,
   edit,
-  duplicate,
+  duplicate: duplicateInstructions,
   save,
   submit,
   close,
@@ -84,18 +85,21 @@ export default plugin
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {ApplicationState} app The main application
+ * @param {ApplicationState} state The main application
  */
-function install(app) {
+function install(state) {
   // add prompt editor component
   const editorDiv = document.createElement("div")
   editorDiv.innerHTML = editorHtml.trim()
+  if (!editorDiv.firstChild) throw new Error("Invalid DOM")
   document.body.appendChild(editorDiv.firstChild)
+
+
   const pe = ui.promptEditor
-  pe.addEventListener("sl-request-close", dialogOnRequestClose)
+  pe.self.addEventListener("sl-request-close", dialogOnRequestClose)
   pe.labelMenu.addEventListener('sl-select', menuOnSelect);
   pe.submit.addEventListener('click', submit)
-  pe.duplicate.addEventListener('click', duplicate)
+  pe.duplicate.addEventListener('click', duplicateInstructions)
   pe.cancel.addEventListener('click', close)
   pe.delete.addEventListener('click', deletePrompt)
 
@@ -103,17 +107,18 @@ function install(app) {
   const buttonDiv = document.createElement('div')
   buttonDiv.innerHTML = buttonHtml.trim()
   const button = buttonDiv.firstChild
+  if (!button) throw new Error("Invalid DOM")
   button.addEventListener("click", () => api.open())
-  ui.toolbar.extractionActions.appendChild(button)
+  ui.toolbar.extractionActions.self.appendChild(button)
 }
 
 // API
 
 /**
  * An array of objects with the different versions of the prompt
- * @type {Array<{ label: string, text: string }>}
+ * @type {Array<{ label: string, text: string[] }>}
  */
-let prompts = null;
+let prompts;
 
 /** @type {Number} */
 let currentIndex = 0
@@ -132,7 +137,7 @@ async function open() {
   }
   ui.promptEditor.delete.disabled = prompts.length < 2
   api.edit(currentIndex)
-  ui.promptEditor.show()
+  ui.promptEditor.self.show()
 }
 
 /**
@@ -140,6 +145,7 @@ async function open() {
  * @param {Number} idx 
  */
 function edit(idx) {
+  // @ts-ignore
   ui.promptEditor.labelMenu.childNodes[idx].checked = true
   const {label, text} = prompts[idx]
   ui.promptEditor.label.value = label
@@ -147,14 +153,14 @@ function edit(idx) {
 }
 
 /**
- * Duplicates the prompt with the given index
- * @param {Number} idx 
+ * Duplicates the current prompt
  */
-function duplicate(idx) {
+function duplicateInstructions() {
   saveCurrentPrompt()
   const newPrompt = Object.assign({}, prompts[currentIndex])
   newPrompt.label += " (Copy)"
   prompts.push(newPrompt)
+  // @ts-ignore
   ui.promptEditor.labelMenu.childNodes[currentIndex].checked = false
   currentIndex = prompts.length - 1
   addSlMenuItem(currentIndex, newPrompt.label)
@@ -182,19 +188,18 @@ function submit() {
  * Closes the prompt editor
  */
 function close() {
-  ui.promptEditor.hide()
+  ui.promptEditor.self.hide()
 }
 
 /**
  * Deletes the prompt with the given index 
- * @param {Number} idx 
  * @returns {void}
  */
-function deletePrompt(idx){
+function deletePrompt(){
   if (prompts.length < 2) {
     throw new Error("There must at least be one prompt entry")
   }
-  if(!confirm("Do you really want to delete this prompt?"))return
+  if(!confirm("Do you really want to delete these prompt instructions?")) return
   ui.promptEditor.labelMenu.removeChild(ui.promptEditor.labelMenu.childNodes[currentIndex])
   prompts.splice(currentIndex, 1)
   ui.promptEditor.delete.disabled = prompts.length < 2
@@ -225,11 +230,12 @@ function saveCurrentPrompt() {
 /**
  * Called when the user selects a new prompt from the dropdown. Saves the current values to the prompt data 
  * and changes to the new prompt
- * @param {Event} event The "sl-select" event
+ * @param {CustomEvent} event The "sl-select" event
  */
 function menuOnSelect(event) {
   saveCurrentPrompt()
   const item = event.detail.item;
+  // @ts-ignore
   ui.promptEditor.labelMenu.childNodes[currentIndex].checked = false
   currentIndex = item.value
   api.edit(currentIndex)

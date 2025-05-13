@@ -1,7 +1,10 @@
+/**
+ * @import { Extension } from '@codemirror/state'
+ * @import {SyntaxNode, Tree} from '@lezer/common'
+ */
+
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
-
-/** @import {SyntaxNode} from '@lezer/common' */
 
 /**
  * Links CodeMirror's syntax tree nodes representing XML elements with their corresponding DOM elements
@@ -10,7 +13,7 @@ import { syntaxTree } from "@codemirror/language";
  *
  * @param {EditorView} view The CodeMirror EditorView instance.
  * @param {SyntaxNode} syntaxNode The root syntax node of the CodeMirror XML editor's syntax tree.
- * @param {Element} domNode The root DOM element parsed by DOMParser.
+ * @param {Element|Document} domNode The (root) DOM element parsed by DOMParser.
  * @throws {Error} If the tags of the syntax tree node and the DOM node do not match.
  * @returns {Object} An object containing two WeakMaps: syntaxToDom and domToSyntax.
  *                  - syntaxToDom: Maps the position of syntax tree nodes to DOM nodes.
@@ -229,4 +232,16 @@ export function resolveXPath(view, xpath) {
   } else {
     return null;
   }
+}
+
+/**
+ * Checks if an object has the Extension interface
+ * @param {Extension} extension 
+ * @returns {Boolean}
+ */
+export function isExtension(extension){
+  if (!Array.isArray(extension)) {
+    extension = [extension]
+  }
+  return extension.every(ext => Boolean(ext.extension) )
 }
