@@ -23,11 +23,10 @@ export class PDFJSViewer {
   /**
    * Constructor for the PDFJSViewer class.
    * @param {string} iframeId - The ID of the iframe element containing the PDF.js viewer.
-   * @param {string?} pdfPath - The path to the PDF document. If given, used when `load()` is called without argument.
    * @throws {Error} If the iframe element is not found.
    */
-  constructor(containerDivId, pdfPath) {
-    this.pdfPath = pdfPath;
+  constructor(containerDivId) {
+
     this.containerDiv = document.getElementById(containerDivId);
     if (!this.containerDiv) {
       throw new Error(`Cannot find element with id ${containerDivId}`);

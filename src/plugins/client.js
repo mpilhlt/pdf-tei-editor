@@ -1,4 +1,12 @@
-import { PdfTeiEditor } from '../app.js'
+/**
+ * Plugin providing a link to server-side methods
+ * This is not really a plugin as it does not implement any endpoints (yet)
+ */
+
+/**
+ * @import { Diagnostic } from '@codemirror/lint'
+ */
+import { api as dialog } from './dialog.js'
 
 // name of the component
 const name = "client"
@@ -9,7 +17,7 @@ const api_base_url = '/api';
 const upload_route = '/api/upload'
 
 /**
- * component API
+ * plugin API
  */
 const api = {
   get lastHttpStatus() {
@@ -33,23 +41,11 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name,
-  install
+  name
 }
 
 export { api, plugin }
 export default plugin
-
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
- */
-function install(app) {
-  app.registerComponent(name, api, name)
-  app.logger.info("Client plugin installed.")
-}
-
-
 
 /**
  * A generic function to make API requests against the application backend. 
@@ -91,7 +87,7 @@ async function callApi(endpoint, method, body = null) {
     }
     return result
   } catch (error) {
-    window.app.dialog.error(error.message)
+    dialog.error(error.message)
     lastHttpStatus = error.status || 500;
     // rethrow
     throw error
@@ -101,20 +97,21 @@ async function callApi(endpoint, method, body = null) {
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
  *
- * @returns {Promise<Array<{id,pdf,xml}>>} - A promise that resolves to an array of objects with keys "id", "pdf", and "tei".
+ * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
+ *  objects with keys "id", "pdf", and "tei".
  */
-async function getFileList(xmlString) {
-  return callApi('/files/list', 'GET');
+async function getFileList() {
+  return await callApi('/files/list', 'GET');
 }
 
 /**
  * Lints a TEI XML string against the Flask API endpoint.
  *
  * @param {string} xmlString - The TEI XML string to validate.
- * @returns {Promise<Array<string>>} - A promise that resolves to an array of error messages,
+ * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
  */
 async function validateXml(xmlString) {
-  return callApi('/validate', 'POST', { xml_string: xmlString });
+  return await  callApi('/validate', 'POST', { xml_string: xmlString });
 }
 
 /**
@@ -125,7 +122,7 @@ async function validateXml(xmlString) {
  * @returns {Promise<Object>}
  */
 async function saveXml(xmlString, filePath, saveAsNewVersion) {
-  return callApi('/files/save', 'POST',
+  return await callApi('/files/save', 'POST',
     { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
 }
 
@@ -136,7 +133,7 @@ async function saveXml(xmlString, filePath, saveAsNewVersion) {
  * @returns {Promise<Object>}
  */
 async function extractReferences(filename, options) {
-  return callApi('/extract', 'POST', { pdf: filename, ...options });
+  return await  callApi('/extract', 'POST', { pdf: filename, ...options });
 }
 
 /**
@@ -144,7 +141,7 @@ async function extractReferences(filename, options) {
  * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
  */
 async function loadInstructions() {
-  return callApi('/config/instructions', 'GET');
+  return await  callApi('/config/instructions', 'GET');
 }
 
 /**
@@ -157,7 +154,7 @@ async function saveInstructions(instructions) {
     throw new Error("Instructions must be an array");
   }
   // Send the instructions to the server
-  return callApi('/config/instructions', 'POST', instructions);
+  return await  callApi('/config/instructions', 'POST', instructions);
 }
 
 
@@ -169,7 +166,7 @@ async function deleteFiles(filePaths) {
   if (!Array.isArray(filePaths)) {
     throw new Error("Timestamps must be an array");
   }
-  return callApi('/files/delete', 'POST', filePaths);
+  return await  callApi('/files/delete', 'POST', filePaths);
 }
 
 
@@ -214,9 +211,9 @@ async function setConfigValue(key, value) {
  * @param {string} [options.fieldName='file'] - The name of the form field for the file.
  * @param {object} [options.headers={}] - Additional headers to include in the request.
  * @param {function} [options.onProgress] - A callback function to handle upload progress events.
- *        The function receives a progress event object as an argument.
- * @returns {Promise<Response>} - A Promise that resolves with the `Response` object
- *                             from the `fetch()` call or rejects with an error.
+ *    The function receives a progress event object as an argument.
+ * @returns {Promise<*>} - A Promise that resolves with the json-deserialized result
+ *    from the `fetch()` call or rejects with an error.
  * @example
  * // Async/Await example (requires an async function context):
  * async function myUploadFunction() {
@@ -229,16 +226,16 @@ async function setConfigValue(key, value) {
  *       onProgress: (event) => {
  *         if (event.lengthComputable) {
  *           const percentComplete = (event.loaded / event.total) * 100;
- *           app.logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
+ *           logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
  *         } else {
- *           app.logger.info("Total size is unknown");
+ *           logger.info("Total size is unknown");
  *         }
  *       } 
  *     });
  *
  *     if (response.ok) {
  *       const data = await response.json();
- *       app.logger.info('Upload successful:', data);
+ *       logger.info('Upload successful:', data);
  *     } else {
  *       throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
  *     }
@@ -259,7 +256,7 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
     input.type = 'file';
     input.accept = '.pdf, .xml';
     input.addEventListener('change', async () => {
-      const file = input.files[0];
+      const file = Array.isArray(input.files) ? input.files[0] : null;
       if (!file) {
         reject(new Error('No file selected.'));
         return;

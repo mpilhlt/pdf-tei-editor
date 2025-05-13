@@ -1,3 +1,8 @@
+/**
+ * @import { Extension } from '@codemirror/state'
+ * @import {SyntaxNode, Tree} from '@lezer/common'
+ */
+
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 
@@ -8,7 +13,7 @@ import { syntaxTree } from "@codemirror/language";
  *
  * @param {EditorView} view The CodeMirror EditorView instance.
  * @param {SyntaxNode} syntaxNode The root syntax node of the CodeMirror XML editor's syntax tree.
- * @param {Element} domNode The root DOM element parsed by DOMParser.
+ * @param {Element|Document} domNode The (root) DOM element parsed by DOMParser.
  * @throws {Error} If the tags of the syntax tree node and the DOM node do not match.
  * @returns {Object} An object containing two WeakMaps: syntaxToDom and domToSyntax.
  *                  - syntaxToDom: Maps the position of syntax tree nodes to DOM nodes.
@@ -86,7 +91,7 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
         syntaxChild = syntaxChild.nextSibling;
       }
       if (syntaxChild) {
-        throw new Error("Syntax tree has more child elements than the DOM tree:", getText(syntaxChild));
+        throw new Error("Syntax tree has more child elements than the DOM tree:" + getText(syntaxChild));
       }
     }
     if (!syntaxChild && domChild && domChild.nodeType === Node.ELEMENT_NODE) {
@@ -162,6 +167,11 @@ export function resolveXPath(view, xpath) {
   let cursor = tree.topNode.cursor();
   let foundNode = null;
 
+  /**
+   * @param {SyntaxNode} node 
+   * @param {Number?} length 
+   * @returns {string}
+   */
   function text(node, length = null) {
     return doc.sliceString(node.from, length ? Math.min(node.from + length, node.to, doc.length) : node.to);
   }
@@ -200,7 +210,7 @@ export function resolveXPath(view, xpath) {
         //console.log('  - cursor[1][1]: ', debugNode(element.firstChild?.firstChild))
         //console.log('  - cursor[1][2]: ', debugNode(element.firstChild?.firstChild?.nextSibling))
         let tagNameNode = element.firstChild?.firstChild?.nextSibling;
-        if (tagNameNode.name === "TagName" && text(tagNameNode) === tagName) {
+        if (tagNameNode && tagNameNode.name === "TagName" && text(tagNameNode) === tagName) {
           if (childIndex === index) {
             found = true;
             foundNode = element;
@@ -211,7 +221,7 @@ export function resolveXPath(view, xpath) {
       }
     } while (cursor.nextSibling());
 
-    if (!found) {
+    if (!found || !foundNode) {
       return null; // No matching node found at this level
     }
     cursor = foundNode.cursor(); // move the cursor for the next level
@@ -222,4 +232,13 @@ export function resolveXPath(view, xpath) {
   } else {
     return null;
   }
+}
+
+/**
+ * Checks if an object has the Extension interface (not really doing that currently)
+ * @param {Extension} extension 
+ * @returns {Boolean}
+ */
+export function isExtension(extension){
+  return extension && typeof extension == "object"
 }

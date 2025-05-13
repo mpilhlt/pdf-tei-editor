@@ -3,8 +3,14 @@
  * and returns an enhanced version of the document
  */
 
-import { app, PdfTeiEditor } from '../app.js'
-//import { xmlFormat } from 'xml-formatter'
+/** 
+ * @import { ApplicationState } from '../app.js' 
+ */
+
+import { api as xmleditor } from './xmleditor.js'
+
+//import { xmlFormat } from 'xml-formatter' // better than custom implementation?
+
 
 const plugin = {
   name: "tei-wizard",
@@ -25,19 +31,17 @@ export default plugin
 let module;
 
 /**
- * 
- * @param {PdfTeiEditor} app 
+ * @param {ApplicationState} state 
  */
-async function install(app) {
+async function install(state) {
   // trick to self-inspect exported functions
   import('./tei-wizard.js').then(m => { module = m })
-  app.logger.info("TEI Wizard plugin installed.")
 }
 
 /**
  * Endpoint invoked with a TEI document 
- * @param {Node} teiDoc The TEI document or fragment
- * @returns {Node} A modified document with the suggested changes
+ * @param {Element} teiDoc The TEI document or fragment
+ * @returns {Promise<Element>} A modified document with the suggested changes
  */
 async function enhancement(teiDoc) {
 
@@ -81,7 +85,7 @@ export function tei_addRevisionChange(xmlDoc) {
   const xpathResult = xmlDoc.evaluate(
     xpathExpression,
     xmlDoc,
-    app.xmleditor.namespaceResolver,
+    xmleditor.namespaceResolver,
     XPathResult.FIRST_ORDERED_NODE_TYPE,
     null
   );
@@ -95,6 +99,7 @@ export function tei_addRevisionChange(xmlDoc) {
   }
 
   // 3. Check if a <change> node with the current date already exists under revisionDesc
+  // @ts-ignore
   const existingChanges = revisionDescElement.getElementsByTagName('change');
   for (let i = 0; i < existingChanges.length; i++) {
     const changeNode = existingChanges[i];
@@ -118,24 +123,6 @@ export function tei_addRevisionChange(xmlDoc) {
 
 }
 
-// Function to serialize the XML DOM back to a string (for demonstration)
-function serializeXmlToString(xmlDoc) {
-  // Check if xmlDoc is actually a document node before trying to serialize
-  if (!xmlDoc || typeof xmlDoc.serializeToString !== 'function') {
-    console.error("Invalid document object passed to serializeXmlToString");
-    // Attempt to return a string representation if possible, or indicate error
-    try {
-      if (xmlDoc.documentElement) {
-        return new XMLSerializer().serializeToString(xmlDoc.documentElement);
-      }
-    } catch (e) {
-      console.error("Could not serialize even documentElement:", e);
-    }
-    return "[Invalid XML Document]";
-  }
-  const serializer = new XMLSerializer();
-  return serializer.serializeToString(xmlDoc);
-}
 
 /**
  * Pretty-prints an XML DOM Document by inserting whitespace text nodes.
@@ -259,12 +246,12 @@ export function tei_prettyPrintXmlDom(xmlDoc, spacing = '  ') {
       const nextSibling = child.nextSibling;
       if (nextSibling && nextSibling.nodeType === Node.ELEMENT_NODE) {
         // Check if there isn't already a text node immediately following that contains a newline
-        if (!(nextSibling.previousSibling && nextSibling.previousSibling.nodeType === Node.TEXT_NODE && nextSibling.previousSibling.nodeValue.includes('\n'))) {
+        if (!(nextSibling.previousSibling && nextSibling.previousSibling.nodeType === Node.TEXT_NODE && nextSibling.previousSibling.nodeValue?.includes('\n'))) {
           root.insertBefore(xmlDoc.createTextNode('\n'), nextSibling);
         }
       }
       lastProcessedRootNode = child; // These count as processed for the final newline
-    } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim() !== '') {
+    } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue?.trim() !== '') {
       // Handle non-whitespace text nodes directly under root (uncommon in TEI, but possible)
       // We don't add indent before or after these typically in simple pretty-printing
       lastProcessedRootNode = child;
@@ -276,7 +263,7 @@ export function tei_prettyPrintXmlDom(xmlDoc, spacing = '  ') {
   // (Element, non-whitespace text, PI, or Comment) processed at the root level.
   // Check if the last child of the root after modifications is a text node ending in newline
   let actualLastChild = root.lastChild;
-  if (lastProcessedRootNode && !(actualLastChild && actualLastChild.nodeType === Node.TEXT_NODE && actualLastChild.nodeValue.endsWith('\n'))) {
+  if (lastProcessedRootNode && !(actualLastChild && actualLastChild.nodeType === Node.TEXT_NODE && actualLastChild.nodeValue?.endsWith('\n'))) {
     root.appendChild(xmlDoc.createTextNode('\n')); // Append newline before </root>
   }
 

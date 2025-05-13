@@ -1,16 +1,72 @@
-import { app, PdfTeiEditor } from '../app.js'
-import { selectByValue, $$ } from '../modules/browser-utils.js'
-import { xpathInfo, parseXPath } from '../modules/utils.js'
-
-import '../modules/switch.js'
+/** 
+ * @import { ApplicationState } from '../app.js'
+ * @import { Switch } from '../modules/switch.js'
+ */
+import { updateState,  client, logger, services, dialog, xmlEditor } from '../app.js'
+import { $$ } from '../modules/browser-utils.js'
+import { parseXPath } from '../modules/utils.js'
+import { appendHtml } from '../ui.js'
+import ui from '../ui.js'
 
 // name of the component
-const componentId = "floating-panel"
+const pluginId = "floating-panel"
+
+
+/**
+ * plugin API
+ */
+const api = {
+  show: () => ui.floatingPanel.self.classList.remove("hidden"),
+  hide: () => ui.floatingPanel.self.classList.add("hidden"),
+}
+
+/**
+ * component plugin
+ */
+const plugin = {
+  name: pluginId,
+  install,
+  state: { update }
+}
+
+export { api, plugin }
+export default plugin
+
+//
+// implementations
+//
+
+// UI elements
+
+/**
+ * Floating panel
+ * @typedef {object} floatingPanelComponent
+ * @property {HTMLDivElement} self
+ * @property {HTMLSelectElement} xpath
+ * @property {HTMLButtonElement} editXpath
+ * @property {HTMLButtonElement} previousNode
+ * @property {HTMLSpanElement} selectionIndex
+ * @property {HTMLButtonElement} nextNode
+ * @property {HTMLDivElement} markNodeButtons - children have class="node-status" and 'data-status' attribute
+ * @property {Switch} switchAutoSearch
+ * @property {diffNavigationComponent} diffNavigation
+ * 
+ */
+
+/**
+ * Diff Navigation
+ * @typedef {object} diffNavigationComponent
+ * @property {HTMLDivElement} self
+ * @property {HTMLButtonElement} prevDiff
+ * @property {HTMLButtonElement} nextDiff
+ * @property {HTMLButtonElement} diffKeepAll
+ * @property {HTMLButtonElement} diffChangeAll
+ */
 
 // component htmnl
-const html = `
+const floatingPanelHtml = `
   <style>
-    #${componentId} {
+    #${pluginId} {
       position: absolute;
       display: flex;
       justify-content: space-between;
@@ -27,30 +83,30 @@ const html = `
       box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
     }
 
-    #${componentId}  * {
+    #${pluginId}  * {
       font-size: small;
     }
 
-    #${componentId} > div {
+    #${pluginId} > div {
       display: flex;
       align-items: center;
       gap: 10px;
     }
 
-    #${componentId} > div > * {
+    #${pluginId} > div > * {
       display: inline;
     }      
   </style>
-  <div id="${componentId}">
+  <div id="${pluginId}" name="floatingPanel">
     <div>
       <span class="navigation-text">Navigate by</span>
       <select name="xpath"></select>
-      <button name="edit-xpath">Custom XPath</button>
-      <button name="prev-node" disabled>&lt;&lt;</button>
-      <span name="selection-index" class="navigation-text"></span>
-      <button name="next-node" disabled>&gt;&gt;</button>
+      <button name="editXpath">Custom XPath</button>
+      <button name="previousNode" disabled>&lt;&lt;</button>
+      <span name="selectionIndex" class="navigation-text"></span>
+      <button name="nextNode" disabled>&gt;&gt;</button>
     </div>
-    <div>
+    <div name="markNodeButtons">
       <span class="navigation-text">Mark node as</span>
       <button class="node-status" data-status="verified" disabled>Verified</button>
       <button class="node-status" data-status="unresolved" disabled>Unresolved</button>
@@ -58,206 +114,151 @@ const html = `
       <!-- button class="node-status" data-status="comment" disabled>Add comment</button-->
     </div>
     <div>
-      <custom-switch name="switch-auto-search" label="Find node" label-on="On" label-off="off"></custom-switch>
-      <span name="nav-diff">
-        <button name="prev-diff" disabled>Prev. Diff</button>
-        <button name="next-diff" disabled>Next Diff</button>
-        <button name="diff-keep-all" disabled>Reject all changes</button>
-        <button name="diff-change-all" disabled>Accept all changes</button>
+      <custom-switch name="switchAutoSearch" label="Find node" label-on="On" label-off="off"></custom-switch>
+      <span name="diffNavigation">
+        <button name="prevDiff" disabled>Prev. Diff</button>
+        <button name="nextDiff" disabled>Next Diff</button>
+        <button name="diffKeepAll" disabled>Reject all changes</button>
+        <button name="diffChangeAll" disabled>Accept all changes</button>
       </span>
     </div>
   </div>
 `
-const div = document.createElement("div")
-div.innerHTML = html.trim()
-document.body.appendChild(div)
 
-/**
- * @type {Element}
- */
-const componentNode = document.getElementById(componentId)
-
-/**
- * component API
- */
-const api = {
-
-  show: () => componentNode.classList.remove("hidden"),
-  hide: () => componentNode.classList.add("hidden"),
-
-  /**
-   * Add an element to the given row
-   * @param {Element} element 
-   * @param {Number} row 
-   * @param {string} name
-   */
-  add: (element, row, name) => {
-    if (name) {
-      element.name = name
-    }
-    getOrCreateRow(row).appendChild(element)
-  },
-
-  /**
-   * Add an element at the specific index in the given row
-   * @param {Element} element 
-   * @param {Number} row 
-   * @param {Number} index 
-   * @param {string} name
-   */
-  addAt: (element, row, index, name) => {
-    if (name) {
-      element.name = name
-    }
-    const parent = getOrCreateRow(row)
-    parent.insertBefore(element, parent.childNodes[index])
-  },
-
-  /**
-   * Returns the child element of that name
-   * @param {string} name The name of the child element
-   * @returns {Element}
-   */
-  getByName: name => {
-    const namedElems = componentNode.querySelectorAll(`[name="${name}"]:not(sl-icon)`) // we need to exclude sl-icon elements
-    if (namedElems.length === 1) {
-      return namedElems[0]
-    }
-    throw new Error(`No or more than one child element with the name "${name}"`)
-  },
-
-  /**
-   * Attaches a click event handler to a named subelement of the component
-   * @param {string} name The name of the element
-   * @param {Function} handler The function to call when the element is clicked
-   */
-  onClick: (name, handler) => {
-    api.getByName(name).addEventListener('click', handler)
-  },
-
-  /**
-   * Updates data such as select box options
-   */
-  update: () => {
-    populateXpathSelectbox()
-  }
-}
-
-/**
- * component plugin
- */
-const plugin = {
-  name: componentId,
-  install
-}
-
-export { api, plugin }
-export default plugin
-
-//
-// implementations
-//
-
-// UI elements
-const xpathSelectbox = api.getByName("xpath")
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} state
  */
-async function install(app) {
-  app.registerComponent(componentId, api, "floatingPanel")
+async function install(state) {
+
+  // add the panel to the DOM
+  appendHtml(floatingPanelHtml)
+
+  // bring clicked elements into foreground when clicked
+  addBringToForegroundListener([`#${pluginId}`, '.cm-panels']);
+
+  // make navigation draggable
+  makeDraggable(ui.floatingPanel.self)
 
   // populate the xpath selectbox
+  const xp = ui.floatingPanel.xpath
 
   // Clear existing options
-  xpathSelectbox.innerHTML = '';
+  xp.innerHTML = '';
 
   // Populate select box with options
-  const selectBoxData = await app.client.getConfigValue("navigation.xpath.list")
+
+  /**
+   * @type {{value:string, label:string}[]}
+   */
+  const selectBoxData = await client.getConfigValue("navigation.xpath.list")
   selectBoxData.forEach(item => {
     const option = document.createElement('option');
     option.value = item.value || ''
     option.text = item.label
-    option.disabled = item.xpath === null
-    xpathSelectbox.appendChild(option);
+    option.disabled = item.value === null
+    xp.appendChild(option);
   });
 
   // listen for changes in the selectbox
-  xpathSelectbox.addEventListener('change', () => {
-    app.xpath = xpathSelectbox.value
+  xp.addEventListener('change', async () => {
+    await updateState(state, { xpath: xp.value })
   });
 
   // button to edit the xpath manually
-  api.onClick('edit-xpath', () => {
-    const custom = xpathSelectbox[xpathSelectbox.length - 1]
+  ui.floatingPanel.editXpath.addEventListener('click', () => {
+    const custom = xp.options[xp.length - 1]
     const xpath = prompt("Enter custom xpath", custom.value)
     if (xpath && xpath.trim()) {
       custom.value = xpath
       custom.text = `Custom: ${xpath}`
-      xpathSelectbox.selectedIndex = xpathSelectbox.length - 1
+      xp.selectedIndex = xp.length - 1
     }
   })
 
-  // setup click handlers
-  api.onClick('prev-node', () => app.xmleditor.previousNode());
-  api.onClick('next-node', () => app.xmleditor.nextNode());
-  api.onClick('prev-diff', () => app.xmleditor.goToPreviousDiff())
-  api.onClick('next-diff', () => app.xmleditor.goToNextDiff())
-
-  api.onClick('diff-keep-all', () => {
-    app.xmleditor.rejectAllDiffs()
-    app.services.removeMergeView()
+  // setup event handlers
+  const fp = ui.floatingPanel
+  fp.previousNode.addEventListener('click', () => xmlEditor.previousNode());
+  fp.nextNode.addEventListener('click', () => xmlEditor.nextNode());
+  fp.diffNavigation.prevDiff.addEventListener('click', () => xmlEditor.goToPreviousDiff())
+  fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff())
+  fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
+    xmlEditor.rejectAllDiffs()
+    services.removeMergeView()
   })
-  api.onClick('diff-change-all', () => {
-    app.xmleditor.acceptAllDiffs()
-    app.services.removeMergeView()
+  fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
+    xmlEditor.acceptAllDiffs()
+    services.removeMergeView()
   })
-
-  // bring clicked elements into foreground when clicked
-  addBringToForegroundListener([`#${componentId}`, '.cm-panels']);
-
-  // make navigation draggable
-  makeDraggable(componentNode)
-
-  // auto-search switch
-  api.getByName('switch-auto-search').addEventListener('change', onAutoSearchSwitchChange)
+  
+  // @ts-ignore
+  fp.switchAutoSearch.addEventListener('change', onAutoSearchSwitchChange) // toggle search of node in the PDF
+  fp.selectionIndex.addEventListener('click', onClickSelectionIndex) // allow to input node index
 
   // configure "status" buttons
   $$('.node-status').forEach(btn => btn.addEventListener('click', evt => {
-    api.setNodeStatus(api.selectedNode, evt.target.dataset.status)
+    if (xmlEditor.selectedNode) {
+      xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status)
+    }
   }))
 
-  // allow to input node index
-  api.onClick('selection-index', onClickSelectionIndex)
-
   // update selectbox when corresponding app state changes
-  app.on("change:xpath", onAppChangeXpath)
+  logger.info("Floating panel plugin installed.")
+}
 
-  app.on("change:diffXmlPath", onAppChangeDiffXmlPath)
+/**
+ * Reacts to application state changes
+ * @param {ApplicationState} state 
+ */
+async function update(state) {
 
-  app.logger.info("Floating panel plugin installed.")
+  // show the xpath selector
+  if (state.xpath) {
+    let { index, pathBeforePredicates } = parseXPath(state.xpath)
+
+    const optionValues = Array.from(ui.floatingPanel.xpath.options).map(node => node.value)
+    if (pathBeforePredicates in optionValues) {
+      // this sets the xpath selectbox to one of the existing values
+      ui.floatingPanel.xpath.selectedIndex = optionValues.indexOf(pathBeforePredicates)
+    } else {
+      // the value does not exist, save it to the last option
+      let lastIdx = ui.floatingPanel.xpath.options.length - 1
+      ui.floatingPanel.xpath.options[lastIdx].value = state.xpath
+      ui.floatingPanel.xpath.options[lastIdx].text = `Custom: ${state.xpath}`
+      ui.floatingPanel.xpath.options[lastIdx].disabled = false
+    }
+    // update counter with index and size
+    xmlEditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
+  }
+
+  // configure node status buttons
+  ui.floatingPanel.markNodeButtons.querySelectorAll("button").forEach(btn => btn.disabled = !Boolean(state.xpath))
+
+  // configure diff navigation buttons
+  ui.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
+    node.disabled = !(node.value && node.value !== state.xmlPath)
+  })
 }
 
 /**
  * Given an xpath and an index, displays the index and the number of occurrences of the 
  * xpath in the xml document. If none can be found, the index is displayed as 0.
  * @param {string} xpath The xpath that will be counted
- * @param {Number} index The index 
+ * @param {Number | null} index The index or null if the result set is empty
  */
 function updateCounter(xpath, index) {
   let size;
   try {
-    size = app.xmleditor.countDomNodesByXpath(xpath)
+    size = xmlEditor.countDomNodesByXpath(xpath)
   } catch (e) {
     console.error(e)
     size = 0
   }
   index = index || 1
-  api.getByName('selection-index').textContent = `(${size > 0 ? index : 0}/${size})`
-  api.getByName('next-node').disabled = api.getByName('prev-node').disabled = size < 2;
+  ui.floatingPanel.selectionIndex.textContent = `(${size > 0 ? index : 0}/${size})`
+  ui.floatingPanel.nextNode.disabled = ui.floatingPanel.previousNode.disabled = size < 2;
 }
-
 
 
 //
@@ -265,48 +266,14 @@ function updateCounter(xpath, index) {
 //
 
 /**
- * Called when the xpath app state changes
- * @param {string} xpath 
- * @param {string|null} old 
- * @returns 
- */
-function onAppChangeXpath(xpath, old) {
-
-  // enable the buttons if we have an selected xpath
-  $$('.node-status').forEach(btn => btn.disabled = !Boolean(xpath))
-
-  if (!xpath) {
-    return
-  }
-
-  let { index, pathBeforePredicates } = parseXPath(xpath)
-
-  try {
-    // this sets the xpath selectbox to one of the existing values
-    selectByValue(xpathSelectbox, indexParent)
-  } catch (error) {
-    // the value does not exist, save it to the last option
-    let lastIdx = xpathSelectbox.length - 1
-    xpathSelectbox[lastIdx].value = xpath
-    xpathSelectbox[lastIdx].text = `Custom: ${xpath}`
-    xpathSelectbox[lastIdx].disabled = false
-  }
-
-  // update counter with index and size
-  app.xmleditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
-}
-
-
-
-/**
  * Called when the switch for auto-search is toggled
- * @param {Event} evt 
+ * @param {CustomEvent} evt 
  */
 async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked
-  app.logger.info(`Auto search is: ${checked}`)
-  if (checked && app.xmleditor.selectedNode) {
-    await app.services.searchNodeContentsInPdf(app.xmleditor.selectedNode)
+  logger.info(`Auto search is: ${checked}`)
+  if (checked && xmlEditor.selectedNode) {
+    await services.searchNodeContentsInPdf(xmlEditor.selectedNode)
   }
 }
 
@@ -318,43 +285,16 @@ function onClickSelectionIndex() {
   let index = prompt('Enter node index')
   if (!index) return;
   try {
-    app.xmleditor.selectByIndex(parseInt(index))
+    xmlEditor.selectByIndex(parseInt(index))
   } catch (error) {
-    app.dialog.error(error.message)
+    dialog.error(error.message)
   }
 }
 
-
-/**
- * Called when the diffXmlPath state changes. Enables or disables the div navigation buttons
- * based on whether 
- * @param {string} value The new value of the diffXmlPath state
- * @param {string} old 
- */
-function onAppChangeDiffXmlPath(value, old) {
-  api.getByName("nav-diff")
-    .querySelectorAll("button")
-    .forEach(node => node.disabled = !(value && value !== app.xmlPath))
-}
 
 //
 // helper functions
 //
-
-/**
- * Returns a div for the row with the given number. If the number is higher than the existing number of 
- * rows, a new one is created and returned.
- * @param {Number} row The number of the row to get or to create if it does not yet exist
- * @returns {Element}
- */
-function getOrCreateRow(row) {
-  if (componentNode.childElementCount <= row) {
-    const div = document.createElement('DIV')
-    api.appendChild(div)
-    return div
-  }
-  return api.childNodes[row]
-}
 
 
 function addBringToForegroundListener(selectors) {

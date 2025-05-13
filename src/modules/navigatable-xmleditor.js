@@ -1,6 +1,5 @@
 import { XMLEditor } from "./xmleditor.js";
-import { disableValidation } from '../modules/lint.js'
-import { xpathInfo } from '../modules/utils.js'
+import { parseXPath } from '../modules/utils.js'
 
 export {XMLEditor}
 
@@ -12,6 +11,7 @@ export class NavXmlEditor extends XMLEditor {
   /**
    * An xpath which identifies the topmost path to which selections of child nodes 
    * "bubble up"
+   * @type {string?}
    */
   parentPath = null;
 
@@ -23,13 +23,13 @@ export class NavXmlEditor extends XMLEditor {
 
   /**
    * The last selected primary node, can be null
-   * @type {Node?}
+   * @type {Element?}
    */
   selectedNode = null;
 
   /**
    * The xpath of the last selected primary node
-   * @type {string}
+   * @type {string?}
    */
   selectedXpath = null;
 
@@ -38,13 +38,23 @@ export class NavXmlEditor extends XMLEditor {
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
    * @param {Object?} tagData - Autocompletion data
    */
-  constructor(editorDivId, tagData) {
+  constructor(editorDivId, tagData=null) {
     super(editorDivId, tagData)
     // handle selection change
     this.addEventListener(
       XMLEditor.EVENT_SELECTION_CHANGED,
-      evt => this.whenReady().then(() => this.onSelectionChange(evt))
+      // @ts-ignore
+      this.#onSelectionChange
     )
+  }
+
+  /**
+   * 
+   * @param {CustomEvent} evt 
+   */
+  async #onSelectionChange(evt) {
+    await this.whenReady()
+    await this.handeSelectionChange(evt.detail)
   }
 
   /**
@@ -52,9 +62,7 @@ export class NavXmlEditor extends XMLEditor {
    * @param {Array} ranges An array of object of the form {to, from, node}
    * @returns 
    */
-  async onSelectionChange(event) {
-    const ranges = event.detail
-
+  async handeSelectionChange(ranges) {
     if (ranges.length === 0 || !this.getXmlTree() || !this.parentPath) {
       let msg = ['Cannot update selection node & xpath:']
       ranges.length || msg.push("Selection is empty")
@@ -76,14 +84,14 @@ export class NavXmlEditor extends XMLEditor {
     }
 
     // we'll "bubble up" to the parent path by comparing tagnames (cheating)
-    const parentTagName = xpathInfo(this.parentPath).tagName.toLowerCase()
+    const parentTagName = parseXPath(this.parentPath).tagName.toLowerCase()
     while (selectedNode) {
       if (selectedNode.tagName && selectedNode.tagName.toLowerCase() === parentTagName) break;
       selectedNode = selectedNode.parentNode
     }
 
     // the xpath of the current cursor position
-    const newCursorXpath = selectedNode && app.xmleditor.getXPathForNode(selectedNode)
+    const newCursorXpath = selectedNode && this.getXPathForNode(selectedNode)
 
     // do nothing if we cannot find a matching parent, or the parent is the same as before
     if (!selectedNode || this.selectedNode === selectedNode || newCursorXpath === this.selectedXpath) {
@@ -107,9 +115,9 @@ export class NavXmlEditor extends XMLEditor {
 
     // Wait for editor to be ready
     if (!this.isReady()) {
-      app.logger.info("Editor not ready, deferring selection")
+      console.log("Editor not ready, deferring selection")
       this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
-        app.logger.info("Editor is now ready")
+        console.log("Editor is now ready")
         this.selectByIndex(index)
       }, { once: true })
       return;
@@ -156,16 +164,8 @@ export class NavXmlEditor extends XMLEditor {
   }
 
   /**
-   * Disables the validation, i.e. any validation triggered returns an empty array
-   * @param {boolean} value 
-   */
-  disableValidation(value) {
-    disableValidation(value)
-  }
-
-  /**
    * Sets the status attribute of the given node, or removes it if the status is empty
-   * @param {Node} node The node
+   * @param {Element} node The node
    * @param {string} status The new status, can be "verified", "unresolved", "comment" or ""
    * @returns {Promise<void>}
    * @throws {Error} If the status is not one of the allowed values

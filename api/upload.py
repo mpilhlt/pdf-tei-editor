@@ -3,8 +3,9 @@ import os
 from werkzeug.utils import secure_filename
 from pathlib import Path
 import mimetypes
-from lib.decorators import handle_api_errors
-from lib.server_utils import ApiError
+
+from api.lib.decorators import handle_api_errors
+from api.lib.server_utils import ApiError
 
 try:
     import magic  # python-magic

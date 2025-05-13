@@ -9,23 +9,6 @@ export function $(selector) {
   if (!node) {
     throw new Error(`Selector "${selector} does not find any element"`)
   }
-  Object.assign(node, {
-    hide: node.hide === undefined ? () => {node.style.visibility = "hidden"} : node.hide,
-    show: node.show === undefined ? () => {node.style.visibility = "visible"} : node.show,
-    text: node.text === undefined ? (text) => {node.textContent = text; return node} : node.text,
-    html: node.html === undefined ? (html) => {node.innerHTML = html; return node} : node.html,
-    remove: node.remove === undefined ? () => {node.parentNode.removeChild(node)} : node.remove,
-    addClass: node.addClass === undefined ? (className) => {node.classList.add(className)} : node.addClass,
-    removeClass: node.removeClass === undefined ? (className) => {node.classList.remove(className)} : node.removeClass,
-    toggleClass: node.toggleClass === undefined ? (className) => {node.classList.toggle(className)} : node.toggleClass,
-    on: node.on === undefined ? (event, callback) => {node.addEventListener(event, callback)} : node.on,
-    off: node.off === undefined ? (event, callback) => {node.removeEventListener(event, callback)} : node.off,
-    once: node.once === undefined ? (event, callback) => {node.addEventListener(event, callback, { once: true })} : node.once,
-    enable: node.disabled !== undefined ? () => { node.disabled = false } : undefined,
-    disable: node.disabled !== undefined ? () => { node.disabled = true } : undefined,
-    click: handler => node.addEventListener('click', handler.bind(node))
-  })
-
   return node
 }
 
@@ -83,7 +66,7 @@ export class CookieStorage {
    * @returns {boolean}
    */
   static has(key) {
-    return this.get(key) !== null;
+    return this['get'](key) !== null;
   }
 
   /**
@@ -210,14 +193,6 @@ export function getDescendantByName(node, name, noError) {
 }
 
 /**
- * Creates and returns a random id that can be used for uniquely identifying a DOM node
- * @returns {string}
- */
-export function createRandomId() {
-  return "id-" + Math.random()*100
-}
-
-/**
  * Parses the HTML and attaches it to a parent node (defaults to document.body).
  * Returns an Array of the added top-level elements
  * @param {string} html The html that will be parsed and appended
@@ -226,6 +201,9 @@ export function createRandomId() {
  * @returns {Array<Element>} 
  */
 export function appendHtml(html, parentNode = document.body) {
+  if (!parentNode) {
+    throw new TypeError("No parent node")
+  }
   const div = document.createElement("div")
   const nodeArr = []
   div.innerHTML = html.trim()
@@ -237,25 +215,97 @@ export function appendHtml(html, parentNode = document.body) {
 }
 
 /**
- * Return a mapping of all named descendents of the given parent element 
- * @param {Element} parentNode The parent element
- * @param {Array<string>?} excludedTags An array of lower cased tag names that should be excluded
- * @returns {Object} An object mapping the value of the 'name' attributes to the corresponding elements
+ * Escapes the given text to valid html
+ * @param {string} text 
+ * @returns {string} The escaped text
  */
-export function getNameMap(parentNode, exludedTags = ['sl-icon']) {
-    const nameMap = {}
-    const nodes = Array.from(parentNode.querySelectorAll('[name]'))
-    nodes
-      .filter(node => !(exludedTags.includes(node.tagName.toLowerCase())))
-      .filter(node => Boolean(node.getAttribute('name')))
-      .forEach(node => {nameMap[node.getAttribute('name')] = node})
-    return nameMap 
-}
-
-
-export function escapeHtml(html) {
+export function escapeHtml(text) {
   const div = document.createElement('div');
-  div.textContent = html;
+  div.textContent = text;
   return div.innerHTML;
 }
 
+/**
+ * Finds all descendants of a given node that have a "name" attribute,
+ * but does not recurse into those nodes.  This means descendants of the
+ * named nodes are excluded.  If duplicate names are found, the first
+ * occurrence is used.
+ *
+ * @param {Element} node The starting node to search from.
+ * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
+ */
+function findNamedDescendants(node) {
+  const results = {};
+
+  /**
+   * Recursive function that adds to the results object
+   * @param {Element} currentNode 
+   * @returns {void}
+   */
+  function traverse(currentNode) {
+    if (!currentNode || !currentNode.childNodes) {
+      return;
+    }
+
+    for (let i = 0; i < currentNode.childNodes.length; i++) {
+      /** @type {Element} */
+      // @ts-ignore
+      const childNode = currentNode.childNodes[i];
+      // Check if it's an element (important to avoid text nodes)
+      if (childNode.nodeType === Node.ELEMENT_NODE) {
+
+        const nameAttribute = childNode.getAttribute("name");
+
+        if (nameAttribute && !results.hasOwnProperty(nameAttribute)) {
+          results[nameAttribute] = childNode;
+        } else {
+          // Only recurse if the current node doesn't have a name attribute
+          // or if the name is already in the results.  This prevents
+          // recursion into named nodes.
+          traverse(childNode);
+        }
+      }
+    }
+  }
+  traverse(node);
+  // @ts-ignore
+  return results;
+}
+
+/**
+ * Modifies a node to access named descendant elements through added properties of their name.
+ * Also adds a property "self" that allows JSDoc annotations of the original node. 
+ * You must be careful to use names that do not override existing properties.
+ *
+ * @param {Element} node The element to modify
+ * @returns {Element} The element with with an added "self" property as well as properties
+ *          to access named descendants
+ */
+export function accessNamedDescendentsAsProperties(node) {
+  const namedDescendants = findNamedDescendants(node)
+  for (const name in namedDescendants){
+    namedDescendants[name] = accessNamedDescendentsAsProperties(namedDescendants[name])
+  }
+  namedDescendants.self = node
+  const modifiedObj =  Object.assign(node, namedDescendants)
+  return modifiedObj
+}
+
+// Function to serialize the XML DOM back to a string (for demonstration)
+export function serializeXmlToString(xmlDoc) {
+  // Check if xmlDoc is actually a document node before trying to serialize
+  if (!xmlDoc || typeof xmlDoc.serializeToString !== 'function') {
+    console.error("Invalid document object passed to serializeXmlToString");
+    // Attempt to return a string representation if possible, or indicate error
+    try {
+      if (xmlDoc.documentElement) {
+        return new XMLSerializer().serializeToString(xmlDoc.documentElement);
+      }
+    } catch (e) {
+      console.error("Could not serialize even documentElement:", e);
+    }
+    return "[Invalid XML Document]";
+  }
+  const serializer = new XMLSerializer();
+  return serializer.serializeToString(xmlDoc);
+}

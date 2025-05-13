@@ -18,51 +18,6 @@ export function escapeRegExp(string) {
  */
 
 /**
- * Parses a xpath expression into components 
- *
- * @deprecated Use `parseXPath()` instead
- * @param {string} xpath An xpath expression
- * @returns {ParsedXPathStepComponentsSimple} An object containing the parsed components of the XPath step.
- */
-export function xpathInfo(xpath) {
-  if (!xpath) {
-    throw new Error("No xpath given")
-  }
-
-  // the last segment of the xpath, with final selector
-  const finalStep = xpath.split("/").pop()
-
-  // everything before the final tag name (or empty string)
-  const parentPath = xpath.slice(0, xpath.length - finalStep.length)
-
-  // match the finalStep
-  const xpathRegex = /^(?:(\w+):)?(\w+)(.*)?$/;
-  const match = finalStep.match(xpathRegex);
-
-  if (!match) {
-    throw new TypeError(`Cannot parse xpath: ${xpath}`)
-  }
-
-  // namespace prefix (e.g., "tei") or empty string
-  const prefix = match[1] || ""
-
-  // tag name (e.g., "biblStruct")
-  const tagName = match[2]
-
-  // the final child/attribute selector (e.g., "[1]", "[@status='verified']") or empty string
-  const positionalPredicate = match[3] || ""
-
-  // final index
-  const m = xpath.match(/(.+?)\[(\d+)\]$/)
-  const index = (m && !isNaN(parseInt(m[2]))) ? parseInt(m[2]) : null
-
-  // xpath without index
-  const indexParent = index ? xpath.slice(0, -positionalPredicate.length) : xpath
-
-  return { parentPath, finalStep, prefix, tagName, positionalPredicate, index, indexParent };
-}
-
-/**
  * @typedef {object} ParsedXPathStepComponents
  * @property {string} input - The XPath as passed in, for debugging purposes only
  * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child'). Includes the trailing separator if present, or is empty for relative paths starting with nodeTest.
@@ -330,6 +285,7 @@ export function isXPathSubset(xpath1, xpath2, rootNode, namespaceResolver = null
 
   try {
       // Evaluate the first XPath expression (potential subset)
+      // @ts-ignore
       const result1 = rootNode.evaluate(
           xpath1,
           rootNode, // Context node
@@ -345,6 +301,7 @@ export function isXPathSubset(xpath1, xpath2, rootNode, namespaceResolver = null
       }
 
       // Evaluate the second XPath expression (potential superset)
+      // @ts-ignore
       const result2 = rootNode.evaluate(
           xpath2,
           rootNode, // Context node

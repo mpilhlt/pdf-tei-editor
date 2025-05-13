@@ -1,6 +1,16 @@
-import { app, PdfTeiEditor } from '../app.js'
+/**
+ * The XML Editor plugin
+ */
+
+/** 
+ * @import { ApplicationState } from '../app.js' 
+ */
+
+import { invoke, updateState, xmlEditor } from '../app.js'
+import ui from '../ui.js'
 import { NavXmlEditor, XMLEditor  } from '../modules/navigatable-xmleditor.js'
-import { xpathInfo, parseXPath, isXPathSubset } from '../modules/utils.js'
+import { parseXPath, isXPathSubset } from '../modules/utils.js'
+import { api as logger } from './logger.js'
 
 // the path to the autocompletion data
 const tagDataPath = '/data/tei.json'
@@ -9,67 +19,56 @@ const tagDataPath = '/data/tei.json'
  * component is an instance of NavXmlEditor
  * @type {NavXmlEditor}
  */
-const xmlEditorComponent = new NavXmlEditor('xml-editor')
-const api = xmlEditorComponent;
+const api = new NavXmlEditor('codemirror-container')
 
 /**
  * component plugin
  */
 const plugin = {
   name: "xmleditor",
-  install
+  install,
+  state: { update }
 }
 
-export { XMLEditor, api, plugin}
+export { api, plugin, XMLEditor}
 export default plugin
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} state
  */
-async function install(app) {
-  app.registerComponent('xmleditor', xmlEditorComponent, 'xmleditor')
-  app.logger.info("XML Editor plugin installed.")
-
+async function install(state) {
   // load autocomplete data
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
     api.startAutocomplete(tagData)
-    app.logger.info("Loaded autocompletion data...");
+    logger.info("Loaded autocompletion data...");
   } catch (error) {
     console.error('Error fetching from', tagDataPath, ":", error);
   }
- 
-  // xpath state => selection
-  app.on("change:xpath", (value, old) => {
-    api.whenReady().then(() => onXpathChange(value, old))
-  })
 
   // selection => xpath state
   api.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
-    api.whenReady().then(() => onSelectionChange(evt))
+    api.whenReady().then(() => onSelectionChange(state))
   });
 }
 
-
-
 /**
- * Called when the app state "xpath" changes to update the selection
- * @param {string|null} xpath The new xpath for selection
- * @param {string|null} old The previous xpath
- * @returns {void}
+ * @param {ApplicationState} state
  */
-function onXpathChange(xpath, old) {
-  if (!xpath) {
+async function update(state) {
+  // xpath state => selection
+  if (!state.xpath) {
     return
   }
-  const { index, indexParent } = xpathInfo(xpath)
+  await xmlEditor.whenReady()
+  const { index, pathBeforePredicates } = parseXPath(state.xpath)
   // select the first node
   try {
-    const size = xmlEditorComponent.countDomNodesByXpath(xpath)
+    const size = api.countDomNodesByXpath(state.xpath)
     if (size > 0 && (index !== api.currentIndex)) {
-      api.parentPath = indexParent
+      api.parentPath = pathBeforePredicates
       api.selectByIndex(index || 1)
     }
   } catch (e) {
@@ -77,11 +76,13 @@ function onXpathChange(xpath, old) {
   }
 }
 
+
 /**
  * Called when the selection in the editor changes to update the cursor xpath
+ * @param {ApplicationState} state
  */
-async function onSelectionChange() {
-  if (!api.selectedXpath)  {
+async function onSelectionChange(state) {
+  if (!(api.selectedXpath && state.xpath)) {
     // this usually means that the editor is not ready yet
     //console.warn("Could not determine xpath of last selected node")
     return
@@ -90,13 +91,13 @@ async function onSelectionChange() {
 
   const cursorXpath = api.selectedXpath
   const cursorParts = parseXPath(cursorXpath)
-  const stateParts = parseXPath(app.xpath)
+  const stateParts = parseXPath(state.xpath)
   
-  const normativeXpath = app.floatingPanel.getByName("xpath").value
+  const normativeXpath = ui.floatingPanel.xpath.value
   const index = cursorParts.index
 
   // todo: use isXPathsubset()
-  if (index !== null & cursorParts.tagName === stateParts.tagName ) {
-    app.xpath = `${normativeXpath}[${index}]`
+  if (index !== null && cursorParts.tagName === stateParts.tagName ) {
+    state.xpath = `${normativeXpath}[${index}]`
   }
 }

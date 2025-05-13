@@ -1,10 +1,12 @@
 /**
- * This component provides a simple logging component which can be extended later
- * or replaced with a shim to an external library
+ * This plugin provides logging endpoints and an API to invoke them. The implementation uses
+ * console.* methods
  */
-import { app, App } from '../app.js'
 
-// name of the component
+import pluginManager from "../modules/plugin.js"
+import ep from '../endpoints.js'
+
+// name of the plugin
 const name = "logger"
 
 /**
@@ -12,7 +14,7 @@ const name = "logger"
  */
 const logLevel = {
   SUPPRESS : 0,
-  FATAL: 1,
+  CRITICAL: 1,
   WARN: 2,
   INFO: 3,
   DEBUG: 4,
@@ -27,14 +29,44 @@ const logLevel = {
 let currentLogLevel = logLevel.INFO 
 
 /**
- * Easy to use logging API which will also send log events to all registered log plugins 
+ * Easy to use logging API which will  send log events to all registered log plugins 
  */
 const api = {
-  setLogLevel: level => app.plugin.invoke(app.ext.log.setLogLevel, {level}),
-  debug: (message, level) => app.plugin.invoke(app.ext.log.debug, {message, level}),
-  info: message => app.plugin.invoke(app.ext.log.info, {message}),
-  warn: message => app.plugin.invoke(app.ext.log.warn, {message}),
-  fatal: message => app.plugin.invoke(app.ext.log.fatal, {message})
+  /**
+   * Sets the log level {@see logLevel}
+   * @param {Number} level The log level
+   * @returns {void}
+   */
+  setLogLevel: level => pluginManager.invoke(ep.log.setLogLevel, {level}),
+
+  /**
+   * Logs a debug message, with varying levels of verbosity
+   * @param {string} message The debug message
+   * @param {Number} level The log level, which is normally either DEBUG (4) or VERBOSE (5)
+   * @returns {void}
+   */
+  debug: (message, level = logLevel.DEBUG) => pluginManager.invoke(ep.log.debug, {message, level}),
+
+  /**
+   * Logs an informational message
+   * @param {string} message 
+   * @returns {void}
+   */
+  info: message => pluginManager.invoke(ep.log.info, {message}),
+
+  /**
+   * Logs an warning message
+   * @param {string} message 
+   * @returns {void}
+   */
+  warn: message => pluginManager.invoke(ep.log.warn, {message}),
+
+  /**
+   * Logs an message about a critical or fatal error
+   * @param {string} message 
+   * @returns {void}
+   */
+  critical: message => pluginManager.invoke(ep.log.fatal, {message})
 }
 
 /**
@@ -48,7 +80,7 @@ const plugin = {
     debug,
     info,
     warn,
-    fatal
+    critical
   }
 }
 
@@ -135,8 +167,8 @@ function warn({message}) {
  * @param {any} options.message - The message or object to log.
  * @returns {void}
  */
-function fatal({message}) {
-  if (currentLogLevel >= logLevel.FATAL) {
+function critical({message}) {
+  if (currentLogLevel >= logLevel.CRITICAL) {
     console.error(message)
   }
 }

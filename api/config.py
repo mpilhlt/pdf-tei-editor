@@ -3,10 +3,11 @@
 
 from flask import Blueprint, jsonify, request, current_app
 import os
-from lib.decorators import handle_api_errors
-from lib.server_utils import ApiError
 import threading
 import json
+
+from api.lib.decorators import handle_api_errors
+from api.lib.server_utils import ApiError
 
 bp = Blueprint("config", __name__, url_prefix="/api/config")
 

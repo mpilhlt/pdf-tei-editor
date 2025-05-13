@@ -1,28 +1,32 @@
+/**
+ * PDF Viewer Plugin
+ */
+
+/** @import { ApplicationState } from '../app.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
-import { app, PdfTeiEditor } from '../app.js'
+import { logger, services, xmlEditor } from '../app.js'
+import ui from '../ui.js'
 
 /**
- * component is an instance of PDFViewer
+ * Expose the PDFViewer API
  * @type {PDFJSViewer}
  */
-const pdfViewerComponent = new PDFJSViewer('pdf-viewer')
+const pdfViewer = new PDFJSViewer('pdf-viewer')
+
 // hide it until ready
-pdfViewerComponent.hide()
+pdfViewer.hide()
+
 
 /**
- * Component API
- */
-const api = pdfViewerComponent;
-
-/**
- * component plugin
+ * plugin object
  */
 const plugin = {
-    name: "pdfviewer",
-    install
+  name: "pdfviewer",
+  install,
+  state: { update }
 }
 
-export { plugin, api }
+export { plugin, pdfViewer as api }
 export default plugin
 
 //
@@ -30,22 +34,27 @@ export default plugin
 //
 
 /**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {PdfTeiEditor} app The main application
+ * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install(app) {
-  app.registerComponent('pdfviewer', pdfViewerComponent, 'pdfviewer')
-  app.on("change:xpath", async (value, old) => {
-    // trigger auto-search if enabled, 
-    const autoSearchSwitch = app.floatingPanel.getByName("switch-auto-search")
-    const node = app.xmleditor.selectedNode
-    if (autoSearchSwitch.checked && node) {
-      await app.services.searchNodeContentsInPdf(node)
-    }
-  })
-  app.logger.info("PDFViewer plugin installed.")
-  await pdfViewerComponent.isReady()
-  app.logger.info("PDF Viewer ready.")
-  pdfViewerComponent.show()
+async function install(state) {
+  await pdfViewer.isReady()
+  logger.info("PDF Viewer ready.")
+  pdfViewer.show()
+}
+
+let lastNode = null; 
+
+/**
+ * @param {ApplicationState} state
+ * @returns {Promise<void>}
+ */
+async function update(state) {
+  // trigger auto-search if enabled and if a new node has been selected
+  const autoSearchSwitch = ui.floatingPanel.switchAutoSearch
+  const node = xmlEditor.selectedNode
+  if (autoSearchSwitch.checked && node && node !== lastNode) {
+    await services.searchNodeContentsInPdf(node)
+    lastNode = node
+  }
 }

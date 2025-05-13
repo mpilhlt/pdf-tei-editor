@@ -31,7 +31,7 @@ python.exe bin\download-pdfjs
 On Windows, use
 
 ```powershell
-python.exe bin\server
+uv run python bin\server
 ```
 
 Then open <http://localhost:3001/web/index.html>
@@ -55,12 +55,16 @@ For public deployments, the development server is inadequate. You need to put a 
 
 ## Application architecture
 
-The application has a modular and pluggable architecture that makes it easy to extend. It is also lightweight and does not involve 
-any particular framework.  The main application class provides 
+The application has a modular architecture that makes it easy to extend. It is also lightweight and does not involve any particular framework.
 
-- an event/message bus based on https://www.npmjs.com/package/eventemitter3
-- a plugin mananger based on https://www.npmjs.com/package/js-plugin
+In particular, there is no central application instance. All functionality of the application is implemented through plugins, based on the [js-plugin](https://github.com/supnate/js-plugin#readme) plugin manager. In order to propagate state changes throughout the application, invoke [extension endpoints](./src/endpoints.js) implemented by other plugins (see [app.js](./src/app.js)). The most relevant endpoints, each invoked with the state object, are the following:
 
-All of the app's functions are implemented as components in the form of plugins (see [app.js](/src/app.js)). New components can be easily added.
+ - `install`: Invoked once as the first operation of the application, in order to let the plugins add components to the DOM, do server queries to initialize values, etc. 
+ - `start`: Invoked once when all plugins have been installed and the application is starting normal operations 
+ - `state.update` invoked when the application state has changed, each plugin can then update the part of the UI it is responsible for. 
 
-The UI is build with WebComponents provided by https://shoelace.style
+New plugins can be easily added without having to change the application.
+
+The UI is (mostly) build with WebComponents provided by https://shoelace.style . The UI of the application is mirrored in an object structure, which can be easily traversed in order to locate the UI element via autocompletion (e.g., ui.toolbar.loginButton). In this structure, each named DOM element encapsulates all named descencdent elements, which can be accessed as virtual properties by the value of the name attribute. The top element of this hierarchy is the default export of [ui.js](./src/ui.js).
+
+In addition to the loosely coupled approach realized via plugin invocation, the plugins can also export an "api" object that exposes methods that can be imported and executed where this approach makes more sense.
