@@ -97,7 +97,8 @@ async function callApi(endpoint, method, body = null) {
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
  *
- * @returns {Promise<Array<{id:string,pdf:string,xml:string}>>} - A promise that resolves to an array of objects with keys "id", "pdf", and "tei".
+ * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
+ *  objects with keys "id", "pdf", and "tei".
  */
 async function getFileList() {
   return await callApi('/files/list', 'GET');

@@ -19,7 +19,7 @@ const tagDataPath = '/data/tei.json'
  * component is an instance of NavXmlEditor
  * @type {NavXmlEditor}
  */
-const api = new NavXmlEditor('xml-editor')
+const api = new NavXmlEditor('codemirror-container')
 
 /**
  * component plugin
