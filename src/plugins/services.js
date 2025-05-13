@@ -6,16 +6,39 @@
  * @import { ApplicationState } from '../app.js' 
  * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
  */
-
 import ui from '../ui.js'
 import { invoke, updateState, endpoints, client, logger, dialog, 
   fileselection, xmlEditor, pdfViewer, services, validation } from '../app.js'
+import { appendHtml } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
 
-// name of the plugin
-const name = "services"
+/**
+ * plugin API
+ */
+const api = {
+  load,
+  validateXml,
+  saveXml,
+  showMergeView,
+  removeMergeView,
+  searchNodeContentsInPdf
+}
+
+/**
+ * component plugin
+ */
+const plugin = {
+  name: "services",
+  deps: ['file-selection'],
+  install,
+  state: { update },
+  validation: { inProgress }
+}
+
+export { plugin, api }
+export default plugin
 
 /**
  * Document actions button group
@@ -40,7 +63,7 @@ const name = "services"
  */
 
 const toolbarActionsHtml = `
-<span class="hbox-with-gap">
+<span class="hbox-with-gap toolbar-content">
   <!-- Document button group -->
   <sl-button-group label="Document" name="documentActions">
     <!-- save -->
@@ -67,7 +90,7 @@ const toolbarActionsHtml = `
     <!-- download, not implemented yet -->
     <sl-tooltip content="Download XML document">
       <sl-button name="download" size="small" disabled>
-        <sl-icon name="cloudDownload"></sl-icon>
+        <sl-icon name="cloud-download"></sl-icon>
       </sl-button>
     </sl-tooltip>   
 
@@ -106,32 +129,6 @@ const toolbarActionsHtml = `
 </span>
 `
 
-/**
- * plugin API
- */
-const api = {
-  load,
-  validateXml,
-  saveXml,
-  showMergeView,
-  removeMergeView,
-  searchNodeContentsInPdf
-}
-
-
-/**
- * component plugin
- */
-const plugin = {
-  name,
-  install,
-  state: { update },
-  validation: { inProgress }
-}
-
-export { plugin, api }
-export default plugin
-
 //
 // Implementation
 //
@@ -141,13 +138,10 @@ export default plugin
  */
 function install(state) {
 
-  const tb = ui.toolbar
+  const tb = ui.toolbar.self
   
   // install controls on menubar
-  const div = document.createElement("div")
-  div.innerHTML = toolbarActionsHtml.trim()
-  // @ts-ignore
-  tb.appendChild(div.firstChild)
+  appendHtml(toolbarActionsHtml, tb)
 
   // === Document button group ===
 
@@ -247,7 +241,7 @@ async function load(state, { xml, pdf }) {
  */
 async function validateXml() {
   logger.info("Validating XML...")
-  return await validation.validateXml()
+  return await validation.validate() // todo use endpoint instead
 }
 
 /**

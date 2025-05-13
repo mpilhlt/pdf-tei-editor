@@ -31,7 +31,7 @@ python.exe bin\download-pdfjs
 On Windows, use
 
 ```powershell
-python.exe bin\server
+uv run python bin\server
 ```
 
 Then open <http://localhost:3001/web/index.html>

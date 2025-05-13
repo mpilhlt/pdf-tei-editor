@@ -1,24 +1,14 @@
 /**
  * This implements the UI for the file selection
  */
+
+
 /** 
  * @import { ApplicationState } from '../app.js' 
  */
-
 import ui from '../ui.js'
-import { SlOption } from '../ui.js'
+import { SlOption, appendHtml } from '../ui.js'
 import { logger, client, services, dialog } from '../app.js'
-
-// name of the component
-const pluginId = "fileselection"
-
-// HTML elements
-const commandBarHtml = `
-<span id="${pluginId}" class="hbox-with-gap">
-  <sl-select name="pdf" size="small" label="PDF"></sl-select>
-  <sl-select name="xml" size="small" label="XML file version"></sl-select>
-  <sl-select name="diff" size="small" label="Compare with version"></sl-select>
-<span>`
 
 /**
  * plugin API
@@ -32,7 +22,7 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name: pluginId,
+  name: "file-selection",
   install,
   state: {
     update
@@ -41,6 +31,18 @@ const plugin = {
 
 export { api, plugin }
 export default plugin
+
+//
+// UI
+//
+
+// HTML elements
+const fileSelectionHtml = `
+<span class="hbox-with-gap">
+  <sl-select name="pdf" size="small" label="PDF"></sl-select>
+  <sl-select name="xml" size="small" label="XML file version"></sl-select>
+  <sl-select name="diff" size="small" label="Compare with version"></sl-select>
+<span>`
 
 //
 // Implementation
@@ -55,9 +57,7 @@ export default plugin
 async function install(state) {
 
   // install controls on menubar
-  const div = document.createElement("div")
-  div.innerHTML = commandBarHtml.trim()
-  div.childNodes.forEach(elem => ui.toolbar.self.appendChild(elem))
+  appendHtml(fileSelectionHtml, ui.toolbar.self)
 
   // configure event handlers for these controls
   ui.toolbar.pdf.addEventListener('sl-change', () => onChangePdfSelectbox(state));

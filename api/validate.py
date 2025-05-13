@@ -5,9 +5,11 @@ from lxml import etree
 from lxml.etree import ElementTree as ET
 from lxml.etree import XMLSyntaxError, XMLSchema, XMLSchemaParseError, XMLSchemaValidateError, DocumentInvalid
 import xmlschema # too slow for validation but has some nice features like exporting a local copy of the schema
-from lib.decorators import handle_api_errors
-from lib.server_utils import ApiError
 from urllib.error import HTTPError
+
+from api.lib.decorators import handle_api_errors
+from api.lib.server_utils import ApiError
+
 
 bp = Blueprint('validate', __name__, url_prefix='/api/')
 

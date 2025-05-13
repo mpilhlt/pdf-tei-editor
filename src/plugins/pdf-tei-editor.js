@@ -2,30 +2,26 @@
  * The main application plugin, which is responsible for loading the documents at startup
  */
 
-/** @import { ApplicationState } from '../app.js' */
+/** 
+ * @import { ApplicationState } from '../app.js' 
+ */
 import ui from '../ui.js'
-import ep from '../endpoints.js'
-import { updateState,  logger, services, dialog, validation, floatingPanel, urlHash } from '../app.js'
-import { Spinner } from '../ui.js'
+import { updateState, logger, services, dialog, validation, floatingPanel, urlHash } from '../app.js'
+import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 
-// plugin name
-const name = "pdf-tei-editor"
-
 /**
- * The plugin API
+ * The plugin API, currently empty
  */
-const api = {
-
-}
-
+const api = {}
 
 /**
  * Plugin object
  */
 const plugin = {
-  name,
-  deps: ['logger','xmleditor', 'pdfviewer', 'services'],
+  name: "pdf-tei-editor",
+  install,
+  deps: ['logger','xmleditor', 'pdfviewer'],
   start
 }
 
@@ -47,8 +43,9 @@ function install(state) {
   // spinner/blocker
   spinner = new Spinner
   // @ts-ignore
-  spinner.name = "spinner"
+  spinner.setAttribute('name', "spinner")
   document.body.appendChild(spinner)
+  updateUi()
 }
 
 /**
@@ -57,7 +54,7 @@ function install(state) {
 */
 async function start(state) {
 
-  spinner.show('Loading documents, please wait...')
+  ui.spinner.show('Loading documents, please wait...')
 
   // async operations
   try {
@@ -66,7 +63,7 @@ async function start(state) {
     urlHash.updateState(state)
 
     // disable regular validation so that we have more control over it
-    validation.disableValidation(true)
+    validation.configure({mode:"off"})
 
     // get document paths from URL hash or from the first entry of the selectboxes
     // @ts-ignore
@@ -98,7 +95,7 @@ async function start(state) {
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
         logger.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`)
-        validation.disableValidation(seconds > 3)
+        validation.configure({mode: seconds > 3 ? "off": "auto"})
       })
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
@@ -113,12 +110,12 @@ async function start(state) {
     }
 
     // finish initialization
-    spinner.hide()
+    ui.spinner.hide()
     floatingPanel.show()
     logger.info("Application ready.")
 
   } catch (error) {
-    spinner.hide();
+    ui.spinner.hide();
     dialog.error(error.message)
     throw error
   }

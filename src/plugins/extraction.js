@@ -6,13 +6,34 @@
  * @import { ApplicationState } from '../app.js' 
  * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
  */
-import { invoke, endpoints, logger, client, services, dialog, fileselection, xmlEditor } from '../app.js'
-import { appendHtml } from '../modules/browser-utils.js'
-import { SlSelect, SlOption } from '../ui.js'
+import { client, services, dialog, fileselection, xmlEditor } from '../app.js'
+import { SlSelect, SlOption, appendHtml } from '../ui.js'
 import ui from '../ui.js'
 
-// name of the component
-const pluginId = "extraction"
+/**
+ * plugin API
+ */
+const api = {
+  extractFromCurrentPDF,
+  extractFromNewPdf,
+  extractFromPDF
+}
+
+/**
+ * plugin object
+ */
+const plugin = {
+  name: "extraction",
+  deps: ['services'],
+  install
+}
+
+export { api, plugin }
+export default plugin
+
+//
+// UI
+//
 
 /**
  * Extraction actions button group
@@ -23,7 +44,7 @@ const pluginId = "extraction"
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
 const buttonsHtml = `
-<sl-button-group label="Extraction" name="extractionActions">
+<sl-button-group name="extractionActions" label="Extraction" >
   <sl-tooltip content="Upload a new PDF and extract references">
     <sl-button name="extractNew" size="small">
       <sl-icon name="filetype-pdf"></sl-icon>
@@ -56,32 +77,9 @@ const dialogHtml = `
 </sl-dialog>
 `
 
-/**
- * plugin API
- */
-const api = {
-  extractFromCurrentPDF,
-  extractFromNewPdf,
-  extractFromPDF
-}
-
-/**
- * component plugin
- */
-const plugin = {
-  deps: ['pdf-tei-editor'],
-  name: pluginId,
-  install
-}
-
-export { api, plugin }
-export default plugin
-
 //
 // Implementation
 //
-
-// API
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
@@ -90,9 +88,7 @@ export default plugin
 function install(state) {
 
   // install controls on menubar
-  const div = document.createElement("div")
-  div.innerHTML = buttonsHtml.trim()
-  div.childNodes.forEach(elem => ui.toolbar.self.appendChild(elem))
+  appendHtml(buttonsHtml, ui.toolbar.self)
 
   // add event listeners
   ui.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state))

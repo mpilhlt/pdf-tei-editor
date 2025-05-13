@@ -235,13 +235,10 @@ export function resolveXPath(view, xpath) {
 }
 
 /**
- * Checks if an object has the Extension interface
+ * Checks if an object has the Extension interface (not really doing that currently)
  * @param {Extension} extension 
  * @returns {Boolean}
  */
 export function isExtension(extension){
-  if (!Array.isArray(extension)) {
-    extension = [extension]
-  }
-  return extension.every(ext => Boolean(ext.extension) )
+  return extension && typeof extension == "object"
 }

@@ -2,13 +2,41 @@
  * @import { ApplicationState } from '../app.js'
  * @import { Switch } from '../modules/switch.js'
  */
-import { invoke, updateState,  client, logger, services, dialog, xmlEditor } from '../app.js'
+import { updateState,  client, logger, services, dialog, xmlEditor } from '../app.js'
 import { $$ } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
+import { appendHtml } from '../ui.js'
 import ui from '../ui.js'
 
 // name of the component
 const pluginId = "floating-panel"
+
+
+/**
+ * plugin API
+ */
+const api = {
+  show: () => ui.floatingPanel.self.classList.remove("hidden"),
+  hide: () => ui.floatingPanel.self.classList.add("hidden"),
+}
+
+/**
+ * component plugin
+ */
+const plugin = {
+  name: pluginId,
+  install,
+  state: { update }
+}
+
+export { api, plugin }
+export default plugin
+
+//
+// implementations
+//
+
+// UI elements
 
 /**
  * Floating panel
@@ -36,7 +64,7 @@ const pluginId = "floating-panel"
  */
 
 // component htmnl
-const html = `
+const floatingPanelHtml = `
   <style>
     #${pluginId} {
       position: absolute;
@@ -69,7 +97,7 @@ const html = `
       display: inline;
     }      
   </style>
-  <div id="${pluginId}" name="floatingPanel>
+  <div id="${pluginId}" name="floatingPanel">
     <div>
       <span class="navigation-text">Navigate by</span>
       <select name="xpath"></select>
@@ -96,36 +124,6 @@ const html = `
     </div>
   </div>
 `
-const div = document.createElement("div")
-div.innerHTML = html.trim()
-document.body.appendChild(div)
-
-
-/**
- * plugin API
- */
-const api = {
-  show: () => ui.floatingPanel.self.classList.remove("hidden"),
-  hide: () => ui.floatingPanel.self.classList.add("hidden"),
-}
-
-/**
- * component plugin
- */
-const plugin = {
-  name: pluginId,
-  install,
-  state: { update }
-}
-
-export { api, plugin }
-export default plugin
-
-//
-// implementations
-//
-
-// UI elements
 
 
 /**
@@ -133,6 +131,9 @@ export default plugin
  * @param {ApplicationState} state
  */
 async function install(state) {
+
+  // add the panel to the DOM
+  appendHtml(floatingPanelHtml)
 
   // bring clicked elements into foreground when clicked
   addBringToForegroundListener([`#${pluginId}`, '.cm-panels']);

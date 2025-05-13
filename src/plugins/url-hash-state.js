@@ -7,9 +7,6 @@
  * @import { ApplicationState } from '../app.js' 
  */
 
-// name of the plugin
-const name = "url-hash-state"
-
 const api = {
   updateState: updateStateFromUrlHash
 }
@@ -18,15 +15,12 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name,
+  name: "url-hash-state",
   state: {
     update: updateUrlHashfromState
   }
 }
 
-//
-// exports 
-//
 export {plugin, api}
 export default plugin
 

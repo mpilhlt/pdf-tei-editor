@@ -25,13 +25,32 @@ body {
   width: 100%;
 }
 
-#command-bar{
+#toolbar{
   height: 50px;
   font-size: small;
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 10px;  
+}
+
+.toolbar-content {
+  max-height: 50px;
+}
+
+#toolbar sl-button::part(base) {
+  margin-top: 18px;
+}
+
+#toolbar sl-button-group[label]:before {
+  content: attr(label);
+  position: absolute; /* Or relative, depending on your context */
+  top: 2px;
+  left: 0;
+  color: var(--sl-color-gray-500);
+  font-size: smaller; /* Optional: Adjust font size for the label */
+  white-space: nowrap; /* Prevent wrapping */
+  display: block; /*Crucial for positioning and showing the content*/
 }
 
 #editors {
@@ -113,20 +132,7 @@ sl-menu-item::part(label) {
   font-size: smaller;
 }
 
-#command-bar sl-button::part(base) {
-  margin-top: 12px;
-}
 
-#command-bar sl-button-group[label]:before {
-  content: attr(label);
-  position: absolute; /* Or relative, depending on your context */
-  top: -3px;
-  left: 0;
-  color: var(--sl-color-gray-500);
-  font-size: smaller; /* Optional: Adjust font size for the label */
-  white-space: nowrap; /* Prevent wrapping */
-  display: block; /*Crucial for positioning and showing the content*/
-}
 
 sl-button-group[label] {
   position: relative; /* To contain the absolute positioning of the :before pseudo-element */

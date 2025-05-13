@@ -2,31 +2,18 @@
  * This application plugin implements a dialog registered as the "diaolog" property of the app
  */
 
-import { SlButton, SlDialog } from '../ui.js'
+import { SlButton, SlDialog, appendHtml } from '../ui.js'
 import ui from '../ui.js'
 
 /** @import { ApplicationState } from '../app.js' */
 
-/**
- * @typedef {object} dialogComponent
- * @property {SlDialog} self
- * @property {HTMLSpanElement} message
- * @property {SlButton} closeBtn
- */
-
-const html = `
-<sl-dialog label="Dialog" class="dialog-width" name="dialog" style="--width: 50vw;">
-  <span name="message"></span>
-  <sl-button slot="footer" name="close" variant="primary">Close</sl-button>
-</sl-dialog>
-`
-
-// define the component with its own API
+// Plugin API
 const api = {
   info,
   error
 }
 
+// Plugin object
 const plugin = {
   name: "dialog",
   install
@@ -36,18 +23,35 @@ export { api, plugin }
 export default plugin
 
 //
-// implementation
+// UI
 //
 
+/**
+ * @typedef {object} dialogComponent
+ * @property {SlDialog} self
+ * @property {HTMLSpanElement} message
+ * @property {SlButton} closeBtn
+ */
+
+const dialogHtml = `
+<sl-dialog name="dialog" label="Dialog" class="dialog-width" style="--width: 50vw;">
+  <div>
+    <span name="message"></span>
+    <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
+  <div>
+</sl-dialog>
+`
+
+//
+// implementation
+//
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
 function install(app) {
-  const elem = document.createElement("div");
-  document.body.appendChild(elem);
-  elem.innerHTML = html.trim();
+  appendHtml(dialogHtml)
   ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.self.hide());
 }
 

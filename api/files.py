@@ -1,10 +1,11 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
 from lxml import etree
-from lib.decorators import handle_api_errors
-from lib.server_utils import ApiError, make_timestamp
 from pathlib import Path
 from glob import glob
+
+from api.lib.decorators import handle_api_errors
+from api.lib.server_utils import ApiError, make_timestamp
 
 bp = Blueprint("files", __name__, url_prefix="/api/files")
 

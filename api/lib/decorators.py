@@ -1,6 +1,6 @@
 from flask import request, jsonify, current_app
 from functools import wraps
-from lib.server_utils import ApiError
+from api.lib.server_utils import ApiError
 
 def handle_api_errors(f):
     """

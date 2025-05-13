@@ -14,7 +14,7 @@ const api = {
 }
 
 const plugin = {
-  name: "validation",
+  name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install,
   validation: {
@@ -244,7 +244,7 @@ function updateCachedDiagnostics(diagnostics) {
  */
 function removeDiagnosticsInChangedRanges(update) {
   console.warn(update)
-  const viewState = this.xmlEditor.getView().state
+  const viewState = xmlEditor.getView().state
   const diagnostics = []
   const changedRangeValues = Object.values(update.changedRanges[0]) // todo this does not seem to be in the docs???
   const minRange = Math.min(...changedRangeValues)
@@ -263,5 +263,5 @@ function removeDiagnosticsInChangedRanges(update) {
   lastDiagnostics = diagnostics;
 
   // remove the diagnostics from the editor
-  this.xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
+  xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
 }

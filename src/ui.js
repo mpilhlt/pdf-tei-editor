@@ -1,8 +1,8 @@
 import { accessNamedDescendentsAsProperties } from './modules/browser-utils.js';
 
-import { Spinner } from './modules/spinner.js' 
+import { Spinner } from './modules/spinner.js'
 import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
-import SlButton  from '@shoelace-style/shoelace/dist/components/button/button.js'
+import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
 import SlButtonGroup from '@shoelace-style/shoelace/dist/components/button-group/button-group.js'
 import SlTextarea from '@shoelace-style/shoelace/dist/components/textarea/textarea.js'
 import SlInput from '@shoelace-style/shoelace/dist/components/input/input.js'
@@ -55,14 +55,48 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
  */
 
 /**
- * This variable is Proxy for the document node, which has the next-level named elements as virtual properties
- * with that name, which are again a Proxy. The virtual property "self" is a reference to the node for the 
+ * This variable represents the document node, which has the next-level named elements as virtual properties
+ * with that name, which then have their named descendants as properties, etc. The property "self" is a reference to the node for the 
  * purpose of documenting the node type, which must be "object" for a `@typedef`.
  * @type{namedElementsTree}
  */
 // @ts-ignore
-const ui = accessNamedDescendentsAsProperties(document);
+let ui = null;
 
-export { SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu, 
-    SlMenuItem, Spinner, SlSelect }
+/**
+ * Adds the given html to the target node
+ * @param {string} html 
+ * @param {Element|Document} targetNode
+ * @returns {Element[]} All the created nodes in an array
+ */
+function appendHtml(html, targetNode=document.body){
+  const div = document.createElement('div')
+  div.innerHTML = html.trim()
+  if (!(div && div.firstChild)) {
+    throw new Error("Adding html to DOM failed.")
+  }
+  const result = []
+  div.childNodes.forEach(childNode => {
+    targetNode.append(childNode)
+    result.push(childNode)
+  })
+  updateUi()
+  return result
+}
+
+/**
+ * Updates the UI structure
+ */
+function updateUi() {
+  // @ts-ignore
+  ui = accessNamedDescendentsAsProperties(document);
+}
+
+updateUi()
+
+export {
+  updateUi, appendHtml,
+  SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
+  SlMenuItem, Spinner, SlSelect
+}
 export default ui;

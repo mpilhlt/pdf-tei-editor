@@ -6,10 +6,37 @@
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
 import { logger, client } from '../app.js'
-import { SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../ui.js'
+import { appendHtml, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../ui.js'
 
-// name of the component
-const pluginId = "prompt-editor"
+
+/**
+ * plugin API
+ */
+const api = {
+  open,
+  edit,
+  duplicate: duplicateInstructions,
+  save,
+  submit,
+  close,
+  delete: deletePrompt
+}
+
+/**
+ * Plugin object
+ */
+const plugin = {
+  name: "prompt-editor",
+  deps: ['extraction'],
+  install
+}
+
+export { api, plugin }
+export default plugin
+
+//
+// UI
+//
 
 /**
  * Prompt editor
@@ -53,32 +80,6 @@ const buttonHtml = `
   </sl-button>
 </sl-tooltip>
 `
-
-/**
- * plugin API
- */
-const api = {
-  open,
-  edit,
-  duplicate: duplicateInstructions,
-  save,
-  submit,
-  close,
-  delete: deletePrompt
-}
-
-/**
- * component plugin
- */
-const plugin = {
-  name: pluginId,
-  deps: ['extraction'],
-  install
-}
-
-export { api, plugin }
-export default plugin
-
 //
 // Implementation
 //
@@ -89,11 +90,7 @@ export default plugin
  */
 function install(state) {
   // add prompt editor component
-  const editorDiv = document.createElement("div")
-  editorDiv.innerHTML = editorHtml.trim()
-  if (!editorDiv.firstChild) throw new Error("Invalid DOM")
-  document.body.appendChild(editorDiv.firstChild)
-
+  appendHtml(editorHtml)
 
   const pe = ui.promptEditor
   pe.self.addEventListener("sl-request-close", dialogOnRequestClose)
@@ -104,12 +101,8 @@ function install(state) {
   pe.delete.addEventListener('click', deletePrompt)
 
   // add a button to the command bar to show dialog with prompt editor
-  const buttonDiv = document.createElement('div')
-  buttonDiv.innerHTML = buttonHtml.trim()
-  const button = buttonDiv.firstChild
-  if (!button) throw new Error("Invalid DOM")
+  const button = appendHtml(buttonHtml, ui.toolbar.extractionActions.self)[0]
   button.addEventListener("click", () => api.open())
-  ui.toolbar.extractionActions.self.appendChild(button)
 }
 
 // API

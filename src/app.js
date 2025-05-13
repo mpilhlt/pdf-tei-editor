@@ -14,7 +14,8 @@ import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash
 import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
 import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
 import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
-import { plugin as validationPlugin, api as validation } from './plugins/validation.js'
+import { plugin as pdfTeiEditorPlugin, api as pdfTeiEditor } from './plugins/pdf-tei-editor.js'
+import { plugin as validationPlugin, api as validation } from './plugins/tei-validation.js'
 import { plugin as clientPlugin, api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
 import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
@@ -44,15 +45,15 @@ let state = {
   xpath: null
 }
 
-const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin, 
-  pdfViewerPlugin, xmlEditorPlugin, validationPlugin, clientPlugin, fileselectionPlugin,
-  extractionPlugin, servicesPlugin, floatingPanelPlugin, promptEditorPlugin,
-  teiWizardPlugin
+const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
+  pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
+  servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
+  teiWizardPlugin, validationPlugin, pdfTeiEditorPlugin
 ]
 
 // register plugins
 for (const plugin of plugins) {
-  console.info(`Installing '${plugin.name}' plugin`)
+  logger.debug(`Installing '${plugin.name}' plugin`)
   pluginManager.register(plugin)
 }
 

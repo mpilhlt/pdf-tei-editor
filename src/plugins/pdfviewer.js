@@ -4,7 +4,7 @@
 
 /** @import { ApplicationState } from '../app.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
-import { invoke, updateState, logger, services, xmlEditor } from '../app.js'
+import { logger, services, xmlEditor } from '../app.js'
 import ui from '../ui.js'
 
 /**

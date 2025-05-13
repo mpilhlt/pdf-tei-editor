@@ -167,6 +167,7 @@ export class XMLEditor extends EventTarget {
    */
   addLinter(extension) {
     if (!isExtension(extension)) {
+      console.log(extension)
       throw new TypeError("Argument must have the Extension interface")
     }
     const extensions = this.#linterCompartment.get(this.#view.state) || []
@@ -793,7 +794,7 @@ export class XMLEditor extends EventTarget {
           const xpath = this.getXPathForNode(node)
           return Object.assign({node, xpath}, range)
         } catch (e) {
-          console.warn(e)
+          console.warn(e.message)
           return range
         }
       })

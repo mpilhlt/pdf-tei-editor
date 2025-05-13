@@ -192,8 +192,6 @@ export function getDescendantByName(node, name, noError) {
   return descendant
 }
 
-
-
 /**
  * Parses the HTML and attaches it to a parent node (defaults to document.body).
  * Returns an Array of the added top-level elements
@@ -234,7 +232,7 @@ export function escapeHtml(text) {
  * occurrence is used.
  *
  * @param {Element} node The starting node to search from.
- * @returns {Object<string, Node>} An object mapping name attribute values to their respective nodes.
+ * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
  */
 function findNamedDescendants(node) {
   const results = {};
@@ -254,7 +252,7 @@ function findNamedDescendants(node) {
       // @ts-ignore
       const childNode = currentNode.childNodes[i];
       // Check if it's an element (important to avoid text nodes)
-      if (childNode.nodeType === Node.ELEMENT_NODE) { 
+      if (childNode.nodeType === Node.ELEMENT_NODE) {
 
         const nameAttribute = childNode.getAttribute("name");
 
@@ -275,32 +273,22 @@ function findNamedDescendants(node) {
 }
 
 /**
- * Modifies a node to access named descendant elements through virtual properties of their name. 
- * Also adds a virtual property "self" that allows JSDoc annotations of parent elements
- * 
- * @param {Element} node The node to modify
+ * Modifies a node to access named descendant elements through added properties of their name.
+ * Also adds a property "self" that allows JSDoc annotations of the original node. 
+ * You must be careful to use names that do not override existing properties.
+ *
+ * @param {Element} node The element to modify
+ * @returns {Element} The element with with an added "self" property as well as properties
+ *          to access named descendants
  */
 export function accessNamedDescendentsAsProperties(node) {
-  return new Proxy({ node }, {
-    get: function (target, name, receiver) {
-      // returns the node itself, this is a trick to allow to annotate the type of a typedef
-      if (name === "self") {
-        return node
-      }
-
-      if (name in target) {
-        return Reflect.get(target, name, receiver);
-      }
-      if (typeof name == "string") {
-        const namedDescendants = findNamedDescendants(node)
-        if (name in namedDescendants) {
-          return namedDescendants[name];
-        }
-      }
-      // property does not exist
-      return undefined
-    }
-  });
+  const namedDescendants = findNamedDescendants(node)
+  for (const name in namedDescendants){
+    namedDescendants[name] = accessNamedDescendentsAsProperties(namedDescendants[name])
+  }
+  namedDescendants.self = node
+  const modifiedObj =  Object.assign(node, namedDescendants)
+  return modifiedObj
 }
 
 // Function to serialize the XML DOM back to a string (for demonstration)

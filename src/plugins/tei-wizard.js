@@ -7,7 +7,6 @@
  * @import { ApplicationState } from '../app.js' 
  */
 
-import { api as logger } from './logger.js'
 import { api as xmleditor } from './xmleditor.js'
 
 //import { xmlFormat } from 'xml-formatter' // better than custom implementation?
