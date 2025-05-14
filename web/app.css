@@ -45,6 +45,7 @@ h1,h2,h3 {
   align-items: center;
   gap: 5px;
   flex-shrink: 0; 
+  z-index: var(--sl-z-index-dropdown);
 }
 
 .toolbar-content {
