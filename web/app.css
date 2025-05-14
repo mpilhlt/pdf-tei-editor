@@ -12,6 +12,10 @@ body {
   box-sizing: border-box; /* Apply to all elements */
 }
 
+h1,h2,h3 {
+  margin:auto
+}
+
 .hidden {
   visibility: hidden;
 }
@@ -99,7 +103,6 @@ iframe {
 #toolbar sl-button::part(base) {
   margin-top: 5px;
 }
-
 
 #toolbar sl-button-group[label]:before {
   content: attr(label);

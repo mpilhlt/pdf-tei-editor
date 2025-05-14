@@ -13,7 +13,7 @@
     "@codemirror/merge": "^6.10.0",
     "@codemirror/search": "^6.5.10",
     "@rollup/plugin-node-resolve": "^16.0.1",
-    "@shoelace-style/shoelace": "^2.20.1",
+    "@shoelace-style/shoelace": "2.20",
     "codemirror": "^6.0.1",
     "eventemitter3": "^5.0.1",
     "glob": "^11.0.1",

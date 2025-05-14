@@ -5,5 +5,7 @@ A viewer/editor web app to compare the PDF source and TEI extraction/annotation 
 Authors/Contributors:
 - Christian Boulanger, Max Planck Institute for Legal History and Legal Theory
 
-More information is in preparation
+More information is in preparation.
+
+[Test](test.md)
 

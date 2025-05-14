@@ -38,11 +38,10 @@ export default plugin
 
 // HTML elements
 const fileSelectionHtml = `
-<span class="hbox-with-gap">
-  <sl-select name="pdf" size="small" label="PDF"></sl-select>
-  <sl-select name="xml" size="small" label="XML file version"></sl-select>
-  <sl-select name="diff" size="small" label="Compare with version"></sl-select>
-<span>`
+  <sl-select name="pdf" size="small" label="PDF" hoist></sl-select>
+  <sl-select name="xml" size="small" label="XML file version" hoist></sl-select>
+  <sl-select name="diff" size="small" label="Compare with version" hoist></sl-select>
+`
 
 //
 // Implementation
@@ -108,11 +107,22 @@ async function reloadFileData() {
   }
 }
 
+let stateCache
+
 /**
  * Populates the selectboxes for file name and version
  * @param {ApplicationState} state
  */
 async function populateSelectboxes(state) {
+
+  // check if state has changed
+  const jsonState = JSON.stringify(state)
+  if (jsonState === stateCache) {
+    logger.debug("Not repopulating selectboxes as state hasn't changed")
+    return 
+  }
+  stateCache = jsonState
+
   logger.debug("Populating selectboxes")
 
   if (fileData === null) {
@@ -138,6 +148,7 @@ async function populateSelectboxes(state) {
     const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'))
     Object.assign(option.dataset, data)
 
+    ui.toolbar.pdf.hoist = true
     ui.toolbar.pdf.appendChild(option);
 
     if (file.pdf === state.pdfPath) {
