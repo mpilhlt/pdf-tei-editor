@@ -63,6 +63,9 @@ export class NavXmlEditor extends XMLEditor {
    * @returns 
    */
   async handeSelectionChange(ranges) {
+    // wait for any editor operations to finish
+    await this.whenReady()
+        
     if (ranges.length === 0 || !this.getXmlTree() || !this.parentPath) {
       let msg = ['Cannot update selection node & xpath:']
       ranges.length || msg.push("Selection is empty")

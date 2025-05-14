@@ -1,5 +1,6 @@
 /**
- * The main application plugin, which is responsible for loading the documents at startup
+ * Plugin which hosts the start function, which is responsible for loading the documents at startup
+ * Does not export any API
  */
 
 /** 
@@ -10,22 +11,20 @@ import { updateState, logger, services, dialog, validation, floatingPanel, urlHa
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 
-/**
- * The plugin API, currently empty
- */
-const api = {}
 
 /**
  * Plugin object
  */
 const plugin = {
-  name: "pdf-tei-editor",
+  name: "start",
   install,
-  deps: ['logger','xmleditor', 'pdfviewer'],
+  // should be the last plugin to be installed, so correctly all of the other plugins should be listed here, 
+  // just using the next-to-last one for convenience
+  deps: ["tei-validation"],
   start
 }
 
-export { plugin, api }
+export { plugin }
 export default plugin
 
 
@@ -82,6 +81,7 @@ async function start(state) {
       // a) load the diff view
       try {
         await services.showMergeView(diff)
+        updateState(state, {diffXmlPath: diff})
       } catch (error) {
         logger.warn("Error loading diff view: " + error.message)
       }

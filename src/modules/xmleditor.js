@@ -783,7 +783,9 @@ export class XMLEditor extends EventTarget {
    * @param {Range[]} ranges Array of range objects
    * @fires SelectionChangedEvent
    */
-  #onSelectionChange(ranges) {
+  async #onSelectionChange(ranges) {
+    // wait for any editor operations to finish
+    await this.whenReady()    
     let rangesWithNode = []
     // add the selected node in the XML-DOM tree to each range
     if (ranges.length > 0) {

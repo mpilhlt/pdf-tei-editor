@@ -29,6 +29,7 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
  * @import {floatingPanelComponent} from './plugins/floating-panel.js'
  * @import {documentActionsComponent, teiServicesComponents} from './plugins/services.js'
  * @import {extractionActionsComponent, extractionOptionsComponent} from './plugins/extraction.js'
+ * @import {infoDialogComponent} from './plugins/info.js'
  */
 
 /**
@@ -36,12 +37,13 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
  * @typedef {object} namedElementsTree
  * @property {toolbarComponent} toolbar - The main toolbar
  * @property {floatingPanelComponent} floatingPanel - The floating panel with navigation buttons
- * @property {HTMLDivElement} pdfViewer
- * @property {HTMLDivElement} xmlEditor
- * @property {Spinner} spinner 
- * @property {dialogComponent} dialog 
+ * @property {HTMLDivElement} pdfViewer - The PDFJS-based PDF viewer contained in an iFrame child node
+ * @property {HTMLDivElement} xmlEditor - The codemirror-based xml editor
+ * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes and block the application while they are ongoing
+ * @property {dialogComponent} dialog - A dialog to display messages or errors
  * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
  * @property {extractionOptionsComponent} extractionOptions - A dialog to choose the options for the instructiopns
+ * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
  */
 
 /**

@@ -250,7 +250,13 @@
     "glob": "../node_modules/glob/dist/esm/index.js",
     "lit": "../node_modules/lit/index.js",
 
-    "xml-formatter": "../node_modules/xml-formatter/dist/browser/xml-formatter.js"
+    "argparse": "../node_modules/argparse/argparse.js",
+    "entities": "../node_modules/entities/lib/esm/index.js",
+    "uc.micro": "../node_modules/uc.micro/index.mjs",
+    "punycode.js": "../node_modules/punycode.js/punycode.es6.js",
+    "mdurl" : "../node_modules/mdurl/index.mjs",
+    "linkify-it" : "../node_modules/linkify-it/index.mjs",
+    "markdown-it" : "../node_modules/markdown-it/index.mjs"
   },
   "scopes": {
     "../node_modules/string-width-cjs/node_modules/emoji-regex/": {

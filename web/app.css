@@ -96,7 +96,7 @@ iframe {
   visibility: hidden;
 }
 
-#toolbar sl-button-group[label] sl-button::part(base) {
+#toolbar sl-button::part(base) {
   margin-top: 5px;
 }
 

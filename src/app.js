@@ -14,7 +14,6 @@ import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash
 import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
 import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
 import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
-import { plugin as pdfTeiEditorPlugin, api as pdfTeiEditor } from './plugins/pdf-tei-editor.js'
 import { plugin as validationPlugin, api as validation } from './plugins/tei-validation.js'
 import { plugin as clientPlugin, api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
@@ -23,6 +22,8 @@ import { plugin as servicesPlugin, api as services } from './plugins/services.js
 import { plugin as floatingPanelPlugin, api as floatingPanel } from './plugins/floating-panel.js'
 import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
 import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
+import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
+import { plugin as startPlugin } from './plugins/start.js'
 
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
@@ -48,7 +49,7 @@ let state = {
 const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
   pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
-  teiWizardPlugin, validationPlugin, pdfTeiEditorPlugin
+  teiWizardPlugin, validationPlugin, infoPlugin, startPlugin
 ]
 
 // register plugins
@@ -92,4 +93,4 @@ await invoke(ep.start, state)
 // 
 export { state, ep as endpoints, invoke, updateState }
 export { logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
-  services, floatingPanel, promptEditor, urlHash }
+  services, floatingPanel, promptEditor, urlHash, appInfo }
