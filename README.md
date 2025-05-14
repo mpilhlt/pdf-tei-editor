@@ -4,6 +4,17 @@ A viewer/editor web app to compare the PDF source and TEI extraction/annotation 
 
 ![grafik](https://github.com/user-attachments/assets/864185f5-864a-439f-806c-537267470c46)
 
+Note: this is a development prototype, not a production-ready application.
+
+This repo is part of the ["Legal Theory Knowledge Graph" project](https://www.lhlt.mpg.de/2514927/03-boulanger-legal-theory-graph) 
+at the Max Planck Institute of Legal History and Legal Theory. 
+
+Related repositories:
+
+ - https://github.com/mpilhlt/llamore
+ - https://github.com/mpilhlt/bibliographic-tei
+
+
 ## Installation
 
 Install uv and nodejs/npm
@@ -18,7 +29,7 @@ On Windows, use
 ```powershell
 uv sync
 npm --ignore-scripts install
-python.exe bin\download-pdfjs
+uv run python bin\download-pdfjs
 ```
 
 ## Start the development server
@@ -37,16 +48,7 @@ Then open <http://localhost:3001/web/index.html>
 
 ## Using the LLamore extraction engine
 
-To extract references from PDF, the [LLamore library](https://github.com/mpilhlt/llamore) is used. Since it is work in progress, we use the GitHub source. As we do not include it as a submodule in this repo, it needs to be installed separately:
-
-```bash
-git clone https://github.com/mpilhlt/llamore.git
-uv pip install -r llamore/pyproject.toml
-```
-
-Once the library stabilizes, the PyPi distribution will be used.
-
-For LLamore to work, you currently need a Gemini API Key (got to <https://aistudio.google.com> to get one). Rename `.env.dist` to `.env` and add the key.
+To extract references from PDF, the [LLamore library](https://github.com/mpilhlt/llamore) is used. For LLamore to work, you currently need a Gemini API Key (got to <https://aistudio.google.com> to get one). Rename `.env.dist` to `.env` and add the key.
 
 ## Public deployments
 
@@ -60,7 +62,7 @@ For public deployments, the current approach using a development server is inade
 
 The application has a modular architecture that makes it easy to extend. It is also lightweight and does not have a dependency on any particular web framework.
 
-Please note there is no central application instance. All functionality of the application is implemented through plugins, based on the [js-plugin](https://github.com/supnate/js-plugin#readme) plugin manager. In order to propagate state changes throughout the application, invoke [extension endpoints](./src/endpoints.js) which may or may not be implemented by other plugins (see [app.js](./src/app.js)). The most relevant endpoints, each invoked with the state object, are the following:
+Please note there is no central application instance. All functionality of the application is implemented through plugins, managed by [js-plugin](https://github.com/supnate/js-plugin#readme). In order to propagate state changes throughout the application, invoke [extension endpoints](./src/endpoints.js) which may or may not be implemented by other plugins (see [app.js](./src/app.js)). The most relevant endpoints, each invoked with the state object, are the following:
 
  - `install`: Invoked once as the first operation of the application, in order to let the plugins add components to the DOM, do server queries to initialize values, etc. 
  - `start`: Invoked once when all plugins have been installed and the application is starting normal operations 

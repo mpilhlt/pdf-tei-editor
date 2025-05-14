@@ -3,9 +3,12 @@ import requests
 import re
 from flask import Blueprint, request, jsonify, current_app
 from lxml import etree
-from glob import glob
 from pathlib import Path
 from shutil import move
+
+from llamore import GeminiExtractor
+from llamore import LineByLinePrompter
+from llamore import TeiBiblStruct
 
 from api.lib.decorators import handle_api_errors
 from api.lib.server_utils import ApiError, get_gold_tei_path, make_timestamp
@@ -14,17 +17,6 @@ DOI_REGEX = r"^10.\d{4,9}/[-._;()/:A-Z0-9]+$"  # from https://www.crossref.org/b
 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")  # set in .env
 
 prompt_path = os.path.join(os.path.dirname(__file__), "..", "data", "prompt.json")
-
-# import llamore from GitHub source
-if os.path.isdir("llamore"):
-    import sys
-    sys.path.append("llamore/src")
-    from llamore import GeminiExtractor
-    from llamore import LineByLinePrompter
-    from llamore import TeiBiblStruct
-else:
-    print("LLamore repo does not exist, extraction service is not available")
-
 
 bp = Blueprint("extract", __name__, url_prefix="/api/extract")
 
