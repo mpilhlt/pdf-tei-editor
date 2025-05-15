@@ -119,9 +119,11 @@ async function open() {
  * @param {string} mdPath The local path to the md file, relative to the "docs" dir
  */
 async function load(mdPath){
+  // remove existing content
   ui.infoDialog.content.innerHTML = ""
+  
+  // load markdown 
   let markdown
-  // load content 
   try {
     markdown = await (await fetch(`${docsBasePath}/${mdPath}`)).text()
   } catch(error) {
@@ -129,16 +131,18 @@ async function load(mdPath){
     return 
   }
   
-  console.log(markdown)
-  // convert to html, replacing local links with api calls
-  // regex written by Gemini 2.5 Flash 
-  const regex = /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#|mailto:|tel:|data:).*?)\2(.*?>)/g
-  const replacement = `$1href="#" onclick="appInfo.load('${docsBasePath}/$3'); return false"$4`
-  const html = md.render(markdown).replaceAll(regex, replacement)
-  console.log(html)
+  // convert to html
+  const html = md.render(markdown)
+    // replace local links with api calls
+    .replaceAll(
+      /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#|mailto:|tel:|data:).*?)\2(.*?>)/g, 
+      `$1href="#" onclick="appInfo.load('${docsBasePath}/$3'); return false"$4`
+    )
+    // open remote links in new tabs
+    .replaceAll(/(href="http)/g, `target="_blank" $1`)
+
   appendHtml(html, ui.infoDialog.content)
 }
-
 
 
 /**

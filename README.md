@@ -1,4 +1,4 @@
-# pdf-tei-editor
+# PDF-TEI Editor (working title)
 
 A viewer/editor web app to compare the PDF source and TEI extraction/annotation results
 
@@ -14,6 +14,7 @@ Related repositories:
  - https://github.com/mpilhlt/llamore
  - https://github.com/mpilhlt/bibliographic-tei
 
+Information for end users can be found [here](./docs/index.md)
 
 ## Installation
 
