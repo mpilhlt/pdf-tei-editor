@@ -42523,6 +42523,8 @@ setDefaultAnimation("alert.hide", {
 var alert_default = SlAlert;
 SlAlert.define("sl-alert");
 
+/*  <sl-icon name="info-circle"> */
+
 function notify(message, variant = 'primary', icon = 'info-circle', duration = 3000) {
     const alert = Object.assign(new alert_default, {
       variant,

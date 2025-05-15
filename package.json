@@ -4,7 +4,7 @@
     "postinstall": "python ./bin/download-pdfjs",
     "start": "./bin/server",
     "importmap": "npx @jsenv/importmap-node-module ./app/web/importmap.json --entrypoint ./app//src/app.js",
-    "build": "node_modules/.bin/rollup app/src/app.js -f es -o app/web/app.js -p @rollup/plugin-node-resolve"
+    "build": "python bin/compile-sl-icons.py && node_modules/.bin/rollup app/src/app.js -f es -o app/web/app.js -p @rollup/plugin-node-resolve"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",
