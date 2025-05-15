@@ -5,6 +5,7 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
+ * @import { SlSelect } from '../ui.js'
  */
 import ui from '../ui.js'
 import { SlOption, appendHtml } from '../ui.js'
@@ -58,10 +59,27 @@ async function install(state) {
   // install controls on menubar
   appendHtml(fileSelectionHtml, ui.toolbar.self)
 
-  // configure event handlers for these controls
-  ui.toolbar.pdf.addEventListener('sl-change', () => onChangePdfSelectbox(state));
-  ui.toolbar.xml.addEventListener('sl-change', () => onChangeXmlSelectbox(state));
-  ui.toolbar.diff.addEventListener('sl-change', () => onChangeDiffSelectbox(state));
+  /**  @type {[SlSelect,function][]} */
+  const handlers = [
+    [ui.toolbar.pdf, onChangePdfSelection],
+    [ui.toolbar.xml, onChangeXmlSelection],
+    [ui.toolbar.diff, onChangeDiffSelection]
+  ]
+
+  for (const [select,handler] of handlers) {
+    // add event handler for the selectbox
+    select.addEventListener('sl-change', () => handler(state));
+    
+    // this works around a problem with the z-index of the select dropdown being bound 
+    // to the z-index of the parent toolbar (and therefore being hidden by the editors)
+    select.addEventListener('sl-show', () => {
+      select.closest('#toolbar')?.classList.add('dropdown-open');
+    });
+
+    select.addEventListener('sl-hide', () => {
+      select.closest('#toolbar')?.classList.remove('dropdown-open');
+    });
+  }
 
   logger.info("Loading file metadata...")
   await reload(state)
@@ -187,7 +205,7 @@ async function populateSelectboxes(state) {
  * Called when the selection in the PDF selectbox changes
  * @param {ApplicationState} state
  */
-async function onChangePdfSelectbox(state) {
+async function onChangePdfSelection(state) {
   const selectedFile = fileData.find(file => file.pdf === ui.toolbar.pdf.value);
   const pdf = selectedFile.pdf
   const xml = selectedFile.xml
@@ -217,7 +235,7 @@ async function onChangePdfSelectbox(state) {
  * Called when the selection in the XML selectbox changes
  * @param {ApplicationState} state
  */
-async function onChangeXmlSelectbox(state) {
+async function onChangeXmlSelection(state) {
   const xml = ui.toolbar.xml.value
   if (xml && typeof xml == "string" && xml !== state.xmlPath) {
     try {
@@ -233,7 +251,7 @@ async function onChangeXmlSelectbox(state) {
  * Called when the selection in the diff version selectbox  changes
  * @param {ApplicationState} state
  */
-async function onChangeDiffSelectbox(state) {
+async function onChangeDiffSelection(state) {
   const diff = ui.toolbar.diff.value
   if (diff && typeof diff == "string" && diff !== ui.toolbar.xml.value) {
     try {
