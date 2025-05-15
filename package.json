@@ -3,7 +3,8 @@
     "ci": "pip install -r requirements.txt",
     "postinstall": "python ./bin/download-pdfjs",
     "start": "./bin/server",
-    "importmap": "npx @jsenv/importmap-node-module ./app/web/importmap.json --entrypoint ./app//src/app.js"
+    "importmap": "npx @jsenv/importmap-node-module ./app/web/importmap.json --entrypoint ./app//src/app.js",
+    "build": "node_modules/.bin/rollup app/src/app.js -f es -o app/web/app.js -p @rollup/plugin-node-resolve"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",
@@ -12,7 +13,6 @@
     "@codemirror/lint": "^6.8.5",
     "@codemirror/merge": "^6.10.0",
     "@codemirror/search": "^6.5.10",
-    "@rollup/plugin-node-resolve": "^16.0.1",
     "@shoelace-style/shoelace": "2.20",
     "codemirror": "^6.0.1",
     "eventemitter3": "^5.0.1",
@@ -25,6 +25,8 @@
     "@codemirror/state": "6.5.2"
   },
   "devDependencies": {
-    "@jsenv/importmap-node-module": "^7.1.1"
+    "@jsenv/importmap-node-module": "^7.1.1",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "rollup": "^4.40.2"
   }
 }
