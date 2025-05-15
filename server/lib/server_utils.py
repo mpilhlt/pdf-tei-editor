@@ -10,8 +10,8 @@ class ApiError(RuntimeError):
     pass
 
 def get_gold_tei_path(file_id):
-    WEB_ROOT = current_app.config['WEB_ROOT']
-    return os.path.join(WEB_ROOT, "data", "tei", f"{file_id}.tei.xml")
+    DATA_ROOT = current_app.config['DATA_ROOT']
+    return os.path.join(DATA_ROOT, "tei", f"{file_id}.tei.xml")
 
 
 def make_timestamp():

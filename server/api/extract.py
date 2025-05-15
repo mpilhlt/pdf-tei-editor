@@ -52,8 +52,8 @@ def extract():
 
     # file paths
     UPLOAD_DIR = current_app.config["UPLOAD_DIR"]
-    WEB_ROOT = current_app.config["WEB_ROOT"]
-    GOLD_DIR = os.path.join(WEB_ROOT, "data", "pdf")
+    DATA_ROOT = current_app.config['DATA_ROOT']
+    GOLD_DIR = os.path.join(DATA_ROOT, "pdf")
 
     uplodad_pdf_path = Path(os.path.join(UPLOAD_DIR, pdf_filename))
     gold_pdf_path = Path(os.path.join(GOLD_DIR, file_id + ".pdf"))
@@ -82,8 +82,8 @@ def extract():
     # return result
     result = {
         "id": file_id,
-        "xml": Path("/" + os.path.relpath(tei_path, WEB_ROOT)).as_posix(),
-        "pdf": Path("/" + os.path.relpath(gold_pdf_path, WEB_ROOT)).as_posix(),
+        "xml": Path("/data/" + os.path.relpath(tei_path, DATA_ROOT)).as_posix(),
+        "pdf": Path("/data/" + os.path.relpath(gold_pdf_path, DATA_ROOT)).as_posix(),
     }
     return jsonify(result)
 

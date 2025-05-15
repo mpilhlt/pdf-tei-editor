@@ -62,7 +62,7 @@ def is_allowed_mime_type(filename, file_content):
 
     if HAS_MAGIC:
         # Check based on file content using libmagic
-        mime_type_by_content = magic.from_buffer(file_content, mime=True).decode('utf-8')
+        mime_type_by_content = magic.from_buffer(file_content, mime=True)
         if mime_type_by_content in ALLOWED_MIME_TYPES:
             return True
     else:

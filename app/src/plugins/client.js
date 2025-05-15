@@ -256,7 +256,8 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
     input.type = 'file';
     input.accept = '.pdf, .xml';
     input.addEventListener('change', async () => {
-      const file = Array.isArray(input.files) ? input.files[0] : null;
+      console.log(input)
+      const file = input.files && input.files[0];
       if (!file) {
         reject(new Error('No file selected.'));
         return;

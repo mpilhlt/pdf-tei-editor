@@ -130,7 +130,7 @@ async function extractFromNewPdf(state) {
     }
 
     const doi = getDoiFromFilename(filename)
-    const { xml, pdf } = await extractFromPDF(state, { doi })
+    const { xml, pdf } = await extractFromPDF(state, { doi, filename })
     await services.load(state, { xml, pdf })
 
   } catch (error) {
@@ -156,7 +156,8 @@ async function extractFromPDF(state, defaultOptions) {
 
   ui.spinner.show('Extracting references, please wait')
   try {
-    let result = await client.extractReferences(state.pdfPath, options)
+    const filename = options.filename || state.pdfPath
+    let result = await client.extractReferences(filename, options)
     await fileselection.reload(state)  // todo uncouple
     return result
   } finally {

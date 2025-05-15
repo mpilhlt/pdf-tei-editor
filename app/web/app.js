@@ -41575,7 +41575,8 @@ async function uploadFile(uploadUrl = upload_route, options = {}) {
     input.type = 'file';
     input.accept = '.pdf, .xml';
     input.addEventListener('change', async () => {
-      const file = Array.isArray(input.files) ? input.files[0] : null;
+      console.log(input);
+      const file = input.files && input.files[0];
       if (!file) {
         reject(new Error('No file selected.'));
         return;
@@ -41988,7 +41989,7 @@ async function extractFromNewPdf(state) {
     }
 
     const doi = getDoiFromFilename(filename);
-    const { xml, pdf } = await extractFromPDF(state, { doi });
+    const { xml, pdf } = await extractFromPDF(state, { doi, filename });
     await api$3.load(state, { xml, pdf });
 
   } catch (error) {
@@ -42014,7 +42015,8 @@ async function extractFromPDF(state, defaultOptions) {
 
   ui$1.spinner.show('Extracting references, please wait');
   try {
-    let result = await api$6.extractReferences(state.pdfPath, options);
+    const filename = options.filename || state.pdfPath;
+    let result = await api$6.extractReferences(filename, options);
     await api$5.reload(state);  // todo uncouple
     return result
   } finally {
