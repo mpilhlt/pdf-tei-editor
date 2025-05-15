@@ -80,8 +80,7 @@ async function start(state) {
     if (diff && diff !== xml) {
       // a) load the diff view
       try {
-        await services.showMergeView(diff)
-        updateState(state, {diffXmlPath: diff})
+        await services.showMergeView(state, diff)
       } catch (error) {
         logger.warn("Error loading diff view: " + error.message)
       }

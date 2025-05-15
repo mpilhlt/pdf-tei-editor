@@ -12,14 +12,23 @@ import importlib.util
 from glob import glob
 from dotenv import load_dotenv
 import tempfile
+from pathlib import Path
 
-web_root = os.path.dirname(__file__)
 load_dotenv()
 
-app = Flask(__name__, static_folder=web_root)
+# paths
+project_root = Path(__file__).resolve().parent.parent
+server_root = project_root / 'server'
+web_root = project_root / 'app' / 'web'
+data_root = project_root / 'data'
+node_modules_root = project_root / 'node_modules'
+src_root = project_root / 'app' / 'src'
+
+# Flask app
+app = Flask(__name__, static_folder=str(project_root))
 
 # Dynamically register blueprints from the 'api' folder
-api_folder = os.path.join(web_root, 'api')
+api_folder = os.path.join(server_root, 'api')
 for filename in os.listdir(api_folder):
     if filename.endswith('.py') and filename != '__init__.py':
         module_name = filename[:-3]  # Remove ".py" extension
@@ -37,23 +46,42 @@ for filename in os.listdir(api_folder):
         else:
             print(f"Warning: No blueprint ('bp' attribute) found in {module_name}")
 
-# Save the absolute path of the web root 
-app.config['WEB_ROOT'] = web_root
+# Save the absolute path of the different root paths
+app.config['PROJECT_ROOT'] = str(project_root)
+app.config['WEB_ROOT'] = str(web_root)
+print(f"Web files served from {web_root}")
+app.config['DATA_ROOT'] = str(data_root)
+print(f"Data files served from {data_root}")
 
 # Provide a temporary directory for file uploads
 app.config['UPLOAD_DIR'] = tempfile.mkdtemp()
 print(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
 
+# Serve from node_modules during development
+@app.route('/node_modules/<path:path>')
+def serve_node_modules(path):
+    return send_from_directory(node_modules_root, path)
+
+# Serve from /app/src during development
+@app.route('/src/<path:path>')
+def serve_src(path):
+    return send_from_directory(src_root, path)
+
+# Serve data files
+@app.route('/data/<path:path>')
+def serve_static(path):
+    return send_from_directory(data_root, path)
+
 # Serve static files
 @app.route('/<path:path>')
-def serve_static(path):
+def serve_data(path):
     return send_from_directory(web_root, path)
 
 
-# Redirect root to /web/index.html
+# Redirect root to index.html
 @app.route('/')
 def index():
-    return redirect('/web/index.html')
+    return redirect('/index.html')
 
 
 # Simple health check

@@ -6,8 +6,8 @@ import os
 import threading
 import json
 
-from api.lib.decorators import handle_api_errors
-from api.lib.server_utils import ApiError
+from server.lib.decorators import handle_api_errors
+from server.lib.server_utils import ApiError
 
 bp = Blueprint("config", __name__, url_prefix="/api/config")
 

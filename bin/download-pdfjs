@@ -17,11 +17,11 @@ with zipfile.ZipFile('pdfjs.zip', 'r') as zip_ref:
 os.unlink('pdfjs.zip')
 
 #overwrite default pdf
-with open('web/pdfjs/web/viewer.mjs', 'r+', encoding='utf-8') as f:
+with open('app/web/pdfjs/web/viewer.mjs', 'r+', encoding='utf-8') as f:
     patched_code = f.read().replace("compressed.tracemonkey-pldi-09.pdf", "../../empty.pdf")
     f.seek(0)
     f.write(patched_code)
     f.truncate()
 
-# event his doesn't work sometimes, so replace the file, too
-shutil.copyfile("web/empty.pdf", "web/pdfjs/web/compressed.tracemonkey-pldi-09.pdf")
+# even his doesn't work sometimes, so replace the file, too
+shutil.copyfile("app/web/empty.pdf", "app/web/pdfjs/web/compressed.tracemonkey-pldi-09.pdf")

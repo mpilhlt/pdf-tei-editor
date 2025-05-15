@@ -7,8 +7,8 @@ from lxml.etree import XMLSyntaxError, XMLSchema, XMLSchemaParseError, XMLSchema
 import xmlschema # too slow for validation but has some nice features like exporting a local copy of the schema
 from urllib.error import HTTPError
 
-from api.lib.decorators import handle_api_errors
-from api.lib.server_utils import ApiError
+from server.lib.decorators import handle_api_errors
+from server.lib.server_utils import ApiError
 
 
 bp = Blueprint('validate', __name__, url_prefix='/api/')

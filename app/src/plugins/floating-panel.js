@@ -185,11 +185,11 @@ async function install(state) {
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff())
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
     xmlEditor.rejectAllDiffs()
-    services.removeMergeView()
+    services.removeMergeView(state)
   })
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
     xmlEditor.acceptAllDiffs()
-    services.removeMergeView()
+    services.removeMergeView(state)
   })
   
   // @ts-ignore
@@ -237,7 +237,7 @@ async function update(state) {
 
   // configure diff navigation buttons
   ui.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
-    node.disabled = !(node.value && node.value !== state.xmlPath)
+    node.disabled = !state.diffXmlPath || state.diffXmlPath === state.xmlPath
   })
 }
 

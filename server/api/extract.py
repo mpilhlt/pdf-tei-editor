@@ -10,8 +10,8 @@ from llamore import GeminiExtractor
 from llamore import LineByLinePrompter
 from llamore import TeiBiblStruct
 
-from api.lib.decorators import handle_api_errors
-from api.lib.server_utils import ApiError, get_gold_tei_path, make_timestamp
+from server.lib.decorators import handle_api_errors
+from server.lib.server_utils import ApiError, get_gold_tei_path, make_timestamp
 
 DOI_REGEX = r"^10.\d{4,9}/[-._;()/:A-Z0-9]+$"  # from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")  # set in .env

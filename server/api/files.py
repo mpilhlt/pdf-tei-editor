@@ -4,8 +4,8 @@ from lxml import etree
 from pathlib import Path
 from glob import glob
 
-from api.lib.decorators import handle_api_errors
-from api.lib.server_utils import ApiError, make_timestamp
+from server.lib.decorators import handle_api_errors
+from server.lib.server_utils import ApiError, make_timestamp, get_data_file_path
 
 bp = Blueprint("files", __name__, url_prefix="/api/files")
 
@@ -15,12 +15,12 @@ file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
 @bp.route("/list", methods=["GET"])
 @handle_api_errors
 def list():
-    WEB_ROOT = current_app.config["WEB_ROOT"]
-    files_data = create_file_data()
+    data_root = current_app.config["DATA_ROOT"]
+    files_data = create_file_data(data_root)
     for idx, data in enumerate(files_data):
         file_path = data.get("xml", None)
         if file_path is not None:
-            metadata = get_tei_metadata(os.path.join(WEB_ROOT, file_path[1:]))
+            metadata = get_tei_metadata(get_data_file_path(file_path))
             if 'author' in metadata:
                 label = f"{metadata.get('author', '')}, {metadata.get('title', '')[:25]}... ({metadata.get('date','')})"
             else:
@@ -31,7 +31,7 @@ def list():
 
     return jsonify(files_data)
 
-def save_file_path(file_path):
+def safe_file_path(file_path):
     # Remove any non-alphabetic leading characters for safety
     while not file_path[0].isalpha():
         file_path = file_path[1:]
@@ -50,7 +50,7 @@ def save():
     # parameters
     data = request.get_json()
     xml_string: str = data.get("xml_string")
-    file_path: str = save_file_path(data.get("file_path"))
+    file_path: str = safe_file_path(data.get("file_path"))
     save_as_new_version = data.get("new_version", False)
     
     # validate input
@@ -84,7 +84,7 @@ def delete():
     #    raise ApiError("Files should be a list")
     for file_path in files: 
         # validate input
-        file_path = save_file_path(file_path)
+        file_path = safe_file_path(file_path)
         # delete the file 
         current_app.logger.info(f"Deleting file {file_path}")
         if os.path.exists(file_path):
@@ -99,7 +99,7 @@ def delete():
 # helper functions
 
 
-def create_file_data():
+def create_file_data(data_root):
     """
     Creates a JSON file with a list of files in the "/data" directory which have "pdf" and "tei.xml"
     extensions. Each file is identified by its ID, which is the filename without the suffix.
@@ -109,10 +109,10 @@ def create_file_data():
     NB: This has become quite convoluted and needs a rewrite
     """
     file_id_data = {}
-    for file_path in glob("data/**/*", recursive=True):
+    for file_path in glob(f"{data_root}/**/*", recursive=True):
+        path = Path(file_path).relative_to(data_root)
         file_type = None
         for suffix, type in file_types.items():
-            path = Path(file_path)
             if file_path.endswith(suffix):
                 file_type = type
                 file_id = path.name[:-len(suffix)]
@@ -125,7 +125,7 @@ def create_file_data():
             file_id_data[file_id] = {}
         if file_type not in file_id_data[file_id]:
             file_id_data[file_id][file_type] = []
-        file_id_data[file_id][file_type].append(Path(file_path).as_posix())
+        file_id_data[file_id][file_type].append(path.as_posix())
 
     # create the files list
     file_list = []
@@ -139,10 +139,10 @@ def create_file_data():
                 if path.parent.parent.name == "versions":
                     file_dict['versions'].append({
                         'label': path.parent.name.replace("_", " "),
-                        'path': "/" + file_path
+                        'path': "/data/" + file_path
                     })
                 else:     
-                    file_dict[file_type] = "/" + file_path
+                    file_dict[file_type] = "/data/" + file_path
 
         file_dict['versions'] = sorted(file_dict['versions'], key= lambda file: file.get('version', ''), reverse=True)
         # add original as first version

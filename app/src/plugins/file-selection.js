@@ -9,7 +9,7 @@
  */
 import ui from '../ui.js'
 import { SlOption, appendHtml } from '../ui.js'
-import { logger, client, services, dialog } from '../app.js'
+import { logger, client, services, dialog, updateState } from '../app.js'
 
 /**
  * plugin API
@@ -220,7 +220,7 @@ async function onChangePdfSelection(state) {
 
   if (Object.keys(filesToLoad).length > 0) {
     try {
-      services.removeMergeView()
+      services.removeMergeView(state)
       // @ts-ignore
       await services.load(state, filesToLoad)
     }
@@ -239,7 +239,7 @@ async function onChangeXmlSelection(state) {
   const xml = ui.toolbar.xml.value
   if (xml && typeof xml == "string" && xml !== state.xmlPath) {
     try {
-      services.removeMergeView()
+      services.removeMergeView(state)
       await services.load(state, { xml })
     } catch (error) {
       console.error(error)
@@ -255,11 +255,12 @@ async function onChangeDiffSelection(state) {
   const diff = ui.toolbar.diff.value
   if (diff && typeof diff == "string" && diff !== ui.toolbar.xml.value) {
     try {
-      await services.showMergeView(diff)
+      await services.showMergeView(state, diff)
     } catch (error) {
       console.error(error)
     }
   } else {
-    services.removeMergeView()
+    services.removeMergeView(state)
   }
+  updateState(state, {diffXmlPath: diff})
 }

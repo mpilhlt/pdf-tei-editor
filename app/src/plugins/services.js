@@ -220,7 +220,7 @@ async function load(state, { xml, pdf }) {
   // XML
   if (xml) {
     logger.info("Loading XML: " + xml)
-    removeMergeView()
+    removeMergeView(state)
     state.diffXmlPath = null
     promises.push(xmlEditor.loadXml(xml))
   }
@@ -262,13 +262,15 @@ async function saveXml(filePath, saveAsNewVersion=false) {
 
 /**
  * Creates a diff between the current and the given document and shows a merge view
+ * @param {ApplicationState} state
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
-async function showMergeView(diff) {
+async function showMergeView(state, diff) {
   logger.info("Loading diff XML: " + diff)
   ui.spinner.show('Computing file differences, please wait...')
   try {
     await xmlEditor.showMergeView(diff)
+    updateState(state, {diffXmlPath: diff})
   } finally {
     ui.spinner.hide()
   }
@@ -278,9 +280,10 @@ async function showMergeView(diff) {
 /**
  * Removes all remaining diffs
  */
-function removeMergeView() {
+function removeMergeView(state) {
   xmlEditor.hideMergeView()
   UrlHash.remove("diff")
+  updateState(state, {diffXmlPath:null})
 }
 
 /**
@@ -292,7 +295,7 @@ async function deleteCurrentVersion(state){
   const msg = `Are you sure you want to delete the current version "${versionName}"?`
   if (!confirm(msg)) return; // todo use dialog
 
-  services.removeMergeView()
+  services.removeMergeView(state)
   
   // delete files 
   
@@ -326,7 +329,7 @@ async function deleteAllVersions(state) {
   const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
   if (!confirm(msg)) return; // todo use dialog
 
-  services.removeMergeView()
+  services.removeMergeView(state)
   
   // delete files 
   // @ts-ignore

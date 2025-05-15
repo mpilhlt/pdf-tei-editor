@@ -1,5 +1,5 @@
 import { XMLEditor } from "./xmleditor.js";
-import { parseXPath } from '../modules/utils.js'
+import { parseXPath } from './utils.js'
 
 export {XMLEditor}
 

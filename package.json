@@ -3,7 +3,7 @@
     "ci": "pip install -r requirements.txt",
     "postinstall": "python ./bin/download-pdfjs",
     "start": "./bin/server",
-    "importmap": "npx @jsenv/importmap-node-module ./web/importmap.json --entrypoint ./src/app.js"
+    "importmap": "npx @jsenv/importmap-node-module ./app/web/importmap.json --entrypoint ./app//src/app.js"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

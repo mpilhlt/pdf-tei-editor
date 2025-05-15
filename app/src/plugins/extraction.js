@@ -110,8 +110,7 @@ async function extractFromCurrentPDF(state) {
     doi = doi || getDoiFromFilename(state.pdfPath)
     if (state.pdfPath) {
       let { xml } = await extractFromPDF(state, { doi })
-      await services.showMergeView(xml)
-      updateState(state, {diffXmlPath: xml})
+      await services.showMergeView(state, xml)
     }
   } catch (error) {
     console.error(error)
