@@ -5,7 +5,7 @@ import requests
 import shutil
 
 version = '5.0.375'
-target = 'web/pdfjs'
+target = 'app/web/pdfjs'
 
 url = f'https://github.com/mozilla/pdf.js/releases/download/v{version}/pdfjs-{version}-dist.zip'
 response = requests.get(url)
