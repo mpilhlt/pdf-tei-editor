@@ -72,6 +72,11 @@ def serve_src(path):
 def serve_static(path):
     return send_from_directory(data_root, path)
 
+# Serve documentation
+@app.route('/docs/<path:path>')
+def serve_docs(path):
+    return send_from_directory(project_root / 'docs', path)
+
 # Serve static files
 @app.route('/<path:path>')
 def serve_data(path):
