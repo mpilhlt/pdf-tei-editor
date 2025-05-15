@@ -62,7 +62,7 @@ For public deployments, the current approach using a development server is inade
 
 The application has a modular architecture that makes it easy to extend. It is also lightweight and does not have a dependency on any particular web framework.
 
-Please note there is no central application instance. All functionality of the application is implemented through plugins, managed by [js-plugin](https://github.com/supnate/js-plugin#readme). In order to propagate state changes throughout the application, invoke [extension endpoints](./src/endpoints.js) which may or may not be implemented by other plugins (see [app/src/app.js](./src/app.js)). The most relevant endpoints, each invoked with the state object, are the following:
+Please note there is no central application instance. All functionality of the application is implemented through plugins, managed by [js-plugin](https://github.com/supnate/js-plugin#readme). In order to propagate state changes throughout the application, invoke [extension endpoints](https://github.com/mpilhlt/pdf-tei-editor/blob/main/app/src/endpoints.js) which may or may not be implemented by other plugins (see [app.js](https://github.com/mpilhlt/pdf-tei-editor/blob/main/app/src/app.js)). The most relevant endpoints, each invoked with the state object, are the following:
 
 - `install`: Invoked once as the first operation of the application, in order to let the plugins add components to the DOM, do server queries to initialize values, etc.
 - `start`: Invoked once when all plugins have been installed and the application is starting normal operations
