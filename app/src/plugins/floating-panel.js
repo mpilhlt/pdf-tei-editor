@@ -2,7 +2,7 @@
  * @import { ApplicationState } from '../app.js'
  * @import { Switch } from '../modules/switch.js'
  */
-import { updateState,  client, logger, services, dialog, xmlEditor } from '../app.js'
+import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
 import { $$ } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
 import { appendHtml } from '../ui.js'
@@ -167,15 +167,7 @@ async function install(state) {
   });
 
   // button to edit the xpath manually
-  ui.floatingPanel.editXpath.addEventListener('click', () => {
-    const custom = xp.options[xp.length - 1]
-    const xpath = prompt("Enter custom xpath", custom.value)
-    if (xpath && xpath.trim()) {
-      custom.value = xpath
-      custom.text = `Custom: ${xpath}`
-      xp.selectedIndex = xp.length - 1
-    }
-  })
+  ui.floatingPanel.editXpath.addEventListener('click', () => onEditXpath(state))
 
   // setup event handlers
   const fp = ui.floatingPanel
@@ -191,7 +183,7 @@ async function install(state) {
     xmlEditor.acceptAllDiffs()
     services.removeMergeView(state)
   })
-  
+
   // @ts-ignore
   fp.switchAutoSearch.addEventListener('change', onAutoSearchSwitchChange) // toggle search of node in the PDF
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex) // allow to input node index
@@ -288,6 +280,17 @@ function onClickSelectionIndex() {
     xmlEditor.selectByIndex(parseInt(index))
   } catch (error) {
     dialog.error(error.message)
+  }
+}
+
+function onEditXpath(state) {
+  const xp = ui.floatingPanel.xpath
+  const custom = xp.options[xp.length - 1]
+  const xpath = prompt("Enter custom xpath", custom.value)
+  if (xpath?.trim()) {
+    custom.value = xpath
+    custom.text = `Custom: ${xpath}`
+    xp.selectedIndex = xp.length - 1
   }
 }
 
