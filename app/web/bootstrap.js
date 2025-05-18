@@ -9,7 +9,7 @@ const loadFromSource = new URLSearchParams(window.location.search).has('dev')
 window.addEventListener('DOMContentLoaded', async () => {
   if (loadFromSource) {
     // add importmap 
-    let response = await fetch('./importmap2.json')
+    let response = await fetch('./importmap.json')
     let importMap = await response.json()
     const script = document.createElement('script');
     script.type = 'importmap';

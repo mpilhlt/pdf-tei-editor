@@ -14,14 +14,11 @@
     "@codemirror/lint": "^6.8.5",
     "@codemirror/merge": "^6.10.0",
     "@codemirror/search": "^6.5.10",
-    "@eirslett/jquery-ui-esm": "^1.12.1-alpha",
     "@shoelace-style/shoelace": "2.20",
     "codemirror": "^6.0.1",
-    "eventemitter3": "^5.0.1",
     "glob": "^11.0.1",
     "js-plugin": "^1.1.0",
-    "markdown-it": "^14.1.0",
-    "xml-formatter": "^3.6.5"
+    "markdown-it": "^14.1.0"
   },
   "resolutions": {
     "@codemirror/state": "6.5.2"

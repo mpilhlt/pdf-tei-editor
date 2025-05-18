@@ -6,7 +6,7 @@ const directoryUrl = new URL("./..", import.meta.url);
 await writeImportmaps({
   directoryUrl,
   importmaps: {
-    "./app/web/importmap2.json": {
+    "./app/web/importmap.json": {
       importResolution: {
         entryPoints: ["./app/src/app.js", "./app/src/ui.js"],
       }
