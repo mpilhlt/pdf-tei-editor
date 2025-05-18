@@ -184,9 +184,6 @@
     "@lezer/common": "/node_modules/@lezer/common/dist/index.js",
     "color-convert": "/node_modules/color-convert/index.js",
     "estree-walker": "/node_modules/estree-walker/dist/esm/estree-walker.js",
-
-    "eventemitter3": "/node_modules/eventemitter3/dist/eventemitter3.esm.js", 
-    
     "function-bind": "/node_modules/function-bind/index.js",
     "lru-cache/min": "/node_modules/lru-cache/dist/esm/index.min.js",
     "shebang-regex": "/node_modules/shebang-regex/index.js",

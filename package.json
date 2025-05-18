@@ -1,9 +1,10 @@
 {
+  "type": "module",
   "scripts": {
     "ci": "pip install -r requirements.txt",
     "postinstall": "python ./bin/download-pdfjs",
     "start": "./bin/server",
-    "importmap": "npx @jsenv/importmap-node-module ./app/web/importmap.json --entrypoint ./app//src/app.js",
+    "update-importmap": "npx @jsenv/importmap-node-module ./app/web/importmap.json --entrypoint ./app//src/app.js",
     "build": "python bin/compile-sl-icons.py && node_modules/.bin/rollup app/src/app.js -f es -o app/web/app.js -p @rollup/plugin-node-resolve"
   },
   "dependencies": {
@@ -13,6 +14,7 @@
     "@codemirror/lint": "^6.8.5",
     "@codemirror/merge": "^6.10.0",
     "@codemirror/search": "^6.5.10",
+    "@eirslett/jquery-ui-esm": "^1.12.1-alpha",
     "@shoelace-style/shoelace": "2.20",
     "codemirror": "^6.0.1",
     "eventemitter3": "^5.0.1",
