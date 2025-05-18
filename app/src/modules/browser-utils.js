@@ -309,3 +309,36 @@ export function serializeXmlToString(xmlDoc) {
   const serializer = new XMLSerializer();
   return serializer.serializeToString(xmlDoc);
 }
+
+/**
+ * Tests if an XPath is valid
+ * @param {string} xpathExpression 
+ * @param {Document} xmlDom The DOM document to test the expression on
+ * @param {XPathNSResolver|null} namespaceResolver 
+ * @returns {Boolean}
+ */
+export function isValidXPath(xpathExpression, xmlDom, namespaceResolver=null) {
+  try {
+    // Check if the XML DOM is valid
+    if (!xmlDom || typeof xmlDom !== 'object' || !xmlDom.evaluate) {
+      console.error("Invalid XML DOM provided.");
+      return false;
+    }
+
+    // Try to evaluate the XPath expression
+    xmlDom.evaluate(
+      xpathExpression,
+      xmlDom, 
+      namespaceResolver, 
+      XPathResult.ANY_TYPE, // resultType - ANY_TYPE is generally fine for validation
+      null     // result - reuse existing result, optional
+    );
+
+    return true; // If no error thrown, the XPath is valid
+
+  } catch (error) {
+    // An error indicates an invalid XPath expression
+    console.error("Invalid XPath:", error.message); // Optionally log the error
+    return false;
+  }
+}

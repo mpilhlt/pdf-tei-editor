@@ -134,9 +134,10 @@ let stateCache
 async function populateSelectboxes(state) {
 
   // check if state has changed
-  const jsonState = JSON.stringify(state)
+  const {xmlPath, pdfPath, diffXmlPath} = state
+  const jsonState = JSON.stringify({xmlPath, pdfPath, diffXmlPath})
   if (jsonState === stateCache) {
-    logger.debug("Not repopulating selectboxes as state hasn't changed")
+    //logger.debug("Not repopulating selectboxes as state hasn't changed")
     return 
   }
   stateCache = jsonState

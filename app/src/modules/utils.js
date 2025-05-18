@@ -26,6 +26,7 @@ export function escapeRegExp(string) {
  * @property {string} prefix - The namespace prefix associated with the node test, if present (e.g., 'prefix' from 'prefix:elementName'). Empty string if none.
  * @property {string} tagName - The local name part of the node test (e.g., 'elementName' from 'prefix:elementName', 'attribute' from '@attribute'). For functions like text(), this will be the function name ('text()'). For wildcards, '*'. For self/parent, '.' or '..'. Empty string if the node test structure doesn't have a name part.
  * @property {string} predicates - The full string containing all predicates associated with the last step (e.g., '[1][@id="xyz"]'). Empty string if none.
+ * @property {string} nonIndexPredicates - The predicates that qualify the tagName but do not contain the index of the node among siblings
  * @property {number | null} index - The primary numerical index extracted from the *first* positional predicate like `[1]` or `[position()=n]` found in the predicates. Defaults to null if no such predicate is found or can't be parsed.
  * @property {string} pathBeforePredicates - The xpath leading up to, but not including any predicates for this step (i.e., parentPath + nodeTest).
  */
@@ -237,6 +238,7 @@ export function parseXPath(xpath) {
   // within the 'predicates' string.
   const indexRegex = /\[\s*(?:(\d+)|position\(\)\s*=\s*(\d+))\s*\]/;
   const indexMatch = predicates.match(indexRegex);
+  let nonIndexPredicates = predicates
 
   let finalIndex = null; // Use a different variable name for the final property value
   if (indexMatch) {
@@ -247,6 +249,8 @@ export function parseXPath(xpath) {
       if (!isNaN(parsedIndex)) {
           finalIndex = parsedIndex;
       }
+      // remove index predicates
+      nonIndexPredicates = predicates.replace(indexMatch[0], '')
   }
 
   // --- Step 5: Calculate pathBeforePredicates ---
@@ -254,12 +258,13 @@ export function parseXPath(xpath) {
 
   return {
     input: xpath, 
-    parentPath: parentPath,
+    parentPath,
     finalStep: finalStepString,
     nodeTest: nodeTestString,
     prefix: matchedPrefix,
     tagName: finalTagName,
-    predicates: predicates,
+    predicates,
+    nonIndexPredicates,
     index: finalIndex,
     pathBeforePredicates: finalPathBeforePredicates,
   };

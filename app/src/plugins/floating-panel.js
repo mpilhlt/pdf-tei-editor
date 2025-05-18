@@ -3,14 +3,10 @@
  * @import { Switch } from '../modules/switch.js'
  */
 import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
-import { $$ } from '../modules/browser-utils.js'
+import { $$, isValidXPath } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
 import { appendHtml } from '../ui.js'
 import ui from '../ui.js'
-
-// name of the component
-const pluginId = "floating-panel"
-
 
 /**
  * plugin API
@@ -24,7 +20,7 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name: pluginId,
+  name: "floating-panel",
   install,
   state: { update }
 }
@@ -62,6 +58,9 @@ export default plugin
  * @property {HTMLButtonElement} diffKeepAll
  * @property {HTMLButtonElement} diffChangeAll
  */
+
+
+const pluginId = "floating-panel"
 
 // component htmnl
 const floatingPanelHtml = `
@@ -101,7 +100,7 @@ const floatingPanelHtml = `
     <div>
       <span class="navigation-text">Navigate by</span>
       <select name="xpath"></select>
-      <button name="editXpath">Custom XPath</button>
+      <button name="editXpath" style="display:none">Custom XPath</button>
       <button name="previousNode" disabled>&lt;&lt;</button>
       <span name="selectionIndex" class="navigation-text"></span>
       <button name="nextNode" disabled>&gt;&gt;</button>
@@ -171,8 +170,12 @@ async function install(state) {
 
   // setup event handlers
   const fp = ui.floatingPanel
-  fp.previousNode.addEventListener('click', () => xmlEditor.previousNode());
-  fp.nextNode.addEventListener('click', () => xmlEditor.nextNode());
+
+  // node navigation
+  fp.previousNode.addEventListener('click', () => changeNodeIndex(state, -1));
+  fp.nextNode.addEventListener('click', () => changeNodeIndex(state, +1));
+
+  // diff navigation
   fp.diffNavigation.prevDiff.addEventListener('click', () => xmlEditor.goToPreviousDiff())
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff())
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
@@ -204,15 +207,16 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
-
   // show the xpath selector
   if (state.xpath) {
-    let { index, pathBeforePredicates } = parseXPath(state.xpath)
+    let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)
 
     const optionValues = Array.from(ui.floatingPanel.xpath.options).map(node => node.value)
-    if (pathBeforePredicates in optionValues) {
+    const nonIndexedPath = pathBeforePredicates + nonIndexPredicates
+    const foundAtIndex = optionValues.indexOf(nonIndexedPath)
+    if (foundAtIndex >= 0) {
       // this sets the xpath selectbox to one of the existing values
-      ui.floatingPanel.xpath.selectedIndex = optionValues.indexOf(pathBeforePredicates)
+      ui.floatingPanel.xpath.selectedIndex = foundAtIndex
     } else {
       // the value does not exist, save it to the last option
       let lastIdx = ui.floatingPanel.xpath.options.length - 1
@@ -221,7 +225,7 @@ async function update(state) {
       ui.floatingPanel.xpath.options[lastIdx].disabled = false
     }
     // update counter with index and size
-    xmlEditor.whenReady().then(() => updateCounter(pathBeforePredicates, index))
+    xmlEditor.whenReady().then(() => updateCounter(nonIndexedPath, index))
   }
 
   // configure node status buttons
@@ -250,6 +254,22 @@ function updateCounter(xpath, index) {
   index = index || 1
   ui.floatingPanel.selectionIndex.textContent = `(${size > 0 ? index : 0}/${size})`
   ui.floatingPanel.nextNode.disabled = ui.floatingPanel.previousNode.disabled = size < 2;
+}
+
+async function changeNodeIndex(state, delta) {
+  if (isNaN(delta)) {
+    throw new TypeError("Second argument must be a number")
+  }
+  const normativeXpath = ui.floatingPanel.xpath.value
+  let { index } = parseXPath(state.xpath)
+  const size = xmlEditor.countDomNodesByXpath(normativeXpath)
+  if (size < 2) return
+  if (index === null) index = 1
+  index += delta
+  if (index < 0) index = size 
+  if (index >= size) index = 1
+  const xpath = normativeXpath + `[${index}]`
+  updateState(state, { xpath })
 }
 
 
@@ -283,22 +303,34 @@ function onClickSelectionIndex() {
   }
 }
 
-function onEditXpath(state) {
+/**
+ * Called when the custom Xpath button has been clicked on
+ * @param {ApplicationState} state 
+ */
+async function onEditXpath(state) {
+  const xmlDoc = xmlEditor.getXmlTree()
+  if (xmlDoc === null) {
+    return
+  }
   const xp = ui.floatingPanel.xpath
   const custom = xp.options[xp.length - 1]
   const xpath = prompt("Enter custom xpath", custom.value)
-  if (xpath?.trim()) {
-    custom.value = xpath
-    custom.text = `Custom: ${xpath}`
-    xp.selectedIndex = xp.length - 1
-  }
-}
+  if (!xpath) return
 
+  if (!isValidXPath(xpath, xmlDoc, xmlEditor.namespaceResolver)) {
+    dialog.error(`'${xpath} is not a valid XPath expression'`)
+  }
+
+  custom.value = xpath
+  custom.text = `Custom: ${xpath}`
+  xp.selectedIndex = xp.length - 1
+  xp.options[xp.length - 1].disabled = false
+  await updateState(state, { xpath })
+}
 
 //
 // helper functions
 //
-
 
 function addBringToForegroundListener(selectors) {
   document.addEventListener('click', function (event) {
@@ -347,11 +379,11 @@ function makeDraggable(element) {
     element.style.userSelect = 'auto'; // Restore text selection
   });
 
-  // document.addEventListener('mouseleave', () => {
-  //   if (isDragging) {
-  //     isDragging = false;
-  //     element.style.cursor = 'grab'; // Restore cursor after dragging
-  //     element.style.userSelect = 'auto'; // Restore text selection
-  //   }
-  // });
+  document.addEventListener('mouseleave', () => {
+    if (isDragging) {
+      isDragging = false;
+      element.style.cursor = 'grab'; // Restore cursor after dragging
+      element.style.userSelect = 'auto'; // Restore text selection
+    }
+  });
 }
