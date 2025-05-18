@@ -564,6 +564,39 @@ function accessNamedDescendentsAsProperties(node) {
 }
 
 /**
+ * Tests if an XPath is valid
+ * @param {string} xpathExpression 
+ * @param {Document} xmlDom The DOM document to test the expression on
+ * @param {XPathNSResolver|null} namespaceResolver 
+ * @returns {Boolean}
+ */
+function isValidXPath(xpathExpression, xmlDom, namespaceResolver=null) {
+  try {
+    // Check if the XML DOM is valid
+    if (!xmlDom || typeof xmlDom !== 'object' || !xmlDom.evaluate) {
+      console.error("Invalid XML DOM provided.");
+      return false;
+    }
+
+    // Try to evaluate the XPath expression
+    xmlDom.evaluate(
+      xpathExpression,
+      xmlDom, 
+      namespaceResolver, 
+      XPathResult.ANY_TYPE, // resultType - ANY_TYPE is generally fine for validation
+      null     // result - reuse existing result, optional
+    );
+
+    return true; // If no error thrown, the XPath is valid
+
+  } catch (error) {
+    // An error indicates an invalid XPath expression
+    console.error("Invalid XPath:", error.message); // Optionally log the error
+    return false;
+  }
+}
+
+/**
  * A spinner/blocker for long-running tasks
  * Adapted from https://codeburst.io/how-to-create-a-simple-css-loading-spinner-make-it-accessible-e5c83c2e464c
  */
@@ -40545,6 +40578,7 @@ class XMLEditor extends EventTarget {
  * @property {string} prefix - The namespace prefix associated with the node test, if present (e.g., 'prefix' from 'prefix:elementName'). Empty string if none.
  * @property {string} tagName - The local name part of the node test (e.g., 'elementName' from 'prefix:elementName', 'attribute' from '@attribute'). For functions like text(), this will be the function name ('text()'). For wildcards, '*'. For self/parent, '.' or '..'. Empty string if the node test structure doesn't have a name part.
  * @property {string} predicates - The full string containing all predicates associated with the last step (e.g., '[1][@id="xyz"]'). Empty string if none.
+ * @property {string} nonIndexPredicates - The predicates that qualify the tagName but do not contain the index of the node among siblings
  * @property {number | null} index - The primary numerical index extracted from the *first* positional predicate like `[1]` or `[position()=n]` found in the predicates. Defaults to null if no such predicate is found or can't be parsed.
  * @property {string} pathBeforePredicates - The xpath leading up to, but not including any predicates for this step (i.e., parentPath + nodeTest).
  */
@@ -40756,6 +40790,7 @@ function parseXPath(xpath) {
   // within the 'predicates' string.
   const indexRegex = /\[\s*(?:(\d+)|position\(\)\s*=\s*(\d+))\s*\]/;
   const indexMatch = predicates.match(indexRegex);
+  let nonIndexPredicates = predicates;
 
   let finalIndex = null; // Use a different variable name for the final property value
   if (indexMatch) {
@@ -40766,6 +40801,8 @@ function parseXPath(xpath) {
       if (!isNaN(parsedIndex)) {
           finalIndex = parsedIndex;
       }
+      // remove index predicates
+      nonIndexPredicates = predicates.replace(indexMatch[0], '');
   }
 
   // --- Step 5: Calculate pathBeforePredicates ---
@@ -40773,12 +40810,13 @@ function parseXPath(xpath) {
 
   return {
     input: xpath, 
-    parentPath: parentPath,
+    parentPath,
     finalStep: finalStepString,
     nodeTest: nodeTestString,
     prefix: matchedPrefix,
     tagName: finalTagName,
-    predicates: predicates,
+    predicates,
+    nonIndexPredicates,
     index: finalIndex,
     pathBeforePredicates: finalPathBeforePredicates,
   };
@@ -41060,13 +41098,11 @@ async function onSelectionChange(state) {
   const cursorParts = parseXPath(cursorXpath);
   const stateParts = parseXPath(state.xpath);
   
-  const normativeXpath = ui$1.floatingPanel.xpath.value;
+  ui$1.floatingPanel.xpath.value;
   const index = cursorParts.index;
 
   // todo: use isXPathsubset()
-  if (index !== null && cursorParts.tagName === stateParts.tagName ) {
-    state.xpath = `${normativeXpath}[${index}]`;
-  }
+  if (index !== null && cursorParts.tagName === stateParts.tagName && index !== api$8.currentIndex + 1) ;
 }
 
 /**
@@ -41736,9 +41772,10 @@ let stateCache;
 async function populateSelectboxes(state) {
 
   // check if state has changed
-  const jsonState = JSON.stringify(state);
+  const {xmlPath, pdfPath, diffXmlPath} = state;
+  const jsonState = JSON.stringify({xmlPath, pdfPath, diffXmlPath});
   if (jsonState === stateCache) {
-    api$b.debug("Not repopulating selectboxes as state hasn't changed");
+    //logger.debug("Not repopulating selectboxes as state hasn't changed")
     return 
   }
   stateCache = jsonState;
@@ -43006,10 +43043,6 @@ function getTextNodes(node) {
  * @import { Switch } from '../modules/switch.js'
  */
 
-// name of the component
-const pluginId = "floating-panel";
-
-
 /**
  * plugin API
  */
@@ -43022,7 +43055,7 @@ const api$2 = {
  * component plugin
  */
 const plugin$4 = {
-  name: pluginId,
+  name: "floating-panel",
   install: install$4,
   state: { update }
 };
@@ -43057,6 +43090,9 @@ const plugin$4 = {
  * @property {HTMLButtonElement} diffKeepAll
  * @property {HTMLButtonElement} diffChangeAll
  */
+
+
+const pluginId = "floating-panel";
 
 // component htmnl
 const floatingPanelHtml = `
@@ -43096,7 +43132,7 @@ const floatingPanelHtml = `
     <div>
       <span class="navigation-text">Navigate by</span>
       <select name="xpath"></select>
-      <button name="editXpath">Custom XPath</button>
+      <button name="editXpath" style="display:none">Custom XPath</button>
       <button name="previousNode" disabled>&lt;&lt;</button>
       <span name="selectionIndex" class="navigation-text"></span>
       <button name="nextNode" disabled>&gt;&gt;</button>
@@ -43162,20 +43198,16 @@ async function install$4(state) {
   });
 
   // button to edit the xpath manually
-  ui$1.floatingPanel.editXpath.addEventListener('click', () => {
-    const custom = xp.options[xp.length - 1];
-    const xpath = prompt("Enter custom xpath", custom.value);
-    if (xpath && xpath.trim()) {
-      custom.value = xpath;
-      custom.text = `Custom: ${xpath}`;
-      xp.selectedIndex = xp.length - 1;
-    }
-  });
+  ui$1.floatingPanel.editXpath.addEventListener('click', () => onEditXpath(state));
 
   // setup event handlers
   const fp = ui$1.floatingPanel;
-  fp.previousNode.addEventListener('click', () => api$8.previousNode());
-  fp.nextNode.addEventListener('click', () => api$8.nextNode());
+
+  // node navigation
+  fp.previousNode.addEventListener('click', () => changeNodeIndex(state, -1));
+  fp.nextNode.addEventListener('click', () => changeNodeIndex(state, 1));
+
+  // diff navigation
   fp.diffNavigation.prevDiff.addEventListener('click', () => api$8.goToPreviousDiff());
   fp.diffNavigation.nextDiff.addEventListener('click', () => api$8.goToNextDiff());
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
@@ -43186,7 +43218,7 @@ async function install$4(state) {
     api$8.acceptAllDiffs();
     api$3.removeMergeView(state);
   });
-  
+
   // @ts-ignore
   fp.switchAutoSearch.addEventListener('change', onAutoSearchSwitchChange); // toggle search of node in the PDF
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex); // allow to input node index
@@ -43207,15 +43239,16 @@ async function install$4(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
-
   // show the xpath selector
   if (state.xpath) {
-    let { index, pathBeforePredicates } = parseXPath(state.xpath);
+    let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath);
 
     const optionValues = Array.from(ui$1.floatingPanel.xpath.options).map(node => node.value);
-    if (pathBeforePredicates in optionValues) {
+    const nonIndexedPath = pathBeforePredicates + nonIndexPredicates;
+    const foundAtIndex = optionValues.indexOf(nonIndexedPath);
+    if (foundAtIndex >= 0) {
       // this sets the xpath selectbox to one of the existing values
-      ui$1.floatingPanel.xpath.selectedIndex = optionValues.indexOf(pathBeforePredicates);
+      ui$1.floatingPanel.xpath.selectedIndex = foundAtIndex;
     } else {
       // the value does not exist, save it to the last option
       let lastIdx = ui$1.floatingPanel.xpath.options.length - 1;
@@ -43224,7 +43257,7 @@ async function update(state) {
       ui$1.floatingPanel.xpath.options[lastIdx].disabled = false;
     }
     // update counter with index and size
-    api$8.whenReady().then(() => updateCounter(pathBeforePredicates, index));
+    api$8.whenReady().then(() => updateCounter(nonIndexedPath, index));
   }
 
   // configure node status buttons
@@ -43253,6 +43286,22 @@ function updateCounter(xpath, index) {
   index = index || 1;
   ui$1.floatingPanel.selectionIndex.textContent = `(${size > 0 ? index : 0}/${size})`;
   ui$1.floatingPanel.nextNode.disabled = ui$1.floatingPanel.previousNode.disabled = size < 2;
+}
+
+async function changeNodeIndex(state, delta) {
+  if (isNaN(delta)) {
+    throw new TypeError("Second argument must be a number")
+  }
+  const normativeXpath = ui$1.floatingPanel.xpath.value;
+  let { index } = parseXPath(state.xpath);
+  const size = api$8.countDomNodesByXpath(normativeXpath);
+  if (size < 2) return
+  if (index === null) index = 1;
+  index += delta;
+  if (index < 0) index = size; 
+  if (index >= size) index = 1;
+  const xpath = normativeXpath + `[${index}]`;
+  updateState(state, { xpath });
 }
 
 
@@ -43286,11 +43335,34 @@ function onClickSelectionIndex() {
   }
 }
 
+/**
+ * Called when the custom Xpath button has been clicked on
+ * @param {ApplicationState} state 
+ */
+async function onEditXpath(state) {
+  const xmlDoc = api$8.getXmlTree();
+  if (xmlDoc === null) {
+    return
+  }
+  const xp = ui$1.floatingPanel.xpath;
+  const custom = xp.options[xp.length - 1];
+  const xpath = prompt("Enter custom xpath", custom.value);
+  if (!xpath) return
+
+  if (!isValidXPath(xpath, xmlDoc, api$8.namespaceResolver)) {
+    api$9.error(`'${xpath} is not a valid XPath expression'`);
+  }
+
+  custom.value = xpath;
+  custom.text = `Custom: ${xpath}`;
+  xp.selectedIndex = xp.length - 1;
+  xp.options[xp.length - 1].disabled = false;
+  await updateState(state, { xpath });
+}
 
 //
 // helper functions
 //
-
 
 function addBringToForegroundListener(selectors) {
   document.addEventListener('click', function (event) {
@@ -43339,13 +43411,13 @@ function makeDraggable(element) {
     element.style.userSelect = 'auto'; // Restore text selection
   });
 
-  // document.addEventListener('mouseleave', () => {
-  //   if (isDragging) {
-  //     isDragging = false;
-  //     element.style.cursor = 'grab'; // Restore cursor after dragging
-  //     element.style.userSelect = 'auto'; // Restore text selection
-  //   }
-  // });
+  document.addEventListener('mouseleave', () => {
+    if (isDragging) {
+      isDragging = false;
+      element.style.cursor = 'grab'; // Restore cursor after dragging
+      element.style.userSelect = 'auto'; // Restore text selection
+    }
+  });
 }
 
 /**
