@@ -73,3 +73,9 @@ New plugins can be easily added without having to change the application.
 The UI is (mostly) build with WebComponents provided by <https://shoelace.style> . The UI of the application is mirrored in an object structure, which can be easily traversed in order to locate the UI element via autocompletion (e.g., ui.toolbar.loginButton). In this structure, each named DOM element provides a reference to all named descencdent elements, which can be accessed as virtual properties by the value of the name attribute. The top element of this hierarchy is the default export of [ui.js](https://github.com/mpilhlt/pdf-tei-editor/blob/main/app/src/ui.js).
 
 In addition to the loosely coupled way of plugin invocation (which might or might not be listened to), the plugins can also export an "api" object that exposes methods that can be imported and executed where a tightly coupled approach makes more sense.
+
+## Development
+
+During development, it is often easier to work with the NPM source files rather than the compiled bundle. You can load the application in this mode by attaching `?dev` to the URL, for example, `http://localhost:3001?dev`. When you change the NPM dependencies, `npm run update-importmap`.
+
+Once you are done with working on the source code, run `npm run build` to regenerate the bundle. 
