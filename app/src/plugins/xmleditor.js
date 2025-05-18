@@ -97,7 +97,9 @@ async function onSelectionChange(state) {
   const index = cursorParts.index
 
   // todo: use isXPathsubset()
-  if (index !== null && cursorParts.tagName === stateParts.tagName ) {
-    state.xpath = `${normativeXpath}[${index}]`
+  if (index !== null && cursorParts.tagName === stateParts.tagName && index !== api.currentIndex + 1) {
+    const xpath = `${normativeXpath}[${index}]`
+    //logger.debug(xpath)
+    //updateState(state, {xpath})
   }
 }

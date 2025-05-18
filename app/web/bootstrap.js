@@ -4,7 +4,7 @@
 
 
 // check whether we are supposed to run the source or the built version
-const loadFromSource = new URLSearchParams(window.location.search).has('loadFromSource')
+const loadFromSource = new URLSearchParams(window.location.search).has('dev')
 
 window.addEventListener('DOMContentLoaded', async () => {
   if (loadFromSource) {
