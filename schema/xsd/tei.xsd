@@ -3,14 +3,14 @@
   xmlns:xs="http://www.w3.org/2001/XMLSchema"
   xmlns:xml="http://www.w3.org/XML/1998/namespace"
   xmlns:tei="http://www.tei-c.org/ns/1.0"
-  elementFormDefault="qualified" 
+  elementFormDefault="qualified"
   targetNamespace="http://www.tei-c.org/ns/1.0">
-  
+
   <xs:import namespace="http://www.w3.org/XML/1998/namespace" schemaLocation="http://www.w3.org/2001/xml.xsd" />
   <!--
-    Schema generated from ODD source 2024-11-23T21:55:32Z. . 
-    TEI Edition: P5 Version 4.8.1. Last updated on 1st November 2024, revision 0a2bff95a 
-    TEI Edition Location: https://www.tei-c.org/Vault/P5/4.8.1/ 
+    Schema generated from ODD source 2025-06-27T11:57:38Z. . 
+    TEI Edition: P5 Version 4.9.0. Last updated on 24th January 2025, revision f73186978 
+    TEI Edition Location: https://www.tei-c.org/Vault/P5/4.9.0/ 
     
   -->
   <!-- TEI material can be licensed differently depending on the use you intend to make of it. Hence it is made available under both the CC+BY and BSD-2 licences. The CC+BY licence is generally appropriate for usages which treat TEI content as data or documentation. The BSD-2 licence is generally appropriate for usage of TEI content in a software environment. For further information or clarification, please contact the TEI Consortium (info@tei-c.org). -->
@@ -112,30 +112,26 @@
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.ascribed.directed.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.ascribed.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.ascribed.directed.attribute.toWhom"/>
+  <xs:attributeGroup name="tbibatt.breaking.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.breaking.attribute.break"/>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.ascribed.directed.attribute.toWhom">
-    <xs:attribute name="toWhom">
+  <xs:attributeGroup name="tbibatt.breaking.attribute.break">
+    <xs:attribute name="break">
       <xs:annotation>
-        <xs:documentation>indicates the person, or group of people, to whom a speech act or action is directed.</xs:documentation>
+        <xs:documentation>indicates whether or not the element bearing this attribute should be considered to mark the end of an orthographic token in the same way as whitespace.</xs:documentation>
       </xs:annotation>
       <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:anyURI">
-                  <xs:pattern value="\S+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
+        <xs:restriction base="xs:token">
+          <xs:pattern value="[^\p{C}\p{Z}]+"/>
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.cReferencing.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.cReferencing.attribute.cRef"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.cReferencing.attribute.cRef">
+    <xs:attribute name="cRef" type="xs:string"/>
   </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.canonical.attributes">
     <xs:attributeGroup ref="tei:tbibatt.canonical.attribute.key"/>
@@ -169,126 +165,42 @@
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.ranging.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.atLeast"/>
-    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.atMost"/>
-    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.min"/>
-    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.max"/>
-    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.confidence"/>
+  <xs:attributeGroup name="tbibatt.citing.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.citing.attribute.unit"/>
+    <xs:attributeGroup ref="tei:tbibatt.citing.attribute.from"/>
+    <xs:attributeGroup ref="tei:tbibatt.citing.attribute.to"/>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.ranging.attribute.atLeast">
-    <xs:attribute name="atLeast">
-      <xs:annotation>
-        <xs:documentation>gives a minimum estimated value for the approximate measurement.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:union memberTypes="xs:double xs:decimal">
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:union>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.ranging.attribute.atMost">
-    <xs:attribute name="atMost">
-      <xs:annotation>
-        <xs:documentation>gives a maximum estimated value for the approximate measurement.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:union memberTypes="xs:double xs:decimal">
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:union>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.ranging.attribute.min">
-    <xs:attribute name="min">
-      <xs:annotation>
-        <xs:documentation>where the measurement summarizes more than one observation or a range, supplies the minimum value observed.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:union memberTypes="xs:double xs:decimal">
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:union>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.ranging.attribute.max">
-    <xs:attribute name="max">
-      <xs:annotation>
-        <xs:documentation>where the measurement summarizes more than one observation or a range, supplies the maximum value observed.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:union memberTypes="xs:double xs:decimal">
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:union>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.ranging.attribute.confidence">
-    <xs:attribute name="confidence">
-      <xs:simpleType>
-        <xs:restriction base="xs:double">
-          <xs:minInclusive value="0"/>
-          <xs:maxInclusive value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.dimensions.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.ranging.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.unit"/>
-    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.quantity"/>
-    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.extent"/>
-    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.precision"/>
-    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.scope"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.dimensions.attribute.unit">
+  <xs:attributeGroup name="tbibatt.citing.attribute.unit">
     <xs:attribute name="unit">
       <xs:annotation>
-        <xs:documentation>names the unit used for the measurement
-Suggested values include: 1] cm (centimetres); 2] mm (millimetres); 3] in (inches); 4] line; 5] char (characters)</xs:documentation>
+        <xs:documentation>identifies the unit of information conveyed by the element, e.g. columns, pages, volume, entry.
+Suggested values include: 1] volume (volume); 2] issue; 3] page (page); 4] line; 5] chapter (chapter); 6] part; 7] column; 8] entry</xs:documentation>
       </xs:annotation>
       <xs:simpleType>
         <xs:union>
           <xs:simpleType>
             <xs:restriction base="xs:token">
-              <xs:enumeration value="cm">
+              <xs:enumeration value="volume">
                 <xs:annotation>
-                  <xs:documentation>(centimetres) </xs:documentation>
+                  <xs:documentation>(volume) the element contains a volume number.</xs:documentation>
                 </xs:annotation>
               </xs:enumeration>
             </xs:restriction>
           </xs:simpleType>
           <xs:simpleType>
             <xs:restriction base="xs:token">
-              <xs:enumeration value="mm">
+              <xs:enumeration value="issue">
                 <xs:annotation>
-                  <xs:documentation>(millimetres) </xs:documentation>
+                  <xs:documentation>the element contains an issue number, or volume and issue numbers.</xs:documentation>
                 </xs:annotation>
               </xs:enumeration>
             </xs:restriction>
           </xs:simpleType>
           <xs:simpleType>
             <xs:restriction base="xs:token">
-              <xs:enumeration value="in">
+              <xs:enumeration value="page">
                 <xs:annotation>
-                  <xs:documentation>(inches) </xs:documentation>
+                  <xs:documentation>(page) the element contains a page number or page range.</xs:documentation>
                 </xs:annotation>
               </xs:enumeration>
             </xs:restriction>
@@ -297,16 +209,43 @@ Suggested values include: 1] cm (centimetres); 2] mm (millimetres); 3] in (inche
             <xs:restriction base="xs:token">
               <xs:enumeration value="line">
                 <xs:annotation>
-                  <xs:documentation>lines of text</xs:documentation>
+                  <xs:documentation>the element contains a line number or line range.</xs:documentation>
                 </xs:annotation>
               </xs:enumeration>
             </xs:restriction>
           </xs:simpleType>
           <xs:simpleType>
             <xs:restriction base="xs:token">
-              <xs:enumeration value="char">
+              <xs:enumeration value="chapter">
                 <xs:annotation>
-                  <xs:documentation>(characters) characters of text</xs:documentation>
+                  <xs:documentation>(chapter) the element contains a chapter indication (number and/or title)</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="part">
+                <xs:annotation>
+                  <xs:documentation>the element identifies a part of a book or collection.</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="column">
+                <xs:annotation>
+                  <xs:documentation>the element identifies a column.</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="entry">
+                <xs:annotation>
+                  <xs:documentation>the element identifies an entry number or label in a list of entries.</xs:documentation>
                 </xs:annotation>
               </xs:enumeration>
             </xs:restriction>
@@ -320,66 +259,8 @@ Suggested values include: 1] cm (centimetres); 2] mm (millimetres); 3] in (inche
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.dimensions.attribute.quantity">
-    <xs:attribute name="quantity">
-      <xs:annotation>
-        <xs:documentation>specifies the length in the units specified</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:union memberTypes="xs:double xs:decimal">
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:union>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.dimensions.attribute.extent">
-    <xs:attribute name="extent" type="xs:string">
-      <xs:annotation>
-        <xs:documentation>indicates the size of the object concerned using a project-specific vocabulary combining quantity and units in a single string of words.</xs:documentation>
-      </xs:annotation>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.dimensions.attribute.precision">
-    <xs:attribute name="precision">
-      <xs:annotation>
-        <xs:documentation>characterizes the precision of the values specified by the other attributes.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:enumeration value="high">
-            <xs:annotation>
-              <xs:documentation/>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="medium">
-            <xs:annotation>
-              <xs:documentation/>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="low">
-            <xs:annotation>
-              <xs:documentation/>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="unknown">
-            <xs:annotation>
-              <xs:documentation/>
-            </xs:annotation>
-          </xs:enumeration>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.dimensions.attribute.scope">
-    <xs:attribute name="scope">
-      <xs:annotation>
-        <xs:documentation>where the measurement summarizes more than one observation, specifies the applicability of this measurement.
-Sample values include: 1] all; 2] most; 3] range</xs:documentation>
-      </xs:annotation>
+  <xs:attributeGroup name="tbibatt.citing.attribute.from">
+    <xs:attribute name="from">
       <xs:simpleType>
         <xs:restriction base="xs:token">
           <xs:pattern value="[^\p{C}\p{Z}]+"/>
@@ -387,26 +268,8 @@ Sample values include: 1] all; 2] most; 3] range</xs:documentation>
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.written.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.written.attribute.hand"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.written.attribute.hand">
-    <xs:attribute name="hand">
-      <xs:simpleType>
-        <xs:restriction base="xs:anyURI">
-          <xs:pattern value="\S+"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.breaking.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.breaking.attribute.break"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.breaking.attribute.break">
-    <xs:attribute name="break">
-      <xs:annotation>
-        <xs:documentation>indicates whether or not the element bearing this attribute should be considered to mark the end of an orthographic token in the same way as whitespace.</xs:documentation>
-      </xs:annotation>
+  <xs:attributeGroup name="tbibatt.citing.attribute.to">
+    <xs:attribute name="to">
       <xs:simpleType>
         <xs:restriction base="xs:token">
           <xs:pattern value="[^\p{C}\p{Z}]+"/>
@@ -479,12 +342,6 @@ Suggested values include: 1] human; 2] template; 3] system; 4] bot; 5] unspecifi
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.cReferencing.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.cReferencing.attribute.cRef"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.cReferencing.attribute.cRef">
-    <xs:attribute name="cRef" type="xs:string"/>
-  </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.datable.w3c.attributes">
     <xs:attributeGroup ref="tei:tbibatt.datable.w3c.attribute.when"/>
     <xs:attributeGroup ref="tei:tbibatt.datable.w3c.attribute.notBefore"/>
@@ -539,30 +396,6 @@ Suggested values include: 1] human; 2] template; 3] system; 4] bot; 5] unspecifi
       </xs:annotation>
       <xs:simpleType>
         <xs:union memberTypes="xs:date xs:gYear xs:gMonth xs:gDay xs:gYearMonth xs:gMonthDay xs:time xs:dateTime"/>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.datable.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.datable.w3c.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.datable.iso.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.datable.custom.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.datable.attribute.period"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.datable.attribute.period">
-    <xs:attribute name="period">
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:anyURI">
-                  <xs:pattern value="\S+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
@@ -673,107 +506,6 @@ Suggested values include: 1] human; 2] template; 3] system; 4] bot; 5] unspecifi
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.fragmentable.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.fragmentable.attribute.part"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.fragmentable.attribute.part">
-    <xs:attribute name="part" default="N">
-      <xs:annotation>
-        <xs:documentation>specifies whether or not its parent element is fragmented in some way, typically by some other overlapping structure: for example a speech which is divided between two or more verse stanzas, a paragraph which is split across a page division, a verse line which is divided between two speakers.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:enumeration value="Y">
-            <xs:annotation>
-              <xs:documentation>(yes) the element is fragmented in some (unspecified) respect</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="N">
-            <xs:annotation>
-              <xs:documentation>(no) the element is not fragmented, or no claim is made as to its completeness</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="I">
-            <xs:annotation>
-              <xs:documentation>(initial) this is the initial part of a fragmented element</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="M">
-            <xs:annotation>
-              <xs:documentation>(medial) this is a medial part of a fragmented element</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="F">
-            <xs:annotation>
-              <xs:documentation>(final) this is the final part of a fragmented element</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.divLike.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.fragmentable.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.divLike.attribute.org"/>
-    <xs:attributeGroup ref="tei:tbibatt.divLike.attribute.sample"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.divLike.attribute.org">
-    <xs:attribute name="org" default="uniform">
-      <xs:annotation>
-        <xs:documentation>(organization) specifies how the content of the division is organized.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:enumeration value="composite">
-            <xs:annotation>
-              <xs:documentation>no claim is made about the sequence in which the immediate contents of this division are to be processed, or their inter-relationships.</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="uniform">
-            <xs:annotation>
-              <xs:documentation>the immediate contents of this element are regarded as forming a logical unit, to be processed in sequence.</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.divLike.attribute.sample">
-    <xs:attribute name="sample" default="complete">
-      <xs:annotation>
-        <xs:documentation>indicates whether this division is a sample of the original source and if so, from which part.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:enumeration value="initial">
-            <xs:annotation>
-              <xs:documentation>division lacks material present at end in source.</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="medial">
-            <xs:annotation>
-              <xs:documentation>division lacks material at start and end.</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="final">
-            <xs:annotation>
-              <xs:documentation>division lacks material at start.</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="unknown">
-            <xs:annotation>
-              <xs:documentation>position of sampled material within original unknown.</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="complete">
-            <xs:annotation>
-              <xs:documentation>division is not a sample.</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.docStatus.attributes">
     <xs:attributeGroup ref="tei:tbibatt.docStatus.attribute.status"/>
   </xs:attributeGroup>
@@ -786,72 +518,6 @@ Sample values include: 1] approved; 2] candidate; 3] cleared; 4] deprecated; 5] 
       <xs:simpleType>
         <xs:restriction base="xs:token">
           <xs:pattern value="[^\p{C}\p{Z}]+"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.responsibility.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.global.responsibility.attribute.cert"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.responsibility.attribute.resp"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.responsibility.attribute.cert">
-    <xs:attribute name="cert">
-      <xs:annotation>
-        <xs:documentation>(certainty) signifies the degree of certainty associated with the intervention or interpretation.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:union>
-          <xs:simpleType>
-            <xs:restriction base="xs:double">
-              <xs:minInclusive value="0"/>
-              <xs:maxInclusive value="1"/>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="high">
-                <xs:annotation>
-                  <xs:documentation/>
-                </xs:annotation>
-              </xs:enumeration>
-              <xs:enumeration value="medium">
-                <xs:annotation>
-                  <xs:documentation/>
-                </xs:annotation>
-              </xs:enumeration>
-              <xs:enumeration value="low">
-                <xs:annotation>
-                  <xs:documentation/>
-                </xs:annotation>
-              </xs:enumeration>
-              <xs:enumeration value="unknown">
-                <xs:annotation>
-                  <xs:documentation/>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:union>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.responsibility.attribute.resp">
-    <xs:attribute name="resp">
-      <xs:annotation>
-        <xs:documentation>(responsible party) indicates the agency responsible for the intervention or interpretation, for example an editor or transcriber.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:anyURI">
-                  <xs:pattern value="\S+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
@@ -938,6 +604,91 @@ Suggested values include: 1] internal; 2] external; 3] conjecture</xs:documentat
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.edition.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.edition.attribute.ed"/>
+    <xs:attributeGroup ref="tei:tbibatt.edition.attribute.edRef"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.edition.attribute.ed">
+    <xs:attribute name="ed">
+      <xs:annotation>
+        <xs:documentation>(edition) supplies a sigil or other arbitrary identifier for the source edition in which the associated feature (for example, a page, column, or line beginning) occurs at this point in the text.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:token">
+                  <xs:pattern value="[^\p{C}\p{Z}]+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.edition.attribute.edRef">
+    <xs:attribute name="edRef">
+      <xs:annotation>
+        <xs:documentation>(edition reference) provides a pointer to the source edition in which the associated feature (for example, a page, column, or line beginning) occurs at this point in the text.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:anyURI">
+                  <xs:pattern value="\S+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.fragmentable.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.fragmentable.attribute.part"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.fragmentable.attribute.part">
+    <xs:attribute name="part" default="N">
+      <xs:annotation>
+        <xs:documentation>specifies whether or not its parent element is fragmented in some way, typically by some other overlapping structure: for example a speech which is divided between two or more verse stanzas, a paragraph which is split across a page division, a verse line which is divided between two speakers.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:enumeration value="Y">
+            <xs:annotation>
+              <xs:documentation>(yes) the element is fragmented in some (unspecified) respect</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="N">
+            <xs:annotation>
+              <xs:documentation>(no) the element is not fragmented, or no claim is made as to its completeness</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="I">
+            <xs:annotation>
+              <xs:documentation>(initial) this is the initial part of a fragmented element</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="M">
+            <xs:annotation>
+              <xs:documentation>(medial) this is a medial part of a fragmented element</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="F">
+            <xs:annotation>
+              <xs:documentation>(final) this is the final part of a fragmented element</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.global.rendition.attributes">
     <xs:attributeGroup ref="tei:tbibatt.global.rendition.attribute.rend"/>
     <xs:attributeGroup ref="tei:tbibatt.global.rendition.attribute.style"/>
@@ -967,7 +718,7 @@ Suggested values include: 1] internal; 2] external; 3] conjecture</xs:documentat
   <xs:attributeGroup name="tbibatt.global.rendition.attribute.style">
     <xs:attribute name="style" type="xs:string">
       <xs:annotation>
-        <xs:documentation>contains an expression in some formal style definition language which defines the rendering or presentation used for this element in the source text</xs:documentation>
+        <xs:documentation>contains an expression in some formal style definition language which defines the rendering or presentation used for this element in the source text.</xs:documentation>
       </xs:annotation>
     </xs:attribute>
   </xs:attributeGroup>
@@ -975,6 +726,72 @@ Suggested values include: 1] internal; 2] external; 3] conjecture</xs:documentat
     <xs:attribute name="rendition">
       <xs:annotation>
         <xs:documentation>points to a description of the rendering or presentation used for this element in the source text.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:anyURI">
+                  <xs:pattern value="\S+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.responsibility.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.global.responsibility.attribute.cert"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.responsibility.attribute.resp"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.responsibility.attribute.cert">
+    <xs:attribute name="cert">
+      <xs:annotation>
+        <xs:documentation>(certainty) signifies the degree of certainty associated with the intervention or interpretation.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union>
+          <xs:simpleType>
+            <xs:restriction base="xs:double">
+              <xs:minInclusive value="0"/>
+              <xs:maxInclusive value="1"/>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="high">
+                <xs:annotation>
+                  <xs:documentation/>
+                </xs:annotation>
+              </xs:enumeration>
+              <xs:enumeration value="medium">
+                <xs:annotation>
+                  <xs:documentation/>
+                </xs:annotation>
+              </xs:enumeration>
+              <xs:enumeration value="low">
+                <xs:annotation>
+                  <xs:documentation/>
+                </xs:annotation>
+              </xs:enumeration>
+              <xs:enumeration value="unknown">
+                <xs:annotation>
+                  <xs:documentation/>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.responsibility.attribute.resp">
+    <xs:attribute name="resp">
+      <xs:annotation>
+        <xs:documentation>(responsible party) indicates the agency responsible for the intervention or interpretation, for example an editor or transcriber.</xs:documentation>
       </xs:annotation>
       <xs:simpleType>
         <xs:restriction>
@@ -1016,148 +833,13 @@ Suggested values include: 1] internal; 2] external; 3] conjecture</xs:documentat
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.global.rendition.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.linking.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.responsibility.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.source.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.attribute.xmlid"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.attribute.n"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.attribute.xmllang"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.attribute.xmlbase"/>
-    <xs:attributeGroup ref="tei:tbibatt.global.attribute.xmlspace"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.attribute.xmlid">
-    <xs:attribute ref="xml:id"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.attribute.n">
-    <xs:attribute name="n" type="xs:string">
-      <xs:annotation>
-        <xs:documentation>(number) gives a number (or other label) for an element, which is not necessarily unique within the document.</xs:documentation>
-      </xs:annotation>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.attribute.xmllang">
-    <xs:attribute ref="xml:lang"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.attribute.xmlbase">
-    <xs:attribute ref="xml:base"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.global.attribute.xmlspace">
-    <xs:attribute ref="xml:space"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.handFeatures.attribute.scribe">
-    <xs:attribute name="scribe" type="xs:Name">
-      <xs:annotation>
-        <xs:documentation>gives a name or other identifier for the scribe believed to be responsible for this hand.</xs:documentation>
-      </xs:annotation>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.handFeatures.attribute.scribeRef">
-    <xs:attribute name="scribeRef">
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:anyURI">
-                  <xs:pattern value="\S+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.handFeatures.attribute.script">
-    <xs:attribute name="script">
-      <xs:annotation>
-        <xs:documentation>characterizes the particular script or writing style used by this hand, for example secretary, copperplate, Chancery, Italian, etc.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list itemType="xs:Name"/>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.handFeatures.attribute.scriptRef">
-    <xs:attribute name="scriptRef">
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:anyURI">
-                  <xs:pattern value="\S+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.handFeatures.attribute.medium">
-    <xs:attribute name="medium">
-      <xs:annotation>
-        <xs:documentation>describes the tint or type of ink, e.g. brown, or other writing medium, e.g. pencil</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:token">
-                  <xs:pattern value="[^\p{C}\p{Z}]+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.handFeatures.attribute.scope">
-    <xs:attribute name="scope">
-      <xs:annotation>
-        <xs:documentation>specifies how widely this hand is used in the manuscript.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:enumeration value="sole">
-            <xs:annotation>
-              <xs:documentation>only this hand is used throughout the manuscript</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="major">
-            <xs:annotation>
-              <xs:documentation>this hand is used through most of the manuscript</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="minor">
-            <xs:annotation>
-              <xs:documentation>this hand is used occasionally in the manuscript</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.internetMedia.attributes">
     <xs:attributeGroup ref="tei:tbibatt.internetMedia.attribute.mimeType"/>
   </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.internetMedia.attribute.mimeType">
     <xs:attribute name="mimeType">
       <xs:annotation>
-        <xs:documentation>(MIME media type) specifies the applicable multimedia internet mail extension (MIME) media type</xs:documentation>
+        <xs:documentation>(MIME media type) specifies the applicable multimedia internet mail extension (MIME) media type.</xs:documentation>
       </xs:annotation>
       <xs:simpleType>
         <xs:restriction>
@@ -1171,67 +853,6 @@ Suggested values include: 1] internal; 2] external; 3] conjecture</xs:documentat
             </xs:list>
           </xs:simpleType>
           <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.media.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.internetMedia.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.media.attribute.width"/>
-    <xs:attributeGroup ref="tei:tbibatt.media.attribute.height"/>
-    <xs:attributeGroup ref="tei:tbibatt.media.attribute.scale"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.media.attribute.width">
-    <xs:attribute name="width">
-      <xs:annotation>
-        <xs:documentation>Where the media are displayed, indicates the display width</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:pattern value="[\-+]?\d+(\.\d+)?(%|cm|mm|in|pt|pc|px|em|ex|ch|rem|vw|vh|vmin|vmax)"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.media.attribute.height">
-    <xs:attribute name="height">
-      <xs:annotation>
-        <xs:documentation>Where the media are displayed, indicates the display height</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:pattern value="[\-+]?\d+(\.\d+)?(%|cm|mm|in|pt|pc|px|em|ex|ch|rem|vw|vh|vmin|vmax)"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.media.attribute.scale">
-    <xs:attribute name="scale">
-      <xs:annotation>
-        <xs:documentation>Where the media are displayed, indicates a scale factor to be applied when generating the desired display size</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:union memberTypes="xs:double xs:decimal">
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:union>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.resourced.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.resourced.attribute.url"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.resourced.attribute.url">
-    <xs:attribute name="url" use="required">
-      <xs:annotation>
-        <xs:documentation>(uniform resource locator) specifies the URL from which the media concerned may be obtained.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:anyURI">
-          <xs:pattern value="\S+"/>
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
@@ -1476,53 +1097,6 @@ Suggested values include: 1] m (metre); 2] kg (kilogram); 3] s (second); 4] Hz (
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.naming.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
-    <xs:attributeGroup ref="tei:tbibatt.naming.attribute.role"/>
-    <xs:attributeGroup ref="tei:tbibatt.naming.attribute.nymRef"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.naming.attribute.role">
-    <xs:attribute name="role">
-      <xs:annotation>
-        <xs:documentation>may be used to specify further information about the entity referenced by this name in the form of a set of whitespace-separated values, for example the occupation of a person, or the status of a place.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:token">
-                  <xs:pattern value="[^\p{C}\p{Z}]+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.naming.attribute.nymRef">
-    <xs:attribute name="nymRef">
-      <xs:annotation>
-        <xs:documentation>(reference to the canonical name) provides a means of locating the canonical form (nym) of the names associated with the object named by the element bearing it.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:anyURI">
-                  <xs:pattern value="\S+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.notated.attributes">
     <xs:attributeGroup ref="tei:tbibatt.notated.attribute.notation"/>
   </xs:attributeGroup>
@@ -1675,34 +1249,6 @@ Suggested values include: 1] top; 2] bottom; 3] margin; 4] opposite; 5] overleaf
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.typed.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.typed.attribute.type"/>
-    <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.typed.attribute.type">
-    <xs:attribute name="type">
-      <xs:annotation>
-        <xs:documentation>characterizes the element in some sense, using any convenient classification scheme or typology.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:pattern value="[^\p{C}\p{Z}]+"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.typed.attribute.subtype">
-    <xs:attribute name="subtype">
-      <xs:annotation>
-        <xs:documentation>(subtype) provides a sub-categorization of the element, if needed</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:pattern value="[^\p{C}\p{Z}]+"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.pointing.attributes">
     <xs:attributeGroup ref="tei:tbibatt.pointing.attribute.targetLang"/>
     <xs:attributeGroup ref="tei:tbibatt.pointing.attribute.target"/>
@@ -1728,7 +1274,7 @@ Suggested values include: 1] top; 2] bottom; 3] margin; 4] opposite; 5] overleaf
   <xs:attributeGroup name="tbibatt.pointing.attribute.target">
     <xs:attribute name="target">
       <xs:annotation>
-        <xs:documentation>specifies the destination of the reference by supplying one or more URI References</xs:documentation>
+        <xs:documentation>specifies the destination of the reference by supplying one or more URI References.</xs:documentation>
       </xs:annotation>
       <xs:simpleType>
         <xs:restriction>
@@ -1768,6 +1314,713 @@ Suggested values include: 1] top; 2] bottom; 3] margin; 4] opposite; 5] overleaf
               <xs:documentation>no further evaluation of targets is carried out beyond that needed to find the element specified in the pointer's target.</xs:documentation>
             </xs:annotation>
           </xs:enumeration>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.ranging.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.atLeast"/>
+    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.atMost"/>
+    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.min"/>
+    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.max"/>
+    <xs:attributeGroup ref="tei:tbibatt.ranging.attribute.confidence"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.ranging.attribute.atLeast">
+    <xs:attribute name="atLeast">
+      <xs:annotation>
+        <xs:documentation>gives a minimum estimated value for the approximate measurement.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:double xs:decimal">
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.ranging.attribute.atMost">
+    <xs:attribute name="atMost">
+      <xs:annotation>
+        <xs:documentation>gives a maximum estimated value for the approximate measurement.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:double xs:decimal">
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.ranging.attribute.min">
+    <xs:attribute name="min">
+      <xs:annotation>
+        <xs:documentation>where the measurement summarizes more than one observation or a range, supplies the minimum value observed.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:double xs:decimal">
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.ranging.attribute.max">
+    <xs:attribute name="max">
+      <xs:annotation>
+        <xs:documentation>where the measurement summarizes more than one observation or a range, supplies the maximum value observed.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:double xs:decimal">
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.ranging.attribute.confidence">
+    <xs:attribute name="confidence">
+      <xs:simpleType>
+        <xs:restriction base="xs:double">
+          <xs:minInclusive value="0"/>
+          <xs:maxInclusive value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.resourced.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.resourced.attribute.url"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.resourced.attribute.url">
+    <xs:attribute name="url" use="required">
+      <xs:annotation>
+        <xs:documentation>(uniform resource locator) specifies the URL from which the media concerned may be obtained.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:anyURI">
+          <xs:pattern value="\S+"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.scope.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.scope.attribute.scope"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.scope.attribute.scope">
+    <xs:attribute name="scope">
+      <xs:annotation>
+        <xs:documentation>indicates the scope of application of the element
+Suggested values include: 1] sole; 2] major; 3] minor</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="sole">
+                <xs:annotation>
+                  <xs:documentation>only this particular feature is used throughout the document</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="major">
+                <xs:annotation>
+                  <xs:documentation>this feature is used through most of the document</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="minor">
+                <xs:annotation>
+                  <xs:documentation>this feature is used occasionally through the document</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:pattern value="[^\p{C}\p{Z}]+"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.sortable.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.sortable.attribute.sortKey"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.sortable.attribute.sortKey">
+    <xs:attribute name="sortKey">
+      <xs:annotation>
+        <xs:documentation>supplies the sort key for this element in an index, list or group which contains it.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:pattern value="[^\p{C}\p{Z}]+"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.spanning.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.spanning.attribute.spanTo"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.spanning.attribute.spanTo">
+    <xs:attribute name="spanTo">
+      <xs:annotation>
+        <xs:documentation>indicates the end of a span initiated by the element bearing this attribute.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:anyURI">
+          <xs:pattern value="\S+"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.styleDef.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.styleDef.attribute.scheme"/>
+    <xs:attributeGroup ref="tei:tbibatt.styleDef.attribute.schemeVersion"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.styleDef.attribute.scheme">
+    <xs:attribute name="scheme">
+      <xs:annotation>
+        <xs:documentation>identifies the language used to describe the rendition.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:enumeration value="css">
+            <xs:annotation>
+              <xs:documentation>Cascading Stylesheet Language</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="xslfo">
+            <xs:annotation>
+              <xs:documentation>Extensible Stylesheet Language Formatting Objects</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="free">
+            <xs:annotation>
+              <xs:documentation>Informal free text description</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="other">
+            <xs:annotation>
+              <xs:documentation>A user-defined rendition description language</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.styleDef.attribute.schemeVersion">
+    <xs:attribute name="schemeVersion">
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:pattern value="[\d]+[a-z]*[\d]*(\.[\d]+[a-z]*[\d]*){0,3}"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.typed.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.typed.attribute.type"/>
+    <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.typed.attribute.type">
+    <xs:attribute name="type">
+      <xs:annotation>
+        <xs:documentation>characterizes the element in some sense, using any convenient classification scheme or typology.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:pattern value="[^\p{C}\p{Z}]+"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.typed.attribute.subtype">
+    <xs:attribute name="subtype">
+      <xs:annotation>
+        <xs:documentation>(subtype) provides a sub-categorization of the element, if needed.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:pattern value="[^\p{C}\p{Z}]+"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.written.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.written.attribute.hand"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.written.attribute.hand">
+    <xs:attribute name="hand">
+      <xs:simpleType>
+        <xs:restriction base="xs:anyURI">
+          <xs:pattern value="\S+"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.ascribed.directed.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.ascribed.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.ascribed.directed.attribute.toWhom"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.ascribed.directed.attribute.toWhom">
+    <xs:attribute name="toWhom">
+      <xs:annotation>
+        <xs:documentation>indicates the person, or group of people, to whom a speech act or action is directed.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:anyURI">
+                  <xs:pattern value="\S+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.datable.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.datable.custom.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.datable.iso.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.datable.w3c.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.datable.attribute.period"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.datable.attribute.period">
+    <xs:attribute name="period">
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:anyURI">
+                  <xs:pattern value="\S+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.dimensions.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.ranging.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.unit"/>
+    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.quantity"/>
+    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.extent"/>
+    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.precision"/>
+    <xs:attributeGroup ref="tei:tbibatt.dimensions.attribute.scope"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.dimensions.attribute.unit">
+    <xs:attribute name="unit">
+      <xs:annotation>
+        <xs:documentation>names the unit used for the measurement
+Suggested values include: 1] cm (centimetres); 2] mm (millimetres); 3] in (inches); 4] line; 5] char (characters)</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="cm">
+                <xs:annotation>
+                  <xs:documentation>(centimetres) </xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="mm">
+                <xs:annotation>
+                  <xs:documentation>(millimetres) </xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="in">
+                <xs:annotation>
+                  <xs:documentation>(inches) </xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="line">
+                <xs:annotation>
+                  <xs:documentation>lines of text</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:enumeration value="char">
+                <xs:annotation>
+                  <xs:documentation>(characters) characters of text</xs:documentation>
+                </xs:annotation>
+              </xs:enumeration>
+            </xs:restriction>
+          </xs:simpleType>
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:pattern value="[^\p{C}\p{Z}]+"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.dimensions.attribute.quantity">
+    <xs:attribute name="quantity">
+      <xs:annotation>
+        <xs:documentation>specifies the length in the units specified</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:double xs:decimal">
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.dimensions.attribute.extent">
+    <xs:attribute name="extent" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>indicates the size of the object concerned using a project-specific vocabulary combining quantity and units in a single string of words.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.dimensions.attribute.precision">
+    <xs:attribute name="precision">
+      <xs:annotation>
+        <xs:documentation>characterizes the precision of the values specified by the other attributes.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:enumeration value="high">
+            <xs:annotation>
+              <xs:documentation/>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="medium">
+            <xs:annotation>
+              <xs:documentation/>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="low">
+            <xs:annotation>
+              <xs:documentation/>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="unknown">
+            <xs:annotation>
+              <xs:documentation/>
+            </xs:annotation>
+          </xs:enumeration>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.dimensions.attribute.scope">
+    <xs:attribute name="scope">
+      <xs:annotation>
+        <xs:documentation>where the measurement summarizes more than one observation, specifies the applicability of this measurement.
+Sample values include: 1] all; 2] most; 3] range</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:pattern value="[^\p{C}\p{Z}]+"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.divLike.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.fragmentable.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.divLike.attribute.org"/>
+    <xs:attributeGroup ref="tei:tbibatt.divLike.attribute.sample"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.divLike.attribute.org">
+    <xs:attribute name="org" default="uniform">
+      <xs:annotation>
+        <xs:documentation>(organization) specifies how the content of the division is organized.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:enumeration value="composite">
+            <xs:annotation>
+              <xs:documentation>no claim is made about the sequence in which the immediate contents of this division are to be processed, or their inter-relationships.</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="uniform">
+            <xs:annotation>
+              <xs:documentation>the immediate contents of this element are regarded as forming a logical unit, to be processed in sequence.</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.divLike.attribute.sample">
+    <xs:attribute name="sample" default="complete">
+      <xs:annotation>
+        <xs:documentation>indicates whether this division is a sample of the original source and if so, from which part.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:enumeration value="initial">
+            <xs:annotation>
+              <xs:documentation>division lacks material present at end in source.</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="medial">
+            <xs:annotation>
+              <xs:documentation>division lacks material at start and end.</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="final">
+            <xs:annotation>
+              <xs:documentation>division lacks material at start.</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="unknown">
+            <xs:annotation>
+              <xs:documentation>position of sampled material within original unknown.</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+          <xs:enumeration value="complete">
+            <xs:annotation>
+              <xs:documentation>division is not a sample.</xs:documentation>
+            </xs:annotation>
+          </xs:enumeration>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.global.linking.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.rendition.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.responsibility.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.source.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.attribute.xmlid"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.attribute.n"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.attribute.xmllang"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.attribute.xmlbase"/>
+    <xs:attributeGroup ref="tei:tbibatt.global.attribute.xmlspace"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.attribute.xmlid">
+    <xs:attribute ref="xml:id"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.attribute.n">
+    <xs:attribute name="n" type="xs:string">
+      <xs:annotation>
+        <xs:documentation>(number) gives a number (or other label) for an element, which is not necessarily unique within the document.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.attribute.xmllang">
+    <xs:attribute ref="xml:lang"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.attribute.xmlbase">
+    <xs:attribute ref="xml:base"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.global.attribute.xmlspace">
+    <xs:attribute ref="xml:space"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.handFeatures.attribute.scribe">
+    <xs:attribute name="scribe" type="xs:Name">
+      <xs:annotation>
+        <xs:documentation>gives a name or other identifier for the scribe believed to be responsible for this hand.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.handFeatures.attribute.scribeRef">
+    <xs:attribute name="scribeRef">
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:anyURI">
+                  <xs:pattern value="\S+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.handFeatures.attribute.script">
+    <xs:attribute name="script">
+      <xs:annotation>
+        <xs:documentation>characterizes the particular script or writing style used by this hand, for example secretary, copperplate, Chancery, Italian, etc.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list itemType="xs:Name"/>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.handFeatures.attribute.scriptRef">
+    <xs:attribute name="scriptRef">
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:anyURI">
+                  <xs:pattern value="\S+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.handFeatures.attribute.medium">
+    <xs:attribute name="medium">
+      <xs:annotation>
+        <xs:documentation>describes the tint or type of ink, e.g. brown, or other writing medium, e.g. pencil.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:token">
+                  <xs:pattern value="[^\p{C}\p{Z}]+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.media.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.internetMedia.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.media.attribute.width"/>
+    <xs:attributeGroup ref="tei:tbibatt.media.attribute.height"/>
+    <xs:attributeGroup ref="tei:tbibatt.media.attribute.scale"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.media.attribute.width">
+    <xs:attribute name="width">
+      <xs:annotation>
+        <xs:documentation>Where the media are displayed, indicates the display width.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:pattern value="[\-+]?\d+(\.\d+)?(%|cm|mm|in|pt|pc|px|em|ex|ch|rem|vw|vh|vmin|vmax)"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.media.attribute.height">
+    <xs:attribute name="height">
+      <xs:annotation>
+        <xs:documentation>Where the media are displayed, indicates the display height.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:token">
+          <xs:pattern value="[\-+]?\d+(\.\d+)?(%|cm|mm|in|pt|pc|px|em|ex|ch|rem|vw|vh|vmin|vmax)"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.media.attribute.scale">
+    <xs:attribute name="scale">
+      <xs:annotation>
+        <xs:documentation>Where the media are displayed, indicates a scale factor to be applied when generating the desired display size.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:union memberTypes="xs:double xs:decimal">
+          <xs:simpleType>
+            <xs:restriction base="xs:token">
+              <xs:pattern value="(\-?[\d]+/\-?[\d]+)"/>
+            </xs:restriction>
+          </xs:simpleType>
+        </xs:union>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.naming.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.naming.attribute.role"/>
+    <xs:attributeGroup ref="tei:tbibatt.naming.attribute.nymRef"/>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.naming.attribute.role">
+    <xs:attribute name="role">
+      <xs:annotation>
+        <xs:documentation>may be used to specify further information about the entity referenced by this name in the form of a set of whitespace-separated values, for example the occupation of a person, or the status of a place.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:token">
+                  <xs:pattern value="[^\p{C}\p{Z}]+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:attributeGroup>
+  <xs:attributeGroup name="tbibatt.naming.attribute.nymRef">
+    <xs:attribute name="nymRef">
+      <xs:annotation>
+        <xs:documentation>(reference to the canonical name) provides a means of locating the canonical form (nym) of the names associated with the object named by the element bearing it.</xs:documentation>
+      </xs:annotation>
+      <xs:simpleType>
+        <xs:restriction>
+          <xs:simpleType>
+            <xs:list>
+              <xs:simpleType>
+                <xs:restriction base="xs:anyURI">
+                  <xs:pattern value="\S+"/>
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:list>
+          </xs:simpleType>
+          <xs:minLength value="1"/>
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
@@ -1862,156 +2115,9 @@ Suggested values include: 1] top; 2] bottom; 3] margin; 4] opposite; 5] overleaf
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.sortable.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.sortable.attribute.sortKey"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.sortable.attribute.sortKey">
-    <xs:attribute name="sortKey">
-      <xs:annotation>
-        <xs:documentation>supplies the sort key for this element in an index, list or group which contains it.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:pattern value="[^\p{C}\p{Z}]+"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.edition.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.edition.attribute.ed"/>
-    <xs:attributeGroup ref="tei:tbibatt.edition.attribute.edRef"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.edition.attribute.ed">
-    <xs:attribute name="ed">
-      <xs:annotation>
-        <xs:documentation>(edition) supplies a sigil or other arbitrary identifier for the source edition in which the associated feature (for example, a page, column, or line break) occurs at this point in the text.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:token">
-                  <xs:pattern value="[^\p{C}\p{Z}]+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.edition.attribute.edRef">
-    <xs:attribute name="edRef">
-      <xs:annotation>
-        <xs:documentation>(edition reference) provides a pointer to the source edition in which the associated feature (for example, a page, column, or line break) occurs at this point in the text.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction>
-          <xs:simpleType>
-            <xs:list>
-              <xs:simpleType>
-                <xs:restriction base="xs:anyURI">
-                  <xs:pattern value="\S+"/>
-                </xs:restriction>
-              </xs:simpleType>
-            </xs:list>
-          </xs:simpleType>
-          <xs:minLength value="1"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.spanning.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.spanning.attribute.spanTo"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.spanning.attribute.spanTo">
-    <xs:attribute name="spanTo">
-      <xs:annotation>
-        <xs:documentation>indicates the end of a span initiated by the element bearing this attribute.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:anyURI">
-          <xs:pattern value="\S+"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.styleDef.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.styleDef.attribute.scheme"/>
-    <xs:attributeGroup ref="tei:tbibatt.styleDef.attribute.schemeVersion"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.styleDef.attribute.scheme">
-    <xs:attribute name="scheme">
-      <xs:annotation>
-        <xs:documentation>identifies the language used to describe the rendition.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:enumeration value="css">
-            <xs:annotation>
-              <xs:documentation>Cascading Stylesheet Language</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="xslfo">
-            <xs:annotation>
-              <xs:documentation>Extensible Stylesheet Language Formatting Objects</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="free">
-            <xs:annotation>
-              <xs:documentation>Informal free text description</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-          <xs:enumeration value="other">
-            <xs:annotation>
-              <xs:documentation>A user-defined rendition description language</xs:documentation>
-            </xs:annotation>
-          </xs:enumeration>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.styleDef.attribute.schemeVersion">
-    <xs:attribute name="schemeVersion">
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:pattern value="[\d]+[a-z]*[\d]*(\.[\d]+[a-z]*[\d]*){0,3}"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.timed.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.timed.attribute.start"/>
-    <xs:attributeGroup ref="tei:tbibatt.timed.attribute.end"/>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.timed.attribute.start">
-    <xs:attribute name="start">
-      <xs:annotation>
-        <xs:documentation>indicates the location within a temporal alignment at which this element begins.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:anyURI">
-          <xs:pattern value="\S+"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.timed.attribute.end">
-    <xs:attribute name="end">
-      <xs:annotation>
-        <xs:documentation>indicates the location within a temporal alignment at which this element ends.</xs:documentation>
-      </xs:annotation>
-      <xs:simpleType>
-        <xs:restriction base="xs:anyURI">
-          <xs:pattern value="\S+"/>
-        </xs:restriction>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
   <xs:attributeGroup name="tbibatt.transcriptional.attributes">
     <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
+    <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
     <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     <xs:attributeGroup ref="tei:tbibatt.transcriptional.attribute.status"/>
     <xs:attributeGroup ref="tei:tbibatt.transcriptional.attribute.cause"/>
@@ -2049,114 +2155,30 @@ Sample values include: 1] duplicate; 2] duplicate-partial; 3] excessStart; 4] ex
       </xs:annotation>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.citing.attributes">
-    <xs:attributeGroup ref="tei:tbibatt.citing.attribute.unit"/>
-    <xs:attributeGroup ref="tei:tbibatt.citing.attribute.from"/>
-    <xs:attributeGroup ref="tei:tbibatt.citing.attribute.to"/>
+  <xs:attributeGroup name="tbibatt.timed.attributes">
+    <xs:attributeGroup ref="tei:tbibatt.timed.attribute.start"/>
+    <xs:attributeGroup ref="tei:tbibatt.timed.attribute.end"/>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.citing.attribute.unit">
-    <xs:attribute name="unit">
+  <xs:attributeGroup name="tbibatt.timed.attribute.start">
+    <xs:attribute name="start">
       <xs:annotation>
-        <xs:documentation>identifies the unit of information conveyed by the element, e.g. columns, pages, volume, entry.
-Suggested values include: 1] volume (volume); 2] issue; 3] page (page); 4] line; 5] chapter (chapter); 6] part; 7] column; 8] entry</xs:documentation>
+        <xs:documentation>indicates the location within a temporal alignment at which this element begins.</xs:documentation>
       </xs:annotation>
       <xs:simpleType>
-        <xs:union>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="volume">
-                <xs:annotation>
-                  <xs:documentation>(volume) the element contains a volume number.</xs:documentation>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="issue">
-                <xs:annotation>
-                  <xs:documentation>the element contains an issue number, or volume and issue numbers.</xs:documentation>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="page">
-                <xs:annotation>
-                  <xs:documentation>(page) the element contains a page number or page range.</xs:documentation>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="line">
-                <xs:annotation>
-                  <xs:documentation>the element contains a line number or line range.</xs:documentation>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="chapter">
-                <xs:annotation>
-                  <xs:documentation>(chapter) the element contains a chapter indication (number and/or title)</xs:documentation>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="part">
-                <xs:annotation>
-                  <xs:documentation>the element identifies a part of a book or collection.</xs:documentation>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="column">
-                <xs:annotation>
-                  <xs:documentation>the element identifies a column.</xs:documentation>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:enumeration value="entry">
-                <xs:annotation>
-                  <xs:documentation>the element identifies an entry number or label in a list of entries.</xs:documentation>
-                </xs:annotation>
-              </xs:enumeration>
-            </xs:restriction>
-          </xs:simpleType>
-          <xs:simpleType>
-            <xs:restriction base="xs:token">
-              <xs:pattern value="[^\p{C}\p{Z}]+"/>
-            </xs:restriction>
-          </xs:simpleType>
-        </xs:union>
-      </xs:simpleType>
-    </xs:attribute>
-  </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.citing.attribute.from">
-    <xs:attribute name="from">
-      <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:pattern value="[^\p{C}\p{Z}]+"/>
+        <xs:restriction base="xs:anyURI">
+          <xs:pattern value="\S+"/>
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
   </xs:attributeGroup>
-  <xs:attributeGroup name="tbibatt.citing.attribute.to">
-    <xs:attribute name="to">
+  <xs:attributeGroup name="tbibatt.timed.attribute.end">
+    <xs:attribute name="end">
+      <xs:annotation>
+        <xs:documentation>indicates the location within a temporal alignment at which this element ends.</xs:documentation>
+      </xs:annotation>
       <xs:simpleType>
-        <xs:restriction base="xs:token">
-          <xs:pattern value="[^\p{C}\p{Z}]+"/>
+        <xs:restriction base="xs:anyURI">
+          <xs:pattern value="\S+"/>
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
@@ -3768,7 +3790,7 @@ Suggested values include: 1] page; 2] column; 3] line; 4] book; 5] poem; 6] cant
             <xs:restriction base="xs:token">
               <xs:enumeration value="column">
                 <xs:annotation>
-                  <xs:documentation>column breaks.</xs:documentation>
+                  <xs:documentation>column beginnings.</xs:documentation>
                 </xs:annotation>
               </xs:enumeration>
             </xs:restriction>
@@ -3885,10 +3907,10 @@ Suggested values include: 1] page; 2] column; 3] line; 4] book; 5] poem; 6] cant
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.fragmentable.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -3915,6 +3937,7 @@ Suggested values include: 1] page; 2] column; 3] line; 4] book; 5] poem; 6] cant
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -3927,8 +3950,8 @@ Suggested values include: 1] page; 2] column; 3] line; 4] book; 5] poem; 6] cant
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -3941,11 +3964,11 @@ Suggested values include: 1] page; 2] column; 3] line; 4] book; 5] poem; 6] cant
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attribute name="type">
             <xs:annotation>
-              <xs:documentation>specifies the sublanguage or register to which the word or phrase is being assigned</xs:documentation>
+              <xs:documentation>specifies the sublanguage or register to which the word or phrase is being assigned.</xs:documentation>
             </xs:annotation>
             <xs:simpleType>
               <xs:restriction base="xs:token">
@@ -3955,17 +3978,17 @@ Suggested values include: 1] page; 2] column; 3] line; 4] book; 5] poem; 6] cant
           </xs:attribute>
           <xs:attribute name="time" type="xs:string">
             <xs:annotation>
-              <xs:documentation>specifies how the phrase is distinct diachronically</xs:documentation>
+              <xs:documentation>specifies how the phrase is distinct diachronically.</xs:documentation>
             </xs:annotation>
           </xs:attribute>
           <xs:attribute name="space" type="xs:string">
             <xs:annotation>
-              <xs:documentation>specifies how the phrase is distinct diatopically</xs:documentation>
+              <xs:documentation>specifies how the phrase is distinct diatopically.</xs:documentation>
             </xs:annotation>
           </xs:attribute>
           <xs:attribute name="social" type="xs:string">
             <xs:annotation>
-              <xs:documentation>specifies how the phrase is distinct diastratically</xs:documentation>
+              <xs:documentation>specifies how the phrase is distinct diastratically.</xs:documentation>
             </xs:annotation>
           </xs:attribute>
         </xs:extension>
@@ -4040,9 +4063,9 @@ Suggested values include: 1] page; 2] column; 3] line; 4] book; 5] poem; 6] cant
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.specialPara">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.notated.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.notated.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4171,8 +4194,8 @@ Suggested values include: 1] spoken (spoken); 2] thought (thought); 3] written (
         <xs:element ref="tei:q"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="mentioned">
@@ -4209,8 +4232,8 @@ Suggested values include: 1] spoken (spoken); 2] thought (thought); 3] written (
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.limitedContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attribute name="type">
             <xs:annotation>
               <xs:documentation>characterizes the element in some sense, using any convenient classification scheme or typology.
@@ -4222,8 +4245,7 @@ Suggested values include: 1] deprecationInfo (deprecation information)</xs:docum
                   <xs:restriction base="xs:token">
                     <xs:enumeration value="deprecationInfo">
                       <xs:annotation>
-                        <xs:documentation>(deprecation
-          information) This element describes why or how its parent element is being deprecated, typically including recommendations for alternate encoding.</xs:documentation>
+                        <xs:documentation>(deprecation information) This element describes why or how its parent element is being deprecated, typically including recommendations for alternate encoding.</xs:documentation>
                       </xs:annotation>
                     </xs:enumeration>
                   </xs:restriction>
@@ -4248,11 +4270,11 @@ Suggested values include: 1] deprecationInfo (deprecation information)</xs:docum
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cReferencing.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4265,13 +4287,13 @@ Suggested values include: 1] deprecationInfo (deprecation information)</xs:docum
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cReferencing.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cReferencing.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4286,8 +4308,8 @@ Suggested values include: 1] deprecationInfo (deprecation information)</xs:docum
         <xs:element maxOccurs="unbounded" ref="tei:rt"/>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="rb">
@@ -4311,9 +4333,8 @@ Suggested values include: 1] deprecationInfo (deprecation information)</xs:docum
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.transcriptional.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
           <xs:attribute name="target">
             <xs:annotation>
               <xs:documentation>supplies a pointer to the base being glossed by this ruby text.</xs:documentation>
@@ -4369,9 +4390,9 @@ Suggested values include: 1] deprecationInfo (deprecation information)</xs:docum
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4408,9 +4429,9 @@ Normalization 13. Critical Apparatus]</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4436,13 +4457,13 @@ Normalization 13. Critical Apparatus]</xs:documentation>
     <xs:complexType>
       <xs:group minOccurs="0" maxOccurs="unbounded" ref="tei:tbibmodel.descLike"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.timed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.timed.attributes"/>
       <xs:attribute name="reason">
         <xs:annotation>
-          <xs:documentation>(reason) gives the reason for omission
+          <xs:documentation>(reason) gives the reason for omission.
 Suggested values include: 1] cancelled (cancelled); 2] deleted (deleted); 3] editorial (editorial); 4] illegible (illegible); 5] inaudible (inaudible); 6] irrelevant (irrelevant); 7] sampling (sampling)</xs:documentation>
         </xs:annotation>
         <xs:simpleType>
@@ -4559,11 +4580,10 @@ Sample values include: 1] rubbing (rubbing); 2] mildew (mildew); 3] smoke (smoke
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.transcriptional.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.transcriptional.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4576,10 +4596,10 @@ Sample values include: 1] rubbing (rubbing); 2] mildew (mildew); 3] smoke (smoke
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.transcriptional.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4592,9 +4612,9 @@ Sample values include: 1] rubbing (rubbing); 2] mildew (mildew); 3] smoke (smoke
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
           <xs:attribute name="reason">
             <xs:annotation>
               <xs:documentation>indicates why the material is hard to transcribe.
@@ -4687,30 +4707,11 @@ Sample values include: 1] rubbing; 2] mildew; 3] smoke</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4723,9 +4724,9 @@ Sample values include: 1] rubbing; 2] mildew; 3] smoke</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.naming.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4808,9 +4809,9 @@ Measures]</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
-          <xs:attributeGroup ref="tei:tbibatt.ranging.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.ranging.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attribute name="type">
             <xs:annotation>
               <xs:documentation>indicates the type of numeric value.
@@ -4889,10 +4890,10 @@ Measures]</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
-          <xs:attributeGroup ref="tei:tbibatt.measurement.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.measurement.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.ranging.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attribute name="type">
             <xs:annotation>
               <xs:documentation>specifies the type of measurement in any convenient typology.</xs:documentation>
@@ -4914,9 +4915,9 @@ Measures]</xs:documentation>
     <xs:complexType mixed="true">
       <xs:group minOccurs="0" maxOccurs="unbounded" ref="tei:tbibmodel.measureLike"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.measurement.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="unit">
@@ -4928,9 +4929,9 @@ Measures]</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.measurement.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.measurement.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -4945,13 +4946,13 @@ Measures]</xs:documentation>
         <xs:group ref="tei:tbibmodel.global"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.calendarSystem.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="time">
@@ -4964,13 +4965,13 @@ Measures]</xs:documentation>
         <xs:group ref="tei:tbibmodel.global"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.calendarSystem.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.dimensions.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="abbr">
@@ -4981,8 +4982,8 @@ Measures]</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attribute name="type">
             <xs:annotation>
               <xs:documentation>(type) allows the encoder to classify the abbreviation according to some convenient typology.
@@ -5006,8 +5007,8 @@ Sample values include: 1] suspension (suspension); 2] contraction (contraction);
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -5017,13 +5018,13 @@ Sample values include: 1] suspension (suspension); 2] contraction (contraction);
       <xs:documentation>(pointer) defines a pointer to another location. [3.7. Simple Links and Cross-References 17.1. Links]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
-      <xs:attributeGroup ref="tei:tbibatt.cReferencing.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cReferencing.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.internetMedia.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="ref">
@@ -5033,13 +5034,13 @@ Sample values include: 1] suspension (suspension); 2] contraction (contraction);
     <xs:complexType>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
-          <xs:attributeGroup ref="tei:tbibatt.cReferencing.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cReferencing.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.internetMedia.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attribute name="type">
             <xs:annotation>
               <xs:documentation/>
@@ -5051,11 +5052,6 @@ Sample values include: 1] suspension (suspension); 2] contraction (contraction);
                     <xs:documentation>A footnote or endnote</xs:documentation>
                   </xs:annotation>
                 </xs:enumeration>
-                <xs:enumeration value="name">
-                  <xs:annotation>
-                    <xs:documentation>The name a previously mentioned author or editor</xs:documentation>
-                  </xs:annotation>
-                </xs:enumeration>
                 <xs:enumeration value="idem">
                   <xs:annotation>
                     <xs:documentation>A reference to a previously mentioned name of an author, replaced by abbreviations such as "id.", "eadem" in English or "ders.", "dies." in German</xs:documentation>
@@ -5064,6 +5060,11 @@ Sample values include: 1] suspension (suspension); 2] contraction (contraction);
                 <xs:enumeration value="op-cit">
                   <xs:annotation>
                     <xs:documentation>A reference to a previously referenced work, usually indicated by abbreviations such as "op. cit.", "ibid." in English or "ebd.", "a.a.O." in German.</xs:documentation>
+                  </xs:annotation>
+                </xs:enumeration>
+                <xs:enumeration value="bibl">
+                  <xs:annotation>
+                    <xs:documentation>A reference that points to a completed bibl element, usually containing a persName element for the author mentioned, plus .</xs:documentation>
                   </xs:annotation>
                 </xs:enumeration>
               </xs:restriction>
@@ -5106,9 +5107,9 @@ Sample values include: 1] suspension (suspension); 2] contraction (contraction);
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
       <xs:attribute name="type">
         <xs:annotation>
           <xs:documentation>(type) describes the nature of the items in the list.
@@ -5188,10 +5189,10 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -5209,10 +5210,10 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
         <xs:group ref="tei:tbibmodel.global"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="headLabel">
@@ -5247,12 +5248,12 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.specialPara">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.anchoring.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.anchoring.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attribute name="type">
             <xs:annotation>
               <xs:documentation/>
@@ -5288,7 +5289,7 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
   </xs:element>
   <xs:element name="noteGrp">
     <xs:annotation>
-      <xs:documentation>(note group) contains a group of notes [3.9.1.1. Encoding Grouped Notes]</xs:documentation>
+      <xs:documentation>(note group) contains a group of notes. [3.9.1.1. Encoding Grouped Notes]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:sequence>
@@ -5299,12 +5300,12 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
         </xs:choice>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.anchoring.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.anchoring.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="index">
@@ -5317,8 +5318,8 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
         <xs:element minOccurs="0" ref="tei:index"/>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
       <xs:attribute name="indexName" type="xs:Name">
         <xs:annotation>
           <xs:documentation>a single word which follows the rules defining a legal XML name (see ), supplying a name to specify which index (of several) the index entry belongs to.</xs:documentation>
@@ -5332,18 +5333,18 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
     </xs:annotation>
     <xs:complexType>
       <xs:group minOccurs="0" maxOccurs="unbounded" ref="tei:tbibmodel.descLike"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.media.attribute.width"/>
       <xs:attributeGroup ref="tei:tbibatt.media.attribute.height"/>
       <xs:attributeGroup ref="tei:tbibatt.media.attribute.scale"/>
       <xs:attributeGroup ref="tei:tbibatt.resourced.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.timed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attribute name="mimeType" use="required">
         <xs:annotation>
-          <xs:documentation>(MIME media type) specifies the applicable multimedia internet mail extension (MIME) media type</xs:documentation>
+          <xs:documentation>(MIME media type) specifies the applicable multimedia internet mail extension (MIME) media type.</xs:documentation>
         </xs:annotation>
         <xs:simpleType>
           <xs:restriction>
@@ -5369,11 +5370,11 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
     <xs:complexType>
       <xs:group minOccurs="0" maxOccurs="unbounded" ref="tei:tbibmodel.descLike"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.media.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.resourced.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="binaryObject">
@@ -5382,10 +5383,10 @@ Suggested values include: 1] gloss (gloss); 2] index (index); 3] instructions (i
     </xs:annotation>
     <xs:complexType mixed="true">
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.media.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.timed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
       <xs:attribute name="encoding">
         <xs:simpleType>
           <xs:restriction>
@@ -5411,12 +5412,12 @@ Elements]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.milestoneUnit.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.breaking.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.milestoneUnit.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="gb">
@@ -5426,11 +5427,11 @@ Elements]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.breaking.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="pb">
@@ -5440,25 +5441,25 @@ Elements]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.breaking.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="lb">
     <xs:annotation>
-      <xs:documentation>(line beginning) marks the beginning of a new (typographic) line in some edition or version of a text. [3.11.3. Milestone
+      <xs:documentation>(line beginning) marks the beginning of a topographic line in some edition or version of a text. [3.11.3. Milestone
 Elements 7.2.5. Speech Contents]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.breaking.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="cb">
@@ -5468,11 +5469,11 @@ Elements]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.breaking.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.spanning.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="analytic">
@@ -5592,27 +5593,8 @@ Elements]</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.naming.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
+          <xs:attributeGroup ref="tei:tbibatt.naming.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -5625,27 +5607,8 @@ Elements]</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.naming.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
+          <xs:attributeGroup ref="tei:tbibatt.naming.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -5682,25 +5645,6 @@ Elements]</xs:documentation>
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -5713,10 +5657,10 @@ Elements]</xs:documentation>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
           <xs:attribute name="type">
             <xs:annotation>
               <xs:documentation>classifies the title according to some convenient typology.
@@ -5725,25 +5669,6 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
             <xs:simpleType>
               <xs:restriction base="xs:token">
                 <xs:pattern value="[^\p{C}\p{Z}]+"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
               </xs:restriction>
             </xs:simpleType>
           </xs:attribute>
@@ -5793,28 +5718,9 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.limitedContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
+          <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -5869,14 +5775,14 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
   </xs:element>
   <xs:element name="citedRange">
     <xs:annotation>
-      <xs:documentation>(cited range) defines the range of cited content, often represented by pages or other units [3.12.2.5. Scopes and Ranges in Bibliographic Citations]</xs:documentation>
+      <xs:documentation>(cited range) defines the range of cited content, often represented by pages or other units. [3.12.2.5. Scopes and Ranges in Bibliographic Citations]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.citing.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -5909,11 +5815,12 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
         <xs:group ref="tei:tbibmodel.global"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.docStatus.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.docStatus.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="biblStruct">
@@ -5935,11 +5842,12 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
         </xs:choice>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.docStatus.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.docStatus.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="listBibl">
@@ -5957,10 +5865,10 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="relatedItem">
@@ -5976,7 +5884,7 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attribute name="target">
         <xs:annotation>
-          <xs:documentation>points to the related bibliographic element by means of an absolute or relative URI reference</xs:documentation>
+          <xs:documentation>points to the related bibliographic element by means of an absolute or relative URI reference.</xs:documentation>
         </xs:annotation>
         <xs:simpleType>
           <xs:restriction base="xs:anyURI">
@@ -5997,8 +5905,8 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
         <xs:group ref="tei:tbibmodel.global"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.fragmentable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.fragmentable.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="lg">
@@ -6032,10 +5940,10 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="sp">
@@ -6066,6 +5974,8 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.ascribed.directed.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="speaker">
@@ -6076,6 +5986,8 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -6087,11 +5999,11 @@ Sample values include: 1] main; 2] sub (subordinate); 3] alt (alternate); 4] sho
     <xs:complexType>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.specialPara">
-          <xs:attributeGroup ref="tei:tbibatt.ascribed.directed.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.ascribed.directed.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attribute name="type">
             <xs:annotation>
               <xs:documentation>indicates the kind of stage direction.
@@ -6364,25 +6276,6 @@ Sample values include: 1] index; 2] toc; 3] figlist; 4] tablist</xs:documentatio
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -6397,25 +6290,6 @@ Sample values include: 1] index; 2] toc; 3] figlist; 4] tablist</xs:documentatio
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -6430,25 +6304,6 @@ Sample values include: 1] index; 2] toc; 3] figlist; 4] tablist</xs:documentatio
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -6542,10 +6397,10 @@ Sample values include: 1] index; 2] toc; 3] figlist; 4] tablist</xs:documentatio
         <xs:element minOccurs="0" maxOccurs="unbounded" ref="tei:idno"/>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
       <xs:attribute name="type">
         <xs:annotation>
           <xs:documentation>categorizes the identifier, for example as an ISBN, Social Security number, etc.
@@ -6616,25 +6471,6 @@ Suggested values include: 1] ISBN; 2] ISSN; 3] DOI; 4] URI; 5] VIAF; 6] ESTC; 7]
           </xs:union>
         </xs:simpleType>
       </xs:attribute>
-      <xs:attribute name="calendar">
-        <xs:annotation>
-          <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-        </xs:annotation>
-        <xs:simpleType>
-          <xs:restriction>
-            <xs:simpleType>
-              <xs:list>
-                <xs:simpleType>
-                  <xs:restriction base="xs:anyURI">
-                    <xs:pattern value="\S+"/>
-                  </xs:restriction>
-                </xs:simpleType>
-              </xs:list>
-            </xs:simpleType>
-            <xs:minLength value="1"/>
-          </xs:restriction>
-        </xs:simpleType>
-      </xs:attribute>
     </xs:complexType>
   </xs:element>
   <xs:element name="availability">
@@ -6682,27 +6518,8 @@ Suggested values include: 1] ISBN; 2] ISSN; 3] DOI; 4] URI; 5] VIAF; 6] ESTC; 7]
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.specialPara">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
+          <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -6781,10 +6598,11 @@ Suggested values include: 1] ISBN; 2] ISSN; 3] DOI; 4] URI; 5] VIAF; 6] ESTC; 7]
         </xs:sequence>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.docStatus.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.docStatus.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="encodingDesc">
@@ -6801,16 +6619,16 @@ Suggested values include: 1] ISBN; 2] ISSN; 3] DOI; 4] URI; 5] VIAF; 6] ESTC; 7]
   </xs:element>
   <xs:element name="schemaRef">
     <xs:annotation>
-      <xs:documentation>(schema reference) describes or points to a related customization or schema file [2.3.10. The Schema Specification]</xs:documentation>
+      <xs:documentation>(schema reference) describes or points to a related customization or schema file. [2.3.10. The Schema Specification]</xs:documentation>
     </xs:annotation>
     <xs:complexType>
       <xs:group minOccurs="0" ref="tei:tbibmodel.descLike"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.resourced.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attribute name="key" type="xs:NCName">
         <xs:annotation>
-          <xs:documentation>the identifier used for the customization or schema</xs:documentation>
+          <xs:documentation>the identifier used for the customization or schema.</xs:documentation>
         </xs:annotation>
       </xs:attribute>
     </xs:complexType>
@@ -7044,8 +6862,8 @@ Suggested values include: 1] ISBN; 2] ISSN; 3] DOI; 4] URI; 5] VIAF; 6] ESTC; 7]
     </xs:annotation>
     <xs:complexType>
       <xs:group minOccurs="0" maxOccurs="unbounded" ref="tei:tbibmodel.pLike"/>
-      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
       <xs:attribute name="marks">
         <xs:annotation>
           <xs:documentation>indicates whether or not punctation marks have been retained as content within the text.</xs:documentation>
@@ -7307,8 +7125,8 @@ Sample values include: 1] first-line; 2] first-letter; 3] before; 4] after</xs:d
     </xs:annotation>
     <xs:complexType>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.milestoneUnit.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.edition.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.milestoneUnit.attributes"/>
       <xs:attribute name="length" type="xs:nonNegativeInteger">
         <xs:annotation>
           <xs:documentation>specifies the fixed length of the reference component.</xs:documentation>
@@ -7418,7 +7236,7 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
                   <xs:restriction base="xs:token">
                     <xs:enumeration value="MGRS">
                       <xs:annotation>
-                        <xs:documentation>(Military Grid Reference System) the values supplied are geospatial entity object codes, based on</xs:documentation>
+                        <xs:documentation>(Military Grid Reference System) values supplied follow the Military Grid Reference System, which designates grid zones in a string of letters and numbers that distinctly indicate each square meter on the planet.</xs:documentation>
                       </xs:annotation>
                     </xs:enumeration>
                   </xs:restriction>
@@ -7461,28 +7279,9 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
       <xs:sequence>
         <xs:element maxOccurs="unbounded" ref="tei:unitDef"/>
       </xs:sequence>
+      <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attribute name="calendar">
-        <xs:annotation>
-          <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-        </xs:annotation>
-        <xs:simpleType>
-          <xs:restriction>
-            <xs:simpleType>
-              <xs:list>
-                <xs:simpleType>
-                  <xs:restriction base="xs:anyURI">
-                    <xs:pattern value="\S+"/>
-                  </xs:restriction>
-                </xs:simpleType>
-              </xs:list>
-            </xs:simpleType>
-            <xs:minLength value="1"/>
-          </xs:restriction>
-        </xs:simpleType>
-      </xs:attribute>
     </xs:complexType>
   </xs:element>
   <xs:element name="unitDef">
@@ -7496,28 +7295,9 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
         <xs:element minOccurs="0" ref="tei:unit"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attribute name="calendar">
-        <xs:annotation>
-          <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-        </xs:annotation>
-        <xs:simpleType>
-          <xs:restriction>
-            <xs:simpleType>
-              <xs:list>
-                <xs:simpleType>
-                  <xs:restriction base="xs:anyURI">
-                    <xs:pattern value="\S+"/>
-                  </xs:restriction>
-                </xs:simpleType>
-              </xs:list>
-            </xs:simpleType>
-            <xs:minLength value="1"/>
-          </xs:restriction>
-        </xs:simpleType>
-      </xs:attribute>
     </xs:complexType>
   </xs:element>
   <xs:element name="conversion">
@@ -7529,25 +7309,6 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
       <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.formula.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.locatable.attributes"/>
-      <xs:attribute name="calendar">
-        <xs:annotation>
-          <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-        </xs:annotation>
-        <xs:simpleType>
-          <xs:restriction>
-            <xs:simpleType>
-              <xs:list>
-                <xs:simpleType>
-                  <xs:restriction base="xs:anyURI">
-                    <xs:pattern value="\S+"/>
-                  </xs:restriction>
-                </xs:simpleType>
-              </xs:list>
-            </xs:simpleType>
-            <xs:minLength value="1"/>
-          </xs:restriction>
-        </xs:simpleType>
-      </xs:attribute>
       <xs:attribute name="fromUnit" use="required">
         <xs:simpleType>
           <xs:restriction base="xs:anyURI">
@@ -7586,27 +7347,8 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
         </xs:choice>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-      <xs:attribute name="calendar">
-        <xs:annotation>
-          <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-        </xs:annotation>
-        <xs:simpleType>
-          <xs:restriction>
-            <xs:simpleType>
-              <xs:list>
-                <xs:simpleType>
-                  <xs:restriction base="xs:anyURI">
-                    <xs:pattern value="\S+"/>
-                  </xs:restriction>
-                </xs:simpleType>
-              </xs:list>
-            </xs:simpleType>
-            <xs:minLength value="1"/>
-          </xs:restriction>
-        </xs:simpleType>
-      </xs:attribute>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attribute name="ident" use="required" type="xs:Name">
         <xs:annotation>
           <xs:documentation>supplies an identifier for the application, independent of its version number or display name.</xs:documentation>
@@ -7657,25 +7399,6 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-      <xs:attribute name="calendar">
-        <xs:annotation>
-          <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-        </xs:annotation>
-        <xs:simpleType>
-          <xs:restriction>
-            <xs:simpleType>
-              <xs:list>
-                <xs:simpleType>
-                  <xs:restriction base="xs:anyURI">
-                    <xs:pattern value="\S+"/>
-                  </xs:restriction>
-                </xs:simpleType>
-              </xs:list>
-            </xs:simpleType>
-            <xs:minLength value="1"/>
-          </xs:restriction>
-        </xs:simpleType>
-      </xs:attribute>
     </xs:complexType>
   </xs:element>
   <xs:element name="langUsage">
@@ -7699,6 +7422,7 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq.limited">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.scope.attributes"/>
           <xs:attribute name="ident" use="required">
             <xs:simpleType>
               <xs:union memberTypes="xs:language">
@@ -7822,9 +7546,9 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
         <xs:group maxOccurs="unbounded" ref="tei:tbibmodel.correspDescPart"/>
         <xs:group maxOccurs="unbounded" ref="tei:tbibmodel.pLike"/>
       </xs:choice>
-      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.canonical.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
@@ -7838,8 +7562,8 @@ Suggested values include: 1] WGS84 (World Geodetic System); 2] MGRS (Military Gr
         <xs:group maxOccurs="unbounded" ref="tei:tbibmodel.pLike"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
       <xs:attributeGroup ref="tei:tbibatt.sortable.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attribute.subtype"/>
       <xs:attribute name="type">
         <xs:annotation>
           <xs:documentation>describes the nature of the action.
@@ -7916,7 +7640,7 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
       <xs:documentation>(non-TEI metadata) provides a container element into which metadata in non-TEI formats may be placed. [2.5. Non-TEI Metadata]</xs:documentation>
     </xs:annotation>
     <xs:complexType mixed="true">
-      <xs:group minOccurs="0" ref="tei:anyElement_xenoData_1"/>
+      <xs:group minOccurs="0" maxOccurs="unbounded" ref="tei:anyElement_xenoData_1"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.declarable.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
@@ -7943,30 +7667,11 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
     <xs:complexType>
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.specialPara">
+          <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.ascribed.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.docStatus.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
           <xs:attribute name="target">
             <xs:annotation>
               <xs:documentation>(target) points to one or more elements that belong to this change.</xs:documentation>
@@ -8179,9 +7884,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="div">
@@ -8224,9 +7929,10 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     </xs:complexType>
   </xs:element>
@@ -8270,9 +7976,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="div2">
@@ -8315,9 +8021,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="div3">
@@ -8360,9 +8066,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="div4">
@@ -8405,9 +8111,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="div5">
@@ -8450,9 +8156,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="div6">
@@ -8495,9 +8201,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="div7">
@@ -8522,9 +8228,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.divLike.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="trailer">
@@ -8540,10 +8246,10 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         <xs:group ref="tei:tbibmodel.global"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="byline">
@@ -8572,6 +8278,7 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="argument">
@@ -8622,8 +8329,8 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         <xs:group ref="tei:tbibmodel.global"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="closer">
@@ -8639,8 +8346,8 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         <xs:group ref="tei:tbibmodel.global"/>
       </xs:choice>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="salute">
@@ -8651,8 +8358,8 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -8665,8 +8372,8 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -8692,8 +8399,9 @@ Suggested values include: 1] sent; 2] received; 3] transmitted; 4] redirected; 5
         </xs:sequence>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.placement.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="titlePage">
@@ -8873,9 +8581,9 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.calendarSystem.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.calendarSystem.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9084,7 +8792,7 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
   <xs:attributeGroup name="tbibatt.datable.custom.attribute.datingPoint">
     <xs:attribute name="datingPoint">
       <xs:annotation>
-        <xs:documentation>supplies a pointer to some location defining a named point in time with reference to which the datable item is understood to have occurred</xs:documentation>
+        <xs:documentation>supplies a pointer to some location defining a named point in time with reference to which the datable item is understood to have occurred.</xs:documentation>
       </xs:annotation>
       <xs:simpleType>
         <xs:restriction base="xs:anyURI">
@@ -9106,6 +8814,7 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     <xs:choice>
       <xs:element ref="tei:surname"/>
       <xs:element ref="tei:forename"/>
+      <xs:element ref="tei:genName"/>
       <xs:element ref="tei:nameLink"/>
       <xs:element ref="tei:addName"/>
       <xs:element ref="tei:roleName"/>
@@ -9115,6 +8824,7 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     <xs:choice>
       <xs:element ref="tei:surname"/>
       <xs:element ref="tei:forename"/>
+      <xs:element ref="tei:genName"/>
       <xs:element ref="tei:nameLink"/>
       <xs:element ref="tei:addName"/>
       <xs:element ref="tei:roleName"/>
@@ -9124,6 +8834,7 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     <xs:sequence>
       <xs:element ref="tei:surname"/>
       <xs:element ref="tei:forename"/>
+      <xs:element ref="tei:genName"/>
       <xs:element ref="tei:nameLink"/>
       <xs:element ref="tei:addName"/>
       <xs:element ref="tei:roleName"/>
@@ -9133,6 +8844,7 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     <xs:sequence>
       <xs:element minOccurs="0" ref="tei:surname"/>
       <xs:element minOccurs="0" ref="tei:forename"/>
+      <xs:element minOccurs="0" ref="tei:genName"/>
       <xs:element minOccurs="0" ref="tei:nameLink"/>
       <xs:element minOccurs="0" ref="tei:addName"/>
       <xs:element minOccurs="0" ref="tei:roleName"/>
@@ -9142,6 +8854,7 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     <xs:sequence>
       <xs:element minOccurs="0" maxOccurs="unbounded" ref="tei:surname"/>
       <xs:element minOccurs="0" maxOccurs="unbounded" ref="tei:forename"/>
+      <xs:element minOccurs="0" maxOccurs="unbounded" ref="tei:genName"/>
       <xs:element minOccurs="0" maxOccurs="unbounded" ref="tei:nameLink"/>
       <xs:element minOccurs="0" maxOccurs="unbounded" ref="tei:addName"/>
       <xs:element minOccurs="0" maxOccurs="unbounded" ref="tei:roleName"/>
@@ -9151,6 +8864,7 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     <xs:sequence>
       <xs:element maxOccurs="unbounded" ref="tei:surname"/>
       <xs:element maxOccurs="unbounded" ref="tei:forename"/>
+      <xs:element maxOccurs="unbounded" ref="tei:genName"/>
       <xs:element maxOccurs="unbounded" ref="tei:nameLink"/>
       <xs:element maxOccurs="unbounded" ref="tei:addName"/>
       <xs:element maxOccurs="unbounded" ref="tei:roleName"/>
@@ -9251,30 +8965,11 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9287,30 +8982,11 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.datable.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.editLike.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
-          <xs:attribute name="calendar">
-            <xs:annotation>
-              <xs:documentation>indicates one or more systems or calendars to which the date represented by the content of this element belongs.</xs:documentation>
-            </xs:annotation>
-            <xs:simpleType>
-              <xs:restriction>
-                <xs:simpleType>
-                  <xs:list>
-                    <xs:simpleType>
-                      <xs:restriction base="xs:anyURI">
-                        <xs:pattern value="\S+"/>
-                      </xs:restriction>
-                    </xs:simpleType>
-                  </xs:list>
-                </xs:simpleType>
-                <xs:minLength value="1"/>
-              </xs:restriction>
-            </xs:simpleType>
-          </xs:attribute>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9323,9 +8999,9 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9338,9 +9014,24 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
+        </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="genName">
+    <xs:annotation>
+      <xs:documentation>(generational name component) contains a name component used to distinguish otherwise similar names on the basis of the relative ages or generations of the persons named. [14.2.1. Personal Names]</xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:complexContent>
+        <xs:extension base="tei:tbibmacro.phraseSeq">
+          <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9353,8 +9044,8 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9367,9 +9058,9 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9382,9 +9073,9 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.phraseSeq">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.personal.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9537,9 +9228,9 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     </xs:annotation>
     <xs:complexType>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.pointing.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="linkGrp">
@@ -9555,8 +9246,8 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
         </xs:choice>
       </xs:sequence>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.pointing.group.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.pointing.group.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="ab">
@@ -9567,11 +9258,11 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.abContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.fragmentable.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9582,8 +9273,8 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     </xs:annotation>
     <xs:complexType>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="seg">
@@ -9594,11 +9285,11 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
       <xs:complexContent>
         <xs:extension base="tei:tbibmacro.paraContent">
           <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
+          <xs:attributeGroup ref="tei:tbibatt.notated.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.segLike.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
           <xs:attributeGroup ref="tei:tbibatt.written.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.notated.attributes"/>
-          <xs:attributeGroup ref="tei:tbibatt.cmc.attributes"/>
         </xs:extension>
       </xs:complexContent>
     </xs:complexType>
@@ -9610,8 +9301,8 @@ Suggested values include: 1] main (main); 2] sub (subordinate); 3] alt (alternat
     <xs:complexType>
       <xs:group maxOccurs="unbounded" ref="tei:tbibmodel.standOffPart"/>
       <xs:attributeGroup ref="tei:tbibatt.global.attributes"/>
-      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
       <xs:attributeGroup ref="tei:tbibatt.declaring.attributes"/>
+      <xs:attributeGroup ref="tei:tbibatt.typed.attributes"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>
