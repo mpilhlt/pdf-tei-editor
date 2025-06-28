@@ -45,7 +45,7 @@ On Windows, use
 uv run python bin\server
 ```
 
-Then open <http://localhost:3001/web/index.html>
+Then open <http://localhost:3001>
 
 ## Using the LLamore extraction engine
 
@@ -79,3 +79,8 @@ In addition to the loosely coupled way of plugin invocation (which might or migh
 During development, it is often easier to work with the NPM source files rather than the compiled bundle. You can load the application in this mode by attaching `?dev` to the URL, for example, `http://localhost:3001?dev`. When you change the NPM dependencies, `npm run update-importmap`.
 
 Once you are done with working on the source code, run `npm run build` to regenerate the bundle. 
+
+## Update the XSD schema
+
+The XSD schema of the documents is downloaded and cached. Currently, there is no mechanism to clear the cache through the user interface. Simply delete the `schema/cache` directory manually to clear the cache.
+

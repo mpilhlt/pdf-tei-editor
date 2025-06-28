@@ -20,7 +20,7 @@ if __name__ == '__main__':
     print()
     print("====================================================================================")
     print(f"Starting development server, load http://{host}:{port}?dev to start in source mode")
-    print(f"To use the build version, run npm built and load http://{host}:{port}")
+    print(f"To use the build version, run npm build and load http://{host}:{port}")
     print("====================================================================================")
     print()
     app.run(host=host, 
