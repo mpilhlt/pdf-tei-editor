@@ -42653,7 +42653,7 @@ const toolbarActionsHtml = `
       </sl-button>
     </sl-tooltip>    
 
-    <!-- download, not implemented yet -->
+    <!-- download -->
     <sl-tooltip content="Download XML document">
       <sl-button name="download" size="small" disabled>
         <sl-icon name="cloud-download"></sl-icon>
@@ -42728,6 +42728,9 @@ function install$5(state) {
   // duplicate
   da.duplicateXml.addEventListener("click", () => onClickDuplicateButton(state));
 
+  // download
+  da.download.addEventListener("click", () => downloadXml(state));
+
   // === TEI button group ===
 
   const ta = ui$1.toolbar.teiActions;
@@ -42754,6 +42757,9 @@ async function update$1(state) {
 
   // Allow duplicate only if we have an xml path
   da.duplicateXml.disabled = !Boolean(state.xmlPath);
+
+  // Allow download only if we have an xml path
+  da.download.disabled = !Boolean(state.xmlPath);
 }
 
 
@@ -42926,6 +42932,24 @@ async function duplicateXml(state) {
   let {path} = await saveXml(state.xmlPath, true);
   await api$5.reload(state);
   state.xmlPath = path;
+}
+
+/**
+ * Downloads the current XML file
+ * @param {ApplicationState} state
+ */
+function downloadXml(state) {
+  if (!state.xmlPath) {
+    throw new TypeError("State does not contain an xml path")
+  }
+  const xml = api$8.getXML();
+  const blob = new Blob([xml], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = state.xmlPath.split('/').pop();
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /**
