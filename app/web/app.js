@@ -42930,8 +42930,9 @@ async function duplicateXml(state) {
     throw new TypeError("State does not contain an xml path")
   }
   let {path} = await saveXml(state.xmlPath, true);
-  await api$5.reload(state);
   state.xmlPath = path;
+  await api$5.reload(state);
+  await updateState(state);
 }
 
 /**
@@ -42947,7 +42948,7 @@ function downloadXml(state) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = state.xmlPath.split('/').pop();
+  a.download = state.xmlPath.split('/').pop() || 'document.xml';
   a.click();
   URL.revokeObjectURL(url);
 }
