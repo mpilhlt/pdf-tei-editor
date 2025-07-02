@@ -1,3 +1,12 @@
+/**
+ * The UI of the application as a typed object structure, which can then be traversed. 
+ * In this structure, each named DOM element encapsulates all named descencdent elements.
+ * This allows to access the elements via `ui.toolbar.pdf`, `ui.floatingPanel.self`, etc. The structure
+ * is created by the `accessNamedDescendentsAsProperties` function, which is called on the document
+ * body at the end of this file. The JSDoc structure is used to document the UI elements and their 
+ * properties and allow autocompletion in IDEs that support JSDoc.   
+ */
+
 import { accessNamedDescendentsAsProperties } from './modules/browser-utils.js';
 
 import { Spinner } from './modules/spinner.js'
@@ -15,13 +24,7 @@ import SlPopup from '@shoelace-style/shoelace/dist/components/popup/popup.js';
 import SlDropdown from '@shoelace-style/shoelace/dist/components/dropdown/dropdown.js';
 import SlMenu from '@shoelace-style/shoelace/dist/components/menu/menu.js'
 import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
-
-/**
- * The UI of the application as a a typed JSDoc object structure, which can then be traversed via autocompletion. 
- * In this structure, each named DOM element encapsulates all named descencdent elements. Using a Proxy, the descendant 
- * elements can be accessed as virtual properties by the value of the name attribute.  
- */
-
+import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
 /**
  * Import type definitions from plugins
  * 
@@ -99,6 +102,6 @@ updateUi()
 export {
   updateUi, appendHtml,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
-  SlMenuItem, SlSelect, SlDropdown, SlPopup, Spinner, Switch
+  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, Switch
 }
 export default ui;

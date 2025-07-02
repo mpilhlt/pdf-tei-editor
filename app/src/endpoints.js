@@ -40,13 +40,6 @@ const endpoints = {
      */
     update: "state.update"
   },
-  tei: {
-    /**
-     * Endpoint that receives an TEI XML string, responding plugins can apply corrections and enhancements
-     * Function signature: (xml: string) => string
-     */
-    enhancement: "tei.enhancement"
-  },
   validation: {
     /**
      * Enpoint that triggers validation 

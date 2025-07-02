@@ -283,11 +283,11 @@ function findNamedDescendants(node) {
  */
 export function accessNamedDescendentsAsProperties(node) {
   const namedDescendants = findNamedDescendants(node)
-  for (const name in namedDescendants){
+  for (let name in namedDescendants) {
     namedDescendants[name] = accessNamedDescendentsAsProperties(namedDescendants[name])
   }
   namedDescendants.self = node
-  const modifiedObj =  Object.assign(node, namedDescendants)
+  const modifiedObj = Object.assign(node, namedDescendants)
   return modifiedObj
 }
 
@@ -317,7 +317,7 @@ export function serializeXmlToString(xmlDoc) {
  * @param {XPathNSResolver|null} namespaceResolver 
  * @returns {Boolean}
  */
-export function isValidXPath(xpathExpression, xmlDom, namespaceResolver=null) {
+export function isValidXPath(xpathExpression, xmlDom, namespaceResolver = null) {
   try {
     // Check if the XML DOM is valid
     if (!xmlDom || typeof xmlDom !== 'object' || !xmlDom.evaluate) {
@@ -328,8 +328,8 @@ export function isValidXPath(xpathExpression, xmlDom, namespaceResolver=null) {
     // Try to evaluate the XPath expression
     xmlDom.evaluate(
       xpathExpression,
-      xmlDom, 
-      namespaceResolver, 
+      xmlDom,
+      namespaceResolver,
       XPathResult.ANY_TYPE, // resultType - ANY_TYPE is generally fine for validation
       null     // result - reuse existing result, optional
     );

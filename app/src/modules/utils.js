@@ -347,3 +347,31 @@ export function isXPathSubset(xpath1, xpath2, rootNode, namespaceResolver = null
       return false;
   }
 }
+
+
+function dashToCamelCase(str) {
+  if (typeof str !== 'string' || str.length === 0) {
+    return "";
+  }
+
+  const parts = str.split('-');
+  let camelCaseResult = "";
+  let isFirstPartProcessed = false;
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+
+    if (part.length === 0) {
+      continue;
+    }
+
+    if (!isFirstPartProcessed) {
+      camelCaseResult += part;
+      isFirstPartProcessed = true;
+    } else {
+      camelCaseResult += part[0].toUpperCase() + part.slice(1);
+    }
+  }
+
+  return camelCaseResult;
+}

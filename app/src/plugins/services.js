@@ -7,7 +7,7 @@
  * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
  */
 import ui from '../ui.js'
-import { invoke, updateState, endpoints, client, logger, dialog, 
+import { updateState, client, logger, dialog, 
   fileselection, xmlEditor, pdfViewer, services, validation } from '../app.js'
 import { appendHtml } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
@@ -59,7 +59,6 @@ export default plugin
  * @typedef {object} teiServicesComponents
  * @property {SlButtonGroup} self
  * @property {SlButton} validate 
- * @property {SlButton} teiWizard
  */
 
 const toolbarActionsHtml = `
@@ -119,13 +118,6 @@ const toolbarActionsHtml = `
       </sl-button> 
     </sl-tooltip>
 
-    <!-- enhance TEI -->
-    <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
-      <sl-button name="teiWizard" size="small">
-        <sl-icon name="magic"></sl-icon>
-      </sl-button>
-    </sl-tooltip> 
-
   </sl-button-group>
 </span>
 `
@@ -170,9 +162,6 @@ function install(state) {
   const ta = ui.toolbar.teiActions
   // validate xml button
   ta.validate.addEventListener('click', onClickValidateButton);
-
-  // wizard
-  ta.teiWizard.addEventListener("click", runTeiWizard)
 }
 
 /**
@@ -419,22 +408,6 @@ async function searchNodeContentsInPdf(node) {
   await pdfViewer.search(searchTerms);
 }
 
-
-/**
- * Invokes all TEI enhancement plugin enpoints
- */
-async function runTeiWizard() {
-  const teiDoc = xmlEditor.getXmlTree()
-  if (!teiDoc) return
-  const invocationResult = await invoke(endpoints.tei.enhancement, teiDoc)
-  // todo check if there are any changes
-  const enhancedTeiDoc = invocationResult[0]
-  const xmlstring = (new XMLSerializer()).serializeToString(enhancedTeiDoc).replace(/ xmlns=".+?"/, '')
-  xmlEditor.showMergeView(xmlstring)
-  ui.floatingPanel.diffNavigation.self
-    .querySelectorAll("button")
-    .forEach(node => node.disabled = false)
-}
 
 // event listeners
 
