@@ -41727,6 +41727,7 @@ const api$6 = {
   loadInstructions,
   saveInstructions,
   deleteFiles,
+  createVersionFromUpload,
   uploadFile,
   getConfigValue,
   setConfigValue
@@ -41862,6 +41863,16 @@ async function deleteFiles(filePaths) {
   return await  callApi('/files/delete', 'POST', filePaths);
 }
 
+/**
+ * Creates a new version of a file from an uploaded file.
+ * @param {string} tempFilename 
+ * @param {string} filePath 
+ * @returns {Promise<Object>}
+ */
+async function createVersionFromUpload(tempFilename, filePath) {
+  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
+}
+
 
 /**
  * Retrieves a configuration value from the server
@@ -41944,10 +41955,11 @@ async function uploadFile(uploadUrl = upload_route, options = {}) {
       fieldName = 'file',
       headers = {},
       onProgress,
+      accept = '.pdf, .xml'
     } = options;
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf, .xml';
+    input.accept = accept;
     input.addEventListener('change', async () => {
       console.log(input);
       const file = input.files && input.files[0];
@@ -42930,6 +42942,12 @@ const api$3 = {
   saveXml,
   showMergeView,
   removeMergeView,
+  deleteCurrentVersion,
+  deleteAllVersions,
+  duplicateXml,
+  downloadXml,
+  uploadXml,
+  inProgress,
   searchNodeContentsInPdf
 };
 
@@ -42985,7 +43003,7 @@ const toolbarActionsHtml = `
     
     <!-- upload, not implemented yet -->
     <sl-tooltip content="Upload document">
-      <sl-button name="upload" size="small" disabled>
+      <sl-button name="upload" size="small">
         <sl-icon name="cloud-upload"></sl-icon>
       </sl-button>
     </sl-tooltip>    
@@ -43060,6 +43078,9 @@ function install$5(state) {
 
   // download
   da.download.addEventListener("click", () => downloadXml(state));
+
+  // upload
+  da.upload.addEventListener("click", () => uploadXml(state));
 
   // === TEI button group ===
 
@@ -43346,7 +43367,17 @@ async function onClickDuplicateButton(state) {
   notify("Document was duplicated. You are now editing the copy.");
 }
 
-// helper methods
+/**
+ * Uploads an XML file, creating a new version for the currently selected document
+ * @param {ApplicationState} state 
+ */
+async function uploadXml(state) {
+  const { filename: tempFilename } = await api$6.uploadFile(undefined, { accept: '.xml' });
+  const { path } = await api$6.createVersionFromUpload(tempFilename, state.xmlPath);
+  await api$5.reload(state);
+  await load$1(state, { xml: path });
+  notify("Document was uploaded. You are now editing the new version.");
+}
 
 /**
  * Returns a list of non-empty text content from all text nodes contained in the given node
