@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
+import re
 from lxml import etree
 from pathlib import Path
 from glob import glob
@@ -95,6 +96,42 @@ def delete():
             raise ApiError(f"File {file_path} does not exist")
     return jsonify({"result": "ok"})
 
+
+@bp.route("/create_version_from_upload", methods=["POST"])
+@handle_api_errors
+def create_version_from_upload():
+    """
+    Creates a new version of a file from an uploaded file.
+    """
+    data = request.get_json()
+    temp_filename = data.get("temp_filename")
+    file_path = safe_file_path(data.get("file_path"))
+
+    if not temp_filename or not file_path:
+        raise ApiError("Missing temp_filename or file_path")
+
+    UPLOAD_DIR = current_app.config["UPLOAD_DIR"]
+    temp_filepath = os.path.join(UPLOAD_DIR, temp_filename)
+
+    if not os.path.exists(temp_filepath):
+        raise ApiError(f"Temporary file {temp_filename} not found")
+
+    file_id = Path(file_path).stem
+    version = make_timestamp().replace(" ", "_").replace(":", "-")
+    new_version_path = os.path.join("data", "versions", version, file_id + ".xml")
+    os.makedirs(os.path.dirname(new_version_path), exist_ok=True)
+
+    with open(temp_filepath, "r", encoding="utf-8") as f_in:
+        xml_content = f_in.read()
+        # Remove XML declaration
+        xml_content = re.sub(r'<\?xml.*\?>', '', xml_content).strip()
+
+    with open(new_version_path, "w", encoding="utf-8") as f_out:
+        f_out.write(xml_content)
+
+    os.remove(temp_filepath)
+
+    return jsonify({"path": "/" + new_version_path})
 
 # helper functions
 

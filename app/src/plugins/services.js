@@ -23,6 +23,12 @@ const api = {
   saveXml,
   showMergeView,
   removeMergeView,
+  deleteCurrentVersion,
+  deleteAllVersions,
+  duplicateXml,
+  downloadXml,
+  uploadXml,
+  inProgress,
   searchNodeContentsInPdf
 }
 
@@ -81,7 +87,7 @@ const toolbarActionsHtml = `
     
     <!-- upload, not implemented yet -->
     <sl-tooltip content="Upload document">
-      <sl-button name="upload" size="small" disabled>
+      <sl-button name="upload" size="small">
         <sl-icon name="cloud-upload"></sl-icon>
       </sl-button>
     </sl-tooltip>    
@@ -156,6 +162,9 @@ function install(state) {
 
   // download
   da.download.addEventListener("click", () => downloadXml(state))
+
+  // upload
+  da.upload.addEventListener("click", () => uploadXml(state))
 
   // === TEI button group ===
 
@@ -442,7 +451,17 @@ async function onClickDuplicateButton(state) {
   notify("Document was duplicated. You are now editing the copy.")
 }
 
-// helper methods
+/**
+ * Uploads an XML file, creating a new version for the currently selected document
+ * @param {ApplicationState} state 
+ */
+async function uploadXml(state) {
+  const { filename: tempFilename } = await client.uploadFile(undefined, { accept: '.xml' })
+  const { path } = await client.createVersionFromUpload(tempFilename, state.xmlPath)
+  await fileselection.reload(state)
+  await load(state, { xml: path })
+  notify("Document was uploaded. You are now editing the new version.")
+}
 
 /**
  * Returns a list of non-empty text content from all text nodes contained in the given node

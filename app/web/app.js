@@ -192,13 +192,6 @@ const endpoints = {
      */
     update: "state.update"
   },
-  tei: {
-    /**
-     * Endpoint that receives an TEI XML string, responding plugins can apply corrections and enhancements
-     * Function signature: (xml: string) => string
-     */
-    enhancement: "tei.enhancement"
-  },
   validation: {
     /**
      * Enpoint that triggers validation 
@@ -555,11 +548,11 @@ function findNamedDescendants(node) {
  */
 function accessNamedDescendentsAsProperties(node) {
   const namedDescendants = findNamedDescendants(node);
-  for (const name in namedDescendants){
+  for (let name in namedDescendants) {
     namedDescendants[name] = accessNamedDescendentsAsProperties(namedDescendants[name]);
   }
   namedDescendants.self = node;
-  const modifiedObj =  Object.assign(node, namedDescendants);
+  const modifiedObj = Object.assign(node, namedDescendants);
   return modifiedObj
 }
 
@@ -570,7 +563,7 @@ function accessNamedDescendentsAsProperties(node) {
  * @param {XPathNSResolver|null} namespaceResolver 
  * @returns {Boolean}
  */
-function isValidXPath(xpathExpression, xmlDom, namespaceResolver=null) {
+function isValidXPath(xpathExpression, xmlDom, namespaceResolver = null) {
   try {
     // Check if the XML DOM is valid
     if (!xmlDom || typeof xmlDom !== 'object' || !xmlDom.evaluate) {
@@ -581,8 +574,8 @@ function isValidXPath(xpathExpression, xmlDom, namespaceResolver=null) {
     // Try to evaluate the XPath expression
     xmlDom.evaluate(
       xpathExpression,
-      xmlDom, 
-      namespaceResolver, 
+      xmlDom,
+      namespaceResolver,
       XPathResult.ANY_TYPE, // resultType - ANY_TYPE is generally fine for validation
       null     // result - reuse existing result, optional
     );
@@ -10363,10 +10356,355 @@ __decorateClass([
 var menu_item_default = SlMenuItem;
 SlMenuItem.define("sl-menu-item");
 
+// src/components/checkbox/checkbox.styles.ts
+var checkbox_styles_default = i$6`
+  :host {
+    display: inline-block;
+  }
+
+  .checkbox {
+    position: relative;
+    display: inline-flex;
+    align-items: flex-start;
+    font-family: var(--sl-input-font-family);
+    font-weight: var(--sl-input-font-weight);
+    color: var(--sl-input-label-color);
+    vertical-align: middle;
+    cursor: pointer;
+  }
+
+  .checkbox--small {
+    --toggle-size: var(--sl-toggle-size-small);
+    font-size: var(--sl-input-font-size-small);
+  }
+
+  .checkbox--medium {
+    --toggle-size: var(--sl-toggle-size-medium);
+    font-size: var(--sl-input-font-size-medium);
+  }
+
+  .checkbox--large {
+    --toggle-size: var(--sl-toggle-size-large);
+    font-size: var(--sl-input-font-size-large);
+  }
+
+  .checkbox__control {
+    flex: 0 0 auto;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--toggle-size);
+    height: var(--toggle-size);
+    border: solid var(--sl-input-border-width) var(--sl-input-border-color);
+    border-radius: 2px;
+    background-color: var(--sl-input-background-color);
+    color: var(--sl-color-neutral-0);
+    transition:
+      var(--sl-transition-fast) border-color,
+      var(--sl-transition-fast) background-color,
+      var(--sl-transition-fast) color,
+      var(--sl-transition-fast) box-shadow;
+  }
+
+  .checkbox__input {
+    position: absolute;
+    opacity: 0;
+    padding: 0;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .checkbox__checked-icon,
+  .checkbox__indeterminate-icon {
+    display: inline-flex;
+    width: var(--toggle-size);
+    height: var(--toggle-size);
+  }
+
+  /* Hover */
+  .checkbox:not(.checkbox--checked):not(.checkbox--disabled) .checkbox__control:hover {
+    border-color: var(--sl-input-border-color-hover);
+    background-color: var(--sl-input-background-color-hover);
+  }
+
+  /* Focus */
+  .checkbox:not(.checkbox--checked):not(.checkbox--disabled) .checkbox__input:focus-visible ~ .checkbox__control {
+    outline: var(--sl-focus-ring);
+    outline-offset: var(--sl-focus-ring-offset);
+  }
+
+  /* Checked/indeterminate */
+  .checkbox--checked .checkbox__control,
+  .checkbox--indeterminate .checkbox__control {
+    border-color: var(--sl-color-primary-600);
+    background-color: var(--sl-color-primary-600);
+  }
+
+  /* Checked/indeterminate + hover */
+  .checkbox.checkbox--checked:not(.checkbox--disabled) .checkbox__control:hover,
+  .checkbox.checkbox--indeterminate:not(.checkbox--disabled) .checkbox__control:hover {
+    border-color: var(--sl-color-primary-500);
+    background-color: var(--sl-color-primary-500);
+  }
+
+  /* Checked/indeterminate + focus */
+  .checkbox.checkbox--checked:not(.checkbox--disabled) .checkbox__input:focus-visible ~ .checkbox__control,
+  .checkbox.checkbox--indeterminate:not(.checkbox--disabled) .checkbox__input:focus-visible ~ .checkbox__control {
+    outline: var(--sl-focus-ring);
+    outline-offset: var(--sl-focus-ring-offset);
+  }
+
+  /* Disabled */
+  .checkbox--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .checkbox__label {
+    display: inline-block;
+    color: var(--sl-input-label-color);
+    line-height: var(--toggle-size);
+    margin-inline-start: 0.5em;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  :host([required]) .checkbox__label::after {
+    content: var(--sl-input-required-content);
+    color: var(--sl-input-required-content-color);
+    margin-inline-start: var(--sl-input-required-content-offset);
+  }
+`;
+
+var SlCheckbox = class extends ShoelaceElement {
+  constructor() {
+    super(...arguments);
+    this.formControlController = new FormControlController(this, {
+      value: (control) => control.checked ? control.value || "on" : void 0,
+      defaultValue: (control) => control.defaultChecked,
+      setValue: (control, checked) => control.checked = checked
+    });
+    this.hasSlotController = new HasSlotController(this, "help-text");
+    this.hasFocus = false;
+    this.title = "";
+    this.name = "";
+    this.size = "medium";
+    this.disabled = false;
+    this.checked = false;
+    this.indeterminate = false;
+    this.defaultChecked = false;
+    this.form = "";
+    this.required = false;
+    this.helpText = "";
+  }
+  /** Gets the validity state object */
+  get validity() {
+    return this.input.validity;
+  }
+  /** Gets the validation message */
+  get validationMessage() {
+    return this.input.validationMessage;
+  }
+  firstUpdated() {
+    this.formControlController.updateValidity();
+  }
+  handleClick() {
+    this.checked = !this.checked;
+    this.indeterminate = false;
+    this.emit("sl-change");
+  }
+  handleBlur() {
+    this.hasFocus = false;
+    this.emit("sl-blur");
+  }
+  handleInput() {
+    this.emit("sl-input");
+  }
+  handleInvalid(event) {
+    this.formControlController.setValidity(false);
+    this.formControlController.emitInvalidEvent(event);
+  }
+  handleFocus() {
+    this.hasFocus = true;
+    this.emit("sl-focus");
+  }
+  handleDisabledChange() {
+    this.formControlController.setValidity(this.disabled);
+  }
+  handleStateChange() {
+    this.input.checked = this.checked;
+    this.input.indeterminate = this.indeterminate;
+    this.formControlController.updateValidity();
+  }
+  /** Simulates a click on the checkbox. */
+  click() {
+    this.input.click();
+  }
+  /** Sets focus on the checkbox. */
+  focus(options) {
+    this.input.focus(options);
+  }
+  /** Removes focus from the checkbox. */
+  blur() {
+    this.input.blur();
+  }
+  /** Checks for validity but does not show a validation message. Returns `true` when valid and `false` when invalid. */
+  checkValidity() {
+    return this.input.checkValidity();
+  }
+  /** Gets the associated form, if one exists. */
+  getForm() {
+    return this.formControlController.getForm();
+  }
+  /** Checks for validity and shows the browser's validation message if the control is invalid. */
+  reportValidity() {
+    return this.input.reportValidity();
+  }
+  /**
+   * Sets a custom validation message. The value provided will be shown to the user when the form is submitted. To clear
+   * the custom validation message, call this method with an empty string.
+   */
+  setCustomValidity(message) {
+    this.input.setCustomValidity(message);
+    this.formControlController.updateValidity();
+  }
+  render() {
+    const hasHelpTextSlot = this.hasSlotController.test("help-text");
+    const hasHelpText = this.helpText ? true : !!hasHelpTextSlot;
+    return x`
+      <div
+        class=${e$2({
+      "form-control": true,
+      "form-control--small": this.size === "small",
+      "form-control--medium": this.size === "medium",
+      "form-control--large": this.size === "large",
+      "form-control--has-help-text": hasHelpText
+    })}
+      >
+        <label
+          part="base"
+          class=${e$2({
+      checkbox: true,
+      "checkbox--checked": this.checked,
+      "checkbox--disabled": this.disabled,
+      "checkbox--focused": this.hasFocus,
+      "checkbox--indeterminate": this.indeterminate,
+      "checkbox--small": this.size === "small",
+      "checkbox--medium": this.size === "medium",
+      "checkbox--large": this.size === "large"
+    })}
+        >
+          <input
+            class="checkbox__input"
+            type="checkbox"
+            title=${this.title}
+            name=${this.name}
+            value=${o$3(this.value)}
+            .indeterminate=${l(this.indeterminate)}
+            .checked=${l(this.checked)}
+            .disabled=${this.disabled}
+            .required=${this.required}
+            aria-checked=${this.checked ? "true" : "false"}
+            aria-describedby="help-text"
+            @click=${this.handleClick}
+            @input=${this.handleInput}
+            @invalid=${this.handleInvalid}
+            @blur=${this.handleBlur}
+            @focus=${this.handleFocus}
+          />
+
+          <span
+            part="control${this.checked ? " control--checked" : ""}${this.indeterminate ? " control--indeterminate" : ""}"
+            class="checkbox__control"
+          >
+            ${this.checked ? x`
+                  <sl-icon part="checked-icon" class="checkbox__checked-icon" library="system" name="check"></sl-icon>
+                ` : ""}
+            ${!this.checked && this.indeterminate ? x`
+                  <sl-icon
+                    part="indeterminate-icon"
+                    class="checkbox__indeterminate-icon"
+                    library="system"
+                    name="indeterminate"
+                  ></sl-icon>
+                ` : ""}
+          </span>
+
+          <div part="label" class="checkbox__label">
+            <slot></slot>
+          </div>
+        </label>
+
+        <div
+          aria-hidden=${hasHelpText ? "false" : "true"}
+          class="form-control__help-text"
+          id="help-text"
+          part="form-control-help-text"
+        >
+          <slot name="help-text">${this.helpText}</slot>
+        </div>
+      </div>
+    `;
+  }
+};
+SlCheckbox.styles = [component_styles_default, form_control_styles_default, checkbox_styles_default];
+SlCheckbox.dependencies = { "sl-icon": SlIcon };
+__decorateClass([
+  e$5('input[type="checkbox"]')
+], SlCheckbox.prototype, "input", 2);
+__decorateClass([
+  r$1()
+], SlCheckbox.prototype, "hasFocus", 2);
+__decorateClass([
+  n$3()
+], SlCheckbox.prototype, "title", 2);
+__decorateClass([
+  n$3()
+], SlCheckbox.prototype, "name", 2);
+__decorateClass([
+  n$3()
+], SlCheckbox.prototype, "value", 2);
+__decorateClass([
+  n$3({ reflect: true })
+], SlCheckbox.prototype, "size", 2);
+__decorateClass([
+  n$3({ type: Boolean, reflect: true })
+], SlCheckbox.prototype, "disabled", 2);
+__decorateClass([
+  n$3({ type: Boolean, reflect: true })
+], SlCheckbox.prototype, "checked", 2);
+__decorateClass([
+  n$3({ type: Boolean, reflect: true })
+], SlCheckbox.prototype, "indeterminate", 2);
+__decorateClass([
+  defaultValue("checked")
+], SlCheckbox.prototype, "defaultChecked", 2);
+__decorateClass([
+  n$3({ reflect: true })
+], SlCheckbox.prototype, "form", 2);
+__decorateClass([
+  n$3({ type: Boolean, reflect: true })
+], SlCheckbox.prototype, "required", 2);
+__decorateClass([
+  n$3({ attribute: "help-text" })
+], SlCheckbox.prototype, "helpText", 2);
+__decorateClass([
+  watch("disabled", { waitUntilFirstUpdate: true })
+], SlCheckbox.prototype, "handleDisabledChange", 1);
+__decorateClass([
+  watch(["checked", "indeterminate"], { waitUntilFirstUpdate: true })
+], SlCheckbox.prototype, "handleStateChange", 1);
+
+SlCheckbox.define("sl-checkbox");
+
 /**
- * The UI of the application as a a typed JSDoc object structure, which can then be traversed via autocompletion. 
- * In this structure, each named DOM element encapsulates all named descencdent elements. Using a Proxy, the descendant 
- * elements can be accessed as virtual properties by the value of the name attribute.  
+ * The UI of the application as a typed object structure, which can then be traversed. 
+ * In this structure, each named DOM element encapsulates all named descencdent elements.
+ * This allows to access the elements via `ui.toolbar.pdf`, `ui.floatingPanel.self`, etc. The structure
+ * is created by the `accessNamedDescendentsAsProperties` function, which is called on the document
+ * body at the end of this file. The JSDoc structure is used to document the UI elements and their 
+ * properties and allow autocompletion in IDEs that support JSDoc.   
  */
 
 /**
@@ -10474,7 +10812,7 @@ const plugin$c = {
  * @property {SlButton} closeBtn
  */
 
-const dialogHtml$1 = `
+const dialogHtml$2 = `
 <sl-dialog name="dialog" label="Dialog" class="dialog-width" style="--width: 50vw;">
   <div>
     <span name="message"></span>
@@ -10492,7 +10830,7 @@ const dialogHtml$1 = `
  * @param {ApplicationState} app The main application
  */
 function install$b(app) {
-  appendHtml(dialogHtml$1);
+  appendHtml(dialogHtml$2);
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.self.hide());
 }
 
@@ -41961,7 +42299,7 @@ const buttonsHtml = `
  * @property {SlSelect} instructionIndex
  * @property {SlInput} doi 
  */
-const dialogHtml = `
+const dialogHtml$1 = `
 <sl-dialog name="extractionOptions" label="Extract references">
   <div class="dialog-column">
     <sl-select name="modelIndex" label="Model" size="small" help-text="Choose the model configuration used for the extraction"></sl-select>
@@ -42075,7 +42413,7 @@ async function promptForExtractionOptions(options) {
   const instructions = [];
 
   // add dialog to DOM
-  const optionsDialog = appendHtml(dialogHtml)[0];
+  const optionsDialog = appendHtml(dialogHtml$1)[0];
 
   // populate dialog
   /** @type {SlInput|null} */
@@ -42625,7 +42963,6 @@ const plugin$5 = {
  * @typedef {object} teiServicesComponents
  * @property {SlButtonGroup} self
  * @property {SlButton} validate 
- * @property {SlButton} teiWizard
  */
 
 const toolbarActionsHtml = `
@@ -42685,13 +43022,6 @@ const toolbarActionsHtml = `
       </sl-button> 
     </sl-tooltip>
 
-    <!-- enhance TEI -->
-    <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
-      <sl-button name="teiWizard" size="small">
-        <sl-icon name="magic"></sl-icon>
-      </sl-button>
-    </sl-tooltip> 
-
   </sl-button-group>
 </span>
 `;
@@ -42736,9 +43066,6 @@ function install$5(state) {
   const ta = ui$1.toolbar.teiActions;
   // validate xml button
   ta.validate.addEventListener('click', onClickValidateButton);
-
-  // wizard
-  ta.teiWizard.addEventListener("click", runTeiWizard);
 }
 
 /**
@@ -42985,22 +43312,6 @@ async function searchNodeContentsInPdf(node) {
   await pdfViewer.search(searchTerms);
 }
 
-
-/**
- * Invokes all TEI enhancement plugin enpoints
- */
-async function runTeiWizard() {
-  const teiDoc = api$8.getXmlTree();
-  if (!teiDoc) return
-  const invocationResult = await invoke(endpoints.tei.enhancement, teiDoc);
-  // todo check if there are any changes
-  const enhancedTeiDoc = invocationResult[0];
-  const xmlstring = (new XMLSerializer()).serializeToString(enhancedTeiDoc).replace(/ xmlns=".+?"/, '');
-  api$8.showMergeView(xmlstring);
-  ui$1.floatingPanel.diffNavigation.self
-    .querySelectorAll("button")
-    .forEach(node => node.disabled = false);
-}
 
 // event listeners
 
@@ -43513,7 +43824,7 @@ const editorHtml = `
 `;
 
 // button, documented in services.js
-const buttonHtml$1 = `
+const buttonHtml$2 = `
 <sl-tooltip content="Edit the prompt instructions">
   <sl-button name="editInstructions" size="small">
     <sl-icon name="pencil-square"></sl-icon>
@@ -43541,7 +43852,7 @@ function install$3(state) {
   pe.delete.addEventListener('click', deletePrompt);
 
   // add a button to the command bar to show dialog with prompt editor
-  const button = appendHtml(buttonHtml$1, ui$1.toolbar.extractionActions.self)[0];
+  const button = appendHtml(buttonHtml$2, ui$1.toolbar.extractionActions.self)[0];
   button.addEventListener("click", () => api$1.open());
 }
 
@@ -43685,54 +43996,11 @@ function dialogOnRequestClose(event) {
 }
 
 /**
- * This plugin provides handlers for the "tei.enhancement" endpoint that is invoked with TEI documents or nodes,
- * and returns an enhanced version of the document
- */
-
-
-//import { xmlFormat } from 'xml-formatter' // better than custom implementation?
-
-
-const plugin$2 = {
-  name: "tei-wizard",
-  install: install$2,
-  tei: {
-    enhancement
-  }
-};
-
-/**
- * The current module
- * @type {Object}
- */
-let module;
-
-/**
- * @param {ApplicationState} state 
- */
-async function install$2(state) {
-  // trick to self-inspect exported functions
-  Promise.resolve().then(function () { return teiWizard; }).then(m => { module = m; });
-}
-
-/**
- * Endpoint invoked with a TEI document 
- * @param {Element} teiDoc The TEI document or fragment
- * @returns {Promise<Element>} A modified document with the suggested changes
- */
-async function enhancement(teiDoc) {
-
-  // apply all exported functions that start with "tei_" in sequence
-  Object.entries(module)
-    .filter(([key, val]) => key.startsWith("tei_") && typeof val == "function")
-    .forEach(([key, func]) => { teiDoc = func(teiDoc); });
-
-  return teiDoc
-}
-
-/**
- * Adds a <change> node with the current date and "Corrections" description
+ * @file Enhancement: Adds a <change> node with the current date and "Corrections" description
  * to the /TEI/teiHeader/revisionDesc section of an XML DOM document using XPath.
+ */
+
+/**
  * The node is only added if the parent path exists and a <change> node
  * with the current date doesn't already exist within revisionDesc.
  * Assumes no namespaces.
@@ -43742,7 +44010,7 @@ async function enhancement(teiDoc) {
  *                       document object if the change was not made (due to
  *                       XPath not found or change already existing).
  */
-function tei_addRevisionChange(xmlDoc) {
+function addRevisionChange(xmlDoc) {
   // Keep a reference to the original document in case we need to return it
   const originalXmlDoc = xmlDoc;
 
@@ -43797,19 +44065,26 @@ function tei_addRevisionChange(xmlDoc) {
   newChangeElement.appendChild(descElement);
   revisionDescElement.appendChild(newChangeElement);
   return xmlDoc;
-
 }
 
+var addRevisionChange$1 = {
+  name: "Add Revision Change",
+  description: "Adds a <change> node with the current date to the <revisionDesc> section.",
+  execute: addRevisionChange
+};
 
 /**
- * Pretty-prints an XML DOM Document by inserting whitespace text nodes.
+ * @file Enhancement: Pretty-prints an XML DOM Document by inserting whitespace text nodes.
+ */
+
+/**
  * This modifies the original document object in place and returns it.
  *
  * @param {Document} xmlDoc - The XML DOM Document object.
  * @param {string} [spacing='  '] - The string to use for each level of indentation (e.g., '  ' or '\t').
  * @returns {Document} - The modified XML DOM Document object.
  */
-function tei_prettyPrintXmlDom(xmlDoc, spacing = '  ') {
+function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
   if (!xmlDoc || typeof xmlDoc.documentElement === 'undefined') {
     console.error("Invalid XML Document object provided for pretty-printing.");
     return xmlDoc; // Return unchanged if input is invalid
@@ -43945,13 +44220,157 @@ function tei_prettyPrintXmlDom(xmlDoc, spacing = '  ') {
   return xmlDoc;
 }
 
-var teiWizard = /*#__PURE__*/Object.freeze({
-  __proto__: null,
-  default: plugin$2,
-  plugin: plugin$2,
-  tei_addRevisionChange: tei_addRevisionChange,
-  tei_prettyPrintXmlDom: tei_prettyPrintXmlDom
-});
+var prettyPrintXml = {
+  name: "Pretty Print XML",
+  description: "Pretty-prints the XML DOM by inserting whitespace text nodes.",
+  execute: prettyPrintXmlDom
+};
+
+/**
+ * @file Manifest file for all TEI Wizard enhancements.
+ * To add a new enhancement:
+ * 1. Create a new file in the 'enhancement' directory with the enhancement logic.
+ * 2. Import it here.
+ * 3. Add it to the 'enhancements' array.
+ */
+
+
+/**
+ * @typedef {Object} Enhancement
+ * @property {string} name - The name of the enhancement.
+ * @property {string} description - A brief description of what the enhancement does.
+ * @property {function(Document): Document} execute - The function to execute the enhancement.
+ */
+
+/** @type {Enhancement[]} */
+const enhancements = [
+  addRevisionChange$1,
+  prettyPrintXml
+];
+
+/**
+ * This plugin provides a TEI Wizard to enhance the XML document.
+ * It runs a series of modular enhancements defined in the /tei-wizard/enhancements/ directory.
+ */
+
+
+const  buttonHtml$1 = `
+  <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
+    <sl-button name="teiWizard" size="small">
+      <sl-icon name="magic"></sl-icon>
+    </sl-button>
+  </sl-tooltip> 
+`;
+const dialogHtml = `
+<sl-dialog name="teiWizardDialog" label="TEI Wizard" class="dialog-width" style="--width: 50vw;">
+  <div name="enhancementList"></div>
+  <sl-button slot="footer" name="selectAll">Select All</sl-button>
+  <sl-button slot="footer" name="selectNone">Select None</sl-button>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="executeBtn" variant="primary">Execute</sl-button>
+</sl-dialog>
+`;
+
+const plugin$2 = {
+  name: "tei-wizard",
+  install: install$2
+};
+
+/**
+ * @param {ApplicationState} state 
+ */
+async function install$2(state) {
+  // button
+  appendHtml(buttonHtml$1, ui$1.toolbar.teiActions.self);
+  // @ts-ignore
+  ui$1.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard);
+
+  // dialog
+  appendHtml(dialogHtml);
+  // @ts-ignore
+  const dialog = ui$1.teiWizardDialog;  
+
+  // Populate enhancement list
+  enhancements.forEach(enhancement => {
+    const checkboxHtml = `
+    <sl-tooltip content="${enhancement.description}" hoist placement="right">
+      <sl-checkbox data-enhancement="${enhancement.name}" 
+        size="medium" checked>${enhancement.name}</sl-checkbox>
+    </sl-tooltip>
+    <br />`;
+    appendHtml(checkboxHtml, dialog.enhancementList);
+  });
+
+  // Select all and none buttons
+  dialog.selectAll.addEventListener('click', () => {
+    const checkboxes = dialog.enhancementList.querySelectorAll('sl-checkbox');
+    checkboxes.forEach(checkbox => checkbox.checked = true);
+  });
+  dialog.selectNone.addEventListener('click', () => {
+    const checkboxes = dialog.enhancementList.querySelectorAll('sl-checkbox');
+    checkboxes.forEach(checkbox => checkbox.checked = false);
+  });
+}
+
+
+async function getSelectedEnhancements() {
+  // @ts-ignore
+  const dialog = ui$1.teiWizardDialog;
+  dialog.self.show();
+  return new Promise((resolve) => {  
+    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([])); 
+    dialog.executeBtn.addEventListener('click', () => {
+      const enhancementFunctions = Array.from(dialog.enhancementList.querySelectorAll('sl-checkbox'))
+        .filter(checkbox => checkbox.checked)
+        .map(checkbox => enhancements.find(e => e.name === checkbox.dataset.enhancement));
+      dialog.self.hide();
+      resolve(enhancementFunctions);
+    });
+  });
+}
+
+async function runTeiWizard() {
+  let teiDoc = api$8.getXmlTree();
+  if (!teiDoc) {
+    console.error("TEI document not available.");
+    return;
+  }
+
+  const selectedEnhancements = await getSelectedEnhancements();
+
+  if (selectedEnhancements.length === 0) {
+    console.log("No enhancements selected. Exiting TEI Wizard.");
+    return;
+  }
+  console.log(`Running ${selectedEnhancements.length} TEI enhancement(s)...`);
+
+  // Sequentially apply each enhancement
+  for (const enhancement of selectedEnhancements) {
+    try {
+      console.log(`- Applying: ${enhancement.name}`);
+      teiDoc = enhancement.execute(teiDoc);
+    } catch (error) {
+      console.error(`Error during enhancement "${enhancement.name}":`, error);
+      // Optionally, stop the process or notify the user
+      return;
+    }
+  }
+
+  // Serialize the modified TEI document back to a string and remove xml namespace declarations outside the TEI root element
+  //@ts-ignore
+  let xmlstring = (new XMLSerializer()).serializeToString(teiDoc);
+  xmlstring = xmlstring.replace(/(?<!<TEI[^>]*)\sxmlns=".+?"/, '');
+  
+  // Display the result in the merge view
+  api$8.showMergeView(xmlstring);
+  
+  // enable diff navigation buttons
+  ui$1.floatingPanel.diffNavigation.self
+    .querySelectorAll("button")
+    .forEach(node => node.disabled = false);
+
+  notify(`${selectedEnhancements.length} TEI enhancements applied successfully.`, "success");
+}
 
 /* eslint-disable no-bitwise */
 

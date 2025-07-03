@@ -31,6 +31,7 @@ const api = {
   loadInstructions,
   saveInstructions,
   deleteFiles,
+  createVersionFromUpload,
   uploadFile,
   getConfigValue,
   setConfigValue
@@ -169,6 +170,16 @@ async function deleteFiles(filePaths) {
   return await  callApi('/files/delete', 'POST', filePaths);
 }
 
+/**
+ * Creates a new version of a file from an uploaded file.
+ * @param {string} tempFilename 
+ * @param {string} filePath 
+ * @returns {Promise<Object>}
+ */
+async function createVersionFromUpload(tempFilename, filePath) {
+  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
+}
+
 
 /**
  * Retrieves a configuration value from the server
@@ -251,10 +262,11 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
       fieldName = 'file',
       headers = {},
       onProgress,
+      accept = '.pdf, .xml'
     } = options;
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf, .xml';
+    input.accept = accept;
     input.addEventListener('change', async () => {
       console.log(input)
       const file = input.files && input.files[0];
