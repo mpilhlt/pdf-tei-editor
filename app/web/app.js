@@ -11294,12 +11294,17 @@ let lastNode = null;
  * @returns {Promise<void>}
  */
 async function update$4(state) {
+
+  // workaround for the node selection not being updated immediately
+  await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
+
   // trigger auto-search if enabled and if a new node has been selected
   const autoSearchSwitch = ui$1.floatingPanel.switchAutoSearch;
   const node = api$8.selectedNode;
+
   if (autoSearchSwitch.checked && node && node !== lastNode) {
-    await api$3.searchNodeContentsInPdf(node);
-    lastNode = node;
+      await api$3.searchNodeContentsInPdf(node);
+      lastNode = node;
   }
 }
 

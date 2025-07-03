@@ -50,11 +50,16 @@ let lastNode = null;
  * @returns {Promise<void>}
  */
 async function update(state) {
+
+  // workaround for the node selection not being updated immediately
+  await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
+
   // trigger auto-search if enabled and if a new node has been selected
   const autoSearchSwitch = ui.floatingPanel.switchAutoSearch
   const node = xmlEditor.selectedNode
+
   if (autoSearchSwitch.checked && node && node !== lastNode) {
-    await services.searchNodeContentsInPdf(node)
-    lastNode = node
+      await services.searchNodeContentsInPdf(node)
+      lastNode = node
   }
 }
