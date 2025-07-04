@@ -265,9 +265,9 @@ function getDoiFromFilename(filename) {
       // custom decoding 
       doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/')
     }
-  }
-  if (isDoi(doi)) {
-    return doi
+    if (isDoi(doi)) {
+      return doi
+    }
   }
   return null
 }
