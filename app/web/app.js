@@ -39786,7 +39786,7 @@ function createCompletionSource(tagData) {
     const pos = context.pos;
     let node = syntaxTree(state).resolveInner(pos, -1);
     let type = node.type.name;
-    context.state.sliceDoc(node.from, context.pos);
+    //let text = context.state.sliceDoc(node.from, context.pos);
     let options = [];
     const parentTags = getParentTagNames(node, state);
     let completionType = "keyword";
@@ -40368,14 +40368,19 @@ class XMLEditor extends EventTarget {
    */
   startAutocomplete(tagData) {
     const autocompleteExtension = xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) });
-    this.#autocompleteCompartment.reconfigure([autocompleteExtension]);
+    //this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+    this.#view.dispatch({
+      effects: this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+    });    
   }
 
   /**
    * Stop suggestion autocompletions
    */
   stopAutocomplete() {
-    this.#autocompleteCompartment.reconfigure([]);
+    this.#view.dispatch({
+      effects: this.#autocompleteCompartment.reconfigure([])
+    });    
   }
 
   /**
@@ -42516,9 +42521,9 @@ function getDoiFromFilename(filename) {
       // custom decoding 
       doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/');
     }
-  }
-  if (isDoi(doi)) {
-    return doi
+    if (isDoi(doi)) {
+      return doi
+    }
   }
   return null
 }
