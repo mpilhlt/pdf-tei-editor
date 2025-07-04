@@ -6,3 +6,4 @@ pdfjs
 __pycache__
 .python-version
 .DS_Store
+._*
