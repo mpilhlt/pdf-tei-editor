@@ -370,14 +370,19 @@ export class XMLEditor extends EventTarget {
    */
   startAutocomplete(tagData) {
     const autocompleteExtension = xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) })
-    this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+    //this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+    this.#view.dispatch({
+      effects: this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+    });    
   }
 
   /**
    * Stop suggestion autocompletions
    */
   stopAutocomplete() {
-    this.#autocompleteCompartment.reconfigure([])
+    this.#view.dispatch({
+      effects: this.#autocompleteCompartment.reconfigure([])
+    });    
   }
 
   /**

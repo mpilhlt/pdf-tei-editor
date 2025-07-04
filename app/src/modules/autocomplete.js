@@ -40,7 +40,7 @@ export function createCompletionSource(tagData) {
     const pos = context.pos;
     let node = syntaxTree(state).resolveInner(pos, -1);
     let type = node.type.name;
-    let text = context.state.sliceDoc(node.from, context.pos);
+    //let text = context.state.sliceDoc(node.from, context.pos);
     let options = [];
     const parentTags = getParentTagNames(node, state);
     let completionType = "keyword";
