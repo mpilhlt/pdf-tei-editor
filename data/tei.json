@@ -5,6 +5,13 @@
       "teiHeader"
     ]
   },
+  "addName": {
+    "children": [],
+    "attrs": {
+      "type": null,
+      "full": ["yes", "abb", "init"]
+    }
+  },
   "analytic": {
     "attrs": {
       "cert": null,
@@ -219,9 +226,9 @@
     "attrs": {
       "from": null,
       "to": null,
-      "type": null,
       "unit": null,
-      "when": null
+      "when": null,
+      "type": ["originalPublication", "firstEdition", "reprint"]
     },
     "children": []
   },
@@ -229,7 +236,10 @@
     "children": []
   },
   "editor": {
-    "children": ["persName", "orgName"]
+    "children": ["persName", "orgName"],
+    "attrs": {
+      "role": ["translator", "preface", "introduction", "editor", "compiler", "annotator", "commentator", "reviser", "redactor", "revisor", "collaborator", "contributor"]
+    }
   },
   "extent": {
     "children": []
@@ -246,11 +256,18 @@
   "forename": {
     "children": [],
     "attrs": {
-      "type": ["first", "middle"]
+      "type": ["first", "middle"],
+      "full": ["yes", "abb", "init"]
     }
   },
   "funder": {
     "children": []
+  },
+  "genName": {
+    "children": [],
+    "attrs": {
+      "full": ["yes", "abb", "init"]
+    }
   },
   "idno": {
     "attrs": {
@@ -402,6 +419,9 @@
       "title"
     ]
   },
+  "nameLink": {
+    "children": []
+  },
   "note": {
     "children": []
   },
@@ -409,7 +429,7 @@
     "children": []
   },
   "persName": {
-    "children": ["surname","forename"]
+    "children": ["surname", "forename", "genName", "roleName", "addName", "nameLink"]
   },
   "ptr": {
     "attrs": {
@@ -537,6 +557,13 @@
       "orgName",
       "persName"
     ]
+  },
+  "roleName": {
+    "children": [],
+    "attrs": {
+      "role": null,
+      "full": ["yes", "abb", "init"]
+    }
   },
   "series": {
     "attrs": {
