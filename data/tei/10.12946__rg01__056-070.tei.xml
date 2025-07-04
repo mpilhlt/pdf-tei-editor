@@ -43,7 +43,7 @@
   </teiHeader>
   <standOff>
     <listBibl>
-      <biblStruct source="fn1">
+      <biblStruct source="fn1" status="verified">
         <monogr>
           <title level="m">Homo Sacer. Die souveräne Macht und das nackte Leben</title>
           <author>
@@ -71,7 +71,7 @@
         <monogr>
           <title level="j">Frankfurter Rundschau</title>
           <imprint>
-            <date>2001</date>
+            <date>16. Februar 2001</date>
           </imprint>
           <biblScope unit="page">19</biblScope>
         </monogr>

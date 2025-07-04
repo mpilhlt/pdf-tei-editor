@@ -1,0 +1,207 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Zugang im Archiv. Möglichkeiten und Grenzen für ein offenes Archiv im digitalen Zeitalter</title>
+        <author>
+          <persName>
+            <forename>Andreas</forename>
+            <surname>Nestl</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Nomos Verlag</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2020</date>
+        <idno type="DOI">10.5771/2699-1284-2020-1-5</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Andreas Nestl. (2020). Zugang im Archiv. Möglichkeiten und Grenzen für ein offenes Archiv im digitalen Zeitalter. RuZ - Recht und Zugang, 1(1), 5-15. DOI: 10.5771/2699-1284-2020-1-5</bibl>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="llamore">
+          <label>https://github.com/mpilhlt/llamore</label>
+        </application>
+        <application version="1.0" ident="pdf-tei-editor">
+          <label>https://github.com/mpilhlt/pdf-tei-editor</label>
+        </application>
+        <application version="1.0" ident="model">
+          <label>Gemini 2.0/LineByLinePrompter</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+    <revisionDesc>
+      <change when="2025-07-04">
+        <desc>Extracted 2025-07-04 15:35:34</desc>
+      </change>
+    </revisionDesc>
+  </teiHeader>
+  <standOff>
+    <listBibl>
+      <biblStruct source="fn1">
+        <analytic>
+          <title level="a">Geheimnis – Gedächtnis. Archive und Archivrecht</title>
+          <author>
+            <persName>
+              <surname>Rehm</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Archivrecht für die Praxis</title>
+          <editor>
+            <persName>
+              <surname>Becker</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Rehm</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2017</date>
+          </imprint>
+        </monogr>
+        <citedRange>3 ff.</citedRange>
+      </biblStruct>
+      <biblStruct source="fn11">
+        <monogr>
+          <title level="j">DÖV</title>
+          <author>
+            <persName>
+              <surname>Engelbrecht</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2017</date>
+          </imprint>
+        </monogr>
+        <citedRange>393, 396</citedRange>
+      </biblStruct>
+      <biblStruct source="fn13">
+        <monogr>
+          <title level="j">DÖV</title>
+          <author>
+            <persName>
+              <surname>Engelbrecht</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2017</date>
+          </imprint>
+        </monogr>
+        <citedRange>393, 401</citedRange>
+      </biblStruct>
+      <biblStruct source="fn19">
+        <analytic>
+          <title level="a">Stolperfallen im Netz. Postmortaler Persönlichkeitsschutz und die Belange von Hinterbliebenen</title>
+          <author>
+            <persName>
+              <surname>Lübben</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Nicht nur Archivgesetze...Archivarinnen und Archivare auf schwankendem rechtlichem Boden? Best Practice – Kollisionen – Perspektiven (Veröffentlichungen der Archivschule Marburg Nr. 66)</title>
+          <editor>
+            <persName>
+              <surname>Becker</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Rehm</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Schäfer</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+        </monogr>
+        <citedRange>167-169</citedRange>
+      </biblStruct>
+      <biblStruct source="fn21">
+        <analytic>
+          <title level="a">Das Urheberrechts-Wissensgesellschaftsgesetz und die Archive</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Nicht nur Archivgesetze...Archivarinnen und Archivare auf schwankendem rechtlichem Boden? Best Practice – Kollisionen – Perspektiven (Veröffentlichungen der Archivschule Marburg Nr. 66)</title>
+          <editor>
+            <persName>
+              <surname>Becker</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Rehm</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Schäfer</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+        </monogr>
+        <citedRange>221 ff.</citedRange>
+      </biblStruct>
+      <biblStruct source="fn22">
+        <monogr>
+          <title level="m">Die bisherigen Reformen des Urheberrechts und die Onlinestellung digitalisierten oder digitalen Archivguts</title>
+          <author>
+            <persName>
+              <surname>Braun</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Brinkhus</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn33">
+        <analytic>
+          <title level="a">Archivierung: ein Plädoyer für eine Bereichsausnahme</title>
+          <author>
+            <persName>
+              <surname>Berger</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Mit gutem Recht erinnern</title>
+          <editor>
+            <persName>
+              <surname>Klimpel</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2015</date>
+          </imprint>
+        </monogr>
+        <citedRange>S. 12 ff.</citedRange>
+      </biblStruct>
+    </listBibl>
+  </standOff>
+</TEI>
