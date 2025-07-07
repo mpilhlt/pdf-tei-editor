@@ -14,6 +14,7 @@ import prettyPrintXml from './enhancements/pretty-print-xml.js';
  * @property {string} name - The name of the enhancement.
  * @property {string} description - A brief description of what the enhancement does.
  * @property {function(Document): Document} execute - The function to execute the enhancement.
+ * @property {boolean} selected - Whether the enhancement is pre-selected in the dialog
  */
 
 /** @type {Enhancement[]} */

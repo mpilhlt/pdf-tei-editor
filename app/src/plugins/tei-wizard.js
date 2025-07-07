@@ -56,7 +56,7 @@ async function install(state) {
     const checkboxHtml = `
     <sl-tooltip content="${enhancement.description}" hoist placement="right">
       <sl-checkbox data-enhancement="${enhancement.name}" 
-        size="medium" checked>${enhancement.name}</sl-checkbox>
+        size="medium" ${enhancement.selected?"checked":""}>${enhancement.name}</sl-checkbox>
     </sl-tooltip>
     <br />`;
     appendHtml(checkboxHtml, dialog.enhancementList);

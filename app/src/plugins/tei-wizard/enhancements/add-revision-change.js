@@ -74,5 +74,6 @@ function addRevisionChange(xmlDoc) {
 export default {
   name: "Add Revision Change",
   description: "Adds a <change> node with the current date to the <revisionDesc> section.",
-  execute: addRevisionChange
+  execute: addRevisionChange,
+  selected: true
 };

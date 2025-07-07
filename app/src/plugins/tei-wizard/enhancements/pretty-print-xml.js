@@ -152,5 +152,6 @@ function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
 export default {
   name: "Pretty Print XML",
   description: "Pretty-prints the XML DOM by inserting whitespace text nodes.",
-  execute: prettyPrintXmlDom
+  execute: prettyPrintXmlDom,
+  selected: true
 };
