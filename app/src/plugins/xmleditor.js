@@ -64,7 +64,7 @@ async function update(state) {
   }
   await xmlEditor.whenReady()
   const { index, pathBeforePredicates } = parseXPath(state.xpath)
-  // select the first node
+  // select the node by index
   try {
     const size = api.countDomNodesByXpath(state.xpath)
     if (size > 0 && (index !== api.currentIndex)) {

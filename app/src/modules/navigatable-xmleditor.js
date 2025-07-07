@@ -178,7 +178,7 @@ export class NavXmlEditor extends XMLEditor {
       throw new Error("No node given")
     }
     // update XML document from editor content
-    this.updateNodeFromEditor(node)
+    await this.updateNodeFromEditor(node)
 
     // set/remove the status attribute
     switch (status) {

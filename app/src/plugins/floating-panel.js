@@ -192,9 +192,15 @@ async function install(state) {
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex) // allow to input node index
 
   // configure "status" buttons
-  $$('.node-status').forEach(btn => btn.addEventListener('click', evt => {
+  $$('.node-status').forEach(btn => btn.addEventListener('click', async evt => {
+    if (!state.xpath) {
+      return
+    }
+    xmlEditor.selectByXpath(state.xpath)
     if (xmlEditor.selectedNode) {
-      xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status)
+      $$('.node-status').forEach(btn => btn.disabled = true)
+      await xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status)
+      $$('.node-status').forEach(btn => btn.disabled = false)
     }
   }))
 
