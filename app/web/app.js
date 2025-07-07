@@ -41345,7 +41345,7 @@ class NavXmlEditor extends XMLEditor {
       throw new Error("No node given")
     }
     // update XML document from editor content
-    this.updateNodeFromEditor(node);
+    await this.updateNodeFromEditor(node);
 
     // set/remove the status attribute
     switch (status) {
@@ -41417,7 +41417,7 @@ async function update$3(state) {
   }
   await api$8.whenReady();
   const { index, pathBeforePredicates } = parseXPath(state.xpath);
-  // select the first node
+  // select the node by index
   try {
     const size = api$8.countDomNodesByXpath(state.xpath);
     if (size > 0 && (index !== api$8.currentIndex)) {
@@ -43601,9 +43601,15 @@ async function install$4(state) {
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex); // allow to input node index
 
   // configure "status" buttons
-  $$('.node-status').forEach(btn => btn.addEventListener('click', evt => {
+  $$('.node-status').forEach(btn => btn.addEventListener('click', async evt => {
+    if (!state.xpath) {
+      return
+    }
+    api$8.selectByXpath(state.xpath);
     if (api$8.selectedNode) {
-      api$8.setNodeStatus(api$8.selectedNode, evt.target.dataset.status);
+      $$('.node-status').forEach(btn => btn.disabled = true);
+      await api$8.setNodeStatus(api$8.selectedNode, evt.target.dataset.status);
+      $$('.node-status').forEach(btn => btn.disabled = false);
     }
   }));
 
