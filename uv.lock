@@ -253,7 +253,7 @@ wheels = [
 [[package]]
 name = "llamore"
 version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/mpilhlt/llamore.git#eff5fe40561721a74fd5663043aa5d0d286e2582" }
 dependencies = [
     { name = "google-genai" },
     { name = "lxml" },
@@ -264,10 +264,6 @@ dependencies = [
     { name = "rapidfuzz" },
     { name = "rich" },
     { name = "scipy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/74/dc/1eaf87131866dd26e739a8f8eba4677adaecf348e07589d4a299b53a672d/llamore-0.2.0.tar.gz", hash = "sha256:69f5fca7aa17ba666fd1d50a33768cf2645009f0e30d20f7b6e8bc06d64a6548", size = 22946 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/83/b61040ac3d26b144c37defafb39548ac61f4302b94fae487b3bdff313031/llamore-0.2.0-py3-none-any.whl", hash = "sha256:1403a8a27abc4ce7b311aec8bd759af7d0589772a87a4016a10360006a784b38", size = 20214 },
 ]
 
 [[package]]
@@ -409,7 +405,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "flask", specifier = ">=3.1.0" },
-    { name = "llamore", specifier = ">=0.2.0" },
+    { name = "llamore", git = "https://github.com/mpilhlt/llamore.git" },
     { name = "lxml", specifier = ">=5.3.1" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "python-magic", specifier = ">=0.4.27" },
