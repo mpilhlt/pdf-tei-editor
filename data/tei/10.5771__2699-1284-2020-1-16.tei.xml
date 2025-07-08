@@ -1,0 +1,1173 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Bibliotheksrecht als Zugangsrecht und die Herausforderungen der Digitalisierung</title>
+        <author>
+          <persName>
+            <forename>Eric</forename>
+            <surname>Steinhauer</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Nomos Verlag</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2020</date>
+        <idno type="DOI">10.5771/2699-1284-2020-1-16</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Eric Steinhauer. (2020). Bibliotheksrecht als Zugangsrecht und die Herausforderungen der Digitalisierung. RuZ - Recht und Zugang, 1(1), 16-30. DOI: 10.5771/2699-1284-2020-1-16</bibl>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="llamore">
+          <label>https://github.com/mpilhlt/llamore</label>
+        </application>
+        <application version="1.0" ident="pdf-tei-editor">
+          <label>https://github.com/mpilhlt/pdf-tei-editor</label>
+        </application>
+        <application version="1.0" ident="model">
+          <label>Gemini 2.0/LineByLinePrompter</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+    <revisionDesc>
+      <change when="2025-07-08">
+        <desc>Extracted 2025-07-08 15:54:48</desc>
+      </change>
+    </revisionDesc>
+  </teiHeader>
+  <standOff>
+    <listBibl>
+      <biblStruct>
+        <monogr>
+          <title level="m">Bibliothekarisches Grundwissen</title>
+          <author>
+            <persName>
+              <surname>Gantert</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2016</date>
+          </imprint>
+          <biblScope unit="issue">9. Aufl.</biblScope>
+          <biblScope unit="page">3</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Sekretierte Bücher</title>
+          <author>
+            <persName>
+              <surname>Genge</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Lexikon des gesamten Buchwesens</title>
+          <editor>
+            <persName>
+              <surname>Corsten</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Füssel</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Pflug</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2007</date>
+          </imprint>
+          <biblScope unit="volume">7</biblScope>
+          <biblScope unit="issue">2. Aufl.</biblScope>
+          <biblScope unit="page">49</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Der „Giftschrank“</title>
+          <author>
+            <persName>
+              <surname>Kellner</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2002</date>
+          </imprint>
+          <biblScope unit="page">1 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Bestandsaufbau an wissenschaftlichen Bibliotheken</title>
+          <author>
+            <persName>
+              <surname>Dorfmüller</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1989</date>
+          </imprint>
+          <biblScope unit="page">36–38</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Von Tausendfüsslern und Skarabäuskäfern : oder: Was geht einem Erwerbungsbibliothekar bei der Auswahlentscheidung durch den Kopf?</title>
+          <author>
+            <persName>
+              <surname>Knudsen</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">FS Jan Štěpán</title>
+          <imprint>
+            <date>1994</date>
+          </imprint>
+          <biblScope unit="page">349-367</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Gesetz über die Preisbindung für Bücher (Buchpreisbindungsgesetz)</title>
+          <imprint>
+            <date>2002</date>
+          </imprint>
+          <biblScope unit="page">3448</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Bibliotheks- und Dokumentationsrecht</title>
+          <author>
+            <persName>
+              <surname>Kirchner</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1981</date>
+          </imprint>
+          <biblScope unit="page">231–235</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">Bibliotheksdienst</title>
+          <author>
+            <persName>
+              <surname>Roeder</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2016</date>
+          </imprint>
+          <biblScope unit="volume">50</biblScope>
+          <biblScope unit="page">1014–1039</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Grundriß des Bibliotheks- und Dokumentationsrechts</title>
+          <author>
+            <persName>
+              <surname>Kirchner</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1993</date>
+          </imprint>
+          <biblScope unit="issue">2. Aufl.</biblScope>
+          <biblScope unit="page">113 f.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Regelwerke: Normative Werkkonzepte in Bibliotheks- und Rechtswissenschaft</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Das Werk: zum Verschwinden und Fortwirken eines Grundbegriffs</title>
+          <editor>
+            <persName>
+              <surname>Danneberg</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Gilbert</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Spoerhase</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+          <biblScope unit="page">237–256</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Datenschutz in Kultureinrichtungen, Bibliotheken und Archiven</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Handbuch europäisches und deutsches Datenschutzrecht</title>
+          <editor>
+            <persName>
+              <surname>Specht</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Mantz</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="volume">$25</biblScope>
+          <biblScope unit="page">Rn. 32-35</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Was du ererbt von deinen Vätern hast, erwirb es, um es zu besitzen</title>
+          <author>
+            <persName>
+              <surname>Babendreier</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Die Bibliothek zwischen Autor und Leser</title>
+          <editor>
+            <persName>
+              <surname>Benkert</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2003</date>
+          </imprint>
+          <biblScope unit="page">77–89</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Dienstleistungen der Bibliothek bei Zugang und Distribution elektronischer Publikationen</title>
+          <author>
+            <persName>
+              <surname>Leskien</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Elektronisches Publizieren und Bibliotheken</title>
+          <editor>
+            <persName>
+              <surname>Neubauer</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1996</date>
+          </imprint>
+          <biblScope unit="page">46 f.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Lizenzen</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Handbuch Bestandsmanagement in öffentlichen Bibliotheken</title>
+          <editor>
+            <persName>
+              <surname>Schade</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Umlauf</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2012</date>
+          </imprint>
+          <biblScope unit="page">421 f.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Das verwaltungsrechtliche Anstaltsrecht als „Ausgangs- und Zentralpunkt“ des Bibliotheksrechts</title>
+          <author>
+            <persName>
+              <surname>Treplin</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Kirchner</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Handbuch der Bibliothekswissenschaft</title>
+          <editor>
+            <persName>
+              <surname>Leyh</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1961</date>
+          </imprint>
+          <biblScope unit="volume">2</biblScope>
+          <biblScope unit="issue">2. Aufl.</biblScope>
+          <biblScope unit="page">762</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Urheberrechtsgesetz</title>
+          <author>
+            <persName>
+              <surname>Dreier</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Schulze-Schulze</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2018</date>
+          </imprint>
+          <biblScope unit="volume">$27</biblScope>
+          <biblScope unit="issue">6. Aufl.</biblScope>
+          <biblScope unit="page">Rn. 15</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Urheberrecht und verwandte Schutzrechte</title>
+          <author>
+            <persName>
+              <surname>Rehbinder</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Peukert</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2018</date>
+          </imprint>
+          <biblScope unit="issue">18. Aufl.</biblScope>
+          <biblScope unit="page">Rn. 471</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Urheberrecht</title>
+          <author>
+            <persName>
+              <surname>Dreyer</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Kotthoff</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Meckel</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Hentsch-Dreyer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2018</date>
+          </imprint>
+          <biblScope unit="volume">$44a</biblScope>
+          <biblScope unit="issue">4. Aufl.</biblScope>
+          <biblScope unit="page">Rn. 6.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Kodex – Jahrbuch der Internationalen Buchwissenschaftlichen Gesellschaft</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2011</date>
+          </imprint>
+          <biblScope unit="volume">1</biblScope>
+          <biblScope unit="page">103-113</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Die Rechtsstellung der wissenschaftlichen Bibliotheken</title>
+          <author>
+            <persName>
+              <surname>Nitze</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1967</date>
+          </imprint>
+          <biblScope unit="page">156–159</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Thüringer Bibliotheksgesetz (ThürBibG)</title>
+          <imprint>
+            <date>2008</date>
+          </imprint>
+          <biblScope unit="page">242</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">ZGE</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2010</date>
+          </imprint>
+          <biblScope unit="volume">2</biblScope>
+          <biblScope unit="page">55–74</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Juristische Methoden und Arbeitstechniken</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Handbuch Methoden der Bibliotheks- und Informationswissenschaft</title>
+          <editor>
+            <persName>
+              <surname>Umlauf</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Fühles-Ubach</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Seadle</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2013</date>
+          </imprint>
+          <biblScope unit="page">406 f.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Urheberrecht und verwandte Schutzrechte</title>
+          <author>
+            <persName>
+              <surname>Rehbinder</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Peukert</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2018</date>
+          </imprint>
+          <biblScope unit="issue">18. Aufl.</biblScope>
+          <biblScope unit="page">Rn. 483</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">ABl. EG</title>
+          <imprint>
+            <date>2001</date>
+          </imprint>
+          <biblScope unit="page">Nr. L 167/10</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Urheber- und Urhebervertragsrecht</title>
+          <author>
+            <persName>
+              <surname>Schack</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+          <biblScope unit="issue">9. Aufl.</biblScope>
+          <biblScope unit="page">Rn. 535</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Beschluss der Kultusministerkonferenz</title>
+          <imprint>
+            <date>1995</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Der Staat</title>
+          <author>
+            <persName>
+              <surname>Böckenförde</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1990</date>
+          </imprint>
+          <biblScope unit="volume">29</biblScope>
+          <biblScope unit="page">21 f. et passim</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">EuGH, Urt. v. 19.12.2019</title>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="page">BeckRS 2019, 32135</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Bibliotheksurheberrecht</title>
+          <author>
+            <persName>
+              <surname>Bartlakowski</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Talke</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2010</date>
+          </imprint>
+          <biblScope unit="page">173–176</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">BGBl. I</title>
+          <imprint>
+            <date>2003</date>
+          </imprint>
+          <biblScope unit="page">1774–1788</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Die Wiedergabe von Werken an elektronischen Leseplätzen</title>
+          <author>
+            <persName>
+              <surname>König</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2015</date>
+          </imprint>
+          <biblScope unit="page">1 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Handbuch des Urheberrechts</title>
+          <author>
+            <persName>
+              <surname>Loewenheim-Loewenheim</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Nordemann</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2010</date>
+          </imprint>
+          <biblScope unit="issue">2. Aufl.</biblScope>
+          <biblScope unit="page">$ 26 Rn. 50</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Verwaiste Werke: Lizenzierung in Abwesenheit des Rechtsinhabers</title>
+          <author>
+            <persName>
+              <surname>Grages</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2013</date>
+          </imprint>
+          <biblScope unit="page">1 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Verwaiste Werke im digitalen Zeitalter aus bibliothekarisch-juristischer Sicht</title>
+          <author>
+            <persName>
+              <surname>Köbler</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2012</date>
+          </imprint>
+          <biblScope unit="page">1 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">ZUM</title>
+          <author>
+            <persName>
+              <surname>Kubis</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2006</date>
+          </imprint>
+          <biblScope unit="volume">370</biblScope>
+          <biblScope unit="page">370 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">GRUR-Int.</title>
+          <author>
+            <persName>
+              <surname>Ott</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2007</date>
+          </imprint>
+          <biblScope unit="volume">562</biblScope>
+          <biblScope unit="page">562 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">ZUM</title>
+          <author>
+            <persName>
+              <surname>De la Durantaye</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2011</date>
+          </imprint>
+          <biblScope unit="volume">538</biblScope>
+          <biblScope unit="page">538 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">ZUM</title>
+          <author>
+            <persName>
+              <surname>De la Durantay</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2011</date>
+          </imprint>
+          <biblScope unit="volume">777</biblScope>
+          <biblScope unit="page">777 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Recht der elektronischen Medien</title>
+          <author>
+            <persName>
+              <surname>Spindler</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Schuster-Heckmann</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+          <biblScope unit="volume">$ 1371</biblScope>
+          <biblScope unit="issue">4. Aufl.</biblScope>
+          <biblScope unit="page">Rn. 17.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Recht der elektronischen Medien</title>
+          <author>
+            <persName>
+              <surname>Spindler</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Schuster-Heckmann</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+          <biblScope unit="volume">$ 1371</biblScope>
+          <biblScope unit="issue">4. Aufl.</biblScope>
+          <biblScope unit="page">Rn. 23 f.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Verwaiste Werke: Regelungsmöglichkeiten auf europäischer Ebene und Umsetzung im Deutschen Recht</title>
+          <author>
+            <persName>
+              <surname>Talke</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2012</date>
+          </imprint>
+          <biblScope unit="page">1 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">BGBl. I</title>
+          <imprint>
+            <date>2013</date>
+          </imprint>
+          <biblScope unit="page">3728</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">BT-Drs. 17/13423</title>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="page">13</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">NJW</title>
+          <author>
+            <persName>
+              <surname>Peifer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+          <biblScope unit="volume">6</biblScope>
+          <biblScope unit="page">6 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">EuGH, Urt. v. 16.11.2016</title>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="page">GRUR 2017, 62, 62-64</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">GRUR-Prax.</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2016</date>
+          </imprint>
+          <biblScope unit="page">561, 561.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">ABl.</title>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+          <biblScope unit="page">Nr. L 130/92</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">GRUR</title>
+          <author>
+            <persName>
+              <surname>De la Durantaye</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2020</date>
+          </imprint>
+          <biblScope unit="volume">7</biblScope>
+          <biblScope unit="page">7 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">ZUM</title>
+          <author>
+            <persName>
+              <surname>De la Durantaye</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Kuschel</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+          <biblScope unit="page">694, 694 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Recht</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Digital Humanities</title>
+          <editor>
+            <persName>
+              <surname>Jannidis</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Kohle</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Rehbein</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2017</date>
+          </imprint>
+          <biblScope unit="page">345–352.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">ZUM</title>
+          <author>
+            <persName>
+              <surname>Raue</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2019</date>
+          </imprint>
+          <biblScope unit="page">684, 684 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Digitale Langzeitarchivierung – Risikoebenen und Lösungsstrategien im nachhaltigen Umgang mit digitalen Ressourcen</title>
+          <author>
+            <persName>
+              <surname>Iordanidis</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Die Digitale Bibliothek und ihr Recht – ein Stiefkind der Informationsgesellschaft</title>
+          <editor>
+            <persName>
+              <surname>Hinte</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+          <biblScope unit="page">141–160.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Das kulturelle Gedächtnis im Zeitalter digitaler und vernetzter Medien und sein Recht</title>
+          <author>
+            <persName>
+              <surname>Euler</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2011</date>
+          </imprint>
+          <biblScope unit="page">163–173.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Wissen ohne Zukunft? Der Rechtsrahmen der digitalen Langzeitarchivierung von Netzpublikationen</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Der Vergangenheit eine Zukunft : Kulturelles Erbe in der digitalen Welt</title>
+          <editor>
+            <persName>
+              <surname>Klimpel</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Euler</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2015</date>
+          </imprint>
+          <biblScope unit="page">142–164.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Recht als Risiko für das kulturelle Gedächtnis: ein blinder Fleck der Technikfolgenabschätzung des digitalen Wandels</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Mit gutem Recht erinnern: Gedanken zur Änderung der rechtlichen Rahmenbedingungen des kulturellen Erbes in der digitalen Welt</title>
+          <editor>
+            <persName>
+              <surname>Klimpel</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2018</date>
+          </imprint>
+          <biblScope unit="page">125–136.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">Bibliotheksdienst</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2015</date>
+          </imprint>
+          <biblScope unit="volume">49</biblScope>
+          <biblScope unit="page">1101, 1101–1113.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="m">Gesetz über die Deutsche Nationalbibliothek (DNBG)</title>
+          <imprint>
+            <date>2006</date>
+          </imprint>
+          <biblScope unit="page">1338</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">Dialog mit Bibliotheken</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2016</date>
+          </imprint>
+          <biblScope unit="volume">28</biblScope>
+          <biblScope unit="page">31, 31-36.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">AfP</title>
+          <author>
+            <persName>
+              <surname>Heckmann</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Weber</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2008</date>
+          </imprint>
+          <biblScope unit="volume">269</biblScope>
+          <biblScope unit="page">269 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Pflichtexemplare im digitalen Zeitalter – ist alles geregelt, oder besteht Nachbesserungsbedarf?</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Euler</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Die Digitale Bibliothek und ihr Recht – ein Stiefkind der Informationsgesellschaft?: Kulturwissenschaftliche Aspekte, technische Hintergründe und rechtliche Herausforderungen des digitalen kulturellen Speichergedächtnisses</title>
+          <editor>
+            <persName>
+              <surname>Hinte</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+          <biblScope unit="page">109–140.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <monogr>
+          <title level="j">Information Wissenschaft &amp; Praxis</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <surname>Höhner</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+          <biblScope unit="volume">65</biblScope>
+          <biblScope unit="page">25, 25 ff.</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct>
+        <analytic>
+          <title level="a">Datenschutz in Kultureinrichtungen, Bibliotheken und Archiven</title>
+          <author>
+            <persName>
+              <surname>Steinhauer</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Handbuch europäisches und deutsches Datenschutzrecht</title>
+          <editor>
+            <persName>
+              <surname>Specht</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <surname>Mantz</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date/>
+          </imprint>
+          <biblScope unit="volume">$ 25</biblScope>
+          <biblScope unit="page">Rn. 36.</biblScope>
+        </monogr>
+      </biblStruct>
+    </listBibl>
+  </standOff>
+</TEI>
