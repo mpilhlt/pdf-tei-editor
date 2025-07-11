@@ -160,6 +160,101 @@ def create_tei_doc(schema_location: str) -> etree.Element:
     )
     return tei
 
+def parse_crossref(doi):
+    """
+    Fetches and parses metadata for a given DOI from the CrossRef API.
+
+    Args:
+        doi (str): The Digital Object Identifier.
+
+    Returns:
+        dict: A dictionary containing the parsed metadata.
+
+    Raises:
+        requests.exceptions.HTTPError: If the CrossRef API returns an error.
+    """
+    url = f"https://api.crossref.org/works/{doi}"
+    response = requests.get(url)
+    response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+    data = response.json()
+
+    # Extract relevant metadata, handling potential missing keys gracefully
+    message = data.get("message", {})
+    title = message.get("title", [None])[0]
+    authors_data = message.get("author", [])
+    authors = [
+        {"given": author.get("given"), "family": author.get("family")}
+        for author in authors_data
+    ]
+    # Safely access nested dictionary keys for date
+    issued_data = message.get("issued", {})
+    date_parts = issued_data.get("date-parts", [[]])
+    date = date_parts[0][0] if date_parts and date_parts[0] else None
+
+    publisher = message.get("publisher")
+    journal = message.get("container-title", [None])[0]
+    volume = message.get("volume")
+    issue = message.get("issue")
+    pages = message.get("page")
+
+    return {
+        "title": title,
+        "authors": authors,
+        "date": date,
+        "publisher": publisher,
+        "journal": journal,
+        "volume": volume,
+        "issue": issue,
+        "pages": pages,
+    }
+
+def parse_datacite(doi):
+    """
+    Fetches and parses metadata for a given DOI from the DataCite API.
+
+    Args:
+        doi (str): The Digital Object Identifier.
+
+    Returns:
+        dict: A dictionary containing the parsed metadata.
+
+    Raises:
+        requests.exceptions.HTTPError: If the DataCite API returns an error.
+    """
+    url = f"https://api.datacite.org/dois/{doi}"
+    response = requests.get(url)
+    response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+    data = response.json()
+
+    # Extract relevant metadata, handling potential missing keys gracefully
+    attributes = data.get("data", {}).get("attributes", {})
+    title = attributes.get("titles", [None])[0].get("title") if attributes.get("titles") else None
+    
+    authors_data = attributes.get("creators", [])
+    authors = [
+        {"given": author.get("givenName"), "family": author.get("familyName")}
+        for author in authors_data
+    ]
+
+    date = attributes.get("publicationYear")
+    publisher = attributes.get("publisher")
+    # DataCite uses 'container' for journal information, but it might be empty
+    journal = attributes.get("container", {}).get("title") if attributes.get("container") else None
+    volume = attributes.get("volume",'') # DataCite might not consistently have volume/issue/pages in the same way as CrossRef
+    issue = attributes.get("issue",'')
+    pages = attributes.get("page")
+
+    return {
+        "title": title,
+        "authors": authors,
+        "date": date,
+        "publisher": publisher,
+        "journal": journal,
+        "volume": volume,
+        "issue": issue,
+        "pages": pages,
+    }
+
 
 def create_tei_header(doi: str) -> etree.Element:
     # defaults
@@ -172,23 +267,26 @@ def create_tei_header(doi: str) -> etree.Element:
 
     if doi != "":
         current_app.logger.info(f"Downloading metadata for {doi} from crossref.org...")
-        url = f"https://api.crossref.org/works/{doi}"
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-
-        # metadata used
-        title = data["message"]["title"][0]
-        authors = [
-            {"given": author["given"], "family": author["family"]}
-            for author in data["message"]["author"]
-        ]
-        date = data["message"]["issued"]["date-parts"][0][0]
-        publisher = data["message"]["publisher"]
-        journal = data["message"]["container-title"][0]
-        volume = data["message"]["volume"]
-        issue = data["message"]["issue"]
-        pages = data["message"]["page"]
+        try:
+            metadata = parse_crossref(doi)
+        except requests.exceptions.HTTPError as e:
+            try:
+                current_app.logger.info(f"CrossRef API error: {e}")
+                current_app.logger.info(f"Trying DataCite API for {doi}...")
+                metadata = parse_datacite(doi)
+            except requests.exceptions.HTTPError as e:
+                raise ApiError(f"Could not fetch metadata for DOI {doi}: {e}")
+        except Exception as e:
+            raise ApiError(f"Could not retrieve metadata for DOI {doi}: {e}")
+        
+        # extract metadata
+        title = metadata.get("title", "Unknown Title")
+        authors = metadata.get("authors", [])
+        date = metadata.get("date", "")
+        publisher = metadata.get("publisher", "Unknown Publisher")
+        journal = metadata.get("journal", "")
+        volume = metadata.get("volume", "")
+        issue = metadata.get("issue", "")
 
     # <teiHeader>
     teiHeader = etree.Element("teiHeader")
