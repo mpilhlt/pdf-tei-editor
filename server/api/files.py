@@ -182,13 +182,16 @@ def create_file_data(data_root):
                     file_dict[file_type] = "/data/" + file_path
 
         file_dict['versions'] = sorted(file_dict['versions'], key= lambda file: file.get('version', ''), reverse=True)
-        # add original as first version
-        file_dict['versions'].insert(0, {
-            'path': file_dict['xml'],
-            'label': "Gold"
-        })
-        # add to the list
-        file_list.append(file_dict)
+        # add original as first version if it exists
+        if 'xml' in file_dict:
+            file_dict['versions'].insert(0, {
+                'path': file_dict['xml'],
+                'label': "Gold"
+            })
+        
+        # only add if we have both pdf and xml
+        if 'pdf' in file_dict and 'xml' in file_dict:
+            file_list.append(file_dict)
 
     # sort by id
     file_list = sorted(file_list, key=lambda file_dict: file_dict.get("id"))
