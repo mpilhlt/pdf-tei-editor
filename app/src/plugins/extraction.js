@@ -123,13 +123,13 @@ async function extractFromCurrentPDF(state) {
  */
 async function extractFromNewPdf(state) {
   try {
-    const { type, filename } = await client.uploadFile();
+    const { type, filename, originalFilename } = await client.uploadFile();
     if (type !== "pdf") {
       dialog.error("Extraction is only possible from PDF files")
       return
     }
 
-    const doi = getDoiFromFilename(filename)
+    const doi = getDoiFromFilename(originalFilename)
     const { xml, pdf } = await extractFromPDF(state, { doi, filename })
     await services.load(state, { xml, pdf })
 
@@ -255,6 +255,7 @@ function getDoiFromXml() {
 
 function getDoiFromFilename(filename) {
   let doi = null
+  console.debug("Extracting DOI from filename:", filename)
   if (filename.match(/^10\./)) {
     // treat as a DOI-like filename
     // do we have URL-encoded filenames?
@@ -264,8 +265,9 @@ function getDoiFromFilename(filename) {
       doi = decodeURIComponent(doi)
     } else {
       // custom decoding 
-      doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/')
+      doi = doi.replaceAll(/__/g, '/')
     }
+    console.debug("Extracted DOI from filename:", doi)
     if (isDoi(doi)) {
       return doi
     }

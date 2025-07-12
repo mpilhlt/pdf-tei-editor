@@ -223,8 +223,13 @@ async function setConfigValue(key, value) {
  * @param {object} [options.headers={}] - Additional headers to include in the request.
  * @param {function} [options.onProgress] - A callback function to handle upload progress events.
  *    The function receives a progress event object as an argument.
- * @returns {Promise<*>} - A Promise that resolves with the json-deserialized result
- *    from the `fetch()` call or rejects with an error.
+ * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
+ *    from the `fetch()` call, which must be an object, or rejects with an error.
+ *    The object should contain the uploaded file's metadata, such as its path or ID.
+ *    It will always contain a key "originalFilename" with the original name of the file,
+ *    (as the server can change the filename). Ff the upload fails on the server side, 
+ *   it will contain an "error" key with the error message.
+ * @throws {Error} If the upload fails or if no file is selected.
  * @example
  * // Async/Await example (requires an async function context):
  * async function myUploadFunction() {
@@ -268,13 +273,13 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
     input.type = 'file';
     input.accept = accept;
     input.addEventListener('change', async () => {
-      console.log(input)
       const file = input.files && input.files[0];
       if (!file) {
         reject(new Error('No file selected.'));
         return;
       }
       const formData = new FormData();
+      console.debug("Uploading file:", file.name, "to", uploadUrl);
       formData.append(fieldName, file);
       const fetchOptions = {
         method: method,
@@ -288,6 +293,14 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
           return;
         }
         let result = await response.json()
+        if (typeof result !== 'object' || !result) {
+          reject(new Error("Invalid response format, expected an object"));
+          return;
+        }
+        // Ensure the result contains the original filename
+        if (!result.originalFilename) {
+          result.originalFilename = file.name; //   Fallback to the input file name
+        }
         if (result.error) {
           reject(result.error)
         }
