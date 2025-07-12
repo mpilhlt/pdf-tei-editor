@@ -12,11 +12,18 @@ import { SlOption, appendHtml } from '../ui.js'
 import { logger, client, services, dialog, updateState } from '../app.js'
 
 /**
+ * The data about the pdf and xml files on the server
+ * @type {Array<object>}
+ */
+const fileData = [];
+
+/**
  * plugin API
  */
 const api = {
   reload,
-  update
+  update,
+  fileData
 }
 
 /**
@@ -108,21 +115,21 @@ async function reload(state) {
   await populateSelectboxes(state);
 }
 
-/**
- * The data about the pdf and xml files on the server
- * @type {Array<object>}
- */
-let fileData;
+
 
 /**
  * Reloads the file data from the server
  */
 async function reloadFileData() {
   logger.debug("Reloading file data")
-  fileData = await client.getFileList();
-  if (!fileData || fileData.length === 0) {
+  let data = await client.getFileList();
+  if (!data || data.length === 0) {
     dialog.error("No files found")
   }
+  // update the fileData variable
+  fileData.length = 0; // clear the array
+  fileData.push(...data);
+  return fileData;
 }
 
 let stateCache

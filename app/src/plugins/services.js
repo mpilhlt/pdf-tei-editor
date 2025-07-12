@@ -25,6 +25,7 @@ const api = {
   removeMergeView,
   deleteCurrentVersion,
   deleteAllVersions,
+  deleteAll, 
   duplicateXml,
   downloadXml,
   uploadXml,
@@ -55,8 +56,8 @@ export default plugin
  * @property {SlButton} upload
  * @property {SlButton} download
  * @property {SlButton} deleteBtn
- * @property {SlButton} deleteCurrent 
- * @property {SlButton} deleteCurrent 
+ * @property {SlButton} deleteCurrentVersion
+ * @property {SlButton} deleteAllVersions
  * @property {SlButton} deleteAll
  */
 
@@ -102,12 +103,13 @@ const toolbarActionsHtml = `
     <!-- delete -->
     <sl-button-group>
       <sl-dropdown placement="bottom-end">
-        <sl-button name="deleteBtn" size="small" slot="trigger" size="small" caret>
+        <sl-button name="deleteBtn" size="small" slot="trigger" caret>
           <sl-icon name="trash3"></sl-icon>
         </sl-button>
         <sl-menu>
-          <sl-menu-item name="deleteCurrent">Delete current version</sl-menu-item>
-          <sl-menu-item name="deleteAll">Delete all versions</sl-menu-item>
+          <sl-menu-item name="deleteCurrentVersion">Delete current version</sl-menu-item>
+          <sl-menu-item name="deleteAllVersions">Delete all versions</sl-menu-item>
+          <sl-menu-item name="deleteAll">Delete PDF and XML</sl-menu-item>
         </sl-menu>
       </sl-dropdown>
     </sl-button-group>
@@ -154,8 +156,9 @@ function install(state) {
   );
 
   // delete
-  da.deleteCurrent.addEventListener("click", () => deleteCurrentVersion(state))
-  da.deleteAll.addEventListener('click', () => deleteAllVersions(state))
+  da.deleteCurrentVersion.addEventListener("click", () => deleteCurrentVersion(state))
+  da.deleteAllVersions.addEventListener('click', () => deleteAllVersions(state))
+  da.deleteAll.addEventListener('click', () => deleteAll(state))
   
   // duplicate
   da.duplicateXml.addEventListener("click", () => onClickDuplicateButton(state))
@@ -180,12 +183,10 @@ function install(state) {
 async function update(state) {
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
-  
-  da.deleteBtn.disabled = da.deleteAll.disabled = da.deleteCurrent.disabled = (
-    ui.toolbar.xml.childElementCount < 2 || 
-    // @ts-ignore
-    ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
-  )
+  da.deleteAll.disabled = ui.toolbar.pdf.childElementCount < 2 // at least on PDF must be present
+  da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2 
+  da.deleteCurrentVersion.disabled = ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
+  da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
   // Allow duplicate only if we have an xml path
   da.duplicateXml.disabled = !Boolean(state.xmlPath)
@@ -291,18 +292,11 @@ function removeMergeView(state) {
 }
 
 /**
- * Called when the "delete-all" button is executed
+ * Deletes the current version of the document
+ * This will remove the XML file from the server and reload the gold version
  * @param {ApplicationState} state
  */
-async function deleteCurrentVersion(state){
-  const versionName = ui.toolbar.xml.selectedOptions[0].textContent
-  const msg = `Are you sure you want to delete the current version "${versionName}"?`
-  if (!confirm(msg)) return; // todo use dialog
-
-  services.removeMergeView(state)
-  
-  // delete files 
-  
+async function deleteCurrentVersion(state){  
   // @ts-ignore
   if (ui.toolbar.xml.value.startsWith("/data/tei")) {
     dialog.error("You cannot delete the gold version")
@@ -313,6 +307,10 @@ async function deleteCurrentVersion(state){
     await client.deleteFiles(filePathsToDelete)
   }
   try {
+    const versionName = ui.toolbar.xml.selectedOptions[0].textContent
+    const msg = `Are you sure you want to delete the current version "${versionName}"?`
+    if (!confirm(msg)) return; // todo use dialog
+    services.removeMergeView(state)
     // update the file data
     await fileselection.reload(state)
     // load the gold version
@@ -326,20 +324,17 @@ async function deleteCurrentVersion(state){
 }
 
 /**
- * Called when the "delete-all" button is executed
+ * Deletes all versions of the document, leaving only the gold standard version
  * @param {ApplicationState} state
  */
 async function deleteAllVersions(state) {
-  const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version."
-  if (!confirm(msg)) return; // todo use dialog
-
-  services.removeMergeView(state)
-  
-  // delete files 
   // @ts-ignore
   const xmlPaths = Array.from(ui.toolbar.xml.childNodes).map(option => option.value)
   const filePathsToDelete = xmlPaths.slice(1) // skip the first option, which is the gold standard version  
   if (filePathsToDelete.length > 0) {
+    const msg = "Are you sure you want to delete all versions of this document and leave only the current gold standard version? This cannot be undone."
+    if (!confirm(msg)) return; // todo use dialog
+    services.removeMergeView(state)
     await client.deleteFiles(filePathsToDelete)
   }
   try {
@@ -348,6 +343,42 @@ async function deleteAllVersions(state) {
     // load the gold version
     await load(state, { xml:xmlPaths[0] })
     notify("All version have been deleted")
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+/**
+ * Deletes all versions of the document and the PDF file
+ * @param {ApplicationState} state
+ */
+async function deleteAll(state) {
+  
+  if (ui.toolbar.pdf.childElementCount < 2) {
+    throw new Error("Cannot delete all files, at least one PDF must be present")
+  }
+
+  // @ts-ignore
+  const filePathsToDelete = [ui.toolbar.pdf.value]
+    .concat(Array.from(ui.toolbar.xml.childNodes).map(option => option.value))
+    
+  if (filePathsToDelete.length > 0) {
+    const msg = `Are you sure you want to delete the current PDF and all XML versions? This cannot be undone.`
+    if (!confirm(msg)) return; // todo use dialog
+    services.removeMergeView(state)
+    console.debug("Deleting files:", filePathsToDelete)
+    await client.deleteFiles(filePathsToDelete)
+  }
+  try {
+    // update the file data
+    await fileselection.reload(state)
+
+    // load the first PDF and XML file 
+    await load(state, { 
+      pdf: fileselection.fileData[0].pdf, 
+      xml: fileselection.fileData[0].xml 
+    })
+    notify("All files have been deleted")
   } catch (error) {
     console.error(error)
   }

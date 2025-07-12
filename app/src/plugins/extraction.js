@@ -155,9 +155,10 @@ async function extractFromPDF(state, defaultOptions) {
   if (options === null) throw new Error("User abort")
 
   ui.spinner.show('Extracting references, please wait')
+  let result
   try {
     const filename = options.filename || state.pdfPath
-    let result = await client.extractReferences(filename, options)
+    result = await client.extractReferences(filename, options)
     await fileselection.reload(state)  // todo uncouple
     return result
   } finally {

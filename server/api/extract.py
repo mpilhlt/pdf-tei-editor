@@ -66,8 +66,12 @@ def extract():
         raise ApiError(f"File {pdf_filename} has not been uploaded.")        
 
     # generate TEI via reference extraction using LLamore
-    tei_xml = tei_from_pdf(gold_pdf_path, options)
-
+    try:
+        tei_xml = tei_from_pdf(gold_pdf_path, options)
+    except Exception as e:
+        os.remove(gold_pdf_path)  # remove the PDF if extraction fails
+        raise ApiError(f"Could not extract references from {pdf_filename}: {e}")
+    
     # save file
     gold_tei_path = tei_path = get_gold_tei_path(file_id)
     if os.path.exists(gold_tei_path):
