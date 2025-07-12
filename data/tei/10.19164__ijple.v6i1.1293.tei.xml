@@ -1,0 +1,474 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">From the Field: Law-Related Education as a Branch of Civics Education in the United States</title>
+        <author>
+          <persName>
+            <forename>Latia</forename>
+            <surname>Ward</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Northumbria University Library</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2022</date>
+        <idno type="DOI">10.19164/ijple.v6i1.1293</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Latia Ward. (2022). From the Field: Law-Related Education as a Branch of Civics Education in the United States. International Journal of Public Legal Education, 6(1), . DOI: 10.19164/ijple.v6i1.1293</bibl>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="llamore">
+          <label>https://github.com/mpilhlt/llamore</label>
+        </application>
+        <application version="1.0" ident="pdf-tei-editor">
+          <label>https://github.com/mpilhlt/pdf-tei-editor</label>
+        </application>
+        <application version="1.0" ident="model">
+          <label>Gemini 2.0/LineByLinePrompter</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+    <revisionDesc>
+      <change when="2025-07-12">
+        <desc>Extracted 2025-07-12 13:05:47</desc>
+      </change>
+    </revisionDesc>
+  </teiHeader>
+  <standOff>
+    <listBibl>
+      <biblStruct source="fn4">
+        <analytic>
+          <title level="a">History of Law-Related Education at 10</title>
+          <author>
+            <persName>
+              <forename type="first">S</forename>
+              <surname>Feinstein</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">R</forename>
+              <surname>Wood</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">ERIC</title>
+          <imprint>
+            <date>1995</date>
+          </imprint>
+          <biblScope unit="volume">ED401163</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn6">
+        <monogr>
+          <title level="m">Isidore Starr Award for Excellence in Law-Related Education</title>
+          <imprint>
+            <publisher>American Bar Association Division for Public Education</publisher>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn9">
+        <analytic>
+          <title level="a">Street Law, Inc.: context, history and future</title>
+          <author>
+            <persName>
+              <forename type="first">L</forename>
+              <surname>Arbetman</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">International Journal of Public Legal Education</title>
+          <imprint>
+            <date>2018</date>
+          </imprint>
+          <biblScope unit="volume">2</biblScope>
+          <biblScope unit="issue">1</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn10">
+        <monogr>
+          <title level="m">Street law: a course in practical law.</title>
+          <imprint>
+            <publisher>National Street Law Institute &amp; District of Columbia Project on Community Legal Assistance</publisher>
+            <date>1975</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn13">
+        <monogr>
+          <title level="m">Life &amp; Laws 101: Citizenship Rights and Responsibilities Over 18.</title>
+          <imprint>
+            <publisher>North Carolina Bar Association Young Lawyers Division Civic Education Outreach Committee</publisher>
+            <date>2015</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn15">
+        <analytic>
+          <title level="a">Practical life lessons</title>
+          <author>
+            <persName>
+              <forename type="first">L</forename>
+              <surname>Ward</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">PowerPoint slides</title>
+          <imprint>
+            <publisher>SlideShare</publisher>
+            <date>2015</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn16">
+        <analytic>
+          <title level="a">Who Is Dana Snay? College Student's Facebook Bragging Costs Father $80,000 Lawsuit Settlement</title>
+          <author>
+            <persName>
+              <forename type="first">T</forename>
+              <surname>Green</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">International Business Times</title>
+          <imprint>
+            <date>2014, February 28</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn17">
+        <analytic>
+          <title level="a">Who were the eight people executed by Indonesia?</title>
+          <author>
+            <persName>
+              <forename type="first">C</forename>
+              <surname>Phipps</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">The Guardian</title>
+          <imprint>
+            <date>2015, April 28</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn18">
+        <analytic>
+          <title level="a">A Sea of Information: Navigating the Waters of Digital Citizenship, Rights, and Responsibilities</title>
+          <author>
+            <persName>
+              <forename type="first">L</forename>
+              <surname>Ward</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Conference Session</title>
+          <imprint>
+            <publisher>North Carolina School Library Media Association Conference</publisher>
+            <date>2015, October 24</date>
+            <pubPlace>Winston-Salem</pubPlace>
+            <pubPlace>NC</pubPlace>
+            <pubPlace>United States.</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn19">
+        <analytic>
+          <title level="a">Five Key Points for Developing an Informative “Know Your Rights" Seminar</title>
+          <author>
+            <persName>
+              <forename type="first">L</forename>
+              <surname>Ward</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">American Bar Association Young Lawyers Division Public Education Committee Newsletter</title>
+          <imprint>
+            <date>2016</date>
+          </imprint>
+          <biblScope unit="volume">2</biblScope>
+          <biblScope unit="issue">1</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn21">
+        <monogr>
+          <title level="m">Breaking rank: a top cop's exposé of the dark side of American policing</title>
+          <author>
+            <persName>
+              <forename type="first">N</forename>
+              <surname>Stamper</surname>
+            </persName>
+          </author>
+          <imprint>
+            <publisher>Nation Books</publisher>
+            <date>2006</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn22">
+        <monogr>
+          <title level="m">The privilege of silence: Fifth Amendment protections against self-incrimination</title>
+          <author>
+            <persName>
+              <forename type="first">S.M</forename>
+              <surname>Salky</surname>
+            </persName>
+          </author>
+          <imprint>
+            <publisher>American Bar Association</publisher>
+            <date>2014</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn24">
+        <monogr>
+          <title level="m">Once Upon a Crime: Using Stories, Simulations, and Mock Trials to Explore Justice and Citizenship in Elementary School</title>
+          <author>
+            <persName>
+              <forename type="first">W</forename>
+              <surname>Cassidy</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">R</forename>
+              <surname>Yates</surname>
+            </persName>
+          </author>
+          <imprint>
+            <publisher>Detselig Enterprises</publisher>
+            <date>2005</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn25">
+        <monogr>
+          <title level="m">Law-Related Education as a Delinquency Prevention Strategy: A Three-Year Evaluation of the Impact of LRE on Students</title>
+          <author>
+            <persName>
+              <forename type="first">G</forename>
+              <surname>Johnson</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">R</forename>
+              <surname>Hunter</surname>
+            </persName>
+          </author>
+          <imprint>
+            <publisher>National Criminal Justice Reference Service</publisher>
+            <date>1985</date>
+          </imprint>
+          <biblScope unit="volume">Publication Number 99991</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn30">
+        <monogr>
+          <title level="m">CPI Inflation Calculator</title>
+          <imprint>
+            <publisher>United States Bureau of Labor Statistics</publisher>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn48">
+        <analytic>
+          <title level="a">These districts defunded their school police. What happened next?</title>
+          <author>
+            <persName>
+              <forename type="first">S</forename>
+              <surname>Schwartz</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">S</forename>
+              <surname>Sawchuk</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">E</forename>
+              <surname>Pendharker</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">I</forename>
+              <surname>Najarro</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">EducationWeek</title>
+          <imprint>
+            <date>2021, June 4</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn50">
+        <monogr>
+          <title level="m">Strengthening Democracy With a Modern Civics Education</title>
+          <author>
+            <persName>
+              <forename type="first">A</forename>
+              <surname>Jeffrey</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">S</forename>
+              <surname>Sargrad</surname>
+            </persName>
+          </author>
+          <imprint>
+            <publisher>Center for American Progress</publisher>
+            <date>2019</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn102">
+        <monogr>
+          <title level="m">Founding Principles Act</title>
+          <imprint>
+            <publisher>American Legislative Exchange Council</publisher>
+            <date>2013</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn103">
+        <monogr>
+          <title level="m">ABOUT ALEC</title>
+          <imprint>
+            <publisher>American Legislative Exchange Council</publisher>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn105">
+        <monogr>
+          <title level="m">What we do</title>
+          <imprint>
+            <publisher>The Center for Media and Democracy's PRWatch</publisher>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn106">
+        <analytic>
+          <title level="a">Founding Principles Act Exposed</title>
+        </analytic>
+        <monogr>
+          <title level="m">ALEC EXPOSED</title>
+          <imprint>
+            <publisher>The Center for Media and Democracy</publisher>
+            <date>2017</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn107">
+        <analytic>
+          <title level="a">Bill of Rights Institute</title>
+        </analytic>
+        <monogr>
+          <title level="m">SOURCEWATCH</title>
+          <imprint>
+            <publisher>The Center for Media and Democracy</publisher>
+            <date>2021</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn109">
+        <monogr>
+          <title level="m">Civic Literacy Act</title>
+          <imprint>
+            <publisher>American Legislative Exchange Council</publisher>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn118">
+        <monogr>
+          <title level="m">Know Your Rights Workshop for Teens</title>
+          <imprint>
+            <publisher>Boston Public Library</publisher>
+            <date>2020</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn119">
+        <monogr>
+          <title level="m">Teen Workshop (Ages 13-17): Know Your Rights</title>
+          <imprint>
+            <publisher>City of Glendale</publisher>
+            <date>2019</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn120">
+        <monogr>
+          <title level="m">The best-kept teaching secret: how written conversations engage kids, activate learning, and grow fluent writers, K-12</title>
+          <author>
+            <persName>
+              <forename type="first">H</forename>
+              <surname>Daniels</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">E</forename>
+              <surname>Daniels</surname>
+            </persName>
+          </author>
+          <imprint>
+            <publisher>Corwin</publisher>
+            <date>2013</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn121">
+        <monogr>
+          <title level="m">Circuit Split</title>
+          <imprint>
+            <publisher>Wex</publisher>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn122">
+        <analytic>
+          <title level="a">Where There's Smoke...A Write-Around Activity Regarding the Circuit Split Over Marijuana-Based Car Searches</title>
+          <author>
+            <persName>
+              <forename type="first">L</forename>
+              <surname>Ward</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Conference Session</title>
+          <imprint>
+            <publisher>2018 Cornell Law Institute for High School Students, Ithaca, NY, United States.</publisher>
+            <date>2018, June 28</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+    </listBibl>
+  </standOff>
+</TEI>

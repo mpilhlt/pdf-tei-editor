@@ -1,0 +1,1065 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">A Mistake of Natural Law: Sir William Blackstone and the Anglican Way</title>
+        <author>
+          <persName>
+            <forename>Craig A.</forename>
+            <surname>Stern</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>University of Bologna Law Review</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2019</date>
+        <idno type="DOI">10.6092/issn.2531-6133/10402</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Craig A. Stern. (2019). A Mistake of Natural Law: Sir William Blackstone and the Anglican Way. University of Bologna Law Review, (), . DOI: 10.6092/issn.2531-6133/10402</bibl>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="llamore">
+          <label>https://github.com/mpilhlt/llamore</label>
+        </application>
+        <application version="1.0" ident="pdf-tei-editor">
+          <label>https://github.com/mpilhlt/pdf-tei-editor</label>
+        </application>
+        <application version="1.0" ident="model">
+          <label>Gemini 2.0/LineByLinePrompter</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+    <revisionDesc>
+      <change when="2025-07-12">
+        <desc>Extracted 2025-07-12 15:27:27</desc>
+      </change>
+    </revisionDesc>
+  </teiHeader>
+  <standOff>
+    <listBibl>
+      <biblStruct source="fn1">
+        <monogr>
+          <title level="m">The Mysterious Science of the Law</title>
+          <author>
+            <persName>
+              <forename type="first">Daniel J.</forename>
+              <surname>Boorstin</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1973</date>
+            <pubPlace>Peter Smith</pubPlace>
+          </imprint>
+        </monogr>
+        <citedRange>vii</citedRange>
+      </biblStruct>
+      <biblStruct source="fn1">
+        <analytic>
+          <title level="a">Rediscovering Blackstone</title>
+          <author>
+            <persName>
+              <forename type="first">Albert W.</forename>
+              <surname>Alschuler</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">U. Pa. L. Rev.</title>
+          <imprint>
+            <date>1996</date>
+          </imprint>
+          <biblScope unit="volume">145</biblScope>
+          <biblScope unit="page">1-2</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn1">
+        <monogr>
+          <title level="m">William Blackstone</title>
+          <author>
+            <persName>
+              <forename type="first">Wilfrid</forename>
+              <surname>Prest</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2008</date>
+          </imprint>
+        </monogr>
+        <citedRange>307</citedRange>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <analytic>
+          <title level="a">Blackstone: Quasi-Jurisprudent</title>
+          <author>
+            <persName>
+              <forename type="first">Joseph W.</forename>
+              <surname>McKnight</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Sw L.J.</title>
+          <imprint>
+            <date>1959</date>
+          </imprint>
+          <biblScope unit="volume">13</biblScope>
+          <biblScope unit="page">399, 411</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn3">
+        <analytic>
+          <title level="a">Blackstone as Architect: Constructing the Commentaries</title>
+          <author>
+            <persName>
+              <forename type="first">Wilfrid</forename>
+              <surname>Prest</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Yale J.L. &amp; Human.</title>
+          <imprint>
+            <date>2003</date>
+          </imprint>
+          <biblScope unit="volume">15</biblScope>
+          <biblScope unit="page">103, 107-08</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn5">
+        <analytic>
+          <title level="a">Justice Blackstone's Common Law Orthodoxy</title>
+          <author>
+            <persName>
+              <forename type="first">Emily</forename>
+              <surname>Kadens</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Nw. U. L. Rev.</title>
+          <imprint>
+            <date>2009</date>
+          </imprint>
+          <biblScope unit="volume">103</biblScope>
+          <biblScope unit="page">1553, 1566</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn9">
+        <monogr>
+          <title level="m">St. German's Doctor and Student</title>
+          <author>
+            <persName>
+              <forename type="first">Christopher Saint</forename>
+              <surname>German</surname>
+            </persName>
+          </author>
+          <editor>
+            <persName>
+              <forename type="first">T. F. T.</forename>
+              <surname>Plucknett</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <forename type="first">J. L.</forename>
+              <surname>Barton</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1975</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn9">
+        <monogr>
+          <title level="m">The Anglo-American Legal Heritage: Introductory Materials</title>
+          <author>
+            <persName>
+              <forename type="first">Daniel R.</forename>
+              <surname>Coquillette</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2004</date>
+            <pubPlace>2d ed.</pubPlace>
+          </imprint>
+        </monogr>
+        <citedRange>187-88</citedRange>
+      </biblStruct>
+      <biblStruct source="fn12">
+        <analytic>
+          <title level="a">Sir William Blackstone: A Life and Legacy Set Apart for God's Work</title>
+          <author>
+            <persName>
+              <forename type="first">Douglas H.</forename>
+              <surname>Cook</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Regent U. L. Rev.</title>
+          <imprint>
+            <date>2000-01</date>
+          </imprint>
+          <biblScope unit="volume">13</biblScope>
+          <biblScope unit="page">169, 172-173</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn14">
+        <analytic>
+          <title level="a">Blackstone on Judging</title>
+          <author>
+            <persName>
+              <forename type="first">John H.</forename>
+              <surname>Langbein</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Blackstone and His Commentaries: Biography, Law, History</title>
+          <editor>
+            <persName>
+              <forename type="first">Wilfrid</forename>
+              <surname>Prest</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2009</date>
+          </imprint>
+          <biblScope unit="page">65, 77</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn15">
+        <monogr>
+          <title level="m">The Province of Legislation Determined: Legal Theory in Eighteenth-Century Britain</title>
+          <author>
+            <persName>
+              <forename type="first">David</forename>
+              <surname>Lieberman</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1989</date>
+          </imprint>
+        </monogr>
+        <citedRange>65</citedRange>
+      </biblStruct>
+      <biblStruct source="fn16">
+        <analytic>
+          <title level="a">The Ultimate Oldie But Goodie: William Blackstone's Commentaries on the Law of England</title>
+          <author>
+            <persName>
+              <forename type="first">Robert C.</forename>
+              <surname>Berring</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">J.L.</title>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+          <biblScope unit="volume">4</biblScope>
+          <biblScope unit="page">189, 190</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn16">
+        <analytic>
+          <title level="a">Blackstone and Law Reform by Education: Preparation for the Bar and Lawyerly Culture in Eighteenth-Century England</title>
+          <author>
+            <persName>
+              <forename type="first">David</forename>
+              <surname>Lemmings</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Law Hist. Rev.</title>
+          <imprint>
+            <date>1998</date>
+          </imprint>
+          <biblScope unit="volume">16</biblScope>
+          <biblScope unit="page">211, 215, 251-52</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn18">
+        <analytic>
+          <title level="a">The Nature of Blackstone's Achievement</title>
+          <author>
+            <persName>
+              <forename type="first">S. F. C.</forename>
+              <surname>Milsom</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Oxford J. Legal Stud.</title>
+          <imprint>
+            <date>1981</date>
+          </imprint>
+          <biblScope unit="volume">1</biblScope>
+          <biblScope unit="page">1, 4, 6</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn21">
+        <analytic>
+          <title level="a">Law and Artifice in Blackstone's Commentaries</title>
+          <author>
+            <persName>
+              <forename type="first">Jessie</forename>
+              <surname>Allen</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">J.L.</title>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+          <biblScope unit="volume">4</biblScope>
+          <biblScope unit="page">195, 195</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn23">
+        <monogr>
+          <title level="m">Commentaries on the Laws of England</title>
+          <author>
+            <persName>
+              <forename type="first">William</forename>
+              <surname>Blackstone</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1765-70</date>
+            <pubPlace>The Legal Classics Library</pubPlace>
+          </imprint>
+          <biblScope unit="volume">1</biblScope>
+        </monogr>
+        <citedRange>37</citedRange>
+      </biblStruct>
+      <biblStruct source="fn24">
+        <monogr>
+          <title level="m">Ancient Law</title>
+          <author>
+            <persName>
+              <forename type="first">Henry Sumner</forename>
+              <surname>Maine</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1931</date>
+            <pubPlace>Oxford Univ. Press</pubPlace>
+          </imprint>
+        </monogr>
+        <citedRange>94</citedRange>
+      </biblStruct>
+      <biblStruct source="fn24">
+        <analytic>
+          <title level="a">Blackstone's Theoretical Intentions</title>
+          <author>
+            <persName>
+              <forename type="first">J. M.</forename>
+              <surname>Finnis</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Nat. L.F.</title>
+          <imprint>
+            <date>1967</date>
+          </imprint>
+          <biblScope unit="volume">12</biblScope>
+          <biblScope unit="page">163, 171</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn36">
+        <monogr>
+          <title level="m">50 Questions on the Natural Law</title>
+          <author>
+            <persName>
+              <forename type="first">Charles E.</forename>
+              <surname>Rice</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1993</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn36">
+        <analytic>
+          <title level="a">Natural Law and Catholic Moral Philosophy</title>
+          <author>
+            <persName>
+              <forename type="first">Russell</forename>
+              <surname>Hittinger</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">A Preserving Grace</title>
+          <editor>
+            <persName>
+              <forename type="first">Michael</forename>
+              <surname>Cromartie</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1997</date>
+          </imprint>
+        </monogr>
+        <citedRange>1, 7-8</citedRange>
+      </biblStruct>
+      <biblStruct source="fn45">
+        <analytic>
+          <title level="a">Blackstone and Bentham</title>
+          <author>
+            <persName>
+              <forename type="first">Richard A.</forename>
+              <surname>Posner</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">J.L. &amp; Econ.</title>
+          <imprint>
+            <date>1976</date>
+          </imprint>
+          <biblScope unit="volume">19</biblScope>
+          <biblScope unit="page">569, 570</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn45">
+        <monogr>
+          <title level="m">Lord Mansfield</title>
+          <author>
+            <persName>
+              <forename type="first">C. Herbert Stuart</forename>
+              <surname>Fifoot</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1936</date>
+          </imprint>
+        </monogr>
+        <citedRange>26</citedRange>
+      </biblStruct>
+      <biblStruct source="fn45">
+        <monogr>
+          <title level="m">A Fragment on Government</title>
+          <author>
+            <persName>
+              <forename type="first">Jeremy</forename>
+              <surname>Bentham</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1776</date>
+            <pubPlace>London</pubPlace>
+            <pubPlace>Thomas Payne et al.</pubPlace>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn50">
+        <analytic>
+          <title level="a">The Transformation of English Legal Science: From Hale to Blackstone</title>
+          <author>
+            <persName>
+              <forename type="first">J.</forename>
+              <forename type="middle">Jr.</forename>
+              <surname>Reid</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Emory L.J.</title>
+          <imprint>
+            <date>1996</date>
+          </imprint>
+          <biblScope unit="volume">45</biblScope>
+          <biblScope unit="page">437, 490 n.107</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn52">
+        <analytic>
+          <title level="a">Blackstone's Use of the Law of Nature</title>
+          <author>
+            <persName>
+              <forename type="first">H. L. A.</forename>
+              <surname>Hart</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Butterworths S. Afr. L. Rev.</title>
+          <imprint>
+            <date>1956</date>
+          </imprint>
+        </monogr>
+        <citedRange>169-71</citedRange>
+      </biblStruct>
+      <biblStruct source="fn54">
+        <analytic>
+          <title level="a">The Structure of Blackstone's Commentaries</title>
+          <author>
+            <persName>
+              <forename type="first">Duncan</forename>
+              <surname>Kennedy</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Buff. L. Rev.</title>
+          <imprint>
+            <date>1979</date>
+          </imprint>
+          <biblScope unit="volume">28</biblScope>
+          <biblScope unit="page">205</biblScope>
+        </monogr>
+        <citedRange>211</citedRange>
+      </biblStruct>
+      <biblStruct source="fn54">
+        <analytic>
+          <title level="a">Blackstone, an English Institutist: Legal Literature and the Rise of the Nation State</title>
+          <author>
+            <persName>
+              <forename type="first">John W.</forename>
+              <surname>Cairns</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Oxford J. Legal Stud.</title>
+          <imprint>
+            <date>1984</date>
+          </imprint>
+          <biblScope unit="volume">4</biblScope>
+          <biblScope unit="page">318, 350-52</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn55">
+        <analytic>
+          <title level="a">Justinian: Lieutenant of Christ, Legislator for Christendom</title>
+          <author>
+            <persName>
+              <forename type="first">Craig A.</forename>
+              <surname>Stern</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Regent U. L. Rev.</title>
+          <imprint>
+            <date>1998</date>
+          </imprint>
+          <biblScope unit="volume">11</biblScope>
+          <biblScope unit="page">1</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn55">
+        <analytic>
+          <title level="a">Natural Law and Human Rights in English Law: From Bracton to Blackstone</title>
+          <author>
+            <persName>
+              <forename type="first">R.H.</forename>
+              <surname>Helmholz</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Ave Maria L. Rev.</title>
+          <imprint>
+            <date>2005</date>
+          </imprint>
+          <biblScope unit="volume">3</biblScope>
+          <biblScope unit="page">1, 5</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn58">
+        <analytic>
+          <title level="a">The Religion of a Lawyer?: William Blackstone's Anglicanism</title>
+          <author>
+            <persName>
+              <forename type="first">Wilfrid</forename>
+              <surname>Prest</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Parergon</title>
+          <imprint>
+            <date>2004</date>
+          </imprint>
+          <biblScope unit="volume">21</biblScope>
+          <biblScope unit="page">153, 158</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn91">
+        <monogr>
+          <title level="m">The Decline and Fall of the Roman Empire</title>
+          <author>
+            <persName>
+              <forename type="first">Edward</forename>
+              <surname>Gibbon</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1788</date>
+            <pubPlace>Encyclopaedia Britannica Inc.</pubPlace>
+          </imprint>
+          <biblScope unit="volume">2</biblScope>
+        </monogr>
+        <citedRange>80</citedRange>
+      </biblStruct>
+      <biblStruct source="fn92">
+        <monogr>
+          <title level="m">The History of English Law Before the Time of Edward I</title>
+          <author>
+            <persName>
+              <forename type="first">Frederick</forename>
+              <surname>Pollock</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Frederic William</forename>
+              <surname>Maitland</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2010</date>
+            <pubPlace>Liberty Fund</pubPlace>
+            <pubPlace>Inc.</pubPlace>
+          </imprint>
+          <biblScope unit="volume">2</biblScope>
+        </monogr>
+        <citedRange>585</citedRange>
+      </biblStruct>
+      <biblStruct source="fn66">
+        <monogr>
+          <title level="m">An Introduction to Roman Law</title>
+          <author>
+            <persName>
+              <forename type="first">Barry</forename>
+              <surname>Nicholas</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1962</date>
+          </imprint>
+        </monogr>
+        <citedRange>57</citedRange>
+      </biblStruct>
+      <biblStruct source="fn77">
+        <analytic>
+          <title level="a">Restoring the "Real" to Real Property Law: A Return to Blackstone?</title>
+          <author>
+            <persName>
+              <forename type="first">Nicole</forename>
+              <surname>Graham</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Blackstone and His Commentaries</title>
+          <imprint>
+            <date/>
+          </imprint>
+        </monogr>
+        <citedRange>151</citedRange>
+      </biblStruct>
+      <biblStruct source="fn106">
+        <monogr>
+          <title level="m">Richard Hooker and the Authority of Scripture, Tradition and Reason</title>
+          <author>
+            <persName>
+              <forename type="first">Nigel</forename>
+              <surname>Atkinson</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1997</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn106">
+        <monogr>
+          <title level="m">The Roots of American Order</title>
+          <author>
+            <persName>
+              <forename type="first">Russell</forename>
+              <surname>Kirk</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1974</date>
+          </imprint>
+        </monogr>
+        <citedRange>246</citedRange>
+      </biblStruct>
+      <biblStruct source="fn109">
+        <monogr>
+          <title level="m">Richard Hooker, Reformer and Platonist</title>
+          <author>
+            <persName>
+              <forename type="first">W.J. Torrance</forename>
+              <surname>Kirby</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2005</date>
+          </imprint>
+        </monogr>
+        <citedRange>48</citedRange>
+      </biblStruct>
+      <biblStruct source="fn109">
+        <analytic>
+          <title level="a">Natural Law in the Anglican Tradition</title>
+          <author>
+            <persName>
+              <forename type="first">Will</forename>
+              <surname>Adam</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Christianity and Natural Law</title>
+          <editor>
+            <persName>
+              <forename type="first">Norman</forename>
+              <surname>Doe</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2017</date>
+          </imprint>
+        </monogr>
+        <citedRange>58, 63</citedRange>
+      </biblStruct>
+      <biblStruct source="fn111">
+        <monogr>
+          <title level="m">Richard Hooker and the Politics of a Christian England</title>
+          <author>
+            <persName>
+              <forename type="first">Robert K.</forename>
+              <surname>Faulkner</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1981</date>
+          </imprint>
+        </monogr>
+        <citedRange>114-16</citedRange>
+      </biblStruct>
+      <biblStruct source="fn113">
+        <analytic>
+          <title level="a">Reason and Law</title>
+          <author>
+            <persName>
+              <forename type="first">W.J. Torrance</forename>
+              <surname>Kirby</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">A Companion to Richard Hooker</title>
+          <editor>
+            <persName>
+              <forename type="first">Torrance</forename>
+              <surname>Kirby</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2008</date>
+          </imprint>
+        </monogr>
+        <citedRange>251, 253, 255</citedRange>
+      </biblStruct>
+      <biblStruct source="fn117">
+        <monogr>
+          <title level="m">Richard Hooker</title>
+          <author>
+            <persName>
+              <forename type="first">L.S.</forename>
+              <surname>Thornton</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1924</date>
+          </imprint>
+        </monogr>
+        <citedRange>32, 107</citedRange>
+      </biblStruct>
+      <biblStruct source="fn118">
+        <monogr>
+          <title level="m">Of the Laws of Ecclesiastical Polity</title>
+          <author>
+            <persName>
+              <forename type="first">Richard</forename>
+              <surname>Hooker</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1594, 1597</date>
+            <pubPlace>J.M. Dent &amp; Sons</pubPlace>
+            <pubPlace>Ltd.</pubPlace>
+          </imprint>
+          <biblScope unit="volume">1</biblScope>
+        </monogr>
+        <citedRange>232</citedRange>
+      </biblStruct>
+      <biblStruct source="fn118">
+        <monogr>
+          <title level="m">Richard Hooker and Reformed Theology</title>
+          <author>
+            <persName>
+              <forename type="first">Nigel</forename>
+              <surname>Voak</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2003</date>
+          </imprint>
+        </monogr>
+        <citedRange>117</citedRange>
+      </biblStruct>
+      <biblStruct source="fn118">
+        <analytic>
+          <title level="a">Foreword: Of the Lawes of Ecclesiastical Politie Revisited</title>
+          <author>
+            <persName>
+              <forename type="first">Rowan</forename>
+              <surname>Williams</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">A Companion to Richard Hooker</title>
+          <imprint>
+            <date/>
+          </imprint>
+        </monogr>
+        <citedRange>xv, xviii-xix</citedRange>
+      </biblStruct>
+      <biblStruct source="fn173">
+        <analytic>
+          <title level="a">The Anglican Origins of Modern Science: The Metaphysical Foundations of the Whig Constitution</title>
+          <author>
+            <persName>
+              <forename type="first">James R.</forename>
+              <surname>Jacob</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Isis</title>
+          <imprint>
+            <date>1980</date>
+          </imprint>
+          <biblScope unit="volume">71</biblScope>
+          <biblScope unit="page">251, 258</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn173">
+        <monogr>
+          <title level="m">Bishop Butler and the Age of Reason: A Study in the History of Thought</title>
+          <author>
+            <persName>
+              <forename type="first">Ernest Campell</forename>
+              <surname>Mossner</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1936</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn188">
+        <monogr>
+          <title level="m">The Analogy of Religion Natural and Revealed</title>
+          <author>
+            <persName>
+              <forename type="first">Joseph</forename>
+              <surname>Butler</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1736</date>
+            <pubPlace>J.M. Dent &amp; Co.</pubPlace>
+          </imprint>
+        </monogr>
+        <citedRange>245</citedRange>
+      </biblStruct>
+      <biblStruct source="fn196">
+        <monogr>
+          <title level="m">Fifteen Sermons Preached at the Rolls Chapel and a Dissertation Upon the Nature of Virtue</title>
+          <author>
+            <persName>
+              <forename type="first">Joseph</forename>
+              <surname>Butler</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1726</date>
+            <pubPlace>G. Bell Sons</pubPlace>
+          </imprint>
+        </monogr>
+        <citedRange>237-38</citedRange>
+      </biblStruct>
+      <biblStruct source="fn204">
+        <analytic>
+          <title level="a">Book Review</title>
+          <author>
+            <persName>
+              <forename type="first">Crane</forename>
+              <surname>Brinton</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Harv. L. Rev.</title>
+          <imprint>
+            <date>1942</date>
+          </imprint>
+          <biblScope unit="volume">55</biblScope>
+          <biblScope unit="page">703, 703</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn151">
+        <monogr>
+          <title level="m">The Bible in English Law</title>
+          <author>
+            <persName>
+              <forename type="first">D. Seaborn</forename>
+              <surname>Davies</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1954</date>
+          </imprint>
+        </monogr>
+        <citedRange>20</citedRange>
+      </biblStruct>
+      <biblStruct source="fn209">
+        <monogr>
+          <title level="m">The Life of Samuel Johnson</title>
+          <author>
+            <persName>
+              <forename type="first">James</forename>
+              <surname>Boswell</surname>
+            </persName>
+          </author>
+          <editor>
+            <persName>
+              <forename type="first">C.P.</forename>
+              <surname>Chadsey</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1791</date>
+            <pubPlace>Doubleday</pubPlace>
+          </imprint>
+        </monogr>
+        <citedRange>510-11</citedRange>
+      </biblStruct>
+      <biblStruct source="fn249">
+        <monogr>
+          <title level="m">Natural Rights Theories</title>
+          <author>
+            <persName>
+              <forename type="first">Richard</forename>
+              <surname>Tuck</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1979</date>
+          </imprint>
+        </monogr>
+        <citedRange>84</citedRange>
+      </biblStruct>
+      <biblStruct source="fn319">
+        <monogr>
+          <title level="m">The Nature and Sources of the Law</title>
+          <author>
+            <persName>
+              <forename type="first">John Chipman</forename>
+              <surname>Gray</surname>
+            </persName>
+          </author>
+          <editor>
+            <persName>
+              <forename type="first">David</forename>
+              <surname>Campbell</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <forename type="first">Philip</forename>
+              <surname>Thomas</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1921</date>
+            <pubPlace>Dartmouth Publ'g</pubPlace>
+          </imprint>
+        </monogr>
+        <citedRange>59-64</citedRange>
+      </biblStruct>
+      <biblStruct source="fn319">
+        <analytic>
+          <title level="a">Found Law, Made Law and Creation: Reconsidering Blackstone's Declaratory Theory</title>
+          <author>
+            <persName>
+              <forename type="first">William S.</forename>
+              <forename type="middle">III</forename>
+              <surname>Brewbaker</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">J.L. &amp; Religion</title>
+          <imprint>
+            <date>2006</date>
+          </imprint>
+          <biblScope unit="volume">22</biblScope>
+          <biblScope unit="page">255</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn322">
+        <monogr>
+          <title level="m">Law's Quandary</title>
+          <author>
+            <persName>
+              <forename type="first">Steven D.</forename>
+              <surname>Smith</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2004</date>
+          </imprint>
+        </monogr>
+        <citedRange>61-64</citedRange>
+      </biblStruct>
+      <biblStruct source="fn296">
+        <monogr>
+          <title level="m">Fundamental Authority in Late Medieval English Law</title>
+          <author>
+            <persName>
+              <forename type="first">Norman</forename>
+              <surname>Doe</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1990</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+    </listBibl>
+  </standOff>
+</TEI>

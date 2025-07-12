@@ -1,0 +1,778 @@
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Law, Market and Marketization</title>
+        <author>
+          <persName>
+            <forename>Robin Paul</forename>
+            <surname>Malloy</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Department of Legal Studies. Alma Mater Studiorum - Università di Bologna</publisher>
+        <availability>
+          <licence target="https://creativecommons.org/licenses/by/4.0/"/>
+        </availability>
+        <date type="publication">2016</date>
+        <idno type="DOI">10.6092/issn.2531-6133/6356</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Robin Paul Malloy. (2016). Law, Market and Marketization. University of Bologna Law Review, (), . DOI: 10.6092/issn.2531-6133/6356</bibl>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="llamore">
+          <label>https://github.com/mpilhlt/llamore</label>
+        </application>
+        <application version="1.0" ident="pdf-tei-editor">
+          <label>https://github.com/mpilhlt/pdf-tei-editor</label>
+        </application>
+        <application version="1.0" ident="model">
+          <label>Gemini 2.0/LineByLinePrompter</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+    <revisionDesc>
+      <change when="2025-07-12">
+        <desc>Extracted 2025-07-12 15:30:40</desc>
+      </change>
+    </revisionDesc>
+  </teiHeader>
+  <standOff>
+    <listBibl>
+      <biblStruct source="fn1">
+        <monogr>
+          <title level="m">The Future Of Financial Regulation</title>
+          <author>
+            <persName>
+              <forename type="first">Ian</forename>
+              <forename type="middle">G.</forename>
+              <surname>Macneil</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Justin</forename>
+              <surname>O'brien</surname>
+            </persName>
+          </author>
+          <editor>
+            <persName>
+              <forename type="first">Ian</forename>
+              <forename type="middle">G.</forename>
+              <surname>Macneil</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <forename type="first">Justin</forename>
+              <surname>O'brien</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2010</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn1">
+        <monogr>
+          <title level="m">Law And Economics Of Global Financial Institutions</title>
+          <author>
+            <persName>
+              <forename type="first">Peter</forename>
+              <surname>Nobel</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Katrin</forename>
+              <surname>Krehan</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Anne-Catherine</forename>
+              <surname>Tanner</surname>
+            </persName>
+          </author>
+          <editor>
+            <persName>
+              <forename type="first">Peter</forename>
+              <surname>Nobel</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <forename type="first">Katrin</forename>
+              <surname>Krehan</surname>
+            </persName>
+          </editor>
+          <editor>
+            <persName>
+              <forename type="first">Anne-Catherine</forename>
+              <surname>Tanner</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2010</date>
+          </imprint>
+          <biblScope unit="volume">3d</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn1">
+        <monogr>
+          <title level="m">Anatomy Meltdown: A Dual Financial Biography Of The Subprime Mortgage Crisis</title>
+          <author>
+            <persName>
+              <forename type="first">Michael</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2010</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn1">
+        <analytic>
+          <title level="a">Mortgage Market Reform and Fallacy of Self-Correcting Markets</title>
+          <author>
+            <persName>
+              <forename type="first">Robin</forename>
+              <forename type="middle">Paul</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Pace L. Rev.</title>
+          <imprint>
+            <date>2009</date>
+          </imprint>
+          <biblScope unit="volume">30</biblScope>
+          <biblScope unit="page">79</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn1">
+        <analytic>
+          <title level="a">Subprime Standardization: How Rating Agencies Allow Predatory Lending to Flourish in the Secondary Mortgage Market</title>
+          <author>
+            <persName>
+              <forename type="first">David</forename>
+              <surname>Reiss</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Fla. St. U. L. Rev.</title>
+          <imprint>
+            <date>2006</date>
+          </imprint>
+          <biblScope unit="volume">33</biblScope>
+          <biblScope unit="page">985</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn1">
+        <monogr>
+          <title level="m">Meltdown: A Free-Market Look At Why The Stock Market Collapsed, The Economy Tanked, And Government Bailouts Will Make Things Worse</title>
+          <author>
+            <persName>
+              <forename type="first">Thomas</forename>
+              <forename type="middle">E.</forename>
+              <surname>Woods</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2009</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <analytic>
+          <title level="a">The Problem of Social Cost</title>
+          <author>
+            <persName>
+              <forename type="first">Ronald</forename>
+              <forename type="middle">H.</forename>
+              <surname>Coase</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">J.L &amp; Econ</title>
+          <imprint>
+            <date>1960</date>
+          </imprint>
+          <biblScope unit="volume">56</biblScope>
+          <biblScope unit="page">837</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <monogr>
+          <title level="m">The Costs Of Accidents: A Legal And Economic Analysis</title>
+          <author>
+            <persName>
+              <forename type="first">Guido</forename>
+              <surname>Calabresi</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1970</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <monogr>
+          <title level="m">The Economics Of Justice</title>
+          <author>
+            <persName>
+              <forename type="first">Richard</forename>
+              <forename type="middle">A.</forename>
+              <surname>Posner</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1981</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <monogr>
+          <title level="m">Economic Analysis Of Law</title>
+          <author>
+            <persName>
+              <forename type="first">Richard</forename>
+              <forename type="middle">A.</forename>
+              <surname>Posner</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+          <biblScope unit="volume">9th</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <monogr>
+          <title level="m">Law &amp; Economics</title>
+          <author>
+            <persName>
+              <forename type="first">Robert</forename>
+              <surname>Cooter</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Thomas</forename>
+              <surname>Ulen</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2000</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <monogr>
+          <title level="m">Law And Market Economy: Reinterpreting The Values Of Law And Economics</title>
+          <author>
+            <persName>
+              <forename type="first">Robin</forename>
+              <forename type="middle">P.</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2000</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn2">
+        <monogr>
+          <title level="m">Economics And The Law: From Posner To Post-Modernism And Beyond</title>
+          <author>
+            <persName>
+              <forename type="first">Nicholas</forename>
+              <surname>Mercuro</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Steven</forename>
+              <forename type="middle">G.</forename>
+              <surname>Medema</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2006</date>
+          </imprint>
+          <biblScope unit="volume">2d</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn3">
+        <monogr>
+          <title level="m">Law In A Market Context: An Introduction To Market Concepts In Legal Reasoning</title>
+          <author>
+            <persName>
+              <forename type="first">Robin</forename>
+              <forename type="middle">Paul</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2004</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn5">
+        <monogr>
+          <title level="m">The Theory Of Moral Sentiments</title>
+          <author>
+            <persName>
+              <forename type="first">Adam</forename>
+              <surname>Smith</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1759</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn5">
+        <monogr>
+          <title level="m">An Inquiry Into The Nature And Causes Of The Wealth Of Nations</title>
+          <author>
+            <persName>
+              <forename type="first">Adam</forename>
+              <surname>Smith</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1776</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn5">
+        <monogr>
+          <title level="m">Lectures On Jurisprudence</title>
+          <author>
+            <persName>
+              <forename type="first">Adam</forename>
+              <surname>Smith</surname>
+            </persName>
+          </author>
+          <editor>
+            <persName>
+              <forename type="first">Adam</forename>
+              <surname>Smith</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>1982</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn7">
+        <analytic>
+          <title level="a">Adam Smith and the Law</title>
+          <author>
+            <persName>
+              <forename type="first">Fabrizio</forename>
+              <surname>Simon</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="m">Adam Smith And Law</title>
+          <editor>
+            <persName>
+              <forename type="first">Robin</forename>
+              <forename type="middle">Paul</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2017</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn14">
+        <monogr>
+          <title level="m">The Mystery Of Capital: Why Capitalism Triumphs In The West And Fails Everywhere Else</title>
+          <author>
+            <persName>
+              <forename type="first">Hernando</forename>
+              <surname>De Soto</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2000</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn18">
+        <monogr>
+          <title level="m">Real Estate Transactions: Problems, Cases And Materials</title>
+          <author>
+            <persName>
+              <forename type="first">Robin</forename>
+              <forename type="middle">Paul</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">James</forename>
+              <forename type="middle">Charles</forename>
+              <surname>Smith</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2013</date>
+          </imprint>
+          <biblScope unit="volume">4th</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn21">
+        <analytic>
+          <title level="a">5 Years Ago Bernie Madoff Was Sentenced to 150 Years In Prison – Here's How His Scheme Worked</title>
+          <author>
+            <persName>
+              <forename type="first">Stephanie</forename>
+              <surname>Yang</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Business Insider</title>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn23">
+        <monogr>
+          <title level="m">Trust: The Social Virtues And The Creation Of Prosperity</title>
+          <author>
+            <persName>
+              <forename type="first">Francis</forename>
+              <surname>Fukuyama</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1996</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn24">
+        <analytic>
+          <title level="a">Comparative Aspects of Commonwealth and U.S. Law Since the Collision Convention</title>
+          <author>
+            <persName>
+              <forename type="first">Joseph</forename>
+              <forename type="middle">C.</forename>
+              <surname>Smith</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Tul. L. Rev.</title>
+          <imprint>
+            <date>1983</date>
+          </imprint>
+          <biblScope unit="volume">57</biblScope>
+          <biblScope unit="page">1092</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn25">
+        <monogr>
+          <title level="m">Corporation Law</title>
+          <author>
+            <persName>
+              <forename type="first">Franklin</forename>
+              <forename type="middle">A.</forename>
+              <surname>Gevurtz</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2000</date>
+          </imprint>
+          <biblScope unit="volume">2d</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn26">
+        <analytic>
+          <title level="a">Real Estate Transactions and Entrepreneurship: Transforming Value Through Exchange</title>
+          <author>
+            <persName>
+              <forename type="first">Robin</forename>
+              <forename type="middle">Paul</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Ind. L. Rev.</title>
+          <imprint>
+            <date>2010</date>
+          </imprint>
+          <biblScope unit="volume">43</biblScope>
+          <biblScope unit="page">1150</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn30">
+        <monogr>
+          <title level="m">Property Law: Rules, Policies And Practices</title>
+          <author>
+            <persName>
+              <forename type="first">Joseph</forename>
+              <forename type="middle">William</forename>
+              <surname>Singer</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2006</date>
+          </imprint>
+          <biblScope unit="volume">4th</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn31">
+        <monogr>
+          <title level="m">Nudge: Improving Decisions About Health, Wealth And Happiness</title>
+          <author>
+            <persName>
+              <forename type="first">Richard</forename>
+              <forename type="middle">H.</forename>
+              <surname>Thaler</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Cass</forename>
+              <forename type="middle">R.</forename>
+              <surname>Sunstein</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2008</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn34">
+        <monogr>
+          <title level="m">The Right To Property In Commonwealth Constitutions</title>
+          <author>
+            <persName>
+              <forename type="first">Tom</forename>
+              <surname>Allen</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2000</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn35">
+        <monogr>
+          <title level="m">Corporate Finance</title>
+          <author>
+            <persName>
+              <forename type="first">Jeffrey</forename>
+              <forename type="middle">J.</forename>
+              <surname>Haas</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2014</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn37">
+        <monogr>
+          <title level="m">The Economics Of Network Industries</title>
+          <author>
+            <persName>
+              <forename type="first">Oz</forename>
+              <surname>Shy</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2001</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn37">
+        <analytic>
+          <title level="a">An Economic Theory of Infrastructure and Commons Management</title>
+          <author>
+            <persName>
+              <forename type="first">Brett</forename>
+              <forename type="middle">M.</forename>
+              <surname>Frischmann</surname>
+            </persName>
+          </author>
+        </analytic>
+        <monogr>
+          <title level="j">Minn. L. Rev.</title>
+          <imprint>
+            <date>2005</date>
+          </imprint>
+          <biblScope unit="volume">89</biblScope>
+          <biblScope unit="page">917</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn37">
+        <monogr>
+          <title level="m">Infrastructure: The Social Value Of Shared Resources</title>
+          <author>
+            <persName>
+              <forename type="first">Brett</forename>
+              <forename type="middle">M.</forename>
+              <surname>Frischmann</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2012</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn37">
+        <monogr>
+          <title level="m">The Wealth Of Networks: How Social Production Transforms Markets And Freedom</title>
+          <author>
+            <persName>
+              <forename type="first">Yochai</forename>
+              <surname>Benkler</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2006</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn37">
+        <monogr>
+          <title level="m">The Rise Of The Network Society: The Information Age - Economy, Society, And Culture</title>
+          <author>
+            <persName>
+              <forename type="first">Manuel</forename>
+              <surname>Castells</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2010</date>
+          </imprint>
+          <biblScope unit="volume">1</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn37">
+        <monogr>
+          <title level="m">Semiotics In Information Systems Engineering</title>
+          <author>
+            <persName>
+              <forename type="first">Kecheng</forename>
+              <surname>Liu</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2000</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn39">
+        <monogr>
+          <title level="m">Trusts And Estates Practice In N.Y.</title>
+          <author>
+            <persName>
+              <forename type="first">Eve</forename>
+              <surname>Preminger</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">David</forename>
+              <surname>Lefkowitz</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Richard</forename>
+              <forename type="middle">B.</forename>
+              <surname>Carrión</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Sean</forename>
+              <surname>Mccormick</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>2024</date>
+          </imprint>
+          <biblScope unit="volume">D-E</biblScope>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn40">
+        <monogr>
+          <title level="m">Adam Smith And Law</title>
+          <editor>
+            <persName>
+              <forename type="first">Robin</forename>
+              <forename type="middle">Paul</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </editor>
+          <imprint>
+            <date>2017</date>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn41">
+        <monogr>
+          <author>
+            <persName>
+              <forename type="first">Malloy</forename>
+              <surname>Malloy</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Smith</forename>
+              <surname>Smith</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date/>
+          </imprint>
+        </monogr>
+      </biblStruct>
+      <biblStruct source="fn42">
+        <monogr>
+          <title level="m">Uniform Commercial Code</title>
+          <author>
+            <persName>
+              <forename type="first">James</forename>
+              <forename type="middle">J.</forename>
+              <surname>White</surname>
+            </persName>
+          </author>
+          <author>
+            <persName>
+              <forename type="first">Robert</forename>
+              <forename type="middle">S.</forename>
+              <surname>Summers</surname>
+            </persName>
+          </author>
+          <imprint>
+            <date>1995</date>
+          </imprint>
+          <biblScope unit="volume">4th</biblScope>
+        </monogr>
+      </biblStruct>
+    </listBibl>
+  </standOff>
+</TEI>
