@@ -4,7 +4,7 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
+ * @import { SlButton, SlButtonGroup, SlDialog, SlInput } from '../ui.js'
  */
 import ui from '../ui.js'
 import { updateState, client, logger, dialog, 
@@ -13,7 +13,7 @@ import { appendHtml } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
-import { addEdition, addRevisionChange, addRespStmt } from '../modules/tei-utils.js'
+import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 
 /**
@@ -132,6 +132,26 @@ const toolbarActionsHtml = `
 </span>
 `
 
+/**
+ * Extraction options dialog
+ * @typedef {object} newVersionDialog
+ * @property {SlDialog} self
+ * @property {SlInput} versionName 
+ * @property {SlInput} persName 
+ * @property {SlInput} persId 
+ */
+const newVersionDialogHtml = `
+<sl-dialog name="newVersionDialog" label="Create new version">
+  <div class="dialog-column">
+    <sl-input name="versionName" label="Version Name" size="small" help-text="Provide a short name for the version"></sl-input>
+    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name"></sl-input>
+    <sl-input name="persId" label="Initials" size="small" help-text="Your initials"></sl-input>
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Create new version</sl-button>  
+</sl-dialog>
+`
+
 //
 // Implementation
 //
@@ -145,6 +165,9 @@ function install(state) {
   
   // install controls on menubar
   appendHtml(toolbarActionsHtml, tb)
+
+  // install dialogs
+  appendHtml(newVersionDialogHtml)
 
   // === Document button group ===
 
@@ -387,22 +410,72 @@ async function deleteAll(state) {
 }
 
 /**
- * Saves the current file as a new version
- * @param {ApplicationState} state
+ * Represents a responsible statement.
+ * @typedef {object} RespStmt
+ * @property {string} persId - The ID of the person.
+ * @property {string} persName - The name of the person 
+ * @property {string} resp - The responsibility.
  */
-async function createNewVersion(state) {
+
+/**
+ * Represents an edition statement.
+ * @typedef {object} EditionStmt
+ * @property {string} note - A note about the edition.
+ */
+
+/**
+ * Represents a revision statement.
+ * @typedef {object} RevisionStmt
+ * @property {string} status - The status of the revision.
+ * @property {string} persId - The ID of the person making the revision.
+ * @property {string} desc - A description of the revision.
+ */
+
+/**
+ * Saves the current file as a new version
+ * @param {ApplicationState} state - The current application state.
+ * @param {RespStmt} [respStmt] - Optional responsible statement details.
+ * @param {EditionStmt} [editionStmt] - Optional edition statement details.
+ * @param {RevisionStmt} [revisionStmt] - Optional revision statement details.
+ */
+async function createNewVersion(state, respStmt, editionStmt, revisionStmt ) {
   if (!state.xmlPath) {
     throw new TypeError("State does not contain an xml path")
   }
-  let {path} = await saveXml(state.xmlPath, true)
-  state.xmlPath = path
-  await fileselection.reload(state)
-  await updateState(state)
-  const xmlDoc = xmlEditor.getXMLDocument()
-  addRespStmt(xmlDoc, "user", "Created a new version of the document")
-  addEdition(xmlDoc, "user", "Version "+ new Date().toISOString())
-  addRevisionChange(xmlDoc, "draft", "user", "Created a new version of the document")
-  prettyPrintXmlDom(xmlDoc)
+  const xmlDoc = xmlEditor.getXmlTree()
+  if (!xmlDoc) {
+    throw new Error("No XML document loaded")
+  }
+  try {
+    let {path} = await saveXml(state.xmlPath, true)
+    state.xmlPath = path
+    await fileselection.reload(state)
+    await updateState(state)
+    if (respStmt) {
+      if (!respStmt || tei_utils.getRespStmtById(xmlDoc, respStmt.persId)) {
+        console.warn("No persId or respStmt already exists for this persId")
+      } else {
+        tei_utils.addRespStmt(xmlDoc, respStmt.persName, respStmt.persId, respStmt.resp)
+      }
+    }
+    if (editionStmt) {
+      const versionName = editionStmt.note
+      const nameExistsInDoc = Array.from(xmlDoc.querySelector('edition > note') || []).some(elem => elem.textContent === versionName)
+      const nameExistsInVersions = fileselection.fileData.some(file => file.label === versionName)
+      if (nameExistsInDoc || nameExistsInVersions ) {
+        alert(`The version name "${versionName}" is already being used, pick another one.`)
+        return
+      }
+      tei_utils.addEdition(xmlDoc, editionStmt.note)
+    }
+    if (revisionStmt) {
+      tei_utils.addRevisionChange(xmlDoc, revisionStmt.status, revisionStmt.persId, revisionStmt.desc)
+    }
+    prettyPrintXmlDom(xmlDoc)
+    await xmlEditor.updateEditorFromXmlTree() 
+  } catch (error) {
+    console.error("Error adding revision change:", error)
+  }
 }
 
 /**
@@ -484,7 +557,43 @@ async function onClickSaveButton() {
  * @param {ApplicationState} state
  */
 async function onClickDuplicateButton(state) {
-  await createNewVersion(state)
+  /** @type {newVersionDialog} */
+  const dialog = document.querySelector('[name="newVersionDialog"]')
+  try {
+    dialog.show()
+    await new Promise((resolve, reject) =>{
+      dialog.submit.addEventListener('click', resolve, {once: true})
+      dialog.cancel.addEventListener('click', reject, {once: true})
+      dialog.self.addEventListener('sl-hide', reject, {once: true})
+    })
+  } catch (e) {
+    console.warn("User cancelled")
+    return 
+  } finally {
+    dialog.hide()
+  }
+
+  /** @type {RespStmt} */
+  const respStmt= {
+    persId: dialog.persId.value,
+    persName: dialog.persName.value,
+    resp: "Contributor"
+  }
+
+  /** @type {EditionStmt} */
+  const editionStmt = {
+    note: dialog.versionName.value
+  }
+
+  /** @type {RevisionStmt} */
+  const revisionStmt = {
+    status: "draft",
+    persId: dialog.persId.value,
+    desc: "Corrections"
+  }
+
+  await createNewVersion(state, respStmt, editionStmt, revisionStmt)
+
   ui.toolbar.documentActions.saveXml.disabled = true
   notify("Document was duplicated. You are now editing the copy.")
 }
@@ -509,22 +618,6 @@ async function uploadXml(state) {
 function getNodeText(node) {
   // @ts-ignore
   return getTextNodes(node).map(node => node.textContent?.trim()).filter(Boolean)
-}
-
-/**
- * Recursively extracts all text nodes contained in the given node into a flat list
- * @return {Array<Node>}
- */
-function getTextNodes(node) {
-  let textNodes = [];
-  if (node.nodeType === Node.TEXT_NODE) {
-    textNodes.push(node);
-  } else {
-    for (let i = 0; i < node.childNodes.length; i++) {
-      textNodes = textNodes.concat(getTextNodes(node.childNodes[i]));
-    }
-  }
-  return textNodes;
 }
 
 /**

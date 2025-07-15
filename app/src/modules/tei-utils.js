@@ -1,4 +1,7 @@
+import { xml } from "@codemirror/lang-xml";
+
 const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
+const xmlNamespace = 'http://www.w3.org/XML/1998/namespace'
 
 /**
  * Returns the TEI header element or throws an error if not found.
@@ -6,7 +9,7 @@ const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
  * @returns {Element} - The TEI header element
  * @throws {Error} If the TEI header is not found in the document.
  */
-function getTeiHeader(xmlDoc) {
+export function getTeiHeader(xmlDoc) {
   let teiHeader = xmlDoc.getElementsByTagName('teiHeader');
   if (!teiHeader.length) {
     throw new Error("TEI header not found in the document.");
@@ -17,15 +20,34 @@ function getTeiHeader(xmlDoc) {
 }
 
 /**
+ * Returns the <respStmt> containing a <persName> with the given xml:id or null if none can be found  
+ * @param {Document} xmlDoc 
+ * @param {string} id 
+ * @returns {Element || null}
+ */
+export function getRespStmtById(xmlDoc, id) {
+  for (const respStmtElem of xmlDoc.getElementsByTagName('respStmt') ) {
+    for (const persNameElem of respStmtElem.getElementsByTagName('persName')) {
+      const xmlId = persNameElem.getAttributeNodeNS('http://www.w3.org/XML/1998/namespace','id').value 
+      if (xmlId === id) {
+        return respStmtElem
+      }
+    }
+  }
+  return null
+}
+
+/**
  * Add a <change> node to the /TEI/teiHeader/revisionDesc section of an XML DOM document.
  *
  * @param {Document} xmlDoc - The XML DOM Document object.
  * @param {string} [status="draft"] - The status of the change, default is "draft"
- * @param {string} [who] - Optional attribute to specify who made the change.
- * @param {string} [why] - Optional attribute to specify the reason for or description of the change.
- * @returns {Document} - The modified XML DOM Document object.
+ * @param {string} [persId] - Optional attribute to specify who made the change.
+ * @param {string} [desc] - Optional attribute to specify the reason for or description of the change.
+ * @throws {Error} If the TEI header is not found in the document
+ * @returns {void}
  */
-export function addRevisionChange(xmlDoc, status="draft", who, why) {
+export function addRevisionChange(xmlDoc, status="draft", persId, desc) {
   const currentDateString = new Date().toISOString();
   let revisionDescElement = xmlDoc.getElementsByTagName('revisionDesc');
   if (!revisionDescElement.length) {
@@ -41,19 +63,18 @@ export function addRevisionChange(xmlDoc, status="draft", who, why) {
   changeElem.setAttribute('when', currentDateString);
   changeElem.setAttribute('status', status);
 
-  if (who) { // Conditional check for 'who' parameter
-    changeElem.setAttribute('who', who);
+  if (persId) { // Conditional check for 'who' parameter
+    changeElem.setAttribute('who', '#' + persId);
   }
   
-  if (why) {
+  if (desc) {
     const descElement = xmlDoc.createElementNS(teiNamespaceURI, 'desc');
-    const textNode = xmlDoc.createTextNode(why); 
+    const textNode = xmlDoc.createTextNode(desc); 
     descElement.appendChild(textNode);
     changeElem.appendChild(descElement);
   }
   
   revisionDescElement.appendChild(changeElem);
-  return xmlDoc;
 }
 
 /**
@@ -61,19 +82,26 @@ export function addRevisionChange(xmlDoc, status="draft", who, why) {
  *
  * @param {Document} xmlDoc - The XML DOM Document object.
  * @param {string} [note] - An optional note to include in the edition element.
- * @returns {Document} - The modified XML DOM Document object.
+ * @throws {Error} If the TEI header or the fileDesc element is not found in the document.
+ * @returns {void}
  */
 export function addEdition(xmlDoc, note) {
-  const currentDateString = new Date().toISOString();
+  const date = new Date()
+  const currentDateString = date.toISOString();
   let editionStmt = xmlDoc.getElementsByTagName('editionStmt');
   if (!editionStmt.length) {
     const teiHeader = getTeiHeader(xmlDoc);
     const fileDesc = teiHeader.getElementsByTagName('fileDesc');
-    if (!fileDesc.length) {
-      throw new Error("teiHeader/fileDesc not found in the document.");
+    const titleStmt = teiHeader.getElementsByTagName('titleStmt');
+    if (!fileDesc.length|| !titleStmt.length) {
+      throw new Error("teiHeader/fileDesc/titleStmt not found in the document.");
     }
     editionStmt = xmlDoc.createElementNS(teiNamespaceURI, 'editionStmt');
-    fileDesc[0].appendChild(editionStmt);
+    if (titleStmt[0].nextSibling) {
+      fileDesc[0].insertBefore(editionStmt, titleStmt[0].nextSibling);
+    } else {
+      fileDesc[0].appendChild(editionStmt)
+    }
   } else {
     editionStmt = editionStmt[0];
   }
@@ -84,7 +112,7 @@ export function addEdition(xmlDoc, note) {
   // Create and append the <date> element as a child of <edition>
   const dateElem = xmlDoc.createElementNS(teiNamespaceURI, 'date'); // Fixed: creating <date> element
   dateElem.setAttribute('when', currentDateString); // Keeping ISO string as per original code.
-  dateElem.textContent = currentDateString;
+  dateElem.textContent = date.toLocaleDateString() + " " + date.toLocaleTimeString();
   editionElem.appendChild(dateElem); // Appending <date> to <edition>
 
   // add a <note> child if provided and not empty or just whitespace
@@ -95,7 +123,6 @@ export function addEdition(xmlDoc, note) {
   }
   
   editionStmt.appendChild(editionElem); // Appending the complete <edition> element to editionStmt
-  return xmlDoc;
 }
 
 
@@ -104,20 +131,18 @@ export function addEdition(xmlDoc, note) {
  *
  * @param {Document} xmlDoc The XML DOM Document object.
  * @param {string} persName The name of the person.
- * @param {string} resp The role or responsibility 
  * @param {string} persId  XML ID for the person
- * @returns {Document} The modified XML DOM Document object.
+ * @param {string} resp The role or responsibility 
+ * @throws {Error} If the TEI header is not found in the document or the persId already exists.
+ * @returns {void}
  */
-export function addRespStmt(xmlDoc, persName, resp, persId) {
-  // Removed validation for persId being mandatory as per bug fix.
-  // The original code implied it was mandatory with `!persId` check. If it's truly optional,
-  // the logic below needs to handle its absence. Assuming for strict bug fix, it IS required based on original validation.
-  // If it should be optional, the function logic would need more changes.
-  // For now, keeping the original mandatory check.
+export function addRespStmt(xmlDoc, persName, persId, resp) {
   if (!persName || !resp || !persId ) {
     throw new Error("Missing required parameters: persName, resp, or persId.");
   }
-
+  if (getRespStmtById(xmlDoc, persId)) {
+    throw new Error(`Element with xml:id="${persId}" already exists in the document.`);
+  }
   const teiHeader = getTeiHeader(xmlDoc);
   let titleStmt = teiHeader.getElementsByTagName('titleStmt');
 
@@ -140,6 +165,4 @@ export function addRespStmt(xmlDoc, persName, resp, persId) {
   respStmtElem.appendChild(respElem);
 
   titleStmt.appendChild(respStmtElem);
-
-  return xmlDoc;
 }
