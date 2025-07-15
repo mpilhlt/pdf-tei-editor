@@ -6,7 +6,6 @@
  * 3. Add it to the 'enhancements' array.
  */
 
-import addRevisionChange from './enhancements/add-revision-change.js';
 import prettyPrintXml from './enhancements/pretty-print-xml.js';
 
 /**
@@ -18,7 +17,6 @@ import prettyPrintXml from './enhancements/pretty-print-xml.js';
 
 /** @type {Enhancement[]} */
 const enhancements = [
-  addRevisionChange,
   prettyPrintXml
 ];
 

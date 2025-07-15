@@ -42954,7 +42954,7 @@ const api$3 = {
   removeMergeView,
   deleteCurrentVersion,
   deleteAllVersions,
-  duplicateXml,
+  createNewVersion,
   downloadXml,
   uploadXml,
   inProgress,
@@ -42977,7 +42977,7 @@ const plugin$5 = {
  * @typedef {object} documentActionsComponent
  * @property {SlButtonGroup} self
  * @property {SlButton} saveXml 
- * @property {SlButton} duplicateXml
+ * @property {SlButton} createNewVersion
  * @property {SlButton} upload
  * @property {SlButton} download
  * @property {SlButton} deleteBtn
@@ -43006,7 +43006,7 @@ const toolbarActionsHtml = `
 
     <!-- duplicate -->
     <sl-tooltip content="Duplicate current document to make changes">
-      <sl-button name="duplicateXml" size="small" disabled>
+      <sl-button name="createNewVersion" size="small" disabled>
         <sl-icon name="copy"></sl-icon>
       </sl-button>
     </sl-tooltip>  
@@ -43084,7 +43084,7 @@ function install$5(state) {
   da.deleteAll.addEventListener('click', () => deleteAllVersions(state));
   
   // duplicate
-  da.duplicateXml.addEventListener("click", () => onClickDuplicateButton(state));
+  da.createNewVersion.addEventListener("click", () => onClickDuplicateButton(state));
 
   // download
   da.download.addEventListener("click", () => downloadXml(state));
@@ -43114,7 +43114,7 @@ async function update$1(state) {
   );
 
   // Allow duplicate only if we have an xml path
-  da.duplicateXml.disabled = !Boolean(state.xmlPath);
+  da.createNewVersion.disabled = !Boolean(state.xmlPath);
 
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xmlPath);
@@ -43283,7 +43283,7 @@ async function deleteAllVersions(state) {
  * Saves the current file as a new version
  * @param {ApplicationState} state
  */
-async function duplicateXml(state) {
+async function createNewVersion(state) {
   if (!state.xmlPath) {
     throw new TypeError("State does not contain an xml path")
   }
@@ -43372,7 +43372,7 @@ async function onClickSaveButton() {
  * @param {ApplicationState} state
  */
 async function onClickDuplicateButton(state) {
-  await duplicateXml(state);
+  await createNewVersion(state);
   ui$1.toolbar.documentActions.saveXml.disabled = true;
   notify("Document was duplicated. You are now editing the copy.");
 }

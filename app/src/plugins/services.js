@@ -13,6 +13,8 @@ import { appendHtml } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
+import { addEdition, addRevisionChange, addRespStmt } from '../modules/tei-utils.js'
+import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 
 /**
  * plugin API
@@ -26,7 +28,7 @@ const api = {
   deleteCurrentVersion,
   deleteAllVersions,
   deleteAll, 
-  duplicateXml,
+  createNewVersion,
   downloadXml,
   uploadXml,
   inProgress,
@@ -52,7 +54,7 @@ export default plugin
  * @typedef {object} documentActionsComponent
  * @property {SlButtonGroup} self
  * @property {SlButton} saveXml 
- * @property {SlButton} duplicateXml
+ * @property {SlButton} createNewVersion
  * @property {SlButton} upload
  * @property {SlButton} download
  * @property {SlButton} deleteBtn
@@ -81,7 +83,7 @@ const toolbarActionsHtml = `
 
     <!-- duplicate -->
     <sl-tooltip content="Duplicate current document to make changes">
-      <sl-button name="duplicateXml" size="small" disabled>
+      <sl-button name="createNewVersion" size="small" disabled>
         <sl-icon name="copy"></sl-icon>
       </sl-button>
     </sl-tooltip>  
@@ -161,7 +163,7 @@ function install(state) {
   da.deleteAll.addEventListener('click', () => deleteAll(state))
   
   // duplicate
-  da.duplicateXml.addEventListener("click", () => onClickDuplicateButton(state))
+  da.createNewVersion.addEventListener("click", () => onClickDuplicateButton(state))
 
   // download
   da.download.addEventListener("click", () => downloadXml(state))
@@ -189,7 +191,7 @@ async function update(state) {
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
   // Allow duplicate only if we have an xml path
-  da.duplicateXml.disabled = !Boolean(state.xmlPath)
+  da.createNewVersion.disabled = !Boolean(state.xmlPath)
 
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xmlPath)
@@ -388,7 +390,7 @@ async function deleteAll(state) {
  * Saves the current file as a new version
  * @param {ApplicationState} state
  */
-async function duplicateXml(state) {
+async function createNewVersion(state) {
   if (!state.xmlPath) {
     throw new TypeError("State does not contain an xml path")
   }
@@ -396,6 +398,11 @@ async function duplicateXml(state) {
   state.xmlPath = path
   await fileselection.reload(state)
   await updateState(state)
+  const xmlDoc = xmlEditor.getXMLDocument()
+  addRespStmt(xmlDoc, "user", "Created a new version of the document")
+  addEdition(xmlDoc, "user", "Version "+ new Date().toISOString())
+  addRevisionChange(xmlDoc, "draft", "user", "Created a new version of the document")
+  prettyPrintXmlDom(xmlDoc)
 }
 
 /**
@@ -477,7 +484,7 @@ async function onClickSaveButton() {
  * @param {ApplicationState} state
  */
 async function onClickDuplicateButton(state) {
-  await duplicateXml(state)
+  await createNewVersion(state)
   ui.toolbar.documentActions.saveXml.disabled = true
   notify("Document was duplicated. You are now editing the copy.")
 }
@@ -519,3 +526,20 @@ function getTextNodes(node) {
   }
   return textNodes;
 }
+
+/**
+ * Recursively extracts all text nodes contained in the given node into a flat list
+ * @return {Array<Node>}
+ */
+function getTextNodes(node) {
+  let textNodes = [];
+  if (node.nodeType === Node.TEXT_NODE) {
+    textNodes.push(node);
+  } else {
+    for (let i = 0; i < node.childNodes.length; i++) {
+      textNodes = textNodes.concat(getTextNodes(node.childNodes[i]));
+    }
+  }
+  return textNodes;
+}
+

@@ -9,7 +9,7 @@
  * @param {string} [spacing='  '] - The string to use for each level of indentation (e.g., '  ' or '\t').
  * @returns {Document} - The modified XML DOM Document object.
  */
-function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
+export function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
   if (!xmlDoc || typeof xmlDoc.documentElement === 'undefined') {
     console.error("Invalid XML Document object provided for pretty-printing.");
     return xmlDoc; // Return unchanged if input is invalid
