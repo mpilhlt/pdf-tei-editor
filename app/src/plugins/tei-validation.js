@@ -12,7 +12,8 @@ import { XMLEditor } from './xmleditor.js';
 const api = {
   configure,
   validate,
-  isValidDocument
+  isValidDocument,
+  isDisabled
 }
 
 const plugin = {
@@ -33,9 +34,8 @@ export default plugin
 // implementation
 // 
 
-let state = null;
 let validatedVersion = null;
-let isDisabled = false;
+let _isDisabled = false;
 let validationInProgress = false;
 let validationPromise = null;
 let lastDiagnostics = [];
@@ -46,7 +46,11 @@ let lastDiagnostics = [];
 function install(state) {
   // add the linter to the editor
   xmlEditor.addLinter([
-    linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => false }),
+    linter(lintSource, { 
+      autoPanel: true, 
+      delay: 2000, 
+      needsRefresh: () => false
+    }),
     lintGutter()
   ])
   // listen for delayed editor updates
@@ -55,14 +59,22 @@ function install(state) {
 }
 
 /**
+ * Returns true if validation is disabled
+ * @returns {boolean}
+ */
+function isDisabled() {
+  return _isDisabled
+}
+
+/**
  * Invoked when this or another plugin starts a validation
  * @param {Promise} validationPromise 
  */
 async function inProgress(validationPromise) {
   // do not start validation if another one is going on
-  isDisabled = true
+  _isDisabled = true
   await validationPromise
-  isDisabled = false
+  _isDisabled = false
 }
 
 /**
@@ -89,7 +101,7 @@ async function lintSource(view) {
   }
 
   // don't validate if disabled and use last diagnostics
-  if (isDisabled) {
+  if (_isDisabled) {
     logger.debug("Ignoring validation request: Validation is disabled")
     return lastDiagnostics;
   }
@@ -143,7 +155,8 @@ async function lintSource(view) {
   } catch (error) {
     // stop querying
     if (client.lastHttpStatus >= 400) {
-      isDisabled = true
+      console.debug("Disabling validation because of server error " + client.lastHttpStatus)
+      configure({mode: "off"})
     }
     return lastDiagnostics
   } finally {
@@ -167,10 +180,12 @@ async function lintSource(view) {
 function configure({ mode = "auto" }) {
   switch (mode) {
     case "auto":
-      isDisabled = false
+      _isDisabled = false
+      logger.info("Validation is enabled")
       break
     case "off":
-      isDisabled = true
+      _isDisabled = true
+      logger.info("Validation is disabled")
       break
     default:
       throw new Error("Invalid mode parameter")
@@ -195,8 +210,8 @@ async function validate() {
   clearDiagnostics();
 
   // save disabled state and enable validation
-  let disabledState = isDisabled
-  isDisabled = false
+  let disabledState = _isDisabled
+  _isDisabled = false
 
   // await the new validation promise once it is available
   const diagnostics = await new Promise(resolve => {
@@ -211,7 +226,7 @@ async function validate() {
     }
     checkIfValidating();
   });
-  isDisabled = disabledState
+  _isDisabled = disabledState
   return diagnostics
 }
 

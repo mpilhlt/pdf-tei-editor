@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../app.js' 
  */
 
-import { invoke, updateState, xmlEditor } from '../app.js'
+import { invoke, updateState, validation, xmlEditor } from '../app.js'
 import ui from '../ui.js'
 import { NavXmlEditor, XMLEditor  } from '../modules/navigatable-xmleditor.js'
 import { parseXPath, isXPathSubset } from '../modules/utils.js'

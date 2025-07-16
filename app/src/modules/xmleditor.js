@@ -7,10 +7,11 @@
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, Compartment } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
+
 // custom modules
 
 import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror_utils.js';
@@ -49,6 +50,21 @@ export class XMLEditor extends EventTarget {
    */
   /** @type {string} */
   static EVENT_EDITOR_DELAYED_UPDATE ="editorUpdateDelayed"
+
+  /**
+   * @event EditorXmlNotWellFormedEvent
+   * @type {ViewUpdate}
+   */
+  /** @type {string} */
+  static EVENT_EDITOR_XML_NOT_WELL_FORMED = "editorXmlNotWellFormed"
+
+
+  /**
+   * @event EditorXmlWellFormedEvent
+   * @type {ViewUpdate}
+   */
+  /** @type {string} */
+  static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"  
 
   // private members
 
@@ -131,7 +147,7 @@ export class XMLEditor extends EventTarget {
       this.#selectionChangeCompartment.of([]),
       this.#updateListenerCompartment.of([]),
       this.#mergeViewCompartment.of([]),
-      this.#autocompleteCompartment.of([])
+      this.#autocompleteCompartment.of([]),
     ];
 
     if (tagData) {
@@ -870,12 +886,15 @@ export class XMLEditor extends EventTarget {
     this.#editorContent = this.#view.state.doc.toString();
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
+    console.log(errorNode)
     if (errorNode) {
-      console.log("Document was updated but is not well-formed")
+      console.warn("Document was updated but is not well-formed")
+      this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, {detail: errorNode}))
       this.#xmlTree = null;
       return false;
     }
     console.log("Document was updated and is well-formed.")
+    this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED))
     this.#xmlTree = doc;
 
     // the syntax tree construction is async, so we need to wait for it to complete

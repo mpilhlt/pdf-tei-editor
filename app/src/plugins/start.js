@@ -11,7 +11,7 @@ import ui from '../ui.js'
 import { updateState, logger, services, dialog, validation, floatingPanel, urlHash, xmlEditor } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
-
+import { XMLEditor } from './xmleditor.js'
 
 /**
  * Plugin object
@@ -88,6 +88,12 @@ async function start(state) {
       } catch (error) {
         logger.warn("Error loading diff view: " + error.message)
       }
+      // if in merge view, save dirty editor content as it is not saved after validation
+      xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, evt => {
+        if (validation.isDisabled()) {
+          saveIfDirty()
+        } 
+      })
     } else {
       // b) validation & xpath selection
 
@@ -125,12 +131,22 @@ async function start(state) {
 }
 
 /**
- * Called when a validation has been done. Used to save the document after successful validation
+ * Called when a validation has been done. 
+ * Used to save the document after successful validation
  * @param {Diagnostic[]} diagnostics 
  */
 async function onValidationResult(diagnostics) {
+  if (diagnostics.length === 0) {
+    saveIfDirty()
+  }
+}
+
+/**
+ * Save the current XML file if the editor is "dirty"
+ */
+async function saveIfDirty() {
   const filePath = ui.toolbar.xml.value
-  if (xmlEditor.isDirty && diagnostics.length === 0 && filePath) {
+  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty) {
     await services.saveXml(filePath)
     console.log(`Saved ${filePath} to server`)
   }

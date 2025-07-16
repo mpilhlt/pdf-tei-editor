@@ -312,6 +312,9 @@ async function validateXml() {
  */
 async function saveXml(filePath, saveAsNewVersion=false) {
   logger.info(`Saving XML${saveAsNewVersion ? " as new version":""}...`);
+  if (!xmlEditor.getXmlTree()) {
+    throw new Error("No XML valid document in the editor")
+  }
   return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
 }
 
@@ -326,6 +329,8 @@ async function showMergeView(state, diff) {
   try {
     await xmlEditor.showMergeView(diff)
     updateState(state, {diffXmlPath: diff})
+    // turn validation off as it creates too much visual noise
+    validation.configure({mode:"off"})
   } finally {
     ui.spinner.hide()
   }
@@ -337,6 +342,8 @@ async function showMergeView(state, diff) {
  */
 function removeMergeView(state) {
   xmlEditor.hideMergeView()
+  // re-enable validation
+  validation.configure({mode:"auto"})
   UrlHash.remove("diff")
   updateState(state, {diffXmlPath:null})
 }
