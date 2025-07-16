@@ -173,13 +173,15 @@ def create_file_data(data_root):
         for file_type, files in file_type_data.items():
             for file_path in files:
                 path = Path(file_path)
+                path_from_root = "/data/" + file_path
                 if path.parent.parent.name == "versions":
+                    label = get_version_name(get_data_file_path(path_from_root)) or path.parent.name.replace("_", " ")
                     file_dict['versions'].append({
-                        'label': path.parent.name.replace("_", " "),
-                        'path': "/data/" + file_path
+                        'label': label,
+                        'path': path_from_root
                     })
                 else:     
-                    file_dict[file_type] = "/data/" + file_path
+                    file_dict[file_type] = path_from_root
 
         file_dict['versions'] = sorted(file_dict['versions'], key= lambda file: file.get('version', ''), reverse=True)
         # add original as first version if it exists
@@ -213,3 +215,21 @@ def get_tei_metadata(file_path):
         "title": title.text if title is not None else "",
         "date": date.text if date is not None else ""
     }
+
+
+def get_version_name(file_path):
+    """
+    Retrieves version title from the specified file, encoded in teiHeader/fileDesc/editionStmt/edition/title
+    """
+    tree = etree.parse(file_path)
+    root = tree.getroot()
+    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    edition_stmts = root.xpath("//tei:editionStmt", namespaces=ns)
+    if not edition_stmts:
+        return None
+    version_title_element = edition_stmts[-1].xpath("./tei:edition/tei:title", namespaces=ns)
+    if version_title_element:
+        return version_title_element[0].text
+    else:
+        return None
+    
