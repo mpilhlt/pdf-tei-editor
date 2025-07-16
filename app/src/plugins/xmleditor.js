@@ -21,6 +21,9 @@ const tagDataPath = '/data/tei.json'
  */
 const api = new NavXmlEditor('codemirror-container')
 
+// add a editor "dirty" state (this is an ad-hoc solution, to be replaced with a more robust one)
+api.isDirty = false
+
 /**
  * component plugin
  */
@@ -52,6 +55,11 @@ async function install(state) {
   api.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
     api.whenReady().then(() => onSelectionChange(state))
   });
+
+  // editor dirty state
+  api.addEventListener(XMLEditor.EVENT_XML_CHANGED,evt => {
+    api.isDirty = true
+  })
 }
 
 /**

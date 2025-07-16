@@ -5,9 +5,10 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
+ * @import { Diagnostic } from '@codemirror/lint'
  */
 import ui from '../ui.js'
-import { updateState, logger, services, dialog, validation, floatingPanel, urlHash } from '../app.js'
+import { updateState, logger, services, dialog, validation, floatingPanel, urlHash, xmlEditor } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 
@@ -18,6 +19,9 @@ import { UrlHash } from '../modules/browser-utils.js'
 const plugin = {
   name: "start",
   install,
+  validation: {
+    result: onValidationResult
+  },
   // should be the last plugin to be installed, so correctly all of the other plugins should be listed here, 
   // just using the next-to-last one for convenience
   deps: ["tei-validation"],
@@ -117,5 +121,17 @@ async function start(state) {
     ui.spinner.hide();
     dialog.error(error.message)
     throw error
+  }
+}
+
+/**
+ * Called when a validation has been done. Used to save the document after successful validation
+ * @param {Diagnostic[]} diagnostics 
+ */
+async function onValidationResult(diagnostics) {
+  const filePath = ui.toolbar.xml.value
+  if (xmlEditor.isDirty && diagnostics.length === 0 && filePath) {
+    await services.saveXml(filePath)
+    console.log(`Saved ${filePath} to server`)
   }
 }

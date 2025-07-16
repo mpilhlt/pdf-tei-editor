@@ -4,13 +4,15 @@
  */
 
 import { EditorView, ViewUpdate } from '@codemirror/view';
-import { client, xmlEditor, invoke, logger, endpoints } from '../app.js'
+import { pluginManager, client, xmlEditor, invoke, logger, endpoints } from '../app.js'
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
 import { XMLEditor } from './xmleditor.js';
 
+
 const api = {
   configure,
-  validate
+  validate,
+  isValidDocument
 }
 
 const plugin = {
@@ -63,6 +65,13 @@ async function inProgress(validationPromise) {
   isDisabled = false
 }
 
+/**
+ * Returns true if the last validation has found no errors
+ * @returns {boolean}
+ */
+function isValidDocument() {
+  return lastDiagnostics.length === 0
+}
 
 /**
  * The ListSource function, called by the editor
@@ -142,7 +151,10 @@ async function lintSource(view) {
     validationPromise = null;
   }
 
+  // save the last diagnostics
   lastDiagnostics = diagnostics;
+  // inform plugins
+  pluginManager.invoke("validation.result", diagnostics)
   return diagnostics;
 }
 

@@ -92,5 +92,5 @@ await invoke(ep.start, state)
 // Exports
 // 
 export { state, ep as endpoints, invoke, updateState }
-export { logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
+export { pluginManager, logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
   services, floatingPanel, promptEditor, urlHash, appInfo }

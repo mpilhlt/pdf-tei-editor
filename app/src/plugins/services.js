@@ -29,7 +29,7 @@ const api = {
   deleteCurrentVersion,
   deleteAllVersions,
   deleteAll, 
-  createNewVersion,
+  addTeiHeaderInfo,
   downloadXml,
   uploadXml,
   inProgress,
@@ -54,7 +54,7 @@ export default plugin
  * Document actions button group
  * @typedef {object} documentActionsComponent
  * @property {SlButtonGroup} self
- * @property {SlButton} saveXml 
+ * @property {SlButton} saveRevision 
  * @property {SlButton} createNewVersion
  * @property {SlButton} upload
  * @property {SlButton} download
@@ -75,9 +75,10 @@ const toolbarActionsHtml = `
 <span class="hbox-with-gap toolbar-content">
   <!-- Document button group -->
   <sl-button-group label="Document" name="documentActions">
-    <!-- save -->
-    <sl-tooltip content="Save document content to server">
-      <sl-button name="saveXml" size="small" disabled>
+
+    <!-- document revision -->
+    <sl-tooltip content="Save document revision">
+      <sl-button name="saveRevision" size="small" disabled>
         <sl-icon name="save"></sl-icon>
       </sl-button>
     </sl-tooltip>
@@ -134,7 +135,7 @@ const toolbarActionsHtml = `
 `
 
 /**
- * Extraction options dialog
+ * Dialog for creating a new version
  * @typedef {object} newVersionDialog
  * @property {SlDialog} self
  * @property {SlInput} versionName 
@@ -147,11 +148,32 @@ const newVersionDialogHtml = `
   <div class="dialog-column">
     <sl-input name="versionName" label="Version Name" size="small" help-text="Provide a short name for the version (required)"></sl-input>
     <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
-    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your fist edit on this document"></sl-input>
+    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
     <sl-input name="editionNote" label="Description" size="small" help-text="Description of this version (optional)"></sl-input>
   </div>
   <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
   <sl-button slot="footer" name="submit" variant="primary">Create new version</sl-button>  
+</sl-dialog>
+`
+
+/**
+ * Dialog for documenting a revision
+ * @typedef {object} newRevisionChangeDialog
+ * @property {SlDialog} self
+ * @property {SlInput} persId
+ * @property {SlInput} persName 
+ * @property {SlInput} changeDesc 
+ */
+const saveChangeDialogHtml = `
+<sl-dialog name="newRevisionChangeDialog" label="Add a change description">
+  <div class="dialog-column">
+    Document changes of this 
+    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
+    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
+    <sl-input name="changeDesc" label="Description" size="small" help-text="Description of the change"></sl-input>
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Add</sl-button>  
 </sl-dialog>
 `
 
@@ -163,7 +185,6 @@ const newVersionDialogHtml = `
  * @param {ApplicationState} state
  */
 function install(state) {
-
   const tb = ui.toolbar.self
   
   // install controls on menubar
@@ -171,16 +192,17 @@ function install(state) {
 
   // install dialogs
   appendHtml(newVersionDialogHtml)
+  appendHtml(saveChangeDialogHtml)
 
   // === Document button group ===
 
   const da = ui.toolbar.documentActions
-  // save current version
-  da.saveXml.addEventListener('click', () => onClickSaveButton());
+  // save a revision
+  da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
   // enable save button on dirty editor
   xmlEditor.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
-    () =>  da.saveXml.disabled = false
+    () =>  da.saveRevision.disabled = false
   );
 
   // delete
@@ -189,7 +211,7 @@ function install(state) {
   da.deleteAll.addEventListener('click', () => deleteAll(state))
   
   // duplicate
-  da.createNewVersion.addEventListener("click", () => onClickDuplicateButton(state))
+  da.createNewVersion.addEventListener("click", () => onClickCreateNewVersionButton(state))
 
   // download
   da.download.addEventListener("click", () => downloadXml(state))
@@ -415,17 +437,14 @@ async function deleteAll(state) {
 
 
 /**
- * Saves the current file as a new version
- * @param {ApplicationState} state - The current application state.
+ * Add information on responsibitiy, edition or revisions to the document
  * @param {RespStmt} [respStmt] - Optional responsible statement details.
  * @param {Edition} [edition] - Optional edition statement details.
  * @param {RevisionChange} [revisionChange] - Optional revision statement details.
  * @throws {Error} If any of the operations to add teiHeader info fail
  */
-async function createNewVersion(state, respStmt, edition, revisionChange ) {
-  if (!state.xmlPath) {
-    throw new TypeError("State does not contain an xml path")
-  }
+async function addTeiHeaderInfo(respStmt, edition, revisionChange ) {
+
   const xmlDoc = xmlEditor.getXmlTree()
   if (!xmlDoc) {
     throw new Error("No XML document loaded")
@@ -455,13 +474,6 @@ async function createNewVersion(state, respStmt, edition, revisionChange ) {
   }
   prettyPrintXmlDom(xmlDoc)
   await xmlEditor.updateEditorFromXmlTree()
-
-  // save new version
-  let {path} = await saveXml(state.xmlPath, true)
-  state.xmlPath = path
-  state.diffXmlPath = path
-  await fileselection.reload(state)
-  await updateState(state)
 }
 
 /**
@@ -514,9 +526,9 @@ async function searchNodeContentsInPdf(node) {
   await pdfViewer.search(searchTerms);
 }
 
-
+//
 // event listeners
-
+//
 
 /**
  * Called when the "Validate" button is executed
@@ -528,23 +540,14 @@ async function onClickValidateButton() {
 }
 
 /**
- * Called when the "Save" button is executed
- */
-async function onClickSaveButton() {
-  const xmlPath = ui.toolbar.xml.value;
-  // @ts-ignore
-  await saveXml(xmlPath)
-  ui.toolbar.documentActions.saveXml.disabled = true
-  notify("Document was saved.")
-}
-
-/**
- * Called when the "Save" button is executed
+ * Called when the "saveRevision" button is executed
  * @param {ApplicationState} state
  */
-async function onClickDuplicateButton(state) {
+async function onClickSaveRevisionButton(state) {
+
   /** @type {newVersionDialog} */
-  const dialog = document.querySelector('[name="newVersionDialog"]')
+  const dialog = document.querySelector('[name="newRevisionChangeDialog"]')
+  dialog.changeDesc.value = "Corrections"
   try {
     dialog.show()
     await new Promise((resolve, reject) =>{
@@ -568,25 +571,80 @@ async function onClickDuplicateButton(state) {
     resp: "Contributor"
   }
 
+  /** @type {RevisionChange} */
+  const revisionChange = {
+    status: "draft",
+    persId: dialog.persId.value,
+    desc: dialog.changeDesc.value
+  }
+  try {
+    await addTeiHeaderInfo(respStmt, null, revisionChange)
+    await saveXml(state.xmlPath)
+    ui.toolbar.documentActions.saveRevision.disabled = true
+    // dirty state
+    xmlEditor.isDirty = false
+    notify("Document was saved.")
+  } catch(e) {
+    console.error(e)
+    alert(e.message)
+  } 
+}
+
+/**
+ * Called when the "Create new version" button is executed
+ * @param {ApplicationState} state
+ */
+async function onClickCreateNewVersionButton(state) {
+
+  /** @type {newVersionDialog} */
+  const dialog = document.querySelector('[name="newVersionDialog"]')
+  try {
+    dialog.show()
+    await new Promise((resolve, reject) =>{
+      dialog.submit.addEventListener('click', resolve, {once: true})
+      dialog.cancel.addEventListener('click', reject, {once: true})
+      dialog.self.addEventListener('sl-hide', reject, {once: true})
+    })
+  } catch (e) {
+    console.warn("User cancelled")
+    return 
+  } finally {
+    dialog.hide()
+  }
+
+  /** @type {RespStmt} */
+  const respStmt= {
+    persId: dialog.persId.value,
+    persName: dialog.persName.value,
+    resp: "Contributor"
+  }
+
   /** @type {Edition} */
   const editionStmt = {
     title: dialog.versionName.value,
     note: dialog.editionNote.value
   }
 
-  /** @type {RevisionChange} */
-  const revisionChange = {
-    status: "draft",
-    persId: dialog.persId.value,
-    desc: "Corrections"
-  }
   try {
-    await createNewVersion(state, respStmt, editionStmt, revisionChange)
-    ui.toolbar.documentActions.saveXml.disabled = true
+    await addTeiHeaderInfo(respStmt, editionStmt)
+    ui.toolbar.documentActions.saveRevision.disabled = true
+
+    // save new version
+    let {path} = await saveXml(state.xmlPath, true)
+    state.xmlPath = path
+    state.diffXmlPath = path
+    await fileselection.reload(state)
+    await updateState(state)
+    // dirty state
+    xmlEditor.isDirty = false
+
     notify("Document was duplicated. You are now editing the copy.")
   } catch(e) {
+    console.error(e)
     alert(e.message)
-  } 
+  } finally {
+    dialog.hide()
+  }
 }
 
 /**

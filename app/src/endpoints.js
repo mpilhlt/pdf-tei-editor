@@ -56,7 +56,13 @@ const endpoints = {
      * end to perform certain actions
      * Function signature: (promise:Promise<Diagnostics[]>) => void - Invoked with a promise that resolves when validation is done
      */
-    inProgress: "validation.inProgress"
+    inProgress: "validation.inProgress",
+
+    /**
+     * Endpoint that will be invoked with the diagnostics of the completed validation
+     * Function signature: (diagnostics: Diagnostics[]) => Promise<void> 
+     */
+    result: "validation.result"
   }
 }
 
