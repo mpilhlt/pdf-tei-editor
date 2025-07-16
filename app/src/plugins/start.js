@@ -12,6 +12,7 @@ import { updateState, logger, services, dialog, validation, floatingPanel, urlHa
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
+import { setDiagnostics } from '@codemirror/lint'
 
 /**
  * Plugin object
@@ -118,6 +119,15 @@ async function start(state) {
       updateState(state)
     }
 
+    // manually show diagnostics if validation is disabled
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+      if (validation.isDisabled()) {
+        let view = xmlEditor.getView()
+        let diagnostic = evt.detail
+        view.dispatch(setDiagnostics(view.state, [diagnostic]))
+      }
+    })
+
     // finish initialization
     ui.spinner.hide()
     floatingPanel.show()
@@ -149,6 +159,6 @@ async function saveIfDirty() {
   const filePath = ui.toolbar.xml.value
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty) {
     await services.saveXml(filePath)
-    console.log(`Saved ${filePath} to server`)
+    logger.info(`Saved ${filePath} to server`)
   }
 }

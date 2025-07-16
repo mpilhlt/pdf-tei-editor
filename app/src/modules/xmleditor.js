@@ -2,15 +2,16 @@
  * @import {SyntaxNode, Tree} from '@lezer/common'
  * @import {Extension, Range} from '@codemirror/state'
  * @import {ViewUpdate} from '@codemirror/view'
+ * @import {Diagnostic} from '@codemirror/lint'
  */
 
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, Compartment } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { createCompletionSource } from './autocomplete.js';
-import { syntaxTree, syntaxParserRunning } from "@codemirror/language";
+import { syntaxTree, syntaxParserRunning } from "@codemirror/language"
 
 // custom modules
 
@@ -27,29 +28,29 @@ export class XMLEditor extends EventTarget {
    * @event SectionChangedEvent
    * @type {ViewUpdate}
    */
-  /** @type {string} */  
+  /** @type {string} */
   static EVENT_SELECTION_CHANGED = "selectionChanged";
 
   /**
    * @event XmlChangedEvent
    * @type {ViewUpdate}
    */
-  /** @type {string} */  
+  /** @type {string} */
   static EVENT_XML_CHANGED = "xmlChanged";
-  
+
   /**
    * @event EditorUpdateEvent
    * @type {ViewUpdate}
    */
   /** @type {string} */
-  static EVENT_EDITOR_UPDATE ="editorUpdate"
+  static EVENT_EDITOR_UPDATE = "editorUpdate"
 
   /**
    * @event EditorUpdateDelayedEvent
    * @type {ViewUpdate}
    */
   /** @type {string} */
-  static EVENT_EDITOR_DELAYED_UPDATE ="editorUpdateDelayed"
+  static EVENT_EDITOR_DELAYED_UPDATE = "editorUpdateDelayed"
 
   /**
    * @event EditorXmlNotWellFormedEvent
@@ -64,7 +65,7 @@ export class XMLEditor extends EventTarget {
    * @type {ViewUpdate}
    */
   /** @type {string} */
-  static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"  
+  static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
 
   // private members
 
@@ -103,22 +104,12 @@ export class XMLEditor extends EventTarget {
   /**  @type {XMLSerializer} */
   #serializer; // an XMLSerializer object or one with a compatible API
 
-  /** @type {Compartment} */
+  // compartments
   #mergeViewCompartment = new Compartment()
-
-  /** @type {Compartment} */
   #autocompleteCompartment = new Compartment()
-
-  /** @type {Compartment} */
   #linterCompartment = new Compartment()
-
-  /** @type {Compartment} */
   #updateListenerCompartment = new Compartment()
-
-  /** @type {Compartment} */
   #selectionChangeCompartment = new Compartment()
-
-   /** @type {Compartment} */
   #lineWrappingCompartment = new Compartment()
 
   /**
@@ -151,7 +142,7 @@ export class XMLEditor extends EventTarget {
     if (tagData) {
       this.startAutocomplete(tagData);
     }
-
+    // editor view
     this.#view = new EditorView({
       state: EditorState.create({ doc: "", extensions }),
       parent: editorDiv
@@ -194,13 +185,13 @@ export class XMLEditor extends EventTarget {
    * Adds an update listener
    * @param {(update:ViewUpdate) => void} listener 
    */
-  addUpdateListener(listener){
-    if (typeof listener != "function"){
+  addUpdateListener(listener) {
+    if (typeof listener != "function") {
       throw new TypeError("Argument must be a function")
     }
     const listeners = this.#updateListenerCompartment.get(this.#view.state) || []
     this.#view.dispatch({
-      effects: this.#updateListenerCompartment.reconfigure([listeners, EditorView.updateListener.of(listener) ])
+      effects: this.#updateListenerCompartment.reconfigure([listeners, EditorView.updateListener.of(listener)])
     })
   }
 
@@ -209,7 +200,7 @@ export class XMLEditor extends EventTarget {
    * @param {(ranges:Range[]) => void} listener 
    */
   addSelectionChangeListener(listener) {
-    if (typeof listener != "function"){
+    if (typeof listener != "function") {
       throw new TypeError("Argument must be a function")
     }
     const listeners = this.#selectionChangeCompartment.get(this.#view.state) || []
@@ -387,7 +378,7 @@ export class XMLEditor extends EventTarget {
     //this.#autocompleteCompartment.reconfigure([autocompleteExtension])
     this.#view.dispatch({
       effects: this.#autocompleteCompartment.reconfigure([autocompleteExtension])
-    });    
+    });
   }
 
   /**
@@ -396,7 +387,7 @@ export class XMLEditor extends EventTarget {
   stopAutocomplete() {
     this.#view.dispatch({
       effects: this.#autocompleteCompartment.reconfigure([])
-    });    
+    });
   }
 
   /**
@@ -437,7 +428,7 @@ export class XMLEditor extends EventTarget {
    * @returns {string} 
    */
   getXML() {
-    if ( this.#xmlTree) {
+    if (this.#xmlTree) {
       return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
     }
     return ''
@@ -748,19 +739,19 @@ export class XMLEditor extends EventTarget {
   // 
 
   /**
-   * Marks the editor as not ready and reates the isReadyPromise if it does not already exist
+   * Marks the editor as not ready and creates the isReadyPromise if it does not already exist
    * already exists 
    */
   #markAsNotReady() {
     this.#isReady = false
-    this.#readyPromise = this.#readyPromise || 
+    this.#readyPromise = this.#readyPromise ||
       /** @type {Promise<void>} */(new Promise(resolve => {
-        this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
-          this.#isReady = true
-          this.#readyPromise = null
-          resolve();
-        }, { once: true })
-      }
+      this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+        this.#isReady = true
+        this.#readyPromise = null
+        resolve();
+      }, { once: true })
+    }
     ))
   }
 
@@ -816,7 +807,7 @@ export class XMLEditor extends EventTarget {
    */
   async #onSelectionChange(ranges) {
     // wait for any editor operations to finish
-    await this.whenReady()    
+    await this.whenReady()
     let rangesWithNode = []
     // add the selected node in the XML-DOM tree to each range
     if (ranges.length > 0) {
@@ -825,13 +816,13 @@ export class XMLEditor extends EventTarget {
         try {
           const node = this.getDomNodeAt(ranges[0].from);
           const xpath = this.getXPathForNode(node)
-          return Object.assign({node, xpath}, range)
+          return Object.assign({ node, xpath }, range)
         } catch (e) {
           console.warn(e.message)
           return range
         }
       })
-    }  
+    }
 
     // inform the listeners
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: rangesWithNode }))
@@ -889,6 +880,28 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
+   * Returns a Diagnostic object from a DomParser error node 
+   * @param {Node} errorNode The error node containing parse errors
+   * @returns {Diagnostic}
+   * @throws {Error} if error node cannot be parsed
+   */
+  #parseErrorNode(errorNode) {
+    const severity = "error"
+    const [message, _, location] = errorNode.firstChild.textContent.split("\n")
+    const regex = /\d+/g;
+    const matches = location.match(regex);
+    if (matches && matches.length >= 2) {
+      let from, to;
+      const line = parseInt(matches[0], 10);
+      const column = parseInt(matches[1], 10);
+      ({ from, to } = this.#view.state.doc.line(line))
+      from += column
+      return { message, severity, line, column, from, to }
+    } 
+    throw new Error(`Cannot parse line and column from error message: "${location}"`)
+  }
+
+  /**
    * Synchronizes the syntax tree and the XML DOM
    * @returns {Promise<Boolean>} Returns true if the tree updates were successful and false if not
    */
@@ -896,10 +909,10 @@ export class XMLEditor extends EventTarget {
     this.#editorContent = this.#view.state.doc.toString();
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
-    console.log(errorNode)
     if (errorNode) {
-      console.warn("Document was updated but is not well-formed")
-      this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, {detail: errorNode}))
+      const diagnostic = this.#parseErrorNode(errorNode)
+      console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
+      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: diagnostic }))
       this.#xmlTree = null;
       return false;
     }
