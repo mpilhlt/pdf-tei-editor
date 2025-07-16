@@ -4,7 +4,8 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
+ * @import { SlButton, SlButtonGroup, SlDialog, SlInput } from '../ui.js'
+ * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  */
 import ui from '../ui.js'
 import { updateState, client, logger, dialog, 
@@ -13,6 +14,8 @@ import { appendHtml } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
+import * as tei_utils from '../modules/tei-utils.js'
+import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 
 /**
  * plugin API
@@ -26,7 +29,7 @@ const api = {
   deleteCurrentVersion,
   deleteAllVersions,
   deleteAll, 
-  duplicateXml,
+  createNewVersion,
   downloadXml,
   uploadXml,
   inProgress,
@@ -52,7 +55,7 @@ export default plugin
  * @typedef {object} documentActionsComponent
  * @property {SlButtonGroup} self
  * @property {SlButton} saveXml 
- * @property {SlButton} duplicateXml
+ * @property {SlButton} createNewVersion
  * @property {SlButton} upload
  * @property {SlButton} download
  * @property {SlButton} deleteBtn
@@ -81,7 +84,7 @@ const toolbarActionsHtml = `
 
     <!-- duplicate -->
     <sl-tooltip content="Duplicate current document to make changes">
-      <sl-button name="duplicateXml" size="small" disabled>
+      <sl-button name="createNewVersion" size="small" disabled>
         <sl-icon name="copy"></sl-icon>
       </sl-button>
     </sl-tooltip>  
@@ -130,6 +133,28 @@ const toolbarActionsHtml = `
 </span>
 `
 
+/**
+ * Extraction options dialog
+ * @typedef {object} newVersionDialog
+ * @property {SlDialog} self
+ * @property {SlInput} versionName 
+ * @property {SlInput} persName 
+ * @property {SlInput} persId 
+ * @property {SlInput} editionNote 
+ */
+const newVersionDialogHtml = `
+<sl-dialog name="newVersionDialog" label="Create new version">
+  <div class="dialog-column">
+    <sl-input name="versionName" label="Version Name" size="small" help-text="Provide a short name for the version (required)"></sl-input>
+    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
+    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your fist edit on this document"></sl-input>
+    <sl-input name="editionNote" label="Description" size="small" help-text="Description of this version (optional)"></sl-input>
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Create new version</sl-button>  
+</sl-dialog>
+`
+
 //
 // Implementation
 //
@@ -143,6 +168,9 @@ function install(state) {
   
   // install controls on menubar
   appendHtml(toolbarActionsHtml, tb)
+
+  // install dialogs
+  appendHtml(newVersionDialogHtml)
 
   // === Document button group ===
 
@@ -161,7 +189,7 @@ function install(state) {
   da.deleteAll.addEventListener('click', () => deleteAll(state))
   
   // duplicate
-  da.duplicateXml.addEventListener("click", () => onClickDuplicateButton(state))
+  da.createNewVersion.addEventListener("click", () => onClickDuplicateButton(state))
 
   // download
   da.download.addEventListener("click", () => downloadXml(state))
@@ -189,7 +217,7 @@ async function update(state) {
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
   // Allow duplicate only if we have an xml path
-  da.duplicateXml.disabled = !Boolean(state.xmlPath)
+  da.createNewVersion.disabled = !Boolean(state.xmlPath)
 
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xmlPath)
@@ -384,16 +412,54 @@ async function deleteAll(state) {
   }
 }
 
+
+
 /**
  * Saves the current file as a new version
- * @param {ApplicationState} state
+ * @param {ApplicationState} state - The current application state.
+ * @param {RespStmt} [respStmt] - Optional responsible statement details.
+ * @param {Edition} [edition] - Optional edition statement details.
+ * @param {RevisionChange} [revisionChange] - Optional revision statement details.
+ * @throws {Error} If any of the operations to add teiHeader info fail
  */
-async function duplicateXml(state) {
+async function createNewVersion(state, respStmt, edition, revisionChange ) {
   if (!state.xmlPath) {
     throw new TypeError("State does not contain an xml path")
   }
+  const xmlDoc = xmlEditor.getXmlTree()
+  if (!xmlDoc) {
+    throw new Error("No XML document loaded")
+  }
+
+  // update document: <respStmt>
+  if (respStmt) {
+    if (!respStmt || tei_utils.getRespStmtById(xmlDoc, respStmt.persId)) {
+      console.warn("No persId or respStmt already exists for this persId")
+    } else {
+      tei_utils.addRespStmt(xmlDoc, respStmt)
+    }
+  }
+
+  // update document: <edition>
+  if (edition) {
+    const versionName = edition.title
+    const nameExistsInDoc = Array.from(xmlDoc.querySelector('edition > title') || []).some(elem => elem.textContent === versionName)
+    const nameExistsInVersions = fileselection.fileData.some(file => file.label === versionName)
+    if (nameExistsInDoc || nameExistsInVersions ) {
+      throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
+    }
+    tei_utils.addEdition(xmlDoc, edition)
+  }
+  if (revisionChange) {
+    tei_utils.addRevisionChange(xmlDoc, revisionChange)
+  }
+  prettyPrintXmlDom(xmlDoc)
+  await xmlEditor.updateEditorFromXmlTree()
+
+  // save new version
   let {path} = await saveXml(state.xmlPath, true)
   state.xmlPath = path
+  state.diffXmlPath = path
   await fileselection.reload(state)
   await updateState(state)
 }
@@ -477,9 +543,50 @@ async function onClickSaveButton() {
  * @param {ApplicationState} state
  */
 async function onClickDuplicateButton(state) {
-  await duplicateXml(state)
-  ui.toolbar.documentActions.saveXml.disabled = true
-  notify("Document was duplicated. You are now editing the copy.")
+  /** @type {newVersionDialog} */
+  const dialog = document.querySelector('[name="newVersionDialog"]')
+  try {
+    dialog.show()
+    await new Promise((resolve, reject) =>{
+      dialog.submit.addEventListener('click', resolve, {once: true})
+      dialog.cancel.addEventListener('click', reject, {once: true})
+      dialog.self.addEventListener('sl-hide', reject, {once: true})
+    })
+  } catch (e) {
+    console.warn("User cancelled")
+    return 
+  } finally {
+    dialog.hide()
+  }
+
+  dialog.hide()
+
+  /** @type {RespStmt} */
+  const respStmt= {
+    persId: dialog.persId.value,
+    persName: dialog.persName.value,
+    resp: "Contributor"
+  }
+
+  /** @type {Edition} */
+  const editionStmt = {
+    title: dialog.versionName.value,
+    note: dialog.editionNote.value
+  }
+
+  /** @type {RevisionChange} */
+  const revisionChange = {
+    status: "draft",
+    persId: dialog.persId.value,
+    desc: "Corrections"
+  }
+  try {
+    await createNewVersion(state, respStmt, editionStmt, revisionChange)
+    ui.toolbar.documentActions.saveXml.disabled = true
+    notify("Document was duplicated. You are now editing the copy.")
+  } catch(e) {
+    alert(e.message)
+  } 
 }
 
 /**
@@ -519,3 +626,4 @@ function getTextNodes(node) {
   }
   return textNodes;
 }
+

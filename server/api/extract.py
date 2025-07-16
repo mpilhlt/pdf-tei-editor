@@ -9,6 +9,8 @@ from shutil import move
 from llamore import GeminiExtractor
 from llamore import LineByLinePrompter
 from llamore import TeiBiblStruct
+import datetime
+
 
 from server.lib.decorators import handle_api_errors
 from server.lib.server_utils import ApiError, get_gold_tei_path, make_timestamp
@@ -348,7 +350,7 @@ def create_tei_header(doi: str) -> etree.Element:
     # <revisionDesc>
     """
         <revisionDesc>
-            <change when="2024-10-27">
+            <change  status="created" when="2024-08-01T14:38:32.499588">
                 <name ref="#BJ">Bob Johnson</name>
                 <desc>Merged the initial manual transcription by Alice Higgins with the automatic transcription from OCR Engine v3.2.  Used Alice's transcription as the base and corrected errors in it using the OCR output. </desc>
             </change>
@@ -359,8 +361,8 @@ def create_tei_header(doi: str) -> etree.Element:
         </revisionDesc>        
     """
     revisionDesc = etree.SubElement(teiHeader, 'revisionDesc')
-    timestamp = make_timestamp()
-    change = etree.SubElement(revisionDesc, 'change', when=timestamp.split(" ")[0])
-    etree.SubElement(change, 'desc').text = f"Extracted {timestamp}"
+    timestamp = datetime.datetime.now().isoformat()
+    change = etree.SubElement(revisionDesc, 'change', when=timestamp, status="created")
+    etree.SubElement(change, 'desc').text = f"First version extracted from PDF using LLamore."
    
     return teiHeader
