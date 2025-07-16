@@ -21,7 +21,8 @@ const tagDataPath = '/data/tei.json'
  */
 const api = new NavXmlEditor('codemirror-container')
 
-// add a editor "dirty" state (this is an ad-hoc solution, to be replaced with a more robust one)
+// add a editor "dirty" state 
+// (this is an ad-hoc solution, to be replaced with a more robust one)
 api.isDirty = false
 
 /**

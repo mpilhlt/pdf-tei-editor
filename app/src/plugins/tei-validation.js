@@ -8,7 +8,6 @@ import { pluginManager, client, xmlEditor, invoke, logger, endpoints } from '../
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
 import { XMLEditor } from './xmleditor.js';
 
-
 const api = {
   configure,
   validate,

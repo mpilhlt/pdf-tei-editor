@@ -121,6 +121,7 @@ async function start(state) {
     // finish initialization
     ui.spinner.hide()
     floatingPanel.show()
+    xmlEditor.setLineWrapping(true)
     logger.info("Application ready.")
 
   } catch (error) {

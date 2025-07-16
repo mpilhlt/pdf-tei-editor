@@ -95,9 +95,6 @@ export class XMLEditor extends EventTarget {
   /** @type {Object} */
   #mergeViewExt
 
-  /** @type {Object} */
-  #mergeViewCompartment
-
   /** @type {string} */
   #original // the original XML document, when in merge view mode
 
@@ -107,16 +104,22 @@ export class XMLEditor extends EventTarget {
   #serializer; // an XMLSerializer object or one with a compatible API
 
   /** @type {Compartment} */
-  #autocompleteCompartment
+  #mergeViewCompartment = new Compartment()
 
   /** @type {Compartment} */
-  #linterCompartment
+  #autocompleteCompartment = new Compartment()
 
   /** @type {Compartment} */
-  #updateListenerCompartment
+  #linterCompartment = new Compartment()
 
   /** @type {Compartment} */
-  #selectionChangeCompartment
+  #updateListenerCompartment = new Compartment()
+
+  /** @type {Compartment} */
+  #selectionChangeCompartment = new Compartment()
+
+   /** @type {Compartment} */
+  #lineWrappingCompartment = new Compartment()
 
   /**
    * Constructs an XMLEditor instance.
@@ -133,12 +136,6 @@ export class XMLEditor extends EventTarget {
       throw new Error(`Element with ID ${editorDivId} not found.`);
     }
 
-    this.#mergeViewCompartment = new Compartment()
-    this.#autocompleteCompartment = new Compartment()
-    this.#linterCompartment = new Compartment()
-    this.#updateListenerCompartment = new Compartment()
-    this.#selectionChangeCompartment = new Compartment()
-
     // list of extensions to be used in the editor
     const extensions = [
       basicSetup,
@@ -148,6 +145,7 @@ export class XMLEditor extends EventTarget {
       this.#updateListenerCompartment.of([]),
       this.#mergeViewCompartment.of([]),
       this.#autocompleteCompartment.of([]),
+      this.#lineWrappingCompartment.of([])
     ];
 
     if (tagData) {
@@ -443,6 +441,18 @@ export class XMLEditor extends EventTarget {
       return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
     }
     return ''
+  }
+
+  /**
+   * Toggles line wrapping on and off
+   * @param {boolean} value 
+   */
+  setLineWrapping(value) {
+    this.#view.dispatch({
+      effects: [this.#lineWrappingCompartment.reconfigure(
+        value ? EditorView.lineWrapping : []
+      )]
+    });
   }
 
   /**
