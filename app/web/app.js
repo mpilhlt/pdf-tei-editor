@@ -40829,7 +40829,8 @@ class XMLEditor extends EventTarget {
           const xpath = this.getXPathForNode(node);
           return Object.assign({ node, xpath }, range)
         } catch (e) {
-          console.warn(e.message);
+          // add error message to range object in case we cannot determine node/xpath
+          range.diagnostic = e.message;
           return range
         }
       });
