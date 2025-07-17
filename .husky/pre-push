@@ -1,4 +1,8 @@
 npm run build
-git add -A
-git commit -m "Added build files"
+if [[ `git status --porcelain` ]]; then
+  git add -A
+  git commit -m "Added build files"
+else
+  echo "No changes"
+fi
 exit 0
