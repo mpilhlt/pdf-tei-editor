@@ -13,7 +13,7 @@ import { parseXPath, isXPathSubset } from '../modules/utils.js'
 import { api as logger } from './logger.js'
 
 // the path to the autocompletion data
-const tagDataPath = '/data/tei.json'
+const tagDataPath = '/config/tei.json'
 
 /**
  * component is an instance of NavXmlEditor

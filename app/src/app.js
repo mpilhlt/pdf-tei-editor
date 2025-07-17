@@ -31,10 +31,11 @@ import { plugin as startPlugin } from './plugins/start.js'
  * The application state, which is often passed to the plugin endpoints
  * 
  * @typedef {object} ApplicationState
- * @property {string?} pdfPath - The path to the PDF file in the viewer
- * @property {string?} xmlPath - The path to the XML file in the editor
- * @property {string?} diffXmlPath - The path to an XML file which is used to create a diff, if any
- * @property {string?} xpath - The current xpath used to select a node in the editor
+ * @property {string|null} pdfPath - The path to the PDF file in the viewer
+ * @property {string|null} xmlPath - The path to the XML file in the editor
+ * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
+ * @property {string|null} xpath - The current xpath used to select a node in the editor
+ * @property {bool} webdavEnabled - Wether on the server, we have a WebDAV backend
  */
 /**
  * @type{ApplicationState}
@@ -43,7 +44,8 @@ let state = {
   pdfPath: null,
   xmlPath: null,
   diffXmlPath: null,
-  xpath: null
+  xpath: null,
+  webdavEnabled: false
 }
 
 const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
@@ -81,6 +83,10 @@ async function updateState(state, changes={}) {
 
 // log level
 await invoke(ep.log.setLogLevel, {level: logLevel.DEBUG})
+
+// get the server-side state 
+const server_state = await client.state()
+Object.assign(state, server_state)
 
 // let the plugins install their components
 await invoke(ep.install, state)

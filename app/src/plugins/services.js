@@ -8,8 +8,10 @@
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  */
 import ui from '../ui.js'
-import { updateState, client, logger, dialog, 
-  fileselection, xmlEditor, pdfViewer, services, validation } from '../app.js'
+import {
+  updateState, client, logger, dialog,
+  fileselection, xmlEditor, pdfViewer, services, validation
+} from '../app.js'
 import { appendHtml } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -28,12 +30,13 @@ const api = {
   removeMergeView,
   deleteCurrentVersion,
   deleteAllVersions,
-  deleteAll, 
+  deleteAll,
   addTeiHeaderInfo,
   downloadXml,
   uploadXml,
   inProgress,
-  searchNodeContentsInPdf
+  searchNodeContentsInPdf,
+  syncFiles
 }
 
 /**
@@ -56,6 +59,7 @@ export default plugin
  * @property {SlButtonGroup} self
  * @property {SlButton} saveRevision 
  * @property {SlButton} createNewVersion
+ * @property {SlButton} sync
  * @property {SlButton} upload
  * @property {SlButton} download
  * @property {SlButton} deleteBtn
@@ -83,12 +87,19 @@ const toolbarActionsHtml = `
       </sl-button>
     </sl-tooltip>
 
-    <!-- duplicate -->
+    <!-- create new version -->
     <sl-tooltip content="Duplicate current document to make changes">
       <sl-button name="createNewVersion" size="small" disabled>
         <sl-icon name="copy"></sl-icon>
       </sl-button>
     </sl-tooltip>  
+
+    <!-- sync -->
+    <sl-tooltip content="Synchronize files on the backend">
+      <sl-button name="sync" size="small" disabled>
+        <sl-icon name="arrow-repeat"></sl-icon>
+      </sl-button>
+    </sl-tooltip>      
     
     <!-- upload, not implemented yet -->
     <sl-tooltip content="Upload document">
@@ -186,7 +197,7 @@ const saveChangeDialogHtml = `
  */
 function install(state) {
   const tb = ui.toolbar.self
-  
+
   // install controls on menubar
   appendHtml(toolbarActionsHtml, tb)
 
@@ -202,16 +213,19 @@ function install(state) {
   // enable save button on dirty editor
   xmlEditor.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
-    () =>  da.saveRevision.disabled = false
+    () => da.saveRevision.disabled = false
   );
 
   // delete
   da.deleteCurrentVersion.addEventListener("click", () => deleteCurrentVersion(state))
   da.deleteAllVersions.addEventListener('click', () => deleteAllVersions(state))
   da.deleteAll.addEventListener('click', () => deleteAll(state))
-  
-  // duplicate
+
+  // new version
   da.createNewVersion.addEventListener("click", () => onClickCreateNewVersionButton(state))
+
+  // sync
+  da.sync.addEventListener("click", () => onClickSyncBtn(state))
 
   // download
   da.download.addEventListener("click", () => downloadXml(state))
@@ -234,7 +248,7 @@ async function update(state) {
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
   da.deleteAll.disabled = ui.toolbar.pdf.childElementCount < 2 // at least on PDF must be present
-  da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2 
+  da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2
   da.deleteCurrentVersion.disabled = ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
@@ -243,6 +257,9 @@ async function update(state) {
 
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xmlPath)
+
+  // disable sync if webdav is not enabled
+  da.sync.disabled = !state.webdavEnabled
 }
 
 
@@ -310,8 +327,8 @@ async function validateXml() {
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<{path:string}>} An object with a path property, containing the path to the saved version
  */
-async function saveXml(filePath, saveAsNewVersion=false) {
-  logger.info(`Saving XML${saveAsNewVersion ? " as new version":""}...`);
+async function saveXml(filePath, saveAsNewVersion = false) {
+  logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
   if (!xmlEditor.getXmlTree()) {
     throw new Error("No XML valid document in the editor")
   }
@@ -328,14 +345,13 @@ async function showMergeView(state, diff) {
   ui.spinner.show('Computing file differences, please wait...')
   try {
     await xmlEditor.showMergeView(diff)
-    updateState(state, {diffXmlPath: diff})
+    updateState(state, { diffXmlPath: diff })
     // turn validation off as it creates too much visual noise
-    validation.configure({mode:"off"})
+    validation.configure({ mode: "off" })
   } finally {
     ui.spinner.hide()
   }
 }
-
 
 /**
  * Removes all remaining diffs
@@ -343,9 +359,9 @@ async function showMergeView(state, diff) {
 function removeMergeView(state) {
   xmlEditor.hideMergeView()
   // re-enable validation
-  validation.configure({mode:"auto"})
+  validation.configure({ mode: "auto" })
   UrlHash.remove("diff")
-  updateState(state, {diffXmlPath:null})
+  updateState(state, { diffXmlPath: null })
 }
 
 /**
@@ -353,7 +369,7 @@ function removeMergeView(state) {
  * This will remove the XML file from the server and reload the gold version
  * @param {ApplicationState} state
  */
-async function deleteCurrentVersion(state){  
+async function deleteCurrentVersion(state) {
   // @ts-ignore
   if (ui.toolbar.xml.value.startsWith("/data/tei")) {
     dialog.error("You cannot delete the gold version")
@@ -361,22 +377,27 @@ async function deleteCurrentVersion(state){
   }
   const filePathsToDelete = [ui.toolbar.xml.value]
   if (filePathsToDelete.length > 0) {
-    await client.deleteFiles(filePathsToDelete)
-  }
-  try {
     const versionName = ui.toolbar.xml.selectedOptions[0].textContent
     const msg = `Are you sure you want to delete the current version "${versionName}"?`
     if (!confirm(msg)) return; // todo use dialog
     services.removeMergeView(state)
-    // update the file data
-    await fileselection.reload(state)
-    // load the gold version
-    // @ts-ignore
-    const xml = ui.toolbar.xml.firstChild?.value 
-    await load(state, { xml })
-    notify(`Version "${versionName}" has been deleted.`)
-  } catch (error) {
-    console.error(error)
+    // delete the file
+    await client.deleteFiles(filePathsToDelete)
+    try {
+      // update the file data
+      await fileselection.reload(state)
+      // load the gold version
+      // @ts-ignore
+      const xml = ui.toolbar.xml.firstChild?.value
+      await load(state, { xml })
+      notify(`Version "${versionName}" has been deleted.`)
+      syncFiles(state, false)
+        .then(summary => summary && notify("Synchronized files"))
+        .catch(e => console.error(e))
+    } catch (error) {
+      console.error(error)
+      alert(error.message)
+    }
   }
 }
 
@@ -391,17 +412,23 @@ async function deleteAllVersions(state) {
   if (filePathsToDelete.length > 0) {
     const msg = "Are you sure you want to delete all versions of this document and leave only the current gold standard version? This cannot be undone."
     if (!confirm(msg)) return; // todo use dialog
-    services.removeMergeView(state)
-    await client.deleteFiles(filePathsToDelete)
   }
+  services.removeMergeView(state)
+  // delete
+  await client.deleteFiles(filePathsToDelete)
   try {
+
     // update the file data
     await fileselection.reload(state)
     // load the gold version
-    await load(state, { xml:xmlPaths[0] })
+    await load(state, { xml: xmlPaths[0] })
     notify("All version have been deleted")
+    syncFiles(state, false)
+      .then(summary => summary && notify("Synchronized files"))
+      .catch(e => console.error(e))    
   } catch (error) {
     console.error(error)
+    alert(error.message)
   }
 }
 
@@ -410,7 +437,7 @@ async function deleteAllVersions(state) {
  * @param {ApplicationState} state
  */
 async function deleteAll(state) {
-  
+
   if (ui.toolbar.pdf.childElementCount < 2) {
     throw new Error("Cannot delete all files, at least one PDF must be present")
   }
@@ -418,69 +445,55 @@ async function deleteAll(state) {
   // @ts-ignore
   const filePathsToDelete = [ui.toolbar.pdf.value]
     .concat(Array.from(ui.toolbar.xml.childNodes).map(option => option.value))
-    
+
   if (filePathsToDelete.length > 0) {
     const msg = `Are you sure you want to delete the current PDF and all XML versions? This cannot be undone.`
     if (!confirm(msg)) return; // todo use dialog
-    services.removeMergeView(state)
-    console.debug("Deleting files:", filePathsToDelete)
-    await client.deleteFiles(filePathsToDelete)
   }
+
+  services.removeMergeView(state)
+  console.debug("Deleting files:", filePathsToDelete)
+  await client.deleteFiles(filePathsToDelete)
+
   try {
     // update the file data
     await fileselection.reload(state)
 
     // load the first PDF and XML file 
-    await load(state, { 
-      pdf: fileselection.fileData[0].pdf, 
-      xml: fileselection.fileData[0].xml 
+    await load(state, {
+      pdf: fileselection.fileData[0].pdf,
+      xml: fileselection.fileData[0].xml
     })
     notify("All files have been deleted")
+    syncFiles(state, false)
+      .then(summary => summary && notify("Synchronized files"))
+      .catch(e => console.error(e))
   } catch (error) {
     console.error(error)
+    alert(error.message)
   }
 }
 
-
-
 /**
- * Add information on responsibitiy, edition or revisions to the document
- * @param {RespStmt} [respStmt] - Optional responsible statement details.
- * @param {Edition} [edition] - Optional edition statement details.
- * @param {RevisionChange} [revisionChange] - Optional revision statement details.
- * @throws {Error} If any of the operations to add teiHeader info fail
+ * Synchronizes the files on the server with the WebDAV backend, if so configured
+ * @param {ApplicationState} state 
+ * @param {boolean} showSpinner Whether to show a blocking spinner
  */
-async function addTeiHeaderInfo(respStmt, edition, revisionChange ) {
-
-  const xmlDoc = xmlEditor.getXmlTree()
-  if (!xmlDoc) {
-    throw new Error("No XML document loaded")
-  }
-
-  // update document: <respStmt>
-  if (respStmt) {
-    if (!respStmt || tei_utils.getRespStmtById(xmlDoc, respStmt.persId)) {
-      console.warn("No persId or respStmt already exists for this persId")
-    } else {
-      tei_utils.addRespStmt(xmlDoc, respStmt)
+async function syncFiles(state, showSpinner = true) {
+  if (state.webdavEnabled) {
+    try {
+      logger.debug("Synchronizing files on the server")
+      showSpinner && ui.spinner.show('Synchronizing files, please wait...')
+      const summary = await client.syncFiles()
+      logger.debug(summary)
+      return summary
+    } catch (e) {
+      throw e
+    } finally {
+      showSpinner && ui.spinner.hide()
     }
   }
-
-  // update document: <edition>
-  if (edition) {
-    const versionName = edition.title
-    const nameExistsInDoc = Array.from(xmlDoc.querySelector('edition > title') || []).some(elem => elem.textContent === versionName)
-    const nameExistsInVersions = fileselection.fileData.some(file => file.label === versionName)
-    if (nameExistsInDoc || nameExistsInVersions ) {
-      throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
-    }
-    tei_utils.addEdition(xmlDoc, edition)
-  }
-  if (revisionChange) {
-    tei_utils.addRevisionChange(xmlDoc, revisionChange)
-  }
-  prettyPrintXmlDom(xmlDoc)
-  await xmlEditor.updateEditorFromXmlTree()
+  return false
 }
 
 /**
@@ -501,6 +514,20 @@ function downloadXml(state) {
   URL.revokeObjectURL(url)
 }
 
+
+/**
+ * Uploads an XML file, creating a new version for the currently selected document
+ * @param {ApplicationState} state 
+ */
+async function uploadXml(state) {
+  const { filename: tempFilename } = await client.uploadFile(undefined, { accept: '.xml' })
+  const { path } = await client.createVersionFromUpload(tempFilename, state.xmlPath)
+  await fileselection.reload(state)
+  await load(state, { xml: path })
+  notify("Document was uploaded. You are now editing the new version.")
+}
+
+
 /**
  * Given a Node in the XML, search and highlight its text content in the PDF Viewer
  * @param {Element} node 
@@ -509,7 +536,7 @@ async function searchNodeContentsInPdf(node) {
 
   let searchTerms = getNodeText(node)
     // split all node text along whitespace and hypen/dash characters
-    .reduce( (/**@type {string[]}*/acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
+    .reduce((/**@type {string[]}*/acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
     // Search terms must be more than three characters or consist of digits. This is to remove 
     // the most common "stop words" which would litter the search results with false positives.
     // This incorrectly removes hyphenated word parts but the alternative would be to  have to 
@@ -557,14 +584,14 @@ async function onClickSaveRevisionButton(state) {
   dialog.changeDesc.value = "Corrections"
   try {
     dialog.show()
-    await new Promise((resolve, reject) =>{
-      dialog.submit.addEventListener('click', resolve, {once: true})
-      dialog.cancel.addEventListener('click', reject, {once: true})
-      dialog.self.addEventListener('sl-hide', reject, {once: true})
+    await new Promise((resolve, reject) => {
+      dialog.submit.addEventListener('click', resolve, { once: true })
+      dialog.cancel.addEventListener('click', reject, { once: true })
+      dialog.self.addEventListener('sl-hide', reject, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
-    return 
+    return
   } finally {
     dialog.hide()
   }
@@ -572,7 +599,7 @@ async function onClickSaveRevisionButton(state) {
   dialog.hide()
 
   /** @type {RespStmt} */
-  const respStmt= {
+  const respStmt = {
     persId: dialog.persId.value,
     persName: dialog.persName.value,
     resp: "Contributor"
@@ -584,17 +611,23 @@ async function onClickSaveRevisionButton(state) {
     persId: dialog.persId.value,
     desc: dialog.changeDesc.value
   }
+  ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     await addTeiHeaderInfo(respStmt, null, revisionChange)
     await saveXml(state.xmlPath)
-    ui.toolbar.documentActions.saveRevision.disabled = true
+    notify("Document was saved.")
+    syncFiles(state, false)
+      .then(summary => summary && notify("Synchronized files"))
+      .catch(e => console.error(e))
+
     // dirty state
     xmlEditor.isDirty = false
-    notify("Document was saved.")
-  } catch(e) {
+  } catch (e) {
     console.error(e)
     alert(e.message)
-  } 
+  } finally {
+    ui.toolbar.documentActions.saveRevision.disabled = false
+  }
 }
 
 /**
@@ -607,20 +640,20 @@ async function onClickCreateNewVersionButton(state) {
   const dialog = document.querySelector('[name="newVersionDialog"]')
   try {
     dialog.show()
-    await new Promise((resolve, reject) =>{
-      dialog.submit.addEventListener('click', resolve, {once: true})
-      dialog.cancel.addEventListener('click', reject, {once: true})
-      dialog.self.addEventListener('sl-hide', reject, {once: true})
+    await new Promise((resolve, reject) => {
+      dialog.submit.addEventListener('click', resolve, { once: true })
+      dialog.cancel.addEventListener('click', reject, { once: true })
+      dialog.self.addEventListener('sl-hide', reject, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
-    return 
+    return
   } finally {
     dialog.hide()
   }
 
   /** @type {RespStmt} */
-  const respStmt= {
+  const respStmt = {
     persId: dialog.persId.value,
     persName: dialog.persName.value,
     resp: "Contributor"
@@ -632,39 +665,51 @@ async function onClickCreateNewVersionButton(state) {
     note: dialog.editionNote.value
   }
 
+  ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     await addTeiHeaderInfo(respStmt, editionStmt)
-    ui.toolbar.documentActions.saveRevision.disabled = true
 
     // save new version
-    let {path} = await saveXml(state.xmlPath, true)
+    let { path } = await saveXml(state.xmlPath, true)
     state.xmlPath = path
     state.diffXmlPath = path
     await fileselection.reload(state)
     await updateState(state)
+
     // dirty state
     xmlEditor.isDirty = false
-
     notify("Document was duplicated. You are now editing the copy.")
-  } catch(e) {
+    syncFiles(state, false)
+      .then(summary => summary && notify("Synchronized files"))
+      .catch(e => console.error(e))
+  } catch (e) {
     console.error(e)
     alert(e.message)
   } finally {
+    ui.toolbar.documentActions.saveRevision.disabled = false
     dialog.hide()
   }
 }
 
-/**
- * Uploads an XML file, creating a new version for the currently selected document
- * @param {ApplicationState} state 
- */
-async function uploadXml(state) {
-  const { filename: tempFilename } = await client.uploadFile(undefined, { accept: '.xml' })
-  const { path } = await client.createVersionFromUpload(tempFilename, state.xmlPath)
-  await fileselection.reload(state)
-  await load(state, { xml: path })
-  notify("Document was uploaded. You are now editing the new version.")
+async function onClickSyncBtn(state) {
+  const summary = await syncFiles(state)
+  if (summary) {
+    let msg = []
+    for (const [action, count] of Object.entries(summary)) {
+      if (count > 0) {
+        msg.push(`${action.replace('_', ' ')}: ${count}`)
+      }
+    }
+    if (msg.length > 0) {
+      notify(msg.join(", "))
+      // something has changed, reload the file data
+      fileselection.reload(state)
+    }
+  }
+  fileselection.reload(state)
 }
+
+
 
 /**
  * Returns a list of non-empty text content from all text nodes contained in the given node
@@ -690,5 +735,46 @@ function getTextNodes(node) {
     }
   }
   return textNodes;
+}
+
+
+/**
+ * Add information on responsibitiy, edition or revisions to the document
+ * @param {RespStmt} [respStmt] - Optional responsible statement details.
+ * @param {Edition} [edition] - Optional edition statement details.
+ * @param {RevisionChange} [revisionChange] - Optional revision statement details.
+ * @throws {Error} If any of the operations to add teiHeader info fail
+ */
+async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
+
+  const xmlDoc = xmlEditor.getXmlTree()
+  if (!xmlDoc) {
+    throw new Error("No XML document loaded")
+  }
+
+  // update document: <respStmt>
+  if (respStmt) {
+    if (!respStmt || tei_utils.getRespStmtById(xmlDoc, respStmt.persId)) {
+      console.warn("No persId or respStmt already exists for this persId")
+    } else {
+      tei_utils.addRespStmt(xmlDoc, respStmt)
+    }
+  }
+
+  // update document: <edition>
+  if (edition) {
+    const versionName = edition.title
+    const nameExistsInDoc = Array.from(xmlDoc.querySelector('edition > title') || []).some(elem => elem.textContent === versionName)
+    const nameExistsInVersions = fileselection.fileData.some(file => file.label === versionName)
+    if (nameExistsInDoc || nameExistsInVersions) {
+      throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
+    }
+    tei_utils.addEdition(xmlDoc, edition)
+  }
+  if (revisionChange) {
+    tei_utils.addRevisionChange(xmlDoc, revisionChange)
+  }
+  prettyPrintXmlDom(xmlDoc)
+  await xmlEditor.updateEditorFromXmlTree()
 }
 

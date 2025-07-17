@@ -31,6 +31,7 @@ const api = {
  */
 const plugin = {
   name: "file-selection",
+
   install,
   state: {
     update
@@ -73,10 +74,10 @@ async function install(state) {
     [ui.toolbar.diff, onChangeDiffSelection]
   ]
 
-  for (const [select,handler] of handlers) {
+  for (const [select, handler] of handlers) {
     // add event handler for the selectbox
     select.addEventListener('sl-change', () => handler(state));
-    
+
     // this works around a problem with the z-index of the select dropdown being bound 
     // to the z-index of the parent toolbar (and therefore being hidden by the editors)
     select.addEventListener('sl-show', () => {
@@ -87,9 +88,6 @@ async function install(state) {
       select.closest('#toolbar')?.classList.remove('dropdown-open');
     });
   }
-
-  logger.info("Loading file metadata...")
-  await reload(state)
 
   logger.info("Fileselection plugin installed.")
 }
@@ -111,16 +109,15 @@ async function update(state) {
  * @param {ApplicationState} state
  */
 async function reload(state) {
-  await reloadFileData();
+  await reloadFileData(state);
   await populateSelectboxes(state);
 }
 
-
-
 /**
  * Reloads the file data from the server
+ * @param {ApplicationState} state
  */
-async function reloadFileData() {
+async function reloadFileData(state) {
   logger.debug("Reloading file data")
   let data = await client.getFileList();
   if (!data || data.length === 0) {
@@ -141,18 +138,18 @@ let stateCache
 async function populateSelectboxes(state) {
 
   // check if state has changed
-  const {xmlPath, pdfPath, diffXmlPath} = state
-  const jsonState = JSON.stringify({xmlPath, pdfPath, diffXmlPath})
+  const { xmlPath, pdfPath, diffXmlPath } = state
+  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath })
   if (jsonState === stateCache) {
     //logger.debug("Not repopulating selectboxes as state hasn't changed")
-    return 
+    return
   }
   stateCache = jsonState
 
   logger.debug("Populating selectboxes")
 
   if (fileData === null) {
-    await reloadFileData()
+    await reloadFileData(state)
   }
 
   // Clear existing options
@@ -270,5 +267,5 @@ async function onChangeDiffSelection(state) {
   } else {
     services.removeMergeView(state)
   }
-  updateState(state, {diffXmlPath: diff})
+  updateState(state, { diffXmlPath: diff })
 }

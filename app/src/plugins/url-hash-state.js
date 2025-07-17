@@ -7,6 +7,9 @@
  * @import { ApplicationState } from '../app.js' 
  */
 
+// this needs to be made configurable
+const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath']
+
 const api = {
   updateState: updateStateFromUrlHash
 }
@@ -36,7 +39,7 @@ export function updateUrlHashfromState(state) {
   const url = new URL(window.location.href);
   const urlHashParams = new URLSearchParams(window.location.hash.slice(1));
   Object.entries(state)
-    .filter(([, value]) => typeof value === "string")
+    .filter(([key]) => key in allowedUrlHashParams)
     .forEach(([key, value]) => {
       if (value) {
         urlHashParams.set(key, value)

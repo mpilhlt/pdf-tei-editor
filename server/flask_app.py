@@ -16,13 +16,27 @@ from pathlib import Path
 
 load_dotenv()
 
+# WebDAV support
+local_webdav_root = None
+if os.environ.get('WEBDAV_ENABLED', 0) == "1":
+    required_vars = [
+        'WEBDAV_LOCAL_ROOT', 
+        'WEBDAV_HOST', 
+        'WEBDAV_REMOTE_ROOT', 
+        'WEBDAV_USER', 
+        'WEBDAV_PASSWORD'
+    ]
+    if not all(v in os.environ for v in required_vars):
+        raise ValueError("Missing one or more required WEBDAV environment variables.")
+    local_webdav_root = Path(os.path.realpath(os.environ.get('WEBDAV_LOCAL_ROOT'))) 
+    
 # paths
 project_root = Path(__file__).resolve().parent.parent
 server_root = project_root / 'server'
 web_root = project_root / 'app' / 'web'
-data_root = project_root / 'data'
 node_modules_root = project_root / 'node_modules'
 src_root = project_root / 'app' / 'src'
+data_root = project_root / 'data' if local_webdav_root is None else local_webdav_root
 
 # Flask app
 app = Flask(__name__, static_folder=str(project_root))
@@ -50,6 +64,7 @@ for filename in os.listdir(api_folder):
 app.config['PROJECT_ROOT'] = str(project_root)
 app.config['WEB_ROOT'] = str(web_root)
 print(f"Web files served from {web_root}")
+
 app.config['DATA_ROOT'] = str(data_root)
 print(f"Data files served from {data_root}")
 
@@ -72,6 +87,11 @@ def serve_src(path):
 def serve_static(path):
     return send_from_directory(data_root, path)
 
+# Serve config files
+@app.route('/config/<path:path>')
+def serve_config(path):
+    return send_from_directory(project_root / 'config', path)
+
 # Serve documentation
 @app.route('/docs/<path:path>')
 def serve_docs(path):
@@ -82,12 +102,10 @@ def serve_docs(path):
 def serve_data(path):
     return send_from_directory(web_root, path)
 
-
 # Redirect root to index.html
 @app.route('/')
 def index():
     return redirect('/index.html')
-
 
 # Simple health check
 @app.route('/api/health', methods=['GET'])

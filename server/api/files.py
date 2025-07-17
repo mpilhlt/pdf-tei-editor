@@ -8,14 +8,13 @@ from glob import glob
 from server.lib.decorators import handle_api_errors
 from server.lib.server_utils import ApiError, make_timestamp, get_data_file_path
 
-bp = Blueprint("files", __name__, url_prefix="/api/files")
+bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
 file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
 
-
 @bp.route("/list", methods=["GET"])
 @handle_api_errors
-def list():
+def file_list():
     data_root = current_app.config["DATA_ROOT"]
     files_data = create_file_data(data_root)
     for idx, data in enumerate(files_data):
@@ -32,14 +31,6 @@ def list():
 
     return jsonify(files_data)
 
-def safe_file_path(file_path):
-    # Remove any non-alphabetic leading characters for safety
-    while not file_path[0].isalpha():
-        file_path = file_path[1:]
-    if not file_path.startswith("data/"):
-        raise ApiError("Invalid file path") 
-    return file_path
-
 
 @bp.route("/save", methods=["POST"])
 @handle_api_errors
@@ -47,11 +38,12 @@ def save():
     """
     Save the given xml as a file
     """
+    data_root = current_app.config["DATA_ROOT"]
     
     # parameters
     data = request.get_json()
-    xml_string: str = data.get("xml_string")
-    file_path: str = safe_file_path(data.get("file_path"))
+    xml_string = data.get("xml_string")
+    file = safe_file_path(data.get("file_path"))
     save_as_new_version = data.get("new_version", False)
     
     # validate input
@@ -59,18 +51,37 @@ def save():
         raise ApiError("No XML string provided")
 
     # save the file
+    result = {}
     if save_as_new_version:
-        file_id = Path(file_path).stem
+        file_id = Path(file).stem
         version = make_timestamp().replace(" ", "_").replace(":", "-")
-        file_path = os.path.join("data", "versions", version, file_id + ".xml")
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        current_app.logger.info(f"Saving XML as newe version to {file_path}")
-    else: 
-        current_app.logger.info(f"Saving current XML to {file_path}")
+        file = os.path.join("versions", version, file_id + ".xml") 
+        current_app.logger.info(f"Saving XML as new version")
+        result['status'] = "new"
+
+    file_path = os.path.join(data_root, file)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(xml_string)
-    return jsonify({"path": "/" + file_path})
+    save = True
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding='utf-8') as f:
+            xml_old = f.read()
+        if xml_string == xml_old:
+            current_app.logger.info(f"Content has not changed, not saving.")
+            result['status'] = "unchanged"
+            save = False
+                
+    if save:
+        current_app.logger.info(f"Saving current XML")
+        result['status'] = "saved"
+        
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(xml_string)
+        current_app.logger.info(f"Saved file to {file_path}")
+            
+    result['path'] = "/data/" + file
+    return jsonify(result)
+
 
 @bp.route("/delete", methods=["POST"])
 @handle_api_errors      
@@ -78,20 +89,21 @@ def delete():
     """
     Delete the given files
     """
+    data_root = current_app.config["DATA_ROOT"]
     files = request.get_json()
-    if not files:
-        raise ApiError("No files provided")
-    #if not type(files) is list: 
-    #    raise ApiError("Files should be a list")
-    for file_path in files: 
-        # validate input
-        file_path = safe_file_path(file_path)
+    if not files or not isinstance(files, list): 
+        raise ApiError("Files must be a list of paths")
+    
+    for file in files: 
+        # get real file path
+        file_path = os.path.join(data_root, safe_file_path(file))
         # delete the file 
         current_app.logger.info(f"Deleting file {file_path}")
         if os.path.exists(file_path):
+            # delete file
             os.remove(file_path)
-            if len(os.listdir(os.path.dirname(file_path))) == 0:
-                os.removedirs(os.path.dirname(file_path))
+            # add a delete marker 
+            Path(file_path + ".deleted").touch()
         else:
             raise ApiError(f"File {file_path} does not exist")
     return jsonify({"result": "ok"})
@@ -103,23 +115,27 @@ def create_version_from_upload():
     """
     Creates a new version of a file from an uploaded file.
     """
+    
+    data_root = current_app.config["DATA_ROOT"]
+    upload_dir = current_app.config["UPLOAD_DIR"]
+    
     data = request.get_json()
     temp_filename = data.get("temp_filename")
-    file_path = safe_file_path(data.get("file_path"))
+    file_path = os.path.join(data_root, safe_file_path(data.get("file_path")))
 
     if not temp_filename or not file_path:
         raise ApiError("Missing temp_filename or file_path")
 
-    UPLOAD_DIR = current_app.config["UPLOAD_DIR"]
-    temp_filepath = os.path.join(UPLOAD_DIR, temp_filename)
+    temp_filepath = os.path.join(upload_dir, temp_filename)
 
     if not os.path.exists(temp_filepath):
         raise ApiError(f"Temporary file {temp_filename} not found")
 
     file_id = Path(file_path).stem
     version = make_timestamp().replace(" ", "_").replace(":", "-")
-    new_version_path = os.path.join("data", "versions", version, file_id + ".xml")
-    os.makedirs(os.path.dirname(new_version_path), exist_ok=True)
+    new_version_path = os.path.join("versions", version, file_id + ".xml")
+    full_version_path = os.path.join(data_root, new_version_path)
+    os.makedirs(os.path.dirname(full_version_path), exist_ok=True)
 
     with open(temp_filepath, "r", encoding="utf-8") as f_in:
         xml_content = f_in.read()
@@ -131,14 +147,24 @@ def create_version_from_upload():
 
     os.remove(temp_filepath)
 
-    return jsonify({"path": "/" + new_version_path})
+    return jsonify({"path": "/data/" + new_version_path})
 
 # helper functions
 
+def safe_file_path(file_path):
+    """
+    Removes any non-alphabetic leading characters for safety, and strips the "/data" prefix
+    """
+    
+    while not file_path[0].isalpha():
+        file_path = file_path[1:]
+    if not file_path.startswith("data/"):
+        raise ApiError("Invalid file path") 
+    return file_path.removeprefix('data/')
 
 def create_file_data(data_root):
     """
-    Creates a JSON file with a list of files in the "/data" directory which have "pdf" and "tei.xml"
+    Creates a JSON file with a list of files in the data directory which have "pdf" and "tei.xml"
     extensions. Each file is identified by its ID, which is the filename without the suffix.
     Files in the "data/versions" directory are treated as  (temporary) versions created with 
     prompt modifications or different models 

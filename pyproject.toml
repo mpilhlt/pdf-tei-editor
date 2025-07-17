@@ -12,6 +12,7 @@ dependencies = [
     "python-magic>=0.4.27",
     "requests>=2.32.3",
     "routes>=2.5.1",
+    "webdav4[fsspec]>=0.10.0",
     "xmlschema>=3.4.5",
 ]
 

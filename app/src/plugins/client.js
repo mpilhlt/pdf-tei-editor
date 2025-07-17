@@ -34,7 +34,9 @@ const api = {
   createVersionFromUpload,
   uploadFile,
   getConfigValue,
-  setConfigValue
+  setConfigValue,
+  syncFiles,
+  state
 }
 
 
@@ -178,6 +180,22 @@ async function deleteFiles(filePaths) {
  */
 async function createVersionFromUpload(tempFilename, filePath) {
   return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
+}
+
+/**
+ * Retrieves the server application state
+ * @returns {Promise<Object>}
+ */
+async function state() {
+  return await callApi('/config/state')
+}
+
+/**
+ * Synchronizes the files on the server with a (WebDav) Backend, if exists
+ * @returns {Promise<Object>}
+ */
+async function syncFiles() {
+  return await callApi('/files/sync')
 }
 
 

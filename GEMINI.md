@@ -14,7 +14,7 @@ The backend is a Flask application (`server/flask_app.py`) that serves the front
 
 - **API:** The API is organized into blueprints located in the `server/api/` directory. Each file in this directory defines a blueprint for a specific set of routes (e.g., `files.py` for file-related operations). The main application file (`flask_app.py`) dynamically imports and registers these blueprints.
 - **Data:** The application serves files from the `data/` directory, which contains PDF and TEI/XML files. It also handles file uploads and versioning.
-- **Configuration:** The application uses a `.env` file for configuration, and a `data/config.json` for application-specific settings.
+- **Configuration:** The application uses a `.env` file for configuration, and a `config/config.json` for application-specific settings.
 
 ### Frontend
 

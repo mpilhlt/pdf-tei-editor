@@ -12,9 +12,9 @@ from server.lib.server_utils import ApiError
 bp = Blueprint("config", __name__, url_prefix="/api/config")
 
 # Paths
-DATA_PATH = os.path.join("data")
-INSTRUCTION_DATA_PATH = os.path.join(DATA_PATH, "prompt.json")
-CONFIG_FILE_PATH = os.path.join(DATA_PATH,'config.json')
+CONFIG_PATH = os.path.join("config")
+INSTRUCTION_DATA_PATH = os.path.join(CONFIG_PATH, "prompt.json")
+CONFIG_FILE_PATH = os.path.join(CONFIG_PATH,'config.json')
 
 # Concurrency lock
 config_lock = threading.Lock()
@@ -93,3 +93,10 @@ def save_instructions():
         json.dump(data, f, indent=4)
     current_app.logger.info(f"Saved instructions.")
     return jsonify({"result": "ok"})
+
+@bp.route("/state", methods=["GET"])
+@handle_api_errors
+def state():
+    return {
+        "webdavEnabled": os.environ.get('WEBDAV_ENABLED') == "1"
+    }
