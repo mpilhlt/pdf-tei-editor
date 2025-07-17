@@ -14,7 +14,7 @@ Related repositories:
 - <https://github.com/mpilhlt/llamore>
 - <https://github.com/mpilhlt/bibliographic-tei>
 
-Information for end users can be found [here](./docs/index.md)
+Information for end users [can be found here](./docs/index.md)
 
 ## Installation
 
@@ -58,7 +58,9 @@ For public deployments, the current approach using a development server is inade
 - You need to put a real http server in front of the flask server.
 - File uploads should be checked using the libmagic package to prevent malicious file content. This package depends on the native libmagic library, which is available on Linux via package manager. On Intel MacOS and Windows, use `uv add python-magic-bin`, on Apple Silicon Macs, use Homebrew and `brew install libmagic`. If the bindings are not available, the backend will only check for the correct file extension.
 
-## Application architecture
+## Development
+
+### Application architecture
 
 The application has a modular architecture that makes it easy to extend. It is also lightweight and does not have a dependency on any particular web framework.
 
@@ -74,13 +76,21 @@ The UI is (mostly) build with WebComponents provided by <https://shoelace.style>
 
 In addition to the loosely coupled way of plugin invocation (which might or might not be listened to), the plugins can also export an "api" object that exposes methods that can be imported and executed where a tightly coupled approach makes more sense.
 
-## Development
+## Dev environment
 
-During development, it is often easier to work with the NPM source files rather than the compiled bundle. You can load the application in this mode by attaching `?dev` to the URL, for example, `http://localhost:3001?dev`. When you change the NPM dependencies, `npm run update-importmap`.
+During development, it is often easier to work with the NPM source files rather than the compiled bundle. You can load the application in this mode by attaching `?dev` to the URL, for example, `http://localhost:3001?dev`.
 
-Once you are done with working on the source code, run `npm run build` to regenerate the bundle. 
+When you change the NPM dependencies, `npm run update-importmap` so that the source version picks up this change. Once you are done with working on the source code, run `npm run build` to regenerate the bundle.
+
+## Git Hooks via Husky
+
+The project uses a "pre-push" git hook via [Husky](https://typicode.github.io/husky/). In order for this to work, you need to inialize Husky that the hook scripts are executed in the project's virtual environment
+
+```bash
+npx husky init
+mkdir -p ~/.config/husky/ && echo "source .venv/bin/activate" > ~/.config/husky/init.sh && chmod +x ~/.config/husky/init.sh
+```
 
 ## Update the XSD schema
 
 The XSD schema of the documents is downloaded and cached. Currently, there is no mechanism to clear the cache through the user interface. Simply delete the `schema/cache` directory manually to clear the cache.
-
