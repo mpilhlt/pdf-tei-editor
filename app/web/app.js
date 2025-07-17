@@ -208,7 +208,13 @@ const endpoints = {
      * end to perform certain actions
      * Function signature: (promise:Promise<Diagnostics[]>) => void - Invoked with a promise that resolves when validation is done
      */
-    inProgress: "validation.inProgress"
+    inProgress: "validation.inProgress",
+
+    /**
+     * Endpoint that will be invoked with the diagnostics of the completed validation
+     * Function signature: (diagnostics: Diagnostics[]) => Promise<void> 
+     */
+    result: "validation.result"
   }
 };
 
@@ -32371,6 +32377,13 @@ const defaultKeymap = /*@__PURE__*/[
     { key: "Alt-A", run: toggleBlockComment },
     { key: "Ctrl-m", mac: "Shift-Alt-m", run: toggleTabFocusMode },
 ].concat(standardKeymap);
+/**
+A binding that binds Tab to [`indentMore`](https://codemirror.net/6/docs/ref/#commands.indentMore) and
+Shift-Tab to [`indentLess`](https://codemirror.net/6/docs/ref/#commands.indentLess).
+Please see the [Tab example](../../examples/tab/) before using
+this.
+*/
+const indentWithTab = { key: "Tab", run: indentMore, shift: indentLess };
 
 function crelt() {
   var elt = arguments[0];
@@ -40012,6 +40025,7 @@ function isExtension(extension){
  * @import {SyntaxNode, Tree} from '@lezer/common'
  * @import {Extension, Range} from '@codemirror/state'
  * @import {ViewUpdate} from '@codemirror/view'
+ * @import {Diagnostic} from '@codemirror/lint'
  */
 
 
@@ -40025,29 +40039,44 @@ class XMLEditor extends EventTarget {
    * @event SectionChangedEvent
    * @type {ViewUpdate}
    */
-  /** @type {string} */  
+  /** @type {string} */
   static EVENT_SELECTION_CHANGED = "selectionChanged";
 
   /**
    * @event XmlChangedEvent
    * @type {ViewUpdate}
    */
-  /** @type {string} */  
+  /** @type {string} */
   static EVENT_XML_CHANGED = "xmlChanged";
-  
+
   /**
    * @event EditorUpdateEvent
    * @type {ViewUpdate}
    */
   /** @type {string} */
-  static EVENT_EDITOR_UPDATE ="editorUpdate"
+  static EVENT_EDITOR_UPDATE = "editorUpdate"
 
   /**
    * @event EditorUpdateDelayedEvent
    * @type {ViewUpdate}
    */
   /** @type {string} */
-  static EVENT_EDITOR_DELAYED_UPDATE ="editorUpdateDelayed"
+  static EVENT_EDITOR_DELAYED_UPDATE = "editorUpdateDelayed"
+
+  /**
+   * @event EditorXmlNotWellFormedEvent
+   * @type {ViewUpdate}
+   */
+  /** @type {string} */
+  static EVENT_EDITOR_XML_NOT_WELL_FORMED = "editorXmlNotWellFormed"
+
+
+  /**
+   * @event EditorXmlWellFormedEvent
+   * @type {ViewUpdate}
+   */
+  /** @type {string} */
+  static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
 
   // private members
 
@@ -40078,9 +40107,6 @@ class XMLEditor extends EventTarget {
   /** @type {Object} */
   #mergeViewExt
 
-  /** @type {Object} */
-  #mergeViewCompartment
-
   /** @type {string} */
   #original // the original XML document, when in merge view mode
 
@@ -40089,17 +40115,13 @@ class XMLEditor extends EventTarget {
   /**  @type {XMLSerializer} */
   #serializer; // an XMLSerializer object or one with a compatible API
 
-  /** @type {Compartment} */
-  #autocompleteCompartment
-
-  /** @type {Compartment} */
-  #linterCompartment
-
-  /** @type {Compartment} */
-  #updateListenerCompartment
-
-  /** @type {Compartment} */
-  #selectionChangeCompartment
+  // compartments
+  #mergeViewCompartment = new Compartment()
+  #autocompleteCompartment = new Compartment()
+  #linterCompartment = new Compartment()
+  #updateListenerCompartment = new Compartment()
+  #selectionChangeCompartment = new Compartment()
+  #lineWrappingCompartment = new Compartment()
 
   /**
    * Constructs an XMLEditor instance.
@@ -40116,27 +40138,23 @@ class XMLEditor extends EventTarget {
       throw new Error(`Element with ID ${editorDivId} not found.`);
     }
 
-    this.#mergeViewCompartment = new Compartment();
-    this.#autocompleteCompartment = new Compartment();
-    this.#linterCompartment = new Compartment();
-    this.#updateListenerCompartment = new Compartment();
-    this.#selectionChangeCompartment = new Compartment();
-
     // list of extensions to be used in the editor
     const extensions = [
       basicSetup,
       xml(),
+      keymap.of([indentWithTab]),
       this.#linterCompartment.of([]),
       this.#selectionChangeCompartment.of([]),
       this.#updateListenerCompartment.of([]),
       this.#mergeViewCompartment.of([]),
-      this.#autocompleteCompartment.of([])
+      this.#autocompleteCompartment.of([]),
+      this.#lineWrappingCompartment.of([])
     ];
 
     if (tagData) {
       this.startAutocomplete(tagData);
     }
-
+    // editor view
     this.#view = new EditorView({
       state: EditorState.create({ doc: "", extensions }),
       parent: editorDiv
@@ -40179,13 +40197,13 @@ class XMLEditor extends EventTarget {
    * Adds an update listener
    * @param {(update:ViewUpdate) => void} listener 
    */
-  addUpdateListener(listener){
-    if (typeof listener != "function"){
+  addUpdateListener(listener) {
+    if (typeof listener != "function") {
       throw new TypeError("Argument must be a function")
     }
     const listeners = this.#updateListenerCompartment.get(this.#view.state) || [];
     this.#view.dispatch({
-      effects: this.#updateListenerCompartment.reconfigure([listeners, EditorView.updateListener.of(listener) ])
+      effects: this.#updateListenerCompartment.reconfigure([listeners, EditorView.updateListener.of(listener)])
     });
   }
 
@@ -40194,7 +40212,7 @@ class XMLEditor extends EventTarget {
    * @param {(ranges:Range[]) => void} listener 
    */
   addSelectionChangeListener(listener) {
-    if (typeof listener != "function"){
+    if (typeof listener != "function") {
       throw new TypeError("Argument must be a function")
     }
     const listeners = this.#selectionChangeCompartment.get(this.#view.state) || [];
@@ -40371,7 +40389,7 @@ class XMLEditor extends EventTarget {
     //this.#autocompleteCompartment.reconfigure([autocompleteExtension])
     this.#view.dispatch({
       effects: this.#autocompleteCompartment.reconfigure([autocompleteExtension])
-    });    
+    });
   }
 
   /**
@@ -40380,7 +40398,7 @@ class XMLEditor extends EventTarget {
   stopAutocomplete() {
     this.#view.dispatch({
       effects: this.#autocompleteCompartment.reconfigure([])
-    });    
+    });
   }
 
   /**
@@ -40421,10 +40439,22 @@ class XMLEditor extends EventTarget {
    * @returns {string} 
    */
   getXML() {
-    if ( this.#xmlTree) {
+    if (this.#xmlTree) {
       return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
     }
     return ''
+  }
+
+  /**
+   * Toggles line wrapping on and off
+   * @param {boolean} value 
+   */
+  setLineWrapping(value) {
+    this.#view.dispatch({
+      effects: [this.#lineWrappingCompartment.reconfigure(
+        value ? EditorView.lineWrapping : []
+      )]
+    });
   }
 
   /**
@@ -40720,19 +40750,19 @@ class XMLEditor extends EventTarget {
   // 
 
   /**
-   * Marks the editor as not ready and reates the isReadyPromise if it does not already exist
+   * Marks the editor as not ready and creates the isReadyPromise if it does not already exist
    * already exists 
    */
   #markAsNotReady() {
     this.#isReady = false;
-    this.#readyPromise = this.#readyPromise || 
+    this.#readyPromise = this.#readyPromise ||
       /** @type {Promise<void>} */(new Promise(resolve => {
-        this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
-          this.#isReady = true;
-          this.#readyPromise = null;
-          resolve();
-        }, { once: true });
-      }
+      this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+        this.#isReady = true;
+        this.#readyPromise = null;
+        resolve();
+      }, { once: true });
+    }
     ));
   }
 
@@ -40788,7 +40818,7 @@ class XMLEditor extends EventTarget {
    */
   async #onSelectionChange(ranges) {
     // wait for any editor operations to finish
-    await this.whenReady();    
+    await this.whenReady();
     let rangesWithNode = [];
     // add the selected node in the XML-DOM tree to each range
     if (ranges.length > 0) {
@@ -40797,13 +40827,13 @@ class XMLEditor extends EventTarget {
         try {
           const node = this.getDomNodeAt(ranges[0].from);
           const xpath = this.getXPathForNode(node);
-          return Object.assign({node, xpath}, range)
+          return Object.assign({ node, xpath }, range)
         } catch (e) {
           console.warn(e.message);
           return range
         }
       });
-    }  
+    }
 
     // inform the listeners
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: rangesWithNode }));
@@ -40861,6 +40891,28 @@ class XMLEditor extends EventTarget {
   }
 
   /**
+   * Returns a Diagnostic object from a DomParser error node 
+   * @param {Node} errorNode The error node containing parse errors
+   * @returns {Diagnostic}
+   * @throws {Error} if error node cannot be parsed
+   */
+  #parseErrorNode(errorNode) {
+    const severity = "error";
+    const [message, _, location] = errorNode.firstChild.textContent.split("\n");
+    const regex = /\d+/g;
+    const matches = location.match(regex);
+    if (matches && matches.length >= 2) {
+      let from, to;
+      const line = parseInt(matches[0], 10);
+      const column = parseInt(matches[1], 10);
+      ({ from, to } = this.#view.state.doc.line(line));
+      from += column;
+      return { message, severity, line, column, from, to }
+    } 
+    throw new Error(`Cannot parse line and column from error message: "${location}"`)
+  }
+
+  /**
    * Synchronizes the syntax tree and the XML DOM
    * @returns {Promise<Boolean>} Returns true if the tree updates were successful and false if not
    */
@@ -40869,11 +40921,14 @@ class XMLEditor extends EventTarget {
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
-      console.log("Document was updated but is not well-formed");
+      const diagnostic = this.#parseErrorNode(errorNode);
+      console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`);
+      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: diagnostic }));
       this.#xmlTree = null;
       return false;
     }
     console.log("Document was updated and is well-formed.");
+    this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED));
     this.#xmlTree = doc;
 
     // the syntax tree construction is async, so we need to wait for it to complete
@@ -41377,6 +41432,10 @@ const tagDataPath = '/data/tei.json';
  */
 const api$8 = new NavXmlEditor('codemirror-container');
 
+// add a editor "dirty" state 
+// (this is an ad-hoc solution, to be replaced with a more robust one)
+api$8.isDirty = false;
+
 /**
  * component plugin
  */
@@ -41404,6 +41463,11 @@ async function install$9(state) {
   // selection => xpath state
   api$8.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
     api$8.whenReady().then(() => onSelectionChange(state));
+  });
+
+  // editor dirty state
+  api$8.addEventListener(XMLEditor.EVENT_XML_CHANGED,evt => {
+    api$8.isDirty = true;
   });
 }
 
@@ -41461,7 +41525,9 @@ async function onSelectionChange(state) {
 
 const api$7 = {
   configure,
-  validate
+  validate,
+  isValidDocument,
+  isDisabled
 };
 
 const plugin$9 = {
@@ -41473,8 +41539,14 @@ const plugin$9 = {
     inProgress: inProgress$1
   }
 };
+
+
+//
+// implementation
+// 
+
 let validatedVersion = null;
-let isDisabled = false;
+let _isDisabled = false;
 let validationInProgress = false;
 let validationPromise = null;
 let lastDiagnostics = [];
@@ -41485,7 +41557,11 @@ let lastDiagnostics = [];
 function install$8(state) {
   // add the linter to the editor
   api$8.addLinter([
-    linter(lintSource, { autoPanel: true, delay: 2000, needsRefresh: () => false }),
+    linter(lintSource, { 
+      autoPanel: true, 
+      delay: 2000, 
+      needsRefresh: () => false
+    }),
     lintGutter()
   ]);
   // listen for delayed editor updates
@@ -41494,16 +41570,31 @@ function install$8(state) {
 }
 
 /**
+ * Returns true if validation is disabled
+ * @returns {boolean}
+ */
+function isDisabled() {
+  return _isDisabled
+}
+
+/**
  * Invoked when this or another plugin starts a validation
  * @param {Promise} validationPromise 
  */
 async function inProgress$1(validationPromise) {
   // do not start validation if another one is going on
-  isDisabled = true;
+  _isDisabled = true;
   await validationPromise;
-  isDisabled = false;
+  _isDisabled = false;
 }
 
+/**
+ * Returns true if the last validation has found no errors
+ * @returns {boolean}
+ */
+function isValidDocument() {
+  return lastDiagnostics.length === 0
+}
 
 /**
  * The ListSource function, called by the editor
@@ -41521,7 +41612,7 @@ async function lintSource(view) {
   }
 
   // don't validate if disabled and use last diagnostics
-  if (isDisabled) {
+  if (_isDisabled) {
     api$b.debug("Ignoring validation request: Validation is disabled");
     return lastDiagnostics;
   }
@@ -41575,7 +41666,8 @@ async function lintSource(view) {
   } catch (error) {
     // stop querying
     if (api$6.lastHttpStatus >= 400) {
-      isDisabled = true;
+      console.debug("Disabling validation because of server error " + api$6.lastHttpStatus);
+      configure({mode: "off"});
     }
     return lastDiagnostics
   } finally {
@@ -41583,7 +41675,10 @@ async function lintSource(view) {
     validationPromise = null;
   }
 
+  // save the last diagnostics
   lastDiagnostics = diagnostics;
+  // inform plugins
+  pluginManager.invoke("validation.result", diagnostics);
   return diagnostics;
 }
 
@@ -41596,10 +41691,12 @@ async function lintSource(view) {
 function configure({ mode = "auto" }) {
   switch (mode) {
     case "auto":
-      isDisabled = false;
+      _isDisabled = false;
+      api$b.info("Validation is enabled");
       break
     case "off":
-      isDisabled = true;
+      _isDisabled = true;
+      api$b.info("Validation is disabled");
       break
     default:
       throw new Error("Invalid mode parameter")
@@ -41624,8 +41721,8 @@ async function validate() {
   clearDiagnostics();
 
   // save disabled state and enable validation
-  let disabledState = isDisabled;
-  isDisabled = false;
+  let disabledState = _isDisabled;
+  _isDisabled = false;
 
   // await the new validation promise once it is available
   const diagnostics = await new Promise(resolve => {
@@ -41640,7 +41737,7 @@ async function validate() {
     }
     checkIfValidating();
   });
-  isDisabled = disabledState;
+  _isDisabled = disabledState;
   return diagnostics
 }
 
@@ -41926,8 +42023,13 @@ async function setConfigValue(key, value) {
  * @param {object} [options.headers={}] - Additional headers to include in the request.
  * @param {function} [options.onProgress] - A callback function to handle upload progress events.
  *    The function receives a progress event object as an argument.
- * @returns {Promise<*>} - A Promise that resolves with the json-deserialized result
- *    from the `fetch()` call or rejects with an error.
+ * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
+ *    from the `fetch()` call, which must be an object, or rejects with an error.
+ *    The object should contain the uploaded file's metadata, such as its path or ID.
+ *    It will always contain a key "originalFilename" with the original name of the file,
+ *    (as the server can change the filename). Ff the upload fails on the server side, 
+ *   it will contain an "error" key with the error message.
+ * @throws {Error} If the upload fails or if no file is selected.
  * @example
  * // Async/Await example (requires an async function context):
  * async function myUploadFunction() {
@@ -41971,13 +42073,13 @@ async function uploadFile(uploadUrl = upload_route, options = {}) {
     input.type = 'file';
     input.accept = accept;
     input.addEventListener('change', async () => {
-      console.log(input);
       const file = input.files && input.files[0];
       if (!file) {
         reject(new Error('No file selected.'));
         return;
       }
       const formData = new FormData();
+      console.debug("Uploading file:", file.name, "to", uploadUrl);
       formData.append(fieldName, file);
       const fetchOptions = {
         method: method,
@@ -41991,6 +42093,14 @@ async function uploadFile(uploadUrl = upload_route, options = {}) {
           return;
         }
         let result = await response.json();
+        if (typeof result !== 'object' || !result) {
+          reject(new Error("Invalid response format, expected an object"));
+          return;
+        }
+        // Ensure the result contains the original filename
+        if (!result.originalFilename) {
+          result.originalFilename = file.name; //   Fallback to the input file name
+        }
         if (result.error) {
           reject(result.error);
         }
@@ -42013,11 +42123,18 @@ async function uploadFile(uploadUrl = upload_route, options = {}) {
 
 
 /**
+ * The data about the pdf and xml files on the server
+ * @type {Array<object>}
+ */
+const fileData = [];
+
+/**
  * plugin API
  */
 const api$5 = {
   reload,
-  update: update$2
+  update: update$2,
+  fileData
 };
 
 /**
@@ -42106,21 +42223,21 @@ async function reload(state) {
   await populateSelectboxes(state);
 }
 
-/**
- * The data about the pdf and xml files on the server
- * @type {Array<object>}
- */
-let fileData;
+
 
 /**
  * Reloads the file data from the server
  */
 async function reloadFileData() {
   api$b.debug("Reloading file data");
-  fileData = await api$6.getFileList();
-  if (!fileData || fileData.length === 0) {
+  let data = await api$6.getFileList();
+  if (!data || data.length === 0) {
     api$9.error("No files found");
   }
+  // update the fileData variable
+  fileData.length = 0; // clear the array
+  fileData.push(...data);
+  return fileData;
 }
 
 let stateCache;
@@ -42379,13 +42496,13 @@ async function extractFromCurrentPDF(state) {
  */
 async function extractFromNewPdf(state) {
   try {
-    const { type, filename } = await api$6.uploadFile();
+    const { type, filename, originalFilename } = await api$6.uploadFile();
     if (type !== "pdf") {
       api$9.error("Extraction is only possible from PDF files");
       return
     }
 
-    const doi = getDoiFromFilename(filename);
+    const doi = getDoiFromFilename(originalFilename);
     const { xml, pdf } = await extractFromPDF(state, { doi, filename });
     await api$3.load(state, { xml, pdf });
 
@@ -42411,9 +42528,10 @@ async function extractFromPDF(state, defaultOptions) {
   if (options === null) throw new Error("User abort")
 
   ui$1.spinner.show('Extracting references, please wait');
+  let result;
   try {
     const filename = options.filename || state.pdfPath;
-    let result = await api$6.extractReferences(filename, options);
+    result = await api$6.extractReferences(filename, options);
     await api$5.reload(state);  // todo uncouple
     return result
   } finally {
@@ -42510,6 +42628,7 @@ function getDoiFromXml() {
 
 function getDoiFromFilename(filename) {
   let doi = null;
+  console.debug("Extracting DOI from filename:", filename);
   if (filename.match(/^10\./)) {
     // treat as a DOI-like filename
     // do we have URL-encoded filenames?
@@ -42519,8 +42638,9 @@ function getDoiFromFilename(filename) {
       doi = decodeURIComponent(doi);
     } else {
       // custom decoding 
-      doi = doi.replace(/_{1,2}/, '/').replaceAll(/__/g, '/');
+      doi = doi.replaceAll(/__/g, '/');
     }
+    console.debug("Extracted DOI from filename:", doi);
     if (isDoi(doi)) {
       return doi
     }
@@ -42938,6 +43058,364 @@ function notify(message, variant = 'primary', icon = 'info-circle', duration = 3
     return alert.toast();
   }
 
+const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
+
+/**
+ * Returns the TEI header element or throws an error if not found.
+ * @param {Document} xmlDoc The XML DOM Document object.
+ * @returns {Element} - The TEI header element
+ * @throws {Error} If the TEI header is not found in the document.
+ */
+function getTeiHeader(xmlDoc) {
+  let teiHeader = xmlDoc.getElementsByTagName('teiHeader');
+  if (!teiHeader.length) {
+    throw new Error("TEI header not found in the document.");
+  } else {
+    teiHeader = teiHeader[0];
+  }
+  return teiHeader;
+}
+
+/**
+ * Returns the <respStmt> containing a <persName> with the given xml:id or null if none can be found  
+ * @param {Document} xmlDoc 
+ * @param {string} id 
+ * @returns {Element || null}
+ */
+function getRespStmtById(xmlDoc, id) {
+  for (const respStmtElem of xmlDoc.getElementsByTagName('respStmt') ) {
+    for (const persNameElem of respStmtElem.getElementsByTagName('persName')) {
+      const xmlId = persNameElem.getAttributeNodeNS('http://www.w3.org/XML/1998/namespace','id').value; 
+      if (xmlId === id) {
+        return respStmtElem
+      }
+    }
+  }
+  return null
+}
+
+
+/**
+ * Represents a responsibility statement.
+ * @typedef {object} RespStmt
+ * @property {string} persId - The ID of the person.
+ * @property {string} persName - The name of the person 
+ * @property {string} resp - The responsibility.
+ */
+
+/**
+ * Adds a respStmt element to the titleStmt of a TEI header.
+ *
+ * @param {Document} xmlDoc The XML DOM Document object.
+ * @param {RespStmt} respStmt Object containing data for the 'respStmt' element.
+ * @throws {Error} If the TEI header is not found in the document or the persId already exists.
+ * @returns {void}
+ */
+function addRespStmt(xmlDoc, respStmt) {
+  const { persName, persId, resp} = respStmt;
+  if (!persName || !resp || !persId ) {
+    throw new Error("Missing required parameters: persName, resp, or persId.");
+  }
+  if (getRespStmtById(xmlDoc, persId)) {
+    throw new Error(`Element with xml:id="${persId}" already exists in the document.`);
+  }
+  const teiHeader = getTeiHeader(xmlDoc);
+  let titleStmt = teiHeader.getElementsByTagName('titleStmt');
+
+  // Fixed: Create titleStmt if it does not exist, instead of throwing an error.
+  if (!titleStmt.length) {
+    titleStmt = xmlDoc.createElementNS(teiNamespaceURI, 'titleStmt');
+    teiHeader.appendChild(titleStmt);
+  } else {
+    titleStmt = titleStmt[0];
+  }
+
+  const respStmtElem = xmlDoc.createElementNS(teiNamespaceURI, 'respStmt');
+  const persNameElem = xmlDoc.createElementNS(teiNamespaceURI, 'persName');
+  persNameElem.setAttribute('xml:id', persId);
+  persNameElem.textContent = persName;
+  respStmtElem.appendChild(persNameElem);
+
+  const respElem = xmlDoc.createElementNS(teiNamespaceURI, 'resp');
+  respElem.textContent = resp;
+  respStmtElem.appendChild(respElem);
+
+  titleStmt.appendChild(respStmtElem);
+}
+
+
+/**
+ * Represents a revision change statement.
+ * @typedef {object} RevisionChange
+ * @property {string} status - The status of the revision.
+ * @property {string} persId - The ID of the person making the revision.
+ * @property {string} desc - A description of the revision.
+ */
+
+/**
+ * Add a <change> node to the /TEI/teiHeader/revisionDesc section of an XML DOM document.
+ *
+ * @param {Document} xmlDoc - The XML DOM Document object.
+ * @param {RevisionChange} revisionChange - Object containing data for the 'change' element
+ * @throws {Error} If the TEI header is not found in the document
+ * @returns {void}
+ */
+function addRevisionChange(xmlDoc, revisionChange) {
+  const {status="draft", persId, desc} = revisionChange;
+  if (!persId || ! desc) {
+    throw new Error("persId and desc data required")
+  }
+  const currentDateString = new Date().toISOString();
+  let revisionDescElement = xmlDoc.getElementsByTagName('revisionDesc');
+  if (!revisionDescElement.length) {
+    const teiHeader = getTeiHeader(xmlDoc);
+    revisionDescElement = xmlDoc.createElementNS(teiNamespaceURI, 'revisionDesc');
+    teiHeader.appendChild(revisionDescElement);
+  } else {
+    revisionDescElement = revisionDescElement[0];
+  }
+  
+  // Create the <change> element
+  const changeElem = xmlDoc.createElementNS(teiNamespaceURI, 'change');
+  changeElem.setAttribute('when', currentDateString);
+  changeElem.setAttribute('status', status);
+
+  if (persId) { // Conditional check for 'who' parameter
+    changeElem.setAttribute('who', '#' + persId);
+  }
+  
+  if (desc) {
+    const descElement = xmlDoc.createElementNS(teiNamespaceURI, 'desc');
+    const textNode = xmlDoc.createTextNode(desc); 
+    descElement.appendChild(textNode);
+    changeElem.appendChild(descElement);
+  }
+  
+  revisionDescElement.appendChild(changeElem);
+}
+
+/**
+ * Represents an 'edition' statement within a 'editionStmt' element.
+ * @typedef {object} Edition
+ * @property {string} title - The title of the edition.
+ * @property {string} [note] - An optional note about the edition.
+ */
+
+/**
+ * Add or replace a <edition> node to the /TEI/teiHeader/fileDesc/editionStmt section of an XML DOM document.
+ *
+ * @param {Document} xmlDoc - The XML DOM Document object.
+ * @param {Edition} edition - Object containing data for the 'edition' element
+ * @throws {Error} If the TEI header or the fileDesc element is not found in the document.
+ * @returns {void}
+ */
+function addEdition(xmlDoc, edition) {
+  const {title, note} = edition;
+  if (!title || title.trim() === '') {
+    throw new Error("Missing 'title'")
+  }
+  const date = new Date();
+  const currentDateString = date.toISOString();
+  const teiHeader = getTeiHeader(xmlDoc);
+  const fileDescs = teiHeader.getElementsByTagName('fileDesc');
+  const titleStmts = teiHeader.getElementsByTagName('titleStmt');
+  if (!fileDescs.length|| !titleStmts.length) {
+    throw new Error("teiHeader/fileDesc/titleStmt not found in the document.");
+  }
+  
+  const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
+  const editionStmt = xmlDoc.createElementNS(teiNamespaceURI, 'editionStmt');
+  const fileDesc = fileDescs[0];
+  const titleStmt = titleStmts[0];
+  
+  if (editionStmts.length > 0) {
+    const lastEditionStmt = editionStmts[editionStmts.length-1];
+    fileDesc.replaceChild(editionStmt, lastEditionStmt);
+  } else {
+    if (titleStmt.nextSibling) {
+      fileDesc.insertBefore(editionStmt, titleStmt.nextSibling);
+    } else {
+      fileDesc.appendChild(editionStmt);
+    }
+  } 
+  
+  // <edition> 
+  const editionElem = xmlDoc.createElementNS(teiNamespaceURI, 'edition'); // Fixed: creating <edition> element
+
+  // <date> 
+  const dateElem = xmlDoc.createElementNS(teiNamespaceURI, 'date'); // Fixed: creating <date> element
+  dateElem.setAttribute('when', currentDateString); // Keeping ISO string as per original code.
+  dateElem.textContent = date.toLocaleDateString() + " " + date.toLocaleTimeString();
+  editionElem.appendChild(dateElem); // Appending <date> to <edition>
+
+  // <title>  
+  const titleElem = xmlDoc.createElementNS(teiNamespaceURI, 'title');
+  titleElem.textContent = title;
+  editionElem.appendChild(titleElem);
+  
+  // <note> 
+  if (note && note.trim() !== '') { 
+    const noteElem = xmlDoc.createElementNS(teiNamespaceURI, 'note');
+    noteElem.textContent = note;
+    editionElem.appendChild(noteElem);
+  }
+  
+  editionStmt.appendChild(editionElem);
+}
+
+/**
+ * @file Enhancement: Pretty-prints an XML DOM Document by inserting whitespace text nodes.
+ */
+
+/**
+ * This modifies the original document object in place and returns it.
+ *
+ * @param {Document} xmlDoc - The XML DOM Document object.
+ * @param {string} [spacing='  '] - The string to use for each level of indentation (e.g., '  ' or '\t').
+ * @returns {Document} - The modified XML DOM Document object.
+ */
+function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
+  if (!xmlDoc || typeof xmlDoc.documentElement === 'undefined') {
+    console.error("Invalid XML Document object provided for pretty-printing.");
+    return xmlDoc; // Return unchanged if input is invalid
+  }
+
+  // Helper function to remove existing pure whitespace text nodes
+  // This cleans up any previous formatting or accidental whitespace
+  function removeWhitespaceNodes(node) {
+    // Iterate over children array because we might remove nodes
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        // Check if the text node consists only of whitespace characters (spaces, tabs, newlines, etc.)
+        if (/^\s*$/.test(child.nodeValue)) {
+          node.removeChild(child);
+        }
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        removeWhitespaceNodes(child); // Recurse into elements
+      }
+      // Ignore other node types like comments, processing instructions for removal
+    }
+  }
+
+  // Helper recursive function to add indentation
+  function addIndentation(node, depth, spacing, doc) {
+    // Only process Element nodes
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+
+    // Create the indentation string for this depth level
+    const indent = '\n' + spacing.repeat(depth);
+
+    // Get a static list of children before we start modifying the list
+    const children = Array.from(node.childNodes);
+
+    let lastElementChild = null;
+
+    // Find the first non-whitespace child (useful for deciding if to indent *after* the start tag)
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        break;
+      } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim() !== '') {
+        break;
+      } else if (child.nodeType === Node.COMMENT_NODE || child.nodeType === Node.PROCESSING_INSTRUCTION_NODE) {
+        break;
+      }
+    }
+
+
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        // Add indentation *before* the element child
+        // Only if it's the first child element OR if the previous sibling wasn't already a newline
+        // Simpler approach: Just always add it if it's an element child. removeWhitespaceNodes cleans up duplicates later if needed, but our adding logic should prevent that.
+        node.insertBefore(doc.createTextNode(indent + spacing), child);
+
+        // Recursively indent the child's content
+        addIndentation(child, depth + 1, spacing, doc);
+
+        lastElementChild = child; // Keep track of the last element child processed
+      }
+      // Note: Text, Comment, PI nodes are not processed by this adding loop's main logic
+      // They are handled implicitly by where we insert whitespace around elements
+    }
+
+    // After iterating through children, if there were any element children,
+    // add indentation *before* the closing tag of the current node.
+    // This is inserted after the last element child, or where the first non-element child was,
+    // or at the end if only elements were children.
+    if (lastElementChild !== null) {
+      // Insert the closing tag indent *after* the last element child
+      // Using insertBefore with null or lastChild.nextSibling appends
+      node.insertBefore(doc.createTextNode(indent), lastElementChild.nextSibling);
+    }
+    // If there were no element children, the node will remain on one line with its text content
+    // e.g., <desc>Corrections</desc> - this is standard pretty printing behavior.
+  }
+
+  // --- Main pretty-printing logic ---
+
+  // Start by cleaning up any existing mixed whitespace/indentation
+  removeWhitespaceNodes(xmlDoc.documentElement);
+
+  const root = xmlDoc.documentElement;
+  if (!root) {
+    // Should have been caught above, but double check
+    return xmlDoc;
+  }
+
+  // Add indentation for children of the root element
+  // The root itself doesn't get preceding indentation (relative to nothing)
+  const rootChildren = Array.from(root.childNodes); // Capture state before modification
+
+  let lastProcessedRootNode = null; // Track the last significant node to decide on the final newline
+
+  for (const child of rootChildren) {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      // Add indent before root element children (relative to the root)
+      root.insertBefore(xmlDoc.createTextNode('\n' + spacing), child);
+      // Recursively indent the child and its descendants
+      addIndentation(child, 1, spacing, xmlDoc); // Start recursion at depth 1 for children of root
+      lastProcessedRootNode = child;
+    } else if (child.nodeType === Node.PROCESSING_INSTRUCTION_NODE || child.nodeType === Node.COMMENT_NODE) {
+      // Handle <?xml?> and comments at the top level.
+      // Ensure they are followed by a newline if the next sibling is an element.
+      const nextSibling = child.nextSibling;
+      if (nextSibling && nextSibling.nodeType === Node.ELEMENT_NODE) {
+        // Check if there isn't already a text node immediately following that contains a newline
+        if (!(nextSibling.previousSibling && nextSibling.previousSibling.nodeType === Node.TEXT_NODE && nextSibling.previousSibling.nodeValue?.includes('\n'))) {
+          root.insertBefore(xmlDoc.createTextNode('\n'), nextSibling);
+        }
+      }
+      lastProcessedRootNode = child; // These count as processed for the final newline
+    } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue?.trim() !== '') {
+      // Handle non-whitespace text nodes directly under root (uncommon in TEI, but possible)
+      // We don't add indent before or after these typically in simple pretty-printing
+      lastProcessedRootNode = child;
+    }
+    // Pure whitespace text nodes were removed by removeWhitespaceNodes
+  }
+
+  // Add a final newline before the root's closing tag IF there was any content
+  // (Element, non-whitespace text, PI, or Comment) processed at the root level.
+  // Check if the last child of the root after modifications is a text node ending in newline
+  let actualLastChild = root.lastChild;
+  if (lastProcessedRootNode && !(actualLastChild && actualLastChild.nodeType === Node.TEXT_NODE && actualLastChild.nodeValue?.endsWith('\n'))) {
+    root.appendChild(xmlDoc.createTextNode('\n')); // Append newline before </root>
+  }
+
+
+  // Return the document (which has been modified in place)
+  return xmlDoc;
+}
+
+var prettyPrintXml = {
+  name: "Pretty Print XML",
+  description: "Pretty-prints the XML DOM by inserting whitespace text nodes.",
+  execute: prettyPrintXmlDom
+};
+
 /**
  * This component provides the core services that can be called programmatically or via user commands
  */
@@ -42954,7 +43432,8 @@ const api$3 = {
   removeMergeView,
   deleteCurrentVersion,
   deleteAllVersions,
-  createNewVersion,
+  deleteAll, 
+  addTeiHeaderInfo,
   downloadXml,
   uploadXml,
   inProgress,
@@ -42976,13 +43455,13 @@ const plugin$5 = {
  * Document actions button group
  * @typedef {object} documentActionsComponent
  * @property {SlButtonGroup} self
- * @property {SlButton} saveXml 
+ * @property {SlButton} saveRevision 
  * @property {SlButton} createNewVersion
  * @property {SlButton} upload
  * @property {SlButton} download
  * @property {SlButton} deleteBtn
- * @property {SlButton} deleteCurrent 
- * @property {SlButton} deleteCurrent 
+ * @property {SlButton} deleteCurrentVersion
+ * @property {SlButton} deleteAllVersions
  * @property {SlButton} deleteAll
  */
 
@@ -42997,9 +43476,10 @@ const toolbarActionsHtml = `
 <span class="hbox-with-gap toolbar-content">
   <!-- Document button group -->
   <sl-button-group label="Document" name="documentActions">
-    <!-- save -->
-    <sl-tooltip content="Save document content to server">
-      <sl-button name="saveXml" size="small" disabled>
+
+    <!-- document revision -->
+    <sl-tooltip content="Save document revision">
+      <sl-button name="saveRevision" size="small" disabled>
         <sl-icon name="save"></sl-icon>
       </sl-button>
     </sl-tooltip>
@@ -43028,12 +43508,13 @@ const toolbarActionsHtml = `
     <!-- delete -->
     <sl-button-group>
       <sl-dropdown placement="bottom-end">
-        <sl-button name="deleteBtn" size="small" slot="trigger" size="small" caret>
+        <sl-button name="deleteBtn" size="small" slot="trigger" caret>
           <sl-icon name="trash3"></sl-icon>
         </sl-button>
         <sl-menu>
-          <sl-menu-item name="deleteCurrent">Delete current version</sl-menu-item>
-          <sl-menu-item name="deleteAll">Delete all versions</sl-menu-item>
+          <sl-menu-item name="deleteCurrentVersion">Delete current version</sl-menu-item>
+          <sl-menu-item name="deleteAllVersions">Delete all versions</sl-menu-item>
+          <sl-menu-item name="deleteAll">Delete PDF and XML</sl-menu-item>
         </sl-menu>
       </sl-dropdown>
     </sl-button-group>
@@ -43054,6 +43535,49 @@ const toolbarActionsHtml = `
 </span>
 `;
 
+/**
+ * Dialog for creating a new version
+ * @typedef {object} newVersionDialog
+ * @property {SlDialog} self
+ * @property {SlInput} versionName 
+ * @property {SlInput} persName 
+ * @property {SlInput} persId 
+ * @property {SlInput} editionNote 
+ */
+const newVersionDialogHtml = `
+<sl-dialog name="newVersionDialog" label="Create new version">
+  <div class="dialog-column">
+    <sl-input name="versionName" label="Version Name" size="small" help-text="Provide a short name for the version (required)"></sl-input>
+    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
+    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
+    <sl-input name="editionNote" label="Description" size="small" help-text="Description of this version (optional)"></sl-input>
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Create new version</sl-button>  
+</sl-dialog>
+`;
+
+/**
+ * Dialog for documenting a revision
+ * @typedef {object} newRevisionChangeDialog
+ * @property {SlDialog} self
+ * @property {SlInput} persId
+ * @property {SlInput} persName 
+ * @property {SlInput} changeDesc 
+ */
+const saveChangeDialogHtml = `
+<sl-dialog name="newRevisionChangeDialog" label="Add a change description">
+  <div class="dialog-column">
+    Document changes of this 
+    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
+    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
+    <sl-input name="changeDesc" label="Description" size="small" help-text="Description of the change"></sl-input>
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Add</sl-button>  
+</sl-dialog>
+`;
+
 //
 // Implementation
 //
@@ -43062,29 +43586,33 @@ const toolbarActionsHtml = `
  * @param {ApplicationState} state
  */
 function install$5(state) {
-
   const tb = ui$1.toolbar.self;
   
   // install controls on menubar
   appendHtml(toolbarActionsHtml, tb);
 
+  // install dialogs
+  appendHtml(newVersionDialogHtml);
+  appendHtml(saveChangeDialogHtml);
+
   // === Document button group ===
 
   const da = ui$1.toolbar.documentActions;
-  // save current version
-  da.saveXml.addEventListener('click', () => onClickSaveButton());
+  // save a revision
+  da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
   // enable save button on dirty editor
   api$8.addEventListener(
     XMLEditor.EVENT_XML_CHANGED,
-    () =>  da.saveXml.disabled = false
+    () =>  da.saveRevision.disabled = false
   );
 
   // delete
-  da.deleteCurrent.addEventListener("click", () => deleteCurrentVersion(state));
-  da.deleteAll.addEventListener('click', () => deleteAllVersions(state));
+  da.deleteCurrentVersion.addEventListener("click", () => deleteCurrentVersion(state));
+  da.deleteAllVersions.addEventListener('click', () => deleteAllVersions(state));
+  da.deleteAll.addEventListener('click', () => deleteAll(state));
   
   // duplicate
-  da.createNewVersion.addEventListener("click", () => onClickDuplicateButton(state));
+  da.createNewVersion.addEventListener("click", () => onClickCreateNewVersionButton(state));
 
   // download
   da.download.addEventListener("click", () => downloadXml(state));
@@ -43106,12 +43634,10 @@ function install$5(state) {
 async function update$1(state) {
   // disable deletion if there are no versions or gold is selected
   const da = ui$1.toolbar.documentActions;
-  
-  da.deleteBtn.disabled = da.deleteAll.disabled = da.deleteCurrent.disabled = (
-    ui$1.toolbar.xml.childElementCount < 2 || 
-    // @ts-ignore
-    ui$1.toolbar.xml.value === ui$1.toolbar.xml.firstChild?.value
-  );
+  da.deleteAll.disabled = ui$1.toolbar.pdf.childElementCount < 2; // at least on PDF must be present
+  da.deleteAllVersions.disabled = ui$1.toolbar.xml.childElementCount < 2; 
+  da.deleteCurrentVersion.disabled = ui$1.toolbar.xml.value === ui$1.toolbar.xml.firstChild?.value;
+  da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled;
 
   // Allow duplicate only if we have an xml path
   da.createNewVersion.disabled = !Boolean(state.xmlPath);
@@ -43187,6 +43713,9 @@ async function validateXml() {
  */
 async function saveXml(filePath, saveAsNewVersion=false) {
   api$b.info(`Saving XML${saveAsNewVersion ? " as new version":""}...`);
+  if (!api$8.getXmlTree()) {
+    throw new Error("No XML valid document in the editor")
+  }
   return await api$6.saveXml(api$8.getXML(), filePath, saveAsNewVersion)
 }
 
@@ -43201,6 +43730,8 @@ async function showMergeView(state, diff) {
   try {
     await api$8.showMergeView(diff);
     updateState(state, {diffXmlPath: diff});
+    // turn validation off as it creates too much visual noise
+    api$7.configure({mode:"off"});
   } finally {
     ui$1.spinner.hide();
   }
@@ -43212,23 +43743,18 @@ async function showMergeView(state, diff) {
  */
 function removeMergeView(state) {
   api$8.hideMergeView();
+  // re-enable validation
+  api$7.configure({mode:"auto"});
   UrlHash.remove("diff");
   updateState(state, {diffXmlPath:null});
 }
 
 /**
- * Called when the "delete-all" button is executed
+ * Deletes the current version of the document
+ * This will remove the XML file from the server and reload the gold version
  * @param {ApplicationState} state
  */
-async function deleteCurrentVersion(state){
-  const versionName = ui$1.toolbar.xml.selectedOptions[0].textContent;
-  const msg = `Are you sure you want to delete the current version "${versionName}"?`;
-  if (!confirm(msg)) return; // todo use dialog
-
-  api$3.removeMergeView(state);
-  
-  // delete files 
-  
+async function deleteCurrentVersion(state){  
   // @ts-ignore
   if (ui$1.toolbar.xml.value.startsWith("/data/tei")) {
     api$9.error("You cannot delete the gold version");
@@ -43239,6 +43765,10 @@ async function deleteCurrentVersion(state){
     await api$6.deleteFiles(filePathsToDelete);
   }
   try {
+    const versionName = ui$1.toolbar.xml.selectedOptions[0].textContent;
+    const msg = `Are you sure you want to delete the current version "${versionName}"?`;
+    if (!confirm(msg)) return; // todo use dialog
+    api$3.removeMergeView(state);
     // update the file data
     await api$5.reload(state);
     // load the gold version
@@ -43252,20 +43782,17 @@ async function deleteCurrentVersion(state){
 }
 
 /**
- * Called when the "delete-all" button is executed
+ * Deletes all versions of the document, leaving only the gold standard version
  * @param {ApplicationState} state
  */
 async function deleteAllVersions(state) {
-  const msg = "Are you sure you want to clean up the extraction history? This will delete all versions of this document and leave only the current gold standard version.";
-  if (!confirm(msg)) return; // todo use dialog
-
-  api$3.removeMergeView(state);
-  
-  // delete files 
   // @ts-ignore
   const xmlPaths = Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value);
   const filePathsToDelete = xmlPaths.slice(1); // skip the first option, which is the gold standard version  
   if (filePathsToDelete.length > 0) {
+    const msg = "Are you sure you want to delete all versions of this document and leave only the current gold standard version? This cannot be undone.";
+    if (!confirm(msg)) return; // todo use dialog
+    api$3.removeMergeView(state);
     await api$6.deleteFiles(filePathsToDelete);
   }
   try {
@@ -43280,17 +43807,81 @@ async function deleteAllVersions(state) {
 }
 
 /**
- * Saves the current file as a new version
+ * Deletes all versions of the document and the PDF file
  * @param {ApplicationState} state
  */
-async function createNewVersion(state) {
-  if (!state.xmlPath) {
-    throw new TypeError("State does not contain an xml path")
+async function deleteAll(state) {
+  
+  if (ui$1.toolbar.pdf.childElementCount < 2) {
+    throw new Error("Cannot delete all files, at least one PDF must be present")
   }
-  let {path} = await saveXml(state.xmlPath, true);
-  state.xmlPath = path;
-  await api$5.reload(state);
-  await updateState(state);
+
+  // @ts-ignore
+  const filePathsToDelete = [ui$1.toolbar.pdf.value]
+    .concat(Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value));
+    
+  if (filePathsToDelete.length > 0) {
+    const msg = `Are you sure you want to delete the current PDF and all XML versions? This cannot be undone.`;
+    if (!confirm(msg)) return; // todo use dialog
+    api$3.removeMergeView(state);
+    console.debug("Deleting files:", filePathsToDelete);
+    await api$6.deleteFiles(filePathsToDelete);
+  }
+  try {
+    // update the file data
+    await api$5.reload(state);
+
+    // load the first PDF and XML file 
+    await load$1(state, { 
+      pdf: api$5.fileData[0].pdf, 
+      xml: api$5.fileData[0].xml 
+    });
+    notify("All files have been deleted");
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+
+
+/**
+ * Add information on responsibitiy, edition or revisions to the document
+ * @param {RespStmt} [respStmt] - Optional responsible statement details.
+ * @param {Edition} [edition] - Optional edition statement details.
+ * @param {RevisionChange} [revisionChange] - Optional revision statement details.
+ * @throws {Error} If any of the operations to add teiHeader info fail
+ */
+async function addTeiHeaderInfo(respStmt, edition, revisionChange ) {
+
+  const xmlDoc = api$8.getXmlTree();
+  if (!xmlDoc) {
+    throw new Error("No XML document loaded")
+  }
+
+  // update document: <respStmt>
+  if (respStmt) {
+    if (!respStmt || getRespStmtById(xmlDoc, respStmt.persId)) {
+      console.warn("No persId or respStmt already exists for this persId");
+    } else {
+      addRespStmt(xmlDoc, respStmt);
+    }
+  }
+
+  // update document: <edition>
+  if (edition) {
+    const versionName = edition.title;
+    const nameExistsInDoc = Array.from(xmlDoc.querySelector('edition > title') || []).some(elem => elem.textContent === versionName);
+    const nameExistsInVersions = api$5.fileData.some(file => file.label === versionName);
+    if (nameExistsInDoc || nameExistsInVersions ) {
+      throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
+    }
+    addEdition(xmlDoc, edition);
+  }
+  if (revisionChange) {
+    addRevisionChange(xmlDoc, revisionChange);
+  }
+  prettyPrintXmlDom(xmlDoc);
+  await api$8.updateEditorFromXmlTree();
 }
 
 /**
@@ -43343,9 +43934,9 @@ async function searchNodeContentsInPdf(node) {
   await pdfViewer.search(searchTerms);
 }
 
-
+//
 // event listeners
-
+//
 
 /**
  * Called when the "Validate" button is executed
@@ -43357,24 +43948,111 @@ async function onClickValidateButton() {
 }
 
 /**
- * Called when the "Save" button is executed
+ * Called when the "saveRevision" button is executed
+ * @param {ApplicationState} state
  */
-async function onClickSaveButton() {
-  const xmlPath = ui$1.toolbar.xml.value;
-  // @ts-ignore
-  await saveXml(xmlPath);
-  ui$1.toolbar.documentActions.saveXml.disabled = true;
-  notify("Document was saved.");
+async function onClickSaveRevisionButton(state) {
+
+  /** @type {newVersionDialog} */
+  const dialog = document.querySelector('[name="newRevisionChangeDialog"]');
+  dialog.changeDesc.value = "Corrections";
+  try {
+    dialog.show();
+    await new Promise((resolve, reject) =>{
+      dialog.submit.addEventListener('click', resolve, {once: true});
+      dialog.cancel.addEventListener('click', reject, {once: true});
+      dialog.self.addEventListener('sl-hide', reject, {once: true});
+    });
+  } catch (e) {
+    console.warn("User cancelled");
+    return 
+  } finally {
+    dialog.hide();
+  }
+
+  dialog.hide();
+
+  /** @type {RespStmt} */
+  const respStmt= {
+    persId: dialog.persId.value,
+    persName: dialog.persName.value,
+    resp: "Contributor"
+  };
+
+  /** @type {RevisionChange} */
+  const revisionChange = {
+    status: "draft",
+    persId: dialog.persId.value,
+    desc: dialog.changeDesc.value
+  };
+  try {
+    await addTeiHeaderInfo(respStmt, null, revisionChange);
+    await saveXml(state.xmlPath);
+    ui$1.toolbar.documentActions.saveRevision.disabled = true;
+    // dirty state
+    api$8.isDirty = false;
+    notify("Document was saved.");
+  } catch(e) {
+    console.error(e);
+    alert(e.message);
+  } 
 }
 
 /**
- * Called when the "Save" button is executed
+ * Called when the "Create new version" button is executed
  * @param {ApplicationState} state
  */
-async function onClickDuplicateButton(state) {
-  await createNewVersion(state);
-  ui$1.toolbar.documentActions.saveXml.disabled = true;
-  notify("Document was duplicated. You are now editing the copy.");
+async function onClickCreateNewVersionButton(state) {
+
+  /** @type {newVersionDialog} */
+  const dialog = document.querySelector('[name="newVersionDialog"]');
+  try {
+    dialog.show();
+    await new Promise((resolve, reject) =>{
+      dialog.submit.addEventListener('click', resolve, {once: true});
+      dialog.cancel.addEventListener('click', reject, {once: true});
+      dialog.self.addEventListener('sl-hide', reject, {once: true});
+    });
+  } catch (e) {
+    console.warn("User cancelled");
+    return 
+  } finally {
+    dialog.hide();
+  }
+
+  /** @type {RespStmt} */
+  const respStmt= {
+    persId: dialog.persId.value,
+    persName: dialog.persName.value,
+    resp: "Contributor"
+  };
+
+  /** @type {Edition} */
+  const editionStmt = {
+    title: dialog.versionName.value,
+    note: dialog.editionNote.value
+  };
+
+  try {
+    await addTeiHeaderInfo(respStmt, editionStmt);
+    ui$1.toolbar.documentActions.saveRevision.disabled = true;
+
+    // save new version
+    let {path} = await saveXml(state.xmlPath, true);
+    state.xmlPath = path;
+    state.diffXmlPath = path;
+    await api$5.reload(state);
+    await updateState(state);
+    // dirty state
+    api$8.isDirty = false;
+
+    notify("Document was duplicated. You are now editing the copy.");
+  } catch(e) {
+    console.error(e);
+    alert(e.message);
+  } finally {
+    dialog.hide();
+  }
 }
 
 /**
@@ -44043,237 +44721,6 @@ function dialogOnRequestClose(event) {
 }
 
 /**
- * @file Enhancement: Adds a <change> node with the current date and "Corrections" description
- * to the /TEI/teiHeader/revisionDesc section of an XML DOM document using XPath.
- */
-
-/**
- * The node is only added if the parent path exists and a <change> node
- * with the current date doesn't already exist within revisionDesc.
- * Assumes no namespaces.
- *
- * @param {Document} xmlDoc - The XML DOM Document object.
- * @returns {Document} - The modified XML DOM Document object, or the original
- *                       document object if the change was not made (due to
- *                       XPath not found or change already existing).
- */
-function addRevisionChange(xmlDoc) {
-  // Keep a reference to the original document in case we need to return it
-  const originalXmlDoc = xmlDoc;
-
-  // 1. Get the current date in YYYY-MM-DD format
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
-  const day = String(today.getDate()).padStart(2, '0');
-  const currentDateString = `${year}-${month}-${day}`;
-
-  console.log(`Attempting to add change for date: ${currentDateString}`);
-
-  // 2. Find the target parent node: /TEI/teiHeader/revisionDesc using XPath
-  const xpathExpression = '//tei:revisionDesc';
-
-  let revisionDescElement;
-  const xpathResult = xmlDoc.evaluate(
-    xpathExpression,
-    xmlDoc,
-    api$8.namespaceResolver,
-    XPathResult.FIRST_ORDERED_NODE_TYPE,
-    null
-  );
-  revisionDescElement = xpathResult.singleNodeValue;
-
-  // Check if the revisionDesc node was found
-  if (!revisionDescElement) {
-    console.warn(`Target node "${xpathExpression}" not found in the document.`);
-    // Return the original document if the target node doesn't exist
-    return originalXmlDoc;
-  }
-
-  // 3. Check if a <change> node with the current date already exists under revisionDesc
-  // @ts-ignore
-  const existingChanges = revisionDescElement.getElementsByTagName('change');
-  for (let i = 0; i < existingChanges.length; i++) {
-    const changeNode = existingChanges[i];
-    if (changeNode.getAttribute('when') === currentDateString) {
-      return originalXmlDoc;
-    }
-  }
-
-  // 4. If no existing node with the current date, create and add the new one
-
-  // Create the <change> element
-  const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
-  const newChangeElement = xmlDoc.createElementNS(teiNamespaceURI, 'change');
-  newChangeElement.setAttribute('when', currentDateString);
-  const descElement = xmlDoc.createElementNS(teiNamespaceURI, 'desc');
-  const textNode = xmlDoc.createTextNode('Corrections');
-  descElement.appendChild(textNode);
-  newChangeElement.appendChild(descElement);
-  revisionDescElement.appendChild(newChangeElement);
-  return xmlDoc;
-}
-
-var addRevisionChange$1 = {
-  name: "Add Revision Change",
-  description: "Adds a <change> node with the current date to the <revisionDesc> section.",
-  execute: addRevisionChange
-};
-
-/**
- * @file Enhancement: Pretty-prints an XML DOM Document by inserting whitespace text nodes.
- */
-
-/**
- * This modifies the original document object in place and returns it.
- *
- * @param {Document} xmlDoc - The XML DOM Document object.
- * @param {string} [spacing='  '] - The string to use for each level of indentation (e.g., '  ' or '\t').
- * @returns {Document} - The modified XML DOM Document object.
- */
-function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
-  if (!xmlDoc || typeof xmlDoc.documentElement === 'undefined') {
-    console.error("Invalid XML Document object provided for pretty-printing.");
-    return xmlDoc; // Return unchanged if input is invalid
-  }
-
-  // Helper function to remove existing pure whitespace text nodes
-  // This cleans up any previous formatting or accidental whitespace
-  function removeWhitespaceNodes(node) {
-    // Iterate over children array because we might remove nodes
-    const children = Array.from(node.childNodes);
-    for (const child of children) {
-      if (child.nodeType === Node.TEXT_NODE) {
-        // Check if the text node consists only of whitespace characters (spaces, tabs, newlines, etc.)
-        if (/^\s*$/.test(child.nodeValue)) {
-          node.removeChild(child);
-        }
-      } else if (child.nodeType === Node.ELEMENT_NODE) {
-        removeWhitespaceNodes(child); // Recurse into elements
-      }
-      // Ignore other node types like comments, processing instructions for removal
-    }
-  }
-
-  // Helper recursive function to add indentation
-  function addIndentation(node, depth, spacing, doc) {
-    // Only process Element nodes
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-      return;
-    }
-
-    // Create the indentation string for this depth level
-    const indent = '\n' + spacing.repeat(depth);
-
-    // Get a static list of children before we start modifying the list
-    const children = Array.from(node.childNodes);
-
-    let lastElementChild = null;
-
-    // Find the first non-whitespace child (useful for deciding if to indent *after* the start tag)
-    for (const child of children) {
-      if (child.nodeType === Node.ELEMENT_NODE) {
-        break;
-      } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim() !== '') {
-        break;
-      } else if (child.nodeType === Node.COMMENT_NODE || child.nodeType === Node.PROCESSING_INSTRUCTION_NODE) {
-        break;
-      }
-    }
-
-
-    for (const child of children) {
-      if (child.nodeType === Node.ELEMENT_NODE) {
-        // Add indentation *before* the element child
-        // Only if it's the first child element OR if the previous sibling wasn't already a newline
-        // Simpler approach: Just always add it if it's an element child. removeWhitespaceNodes cleans up duplicates later if needed, but our adding logic should prevent that.
-        node.insertBefore(doc.createTextNode(indent + spacing), child);
-
-        // Recursively indent the child's content
-        addIndentation(child, depth + 1, spacing, doc);
-
-        lastElementChild = child; // Keep track of the last element child processed
-      }
-      // Note: Text, Comment, PI nodes are not processed by this adding loop's main logic
-      // They are handled implicitly by where we insert whitespace around elements
-    }
-
-    // After iterating through children, if there were any element children,
-    // add indentation *before* the closing tag of the current node.
-    // This is inserted after the last element child, or where the first non-element child was,
-    // or at the end if only elements were children.
-    if (lastElementChild !== null) {
-      // Insert the closing tag indent *after* the last element child
-      // Using insertBefore with null or lastChild.nextSibling appends
-      node.insertBefore(doc.createTextNode(indent), lastElementChild.nextSibling);
-    }
-    // If there were no element children, the node will remain on one line with its text content
-    // e.g., <desc>Corrections</desc> - this is standard pretty printing behavior.
-  }
-
-  // --- Main pretty-printing logic ---
-
-  // Start by cleaning up any existing mixed whitespace/indentation
-  removeWhitespaceNodes(xmlDoc.documentElement);
-
-  const root = xmlDoc.documentElement;
-  if (!root) {
-    // Should have been caught above, but double check
-    return xmlDoc;
-  }
-
-  // Add indentation for children of the root element
-  // The root itself doesn't get preceding indentation (relative to nothing)
-  const rootChildren = Array.from(root.childNodes); // Capture state before modification
-
-  let lastProcessedRootNode = null; // Track the last significant node to decide on the final newline
-
-  for (const child of rootChildren) {
-    if (child.nodeType === Node.ELEMENT_NODE) {
-      // Add indent before root element children (relative to the root)
-      root.insertBefore(xmlDoc.createTextNode('\n' + spacing), child);
-      // Recursively indent the child and its descendants
-      addIndentation(child, 1, spacing, xmlDoc); // Start recursion at depth 1 for children of root
-      lastProcessedRootNode = child;
-    } else if (child.nodeType === Node.PROCESSING_INSTRUCTION_NODE || child.nodeType === Node.COMMENT_NODE) {
-      // Handle <?xml?> and comments at the top level.
-      // Ensure they are followed by a newline if the next sibling is an element.
-      const nextSibling = child.nextSibling;
-      if (nextSibling && nextSibling.nodeType === Node.ELEMENT_NODE) {
-        // Check if there isn't already a text node immediately following that contains a newline
-        if (!(nextSibling.previousSibling && nextSibling.previousSibling.nodeType === Node.TEXT_NODE && nextSibling.previousSibling.nodeValue?.includes('\n'))) {
-          root.insertBefore(xmlDoc.createTextNode('\n'), nextSibling);
-        }
-      }
-      lastProcessedRootNode = child; // These count as processed for the final newline
-    } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue?.trim() !== '') {
-      // Handle non-whitespace text nodes directly under root (uncommon in TEI, but possible)
-      // We don't add indent before or after these typically in simple pretty-printing
-      lastProcessedRootNode = child;
-    }
-    // Pure whitespace text nodes were removed by removeWhitespaceNodes
-  }
-
-  // Add a final newline before the root's closing tag IF there was any content
-  // (Element, non-whitespace text, PI, or Comment) processed at the root level.
-  // Check if the last child of the root after modifications is a text node ending in newline
-  let actualLastChild = root.lastChild;
-  if (lastProcessedRootNode && !(actualLastChild && actualLastChild.nodeType === Node.TEXT_NODE && actualLastChild.nodeValue?.endsWith('\n'))) {
-    root.appendChild(xmlDoc.createTextNode('\n')); // Append newline before </root>
-  }
-
-
-  // Return the document (which has been modified in place)
-  return xmlDoc;
-}
-
-var prettyPrintXml = {
-  name: "Pretty Print XML",
-  description: "Pretty-prints the XML DOM by inserting whitespace text nodes.",
-  execute: prettyPrintXmlDom
-};
-
-/**
  * @file Manifest file for all TEI Wizard enhancements.
  * To add a new enhancement:
  * 1. Create a new file in the 'enhancement' directory with the enhancement logic.
@@ -44291,7 +44738,6 @@ var prettyPrintXml = {
 
 /** @type {Enhancement[]} */
 const enhancements = [
-  addRevisionChange$1,
   prettyPrintXml
 ];
 
@@ -52923,13 +53369,15 @@ function close() {
  */
 
 
-
 /**
  * Plugin object
  */
 const plugin = {
   name: "start",
   install,
+  validation: {
+    result: onValidationResult
+  },
   // should be the last plugin to be installed, so correctly all of the other plugins should be listed here, 
   // just using the next-to-last one for convenience
   deps: ["tei-validation"],
@@ -52993,6 +53441,12 @@ async function start(state) {
       } catch (error) {
         api$b.warn("Error loading diff view: " + error.message);
       }
+      // if in merge view, save dirty editor content as it is not saved after validation
+      api$8.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, evt => {
+        if (api$7.isDisabled()) {
+          saveIfDirty();
+        } 
+      });
     } else {
       // b) validation & xpath selection
 
@@ -53017,15 +53471,47 @@ async function start(state) {
       updateState(state);
     }
 
+    // manually show diagnostics if validation is disabled
+    api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+      if (api$7.isDisabled()) {
+        let view = api$8.getView();
+        let diagnostic = evt.detail;
+        view.dispatch(setDiagnostics(view.state, [diagnostic]));
+      }
+    });
+
     // finish initialization
     ui$1.spinner.hide();
     api$2.show();
+    api$8.setLineWrapping(true);
     api$b.info("Application ready.");
 
   } catch (error) {
     ui$1.spinner.hide();
     api$9.error(error.message);
     throw error
+  }
+}
+
+/**
+ * Called when a validation has been done. 
+ * Used to save the document after successful validation
+ * @param {Diagnostic[]} diagnostics 
+ */
+async function onValidationResult(diagnostics) {
+  if (diagnostics.length === 0) {
+    saveIfDirty();
+  }
+}
+
+/**
+ * Save the current XML file if the editor is "dirty"
+ */
+async function saveIfDirty() {
+  const filePath = ui$1.toolbar.xml.value;
+  if (filePath && api$8.getXmlTree() && api$8.isDirty) {
+    await api$3.saveXml(filePath);
+    api$b.info(`Saved ${filePath} to server`);
   }
 }
 
@@ -53100,4 +53586,4 @@ await invoke(endpoints.install, state);
 // start the application 
 await invoke(endpoints.start, state);
 
-export { api as appInfo, api$6 as client, api$9 as dialog, endpoints, api$4 as extraction, api$5 as fileselection, api$2 as floatingPanel, invoke, api$b as logger, pdfViewer, api$1 as promptEditor, api$3 as services, state, updateState, api$a as urlHash, api$7 as validation, api$8 as xmlEditor };
+export { api as appInfo, api$6 as client, api$9 as dialog, endpoints, api$4 as extraction, api$5 as fileselection, api$2 as floatingPanel, invoke, api$b as logger, pdfViewer, pluginManager, api$1 as promptEditor, api$3 as services, state, updateState, api$a as urlHash, api$7 as validation, api$8 as xmlEditor };

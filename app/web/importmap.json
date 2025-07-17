@@ -2,6 +2,7 @@
   "imports": {
     "@shoelace-style/shoelace/dist/components/": "../../node_modules/@shoelace-style/shoelace/dist/components/",
     "@codemirror/autocomplete": "../../node_modules/@codemirror/autocomplete/dist/index.js",
+    "@codemirror/commands": "../../node_modules/@codemirror/commands/dist/index.js",
     "@codemirror/lang-xml": "../../node_modules/@codemirror/lang-xml/dist/index.js",
     "@codemirror/language": "../../node_modules/@codemirror/language/dist/index.js",
     "@codemirror/merge": "../../node_modules/@codemirror/merge/dist/index.js",
@@ -84,7 +85,6 @@
       "@lezer/lr": "../../node_modules/@lezer/lr/dist/index.js"
     },
     "../../node_modules/codemirror/": {
-      "@codemirror/commands": "../../node_modules/@codemirror/commands/dist/index.js",
       "@codemirror/search": "../../node_modules/@codemirror/search/dist/index.js"
     },
     "../../node_modules/linkify-it/": {

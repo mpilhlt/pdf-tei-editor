@@ -8,10 +8,11 @@
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, Compartment } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
-import { EditorView } from "@codemirror/view";
+import {EditorView, keymap} from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language"
+import {indentWithTab} from "@codemirror/commands"
 
 // custom modules
 
@@ -131,6 +132,7 @@ export class XMLEditor extends EventTarget {
     const extensions = [
       basicSetup,
       xml(),
+      keymap.of([indentWithTab]),
       this.#linterCompartment.of([]),
       this.#selectionChangeCompartment.of([]),
       this.#updateListenerCompartment.of([]),
@@ -818,7 +820,8 @@ export class XMLEditor extends EventTarget {
           const xpath = this.getXPathForNode(node)
           return Object.assign({ node, xpath }, range)
         } catch (e) {
-          console.warn(e.message)
+          // add error message to range object in case we cannot determine node/xpath
+          range.diagnostic = e.message
           return range
         }
       })
