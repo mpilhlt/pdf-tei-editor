@@ -5,7 +5,7 @@
     "postinstall": "./bin/postinstall",
     "start": "./bin/server",
     "update-importmap": "node ./bin/generate-importmap.js",
-    "build": "node bin/generate-importmap.js && python bin/compile-sl-icons.py && node_modules/.bin/rollup app/src/app.js -f es -o app/web/app.js -p @rollup/plugin-node-resolve",
+    "build": "./bin/build",
     "prepare": "husky"
   },
   "dependencies": {
