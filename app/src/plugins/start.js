@@ -62,9 +62,6 @@ async function start(state) {
   // async operations
   try {
 
-    // initial synchronization so that the files on the server are up-to-date
-    await services.syncFiles(state)
-
     // update the file lists
     await fileselection.reload(state)
 

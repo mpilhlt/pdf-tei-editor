@@ -21,10 +21,11 @@ def file_list():
         file_path = data.get("xml", None)
         if file_path is not None:
             metadata = get_tei_metadata(get_data_file_path(file_path))
-            if 'author' in metadata:
-                label = f"{metadata.get('author', '')}, {metadata.get('title', '')[:25]}... ({metadata.get('date','')})"
-            else:
+            if "".join(metadata.values()).strip() == "":
                 label = data['id']
+            else:
+                label = f"{metadata.get('author', '')}, {metadata.get('title', '')[:25]}... ({metadata.get('date','')})"
+                
             metadata['label'] = label
             if metadata:
                 files_data[idx].update(metadata)
