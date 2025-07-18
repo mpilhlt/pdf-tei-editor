@@ -112,7 +112,7 @@ var pluginManager = {
     _cache = {};
   },
 
-  invoke: function (prop) {
+  invoke: function (prop, ) {
     var args = Array.prototype.slice.call(arguments, 1);
     if (!prop) throw new Error('Invoke on plugin should have prop argument');
     var noCall = /^!/.test(prop);
@@ -289,7 +289,7 @@ const api$b = {
  */
 const plugin$e = {
   name: name$2,
-  install: () => console.info("Console-based logger installed."),
+  install: install$d,
   log: {
     setLogLevel,
     debug,
@@ -298,6 +298,14 @@ const plugin$e = {
     critical
   }
 };
+
+//
+// implementation
+//
+
+async function install$d(state) {
+  console.log(`Installing plugin "${plugin$e.name}"`);
+}
 
 
 
@@ -369,6 +377,7 @@ function critical({message}) {
  * This might have to be changed later in case we do not want to show all string properties in the app state
  */
 
+
 /** 
  * @import { ApplicationState } from '../app.js' 
  */
@@ -385,6 +394,7 @@ const api$a = {
  */
 const plugin$d = {
   name: "url-hash-state",
+  install: install$c,
   state: {
     update: updateUrlHashfromState
   }
@@ -394,6 +404,10 @@ const plugin$d = {
 // implementation
 //
 
+async function install$c(state){
+  api$b.debug(`Installing plugin "${plugin$d.name}"`);
+}
+
 /**
  * 
  * @param {ApplicationState} state 
@@ -402,7 +416,7 @@ function updateUrlHashfromState(state) {
   const url = new URL(window.location.href);
   const urlHashParams = new URLSearchParams(window.location.hash.slice(1));
   Object.entries(state)
-    .filter(([key]) => key in allowedUrlHashParams)
+    .filter(([key]) => allowedUrlHashParams.includes(key))
     .forEach(([key, value]) => {
       if (value) {
         urlHashParams.set(key, value);
@@ -487,6 +501,8 @@ class UrlHash {
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   }
 }
+
+
 
 /**
  * Escapes the given text to valid html
@@ -10707,6 +10723,53 @@ __decorateClass([
 
 SlCheckbox.define("sl-checkbox");
 
+// src/components/divider/divider.styles.ts
+var divider_styles_default = i$6`
+  :host {
+    --color: var(--sl-panel-border-color);
+    --width: var(--sl-panel-border-width);
+    --spacing: var(--sl-spacing-medium);
+  }
+
+  :host(:not([vertical])) {
+    display: block;
+    border-top: solid var(--width) var(--color);
+    margin: var(--spacing) 0;
+  }
+
+  :host([vertical]) {
+    display: inline-block;
+    height: 100%;
+    border-left: solid var(--width) var(--color);
+    margin: 0 var(--spacing);
+  }
+`;
+
+var SlDivider = class extends ShoelaceElement {
+  constructor() {
+    super(...arguments);
+    this.vertical = false;
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this.setAttribute("role", "separator");
+  }
+  handleVerticalChange() {
+    this.setAttribute("aria-orientation", this.vertical ? "vertical" : "horizontal");
+  }
+};
+SlDivider.styles = [component_styles_default, divider_styles_default];
+__decorateClass([
+  n$3({ type: Boolean, reflect: true })
+], SlDivider.prototype, "vertical", 2);
+__decorateClass([
+  watch("vertical")
+], SlDivider.prototype, "handleVerticalChange", 1);
+
+// src/components/divider/divider.ts
+var divider_default = SlDivider;
+SlDivider.define("sl-divider");
+
 /**
  * The UI of the application as a typed object structure, which can then be traversed. 
  * In this structure, each named DOM element encapsulates all named descencdent elements.
@@ -10716,6 +10779,7 @@ SlCheckbox.define("sl-checkbox");
  * properties and allow autocompletion in IDEs that support JSDoc.   
  */
 
+
 /**
  * Import type definitions from plugins
  * 
@@ -10723,7 +10787,7 @@ SlCheckbox.define("sl-checkbox");
  * @import {promptEditorComponent} from './plugins/prompt-editor.js'
  * @import {floatingPanelComponent} from './plugins/floating-panel.js'
  * @import {documentActionsComponent, teiServicesComponents} from './plugins/services.js'
- * @import {extractionActionsComponent, extractionOptionsComponent} from './plugins/extraction.js'
+ * @import {extractionActionsComponent, extractionOptionsDialog} from './plugins/extraction.js'
  * @import {infoDialogComponent} from './plugins/info.js'
  */
 
@@ -10737,7 +10801,7 @@ SlCheckbox.define("sl-checkbox");
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes and block the application while they are ongoing
  * @property {dialogComponent} dialog - A dialog to display messages or errors
  * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
- * @property {extractionOptionsComponent} extractionOptions - A dialog to choose the options for the instructiopns
+ * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
  * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
  */
 
@@ -10763,21 +10827,36 @@ SlCheckbox.define("sl-checkbox");
 let ui = null;
 
 /**
- * Adds the given html to the target node
- * @param {string} html 
- * @param {Element|Document} targetNode
- * @returns {Element[]} All the created nodes in an array
+ * Adds html to the target node. The html can be a string which starts with "<" or the name of a file
+ * in the 'app/src/templates/' folder
+ * @param {string} htmlOrFile A literal html string or the name of a file in the 'app/src/templates/' folder
+ * @param {Element|Document|null} [parentNode] 
+ *    If given, appends the generated nodes as children to the parentNode. The `ui` object is updated automatically.
+ *    Make sure that the parentNode already exists, otherwise await the method first and then append the nodes. 
+ *    If not given, the generated nodes are returned, and you need to call `updateUi()` manually.
+ * @returns {Promise<Element[]>} All the created nodes in an array
  */
-function appendHtml(html, targetNode=document.body){
+async function appendHtml(htmlOrFile, parentNode=null){
+  let html;
+  if (htmlOrFile.trim()[0]==='<') {
+    // interpret as literal html
+    html = htmlOrFile.trim();
+  } else {
+    // treat as path
+    const path = '/src/templates/' + htmlOrFile;
+    console.log('Loading HTML from', path);
+    html = await (await fetch(path)).text();
+  }
   const div = document.createElement('div');
   div.innerHTML = html.trim();
-  const result = [];
-  div.childNodes.forEach(childNode => {
-    targetNode.append(childNode);
-    result.push(childNode);
-  });
-  updateUi();
-  return result
+  const nodes = Array.from(div.childNodes);
+  // if a parent node has been given, add nodes to it and update the `ui` object
+  if (parentNode instanceof Element) {
+    parentNode.append(...nodes);
+    updateUi();
+  } 
+  // return the nodes as an array
+  return nodes
 }
 
 /**
@@ -10821,7 +10900,7 @@ const plugin$c = {
  * @property {SlButton} closeBtn
  */
 
-const dialogHtml$2 = `
+const dialogHtml = `
 <sl-dialog name="dialog" label="Dialog" class="dialog-width" style="--width: 50vw;">
   <div>
     <span name="message"></span>
@@ -10838,8 +10917,9 @@ const dialogHtml$2 = `
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-function install$b(app) {
-  appendHtml(dialogHtml$2);
+async function install$b(app) {
+  api$b.debug(`Installing plugin "${plugin$c.name}"`);
+  await appendHtml(dialogHtml, document.body);
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.self.hide());
 }
 
@@ -11303,6 +11383,7 @@ let lastNode = null;
  * @returns {Promise<void>}
  */
 async function update$4(state) {
+  api$b.debug(`Installing plugin "${plugin$b.name}"`);
 
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
@@ -41454,6 +41535,7 @@ const plugin$a = {
  * @param {ApplicationState} state
  */
 async function install$9(state) {
+  api$b.debug(`Installing plugin "${plugin$a.name}"`);
   // load autocomplete data
   try {
     const res = await fetch(tagDataPath);
@@ -41558,7 +41640,8 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-function install$8(state) {
+async function install$8(state) {
+  api$b.debug(`Installing plugin "${plugin$9.name}"`);
   // add the linter to the editor
   api$8.addLinter([
     linter(lintSource, { 
@@ -42175,12 +42258,8 @@ const plugin$7 = {
 // UI
 //
 
-// HTML elements
-const fileSelectionHtml = `
-  <sl-select name="pdf" size="small" label="PDF" hoist></sl-select>
-  <sl-select name="xml" size="small" label="XML file version" hoist></sl-select>
-  <sl-select name="diff" size="small" label="Compare with version" hoist></sl-select>
-`;
+// see ui.js for @typedef 
+const fileSelectionControls = await appendHtml('file-selection.html');
 
 //
 // Implementation
@@ -42194,9 +42273,12 @@ const fileSelectionHtml = `
  */
 async function install$7(state) {
 
+  api$b.debug(`Installing plugin "${plugin$7.name}"`);
+  
   // install controls on menubar
-  appendHtml(fileSelectionHtml, ui$1.toolbar.self);
-
+  ui$1.toolbar.self.append(...fileSelectionControls);
+  updateUi();
+  
   /**  @type {[SlSelect,function][]} */
   const handlers = [
     [ui$1.toolbar.pdf, onChangePdfSelection],
@@ -42218,8 +42300,6 @@ async function install$7(state) {
       select.closest('#toolbar')?.classList.remove('dropdown-open');
     });
   }
-
-  api$b.info("Fileselection plugin installed.");
 }
 
 /**
@@ -42287,45 +42367,68 @@ async function populateSelectboxes(state) {
     ui$1.toolbar[name].innerHTML = "";
   }
 
+  // sort into groups by directory
+  const dirname = (path) => path.split('/').slice(0, -1).join('/');
+  const basename = (path) => path.split('/').pop();
+  const grouped_files = fileData.reduce((groups, file) => {
+    const collection_name = basename(dirname(file.pdf));
+    (groups[collection_name] = groups[collection_name] || []).push(file);
+    return groups
+  }, {});
+
+  // save the collections, this tight coupling is not ideal
+  const collections = Object.keys(grouped_files).sort();
+  ui$1.toolbar.pdf.dataset.collections = JSON.stringify(collections);
+
   // get items to be selected from app state or use first element
-  fileData.forEach(file => {
+  for (const collection_name of collections) {
+    
+    await appendHtml(`<small>${collection_name}</small>`, ui$1.toolbar.pdf);
+    
+    // get a list of file data sorted by label
+    const files = grouped_files[collection_name]
+      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0 );
 
-    // populate pdf select box 
-    const option = Object.assign(new option_default, {
-      value: file.pdf,
-      textContent: file.label,
-      size: "small",
-    });
+    for (const file of files) {
+      // populate pdf select box 
+      const option = Object.assign(new option_default, {
+        value: file.pdf,
+        textContent: file.label,
+        size: "small",
+      });
 
-    // save scalar file properties in option
-    const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'));
-    Object.assign(option.dataset, data);
+      // save scalar file properties in option
+      const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'));
+      Object.assign(option.dataset, data);
 
-    ui$1.toolbar.pdf.hoist = true;
-    ui$1.toolbar.pdf.appendChild(option);
+      ui$1.toolbar.pdf.hoist = true;
+      ui$1.toolbar.pdf.appendChild(option);
 
-    if (file.pdf === state.pdfPath) {
-      // populate the version and diff selectboxes depending on the selected file
-      if (file.versions) {
-        file.versions.forEach((version) => {
-          // xml
-          let option = new option_default();
-          // @ts-ignore
-          option.size = "small";
-          option.value = version.path;
-          option.textContent = version.label;
-          ui$1.toolbar.xml.appendChild(option);
-          // diff 
-          option = new option_default();
-          // @ts-ignore
-          option.size = "small";
-          option.value = version.path;
-          option.textContent = version.label;
-          ui$1.toolbar.diff.appendChild(option);
-        });
+      if (file.pdf === state.pdfPath) {
+        // populate the version and diff selectboxes depending on the selected file
+        if (file.versions) {
+          file.versions.forEach((version) => {
+            // xml
+            let option = new option_default();
+            // @ts-ignore
+            option.size = "small";
+            option.value = version.path;
+            option.textContent = version.label;
+            ui$1.toolbar.xml.appendChild(option);
+            // diff 
+            option = new option_default();
+            // @ts-ignore
+            option.size = "small";
+            option.value = version.path;
+            option.textContent = version.label;
+            ui$1.toolbar.diff.appendChild(option);
+          });
+        }
       }
     }
-  });
+    ui$1.toolbar.pdf.appendChild(new divider_default);
+  }
+
 
   // update selection
   ui$1.toolbar.pdf.value = state.pdfPath || '';
@@ -42435,39 +42538,20 @@ const plugin$6 = {
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
-const buttonsHtml = `
-<sl-button-group name="extractionActions" label="Extraction" >
-  <sl-tooltip content="Upload a new PDF and extract references">
-    <sl-button name="extractNew" size="small">
-      <sl-icon name="filetype-pdf"></sl-icon>
-    </sl-button>
-  </sl-tooltip>
-  <sl-tooltip content="Extract from the current PDF into a new TEI version">
-    <sl-button name="extractCurrent" size="small">
-      <sl-icon name="clipboard2-plus"></sl-icon>
-    </sl-button>
-  </sl-tooltip>
-</sl-button-group>
-`;
+/** @type {extractionActionsComponent} */
+const extractionBtnGroup = await appendHtml('extraction-buttons.html');
+
 
 /**
  * Extraction options dialog
- * @typedef {object} extractionOptionsComponent
+ * @typedef {object} extractionOptionsDialog
+ * @property {SlInput} doi 
+ * @property {SlSelect} collectionName
  * @property {SlSelect} modelIndex 
  * @property {SlSelect} instructionIndex
- * @property {SlInput} doi 
  */
-const dialogHtml$1 = `
-<sl-dialog name="extractionOptions" label="Extract references">
-  <div class="dialog-column">
-    <sl-select name="modelIndex" label="Model" size="small" help-text="Choose the model configuration used for the extraction"></sl-select>
-    <sl-select name="instructionIndex" label="Instructions" size="small" help-text="Choose the instruction set that is added to the prompt"></sl-select>  
-    <sl-input name="doi" label="DOI" size="small" help-text="Please enter the DOI of the document to add document metadata"></input>   
-  </div>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="submit" variant="primary">Extract</sl-button>  
-</sl-dialog>
-`;
+/** @type {extractionOptionsDialog} */
+const optionsDialog = (await appendHtml('extraction-dialog.html'))[0];
 
 //
 // Implementation
@@ -42477,10 +42561,14 @@ const dialogHtml$1 = `
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-function install$6(state) {
+async function install$6(state) {
+  api$b.debug(`Installing plugin "${plugin$6.name}"`);
 
   // install controls on menubar
-  appendHtml(buttonsHtml, ui$1.toolbar.self);
+  console.warn(ui$1.toolbar.self.childElementCount);
+  ui$1.toolbar.self.append(...extractionBtnGroup);
+  document.body.append(optionsDialog);
+  updateUi();
 
   // add event listeners
   ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state));
@@ -42571,74 +42659,82 @@ async function promptForExtractionOptions(options) {
   const instructionsData = await api$6.loadInstructions();
   const instructions = [];
 
-  // add dialog to DOM
-  const optionsDialog = appendHtml(dialogHtml$1)[0];
-
   // populate dialog
   /** @type {SlInput|null} */
-  const doiInput = optionsDialog.querySelector('[name="doi"]');
-  if (!doiInput) throw new Error("Missing DOM element")
   if (options && typeof options =="object" && 'doi' in options) {
-    doiInput.value = options.doi;
+    optionsDialog.doi.value = options.doi;
+  } else {
+    optionsDialog.doi.value = "";
   }
-  
-  // configure selectbox 
+
+  // configure collections selectbox 
   /** @type {SlSelect|null} */
-  const selectbox = optionsDialog.querySelector('[name="instructionIndex"]');
-  if (!selectbox) throw new Error("Missing DOM element")
+  const collectionSelectBox = optionsDialog.collectionName;
+  collectionSelectBox.innerHTML="";
+  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections);
+  collections.unshift('__inbox');
+  for (const collection_name of collections){
+    const option = Object.assign(new option_default, {
+      value: collection_name,
+      textContent: collection_name.replaceAll("_", " ").trim()
+    });
+    collectionSelectBox.append(option);
+  } 
+  collectionSelectBox.value = "__inbox";
+  
+  // configure instructions selectbox 
+  /** @type {SlSelect|null} */
+  const instructionsSelectBox = optionsDialog.instructionIndex;
+  instructionsSelectBox.innerHTML ="";
   for (const [idx, { label, text }] of instructionsData.entries()) {
     const option = Object.assign(new option_default, {
       value: String(idx),
       textContent: label
     });
     instructions[idx] = text.join("\n");
-    selectbox.appendChild(option);
+    instructionsSelectBox.appendChild(option);
   }
-  selectbox.value = "0";
+  instructionsSelectBox.value = "0";
 
   // display the dialog and await the user's response
-  const formData = await new Promise(resolve => {
+  const result = await new Promise(resolve => {
     // user cancels
     function cancel() {
-      optionsDialog.remove();
-      resolve(null);
+      resolve(false);
     }
     // user submits their input
     function submit() {
-      optionsDialog.remove();
-      resolve({
-        // @ts-ignore
-        'doi': optionsDialog.querySelector('[name="doi"]').value,
-        // @ts-ignore
-        'instructionIndex': parseInt(optionsDialog.querySelector('[name="instructionIndex"]').value)
-      });
+      resolve(true);
     }
 
     // event listeners
     optionsDialog.addEventListener("sl-request-close", cancel, { once: true });
-    // @ts-ignore
-    optionsDialog.querySelector('[name="cancel"]').addEventListener("click", cancel, { once: true });
-    // @ts-ignore
-    optionsDialog.querySelector('[name="submit"]').addEventListener("click", submit, { once: true });
+    optionsDialog.cancel.addEventListener("click", cancel, { once: true });
+    optionsDialog.submit.addEventListener("click", submit, { once: true });
 
-    // @ts-ignore
     optionsDialog.show();
   });
+  optionsDialog.hide();
 
-  if (formData === null) {
+  if (result === false) {
     // user has cancelled the form
     return null
   }
 
+  const formData = {
+    'doi': optionsDialog.doi.value,
+    'instructions': instructions[parseInt(optionsDialog.instructionIndex.value)],
+    'collection': optionsDialog.collectionName.value
+  };
+
+  console.warn(formData);
+
   if (formData.doi == "" || !isDoi(formData.doi)) {
-    api$9.error(`${formData.doi} does not seem to be a DOI, please try again.`);
+    api$9.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
     return
   }
 
-  return Object.assign({
-    doi: formData.doi,
-    instructions: instructions[formData.instructionIndex]
-  }, options)
+  return Object.assign(formData, options)
 }
 
 function getDoiFromXml() {
@@ -42656,7 +42752,8 @@ function getDoiFromFilename(filename) {
       // filename is URL-encoded DOI
       doi = decodeURIComponent(doi);
     } else {
-      // custom decoding 
+      // custom decoding
+      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
       doi = doi.replaceAll(/__/g, '/');
     }
     console.debug("Extracted DOI from filename:", doi);
@@ -43471,6 +43568,10 @@ const plugin$5 = {
   validation: { inProgress }
 };
 
+//
+// UI
+//
+
 /**
  * Document actions button group
  * @typedef {object} documentActionsComponent
@@ -43493,75 +43594,8 @@ const plugin$5 = {
  * @property {SlButton} validate 
  */
 
-const toolbarActionsHtml = `
-<span class="hbox-with-gap toolbar-content">
-  <!-- Document button group -->
-  <sl-button-group label="Document" name="documentActions">
-
-    <!-- document revision -->
-    <sl-tooltip content="Save document revision">
-      <sl-button name="saveRevision" size="small" disabled>
-        <sl-icon name="save"></sl-icon>
-      </sl-button>
-    </sl-tooltip>
-
-    <!-- create new version -->
-    <sl-tooltip content="Duplicate current document to make changes">
-      <sl-button name="createNewVersion" size="small" disabled>
-        <sl-icon name="copy"></sl-icon>
-      </sl-button>
-    </sl-tooltip>  
-
-    <!-- sync -->
-    <sl-tooltip content="Synchronize files on the backend">
-      <sl-button name="sync" size="small" disabled>
-        <sl-icon name="arrow-repeat"></sl-icon>
-      </sl-button>
-    </sl-tooltip>      
-    
-    <!-- upload, not implemented yet -->
-    <sl-tooltip content="Upload document">
-      <sl-button name="upload" size="small">
-        <sl-icon name="cloud-upload"></sl-icon>
-      </sl-button>
-    </sl-tooltip>    
-
-    <!-- download -->
-    <sl-tooltip content="Download XML document">
-      <sl-button name="download" size="small" disabled>
-        <sl-icon name="cloud-download"></sl-icon>
-      </sl-button>
-    </sl-tooltip>   
-
-    <!-- delete -->
-    <sl-button-group>
-      <sl-dropdown placement="bottom-end">
-        <sl-button name="deleteBtn" size="small" slot="trigger" caret>
-          <sl-icon name="trash3"></sl-icon>
-        </sl-button>
-        <sl-menu>
-          <sl-menu-item name="deleteCurrentVersion">Delete current version</sl-menu-item>
-          <sl-menu-item name="deleteAllVersions">Delete all versions</sl-menu-item>
-          <sl-menu-item name="deleteAll">Delete PDF and XML</sl-menu-item>
-        </sl-menu>
-      </sl-dropdown>
-    </sl-button-group>
-    
-  </sl-button-group>
-
-  <!-- TEI -->
-  <sl-button-group label="TEI" name="teiActions">
-
-    <!-- validate -->
-    <sl-tooltip content="Validate the document">
-      <sl-button name="validate" size="small" disabled>
-        <sl-icon name="file-earmark-check"></sl-icon>
-      </sl-button> 
-    </sl-tooltip>
-
-  </sl-button-group>
-</span>
-`;
+// todo align template with definition
+const documentActionButtons = await appendHtml("document-action-buttons.html");
 
 /**
  * Dialog for creating a new version
@@ -43572,19 +43606,10 @@ const toolbarActionsHtml = `
  * @property {SlInput} persId 
  * @property {SlInput} editionNote 
  */
-const newVersionDialogHtml = `
-<sl-dialog name="newVersionDialog" label="Create new version">
-  <div class="dialog-column">
-    <sl-input name="versionName" label="Version Name" size="small" help-text="Provide a short name for the version (required)"></sl-input>
-    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
-    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
-    <sl-input name="editionNote" label="Description" size="small" help-text="Description of this version (optional)"></sl-input>
-  </div>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="submit" variant="primary">Create new version</sl-button>  
-</sl-dialog>
-`;
 
+/** @type {newVersionDialog} */
+const newVersionDialog = (await appendHtml("new-version-dialog.html"))[0];
+  
 /**
  * Dialog for documenting a revision
  * @typedef {object} newRevisionChangeDialog
@@ -43593,18 +43618,9 @@ const newVersionDialogHtml = `
  * @property {SlInput} persName 
  * @property {SlInput} changeDesc 
  */
-const saveChangeDialogHtml = `
-<sl-dialog name="newRevisionChangeDialog" label="Add a change description">
-  <div class="dialog-column">
-    Document changes of this 
-    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
-    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
-    <sl-input name="changeDesc" label="Description" size="small" help-text="Description of the change"></sl-input>
-  </div>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="submit" variant="primary">Add</sl-button>  
-</sl-dialog>
-`;
+
+/** @type {newRevisionChangeDialog} */
+const saveRevisionDialog = (await appendHtml("save-revision-dialog.html"))[0];
 
 //
 // Implementation
@@ -43613,15 +43629,18 @@ const saveChangeDialogHtml = `
 /**
  * @param {ApplicationState} state
  */
-function install$5(state) {
-  const tb = ui$1.toolbar.self;
-
+async function install$5(state) {
+  api$b.debug(`Installing plugin "${plugin$5.name}"`);
+  
   // install controls on menubar
-  appendHtml(toolbarActionsHtml, tb);
+  ui$1.toolbar.self.append(...documentActionButtons);
+  document.body.append(newVersionDialog);
+  document.body.append(saveRevisionDialog);
+  updateUi();
+
+  ui$1.toolbar.self;
 
   // install dialogs
-  appendHtml(newVersionDialogHtml);
-  appendHtml(saveChangeDialogHtml);
 
   // === Document button group ===
 
@@ -44238,6 +44257,8 @@ const plugin$4 = {
  * @property {diffNavigationComponent} diffNavigation
  * 
  */
+/** @type {floatingPanelComponent} */
+const floatingPanelControls = await appendHtml('floating-panel.html');
 
 /**
  * Diff Navigation
@@ -44252,77 +44273,16 @@ const plugin$4 = {
 
 const pluginId = "floating-panel";
 
-// component htmnl
-const floatingPanelHtml = `
-  <style>
-    #${pluginId} {
-      position: absolute;
-      display: flex;
-      justify-content: space-between;
-      flex-direction: column;
-      gap: 10px;
-      align-items: center;
-      width: auto;
-      height: auto;
-      padding: 20px;
-      top: 70vh;
-      left: 100px;
-      background-color: rgba(167, 158, 158, 0.8);
-      border-radius: 10px;
-      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
-    }
-
-    #${pluginId}  * {
-      font-size: small;
-    }
-
-    #${pluginId} > div {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    #${pluginId} > div > * {
-      display: inline;
-    }      
-  </style>
-  <div id="${pluginId}" name="floatingPanel">
-    <div>
-      <span class="navigation-text">Navigate by</span>
-      <select name="xpath"></select>
-      <button name="editXpath" style="display:none">Custom XPath</button>
-      <button name="previousNode" disabled>&lt;&lt;</button>
-      <span name="selectionIndex" class="navigation-text"></span>
-      <button name="nextNode" disabled>&gt;&gt;</button>
-    </div>
-    <div name="markNodeButtons">
-      <span class="navigation-text">Mark node as</span>
-      <button class="node-status" data-status="verified" disabled>Verified</button>
-      <button class="node-status" data-status="unresolved" disabled>Unresolved</button>
-      <button class="node-status" data-status="" disabled>Clear node</button>
-      <!-- button class="node-status" data-status="comment" disabled>Add comment</button-->
-    </div>
-    <div>
-      <custom-switch name="switchAutoSearch" label="Find node" label-on="On" label-off="off"></custom-switch>
-      <span name="diffNavigation">
-        <button name="prevDiff" disabled>Prev. Diff</button>
-        <button name="nextDiff" disabled>Next Diff</button>
-        <button name="diffKeepAll" disabled>Reject all changes</button>
-        <button name="diffChangeAll" disabled>Accept all changes</button>
-      </span>
-    </div>
-  </div>
-`;
-
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
 async function install$4(state) {
+  api$b.debug(`Installing plugin "${plugin$4.name}"`);
 
-  // add the panel to the DOM
-  appendHtml(floatingPanelHtml);
+  document.body.append(...floatingPanelControls);
+  updateUi();
 
   // bring clicked elements into foreground when clicked
   addBringToForegroundListener([`#${pluginId}`, '.cm-panels']);
@@ -44393,9 +44353,6 @@ async function install$4(state) {
       $$('.node-status').forEach(btn => btn.disabled = false);
     }
   }));
-
-  // update selectbox when corresponding app state changes
-  api$b.info("Floating panel plugin installed.");
 }
 
 /**
@@ -44631,34 +44588,12 @@ const plugin$3 = {
  */
 
 // editor dialog
-const editorHtml = `
-<sl-dialog name="promptEditor" label="Edit prompt" class="dialog-big">
-  <p>Below are the parts of the LLM prompt specific to the reference instruction.</p>
-  <div class="dialog-column">
-    <div class="dialog-row">
-      <sl-input name="label" help-text="A short description of the prompt additions"></sl-input>
-      <sl-dropdown>
-        <sl-button slot="trigger" caret></sl-button>
-        <sl-menu name="labelMenu"></sl-menu>
-      </sl-dropdown>
-    </div>
-    <sl-textarea name="text" rows="20"></sl-texarea>
-  </div>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="delete" disabled variant="danger">Delete prompt</sl-button>
-  <sl-button slot="footer" name="duplicate" variant="secondary">Duplicate prompt</sl-button>
-  <sl-button slot="footer" name="submit" variant="primary">Save &amp; Close</sl-button>
-</sl-dialog>
-`;
+/** @type {promptEditorComponent} */
+const promptEditorDialog = (await appendHtml("prompt-editor.html"))[0];
 
 // button, documented in services.js
-const buttonHtml$2 = `
-<sl-tooltip content="Edit the prompt instructions">
-  <sl-button name="editInstructions" size="small">
-    <sl-icon name="pencil-square"></sl-icon>
-  </sl-button>
-</sl-tooltip>
-`;
+const promptEditorButton = (await appendHtml('prompt-editor-button.html'))[0];
+
 //
 // Implementation
 //
@@ -44667,9 +44602,12 @@ const buttonHtml$2 = `
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-function install$3(state) {
+async function install$3(state) {
+  api$b.debug(`Installing plugin "${plugin$3.name}"`);
+  
   // add prompt editor component
-  appendHtml(editorHtml);
+  document.body.append(promptEditorDialog);
+  updateUi();
 
   const pe = ui$1.promptEditor;
   pe.self.addEventListener("sl-request-close", dialogOnRequestClose);
@@ -44680,8 +44618,8 @@ function install$3(state) {
   pe.delete.addEventListener('click', deletePrompt);
 
   // add a button to the command bar to show dialog with prompt editor
-  const button = appendHtml(buttonHtml$2, ui$1.toolbar.extractionActions.self)[0];
-  button.addEventListener("click", () => api$1.open());
+  ui$1.toolbar.extractionActions.self.append(promptEditorButton);
+  promptEditorButton.addEventListener("click", () => api$1.open());
 }
 
 // API
@@ -44850,51 +44788,47 @@ const enhancements = [
  */
 
 
-const  buttonHtml$1 = `
-  <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
-    <sl-button name="teiWizard" size="small">
-      <sl-icon name="magic"></sl-icon>
-    </sl-button>
-  </sl-tooltip> 
-`;
-const dialogHtml = `
-<sl-dialog name="teiWizardDialog" label="TEI Wizard" class="dialog-width" style="--width: 50vw;">
-  <div name="enhancementList"></div>
-  <sl-button slot="footer" name="selectAll">Select All</sl-button>
-  <sl-button slot="footer" name="selectNone">Select None</sl-button>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="executeBtn" variant="primary">Execute</sl-button>
-</sl-dialog>
-`;
 
 const plugin$2 = {
   name: "tei-wizard",
-  install: install$2
+  install: install$2,
+  deps: ['services']
 };
+
+//
+// UI
+//
+
+const teiWizardButton = (await appendHtml("tei-wizard-button.html"))[0];
+
+const teiWizardDialog = (await appendHtml("tei-wizard-dialog.html"))[0];
+
 
 /**
  * @param {ApplicationState} state 
  */
 async function install$2(state) {
+  api$b.debug(`Installing plugin "${plugin$2.name}"`);
+
   // button
-  appendHtml(buttonHtml$1, ui$1.toolbar.teiActions.self);
+  ui$1.toolbar.teiActions.self.append(teiWizardButton);
+  document.body.append(teiWizardDialog);
+  updateUi();
+  
   // @ts-ignore
   ui$1.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard);
 
-  // dialog
-  appendHtml(dialogHtml);
   // @ts-ignore
   const dialog = ui$1.teiWizardDialog;  
 
   // Populate enhancement list
-  enhancements.forEach(enhancement => {
+  enhancements.forEach(async enhancement => {
     const checkboxHtml = `
     <sl-tooltip content="${enhancement.description}" hoist placement="right">
-      <sl-checkbox data-enhancement="${enhancement.name}" 
-        size="medium" checked>${enhancement.name}</sl-checkbox>
+      <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
     </sl-tooltip>
     <br />`;
-    appendHtml(checkboxHtml, dialog.enhancementList);
+    await appendHtml(checkboxHtml, dialog.enhancementList);
   });
 
   // Select all and none buttons
@@ -53397,12 +53331,15 @@ const docsBasePath = "../../docs";
  * @param {ApplicationState} state The main application
  */
 async function install$1(state) {
+  api$b.debug(`Installing plugin "${plugin$1.name}"`);
   // add the component html
-  appendHtml(infoHtml);
+  await appendHtml(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.self.hide());
 
   // add a button to the command bar to show dialog with prompt editor
-  const button = appendHtml(buttonHtml, ui$1.toolbar.self)[0];
+  const button = (await appendHtml(buttonHtml))[0];
+  ui$1.toolbar.self.append(button);
+  updateUi();
   button.addEventListener("click", () => api.open());
   
   // configure markdown parser
@@ -53455,7 +53392,7 @@ async function load(mdPath){
     // open remote links in new tabs
     .replaceAll(/(href="http)/g, `target="_blank" $1`);
 
-  appendHtml(html, ui$1.infoDialog.content);
+  await appendHtml(html, ui$1.infoDialog.content);
 }
 
 
@@ -53498,7 +53435,8 @@ let spinner;
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-function install(state) {
+async function install(state) {
+  api$b.debug(`Installing plugin "${plugin.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -53667,7 +53605,6 @@ const plugins = [plugin$e, plugin$d, plugin$c,
 
 // register plugins
 for (const plugin of plugins) {
-  api$b.debug(`Installing '${plugin.name}' plugin`);
   pluginManager.register(plugin);
 }
 
@@ -53678,7 +53615,8 @@ for (const plugin of plugins) {
  * @returns {Promise<*>}
  */
 async function invoke(endpoint, param) {
- return await Promise.all(pluginManager.invoke(endpoint, param))
+  const promises = pluginManager.invoke(endpoint, param);
+  return await Promise.all(promises)
 }
 
 /**
