@@ -53454,9 +53454,6 @@ async function start(state) {
   // async operations
   try {
 
-    // initial synchronization so that the files on the server are up-to-date
-    await api$3.syncFiles(state);
-
     // update the file lists
     await api$5.reload(state);
 
