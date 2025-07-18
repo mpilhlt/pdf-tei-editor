@@ -396,7 +396,7 @@ const plugin$d = {
   name: "url-hash-state",
   install: install$c,
   state: {
-    update: updateUrlHashfromState
+    update: update$6
   }
 };
 
@@ -406,6 +406,11 @@ const plugin$d = {
 
 async function install$c(state){
   api$b.debug(`Installing plugin "${plugin$d.name}"`);
+}
+
+async function update$6(state) {
+  //console.warn("update", plugin.name, state)
+  updateUrlHashfromState(state);
 }
 
 /**
@@ -11102,7 +11107,7 @@ class PDFJSViewer {
         this.isLoadedFlag = true;
         resolve();
       } catch (error) {
-        reject(new Error(`Error loading PDF: ${error}`));
+        reject(error);
       }
     });
     await this.loadPromise;
@@ -11371,6 +11376,7 @@ const plugin$b = {
  * @returns {Promise<void>}
  */
 async function install$a(state) {
+  api$b.debug(`Installing plugin "${plugin$b.name}"`);
   await pdfViewer.isReady();
   api$b.info("PDF Viewer ready.");
   pdfViewer.show();
@@ -11383,7 +11389,6 @@ let lastNode = null;
  * @returns {Promise<void>}
  */
 async function update$4(state) {
-  api$b.debug(`Installing plugin "${plugin$b.name}"`);
 
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
@@ -40343,15 +40348,18 @@ class XMLEditor extends EventTarget {
     this.#markAsNotReady();
 
     // fetch xml if path 
+    console.warn("Loading XML");
     const xml = await this.#fetchXml(xmlPathOrString);
 
     // display xml in editor, this triggers the update handlers
+    console.warn("XML was loaded, dispatch to editor");
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
     await this.isReadyPromise();
+    console.warn("XML document is loaded");
   }
 
   /**
@@ -40822,11 +40830,13 @@ class XMLEditor extends EventTarget {
     try {
       if (await this.#updateTrees()) {
         this.#updateMaps();
-        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
       }
     } catch (error) {
       console.warn("Linking DOM and syntax tree failed:", error.message);
     }
+
+    // once we at least tried to synchronize, we can mark the editor as ready
+    this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
   }
 
   //
@@ -40834,7 +40844,7 @@ class XMLEditor extends EventTarget {
   // 
 
   /**
-   * Marks the editor as not ready and creates the isReadyPromise if it does not already exist
+   * Marks the editor as not ready and creates the isReadyPromise if it does not
    * already exists 
    */
   #markAsNotReady() {
@@ -40846,8 +40856,7 @@ class XMLEditor extends EventTarget {
         this.#readyPromise = null;
         resolve();
       }, { once: true });
-    }
-    ));
+    }));
   }
 
   /**
@@ -40869,23 +40878,29 @@ class XMLEditor extends EventTarget {
   /**
    * Given a string, if the string is an xml string, return it, otherwise treat it as a path
    * and load the xml string from this location
-   * @param {string} xmlPathOrString A path to an xml file, or an XML string
+   * @param {string} xmlUrlOrString A url with the path to an xml file, or an XML string
    * @returns {Promise<string>} The xml string
    */
-  async #fetchXml(xmlPathOrString) {
+  async #fetchXml(xmlUrlOrString) {
     let xml;
-    if (xmlPathOrString.trim().slice(0, 1) != "<") {
+    if (xmlUrlOrString.trim().slice(0, 1) != "<") {
       // treat argument as path
+      const url = xmlUrlOrString;
       try {
-        const response = await fetch(xmlPathOrString);
+        const response = await fetch(url);
+        if (response.status >= 400) {
+          throw new Error(`Resource at ${url} does not exist.`);
+        }
         xml = await response.text();
       } catch (error) {
-        throw new Error('Error loading or parsing XML: ' + error.message);
+        throw new Error('Error loading XML: ' + error.message);
       }
     } else {
       // treat argument as xml string
-      xml = xmlPathOrString;
+      xml = xmlUrlOrString;
     }
+    // remove xml declaration
+    xml = xml.replaceAll(/<\?xml.+?\?>/g,'').trim();
     return xml
   }
 
@@ -40945,6 +40960,7 @@ class XMLEditor extends EventTarget {
     }
     // @ts-ignore
     this.#updateTimeout = setTimeout(() => this.#delayedUpdateActions(update), 1000); // todo make configurable
+
   }
 
   /**
@@ -41561,8 +41577,9 @@ async function install$9(state) {
  * @param {ApplicationState} state
  */
 async function update$3(state) {
+  //console.warn("update", plugin.name, state)
   // xpath state => selection
-  if (!state.xpath) {
+  if (!state.xpath || !state.xmlPath) {
     return
   }
   await api$8.whenReady();
@@ -42307,6 +42324,7 @@ async function install$7(state) {
  * @param {ApplicationState} state 
  */
 async function update$2(state) {
+//console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
   ui$1.toolbar.pdf.value = state.pdfPath || "";
   ui$1.toolbar.xml.value = state.xmlPath || "";
@@ -43609,7 +43627,7 @@ const documentActionButtons = await appendHtml("document-action-buttons.html");
 
 /** @type {newVersionDialog} */
 const newVersionDialog = (await appendHtml("new-version-dialog.html"))[0];
-  
+
 /**
  * Dialog for documenting a revision
  * @typedef {object} newRevisionChangeDialog
@@ -43631,7 +43649,7 @@ const saveRevisionDialog = (await appendHtml("save-revision-dialog.html"))[0];
  */
 async function install$5(state) {
   api$b.debug(`Installing plugin "${plugin$5.name}"`);
-  
+
   // install controls on menubar
   ui$1.toolbar.self.append(...documentActionButtons);
   document.body.append(newVersionDialog);
@@ -43682,6 +43700,7 @@ async function install$5(state) {
  * @param {ApplicationState} state
  */
 async function update$1(state) {
+  //console.warn("update", plugin.name, state)
   // disable deletion if there are no versions or gold is selected
   const da = ui$1.toolbar.documentActions;
   da.deleteAll.disabled = ui$1.toolbar.pdf.childElementCount < 2; // at least on PDF must be present
@@ -43717,6 +43736,8 @@ async function inProgress(validationPromise) {
  * @param {Object} files An Object with one or more of the keys "xml" and "pdf"
  */
 async function load$1(state, { xml, pdf }) {
+  
+  await updateState(state, { pdfPath: null,  xmlPath: null, diffXmlPath: null});
 
   const promises = [];
 
@@ -43735,7 +43756,17 @@ async function load$1(state, { xml, pdf }) {
   }
 
   // await promises in parallel
-  await Promise.all(promises);
+  try {
+    await Promise.all(promises);
+  } catch (error) {
+    
+    console.error(error.message);
+    if (error.status === 404) {
+      await api$5.reload(state);
+      return
+    }
+    throw error
+  }
 
   if (pdf) {
     state.pdfPath = pdf;
@@ -43745,8 +43776,9 @@ async function load$1(state, { xml, pdf }) {
   if (xml) {
     state.xmlPath = xml;
   }
+
   // notify plugins
-  updateState(state);
+  await updateState(state);
 }
 
 /**
@@ -43862,7 +43894,7 @@ async function deleteAllVersions(state) {
     notify("All version have been deleted");
     syncFiles(state, false)
       .then(summary => summary && notify("Synchronized files"))
-      .catch(e => console.error(e));    
+      .catch(e => console.error(e));
   } catch (error) {
     console.error(error);
     alert(error.message);
@@ -44360,6 +44392,7 @@ async function install$4(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
+  //console.warn("update", plugin.name, state)
   // show the xpath selector
   if (state.xpath) {
     let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath);
@@ -53485,12 +53518,6 @@ async function start(state) {
       } catch (error) {
         api$b.warn("Error loading diff view: " + error.message);
       }
-      // if in merge view, save dirty editor content as it is not saved after validation
-      api$8.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, evt => {
-        if (api$7.isDisabled()) {
-          saveIfDirty();
-        } 
-      });
     } else {
       // b) validation & xpath selection
 
@@ -53522,6 +53549,13 @@ async function start(state) {
         let diagnostic = evt.detail;
         view.dispatch(setDiagnostics(view.state, [diagnostic]));
       }
+    });
+
+    // if validation is disabled, save dirty editor content
+    api$8.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, evt => {
+      if (api$7.isDisabled()) {
+        saveIfDirty();
+      } 
     });
 
     // finish initialization
@@ -53613,7 +53647,8 @@ for (const plugin of plugins) {
  */
 async function invoke(endpoint, param) {
   const promises = pluginManager.invoke(endpoint, param);
-  return await Promise.all(promises)
+  const result = await Promise.all(promises);
+  return result
 }
 
 /**
