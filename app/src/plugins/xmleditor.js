@@ -42,6 +42,7 @@ export default plugin
  * @param {ApplicationState} state
  */
 async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
   // load autocomplete data
   try {
     const res = await fetch(tagDataPath);

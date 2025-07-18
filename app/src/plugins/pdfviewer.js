@@ -50,6 +50,7 @@ let lastNode = null;
  * @returns {Promise<void>}
  */
 async function update(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
 
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick

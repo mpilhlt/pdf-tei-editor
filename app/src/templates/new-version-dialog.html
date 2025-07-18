@@ -1,0 +1,10 @@
+<sl-dialog name="newVersionDialog" label="Create new version">
+  <div class="dialog-column">
+    <sl-input name="versionName" label="Version Name" size="small" help-text="Provide a short name for the version (required)"></sl-input>
+    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
+    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
+    <sl-input name="editionNote" label="Description" size="small" help-text="Description of this version (optional)"></sl-input>
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Create new version</sl-button>  
+</sl-dialog>

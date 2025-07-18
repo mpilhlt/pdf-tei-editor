@@ -6,7 +6,7 @@
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
 import { logger, client } from '../app.js'
-import { appendHtml, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../ui.js'
+import { appendHtml, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../ui.js'
 
 
 /**
@@ -52,34 +52,12 @@ export default plugin
  */
 
 // editor dialog
-const editorHtml = `
-<sl-dialog name="promptEditor" label="Edit prompt" class="dialog-big">
-  <p>Below are the parts of the LLM prompt specific to the reference instruction.</p>
-  <div class="dialog-column">
-    <div class="dialog-row">
-      <sl-input name="label" help-text="A short description of the prompt additions"></sl-input>
-      <sl-dropdown>
-        <sl-button slot="trigger" caret></sl-button>
-        <sl-menu name="labelMenu"></sl-menu>
-      </sl-dropdown>
-    </div>
-    <sl-textarea name="text" rows="20"></sl-texarea>
-  </div>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="delete" disabled variant="danger">Delete prompt</sl-button>
-  <sl-button slot="footer" name="duplicate" variant="secondary">Duplicate prompt</sl-button>
-  <sl-button slot="footer" name="submit" variant="primary">Save &amp; Close</sl-button>
-</sl-dialog>
-`
+/** @type {promptEditorComponent} */
+const promptEditorDialog = (await appendHtml("prompt-editor.html"))[0]
 
 // button, documented in services.js
-const buttonHtml = `
-<sl-tooltip content="Edit the prompt instructions">
-  <sl-button name="editInstructions" size="small">
-    <sl-icon name="pencil-square"></sl-icon>
-  </sl-button>
-</sl-tooltip>
-`
+const promptEditorButton = (await appendHtml('prompt-editor-button.html'))[0]
+
 //
 // Implementation
 //
@@ -88,9 +66,12 @@ const buttonHtml = `
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-function install(state) {
+async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
+  
   // add prompt editor component
-  appendHtml(editorHtml)
+  document.body.append(promptEditorDialog)
+  updateUi()
 
   const pe = ui.promptEditor
   pe.self.addEventListener("sl-request-close", dialogOnRequestClose)
@@ -101,8 +82,8 @@ function install(state) {
   pe.delete.addEventListener('click', deletePrompt)
 
   // add a button to the command bar to show dialog with prompt editor
-  const button = appendHtml(buttonHtml, ui.toolbar.extractionActions.self)[0]
-  button.addEventListener("click", () => api.open())
+  ui.toolbar.extractionActions.self.append(promptEditorButton)
+  promptEditorButton.addEventListener("click", () => api.open())
 }
 
 // API

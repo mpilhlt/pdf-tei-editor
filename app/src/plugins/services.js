@@ -7,7 +7,7 @@
  * @import { SlButton, SlButtonGroup, SlDialog, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  */
-import ui from '../ui.js'
+import ui, { updateUi } from '../ui.js'
 import {
   updateState, client, logger, dialog,
   fileselection, xmlEditor, pdfViewer, services, validation
@@ -53,6 +53,10 @@ const plugin = {
 export { plugin, api }
 export default plugin
 
+//
+// UI
+//
+
 /**
  * Document actions button group
  * @typedef {object} documentActionsComponent
@@ -75,75 +79,8 @@ export default plugin
  * @property {SlButton} validate 
  */
 
-const toolbarActionsHtml = `
-<span class="hbox-with-gap toolbar-content">
-  <!-- Document button group -->
-  <sl-button-group label="Document" name="documentActions">
-
-    <!-- document revision -->
-    <sl-tooltip content="Save document revision">
-      <sl-button name="saveRevision" size="small" disabled>
-        <sl-icon name="save"></sl-icon>
-      </sl-button>
-    </sl-tooltip>
-
-    <!-- create new version -->
-    <sl-tooltip content="Duplicate current document to make changes">
-      <sl-button name="createNewVersion" size="small" disabled>
-        <sl-icon name="copy"></sl-icon>
-      </sl-button>
-    </sl-tooltip>  
-
-    <!-- sync -->
-    <sl-tooltip content="Synchronize files on the backend">
-      <sl-button name="sync" size="small" disabled>
-        <sl-icon name="arrow-repeat"></sl-icon>
-      </sl-button>
-    </sl-tooltip>      
-    
-    <!-- upload, not implemented yet -->
-    <sl-tooltip content="Upload document">
-      <sl-button name="upload" size="small">
-        <sl-icon name="cloud-upload"></sl-icon>
-      </sl-button>
-    </sl-tooltip>    
-
-    <!-- download -->
-    <sl-tooltip content="Download XML document">
-      <sl-button name="download" size="small" disabled>
-        <sl-icon name="cloud-download"></sl-icon>
-      </sl-button>
-    </sl-tooltip>   
-
-    <!-- delete -->
-    <sl-button-group>
-      <sl-dropdown placement="bottom-end">
-        <sl-button name="deleteBtn" size="small" slot="trigger" caret>
-          <sl-icon name="trash3"></sl-icon>
-        </sl-button>
-        <sl-menu>
-          <sl-menu-item name="deleteCurrentVersion">Delete current version</sl-menu-item>
-          <sl-menu-item name="deleteAllVersions">Delete all versions</sl-menu-item>
-          <sl-menu-item name="deleteAll">Delete PDF and XML</sl-menu-item>
-        </sl-menu>
-      </sl-dropdown>
-    </sl-button-group>
-    
-  </sl-button-group>
-
-  <!-- TEI -->
-  <sl-button-group label="TEI" name="teiActions">
-
-    <!-- validate -->
-    <sl-tooltip content="Validate the document">
-      <sl-button name="validate" size="small" disabled>
-        <sl-icon name="file-earmark-check"></sl-icon>
-      </sl-button> 
-    </sl-tooltip>
-
-  </sl-button-group>
-</span>
-`
+// todo align template with definition
+const documentActionButtons = await appendHtml("document-action-buttons.html")
 
 /**
  * Dialog for creating a new version
@@ -154,19 +91,10 @@ const toolbarActionsHtml = `
  * @property {SlInput} persId 
  * @property {SlInput} editionNote 
  */
-const newVersionDialogHtml = `
-<sl-dialog name="newVersionDialog" label="Create new version">
-  <div class="dialog-column">
-    <sl-input name="versionName" label="Version Name" size="small" help-text="Provide a short name for the version (required)"></sl-input>
-    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
-    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
-    <sl-input name="editionNote" label="Description" size="small" help-text="Description of this version (optional)"></sl-input>
-  </div>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="submit" variant="primary">Create new version</sl-button>  
-</sl-dialog>
-`
 
+/** @type {newVersionDialog} */
+const newVersionDialog = (await appendHtml("new-version-dialog.html"))[0]
+  
 /**
  * Dialog for documenting a revision
  * @typedef {object} newRevisionChangeDialog
@@ -175,18 +103,9 @@ const newVersionDialogHtml = `
  * @property {SlInput} persName 
  * @property {SlInput} changeDesc 
  */
-const saveChangeDialogHtml = `
-<sl-dialog name="newRevisionChangeDialog" label="Add a change description">
-  <div class="dialog-column">
-    Document changes of this 
-    <sl-input name="persId" label="Initials" size="small" help-text="Your initials (required)"></sl-input>
-    <sl-input name="persName" label="Editor Name" size="small" help-text="Your name, if this is your first edit on this document"></sl-input>
-    <sl-input name="changeDesc" label="Description" size="small" help-text="Description of the change"></sl-input>
-  </div>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="submit" variant="primary">Add</sl-button>  
-</sl-dialog>
-`
+
+/** @type {newRevisionChangeDialog} */
+const saveRevisionDialog = (await appendHtml("save-revision-dialog.html"))[0]
 
 //
 // Implementation
@@ -195,15 +114,18 @@ const saveChangeDialogHtml = `
 /**
  * @param {ApplicationState} state
  */
-function install(state) {
+async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
+  
+  // install controls on menubar
+  ui.toolbar.self.append(...documentActionButtons)
+  document.body.append(newVersionDialog)
+  document.body.append(saveRevisionDialog)
+  updateUi()
+
   const tb = ui.toolbar.self
 
-  // install controls on menubar
-  appendHtml(toolbarActionsHtml, tb)
-
   // install dialogs
-  appendHtml(newVersionDialogHtml)
-  appendHtml(saveChangeDialogHtml)
 
   // === Document button group ===
 

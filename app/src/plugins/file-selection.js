@@ -8,7 +8,7 @@
  * @import { SlSelect } from '../ui.js'
  */
 import ui from '../ui.js'
-import { SlOption, appendHtml } from '../ui.js'
+import { SlOption, SlDivider, appendHtml, updateUi } from '../ui.js'
 import { logger, client, services, dialog, updateState } from '../app.js'
 
 /**
@@ -45,12 +45,8 @@ export default plugin
 // UI
 //
 
-// HTML elements
-const fileSelectionHtml = `
-  <sl-select name="pdf" size="small" label="PDF" hoist></sl-select>
-  <sl-select name="xml" size="small" label="XML file version" hoist></sl-select>
-  <sl-select name="diff" size="small" label="Compare with version" hoist></sl-select>
-`
+// see ui.js for @typedef 
+const fileSelectionControls = await appendHtml('file-selection.html')
 
 //
 // Implementation
@@ -64,9 +60,12 @@ const fileSelectionHtml = `
  */
 async function install(state) {
 
+  logger.debug(`Installing plugin "${plugin.name}"`);
+  
   // install controls on menubar
-  appendHtml(fileSelectionHtml, ui.toolbar.self)
-
+  ui.toolbar.self.append(...fileSelectionControls)
+  updateUi()
+  
   /**  @type {[SlSelect,function][]} */
   const handlers = [
     [ui.toolbar.pdf, onChangePdfSelection],
@@ -88,8 +87,6 @@ async function install(state) {
       select.closest('#toolbar')?.classList.remove('dropdown-open');
     });
   }
-
-  logger.info("Fileselection plugin installed.")
 }
 
 /**
@@ -157,45 +154,68 @@ async function populateSelectboxes(state) {
     ui.toolbar[name].innerHTML = ""
   }
 
+  // sort into groups by directory
+  const dirname = (path) => path.split('/').slice(0, -1).join('/')
+  const basename = (path) => path.split('/').pop()
+  const grouped_files = fileData.reduce((groups, file) => {
+    const collection_name = basename(dirname(file.pdf));
+    (groups[collection_name] = groups[collection_name] || []).push(file)
+    return groups
+  }, {})
+
+  // save the collections, this tight coupling is not ideal
+  const collections = Object.keys(grouped_files).sort()
+  ui.toolbar.pdf.dataset.collections = JSON.stringify(collections)
+
   // get items to be selected from app state or use first element
-  fileData.forEach(file => {
+  for (const collection_name of collections) {
+    
+    await appendHtml(`<small>${collection_name}</small>`, ui.toolbar.pdf)
+    
+    // get a list of file data sorted by label
+    const files = grouped_files[collection_name]
+      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0 )
 
-    // populate pdf select box 
-    const option = Object.assign(new SlOption, {
-      value: file.pdf,
-      textContent: file.label,
-      size: "small",
-    })
+    for (const file of files) {
+      // populate pdf select box 
+      const option = Object.assign(new SlOption, {
+        value: file.pdf,
+        textContent: file.label,
+        size: "small",
+      })
 
-    // save scalar file properties in option
-    const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'))
-    Object.assign(option.dataset, data)
+      // save scalar file properties in option
+      const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'))
+      Object.assign(option.dataset, data)
 
-    ui.toolbar.pdf.hoist = true
-    ui.toolbar.pdf.appendChild(option);
+      ui.toolbar.pdf.hoist = true
+      ui.toolbar.pdf.appendChild(option);
 
-    if (file.pdf === state.pdfPath) {
-      // populate the version and diff selectboxes depending on the selected file
-      if (file.versions) {
-        file.versions.forEach((version) => {
-          // xml
-          let option = new SlOption()
-          // @ts-ignore
-          option.size = "small"
-          option.value = version.path;
-          option.textContent = version.label;
-          ui.toolbar.xml.appendChild(option);
-          // diff 
-          option = new SlOption()
-          // @ts-ignore
-          option.size = "small"
-          option.value = version.path;
-          option.textContent = version.label;
-          ui.toolbar.diff.appendChild(option)
-        })
+      if (file.pdf === state.pdfPath) {
+        // populate the version and diff selectboxes depending on the selected file
+        if (file.versions) {
+          file.versions.forEach((version) => {
+            // xml
+            let option = new SlOption()
+            // @ts-ignore
+            option.size = "small"
+            option.value = version.path;
+            option.textContent = version.label;
+            ui.toolbar.xml.appendChild(option);
+            // diff 
+            option = new SlOption()
+            // @ts-ignore
+            option.size = "small"
+            option.value = version.path;
+            option.textContent = version.label;
+            ui.toolbar.diff.appendChild(option)
+          })
+        }
       }
     }
-  })
+    ui.toolbar.pdf.appendChild(new SlDivider);
+  }
+
 
   // update selection
   ui.toolbar.pdf.value = state.pdfPath || ''

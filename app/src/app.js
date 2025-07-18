@@ -56,7 +56,6 @@ const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
 
 // register plugins
 for (const plugin of plugins) {
-  logger.debug(`Installing '${plugin.name}' plugin`)
   pluginManager.register(plugin)
 }
 
@@ -67,7 +66,8 @@ for (const plugin of plugins) {
  * @returns {Promise<*>}
  */
 async function invoke(endpoint, param) {
- return await Promise.all(pluginManager.invoke(endpoint, param))
+  const promises = pluginManager.invoke(endpoint, param)
+  return await Promise.all(promises)
 }
 
 /**

@@ -3,6 +3,8 @@
  * This might have to be changed later in case we do not want to show all string properties in the app state
  */
 
+import { logger } from '../app.js'
+
 /** 
  * @import { ApplicationState } from '../app.js' 
  */
@@ -19,6 +21,7 @@ const api = {
  */
 const plugin = {
   name: "url-hash-state",
+  install,
   state: {
     update: updateUrlHashfromState
   }
@@ -31,6 +34,10 @@ export default plugin
 // implementation
 //
 
+async function install(state){
+  logger.debug(`Installing plugin "${plugin.name}"`)
+}
+
 /**
  * 
  * @param {ApplicationState} state 
@@ -39,7 +46,7 @@ export function updateUrlHashfromState(state) {
   const url = new URL(window.location.href);
   const urlHashParams = new URLSearchParams(window.location.hash.slice(1));
   Object.entries(state)
-    .filter(([key]) => key in allowedUrlHashParams)
+    .filter(([key]) => allowedUrlHashParams.includes(key))
     .forEach(([key, value]) => {
       if (value) {
         urlHashParams.set(key, value)

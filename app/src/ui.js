@@ -25,6 +25,8 @@ import SlDropdown from '@shoelace-style/shoelace/dist/components/dropdown/dropdo
 import SlMenu from '@shoelace-style/shoelace/dist/components/menu/menu.js'
 import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
 import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
+import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.js';
+
 /**
  * Import type definitions from plugins
  * 
@@ -32,7 +34,7 @@ import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/check
  * @import {promptEditorComponent} from './plugins/prompt-editor.js'
  * @import {floatingPanelComponent} from './plugins/floating-panel.js'
  * @import {documentActionsComponent, teiServicesComponents} from './plugins/services.js'
- * @import {extractionActionsComponent, extractionOptionsComponent} from './plugins/extraction.js'
+ * @import {extractionActionsComponent, extractionOptionsDialog} from './plugins/extraction.js'
  * @import {infoDialogComponent} from './plugins/info.js'
  */
 
@@ -46,7 +48,7 @@ import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/check
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes and block the application while they are ongoing
  * @property {dialogComponent} dialog - A dialog to display messages or errors
  * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
- * @property {extractionOptionsComponent} extractionOptions - A dialog to choose the options for the instructiopns
+ * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
  * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
  */
 
@@ -72,21 +74,36 @@ import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/check
 let ui = null;
 
 /**
- * Adds the given html to the target node
- * @param {string} html 
- * @param {Element|Document} targetNode
- * @returns {Element[]} All the created nodes in an array
+ * Adds html to the target node. The html can be a string which starts with "<" or the name of a file
+ * in the 'app/src/templates/' folder
+ * @param {string} htmlOrFile A literal html string or the name of a file in the 'app/src/templates/' folder
+ * @param {Element|Document|null} [parentNode] 
+ *    If given, appends the generated nodes as children to the parentNode. The `ui` object is updated automatically.
+ *    Make sure that the parentNode already exists, otherwise await the method first and then append the nodes. 
+ *    If not given, the generated nodes are returned, and you need to call `updateUi()` manually.
+ * @returns {Promise<Element[]>} All the created nodes in an array
  */
-function appendHtml(html, targetNode=document.body){
+async function appendHtml(htmlOrFile, parentNode=null){
+  let html
+  if (htmlOrFile.trim()[0]==='<') {
+    // interpret as literal html
+    html = htmlOrFile.trim()
+  } else {
+    // treat as path
+    const path = '/src/templates/' + htmlOrFile
+    console.log('Loading HTML from', path)
+    html = await (await fetch(path)).text()
+  }
   const div = document.createElement('div')
   div.innerHTML = html.trim()
-  const result = []
-  div.childNodes.forEach(childNode => {
-    targetNode.append(childNode)
-    result.push(childNode)
-  })
-  updateUi()
-  return result
+  const nodes = Array.from(div.childNodes)
+  // if a parent node has been given, add nodes to it and update the `ui` object
+  if (parentNode instanceof Element) {
+    parentNode.append(...nodes)
+    updateUi()
+  } 
+  // return the nodes as an array
+  return nodes
 }
 
 /**
@@ -102,6 +119,6 @@ updateUi()
 export {
   updateUi, appendHtml,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
-  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, Switch
+  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, Switch, SlDivider
 }
 export default ui;

@@ -6,9 +6,9 @@
  * @import { ApplicationState } from '../app.js' 
  * @import MarkdownIt from 'markdown-it'
  */
-import ui from '../ui.js'
+import ui, { updateUi } from '../ui.js'
 import { appendHtml, SlDialog, SlButton } from '../ui.js'
-import { dialog } from '../app.js'
+import { dialog,logger } from '../app.js'
 
 import markdownit from 'markdown-it'
 
@@ -83,12 +83,15 @@ const docsBasePath = "../../docs"
  * @param {ApplicationState} state The main application
  */
 async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
   // add the component html
-  appendHtml(infoHtml)
+  await appendHtml(infoHtml, document.body)
   ui.infoDialog.closeBtn.addEventListener('click', () => ui.infoDialog.self.hide());
 
   // add a button to the command bar to show dialog with prompt editor
-  const button = appendHtml(buttonHtml, ui.toolbar.self)[0]
+  const button = (await appendHtml(buttonHtml))[0]
+  ui.toolbar.self.append(button)
+  updateUi()
   button.addEventListener("click", () => api.open())
   
   // configure markdown parser
@@ -141,7 +144,7 @@ async function load(mdPath){
     // open remote links in new tabs
     .replaceAll(/(href="http)/g, `target="_blank" $1`)
 
-  appendHtml(html, ui.infoDialog.content)
+  await appendHtml(html, ui.infoDialog.content)
 }
 
 

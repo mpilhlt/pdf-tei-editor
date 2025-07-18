@@ -112,7 +112,7 @@ export default {
     _cache = {};
   },
 
-  invoke: function (prop) {
+  invoke: function (prop, ) {
     var args = Array.prototype.slice.call(arguments, 1);
     if (!prop) throw new Error('Invoke on plugin should have prop argument');
     var noCall = /^!/.test(prop);

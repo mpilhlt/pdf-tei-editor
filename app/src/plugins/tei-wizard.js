@@ -7,59 +7,55 @@
  * @import { ApplicationState } from '../app.js' 
  */
 import ui from '../ui.js';
-import { xmlEditor } from '../app.js';
-import { appendHtml } from '../ui.js';
+import { xmlEditor, logger } from '../app.js';
+import { appendHtml, updateUi } from '../ui.js';
 import enhancements from './tei-wizard/enhancements.js';
 import { notify } from '../modules/sl-utils.js'
 
-const  buttonHtml = `
-  <sl-tooltip content="Enhance TEI, i.e. add missing attributes">
-    <sl-button name="teiWizard" size="small">
-      <sl-icon name="magic"></sl-icon>
-    </sl-button>
-  </sl-tooltip> 
-`
-const dialogHtml = `
-<sl-dialog name="teiWizardDialog" label="TEI Wizard" class="dialog-width" style="--width: 50vw;">
-  <div name="enhancementList"></div>
-  <sl-button slot="footer" name="selectAll">Select All</sl-button>
-  <sl-button slot="footer" name="selectNone">Select None</sl-button>
-  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-  <sl-button slot="footer" name="executeBtn" variant="primary">Execute</sl-button>
-</sl-dialog>
-`;
 
 const plugin = {
   name: "tei-wizard",
-  install
+  install,
+  deps: ['services']
 }
 
 export { plugin }
 export default plugin
 
+//
+// UI
+//
+
+const teiWizardButton = (await appendHtml("tei-wizard-button.html"))[0];
+
+const teiWizardDialog = (await appendHtml("tei-wizard-dialog.html"))[0];
+
+
 /**
  * @param {ApplicationState} state 
  */
 async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
+
   // button
-  appendHtml(buttonHtml, ui.toolbar.teiActions.self);
+  ui.toolbar.teiActions.self.append(teiWizardButton)
+  document.body.append(teiWizardDialog)
+  updateUi()
+  
   // @ts-ignore
   ui.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard)
 
-  // dialog
-  appendHtml(dialogHtml);
   // @ts-ignore
   const dialog = ui.teiWizardDialog;  
 
   // Populate enhancement list
-  enhancements.forEach(enhancement => {
+  enhancements.forEach(async enhancement => {
     const checkboxHtml = `
     <sl-tooltip content="${enhancement.description}" hoist placement="right">
-      <sl-checkbox data-enhancement="${enhancement.name}" 
-        size="medium" checked>${enhancement.name}</sl-checkbox>
+      <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
     </sl-tooltip>
     <br />`;
-    appendHtml(checkboxHtml, dialog.enhancementList);
+    await appendHtml(checkboxHtml, dialog.enhancementList);
   });
 
   // Select all and none buttons

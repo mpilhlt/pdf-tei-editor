@@ -74,7 +74,7 @@ const api = {
  */
 const plugin = {
   name,
-  install: () => console.info("Console-based logger installed."),
+  install,
   log: {
     setLogLevel,
     debug,
@@ -90,6 +90,10 @@ export default plugin
 //
 // implementation
 //
+
+async function install(state) {
+  console.log(`Installing plugin "${plugin.name}"`)
+}
 
 /**
  * Returns the current stack trace 

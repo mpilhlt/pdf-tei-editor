@@ -42,7 +42,8 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-function install(state) {
+async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
   // add the linter to the editor
   xmlEditor.addLinter([
     linter(lintSource, { 

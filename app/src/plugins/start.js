@@ -43,7 +43,8 @@ let spinner
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-function install(state) {
+async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
   // spinner/blocker
   spinner = new Spinner
   // @ts-ignore

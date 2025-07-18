@@ -4,6 +4,7 @@
 
 import { SlButton, SlDialog, appendHtml } from '../ui.js'
 import ui from '../ui.js'
+import { logger } from '../app.js'
 
 /** @import { ApplicationState } from '../app.js' */
 
@@ -50,8 +51,9 @@ const dialogHtml = `
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-function install(app) {
-  appendHtml(dialogHtml)
+async function install(app) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
+  await appendHtml(dialogHtml, document.body)
   ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.self.hide());
 }
 

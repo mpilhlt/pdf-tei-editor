@@ -1,0 +1,67 @@
+<span class="hbox-with-gap toolbar-content">
+  <!-- Document button group -->
+  <sl-button-group label="Document" name="documentActions">
+
+    <!-- document revision -->
+    <sl-tooltip content="Save document revision">
+      <sl-button name="saveRevision" size="small" disabled>
+        <sl-icon name="save"></sl-icon>
+      </sl-button>
+    </sl-tooltip>
+
+    <!-- create new version -->
+    <sl-tooltip content="Duplicate current document to make changes">
+      <sl-button name="createNewVersion" size="small" disabled>
+        <sl-icon name="copy"></sl-icon>
+      </sl-button>
+    </sl-tooltip>  
+
+    <!-- sync -->
+    <sl-tooltip content="Synchronize files on the backend">
+      <sl-button name="sync" size="small" disabled>
+        <sl-icon name="arrow-repeat"></sl-icon>
+      </sl-button>
+    </sl-tooltip>      
+    
+    <!-- upload, not implemented yet -->
+    <sl-tooltip content="Upload document">
+      <sl-button name="upload" size="small">
+        <sl-icon name="cloud-upload"></sl-icon>
+      </sl-button>
+    </sl-tooltip>    
+
+    <!-- download -->
+    <sl-tooltip content="Download XML document">
+      <sl-button name="download" size="small" disabled>
+        <sl-icon name="cloud-download"></sl-icon>
+      </sl-button>
+    </sl-tooltip>   
+
+    <!-- delete -->
+    <sl-button-group>
+      <sl-dropdown placement="bottom-end">
+        <sl-button name="deleteBtn" size="small" slot="trigger" caret>
+          <sl-icon name="trash3"></sl-icon>
+        </sl-button>
+        <sl-menu>
+          <sl-menu-item name="deleteCurrentVersion">Delete current version</sl-menu-item>
+          <sl-menu-item name="deleteAllVersions">Delete all versions</sl-menu-item>
+          <sl-menu-item name="deleteAll">Delete PDF and XML</sl-menu-item>
+        </sl-menu>
+      </sl-dropdown>
+    </sl-button-group>
+    
+  </sl-button-group>
+
+  <!-- TEI -->
+  <sl-button-group label="TEI" name="teiActions">
+
+    <!-- validate -->
+    <sl-tooltip content="Validate the document">
+      <sl-button name="validate" size="small" disabled>
+        <sl-icon name="file-earmark-check"></sl-icon>
+      </sl-button> 
+    </sl-tooltip>
+
+  </sl-button-group>
+</span>

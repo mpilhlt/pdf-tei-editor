@@ -5,7 +5,7 @@
 import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
 import { $$, isValidXPath } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
-import { appendHtml } from '../ui.js'
+import { appendHtml, updateUi } from '../ui.js'
 import ui from '../ui.js'
 
 /**
@@ -48,6 +48,8 @@ export default plugin
  * @property {diffNavigationComponent} diffNavigation
  * 
  */
+/** @type {floatingPanelComponent} */
+const floatingPanelControls = await appendHtml('floating-panel.html')
 
 /**
  * Diff Navigation
@@ -62,77 +64,16 @@ export default plugin
 
 const pluginId = "floating-panel"
 
-// component htmnl
-const floatingPanelHtml = `
-  <style>
-    #${pluginId} {
-      position: absolute;
-      display: flex;
-      justify-content: space-between;
-      flex-direction: column;
-      gap: 10px;
-      align-items: center;
-      width: auto;
-      height: auto;
-      padding: 20px;
-      top: 70vh;
-      left: 100px;
-      background-color: rgba(167, 158, 158, 0.8);
-      border-radius: 10px;
-      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
-    }
-
-    #${pluginId}  * {
-      font-size: small;
-    }
-
-    #${pluginId} > div {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    #${pluginId} > div > * {
-      display: inline;
-    }      
-  </style>
-  <div id="${pluginId}" name="floatingPanel">
-    <div>
-      <span class="navigation-text">Navigate by</span>
-      <select name="xpath"></select>
-      <button name="editXpath" style="display:none">Custom XPath</button>
-      <button name="previousNode" disabled>&lt;&lt;</button>
-      <span name="selectionIndex" class="navigation-text"></span>
-      <button name="nextNode" disabled>&gt;&gt;</button>
-    </div>
-    <div name="markNodeButtons">
-      <span class="navigation-text">Mark node as</span>
-      <button class="node-status" data-status="verified" disabled>Verified</button>
-      <button class="node-status" data-status="unresolved" disabled>Unresolved</button>
-      <button class="node-status" data-status="" disabled>Clear node</button>
-      <!-- button class="node-status" data-status="comment" disabled>Add comment</button-->
-    </div>
-    <div>
-      <custom-switch name="switchAutoSearch" label="Find node" label-on="On" label-off="off"></custom-switch>
-      <span name="diffNavigation">
-        <button name="prevDiff" disabled>Prev. Diff</button>
-        <button name="nextDiff" disabled>Next Diff</button>
-        <button name="diffKeepAll" disabled>Reject all changes</button>
-        <button name="diffChangeAll" disabled>Accept all changes</button>
-      </span>
-    </div>
-  </div>
-`
-
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
 async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // add the panel to the DOM
-  appendHtml(floatingPanelHtml)
+  document.body.append(...floatingPanelControls)
+  updateUi()
 
   // bring clicked elements into foreground when clicked
   addBringToForegroundListener([`#${pluginId}`, '.cm-panels']);
@@ -203,9 +144,6 @@ async function install(state) {
       $$('.node-status').forEach(btn => btn.disabled = false)
     }
   }))
-
-  // update selectbox when corresponding app state changes
-  logger.info("Floating panel plugin installed.")
 }
 
 /**

@@ -192,27 +192,7 @@ export function getDescendantByName(node, name, noError) {
   return descendant
 }
 
-/**
- * Parses the HTML and attaches it to a parent node (defaults to document.body).
- * Returns an Array of the added top-level elements
- * @param {string} html The html that will be parsed and appended
- * @param {Element?} parentNode The DOM parent element the parsed content will be added to. If not provided, the 
- * content will be added to document.body 
- * @returns {Array<Element>} 
- */
-export function appendHtml(html, parentNode = document.body) {
-  if (!parentNode) {
-    throw new TypeError("No parent node")
-  }
-  const div = document.createElement("div")
-  const nodeArr = []
-  div.innerHTML = html.trim()
-  div.childNodes.forEach(node => {
-    parentNode.appendChild(node)
-    nodeArr.push(node)
-  })
-  return nodeArr
-}
+
 
 /**
  * Escapes the given text to valid html

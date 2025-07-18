@@ -13,7 +13,7 @@ import datetime
 
 
 from server.lib.decorators import handle_api_errors
-from server.lib.server_utils import ApiError, get_gold_tei_path, make_timestamp
+from server.lib.server_utils import ApiError, make_timestamp
 
 DOI_REGEX = r"^10.\d{4,9}/[-._;()/:A-Z0-9]+$"  # from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")  # set in .env
@@ -39,9 +39,8 @@ def extract():
     pdf_filename = options.get("pdf")
     if pdf_filename == "":
         raise ApiError("Missing PDF file name")
-
-    # todo: if the header has been sent, use that 
-    # tei_header = data.get("teiHeader", None)
+    
+    collection_name = options.get("collection")
 
     # get file id from DOI or file name
     doi = options.get("doi", "")
@@ -55,41 +54,49 @@ def extract():
     # file paths
     UPLOAD_DIR = current_app.config["UPLOAD_DIR"]
     DATA_ROOT = current_app.config['DATA_ROOT']
-    GOLD_DIR = os.path.join(DATA_ROOT, "pdf")
+    
+    target_dir = os.path.join(DATA_ROOT, "pdf")
+    
+    if collection_name:
+        target_dir = os.path.join(target_dir, collection_name)
+    os.makedirs(target_dir, exist_ok=True)
 
     uplodad_pdf_path = Path(os.path.join(UPLOAD_DIR, pdf_filename))
-    gold_pdf_path = Path(os.path.join(GOLD_DIR, file_id + ".pdf"))
+    target_pdf_path = Path(os.path.join(target_dir, file_id + ".pdf"))
 
     # check for uploaded file
     if uplodad_pdf_path.exists():
         # rename and move PDF
-        move(uplodad_pdf_path, gold_pdf_path)
-    elif not gold_pdf_path.exists():
+        move(uplodad_pdf_path, target_pdf_path)
+    elif not target_pdf_path.exists():
         raise ApiError(f"File {pdf_filename} has not been uploaded.")        
 
     # generate TEI via reference extraction using LLamore
     try:
-        tei_xml = tei_from_pdf(gold_pdf_path, options)
+        tei_xml = tei_from_pdf(target_pdf_path, options)
     except Exception as e:
-        os.remove(gold_pdf_path)  # remove the PDF if extraction fails
+        os.remove(target_pdf_path)  # remove the PDF if extraction fails
         raise ApiError(f"Could not extract references from {pdf_filename}: {e}")
     
-    # save file
-    gold_tei_path = tei_path = get_gold_tei_path(file_id)
-    if os.path.exists(gold_tei_path):
+    # save xml file
+    path_elems = filter(None, [DATA_ROOT, "tei", collection_name, f"{file_id}.tei.xml"])
+    target_tei_path = os.path.join(*path_elems)
+    final_tei_path = target_tei_path
+    if os.path.exists(target_tei_path):
         # we already have a gold file, so save as a version, not as the original
         version = make_timestamp().replace(" ", "_").replace(":", "-")
-        tei_path = os.path.join("data", "versions", version, file_id + ".tei.xml")
-        os.makedirs(os.path.dirname(tei_path), exist_ok=True)
+        final_tei_path = os.path.join(DATA_ROOT, "versions", version, file_id + ".tei.xml")
+    
+    os.makedirs(os.path.dirname(final_tei_path), exist_ok=True)
 
-    with open(tei_path, "w", encoding="utf-8") as f:
+    with open(final_tei_path, "w", encoding="utf-8") as f:
         f.write(tei_xml)
 
     # return result
     result = {
         "id": file_id,
-        "xml": Path("/data/" + os.path.relpath(tei_path, DATA_ROOT)).as_posix(),
-        "pdf": Path("/data/" + os.path.relpath(gold_pdf_path, DATA_ROOT)).as_posix(),
+        "xml": Path("/data/" + os.path.relpath(final_tei_path, DATA_ROOT)).as_posix(),
+        "pdf": Path("/data/" + os.path.relpath(target_pdf_path, DATA_ROOT)).as_posix(),
     }
     return jsonify(result)
 
