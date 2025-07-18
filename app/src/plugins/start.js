@@ -93,12 +93,6 @@ async function start(state) {
       } catch (error) {
         logger.warn("Error loading diff view: " + error.message)
       }
-      // if in merge view, save dirty editor content as it is not saved after validation
-      xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, evt => {
-        if (validation.isDisabled()) {
-          saveIfDirty()
-        } 
-      })
     } else {
       // b) validation & xpath selection
 
@@ -130,6 +124,13 @@ async function start(state) {
         let diagnostic = evt.detail
         view.dispatch(setDiagnostics(view.state, [diagnostic]))
       }
+    })
+
+    // if validation is disabled, save dirty editor content
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, evt => {
+      if (validation.isDisabled()) {
+        saveIfDirty()
+      } 
     })
 
     // finish initialization

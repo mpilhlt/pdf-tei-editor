@@ -249,15 +249,18 @@ export class XMLEditor extends EventTarget {
     this.#markAsNotReady()
 
     // fetch xml if path 
+    console.warn("Loading XML")
     const xml = await this.#fetchXml(xmlPathOrString);
 
     // display xml in editor, this triggers the update handlers
+    console.warn("XML was loaded, dispatch to editor")
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
     await this.isReadyPromise();
+    console.warn("XML document is loaded")
   }
 
   /**
@@ -729,11 +732,13 @@ export class XMLEditor extends EventTarget {
     try {
       if (await this.#updateTrees()) {
         this.#updateMaps()
-        this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
       }
     } catch (error) {
       console.warn("Linking DOM and syntax tree failed:", error.message)
     }
+
+    // once we at least tried to synchronize, we can mark the editor as ready
+    this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
   }
 
   //
@@ -741,7 +746,7 @@ export class XMLEditor extends EventTarget {
   // 
 
   /**
-   * Marks the editor as not ready and creates the isReadyPromise if it does not already exist
+   * Marks the editor as not ready and creates the isReadyPromise if it does not
    * already exists 
    */
   #markAsNotReady() {
@@ -753,8 +758,7 @@ export class XMLEditor extends EventTarget {
         this.#readyPromise = null
         resolve();
       }, { once: true })
-    }
-    ))
+    }))
   }
 
   /**
@@ -776,23 +780,29 @@ export class XMLEditor extends EventTarget {
   /**
    * Given a string, if the string is an xml string, return it, otherwise treat it as a path
    * and load the xml string from this location
-   * @param {string} xmlPathOrString A path to an xml file, or an XML string
+   * @param {string} xmlUrlOrString A url with the path to an xml file, or an XML string
    * @returns {Promise<string>} The xml string
    */
-  async #fetchXml(xmlPathOrString) {
+  async #fetchXml(xmlUrlOrString) {
     let xml;
-    if (xmlPathOrString.trim().slice(0, 1) != "<") {
+    if (xmlUrlOrString.trim().slice(0, 1) != "<") {
       // treat argument as path
+      const url = xmlUrlOrString
       try {
-        const response = await fetch(xmlPathOrString);
+        const response = await fetch(url);
+        if (response.status >= 400) {
+          throw new Error(`Resource at ${url} does not exist.`);
+        }
         xml = await response.text();
       } catch (error) {
-        throw new Error('Error loading or parsing XML: ' + error.message);
+        throw new Error('Error loading XML: ' + error.message);
       }
     } else {
       // treat argument as xml string
-      xml = xmlPathOrString;
+      xml = xmlUrlOrString;
     }
+    // remove xml declaration
+    xml = xml.replaceAll(/<\?xml.+?\?>/g,'').trim()
     return xml
   }
 
@@ -852,6 +862,7 @@ export class XMLEditor extends EventTarget {
     }
     // @ts-ignore
     this.#updateTimeout = setTimeout(() => this.#delayedUpdateActions(update), 1000) // todo make configurable
+
   }
 
   /**

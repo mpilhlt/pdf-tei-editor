@@ -151,6 +151,7 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
+  //console.warn("update", plugin.name, state)
   // show the xpath selector
   if (state.xpath) {
     let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)

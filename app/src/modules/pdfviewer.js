@@ -157,7 +157,7 @@ export class PDFJSViewer {
         this.isLoadedFlag = true;
         resolve();
       } catch (error) {
-        reject(new Error(`Error loading PDF: ${error}`));
+        reject(error);
       }
     });
     await this.loadPromise;

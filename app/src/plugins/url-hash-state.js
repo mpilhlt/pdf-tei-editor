@@ -23,7 +23,7 @@ const plugin = {
   name: "url-hash-state",
   install,
   state: {
-    update: updateUrlHashfromState
+    update
   }
 }
 
@@ -36,6 +36,11 @@ export default plugin
 
 async function install(state){
   logger.debug(`Installing plugin "${plugin.name}"`)
+}
+
+async function update(state) {
+  //console.warn("update", plugin.name, state)
+  updateUrlHashfromState(state)
 }
 
 /**

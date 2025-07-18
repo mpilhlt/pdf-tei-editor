@@ -94,7 +94,7 @@ const documentActionButtons = await appendHtml("document-action-buttons.html")
 
 /** @type {newVersionDialog} */
 const newVersionDialog = (await appendHtml("new-version-dialog.html"))[0]
-  
+
 /**
  * Dialog for documenting a revision
  * @typedef {object} newRevisionChangeDialog
@@ -116,7 +116,7 @@ const saveRevisionDialog = (await appendHtml("save-revision-dialog.html"))[0]
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-  
+
   // install controls on menubar
   ui.toolbar.self.append(...documentActionButtons)
   document.body.append(newVersionDialog)
@@ -167,6 +167,7 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
+  //console.warn("update", plugin.name, state)
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
   da.deleteAll.disabled = ui.toolbar.pdf.childElementCount < 2 // at least on PDF must be present
@@ -202,6 +203,8 @@ async function inProgress(validationPromise) {
  * @param {Object} files An Object with one or more of the keys "xml" and "pdf"
  */
 async function load(state, { xml, pdf }) {
+  
+  await updateState(state, { pdfPath: null,  xmlPath: null, diffXmlPath: null})
 
   const promises = []
 
@@ -220,7 +223,17 @@ async function load(state, { xml, pdf }) {
   }
 
   // await promises in parallel
-  await Promise.all(promises)
+  try {
+    await Promise.all(promises)
+  } catch (error) {
+    
+    console.error(error.message)
+    if (error.status === 404) {
+      await fileselection.reload(state)
+      return
+    }
+    throw error
+  }
 
   if (pdf) {
     state.pdfPath = pdf
@@ -230,8 +243,9 @@ async function load(state, { xml, pdf }) {
   if (xml) {
     state.xmlPath = xml
   }
+
   // notify plugins
-  updateState(state)
+  await updateState(state)
 }
 
 /**
@@ -347,7 +361,7 @@ async function deleteAllVersions(state) {
     notify("All version have been deleted")
     syncFiles(state, false)
       .then(summary => summary && notify("Synchronized files"))
-      .catch(e => console.error(e))    
+      .catch(e => console.error(e))
   } catch (error) {
     console.error(error)
     alert(error.message)

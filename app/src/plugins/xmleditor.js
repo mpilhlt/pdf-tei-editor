@@ -68,8 +68,9 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
+  //console.warn("update", plugin.name, state)
   // xpath state => selection
-  if (!state.xpath) {
+  if (!state.xpath || !state.xmlPath) {
     return
   }
   await xmlEditor.whenReady()

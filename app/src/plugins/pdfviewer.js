@@ -38,6 +38,7 @@ export default plugin
  * @returns {Promise<void>}
  */
 async function install(state) {
+  logger.debug(`Installing plugin "${plugin.name}"`)
   await pdfViewer.isReady()
   logger.info("PDF Viewer ready.")
   pdfViewer.show()
@@ -50,7 +51,6 @@ let lastNode = null;
  * @returns {Promise<void>}
  */
 async function update(state) {
-  logger.debug(`Installing plugin "${plugin.name}"`)
 
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick

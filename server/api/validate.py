@@ -66,7 +66,11 @@ def validate(xml_string):
     for sl in schema_locations:
         namespace = sl['namespace']
         schema_location = sl['schemaLocation']
-        current_app.logger.debug(f"Validating doc for namespace {namespace} from schema at {schema_location}")
+        if not schema_location.startswith("http"):
+            current_app.logger.warning(f"Not validating for namespace {namespace} with schema at {schema_location}: schema location must start with 'http'")
+            continue
+            
+        current_app.logger.debug(f"Validating doc for namespace {namespace} with schema at {schema_location}")
         schema_location_parts = schema_location.split("/")[2:-1]
         schema_cache_dir = os.path.join('schema', 'cache', *schema_location_parts)
         schema_file_name = os.path.basename(schema_location)

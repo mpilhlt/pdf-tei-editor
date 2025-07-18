@@ -67,7 +67,8 @@ for (const plugin of plugins) {
  */
 async function invoke(endpoint, param) {
   const promises = pluginManager.invoke(endpoint, param)
-  return await Promise.all(promises)
+  const result = await Promise.all(promises)
+  return result
 }
 
 /**
