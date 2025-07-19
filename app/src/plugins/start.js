@@ -161,8 +161,8 @@ async function onValidationResult(diagnostics) {
  * Save the current XML file if the editor is "dirty"
  */
 async function saveIfDirty() {
-  const filePath = ui.toolbar.xml.value
-  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty) {
+  const filePath = String(ui.toolbar.xml.value)
+  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
     const result = await services.saveXml(filePath)
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)

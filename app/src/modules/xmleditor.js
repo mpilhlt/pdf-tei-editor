@@ -8,11 +8,11 @@
 import { basicSetup } from 'codemirror';
 import { EditorState, EditorSelection, Compartment } from "@codemirror/state";
 import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk } from "@codemirror/merge"
-import {EditorView, keymap} from "@codemirror/view"
+import { EditorView, keymap } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { createCompletionSource } from './autocomplete.js';
 import { syntaxTree, syntaxParserRunning } from "@codemirror/language"
-import {indentWithTab} from "@codemirror/commands"
+import { indentWithTab } from "@codemirror/commands"
 
 // custom modules
 
@@ -89,21 +89,38 @@ export class XMLEditor extends EventTarget {
   /** @type {Tree} */
   #syntaxTree // the lezer syntax tree
 
+  /** @type {boolean} */
   #isReady = false
 
-  /** @type {Promise | null} */
+  /** 
+   * Promise that resolves when the editor is ready and the XML document is loaded
+   * @type {Promise | null} 
+   */
   #readyPromise
 
-  /** @type {Object} */
-  #mergeViewExt
+  /**
+   * true if the content of the editor is different from the original XML document
+   * @type {boolean}
+   */
+  #isDirty = false
 
-  /** @type {string} */
-  #original // the original XML document, when in merge view mode
+  /**
+   * The original XML document, when in merge view mode
+   * @type {string} 
+   */
+  #original
 
-  #updateMergButtonsInterval // interval to update the merge buttons
+  /**
+   * interval to update the merge buttons
+   * @type {Number|null}
+   */
+  #updateMergButtonsInterval // 
 
   /**  @type {XMLSerializer} */
   #serializer; // an XMLSerializer object or one with a compatible API
+
+  /** @type {Object} */
+  #mergeViewExt
 
   // compartments
   #mergeViewCompartment = new Compartment()
@@ -259,8 +276,25 @@ export class XMLEditor extends EventTarget {
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
+    this.#isDirty = false;
     await this.isReadyPromise();
     console.warn("XML document is loaded")
+  }
+
+  /**
+   * Marks the editor as saved, i.e. no changes are pending. 
+   */
+  markAsSaved() {
+    this.#isDirty = false;
+  }
+
+  /**
+   * Checks if the editor has unsaved changes, i.e. the content of the 
+   * editor is different from the original XML document.
+   * @returns {boolean}
+   */
+  isDirty() {
+    return this.#isDirty;
   }
 
   /**
@@ -270,6 +304,9 @@ export class XMLEditor extends EventTarget {
    * @throws {Error} If there's an error loading or parsing the XML.
    */
   async showMergeView(xmlPathOrString) {
+
+    this.#original = this.getXML() // store the original XML content;
+
     // remove existing merge view
     await this.hideMergeView()
 
@@ -287,10 +324,18 @@ export class XMLEditor extends EventTarget {
     });
 
     // Overwrite the default button labels
+    // @ts-ignore
     this.#updateMergButtonsInterval = setInterval(() => {
       $$('button[name="accept"]').forEach(b => b.innerHTML = 'Keep')
       $$('button[name="reject"]').forEach(b => b.innerHTML = 'Change')
     }, 200)
+  }
+
+  /**
+   * Returns the original content of the XML document before the merge view was shown.
+   */
+  getOriginalContent() {
+    return this.#original
   }
 
   /**
@@ -308,6 +353,7 @@ export class XMLEditor extends EventTarget {
   async hideMergeView() {
     if (this.#mergeViewExt) {
       // stop updating the buttons
+      // @ts-ignore
       clearInterval(this.#updateMergButtonsInterval)
       this.#updateMergButtonsInterval = null
       // remove the merge view
@@ -802,7 +848,7 @@ export class XMLEditor extends EventTarget {
       xml = xmlUrlOrString;
     }
     // remove xml declaration
-    xml = xml.replaceAll(/<\?xml.+?\?>/g,'').trim()
+    xml = xml.replaceAll(/<\?xml.+?\?>/g, '').trim()
     return xml
   }
 
@@ -854,6 +900,8 @@ export class XMLEditor extends EventTarget {
     if (!update.docChanged) {
       return
     }
+
+    this.#isDirty = true;
 
     // inform the listeners
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_UPDATE, { detail: update }))
@@ -914,7 +962,7 @@ export class XMLEditor extends EventTarget {
       from += column
       // @ts-ignore
       return { message, severity, line, column, from, to }
-    } 
+    }
     throw new Error(`Cannot parse line and column from error message: "${location}"`)
   }
 
