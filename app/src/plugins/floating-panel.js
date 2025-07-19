@@ -5,7 +5,7 @@
 import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
 import { $$, isValidXPath } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
-import { appendHtml, updateUi } from '../ui.js'
+import { createHtmlElements, updateUi } from '../ui.js'
 import ui from '../ui.js'
 
 /**
@@ -49,7 +49,7 @@ export default plugin
  * 
  */
 /** @type {floatingPanelComponent} */
-const floatingPanelControls = await appendHtml('floating-panel.html')
+const floatingPanelControls = await createHtmlElements('floating-panel.html')
 
 /**
  * Diff Navigation

@@ -10841,7 +10841,7 @@ let ui = null;
  *    If not given, the generated nodes are returned, and you need to call `updateUi()` manually.
  * @returns {Promise<Element[]>} All the created nodes in an array
  */
-async function appendHtml(htmlOrFile, parentNode=null){
+async function createHtmlElements(htmlOrFile, parentNode=null){
   let html;
   if (htmlOrFile.trim()[0]==='<') {
     // interpret as literal html
@@ -10924,7 +10924,7 @@ const dialogHtml = `
  */
 async function install$b(app) {
   api$b.debug(`Installing plugin "${plugin$c.name}"`);
-  await appendHtml(dialogHtml, document.body);
+  await createHtmlElements(dialogHtml, document.body);
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.self.hide());
 }
 
@@ -42276,7 +42276,7 @@ const plugin$7 = {
 //
 
 // see ui.js for @typedef 
-const fileSelectionControls = await appendHtml('file-selection.html');
+const fileSelectionControls = await createHtmlElements('file-selection.html');
 
 //
 // Implementation
@@ -42401,7 +42401,7 @@ async function populateSelectboxes(state) {
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
     
-    await appendHtml(`<small>${collection_name}</small>`, ui$1.toolbar.pdf);
+    await createHtmlElements(`<small>${collection_name}</small>`, ui$1.toolbar.pdf);
     
     // get a list of file data sorted by label
     const files = grouped_files[collection_name]
@@ -42557,7 +42557,7 @@ const plugin$6 = {
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
 /** @type {extractionActionsComponent} */
-const extractionBtnGroup = await appendHtml('extraction-buttons.html');
+const extractionBtnGroup = await createHtmlElements('extraction-buttons.html');
 
 
 /**
@@ -42569,7 +42569,7 @@ const extractionBtnGroup = await appendHtml('extraction-buttons.html');
  * @property {SlSelect} instructionIndex
  */
 /** @type {extractionOptionsDialog} */
-const optionsDialog = (await appendHtml('extraction-dialog.html'))[0];
+const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
 
 //
 // Implementation
@@ -43613,7 +43613,7 @@ const plugin$5 = {
  */
 
 // todo align template with definition
-const documentActionButtons = await appendHtml("document-action-buttons.html");
+const documentActionButtons = await createHtmlElements("document-action-buttons.html");
 
 /**
  * Dialog for creating a new version
@@ -43626,7 +43626,7 @@ const documentActionButtons = await appendHtml("document-action-buttons.html");
  */
 
 /** @type {newVersionDialog} */
-const newVersionDialog = (await appendHtml("new-version-dialog.html"))[0];
+const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0];
 
 /**
  * Dialog for documenting a revision
@@ -43638,7 +43638,7 @@ const newVersionDialog = (await appendHtml("new-version-dialog.html"))[0];
  */
 
 /** @type {newRevisionChangeDialog} */
-const saveRevisionDialog = (await appendHtml("save-revision-dialog.html"))[0];
+const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0];
 
 //
 // Implementation
@@ -44290,7 +44290,7 @@ const plugin$4 = {
  * 
  */
 /** @type {floatingPanelComponent} */
-const floatingPanelControls = await appendHtml('floating-panel.html');
+const floatingPanelControls = await createHtmlElements('floating-panel.html');
 
 /**
  * Diff Navigation
@@ -44622,10 +44622,10 @@ const plugin$3 = {
 
 // editor dialog
 /** @type {promptEditorComponent} */
-const promptEditorDialog = (await appendHtml("prompt-editor.html"))[0];
+const promptEditorDialog = (await createHtmlElements("prompt-editor.html"))[0];
 
 // button, documented in services.js
-const promptEditorButton = (await appendHtml('prompt-editor-button.html'))[0];
+const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'))[0];
 
 //
 // Implementation
@@ -44832,9 +44832,9 @@ const plugin$2 = {
 // UI
 //
 
-const teiWizardButton = (await appendHtml("tei-wizard-button.html"))[0];
+const teiWizardButton = (await createHtmlElements("tei-wizard-button.html"))[0];
 
-const teiWizardDialog = (await appendHtml("tei-wizard-dialog.html"))[0];
+const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 
 
 /**
@@ -44861,7 +44861,7 @@ async function install$2(state) {
       <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
     </sl-tooltip>
     <br />`;
-    await appendHtml(checkboxHtml, dialog.enhancementList);
+    await createHtmlElements(checkboxHtml, dialog.enhancementList);
   });
 
   // Select all and none buttons
@@ -53366,11 +53366,11 @@ const docsBasePath = "../../docs";
 async function install$1(state) {
   api$b.debug(`Installing plugin "${plugin$1.name}"`);
   // add the component html
-  await appendHtml(infoHtml, document.body);
+  await createHtmlElements(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.self.hide());
 
   // add a button to the command bar to show dialog with prompt editor
-  const button = (await appendHtml(buttonHtml))[0];
+  const button = (await createHtmlElements(buttonHtml))[0];
   ui$1.toolbar.self.append(button);
   updateUi();
   button.addEventListener("click", () => api.open());
@@ -53425,7 +53425,7 @@ async function load(mdPath){
     // open remote links in new tabs
     .replaceAll(/(href="http)/g, `target="_blank" $1`);
 
-  await appendHtml(html, ui$1.infoDialog.content);
+  await createHtmlElements(html, ui$1.infoDialog.content);
 }
 
 

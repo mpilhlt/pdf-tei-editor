@@ -8,7 +8,7 @@
  * @import { SlSelect } from '../ui.js'
  */
 import ui from '../ui.js'
-import { SlOption, SlDivider, appendHtml, updateUi } from '../ui.js'
+import { SlOption, SlDivider, createHtmlElements, updateUi } from '../ui.js'
 import { logger, client, services, dialog, updateState } from '../app.js'
 
 /**
@@ -46,7 +46,7 @@ export default plugin
 //
 
 // see ui.js for @typedef 
-const fileSelectionControls = await appendHtml('file-selection.html')
+const fileSelectionControls = await createHtmlElements('file-selection.html')
 
 //
 // Implementation
@@ -171,7 +171,7 @@ async function populateSelectboxes(state) {
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
     
-    await appendHtml(`<small>${collection_name}</small>`, ui.toolbar.pdf)
+    await createHtmlElements(`<small>${collection_name}</small>`, ui.toolbar.pdf)
     
     // get a list of file data sorted by label
     const files = grouped_files[collection_name]

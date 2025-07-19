@@ -74,16 +74,17 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
 let ui = null;
 
 /**
- * Adds html to the target node. The html can be a string which starts with "<" or the name of a file
- * in the 'app/src/templates/' folder
+ * Generates UI elements from templates in the 'app/src/templates' folder or from
+ * literal hmtl strings, which must start with "<". If a parentNode is given,
+ * the elements are appended to it and the `ui` object is updated automatically.
+ * If no parentNode is given, the generated nodes are returned as an array, and you
+ * need to call `updateUi()` manually to update the `ui` object.
  * @param {string} htmlOrFile A literal html string or the name of a file in the 'app/src/templates/' folder
  * @param {Element|Document|null} [parentNode] 
- *    If given, appends the generated nodes as children to the parentNode. The `ui` object is updated automatically.
- *    Make sure that the parentNode already exists, otherwise await the method first and then append the nodes. 
- *    If not given, the generated nodes are returned, and you need to call `updateUi()` manually.
- * @returns {Promise<Element[]>} All the created nodes in an array
+ *    If given, appends the generated nodes as children to the parentNode. 
+ * @returns {Promise<ChildNode[]>} All the created nodes in an array
  */
-async function appendHtml(htmlOrFile, parentNode=null){
+async function createHtmlElements(htmlOrFile, parentNode=null){
   let html
   if (htmlOrFile.trim()[0]==='<') {
     // interpret as literal html
@@ -117,7 +118,7 @@ function updateUi() {
 updateUi()
 
 export {
-  updateUi, appendHtml,
+  updateUi, createHtmlElements,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
   SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, Switch, SlDivider
 }

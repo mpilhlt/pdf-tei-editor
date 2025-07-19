@@ -7,7 +7,7 @@
  * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
  */
 import { client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
-import { SlSelect, SlOption, appendHtml, updateUi } from '../ui.js'
+import { SlSelect, SlOption, createHtmlElements, updateUi } from '../ui.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
 
@@ -45,7 +45,7 @@ export default plugin
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
 /** @type {extractionActionsComponent} */
-const extractionBtnGroup = await appendHtml('extraction-buttons.html')
+const extractionBtnGroup = await createHtmlElements('extraction-buttons.html')
 
 
 /**
@@ -57,7 +57,7 @@ const extractionBtnGroup = await appendHtml('extraction-buttons.html')
  * @property {SlSelect} instructionIndex
  */
 /** @type {extractionOptionsDialog} */
-const optionsDialog = (await appendHtml('extraction-dialog.html'))[0]
+const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0]
 
 //
 // Implementation

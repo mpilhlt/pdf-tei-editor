@@ -2,7 +2,7 @@
  * This application plugin implements a dialog registered as the "diaolog" property of the app
  */
 
-import { SlButton, SlDialog, appendHtml } from '../ui.js'
+import { SlButton, SlDialog, createHtmlElements } from '../ui.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
 
@@ -53,7 +53,7 @@ const dialogHtml = `
  */
 async function install(app) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-  await appendHtml(dialogHtml, document.body)
+  await createHtmlElements(dialogHtml, document.body)
   ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.self.hide());
 }
 

@@ -12,7 +12,7 @@ import {
   updateState, client, logger, dialog,
   fileselection, xmlEditor, pdfViewer, services, validation
 } from '../app.js'
-import { appendHtml } from '../ui.js'
+import { createHtmlElements } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
@@ -80,7 +80,7 @@ export default plugin
  */
 
 // todo align template with definition
-const documentActionButtons = await appendHtml("document-action-buttons.html")
+const documentActionButtons = await createHtmlElements("document-action-buttons.html")
 
 /**
  * Dialog for creating a new version
@@ -93,7 +93,7 @@ const documentActionButtons = await appendHtml("document-action-buttons.html")
  */
 
 /** @type {newVersionDialog} */
-const newVersionDialog = (await appendHtml("new-version-dialog.html"))[0]
+const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0]
 
 /**
  * Dialog for documenting a revision
@@ -105,7 +105,7 @@ const newVersionDialog = (await appendHtml("new-version-dialog.html"))[0]
  */
 
 /** @type {newRevisionChangeDialog} */
-const saveRevisionDialog = (await appendHtml("save-revision-dialog.html"))[0]
+const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0]
 
 //
 // Implementation

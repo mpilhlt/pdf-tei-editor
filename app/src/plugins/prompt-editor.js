@@ -6,7 +6,7 @@
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
 import { logger, client } from '../app.js'
-import { appendHtml, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../ui.js'
+import { createHtmlElements, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../ui.js'
 
 
 /**
@@ -53,10 +53,10 @@ export default plugin
 
 // editor dialog
 /** @type {promptEditorComponent} */
-const promptEditorDialog = (await appendHtml("prompt-editor.html"))[0]
+const promptEditorDialog = (await createHtmlElements("prompt-editor.html"))[0]
 
 // button, documented in services.js
-const promptEditorButton = (await appendHtml('prompt-editor-button.html'))[0]
+const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'))[0]
 
 //
 // Implementation

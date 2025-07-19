@@ -8,7 +8,7 @@
  */
 import ui from '../ui.js';
 import { xmlEditor, logger } from '../app.js';
-import { appendHtml, updateUi } from '../ui.js';
+import { createHtmlElements, updateUi } from '../ui.js';
 import enhancements from './tei-wizard/enhancements.js';
 import { notify } from '../modules/sl-utils.js'
 
@@ -26,9 +26,9 @@ export default plugin
 // UI
 //
 
-const teiWizardButton = (await appendHtml("tei-wizard-button.html"))[0];
+const teiWizardButton = (await createHtmlElements("tei-wizard-button.html"))[0];
 
-const teiWizardDialog = (await appendHtml("tei-wizard-dialog.html"))[0];
+const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 
 
 /**
@@ -55,7 +55,7 @@ async function install(state) {
       <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
     </sl-tooltip>
     <br />`;
-    await appendHtml(checkboxHtml, dialog.enhancementList);
+    await createHtmlElements(checkboxHtml, dialog.enhancementList);
   });
 
   // Select all and none buttons
