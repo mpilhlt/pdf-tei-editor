@@ -1,0 +1,13 @@
+<sl-dialog name="move-files-dialog" label="Move Files to Collection">
+  <p>
+    Select a collection to move the current PDF and XML files to.
+  </p>
+  <div style="display: flex; align-items: flex-end; gap: 0.5rem;">
+    <sl-select name="collectionName" label="Collection" required style="flex-grow: 1;"></sl-select>
+    <sl-button name="newCollectionBtn" variant="default" outline>
+      <sl-icon name="plus-lg"></sl-icon> New
+    </sl-button>
+  </div>
+  <sl-button slot="footer" name="cancel">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">Move</sl-button>
+</sl-dialog>

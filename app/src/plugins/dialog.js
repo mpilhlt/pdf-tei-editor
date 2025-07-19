@@ -2,7 +2,7 @@
  * This application plugin implements a dialog registered as the "diaolog" property of the app
  */
 
-import { SlButton, SlDialog, createHtmlElements } from '../ui.js'
+import { SlButton, SlDialog, createHtmlElements, updateUi } from '../ui.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
 
@@ -11,7 +11,8 @@ import { logger } from '../app.js'
 // Plugin API
 const api = {
   info,
-  error
+  error,
+  success
 }
 
 // Plugin object
@@ -31,17 +32,9 @@ export default plugin
  * @typedef {object} dialogComponent
  * @property {SlDialog} self
  * @property {HTMLSpanElement} message
+ * @property {HTMLDivElement} icon
  * @property {SlButton} closeBtn
  */
-
-const dialogHtml = `
-<sl-dialog name="dialog" label="Dialog" class="dialog-width" style="--width: 50vw;">
-  <div>
-    <span name="message"></span>
-    <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
-  <div>
-</sl-dialog>
-`
 
 //
 // implementation
@@ -53,7 +46,8 @@ const dialogHtml = `
  */
 async function install(app) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-  await createHtmlElements(dialogHtml, document.body)
+  await createHtmlElements("dialog.html", document.body)
+  updateUi();
   ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.self.hide());
 }
 
@@ -63,6 +57,7 @@ async function install(app) {
  */
 function info(message) {
   ui.dialog.self.setAttribute("label", "Information");
+  ui.dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
   ui.dialog.message.innerHTML = message
   ui.dialog.self.show()
 }
@@ -73,6 +68,18 @@ function info(message) {
  */
 function error(message) {
   ui.dialog.self.setAttribute("label", "Error");
+  ui.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
+  ui.dialog.message.innerHTML = message
+  ui.dialog.self.show()
+}
+
+/**
+ * Shows a success dialog
+ * @param {string} message 
+ */
+function success(message) {
+  ui.dialog.self.setAttribute("label", "Success");
+  ui.dialog.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
   ui.dialog.message.innerHTML = message
   ui.dialog.self.show()
 }

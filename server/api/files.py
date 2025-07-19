@@ -6,7 +6,7 @@ from pathlib import Path
 from glob import glob
 
 from server.lib.decorators import handle_api_errors
-from server.lib.server_utils import ApiError, make_timestamp, get_data_file_path
+from server.lib.server_utils import ApiError, make_timestamp, get_data_file_path, safe_file_path
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
@@ -150,18 +150,50 @@ def create_version_from_upload():
 
     return jsonify({"path": "/data/" + new_version_path})
 
-# helper functions
+@bp.route("/move", methods=["POST"])
+@handle_api_errors
+def move_files():
+    """
+    Moves a pair of PDF and XML files to a different collection.
+    """
+    data_root = current_app.config["DATA_ROOT"]
+    data = request.get_json()
+    pdf_path_str = data.get("pdf_path")
+    xml_path_str = data.get("xml_path")
+    destination_collection = data.get("destination_collection")
 
-def safe_file_path(file_path):
-    """
-    Removes any non-alphabetic leading characters for safety, and strips the "/data" prefix
-    """
-    
-    while not file_path[0].isalpha():
-        file_path = file_path[1:]
-    if not file_path.startswith("data/"):
-        raise ApiError("Invalid file path") 
-    return file_path.removeprefix('data/')
+    if not all([pdf_path_str, xml_path_str, destination_collection]):
+        raise ApiError("Missing parameters")
+
+    pdf_path = Path(get_data_file_path(pdf_path_str))
+    xml_path = Path(get_data_file_path(xml_path_str))
+
+    if not pdf_path.exists() or not xml_path.exists():
+        raise ApiError("One or both files do not exist.")
+
+    # Create destination directories
+    new_pdf_dir = Path(data_root) / "pdf" / destination_collection
+    new_xml_dir = Path(data_root) / "tei" / destination_collection
+    os.makedirs(new_pdf_dir, exist_ok=True)
+    os.makedirs(new_xml_dir, exist_ok=True)
+
+    # New paths
+    new_pdf_path = new_pdf_dir / pdf_path.name
+    new_xml_path = new_xml_dir / xml_path.name
+
+    # Move files
+    os.rename(pdf_path, new_pdf_path)
+    os.rename(xml_path, new_xml_path)
+
+    current_app.logger.info(f"Moved {pdf_path} to {new_pdf_path}")
+    current_app.logger.info(f"Moved {xml_path} to {new_xml_path}")
+
+    return jsonify({
+        "new_pdf_path": f"/data/pdf/{destination_collection}/{pdf_path.name}",
+        "new_xml_path": f"/data/tei/{destination_collection}/{xml_path.name}"
+    })
+
+# helper functions
 
 def create_file_data(data_root):
     """

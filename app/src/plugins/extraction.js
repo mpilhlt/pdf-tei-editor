@@ -4,7 +4,7 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlButton, SlButtonGroup, SlInput } from '../ui.js'
+ * @import { SlButton, SlButtonGroup, SlDialog, SlInput } from '../ui.js'
  */
 import { client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
 import { SlSelect, SlOption, createHtmlElements, updateUi } from '../ui.js'
@@ -44,19 +44,22 @@ export default plugin
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
-/** @type {extractionActionsComponent} */
+/** @type {SlButtonGroup & extractionActionsComponent} */
+// @ts-ignore
 const extractionBtnGroup = await createHtmlElements('extraction-buttons.html')
 
 
 /**
  * Extraction options dialog
  * @typedef {object} extractionOptionsDialog
+ * @property {SlDialog} self
  * @property {SlInput} doi 
  * @property {SlSelect} collectionName
  * @property {SlSelect} modelIndex 
  * @property {SlSelect} instructionIndex
  */
-/** @type {extractionOptionsDialog} */
+/** @type {extractionOptionsDialog & SlDialog} */
+// @ts-ignore
 const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0]
 
 //
@@ -71,7 +74,6 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // install controls on menubar
-  console.warn(ui.toolbar.self.childElementCount)
   ui.toolbar.self.append(...extractionBtnGroup)
   document.body.append(optionsDialog)
   updateUi()
@@ -232,9 +234,7 @@ async function promptForExtractionOptions(options) {
     'instructions': instructions[parseInt(optionsDialog.instructionIndex.value)],
     'collection': optionsDialog.collectionName.value
   }
-
-  console.warn(formData)
-
+  
   if (formData.doi == "" || !isDoi(formData.doi)) {
     dialog.error(`"${formData.doi}" does not seem to be a DOI, please try again.`)
     return
@@ -259,8 +259,8 @@ function getDoiFromFilename(filename) {
       doi = decodeURIComponent(doi)
     } else {
       // custom decoding
-      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2')
       doi = doi.replaceAll(/__/g, '/')
+      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2')
     }
     console.debug("Extracted DOI from filename:", doi)
     if (isDoi(doi)) {

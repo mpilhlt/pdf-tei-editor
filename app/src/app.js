@@ -24,6 +24,7 @@ import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/pro
 import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
 import { plugin as startPlugin } from './plugins/start.js'
+import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
@@ -51,11 +52,12 @@ let state = {
 const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
   pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
-  teiWizardPlugin, validationPlugin, infoPlugin, startPlugin
+  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, startPlugin
 ]
 
 // register plugins
 for (const plugin of plugins) {
+  console.log(`Registering plugin '${plugin}'...`)
   pluginManager.register(plugin)
 }
 

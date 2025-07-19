@@ -36,6 +36,7 @@ const api = {
   getConfigValue,
   setConfigValue,
   syncFiles,
+  moveFiles,
   state
 }
 
@@ -61,7 +62,7 @@ export default plugin
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
-async function callApi(endpoint, method, body = null) {
+async function callApi(endpoint, method='GET', body = null) {
   try {
     const url = `${api_base_url}${endpoint}`;
     const options = {
@@ -198,6 +199,21 @@ async function syncFiles() {
   return await callApi('/files/sync')
 }
 
+/**
+ * Moves the given files to a new collection
+ * @param {string} pdfPath
+ * @param {string} xmlPath
+ * @param {string} destinationCollection
+ * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
+ */
+async function moveFiles(pdfPath, xmlPath, destinationCollection) {
+  return await callApi('/files/move', 'POST', {
+    pdf_path: pdfPath,
+    xml_path: xmlPath,
+    destination_collection: destinationCollection
+  });
+}
+
 
 /**
  * Retrieves a configuration value from the server
@@ -241,6 +257,8 @@ async function setConfigValue(key, value) {
  * @param {object} [options.headers={}] - Additional headers to include in the request.
  * @param {function} [options.onProgress] - A callback function to handle upload progress events.
  *    The function receives a progress event object as an argument.
+ * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
+ *    This is a string that will be set as the `accept` attribute of the file
  * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
  *    from the `fetch()` call, which must be an object, or rejects with an error.
  *    The object should contain the uploaded file's metadata, such as its path or ID.
