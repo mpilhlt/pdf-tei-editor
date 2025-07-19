@@ -35,7 +35,7 @@ import { plugin as startPlugin } from './plugins/start.js'
  * @property {string|null} xmlPath - The path to the XML file in the editor
  * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
  * @property {string|null} xpath - The current xpath used to select a node in the editor
- * @property {bool} webdavEnabled - Wether on the server, we have a WebDAV backend
+ * @property {boolean} webdavEnabled - Wether on the server, we have a WebDAV backend
  */
 /**
  * @type{ApplicationState}

@@ -134,7 +134,7 @@ async function install(state) {
   da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
   // enable save button on dirty editor
   xmlEditor.addEventListener(
-    XMLEditor.EVENT_XML_CHANGED,
+    XMLEditor.EVENT_EDITOR_READY,
     () => da.saveRevision.disabled = false
   );
 

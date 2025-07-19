@@ -59,7 +59,7 @@ async function install(state) {
   });
 
   // editor dirty state
-  api.addEventListener(XMLEditor.EVENT_XML_CHANGED,evt => {
+  api.addEventListener(XMLEditor.EVENT_EDITOR_READY,evt => {
     api.isDirty = true
   })
 }

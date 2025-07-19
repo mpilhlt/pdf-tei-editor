@@ -37,7 +37,7 @@ export class XMLEditor extends EventTarget {
    * @type {ViewUpdate}
    */
   /** @type {string} */
-  static EVENT_XML_CHANGED = "xmlChanged";
+  static EVENT_EDITOR_READY = "editorReady";
 
   /**
    * @event EditorUpdateEvent
@@ -738,7 +738,7 @@ export class XMLEditor extends EventTarget {
     }
 
     // once we at least tried to synchronize, we can mark the editor as ready
-    this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
+    this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_READY));
   }
 
   //
@@ -753,7 +753,7 @@ export class XMLEditor extends EventTarget {
     this.#isReady = false
     this.#readyPromise = this.#readyPromise ||
       /** @type {Promise<void>} */(new Promise(resolve => {
-      this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      this.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => {
         this.#isReady = true
         this.#readyPromise = null
         resolve();
@@ -831,6 +831,7 @@ export class XMLEditor extends EventTarget {
           return Object.assign({ node, xpath }, range)
         } catch (e) {
           // add error message to range object in case we cannot determine node/xpath
+          // @ts-ignore
           range.diagnostic = e.message
           return range
         }
@@ -888,7 +889,7 @@ export class XMLEditor extends EventTarget {
    * @param {Object} changes The changes to apply to the editor
    */
   async #waitForEditorUpdate(changes) {
-    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, resolve, { once: true }))
+    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_EDITOR_READY, resolve, { once: true }))
     this.#view.dispatch({ changes });
     await promise;
   }
@@ -901,6 +902,7 @@ export class XMLEditor extends EventTarget {
    */
   #parseErrorNode(errorNode) {
     const severity = "error"
+    // @ts-ignore
     const [message, _, location] = errorNode.firstChild.textContent.split("\n")
     const regex = /\d+/g;
     const matches = location.match(regex);
@@ -910,6 +912,7 @@ export class XMLEditor extends EventTarget {
       const column = parseInt(matches[1], 10);
       ({ from, to } = this.#view.state.doc.line(line))
       from += column
+      // @ts-ignore
       return { message, severity, line, column, from, to }
     } 
     throw new Error(`Cannot parse line and column from error message: "${location}"`)
@@ -925,6 +928,7 @@ export class XMLEditor extends EventTarget {
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
       const diagnostic = this.#parseErrorNode(errorNode)
+      // @ts-ignore
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
       this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: diagnostic }))
       this.#xmlTree = null;

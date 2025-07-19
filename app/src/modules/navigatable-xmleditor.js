@@ -119,7 +119,7 @@ export class NavXmlEditor extends XMLEditor {
     // Wait for editor to be ready
     if (!this.isReady()) {
       console.log("Editor not ready, deferring selection")
-      this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      this.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => {
         console.log("Editor is now ready")
         this.selectByIndex(index)
       }, { once: true })
