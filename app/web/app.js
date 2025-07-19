@@ -287,9 +287,9 @@ const api$b = {
 /**
  * component plugin
  */
-const plugin$e = {
+const plugin$f = {
   name: name$2,
-  install: install$d,
+  install: install$e,
   log: {
     setLogLevel,
     debug,
@@ -303,8 +303,8 @@ const plugin$e = {
 // implementation
 //
 
-async function install$d(state) {
-  console.log(`Installing plugin "${plugin$e.name}"`);
+async function install$e(state) {
+  console.log(`Installing plugin "${plugin$f.name}"`);
 }
 
 
@@ -392,9 +392,9 @@ const api$a = {
 /**
  * component plugin
  */
-const plugin$d = {
+const plugin$e = {
   name: "url-hash-state",
-  install: install$c,
+  install: install$d,
   state: {
     update: update$6
   }
@@ -404,8 +404,8 @@ const plugin$d = {
 // implementation
 //
 
-async function install$c(state){
-  api$b.debug(`Installing plugin "${plugin$d.name}"`);
+async function install$d(state){
+  api$b.debug(`Installing plugin "${plugin$e.name}"`);
 }
 
 async function update$6(state) {
@@ -10832,14 +10832,15 @@ SlDivider.define("sl-divider");
 let ui = null;
 
 /**
- * Adds html to the target node. The html can be a string which starts with "<" or the name of a file
- * in the 'app/src/templates/' folder
+ * Generates UI elements from templates in the 'app/src/templates' folder or from
+ * literal hmtl strings, which must start with "<". If a parentNode is given,
+ * the elements are appended to it and the `ui` object is updated automatically.
+ * If no parentNode is given, the generated nodes are returned as an array, and you
+ * need to call `updateUi()` manually to update the `ui` object.
  * @param {string} htmlOrFile A literal html string or the name of a file in the 'app/src/templates/' folder
  * @param {Element|Document|null} [parentNode] 
- *    If given, appends the generated nodes as children to the parentNode. The `ui` object is updated automatically.
- *    Make sure that the parentNode already exists, otherwise await the method first and then append the nodes. 
- *    If not given, the generated nodes are returned, and you need to call `updateUi()` manually.
- * @returns {Promise<Element[]>} All the created nodes in an array
+ *    If given, appends the generated nodes as children to the parentNode. 
+ * @returns {Promise<ChildNode[]>} All the created nodes in an array
  */
 async function createHtmlElements(htmlOrFile, parentNode=null){
   let html;
@@ -10885,13 +10886,14 @@ var ui$1 = ui;
 // Plugin API
 const api$9 = {
   info,
-  error: error$1
+  error: error$1,
+  success
 };
 
 // Plugin object
-const plugin$c = {
+const plugin$d = {
   name: "dialog",
-  install: install$b
+  install: install$c
 };
 
 //
@@ -10902,17 +10904,9 @@ const plugin$c = {
  * @typedef {object} dialogComponent
  * @property {SlDialog} self
  * @property {HTMLSpanElement} message
+ * @property {HTMLDivElement} icon
  * @property {SlButton} closeBtn
  */
-
-const dialogHtml = `
-<sl-dialog name="dialog" label="Dialog" class="dialog-width" style="--width: 50vw;">
-  <div>
-    <span name="message"></span>
-    <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
-  <div>
-</sl-dialog>
-`;
 
 //
 // implementation
@@ -10922,9 +10916,10 @@ const dialogHtml = `
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-async function install$b(app) {
-  api$b.debug(`Installing plugin "${plugin$c.name}"`);
-  await createHtmlElements(dialogHtml, document.body);
+async function install$c(app) {
+  api$b.debug(`Installing plugin "${plugin$d.name}"`);
+  await createHtmlElements("dialog.html", document.body);
+  updateUi();
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.self.hide());
 }
 
@@ -10934,6 +10929,7 @@ async function install$b(app) {
  */
 function info(message) {
   ui$1.dialog.self.setAttribute("label", "Information");
+  ui$1.dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
   ui$1.dialog.message.innerHTML = message;
   ui$1.dialog.self.show();
 }
@@ -10944,6 +10940,18 @@ function info(message) {
  */
 function error$1(message) {
   ui$1.dialog.self.setAttribute("label", "Error");
+  ui$1.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
+  ui$1.dialog.message.innerHTML = message;
+  ui$1.dialog.self.show();
+}
+
+/**
+ * Shows a success dialog
+ * @param {string} message 
+ */
+function success(message) {
+  ui$1.dialog.self.setAttribute("label", "Success");
+  ui$1.dialog.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
   ui$1.dialog.message.innerHTML = message;
   ui$1.dialog.self.show();
 }
@@ -11361,9 +11369,9 @@ pdfViewer.hide();
 /**
  * plugin object
  */
-const plugin$b = {
+const plugin$c = {
   name: "pdfviewer",
-  install: install$a,
+  install: install$b,
   state: { update: update$4 }
 };
 
@@ -11375,8 +11383,8 @@ const plugin$b = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$a(state) {
-  api$b.debug(`Installing plugin "${plugin$b.name}"`);
+async function install$b(state) {
+  api$b.debug(`Installing plugin "${plugin$c.name}"`);
   await pdfViewer.isReady();
   api$b.info("PDF Viewer ready.");
   pdfViewer.show();
@@ -40136,7 +40144,7 @@ class XMLEditor extends EventTarget {
    * @type {ViewUpdate}
    */
   /** @type {string} */
-  static EVENT_XML_CHANGED = "xmlChanged";
+  static EVENT_EDITOR_READY = "editorReady";
 
   /**
    * @event EditorUpdateEvent
@@ -40188,21 +40196,38 @@ class XMLEditor extends EventTarget {
   /** @type {Tree} */
   #syntaxTree // the lezer syntax tree
 
+  /** @type {boolean} */
   #isReady = false
 
-  /** @type {Promise | null} */
+  /** 
+   * Promise that resolves when the editor is ready and the XML document is loaded
+   * @type {Promise | null} 
+   */
   #readyPromise
 
-  /** @type {Object} */
-  #mergeViewExt
+  /**
+   * true if the content of the editor is different from the original XML document
+   * @type {boolean}
+   */
+  #isDirty = false
 
-  /** @type {string} */
-  #original // the original XML document, when in merge view mode
+  /**
+   * The original XML document, when in merge view mode
+   * @type {string} 
+   */
+  #original
 
-  #updateMergButtonsInterval // interval to update the merge buttons
+  /**
+   * interval to update the merge buttons
+   * @type {Number|null}
+   */
+  #updateMergButtonsInterval // 
 
   /**  @type {XMLSerializer} */
   #serializer; // an XMLSerializer object or one with a compatible API
+
+  /** @type {Object} */
+  #mergeViewExt
 
   // compartments
   #mergeViewCompartment = new Compartment()
@@ -40358,8 +40383,25 @@ class XMLEditor extends EventTarget {
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
+    this.#isDirty = false;
     await this.isReadyPromise();
     console.warn("XML document is loaded");
+  }
+
+  /**
+   * Marks the editor as saved, i.e. no changes are pending. 
+   */
+  markAsSaved() {
+    this.#isDirty = false;
+  }
+
+  /**
+   * Checks if the editor has unsaved changes, i.e. the content of the 
+   * editor is different from the original XML document.
+   * @returns {boolean}
+   */
+  isDirty() {
+    return this.#isDirty;
   }
 
   /**
@@ -40369,6 +40411,9 @@ class XMLEditor extends EventTarget {
    * @throws {Error} If there's an error loading or parsing the XML.
    */
   async showMergeView(xmlPathOrString) {
+
+    this.#original = this.getXML(); // store the original XML content;
+
     // remove existing merge view
     await this.hideMergeView();
 
@@ -40386,10 +40431,18 @@ class XMLEditor extends EventTarget {
     });
 
     // Overwrite the default button labels
+    // @ts-ignore
     this.#updateMergButtonsInterval = setInterval(() => {
       $$('button[name="accept"]').forEach(b => b.innerHTML = 'Keep');
       $$('button[name="reject"]').forEach(b => b.innerHTML = 'Change');
     }, 200);
+  }
+
+  /**
+   * Returns the original content of the XML document before the merge view was shown.
+   */
+  getOriginalContent() {
+    return this.#original
   }
 
   /**
@@ -40407,6 +40460,7 @@ class XMLEditor extends EventTarget {
   async hideMergeView() {
     if (this.#mergeViewExt) {
       // stop updating the buttons
+      // @ts-ignore
       clearInterval(this.#updateMergButtonsInterval);
       this.#updateMergButtonsInterval = null;
       // remove the merge view
@@ -40836,7 +40890,7 @@ class XMLEditor extends EventTarget {
     }
 
     // once we at least tried to synchronize, we can mark the editor as ready
-    this.dispatchEvent(new Event(XMLEditor.EVENT_XML_CHANGED));
+    this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_READY));
   }
 
   //
@@ -40851,7 +40905,7 @@ class XMLEditor extends EventTarget {
     this.#isReady = false;
     this.#readyPromise = this.#readyPromise ||
       /** @type {Promise<void>} */(new Promise(resolve => {
-      this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      this.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => {
         this.#isReady = true;
         this.#readyPromise = null;
         resolve();
@@ -40900,7 +40954,7 @@ class XMLEditor extends EventTarget {
       xml = xmlUrlOrString;
     }
     // remove xml declaration
-    xml = xml.replaceAll(/<\?xml.+?\?>/g,'').trim();
+    xml = xml.replaceAll(/<\?xml.+?\?>/g, '').trim();
     return xml
   }
 
@@ -40929,6 +40983,7 @@ class XMLEditor extends EventTarget {
           return Object.assign({ node, xpath }, range)
         } catch (e) {
           // add error message to range object in case we cannot determine node/xpath
+          // @ts-ignore
           range.diagnostic = e.message;
           return range
         }
@@ -40951,6 +41006,8 @@ class XMLEditor extends EventTarget {
     if (!update.docChanged) {
       return
     }
+
+    this.#isDirty = true;
 
     // inform the listeners
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_UPDATE, { detail: update }));
@@ -40986,7 +41043,7 @@ class XMLEditor extends EventTarget {
    * @param {Object} changes The changes to apply to the editor
    */
   async #waitForEditorUpdate(changes) {
-    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_XML_CHANGED, resolve, { once: true }));
+    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_EDITOR_READY, resolve, { once: true }));
     this.#view.dispatch({ changes });
     await promise;
   }
@@ -40999,6 +41056,7 @@ class XMLEditor extends EventTarget {
    */
   #parseErrorNode(errorNode) {
     const severity = "error";
+    // @ts-ignore
     const [message, _, location] = errorNode.firstChild.textContent.split("\n");
     const regex = /\d+/g;
     const matches = location.match(regex);
@@ -41008,8 +41066,9 @@ class XMLEditor extends EventTarget {
       const column = parseInt(matches[1], 10);
       ({ from, to } = this.#view.state.doc.line(line));
       from += column;
+      // @ts-ignore
       return { message, severity, line, column, from, to }
-    } 
+    }
     throw new Error(`Cannot parse line and column from error message: "${location}"`)
   }
 
@@ -41023,6 +41082,7 @@ class XMLEditor extends EventTarget {
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
       const diagnostic = this.#parseErrorNode(errorNode);
+      // @ts-ignore
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`);
       this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: diagnostic }));
       this.#xmlTree = null;
@@ -41442,7 +41502,7 @@ class NavXmlEditor extends XMLEditor {
     // Wait for editor to be ready
     if (!this.isReady()) {
       console.log("Editor not ready, deferring selection");
-      this.addEventListener(XMLEditor.EVENT_XML_CHANGED, () => {
+      this.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => {
         console.log("Editor is now ready");
         this.selectByIndex(index);
       }, { once: true });
@@ -41533,16 +41593,12 @@ const tagDataPath = '/config/tei.json';
  */
 const api$8 = new NavXmlEditor('codemirror-container');
 
-// add a editor "dirty" state 
-// (this is an ad-hoc solution, to be replaced with a more robust one)
-api$8.isDirty = false;
-
 /**
  * component plugin
  */
-const plugin$a = {
+const plugin$b = {
   name: "xmleditor",
-  install: install$9,
+  install: install$a,
   state: { update: update$3 }
 };
 
@@ -41550,8 +41606,8 @@ const plugin$a = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$9(state) {
-  api$b.debug(`Installing plugin "${plugin$a.name}"`);
+async function install$a(state) {
+  api$b.debug(`Installing plugin "${plugin$b.name}"`);
   // load autocomplete data
   try {
     const res = await fetch(tagDataPath);
@@ -41565,11 +41621,6 @@ async function install$9(state) {
   // selection => xpath state
   api$8.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
     api$8.whenReady().then(() => onSelectionChange(state));
-  });
-
-  // editor dirty state
-  api$8.addEventListener(XMLEditor.EVENT_XML_CHANGED,evt => {
-    api$8.isDirty = true;
   });
 }
 
@@ -41633,10 +41684,10 @@ const api$7 = {
   isDisabled
 };
 
-const plugin$9 = {
+const plugin$a = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
-  install: install$8,
+  install: install$9,
   validation: {
     validate,
     inProgress: inProgress$1
@@ -41657,8 +41708,8 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-async function install$8(state) {
-  api$b.debug(`Installing plugin "${plugin$9.name}"`);
+async function install$9(state) {
+  api$b.debug(`Installing plugin "${plugin$a.name}"`);
   // add the linter to the editor
   api$8.addLinter([
     linter(lintSource, { 
@@ -41943,6 +41994,7 @@ const api$6 = {
   getConfigValue,
   setConfigValue,
   syncFiles: syncFiles$1,
+  moveFiles,
   state: state$1
 };
 
@@ -41950,7 +42002,7 @@ const api$6 = {
 /**
  * component plugin
  */
-const plugin$8 = {
+const plugin$9 = {
   name
 };
 
@@ -41965,7 +42017,7 @@ const plugin$8 = {
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
-async function callApi(endpoint, method, body = null) {
+async function callApi(endpoint, method='GET', body = null) {
   try {
     const url = `${api_base_url}${endpoint}`;
     const options = {
@@ -42102,6 +42154,21 @@ async function syncFiles$1() {
   return await callApi('/files/sync')
 }
 
+/**
+ * Moves the given files to a new collection
+ * @param {string} pdfPath
+ * @param {string} xmlPath
+ * @param {string} destinationCollection
+ * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
+ */
+async function moveFiles(pdfPath, xmlPath, destinationCollection) {
+  return await callApi('/files/move', 'POST', {
+    pdf_path: pdfPath,
+    xml_path: xmlPath,
+    destination_collection: destinationCollection
+  });
+}
+
 
 /**
  * Retrieves a configuration value from the server
@@ -42145,6 +42212,8 @@ async function setConfigValue(key, value) {
  * @param {object} [options.headers={}] - Additional headers to include in the request.
  * @param {function} [options.onProgress] - A callback function to handle upload progress events.
  *    The function receives a progress event object as an argument.
+ * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
+ *    This is a string that will be set as the `accept` attribute of the file
  * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
  *    from the `fetch()` call, which must be an object, or rejects with an error.
  *    The object should contain the uploaded file's metadata, such as its path or ID.
@@ -42262,10 +42331,10 @@ const api$5 = {
 /**
  * component plugin
  */
-const plugin$7 = {
+const plugin$8 = {
   name: "file-selection",
 
-  install: install$7,
+  install: install$8,
   state: {
     update: update$2
   }
@@ -42288,9 +42357,9 @@ const fileSelectionControls = await createHtmlElements('file-selection.html');
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$7(state) {
+async function install$8(state) {
 
-  api$b.debug(`Installing plugin "${plugin$7.name}"`);
+  api$b.debug(`Installing plugin "${plugin$8.name}"`);
   
   // install controls on menubar
   ui$1.toolbar.self.append(...fileSelectionControls);
@@ -42538,10 +42607,10 @@ const api$4 = {
 /**
  * plugin object
  */
-const plugin$6 = {
+const plugin$7 = {
   name: "extraction",
   deps: ['services'],
-  install: install$6
+  install: install$7
 };
 
 //
@@ -42556,19 +42625,22 @@ const plugin$6 = {
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
-/** @type {extractionActionsComponent} */
+/** @type {SlButtonGroup & extractionActionsComponent} */
+// @ts-ignore
 const extractionBtnGroup = await createHtmlElements('extraction-buttons.html');
 
 
 /**
  * Extraction options dialog
  * @typedef {object} extractionOptionsDialog
+ * @property {SlDialog} self
  * @property {SlInput} doi 
  * @property {SlSelect} collectionName
  * @property {SlSelect} modelIndex 
  * @property {SlSelect} instructionIndex
  */
-/** @type {extractionOptionsDialog} */
+/** @type {extractionOptionsDialog & SlDialog} */
+// @ts-ignore
 const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
 
 //
@@ -42579,11 +42651,10 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$6(state) {
-  api$b.debug(`Installing plugin "${plugin$6.name}"`);
+async function install$7(state) {
+  api$b.debug(`Installing plugin "${plugin$7.name}"`);
 
   // install controls on menubar
-  console.warn(ui$1.toolbar.self.childElementCount);
   ui$1.toolbar.self.append(...extractionBtnGroup);
   document.body.append(optionsDialog);
   updateUi();
@@ -42744,9 +42815,7 @@ async function promptForExtractionOptions(options) {
     'instructions': instructions[parseInt(optionsDialog.instructionIndex.value)],
     'collection': optionsDialog.collectionName.value
   };
-
-  console.warn(formData);
-
+  
   if (formData.doi == "" || !isDoi(formData.doi)) {
     api$9.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
     return
@@ -42771,8 +42840,8 @@ function getDoiFromFilename(filename) {
       doi = decodeURIComponent(doi);
     } else {
       // custom decoding
-      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
       doi = doi.replaceAll(/__/g, '/');
+      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
     }
     console.debug("Extracted DOI from filename:", doi);
     if (isDoi(doi)) {
@@ -43578,10 +43647,10 @@ const api$3 = {
 /**
  * component plugin
  */
-const plugin$5 = {
+const plugin$6 = {
   name: "services",
   deps: ['file-selection'],
-  install: install$5,
+  install: install$6,
   state: { update: update$1 },
   validation: { inProgress }
 };
@@ -43647,8 +43716,8 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 /**
  * @param {ApplicationState} state
  */
-async function install$5(state) {
-  api$b.debug(`Installing plugin "${plugin$5.name}"`);
+async function install$6(state) {
+  api$b.debug(`Installing plugin "${plugin$6.name}"`);
 
   // install controls on menubar
   ui$1.toolbar.self.append(...documentActionButtons);
@@ -43667,7 +43736,7 @@ async function install$5(state) {
   da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
   // enable save button on dirty editor
   api$8.addEventListener(
-    XMLEditor.EVENT_XML_CHANGED,
+    XMLEditor.EVENT_EDITOR_READY,
     () => da.saveRevision.disabled = false
   );
 
@@ -43794,7 +43863,7 @@ async function validateXml() {
  * Saves the current XML content to the server, optionally as a new version
  * @param {string} filePath The path to the XML file on the server
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
- * @returns {Promise<{path:string}>} An object with a path property, containing the path to the saved version
+ * @returns {Promise<{path:string, status:string}>} An object with a path property, containing the path to the saved version
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
   api$b.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
@@ -44263,9 +44332,9 @@ const api$2 = {
 /**
  * component plugin
  */
-const plugin$4 = {
+const plugin$5 = {
   name: "floating-panel",
-  install: install$4,
+  install: install$5,
   state: { update }
 };
 
@@ -44310,8 +44379,8 @@ const pluginId = "floating-panel";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$4(state) {
-  api$b.debug(`Installing plugin "${plugin$4.name}"`);
+async function install$5(state) {
+  api$b.debug(`Installing plugin "${plugin$5.name}"`);
 
   document.body.append(...floatingPanelControls);
   updateUi();
@@ -44597,10 +44666,10 @@ const api$1 = {
 /**
  * Plugin object
  */
-const plugin$3 = {
+const plugin$4 = {
   name: "prompt-editor",
   deps: ['extraction'],
-  install: install$3
+  install: install$4
 };
 
 //
@@ -44635,8 +44704,8 @@ const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$3(state) {
-  api$b.debug(`Installing plugin "${plugin$3.name}"`);
+async function install$4(state) {
+  api$b.debug(`Installing plugin "${plugin$4.name}"`);
   
   // add prompt editor component
   document.body.append(promptEditorDialog);
@@ -44822,9 +44891,9 @@ const enhancements = [
 
 
 
-const plugin$2 = {
+const plugin$3 = {
   name: "tei-wizard",
-  install: install$2,
+  install: install$3,
   deps: ['services']
 };
 
@@ -44840,8 +44909,8 @@ const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 /**
  * @param {ApplicationState} state 
  */
-async function install$2(state) {
-  api$b.debug(`Installing plugin "${plugin$2.name}"`);
+async function install$3(state) {
+  api$b.debug(`Installing plugin "${plugin$3.name}"`);
 
   // button
   ui$1.toolbar.teiActions.self.append(teiWizardButton);
@@ -53308,9 +53377,9 @@ const api = {
 /**
  * Plugin object
  */
-const plugin$1 = {
+const plugin$2 = {
   name: "info",
-  install: install$1
+  install: install$2
 };
 
 //
@@ -53363,8 +53432,8 @@ const docsBasePath = "../../docs";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$1(state) {
-  api$b.debug(`Installing plugin "${plugin$1.name}"`);
+async function install$2(state) {
+  api$b.debug(`Installing plugin "${plugin$2.name}"`);
   // add the component html
   await createHtmlElements(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.self.hide());
@@ -53445,9 +53514,9 @@ function close() {
 /**
  * Plugin object
  */
-const plugin = {
+const plugin$1 = {
   name: "start",
-  install,
+  install: install$1,
   validation: {
     result: onValidationResult
   },
@@ -53468,8 +53537,8 @@ let spinner;
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-async function install(state) {
-  api$b.debug(`Installing plugin "${plugin.name}"`);
+async function install$1(state) {
+  api$b.debug(`Installing plugin "${plugin$1.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -53586,14 +53655,140 @@ async function onValidationResult(diagnostics) {
  * Save the current XML file if the editor is "dirty"
  */
 async function saveIfDirty() {
-  const filePath = ui$1.toolbar.xml.value;
-  if (filePath && api$8.getXmlTree() && api$8.isDirty) {
+  const filePath = String(ui$1.toolbar.xml.value);
+  if (filePath && api$8.getXmlTree() && api$8.isDirty()) {
     const result = await api$3.saveXml(filePath);
     if (result.status == "unchanged") {
       api$b.debug(`File has not changed`);
     } else {
       api$b.debug(`Saved file to ${result.path}`);
     }
+  }
+}
+
+/**
+ * This plugin allows moving files to a different collection.
+ */
+
+
+const plugin = {
+  name: "move-files",
+  deps: ['services'],
+  install
+};
+
+//
+// UI
+//
+
+const moveBtn = Object.assign(document.createElement('sl-button'), {
+  innerHTML: `<sl-icon name="folder-symlink"></sl-icon>`,
+  variant: 'default',
+  size: 'small',
+  name: 'moveFiles'
+});
+
+/**
+ * @typedef {object} MoveFilesDialog
+ * @property {SlDialog} self
+ * @property {SlSelect} collectionName
+ * @property {SlButton} newCollectionBtn
+ * @property {SlButton} cancel
+ * @property {SlButton} submit
+ */
+
+/** @type {SlDialog & MoveFilesDialog} */
+// @ts-ignore
+const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
+
+
+//
+// Implementation
+//
+
+/**
+ * @param {ApplicationState} state
+ */
+async function install(state) {
+  api$b.debug(`Installing plugin "${plugin.name}"`);
+
+  // install button & dialog
+  ui$1.toolbar.documentActions.self.append(moveBtn);
+  document.body.append(moveFilesDialog);
+  updateUi();
+
+  // add event listener
+  moveBtn.addEventListener('click', () => showMoveFilesDialog(state));
+  moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
+    const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
+    if (newCollectionName) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
+        api$9.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
+        return;
+      }
+      const option = Object.assign(document.createElement('sl-option'), {
+        value: newCollectionName,
+        textContent: newCollectionName.replaceAll("_", " ").trim()
+      });
+      moveFilesDialog.collectionName.append(option);
+      moveFilesDialog.collectionName.value = newCollectionName;
+    }
+  });
+}
+
+/**
+ * @param {ApplicationState} state
+ */
+async function showMoveFilesDialog(state) {
+  const { xmlPath, pdfPath } = state;
+  if (!xmlPath || !pdfPath) {
+    api$9.error("Cannot move files, PDF or XML path is missing.");
+    return;
+  }
+
+  const currentCollection = pdfPath.split('/')[3];
+
+  const collectionSelectBox = moveFilesDialog.collectionName;
+  collectionSelectBox.innerHTML = "";
+  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections || '[]').filter(c => c !== currentCollection);
+  for (const collection_name of collections) {
+    const option = Object.assign(document.createElement('sl-option'), {
+      value: collection_name,
+      textContent: collection_name.replaceAll("_", " ").trim()
+    });
+    collectionSelectBox.append(option);
+  }
+
+  try {
+    moveFilesDialog.show();
+    await new Promise((resolve, reject) => {
+      moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
+      moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
+      moveFilesDialog.self.addEventListener('sl-hide', reject, { once: true });
+    });
+  } catch (e) {
+    api$b.warn("User cancelled move files dialog");
+    return;
+  } finally {
+    moveFilesDialog.hide();
+  }
+
+  const destinationCollection = String(collectionSelectBox.value);
+  if (!destinationCollection) {
+    api$9.error("No collection selected.");
+    return;
+  }
+
+  ui$1.spinner.show('Moving files, please wait...');
+  try {
+    const { new_pdf_path, new_xml_path } = await api$6.moveFiles(pdfPath, xmlPath, destinationCollection);
+    await api$5.reload(state);
+    await api$3.load(state, { pdf: new_pdf_path, xml: new_xml_path });
+    api$9.success("Files moved successfully.");
+  } catch (error) {
+    api$9.error(`Error moving files: ${error.message}`);
+  } finally {
+    ui$1.spinner.hide();
   }
 }
 
@@ -53615,7 +53810,7 @@ async function saveIfDirty() {
  * @property {string|null} xmlPath - The path to the XML file in the editor
  * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
  * @property {string|null} xpath - The current xpath used to select a node in the editor
- * @property {bool} webdavEnabled - Wether on the server, we have a WebDAV backend
+ * @property {boolean} webdavEnabled - Wether on the server, we have a WebDAV backend
  */
 /**
  * @type{ApplicationState}
@@ -53628,14 +53823,15 @@ let state = {
   webdavEnabled: false
 };
 
-const plugins = [plugin$e, plugin$d, plugin$c,
-  plugin$b, plugin$a, plugin$8, plugin$7,
-  plugin$5, plugin$6, plugin$4, plugin$3,
-  plugin$2, plugin$9, plugin$1, plugin
+const plugins = [plugin$f, plugin$e, plugin$d,
+  plugin$c, plugin$b, plugin$9, plugin$8,
+  plugin$6, plugin$7, plugin$5, plugin$4,
+  plugin$3, plugin$a, plugin$2, plugin, plugin$1
 ];
 
 // register plugins
 for (const plugin of plugins) {
+  console.log(`Registering plugin '${plugin}'...`);
   pluginManager.register(plugin);
 }
 
