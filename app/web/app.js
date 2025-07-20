@@ -42470,7 +42470,7 @@ async function populateSelectboxes(state) {
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
     
-    await createHtmlElements(`<small>${collection_name}</small>`, ui$1.toolbar.pdf);
+    await createHtmlElements(`<small>${collection_name.replaceAll("_"," ").trim()}</small>`, ui$1.toolbar.pdf);
     
     // get a list of file data sorted by label
     const files = grouped_files[collection_name]
@@ -43770,9 +43770,10 @@ async function install$6(state) {
  */
 async function update$1(state) {
   //console.warn("update", plugin.name, state)
+  
   // disable deletion if there are no versions or gold is selected
   const da = ui$1.toolbar.documentActions;
-  da.deleteAll.disabled = ui$1.toolbar.pdf.childElementCount < 2; // at least on PDF must be present
+  da.deleteAll.disabled = api$5.fileData.length < 2; // at least on PDF must be present
   da.deleteAllVersions.disabled = ui$1.toolbar.xml.childElementCount < 2;
   da.deleteCurrentVersion.disabled = ui$1.toolbar.xml.value === ui$1.toolbar.xml.firstChild?.value;
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled;
@@ -53569,9 +53570,9 @@ async function start(state) {
 
     // get document paths from URL hash or from the first entry of the selectboxes
     // @ts-ignore
-    const defaultFile = ui$1.toolbar.pdf.firstChild.dataset;
-    const pdf = state.pdfPath || defaultFile.pdf;
-    const xml = state.xmlPath || defaultFile.xml;
+    const defaultFile = api$5.fileData.length && api$5.fileData[0];
+    const pdf = state.pdfPath || defaultFile?.pdf;
+    const xml = state.xmlPath || defaultFile?.xml;
     const diff = state.diffXmlPath;
 
     // lod the documents
@@ -53764,7 +53765,7 @@ async function showMoveFilesDialog(state) {
     await new Promise((resolve, reject) => {
       moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
       moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
-      moveFilesDialog.self.addEventListener('sl-hide', reject, { once: true });
+      moveFilesDialog.self.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
     api$b.warn("User cancelled move files dialog");
