@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
+import unicodedata
 from datetime import datetime, timezone
 from webdav4.fsspec import WebdavFileSystem
 
@@ -16,7 +17,7 @@ def _get_local_map(root_path: str) -> dict:
             if os.path.basename(filename).startswith('.'):
                 continue
             full_path = os.path.join(dirpath, filename)
-            relative_path = os.path.relpath(full_path, root_path)
+            relative_path = unicodedata.normalize('NFC', os.path.relpath(full_path, root_path))
             is_deleted = relative_path.endswith('.deleted')
             original_name = relative_path[:-len('.deleted')] if is_deleted else relative_path
 
@@ -48,7 +49,7 @@ def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
         if os.path.basename(details['name']).startswith('.') or details['type'] == 'directory':
             continue
 
-        relative_path = os.path.relpath(details['name'], root_path)
+        relative_path = unicodedata.normalize('NFC', os.path.relpath(details['name'], root_path))
         is_deleted = relative_path.endswith('.deleted')
         original_name = relative_path[:-len('.deleted')] if is_deleted else relative_path
         
