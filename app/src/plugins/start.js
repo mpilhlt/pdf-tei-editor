@@ -75,9 +75,9 @@ async function start(state) {
 
     // get document paths from URL hash or from the first entry of the selectboxes
     // @ts-ignore
-    const defaultFile = ui.toolbar.pdf.firstChild.dataset
-    const pdf = state.pdfPath || defaultFile.pdf
-    const xml = state.xmlPath || defaultFile.xml
+    const defaultFile = fileselection.fileData.length && fileselection.fileData[0]
+    const pdf = state.pdfPath || defaultFile?.pdf
+    const xml = state.xmlPath || defaultFile?.xml
     const diff = state.diffXmlPath
 
     // lod the documents

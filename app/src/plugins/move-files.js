@@ -106,7 +106,7 @@ async function showMoveFilesDialog(state) {
     await new Promise((resolve, reject) => {
       moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
       moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
-      moveFilesDialog.self.addEventListener('sl-hide', reject, { once: true });
+      moveFilesDialog.self.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
     logger.warn("User cancelled move files dialog");

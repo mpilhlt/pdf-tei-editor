@@ -7,3 +7,10 @@ __pycache__
 .python-version
 .DS_Store
 ._*
+
+# Ignore data files by default
+data/*
+# But not these specific directories/files
+!data/pdf/example/
+!data/tei/example/
+!data/versions/.gitignore

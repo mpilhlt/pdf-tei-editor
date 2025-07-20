@@ -1,7 +1,7 @@
 <sl-dialog name="dialog" label="Dialog" class="dialog-width" style="--width: 50vw;">
-  <div name="icon" style="font-size: 3rem; text-align: center;"></div>
-  <div>
-    <span name="message"></span>
-    <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
-  <div>
+  <div style="display: flex; align-items: center; gap: 1rem;">
+    <div name="icon" style="font-size: 2.5rem; display: flex; align-items: center;"></div>
+    <span name="message" style="flex-grow: 1;"></span>
+  </div>
+  <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
 </sl-dialog>

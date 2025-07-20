@@ -20,6 +20,10 @@ def _get_local_map(root_path: str) -> dict:
             is_deleted = relative_path.endswith('.deleted')
             original_name = relative_path[:-len('.deleted')] if is_deleted else relative_path
 
+            # Check for invalid state: both file and marker exist
+            if original_name in local_map:
+                raise ApiError(f"Invalid state: Both a file and its deletion marker exist for '{original_name}' locally.")
+
             try:
                 mtime_ts = os.path.getmtime(full_path)
                 mtime_utc = datetime.fromtimestamp(mtime_ts, tz=timezone.utc)
@@ -48,6 +52,10 @@ def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
         is_deleted = relative_path.endswith('.deleted')
         original_name = relative_path[:-len('.deleted')] if is_deleted else relative_path
         
+        # Check for invalid state: both file and marker exist
+        if original_name in remote_map:
+            raise ApiError(f"Invalid state: Both a file and its deletion marker exist for '{original_name}' on the remote server.")
+            
         mtime_utc = details.get('modified')
 
         remote_map[original_name] = {
@@ -94,6 +102,7 @@ def sync():
         logger.info("WebDAV sync not enabled")
         return {"error": "WebDAV sync is not enabled."}
     
+    keep_deleted_markers = os.environ.get('WEBDAV_KEEP_DELETED', '0') == '1'
     local_root = os.environ['WEBDAV_LOCAL_ROOT']
     remote_root = os.environ['WEBDAV_REMOTE_ROOT']
     logger = current_app.logger
@@ -152,11 +161,16 @@ def sync():
                             fs.rm(remote_path)
                             _upload_and_align(fs, local_path, remote_marker_path, logger)
                             summary['remote_deletes'] += 1
+                            if not keep_deleted_markers:
+                                logger.info(f"Removing local marker for '{path}' as per configuration.")
+                                os.remove(local_path)
+                                summary['local_markers_cleaned_up'] += 1
                         else: # Remote marker is newer, delete local file and replace with marker.
                             logger.info(f"Conflict: Remote marker for '{path}' is newer. Deleting local file.")
                             local_marker_path = os.path.join(local_root, marker_info['relative_path'])
                             os.remove(local_path)
-                            _download_and_align(fs, remote_path, local_marker_path, remote_info['mtime'], logger)
+                            if keep_deleted_markers:
+                                _download_and_align(fs, remote_path, local_marker_path, remote_info['mtime'], logger)
                             summary['local_deletes'] += 1
 
                 # No conflict: Both are files, compare timestamps for updates.
@@ -175,16 +189,26 @@ def sync():
 
             # Case 2: Exists only locally.
             elif local_info and not remote_info:
-                # If the local-only item is a deletion marker, it's redundant because the
-                # remote file is already gone. Clean it up.
+                # If the local-only item is a deletion marker...
                 if local_info['is_deleted']:
-                    logger.info(f"Cleaning up redundant local deletion marker for '{path}'.")
-                    os.remove(local_path)
-                    summary['local_markers_cleaned_up'] += 1
-                    # remove empty version directories
-                    container_dir = os.path.dirname(local_path)
-                    if 'versions' in container_dir.split(os.sep) and len(os.listdir(container_dir)) == 0:
-                        os.rmdir(container_dir)
+                    # If we keep markers, a local-only marker means the remote file was already
+                    # deleted, but we keep it for safety. A future garbage collection can remove it.
+                    if keep_deleted_markers:
+                        logger.info(f"Keeping redundant local deletion marker for '{path}' as per configuration.")
+                    # If we DON'T keep markers, this is an un-synced deletion. Upload the marker,
+                    # then remove it locally.
+                    else:
+                        logger.info(f"Uploading marker for '{path}' and removing locally as per configuration.")
+                        remote_marker_path = f"{remote_root.rstrip('/')}/{local_info['relative_path']}"
+                        _upload_and_align(fs, local_path, remote_marker_path, logger)
+                        summary['uploads'] += 1
+                        os.remove(local_path)
+                        summary['local_markers_cleaned_up'] += 1
+                        # remove empty version directories
+                        container_dir = os.path.dirname(local_path)
+                        if 'versions' in container_dir.split(os.sep) and len(os.listdir(container_dir)) == 0:
+                            logger.info(f"Removing empty version directory '{container_dir}' after marker upload.")
+                            os.rmdir(container_dir)    
                 # Otherwise, it's a new local file that needs to be uploaded.
                 else:
                     logger.info(f"File '{path}' exists only locally. Uploading.")
@@ -192,12 +216,25 @@ def sync():
                     _upload_and_align(fs, local_path, remote_path_dest, logger)
                     summary['uploads'] += 1
 
-            # Case 3: Exists only remotely, needs to be downloaded.
+            # Case 3: Exists only remotely, needs to be downloaded or handled.
             elif remote_info and not local_info:
-                logger.info(f"File '{path}' exists only remotely. Downloading.")
-                local_path_dest = os.path.join(local_root, remote_info['relative_path'])
-                _download_and_align(fs, remote_path, local_path_dest, remote_info['mtime'], logger)
-                summary['downloads'] += 1
+                # If the remote-only item is a deletion marker...
+                if remote_info['is_deleted']:
+                    # If we are keeping markers, we need to create one locally to match.
+                    if keep_deleted_markers:
+                        logger.info(f"Marker for '{path}' exists only remotely. Creating local marker.")
+                        local_path_dest = os.path.join(local_root, remote_info['relative_path'])
+                        _download_and_align(fs, remote_path, local_path_dest, remote_info['mtime'], logger)
+                        summary['downloads'] += 1
+                    # If we don't keep markers, we do nothing. The file is already gone locally.
+                    else:
+                        logger.info(f"Ignoring remote marker for '{path}' as per configuration.")
+                # Otherwise, it's a new remote file that needs to be downloaded.
+                else:
+                    logger.info(f"File '{path}' exists only remotely. Downloading.")
+                    local_path_dest = os.path.join(local_root, remote_info['relative_path'])
+                    _download_and_align(fs, remote_path, local_path_dest, remote_info['mtime'], logger)
+                    summary['downloads'] += 1
 
         except Exception as e:
             raise ApiError(f"Failed to sync path '{path}': {e}", exc_info=True)

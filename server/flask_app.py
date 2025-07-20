@@ -29,6 +29,8 @@ if os.environ.get('WEBDAV_ENABLED', 0) == "1":
     if not all(v in os.environ for v in required_vars):
         raise ValueError("Missing one or more required WEBDAV environment variables.")
     local_webdav_root = Path(os.path.realpath(os.environ.get('WEBDAV_LOCAL_ROOT'))) 
+    if not local_webdav_root.exists():
+        raise ValueError(f"WebDAV local root {local_webdav_root} does not exist.")
     
 # paths
 project_root = Path(__file__).resolve().parent.parent
@@ -65,6 +67,14 @@ app.config['PROJECT_ROOT'] = str(project_root)
 app.config['WEB_ROOT'] = str(web_root)
 print(f"Web files served from {web_root}")
 
+# WebDAV support
+if local_webdav_root is not None:
+    app.config['WEBDAV_ENABLED'] = True
+    print(f"WebDAV synchronization with {os.environ.get('WEBDAV_HOST')} enabled")
+else:
+    app.config['WEBDAV_ENABLED'] = False
+
+# Path to the data files
 app.config['DATA_ROOT'] = str(data_root)
 print(f"Data files served from {data_root}")
 

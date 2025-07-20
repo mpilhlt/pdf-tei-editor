@@ -6,7 +6,7 @@ from pathlib import Path
 from glob import glob
 
 from server.lib.decorators import handle_api_errors
-from server.lib.server_utils import ApiError, make_timestamp, get_data_file_path, safe_file_path
+from server.lib.server_utils import ApiError, make_timestamp, get_data_file_path, safe_file_path, remove_obsolete_marker_if_exists
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
@@ -61,6 +61,7 @@ def save():
         result['status'] = "new"
 
     file_path = os.path.join(data_root, file)
+    remove_obsolete_marker_if_exists(file_path, current_app.logger)
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     
     save = True
@@ -103,8 +104,10 @@ def delete():
         if os.path.exists(file_path):
             # delete file
             os.remove(file_path)
-            # add a delete marker 
-            Path(file_path + ".deleted").touch()
+            
+            if current_app.config['WEBDAV_ENABLED']: 
+                # add a delete marker 
+                Path(file_path + ".deleted").touch()
         else:
             raise ApiError(f"File {file_path} does not exist")
     return jsonify({"result": "ok"})
@@ -136,6 +139,7 @@ def create_version_from_upload():
     version = make_timestamp().replace(" ", "_").replace(":", "-")
     new_version_path = os.path.join("versions", version, file_id + ".xml")
     full_version_path = os.path.join(data_root, new_version_path)
+    remove_obsolete_marker_if_exists(full_version_path, current_app.logger)
     os.makedirs(os.path.dirname(full_version_path), exist_ok=True)
 
     with open(temp_filepath, "r", encoding="utf-8") as f_in:
@@ -143,7 +147,7 @@ def create_version_from_upload():
         # Remove XML declaration
         xml_content = re.sub(r'<\?xml.*\?>', '', xml_content).strip()
 
-    with open(new_version_path, "w", encoding="utf-8") as f_out:
+    with open(full_version_path, "w", encoding="utf-8") as f_out:
         f_out.write(xml_content)
 
     os.remove(temp_filepath)

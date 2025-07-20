@@ -13,7 +13,7 @@ import datetime
 
 
 from server.lib.decorators import handle_api_errors
-from server.lib.server_utils import ApiError, make_timestamp
+from server.lib.server_utils import ApiError, make_timestamp, remove_obsolete_marker_if_exists
 
 DOI_REGEX = r"^10.\d{4,9}/[-._;()/:A-Z0-9]+$"  # from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
 gemini_api_key = os.environ.get("GEMINI_API_KEY", "")  # set in .env
@@ -63,6 +63,7 @@ def extract():
 
     uplodad_pdf_path = Path(os.path.join(UPLOAD_DIR, pdf_filename))
     target_pdf_path = Path(os.path.join(target_dir, file_id + ".pdf"))
+    remove_obsolete_marker_if_exists(target_pdf_path, current_app.logger)
 
     # check for uploaded file
     if uplodad_pdf_path.exists():
@@ -87,6 +88,7 @@ def extract():
         version = make_timestamp().replace(" ", "_").replace(":", "-")
         final_tei_path = os.path.join(DATA_ROOT, "versions", version, file_id + ".tei.xml")
     
+    remove_obsolete_marker_if_exists(final_tei_path, current_app.logger)
     os.makedirs(os.path.dirname(final_tei_path), exist_ok=True)
 
     with open(final_tei_path, "w", encoding="utf-8") as f:

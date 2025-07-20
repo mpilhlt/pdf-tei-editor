@@ -171,7 +171,7 @@ async function populateSelectboxes(state) {
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
     
-    await createHtmlElements(`<small>${collection_name}</small>`, ui.toolbar.pdf)
+    await createHtmlElements(`<small>${collection_name.replaceAll("_"," ").trim()}</small>`, ui.toolbar.pdf)
     
     // get a list of file data sorted by label
     const files = grouped_files[collection_name]

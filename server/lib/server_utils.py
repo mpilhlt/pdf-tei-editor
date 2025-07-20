@@ -29,3 +29,12 @@ def safe_file_path(file_path):
     if not file_path.startswith("data/"):
         raise ApiError("Invalid file path") 
     return file_path.removeprefix('data/')
+
+def remove_obsolete_marker_if_exists(file_path, logger):
+    """
+    Checks for a .deleted marker corresponding to a file path and removes it if it exists.
+    """
+    marker_path = str(file_path) + ".deleted"
+    if os.path.exists(marker_path):
+        logger.info(f"Removing obsolete deletion marker at {marker_path} before writing file.")
+        os.remove(marker_path)

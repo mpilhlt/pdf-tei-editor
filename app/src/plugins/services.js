@@ -168,9 +168,10 @@ async function install(state) {
  */
 async function update(state) {
   //console.warn("update", plugin.name, state)
+  
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
-  da.deleteAll.disabled = ui.toolbar.pdf.childElementCount < 2 // at least on PDF must be present
+  da.deleteAll.disabled = fileselection.fileData.length < 2 // at least on PDF must be present
   da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2
   da.deleteCurrentVersion.disabled = ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
