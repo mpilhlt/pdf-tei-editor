@@ -43991,10 +43991,11 @@ async function deleteAll(state) {
 
   // @ts-ignore
   const filePathsToDelete = [ui$1.toolbar.pdf.value]
-    .concat(Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value));
+    .concat(Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value))
+    .concat(Array.from(ui$1.toolbar.diff.childNodes).map(option => option.value));
 
   if (filePathsToDelete.length > 0) {
-    const msg = `Are you sure you want to delete the current PDF and all XML versions? This cannot be undone.`;
+    const msg = `Are you sure you want to delete the following files: ${filePathsToDelete.join(", ")}? This cannot be undone.`;
     if (!confirm(msg)) return; // todo use dialog
   }
 
@@ -44011,7 +44012,7 @@ async function deleteAll(state) {
       pdf: api$5.fileData[0].pdf,
       xml: api$5.fileData[0].xml
     });
-    notify("All files have been deleted");
+    notify(`${filePathsToDelete.length} files have been deleted.`);
     syncFiles(state, false)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
@@ -44250,10 +44251,9 @@ async function onClickSyncBtn(state) {
     if (msg.length > 0) {
       notify(msg.join(", "));
       // something has changed, reload the file data
-      api$5.reload(state);
+      await api$5.reload(state);
     }
   }
-  api$5.reload(state);
 }
 
 
