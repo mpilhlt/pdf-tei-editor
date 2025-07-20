@@ -40218,7 +40218,7 @@ class XMLEditor extends EventTarget {
    * true if the content of the editor is different from the original XML document
    * @type {boolean}
    */
-  #isDirty = false
+  #editorIsDirty = false
 
   /**
    * The original XML document, when in merge view mode
@@ -40392,7 +40392,7 @@ class XMLEditor extends EventTarget {
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
-    this.#isDirty = false;
+    this.#editorIsDirty = false;
     await this.isReadyPromise();
     console.warn("XML document is loaded");
   }
@@ -40401,7 +40401,7 @@ class XMLEditor extends EventTarget {
    * Marks the editor as saved, i.e. no changes are pending. 
    */
   markAsSaved() {
-    this.#isDirty = false;
+    this.#editorIsDirty = false;
   }
 
   /**
@@ -40410,7 +40410,7 @@ class XMLEditor extends EventTarget {
    * @returns {boolean}
    */
   isDirty() {
-    return this.#isDirty;
+    return this.#editorIsDirty;
   }
 
   /**
@@ -41016,7 +41016,7 @@ class XMLEditor extends EventTarget {
       return
     }
 
-    this.#isDirty = true;
+    this.#editorIsDirty = true;
 
     // inform the listeners
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_UPDATE, { detail: update }));
@@ -43779,7 +43779,7 @@ async function install$6(state) {
  */
 async function update$1(state) {
   //console.warn("update", plugin.name, state)
-  
+
   // disable deletion if there are no versions or gold is selected
   const da = ui$1.toolbar.documentActions;
   da.deleteAll.disabled = api$5.fileData.length < 2; // at least on PDF must be present
@@ -43815,7 +43815,7 @@ async function inProgress(validationPromise) {
  * @param {Object} files An Object with one or more of the keys "xml" and "pdf"
  */
 async function load$1(state, { xml, pdf }) {
-  
+
   const promises = [];
 
   // PDF 
@@ -43828,7 +43828,7 @@ async function load$1(state, { xml, pdf }) {
   // XML
   if (xml) {
     removeMergeView(state);
-    await updateState(state, { xmlPath: null, diffXmlPath: null});
+    await updateState(state, { xmlPath: null, diffXmlPath: null });
     api$b.info("Loading XML: " + xml);
     promises.push(api$8.loadXml(xml));
   }
@@ -43837,7 +43837,7 @@ async function load$1(state, { xml, pdf }) {
   try {
     await Promise.all(promises);
   } catch (error) {
-    
+
     console.error(error.message);
     if (error.status === 404) {
       await api$5.reload(state);
@@ -43879,7 +43879,14 @@ async function saveXml(filePath, saveAsNewVersion = false) {
   if (!api$8.getXmlTree()) {
     throw new Error("No XML valid document in the editor")
   }
-  return await api$6.saveXml(api$8.getXML(), filePath, saveAsNewVersion)
+  try {
+    ui$1.statusBar.statusMessageXml.textContent = "Saving XML...";  
+    return await api$6.saveXml(api$8.getXML(), filePath, saveAsNewVersion)
+  } catch (e) {
+    throw e
+  } finally {
+    setTimeout( () => {ui$1.statusBar.statusMessageXml.textContent = "";}, 1000); // clear status message after 1 second 
+  }
 }
 
 /**
@@ -53625,7 +53632,11 @@ async function start(state) {
       if (api$7.isDisabled()) {
         let view = api$8.getView();
         let diagnostic = evt.detail;
-        view.dispatch(setDiagnostics(view.state, [diagnostic]));
+        try {
+          view.dispatch(setDiagnostics(view.state, [diagnostic]));
+        } catch (error) {
+          api$b.warn("Error setting diagnostics: " + error.message);
+        }
       }
     });
 
@@ -53636,6 +53647,7 @@ async function start(state) {
       } 
     });
 
+    // xml vaidation events
     api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
       ui$1.statusBar.statusMessageXml.textContent = "Invalid XML";
       //ui.statusBar.statusMessageXml.classList.add("error")
