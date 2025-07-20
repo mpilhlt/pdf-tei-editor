@@ -2,15 +2,8 @@
   <!-- Document button group -->
   <sl-button-group label="Document" name="documentActions">
 
-    <!-- document revision -->
-    <sl-tooltip content="Save document revision">
-      <sl-button name="saveRevision" size="small" disabled>
-        <sl-icon name="save"></sl-icon>
-      </sl-button>
-    </sl-tooltip>
-
     <!-- create new version -->
-    <sl-tooltip content="Duplicate current document to make changes">
+    <sl-tooltip content="Duplicate current document to make changes to a new version">
       <sl-button name="createNewVersion" size="small" disabled>
         <sl-icon name="copy"></sl-icon>
       </sl-button>
@@ -50,6 +43,13 @@
         </sl-menu>
       </sl-dropdown>
     </sl-button-group>
+
+    <!-- document revision -->
+    <sl-tooltip content="Save document revision">
+      <sl-button name="saveRevision" size="small" disabled>
+        <sl-icon name="save"></sl-icon>
+      </sl-button>
+    </sl-tooltip>    
     
   </sl-button-group>
 

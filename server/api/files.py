@@ -160,7 +160,6 @@ def move_files():
     """
     Moves a pair of PDF and XML files to a different collection.
     """
-    data_root = current_app.config["DATA_ROOT"]
     data = request.get_json()
     pdf_path_str = data.get("pdf_path")
     xml_path_str = data.get("xml_path")
@@ -169,33 +168,43 @@ def move_files():
     if not all([pdf_path_str, xml_path_str, destination_collection]):
         raise ApiError("Missing parameters")
 
-    pdf_path = Path(get_data_file_path(pdf_path_str))
-    xml_path = Path(get_data_file_path(xml_path_str))
-
-    if not pdf_path.exists() or not xml_path.exists():
-        raise ApiError("One or both files do not exist.")
-
-    # Create destination directories
-    new_pdf_dir = Path(data_root) / "pdf" / destination_collection
-    new_xml_dir = Path(data_root) / "tei" / destination_collection
-    os.makedirs(new_pdf_dir, exist_ok=True)
-    os.makedirs(new_xml_dir, exist_ok=True)
-
-    # New paths
-    new_pdf_path = new_pdf_dir / pdf_path.name
-    new_xml_path = new_xml_dir / xml_path.name
-
-    # Move files
-    os.rename(pdf_path, new_pdf_path)
-    os.rename(xml_path, new_xml_path)
-
-    current_app.logger.info(f"Moved {pdf_path} to {new_pdf_path}")
-    current_app.logger.info(f"Moved {xml_path} to {new_xml_path}")
+    new_pdf_path = _move_file(pdf_path_str, "pdf", destination_collection)
+    new_xml_path = _move_file(xml_path_str, "tei", destination_collection)
 
     return jsonify({
-        "new_pdf_path": f"/data/pdf/{destination_collection}/{pdf_path.name}",
-        "new_xml_path": f"/data/tei/{destination_collection}/{xml_path.name}"
+        "new_pdf_path": new_pdf_path,
+        "new_xml_path": new_xml_path
     })
+
+
+def _move_file(file_path_str, file_type, destination_collection):
+    """
+    Helper function to move a single file and create a .deleted marker.
+    """
+    data_root = current_app.config["DATA_ROOT"]
+    
+    original_path = Path(get_data_file_path(file_path_str))
+    if not original_path.exists():
+        raise ApiError(f"File {original_path} does not exist.")
+
+    # Create destination directory
+    new_dir = Path(data_root) / file_type / destination_collection
+    os.makedirs(new_dir, exist_ok=True)
+
+    # New path
+    new_path = new_dir / original_path.name
+
+    # Move file
+    os.rename(original_path, new_path)
+    current_app.logger.info(f"Moved {original_path} to {new_path}")
+
+    # Create .deleted marker
+    if current_app.config['WEBDAV_ENABLED']:
+        remove_obsolete_marker_if_exists(new_path, current_app.logger)
+        Path(str(original_path) + ".deleted").touch()
+        current_app.logger.info(f"Created .deleted marker for {original_path}")
+
+    return f"/data/{file_type}/{destination_collection}/{original_path.name}"
 
 # helper functions
 
