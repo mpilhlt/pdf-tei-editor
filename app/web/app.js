@@ -10808,6 +10808,7 @@ SlDivider.define("sl-divider");
  * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
  * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
  * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
+ * @property {statusBarComponent} statusBar - A status bar to display messages about the current state of the application
  */
 
 /**
@@ -10820,6 +10821,14 @@ SlDivider.define("sl-divider");
  * @property {documentActionsComponent} documentActions 
  * @property {teiServicesComponents} teiActions
  * @property {extractionActionsComponent} extractionActions
+ */
+
+/**
+ * The status bar with messages about the current state of the application
+ * @typedef {object} statusBarComponent
+ * @property {HTMLDivElement} self - The status bar element
+ * @property {HTMLDivElement} statusMessagePdf - The status message for the PDF viewer
+ * @property {HTMLDivElement} statusMessageXml - The status message for the XML editor 
  */
 
 /**
@@ -41089,7 +41098,7 @@ class XMLEditor extends EventTarget {
       return false;
     }
     console.log("Document was updated and is well-formed.");
-    this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED));
+    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, { detail: null }));
     this.#xmlTree = doc;
 
     // the syntax tree construction is async, so we need to wait for it to complete
@@ -53625,6 +53634,15 @@ async function start(state) {
       if (api$7.isDisabled()) {
         saveIfDirty();
       } 
+    });
+
+    api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+      ui$1.statusBar.statusMessageXml.textContent = "Invalid XML";
+      //ui.statusBar.statusMessageXml.classList.add("error")
+    });
+    api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+      //ui.statusBar.statusMessageXml.classList.remove("error")
+      ui$1.statusBar.statusMessageXml.textContent = "";
     });
 
     // finish initialization
