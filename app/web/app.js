@@ -42393,7 +42393,7 @@ async function install$8(state) {
  * @param {ApplicationState} state 
  */
 async function update$2(state) {
-//console.warn("update", plugin.name, state)
+  //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
   ui$1.toolbar.pdf.value = state.pdfPath || "";
   ui$1.toolbar.xml.value = state.xmlPath || "";
@@ -43807,21 +43807,20 @@ async function inProgress(validationPromise) {
  */
 async function load$1(state, { xml, pdf }) {
   
-  await updateState(state, { pdfPath: null,  xmlPath: null, diffXmlPath: null});
-
   const promises = [];
 
   // PDF 
   if (pdf) {
+    await updateState(state, { pdfPath: null, xmlPath: null, diffXmlPath: null });
     api$b.info("Loading PDF: " + pdf);
     promises.push(pdfViewer.load(pdf));
   }
 
   // XML
   if (xml) {
-    api$b.info("Loading XML: " + xml);
     removeMergeView(state);
-    state.diffXmlPath = null;
+    await updateState(state, { xmlPath: null, diffXmlPath: null});
+    api$b.info("Loading XML: " + xml);
     promises.push(api$8.loadXml(xml));
   }
 
