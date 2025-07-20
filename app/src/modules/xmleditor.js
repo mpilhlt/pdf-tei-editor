@@ -983,7 +983,7 @@ export class XMLEditor extends EventTarget {
       return false;
     }
     console.log("Document was updated and is well-formed.")
-    this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED))
+    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, { detail: null }))
     this.#xmlTree = doc;
 
     // the syntax tree construction is async, so we need to wait for it to complete

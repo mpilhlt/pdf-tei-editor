@@ -93,9 +93,15 @@ iframe {
 }
 
 #status-bar {
-  height: 15px;
+  height: 20px;
   color: var(--sl-color-gray-500);
   flex-shrink: 0; /* Prevent status bar from shrinking */
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px;
+  border-top: 1px solid #ccc;
 }
 
 /* Shoelace library */
@@ -166,4 +172,29 @@ sl-menu-item::part(label) {
 
 sl-button-group[label] {
   position: relative; /* To contain the absolute positioning of the :before pseudo-element */
+}
+
+
+
+#status-message-pdf,
+#status-message-xml {
+  color: var(--sl-color-gray-500);
+  font-size: var(--sl-font-size-x-small);
+  white-space: nowrap; /* Prevent text from wrapping */
+  overflow: hidden; /* Hide overflow text */
+  align-items: center; /* Center align text vertically */
+  text-overflow: ellipsis; /* Add ellipsis for overflow text */
+  max-width: 50%;
+}
+
+#status-message-pdf {
+  text-align: left;
+}
+
+#status-message-xml {
+  text-align: right;
+}
+
+.error {
+  color: var(--sl-color-danger-500);
 }

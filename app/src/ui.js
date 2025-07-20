@@ -50,6 +50,7 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
  * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
  * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
  * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
+ * @property {statusBarComponent} statusBar - A status bar to display messages about the current state of the application
  */
 
 /**
@@ -62,6 +63,14 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
  * @property {documentActionsComponent} documentActions 
  * @property {teiServicesComponents} teiActions
  * @property {extractionActionsComponent} extractionActions
+ */
+
+/**
+ * The status bar with messages about the current state of the application
+ * @typedef {object} statusBarComponent
+ * @property {HTMLDivElement} self - The status bar element
+ * @property {HTMLDivElement} statusMessagePdf - The status message for the PDF viewer
+ * @property {HTMLDivElement} statusMessageXml - The status message for the XML editor 
  */
 
 /**

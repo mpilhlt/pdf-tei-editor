@@ -133,6 +133,15 @@ async function start(state) {
       } 
     })
 
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+      ui.statusBar.statusMessageXml.textContent = "Invalid XML"
+      //ui.statusBar.statusMessageXml.classList.add("error")
+    })
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+      //ui.statusBar.statusMessageXml.classList.remove("error")
+      ui.statusBar.statusMessageXml.textContent = ""
+    })
+
     // finish initialization
     ui.spinner.hide()
     floatingPanel.show()

@@ -1,4 +1,4 @@
 #!/bin/bash
 
 echo "Downloading PDFJS..." 
-./download-pdfjs
+./bin/download-pdfjs
