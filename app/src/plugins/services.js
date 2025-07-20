@@ -168,7 +168,7 @@ async function install(state) {
  */
 async function update(state) {
   //console.warn("update", plugin.name, state)
-  
+
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
   da.deleteAll.disabled = fileselection.fileData.length < 2 // at least on PDF must be present
@@ -204,7 +204,7 @@ async function inProgress(validationPromise) {
  * @param {Object} files An Object with one or more of the keys "xml" and "pdf"
  */
 async function load(state, { xml, pdf }) {
-  
+
   const promises = []
 
   // PDF 
@@ -217,7 +217,7 @@ async function load(state, { xml, pdf }) {
   // XML
   if (xml) {
     removeMergeView(state)
-    await updateState(state, { xmlPath: null, diffXmlPath: null})
+    await updateState(state, { xmlPath: null, diffXmlPath: null })
     logger.info("Loading XML: " + xml)
     promises.push(xmlEditor.loadXml(xml))
   }
@@ -226,7 +226,7 @@ async function load(state, { xml, pdf }) {
   try {
     await Promise.all(promises)
   } catch (error) {
-    
+
     console.error(error.message)
     if (error.status === 404) {
       await fileselection.reload(state)
@@ -268,7 +268,14 @@ async function saveXml(filePath, saveAsNewVersion = false) {
   if (!xmlEditor.getXmlTree()) {
     throw new Error("No XML valid document in the editor")
   }
-  return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
+  try {
+    ui.statusBar.statusMessageXml.textContent = "Saving XML..."  
+    return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
+  } catch (e) {
+    throw e
+  } finally {
+    setTimeout( () => {ui.statusBar.statusMessageXml.textContent = ""}, 1000) // clear status message after 1 second 
+  }
 }
 
 /**

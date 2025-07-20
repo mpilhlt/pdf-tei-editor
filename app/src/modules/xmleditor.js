@@ -102,7 +102,7 @@ export class XMLEditor extends EventTarget {
    * true if the content of the editor is different from the original XML document
    * @type {boolean}
    */
-  #isDirty = false
+  #editorIsDirty = false
 
   /**
    * The original XML document, when in merge view mode
@@ -276,7 +276,7 @@ export class XMLEditor extends EventTarget {
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
-    this.#isDirty = false;
+    this.#editorIsDirty = false;
     await this.isReadyPromise();
     console.warn("XML document is loaded")
   }
@@ -285,7 +285,7 @@ export class XMLEditor extends EventTarget {
    * Marks the editor as saved, i.e. no changes are pending. 
    */
   markAsSaved() {
-    this.#isDirty = false;
+    this.#editorIsDirty = false;
   }
 
   /**
@@ -294,7 +294,7 @@ export class XMLEditor extends EventTarget {
    * @returns {boolean}
    */
   isDirty() {
-    return this.#isDirty;
+    return this.#editorIsDirty;
   }
 
   /**
@@ -901,7 +901,7 @@ export class XMLEditor extends EventTarget {
       return
     }
 
-    this.#isDirty = true;
+    this.#editorIsDirty = true;
 
     // inform the listeners
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_UPDATE, { detail: update }))

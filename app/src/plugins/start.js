@@ -122,7 +122,11 @@ async function start(state) {
       if (validation.isDisabled()) {
         let view = xmlEditor.getView()
         let diagnostic = evt.detail
-        view.dispatch(setDiagnostics(view.state, [diagnostic]))
+        try {
+          view.dispatch(setDiagnostics(view.state, [diagnostic]))
+        } catch (error) {
+          logger.warn("Error setting diagnostics: " + error.message)
+        }
       }
     })
 
@@ -133,6 +137,7 @@ async function start(state) {
       } 
     })
 
+    // xml vaidation events
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
       ui.statusBar.statusMessageXml.textContent = "Invalid XML"
       //ui.statusBar.statusMessageXml.classList.add("error")
