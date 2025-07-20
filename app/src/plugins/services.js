@@ -205,21 +205,20 @@ async function inProgress(validationPromise) {
  */
 async function load(state, { xml, pdf }) {
   
-  await updateState(state, { pdfPath: null,  xmlPath: null, diffXmlPath: null})
-
   const promises = []
 
   // PDF 
   if (pdf) {
+    await updateState(state, { pdfPath: null, xmlPath: null, diffXmlPath: null })
     logger.info("Loading PDF: " + pdf)
     promises.push(pdfViewer.load(pdf))
   }
 
   // XML
   if (xml) {
-    logger.info("Loading XML: " + xml)
     removeMergeView(state)
-    state.diffXmlPath = null
+    await updateState(state, { xmlPath: null, diffXmlPath: null})
+    logger.info("Loading XML: " + xml)
     promises.push(xmlEditor.loadXml(xml))
   }
 

@@ -94,7 +94,7 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
-//console.warn("update", plugin.name, state)
+  //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
   ui.toolbar.pdf.value = state.pdfPath || ""
   ui.toolbar.xml.value = state.xmlPath || ""
