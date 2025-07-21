@@ -8,7 +8,7 @@
  * @import { Diagnostic } from '@codemirror/lint'
  */
 import ui from '../ui.js'
-import { updateState, logger, services, dialog, validation, floatingPanel, urlHash, xmlEditor, client, fileselection } from '../app.js'
+import { updateState, logger, services, dialog, validation, floatingPanel, urlHash, xmlEditor, fileselection } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -118,9 +118,10 @@ async function start(state) {
     }
 
     // manually show diagnostics if validation is disabled
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
       if (validation.isDisabled()) {
         let view = xmlEditor.getView()
+        // @ts-ignore
         let diagnostic = evt.detail
         try {
           view.dispatch(setDiagnostics(view.state, [diagnostic]))
@@ -140,10 +141,12 @@ async function start(state) {
     // xml vaidation events
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
       ui.statusBar.statusMessageXml.textContent = "Invalid XML"
-      //ui.statusBar.statusMessageXml.classList.add("error")
+      // @ts-ignore
+      ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
     })
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
-      //ui.statusBar.statusMessageXml.classList.remove("error")
+      // @ts-ignore
+      ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
       ui.statusBar.statusMessageXml.textContent = ""
     })
 
@@ -176,6 +179,14 @@ async function onValidationResult(diagnostics) {
  */
 async function saveIfDirty() {
   const filePath = String(ui.toolbar.xml.value)
+
+  // track weird bug where the xmlEditor is not initialized yet
+  if (!xmlEditor || !xmlEditor.isDirty) {
+    logger.warn("XML Editor is not initialized yet, cannot save.")
+    console.log(xmlEditor)
+    return
+  }
+
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
     const result = await services.saveXml(filePath)
     if (result.status == "unchanged") {

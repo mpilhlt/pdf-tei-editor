@@ -195,6 +195,6 @@ sl-button-group[label] {
   text-align: right;
 }
 
-.error {
-  color: var(--sl-color-danger-500);
+.invalid-xml {
+  background-color: #ff000030;
 }
