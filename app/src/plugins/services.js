@@ -546,7 +546,7 @@ async function onClickSaveRevisionButton(state) {
   const respStmt = {
     persId: dialog.persId.value,
     persName: dialog.persName.value,
-    resp: "Contributor"
+    resp: "Annotator"
   }
 
   /** @type {RevisionChange} */
@@ -600,7 +600,7 @@ async function onClickCreateNewVersionButton(state) {
   const respStmt = {
     persId: dialog.persId.value,
     persName: dialog.persName.value,
-    resp: "Contributor"
+    resp: "Annotator"
   }
 
   /** @type {Edition} */

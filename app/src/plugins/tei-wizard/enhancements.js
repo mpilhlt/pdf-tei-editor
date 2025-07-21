@@ -7,6 +7,7 @@
  */
 
 import prettyPrintXml from './enhancements/pretty-print-xml.js';
+import removeBlankLines from './enhancements/remove-blank-lines.js';
 
 /**
  * @typedef {Object} Enhancement
@@ -17,7 +18,8 @@ import prettyPrintXml from './enhancements/pretty-print-xml.js';
 
 /** @type {Enhancement[]} */
 const enhancements = [
-  prettyPrintXml
+  prettyPrintXml,
+//  removeBlankLines // doesn't work as expected, needs more testing
 ];
 
 export default enhancements;
