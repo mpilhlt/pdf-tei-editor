@@ -198,3 +198,7 @@ sl-button-group[label] {
 .invalid-xml {
   background-color: #ff000030;
 }
+
+.editor-readonly {
+  background-color: #7cc5efba;
+}

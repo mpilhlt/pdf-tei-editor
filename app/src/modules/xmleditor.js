@@ -25,48 +25,22 @@ import { $$ } from './browser-utils.js';
  */
 export class XMLEditor extends EventTarget {
 
-  /**
-   * @event SectionChangedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  // events
+
+  /** dispatched a {CustomEvent} with a {RangeWithNode} detail when the selection changes */
   static EVENT_SELECTION_CHANGED = "selectionChanged";
-
-  /**
-   * @event XmlChangedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatches an {Event} object when the editor is ready for user interaction */
   static EVENT_EDITOR_READY = "editorReady";
-
-  /**
-   * @event EditorUpdateEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatched with a CustomEvent with an {Update} detail when the editor content was changed*/
   static EVENT_EDITOR_UPDATE = "editorUpdate"
-
-  /**
-   * @event EditorUpdateDelayedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatched with a CustomEvent with an {Update} object one second after the editor content was last changed */
   static EVENT_EDITOR_DELAYED_UPDATE = "editorUpdateDelayed"
-
-  /**
-   * @event EditorXmlNotWellFormedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatches an {Event} object when the editor content is well-formed accoring to XML syntax */
   static EVENT_EDITOR_XML_NOT_WELL_FORMED = "editorXmlNotWellFormed"
-
-
-  /**
-   * @event EditorXmlWellFormedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatches an {Event} object when the editor content is not well-formed accoring to XML syntax */
   static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
+  /** dispatched with a CustomEvent with a boolean detail which is true if the editor is set to read-only mode */
+  static EVENT_EDITOR_READONLY = "editorReadOnly"
 
   // private members
 
@@ -104,6 +78,13 @@ export class XMLEditor extends EventTarget {
    */
   #editorIsDirty = false
 
+
+  /**
+   * true if the editor is read-only
+   * @type {boolean}
+   */
+  #editorIsReadOnly = false 
+
   /**
    * The original XML document, when in merge view mode
    * @type {string} 
@@ -131,6 +112,7 @@ export class XMLEditor extends EventTarget {
   #lineWrappingCompartment = new Compartment()
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
+  #readOnlyCompartment = new Compartment()
 
 
   /**
@@ -161,6 +143,7 @@ export class XMLEditor extends EventTarget {
       keymap.of([indentWithTab]),
       this.#tabSizeCompartment.of([]),
       this.#indentationCompartment.of([]),
+      this.#readOnlyCompartment.of([]),
     ];
 
     if (tagData) {
@@ -255,6 +238,27 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
+   * Sets the editor to read-only mode, i.e. the user cannot edit the content of the editor.
+   * @param {Boolean} value 
+   */
+  setReadOnly(value) { 
+    this.#editorIsReadOnly = Boolean(value)
+    this.#view.dispatch({
+      effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
+    });
+    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_READONLY, { detail: this.#editorIsReadOnly }))
+  }
+
+
+  /**
+   * Returns true if the editor is read-only, i.e. the user cannot edit the content of the editor.
+   * @returns {boolean} 
+   */
+  isReadOnly() {  
+    return this.#editorIsReadOnly
+  }
+
+  /**
    * Returns the current state of the editor. If false await the promise returned from 
    * isReadyPromise()
    * @returns {boolean} - Returns true if the editor is ready and the XML document is loaded
@@ -292,16 +296,15 @@ export class XMLEditor extends EventTarget {
     this.#markAsNotReady()
 
     // fetch xml if path 
-    console.warn("Loading XML")
+    //console.warn("Loading XML")
     const xml = await this.#fetchXml(xmlPathOrString);
 
     // detect the indentation mode
     const indentUnit = detectXmlIndentation(xml);
-    console.warn("Detected indentation unit: ", JSON.stringify(indentUnit))
+    console.log("Detected indentation unit: ", JSON.stringify(indentUnit))
     this.configureIntenation(indentUnit, 4); // default tab size of 4 spaces, needs to be configurable
     
     // display xml in editor, this triggers the update handlers
-    console.warn("XML was loaded, dispatch to editor")
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0)
@@ -309,13 +312,12 @@ export class XMLEditor extends EventTarget {
     this.#documentVersion = 0;
     this.#editorIsDirty = false;
     await this.isReadyPromise();
-    console.warn("XML document is loaded")
   }
 
   /**
-   * Marks the editor as saved, i.e. no changes are pending. 
+   * Marks the editor as clean, i.e. no changes are pending. 
    */
-  markAsSaved() {
+  markAsClean() {
     this.#editorIsDirty = false;
   }
 

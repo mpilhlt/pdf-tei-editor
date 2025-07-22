@@ -37,7 +37,11 @@ const api = {
   setConfigValue,
   syncFiles,
   moveFiles,
-  state
+  state,
+  sendHeartbeat,
+  checkLock,
+  releaseLock,
+  getAllLocks
 }
 
 
@@ -245,6 +249,47 @@ async function setConfigValue(key, value) {
   return response;
 }
 
+/**
+ * Sends a heartbeat to the server to keep the file lock alive.
+ * @param {string} filePath The file path to send the heartbeat for
+ * @returns {Promise<{status:string}>} The response from the server 
+ * @throws {Error} If the file path is not provided or if the heartbeat fails
+ */
+async function sendHeartbeat(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required for heartbeat");
+  }
+  return await callApi('/files/heartbeat', 'POST', { file_path: filePath });
+}
+
+/**
+ * Checks if a file is locked by another user.
+ * @param {string} filePath The file path to check the lock for
+ * @returns {Promise<{is_locked: boolean}>} The response from the server indicating if the file is locked
+ * @throws {Error} If the file path is not provided or if the lock check fails
+ */
+async function checkLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to check lock");
+  }
+  return await callApi('/files/check_lock', 'POST', { file_path: filePath });
+}
+
+async function releaseLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to release lock");
+  }
+  return await callApi('/files/release_lock', 'POST', { file_path: filePath });
+}
+
+
+/**
+ * Retrieves an object mapping all currently locked files to the session id that locked them.
+ * @returns {Promise<{[string]:Number}>} An object mapping locked file paths to session ids 
+ */
+async function getAllLocks() {
+  return await callApi('/files/locks', 'GET');
+} 
 
 /**
  * Uploads a file selected by the user to a specified URL using `fetch()`.

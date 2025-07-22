@@ -22,18 +22,21 @@ def file_list():
     data_root = current_app.config["DATA_ROOT"]
     active_locks = get_all_active_locks()
     current_session_id = current_app.config['SESSION_ID']
+    webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
 
     files_data = create_file_data(data_root)
     for idx, data in enumerate(files_data):
-        # Add lock information to each file version
-        if "versions" in data:
-            for version in data["versions"]:
-                if version['path'] in active_locks and active_locks[version['path']] != current_session_id:
-                    version['is_locked'] = True
-                else:
-                    version['is_locked'] = False
+        
+        if webdav_enabled:
+            # Add lock information to each file version
+            if "versions" in data:
+                for version in data["versions"]:
+                    version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != current_session_id
 
-        file_path = data.get("xml", None)
+            file_path = data.get("xml", None)
+            # Add lock information for the main XML file
+            data['is_locked'] = file_path in active_locks and active_locks[file_path] != current_session_id
+        
         if file_path is not None:
             metadata = get_tei_metadata(get_data_file_path(file_path))
             if metadata is None:
@@ -66,8 +69,9 @@ def save():
     """
     data = request.get_json()
     xml_string = data.get("xml_string")
-    file_path_rel = data.get("file_path") # The path relative to /data/
+    file_path_rel = data.get("file_path") 
     save_as_new_version = data.get("new_version", False)
+    webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
 
     if not xml_string or not file_path_rel:
         raise ApiError("XML content and file path are required.")
@@ -75,10 +79,12 @@ def save():
     # The file path used for locking must be consistent
     lock_file_path = file_path_rel
 
-    if not acquire_lock(lock_file_path):
-        # Use a specific error message for the frontend to catch
-        raise ApiError("Failed to acquire lock. The file may be edited by another user.", status_code=423)
-
+    if webdav_enabled:
+        if not acquire_lock(lock_file_path):
+            # Use a specific error message for the frontend to catch
+            raise ApiError("Failed to acquire lock. The file may be edited by another user.", status_code=423)
+        current_app.logger.info(f"Acquired lock for {lock_file_path}")
+    
     try:
         data_root = current_app.config["DATA_ROOT"]
         
@@ -356,6 +362,21 @@ def check_lock_route():
         raise ApiError("File path is required.")
     return jsonify(check_lock(file_path))
 
+@bp.route("/release_lock", methods=["POST"])
+@handle_api_errors
+def release_lock_route():
+    """Releases the lock for a given file path."""
+    data = request.get_json()
+    file_path = data.get("file_path")
+    if not file_path:
+        raise ApiError("File path is required.")
+    
+    if release_lock(file_path):
+        return jsonify({"status": "lock_released"})
+    else:
+        raise ApiError("Failed to release lock. It may have been acquired by another session.", status_code=409)    
+
+
 @bp.route("/heartbeat", methods=["POST"])
 @handle_api_errors
 def heartbeat():
@@ -375,3 +396,11 @@ def heartbeat():
     else:
         # This would happen if the lock was lost or taken by another user.
         raise ApiError("Failed to refresh lock. It may have been acquired by another session.", status_code=409)
+    
+@bp.route("/locks", methods=["GET"])
+@handle_api_errors
+def get_all_locks_route():  
+    """Fetches all active locks."""
+    active_locks = get_all_active_locks()
+    return jsonify(active_locks)
+

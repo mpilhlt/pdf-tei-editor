@@ -2,16 +2,23 @@ import datetime
 import os
 from flask import current_app
 import uuid
-from webdav4.fsspec import WebdavFileSystem
-from webdav4.client import Client
+from webdav4.client import Client, ResourceAlreadyExists
 from datetime import datetime, timezone, timedelta
 import io
+import requests
 
 class ApiError(RuntimeError):
     """
     Custom exception class for API-specific errors.
+
+    Attributes:
+        message -- explanation of the error
+        status_code -- the HTTP (or other) status code associated with the error
+        
     """
-    pass
+    def __init__(self, message, status_code=500):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def make_timestamp():
@@ -27,11 +34,13 @@ def safe_file_path(file_path):
     """
     Removes any non-alphabetic leading characters for safety, and strips the "/data" prefix
     """
+    if not file_path:
+        raise ApiError("Invalid file path: path is empty", status_code=400)
     
-    while not file_path[0].isalpha():
+    while len(file_path) > 0 and not file_path[0].isalpha():
         file_path = file_path[1:]
     if not file_path.startswith("data/"):
-        raise ApiError("Invalid file path") 
+        raise ApiError(f"Invalid file path: {file_path}", status_code=400) 
     return file_path.removeprefix('data/')
 
 def remove_obsolete_marker_if_exists(file_path, logger):
@@ -58,6 +67,13 @@ def get_webdav_client():
         auth=(os.environ['WEBDAV_USER'], os.environ['WEBDAV_PASSWORD'])
     )
 
+def _read_lock_id(client, lock_path):
+    """Downloads and reads the session ID from a lock file."""
+    file_obj = io.BytesIO()
+    client.download_fileobj(lock_path, file_obj)
+    file_obj.seek(0)
+    return file_obj.read().decode('utf-8')
+
 def get_lock_path(file_path):
     """Constructs the remote lock file path."""
     remote_root = os.environ['WEBDAV_REMOTE_ROOT']
@@ -78,31 +94,35 @@ def acquire_lock(file_path):
     """
     client = get_webdav_client()
     if not client:
-        raise ApiError("WebDAV is not configured, cannot acquire lock.")
+        raise ApiError("WebDAV is not configured, cannot acquire lock.", status_code=500)
 
     lock_path = get_lock_path(file_path)
     session_id = current_app.config['SESSION_ID']
     
+    def upload_lock(overwrite=True):
+        lock_content = io.BytesIO(session_id.encode('utf-8'))
+        client.upload_fileobj(lock_content, lock_path, overwrite=overwrite)
+
     try:
         # Atomically create the lock file. Fails if it already exists.
-        client.upload_fileobj(io.BytesIO(session_id.encode('utf-8')), lock_path, overwrite=False)
+        upload_lock(overwrite=False)
         current_app.logger.info(f"Lock acquired for {file_path} by session {session_id}")
         return True
-    except FileExistsError:
+    except (ResourceAlreadyExists, requests.exceptions.HTTPError):
         # Lock exists. Check if it's ours or if it's stale.
         try:
             info = client.info(lock_path)
-            existing_lock_id = client.download_fileobj(lock_path).read().decode('utf-8')
+            existing_lock_id = _read_lock_id(client, lock_path)
             
             if existing_lock_id == session_id:
                 # It's our own lock, just refresh it.
-                client.upload_fileobj(io.BytesIO(session_id.encode('utf-8')), lock_path, overwrite=True)
+                upload_lock(overwrite=True)
                 current_app.logger.info(f"Refreshed own lock for {file_path}")
                 return True
 
             if is_lock_stale(info.get('modified')):
                 # Lock is stale, take it over.
-                client.upload_fileobj(io.BytesIO(session_id.encode('utf-8')), lock_path, overwrite=True)
+                upload_lock(overwrite=True)
                 current_app.logger.warning(f"Took over stale lock for {file_path} from session {existing_lock_id}")
                 return True
             else:
@@ -112,7 +132,7 @@ def acquire_lock(file_path):
         except Exception as e:
             current_app.logger.error(f"Error checking existing lock for {file_path}: {e}")
             return False
-
+        
 def release_lock(file_path):
     """Releases the lock for a given file if it is held by the current session."""
     client = get_webdav_client()
@@ -126,7 +146,7 @@ def release_lock(file_path):
         # Verify we own the lock before deleting
         info = client.info(lock_path)
         if info:
-            existing_lock_id = client.download_fileobj(lock_path).read().decode('utf-8')
+            existing_lock_id = _read_lock_id(client, lock_path)
             if existing_lock_id == session_id:
                 client.remove(lock_path)
                 current_app.logger.info(f"Lock released for {file_path} by session {session_id}")
@@ -138,6 +158,7 @@ def release_lock(file_path):
     except Exception as e:
         current_app.logger.error(f"Error releasing lock for {file_path}: {e}")
 
+
 def purge_stale_locks():
     """Removes all stale lock files from the WebDAV server."""
     client = get_webdav_client()
@@ -148,10 +169,8 @@ def purge_stale_locks():
     locks_dir = f"{remote_root.rstrip('/')}/locks/"
     
     try:
-        # Ensure the locks directory exists
-        client.mkdir(locks_dir)
-    except FileExistsError:
-        pass # Directory already exists
+        if not client.exists(locks_dir):
+            client.mkdir(locks_dir)
     except Exception as e:
         current_app.logger.error(f"Could not create remote locks directory '{locks_dir}': {e}")
         return 0
@@ -182,7 +201,14 @@ def get_all_active_locks():
         return {}
 
     remote_root = os.environ['WEBDAV_REMOTE_ROOT']
-    locks_dir = f"{remote_root.rstrip('/')}/locks/"
+    locks_dir =  f"{remote_root.rstrip('/')}/locks/"
+    if not client.exists(locks_dir):
+        try:
+            client.mkdir(locks_dir)
+        except Exception as e:
+            current_app.logger.error(f"Could not create remote locks directory '{locks_dir}': {e}")
+            return {}
+        
     active_locks = {}
 
     try:
@@ -190,9 +216,10 @@ def get_all_active_locks():
         for lock in lock_files:
             if lock['type'] == 'file' and not is_lock_stale(lock.get('modified')):
                 try:
-                    session_id = client.download_fileobj(lock['name']).read().decode('utf-8')
+                    session_id = _read_lock_id(client, lock['name'])
                     # The lock file name is the original file path with slashes replaced by underscores
-                    original_file_path = lock['name'].split('/')[-1].replace('_', '/').replace('.lock', '')
+                    original_file_path_part = lock['name'].split('/')[-1].replace('.lock', '')
+                    original_file_path = original_file_path_part.replace('_', '/')
                     active_locks["/data/" + original_file_path] = session_id
                 except Exception as e:
                     current_app.logger.error(f"Error reading lock file {lock['name']}: {e}")

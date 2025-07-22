@@ -4,13 +4,15 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
+ * @import { Diagnostic } from '@codemirror/lint'
  */
 
-import { invoke, updateState, validation, xmlEditor } from '../app.js'
 import ui from '../ui.js'
-import { NavXmlEditor, XMLEditor  } from '../modules/navigatable-xmleditor.js'
-import { parseXPath, isXPathSubset } from '../modules/utils.js'
+import { updateState, validation, services, client } from '../app.js'
+import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
+import { parseXPath } from '../modules/utils.js'
 import { api as logger } from './logger.js'
+import { setDiagnostics } from '@codemirror/lint'
 
 // the path to the autocompletion data
 const tagDataPath = '/config/tei.json'
@@ -19,7 +21,7 @@ const tagDataPath = '/config/tei.json'
  * component is an instance of NavXmlEditor
  * @type {NavXmlEditor}
  */
-const api = new NavXmlEditor('codemirror-container')
+const xmlEditor = new NavXmlEditor('codemirror-container')
 
 /**
  * component plugin
@@ -27,10 +29,15 @@ const api = new NavXmlEditor('codemirror-container')
 const plugin = {
   name: "xmleditor",
   install,
-  state: { update }
+  state: {
+    update,
+    validation: {
+      result: onValidationResult
+    }
+  }
 }
 
-export { api, plugin, XMLEditor}
+export { xmlEditor as api, plugin, XMLEditor }
 export default plugin
 
 /**
@@ -43,16 +50,58 @@ async function install(state) {
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
-    api.startAutocomplete(tagData)
+    xmlEditor.startAutocomplete(tagData)
     logger.info("Loaded autocompletion data...");
   } catch (error) {
     console.error('Error fetching from', tagDataPath, ":", error);
   }
 
   // selection => xpath state
-  api.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
-    api.whenReady().then(() => onSelectionChange(state))
+  xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
+    xmlEditor.whenReady().then(() => onSelectionChange(state))
   });
+
+  // manually show diagnostics if validation is disabled
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+    if (validation.isDisabled()) {
+      let view = xmlEditor.getView()
+      // @ts-ignore
+      let diagnostic = evt.detail
+      try {
+        view.dispatch(setDiagnostics(view.state, [diagnostic]))
+      } catch (error) {
+        logger.warn("Error setting diagnostics: " + error.message)
+      }
+    }
+  })
+
+  // save dirty editor content after an update
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
+
+  // send heartbeat to the server to keep the file lock alive
+  if (state.webdavEnabled) {
+    // configure heartbeat mechanism
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => configureHearbeat(state), { once: true })
+  }
+
+  // xml validation events
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+    /** @type Diagnostic[] */
+
+    const diagnostics = evt.detail
+    console.warn("XML is not well-formed", diagnostics)
+    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
+
+    ui.statusBar.statusMessageXml.textContent = "Invalid XML"
+    // @ts-ignore
+    ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
+  })
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+    // @ts-ignore
+    ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
+    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
+    ui.statusBar.statusMessageXml.textContent = ""
+  })
 }
 
 /**
@@ -60,18 +109,32 @@ async function install(state) {
  */
 async function update(state) {
   //console.warn("update", plugin.name, state)
+
+  if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
+    // update the editor read-only state
+    xmlEditor.setReadOnly(state.editorReadOnly)
+    logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`)
+    if (state.editorReadOnly) {
+      ui.xmlEditor.classList.add("editor-readonly")
+      ui.statusBar.statusMessageXml.textContent = "🔒 File is read-only"
+    } else {
+      ui.xmlEditor.classList.remove("editor-readonly")
+      ui.statusBar.statusMessageXml.textContent = ""
+    }
+  }
+
   // xpath state => selection
-  if (!state.xpath || !state.xmlPath) {
+  if (!state.xpath || !state.xmlPath) {
     return
   }
   await xmlEditor.whenReady()
   const { index, pathBeforePredicates } = parseXPath(state.xpath)
   // select the node by index
   try {
-    const size = api.countDomNodesByXpath(state.xpath)
-    if (size > 0 && (index !== api.currentIndex)) {
-      api.parentPath = pathBeforePredicates
-      api.selectByIndex(index || 1)
+    const size = xmlEditor.countDomNodesByXpath(state.xpath)
+    if (size > 0 && (index !== xmlEditor.currentIndex)) {
+      xmlEditor.parentPath = pathBeforePredicates
+      xmlEditor.selectByIndex(index || 1)
     }
   } catch (e) {
     console.error(e)
@@ -84,24 +147,86 @@ async function update(state) {
  * @param {ApplicationState} state
  */
 async function onSelectionChange(state) {
-  if (!(api.selectedXpath && state.xpath)) {
+  if (!(xmlEditor.selectedXpath && state.xpath)) {
     // this usually means that the editor is not ready yet
     //console.warn("Could not determine xpath of last selected node")
     return
   }
   // update state from the xpath of the nearest selection node
 
-  const cursorXpath = api.selectedXpath
+  const cursorXpath = xmlEditor.selectedXpath
   const cursorParts = parseXPath(cursorXpath)
   const stateParts = parseXPath(state.xpath)
-  
+
   const normativeXpath = ui.floatingPanel.xpath.value
   const index = cursorParts.index
 
   // todo: use isXPathsubset()
-  if (index !== null && cursorParts.tagName === stateParts.tagName && index !== api.currentIndex + 1) {
+  if (index !== null && cursorParts.tagName === stateParts.tagName && index !== xmlEditor.currentIndex + 1) {
     const xpath = `${normativeXpath}[${index}]`
     //logger.debug(xpath)
     //updateState(state, {xpath})
   }
+}
+
+
+/**
+ * Called when a validation has been done. 
+ * Used to save the document after successful validation
+ * @param {Diagnostic[]} diagnostics 
+ */
+async function onValidationResult(diagnostics) {
+  if (diagnostics.length === 0) {
+    saveIfDirty()
+  }
+}
+
+/**
+ * Save the current XML file if the editor is "dirty"
+ */
+async function saveIfDirty() {
+  const filePath = String(ui.toolbar.xml.value)
+
+  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
+    const result = await services.saveXml(filePath)
+    if (result.status == "unchanged") {
+      logger.debug(`File has not changed`)
+    } else {
+      logger.debug(`Saved file to ${result.path}`)
+    }
+  }
+}
+
+/**
+ * Heartbeat mechanism for file locking
+ * @param {ApplicationState} state 
+ * @param {Number} [lockTimeoutSeconds] Default is 60 seconds 
+ */
+function configureHearbeat(state, lockTimeoutSeconds = 60) {
+  let heartbeatInterval = null;
+
+  const startHeartbeat = () => {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+    const heartbeatFrequency = (lockTimeoutSeconds / 2) * 1000;
+    heartbeatInterval = setInterval(async () => {
+      // get the current file path from the editor
+      const filePath = String(ui.toolbar.xml.value);
+      if (!filePath) return;
+
+      logger.debug(`Sending heartbeat for ${filePath}`);
+      try {
+        await client.sendHeartbeat(filePath);
+      } catch (error) {
+        if (error.status === 409 || error.status === 423) {
+          clearInterval(heartbeatInterval);
+          dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+          updateState(state, { editorReadOnly: true });
+        } else {
+          throw error; // rethrow other errors
+        }
+      }
+    }, heartbeatFrequency);
+  };
+  startHeartbeat();
 }
