@@ -269,12 +269,12 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    ui.statusBar.statusMessageXml.textContent = "Saving XML..."  
+    ui.statusBar.statusMessageXml.textContent = "Saving XML..."
     return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     throw e
   } finally {
-    setTimeout( () => {ui.statusBar.statusMessageXml.textContent = ""}, 1000) // clear status message after 1 second 
+    setTimeout(() => { ui.statusBar.statusMessageXml.textContent = "" }, 1000) // clear status message after 1 second 
   }
 }
 
@@ -334,7 +334,7 @@ async function deleteCurrentVersion(state) {
       const xml = ui.toolbar.xml.firstChild?.value
       await load(state, { xml })
       notify(`Version "${versionName}" has been deleted.`)
-      syncFiles(state, false)
+      syncFiles(state)
         .then(summary => summary && notify("Synchronized files"))
         .catch(e => console.error(e))
     } catch (error) {
@@ -366,7 +366,7 @@ async function deleteAllVersions(state) {
     // load the gold version
     await load(state, { xml: xmlPaths[0] })
     notify("All version have been deleted")
-    syncFiles(state, false)
+    syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
   } catch (error) {
@@ -409,7 +409,7 @@ async function deleteAll(state) {
       xml: fileselection.fileData[0].xml
     })
     notify(`${filePathsToDelete.length} files have been deleted.`)
-    syncFiles(state, false)
+    syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
   } catch (error) {
@@ -421,21 +421,13 @@ async function deleteAll(state) {
 /**
  * Synchronizes the files on the server with the WebDAV backend, if so configured
  * @param {ApplicationState} state 
- * @param {boolean} showSpinner Whether to show a blocking spinner
  */
-async function syncFiles(state, showSpinner = true) {
+async function syncFiles(state) {
   if (state.webdavEnabled) {
-    try {
-      logger.debug("Synchronizing files on the server")
-      showSpinner && ui.spinner.show('Synchronizing files, please wait...')
-      const summary = await client.syncFiles()
-      logger.debug(summary)
-      return summary
-    } catch (e) {
-      throw e
-    } finally {
-      showSpinner && ui.spinner.hide()
-    }
+    logger.debug("Synchronizing files on the server")
+    const summary = await client.syncFiles()
+    logger.debug(summary)
+    return summary
   }
   return false
 }
@@ -560,7 +552,7 @@ async function onClickSaveRevisionButton(state) {
     await addTeiHeaderInfo(respStmt, null, revisionChange)
     await saveXml(state.xmlPath)
     notify("Document was saved.")
-    syncFiles(state, false)
+    syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
 
@@ -623,7 +615,7 @@ async function onClickCreateNewVersionButton(state) {
     // dirty state
     xmlEditor.isDirty = false
     notify("Document was duplicated. You are now editing the copy.")
-    syncFiles(state, false)
+    syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
   } catch (e) {
@@ -636,7 +628,15 @@ async function onClickCreateNewVersionButton(state) {
 }
 
 async function onClickSyncBtn(state) {
-  const summary = await syncFiles(state)
+  let summary
+  ui.spinner.show('Synchronizing files, please wait...')
+  try {
+    summary = await syncFiles(state)
+  } catch (e) {
+    throw e
+  } finally {
+    ui.spinner.hide()
+  }
   if (summary) {
     let msg = []
     for (const [action, count] of Object.entries(summary)) {
