@@ -6,7 +6,11 @@ from pathlib import Path
 from glob import glob
 
 from server.lib.decorators import handle_api_errors
-from server.lib.server_utils import ApiError, make_timestamp, get_data_file_path, safe_file_path, remove_obsolete_marker_if_exists
+from server.lib.server_utils import (
+    ApiError, make_timestamp, get_data_file_path, 
+    safe_file_path, remove_obsolete_marker_if_exists,
+    acquire_lock, release_lock, get_all_active_locks, check_lock
+)
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
@@ -16,8 +20,19 @@ file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
 @handle_api_errors
 def file_list():
     data_root = current_app.config["DATA_ROOT"]
+    active_locks = get_all_active_locks()
+    current_session_id = current_app.config['SESSION_ID']
+
     files_data = create_file_data(data_root)
     for idx, data in enumerate(files_data):
+        # Add lock information to each file version
+        if "versions" in data:
+            for version in data["versions"]:
+                if version['path'] in active_locks and active_locks[version['path']] != current_session_id:
+                    version['is_locked'] = True
+                else:
+                    version['is_locked'] = False
+
         file_path = data.get("xml", None)
         if file_path is not None:
             metadata = get_tei_metadata(get_data_file_path(file_path))
@@ -47,52 +62,57 @@ def file_list():
 @handle_api_errors
 def save():
     """
-    Save the given xml as a file
+    Save the given xml as a file, with file locking.
     """
-    data_root = current_app.config["DATA_ROOT"]
-    
-    # parameters
     data = request.get_json()
     xml_string = data.get("xml_string")
-    file = safe_file_path(data.get("file_path"))
+    file_path_rel = data.get("file_path") # The path relative to /data/
     save_as_new_version = data.get("new_version", False)
-    
-    # validate input
-    if not xml_string:
-        raise ApiError("No XML string provided")
 
-    # save the file
-    result = {}
-    if save_as_new_version:
-        file_id = Path(file).stem
-        version = make_timestamp().replace(" ", "_").replace(":", "-")
-        file = os.path.join("versions", version, file_id + ".xml") 
-        current_app.logger.info(f"Saving XML as new version")
-        result['status'] = "new"
+    if not xml_string or not file_path_rel:
+        raise ApiError("XML content and file path are required.")
 
-    file_path = os.path.join(data_root, file)
-    remove_obsolete_marker_if_exists(file_path, current_app.logger)
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    
-    save = True
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding='utf-8') as f:
-            xml_old = f.read()
-        if xml_string == xml_old:
-            current_app.logger.info(f"Content has not changed, not saving.")
-            result['status'] = "unchanged"
-            save = False
-                
-    if save:
-        current_app.logger.info(f"Saving current XML")
-        result['status'] = "saved"
+    # The file path used for locking must be consistent
+    lock_file_path = file_path_rel
+
+    if not acquire_lock(lock_file_path):
+        # Use a specific error message for the frontend to catch
+        raise ApiError("Failed to acquire lock. The file may be edited by another user.", status_code=423)
+
+    try:
+        data_root = current_app.config["DATA_ROOT"]
         
-        with open(file_path, "w", encoding="utf-8") as f:
+        # Determine the final save path
+        if save_as_new_version:
+            file_id = Path(safe_file_path(file_path_rel)).stem
+            version = make_timestamp().replace(" ", "_").replace(":", "-")
+            final_file_rel = os.path.join("versions", version, file_id + ".xml")
+            status = "new"
+        else:
+            final_file_rel = safe_file_path(file_path_rel)
+            status = "saved"
+
+        full_save_path = os.path.join(data_root, final_file_rel)
+        remove_obsolete_marker_if_exists(full_save_path, current_app.logger)
+        os.makedirs(os.path.dirname(full_save_path), exist_ok=True)
+
+        # Avoid saving if content is identical
+        if not save_as_new_version and os.path.exists(full_save_path):
+            with open(full_save_path, "r", encoding='utf-8') as f:
+                if f.read() == xml_string:
+                    current_app.logger.info("Content unchanged, not saving.")
+                    return jsonify({'status': 'unchanged', 'path': "/data/" + final_file_rel})
+        
+        # Write the file
+        with open(full_save_path, "w", encoding="utf-8") as f:
             f.write(xml_string)
-        current_app.logger.info(f"Saved file to {file_path}")
-            
-    result['path'] = "/data/" + file
-    return jsonify(result)
+        current_app.logger.info(f"Saved file to {full_save_path}")
+
+        return jsonify({'status': status, 'path': "/data/" + final_file_rel})
+
+    finally:
+        # Always release the lock
+        release_lock(lock_file_path)
 
 
 @bp.route("/delete", methods=["POST"])
@@ -324,4 +344,34 @@ def get_version_name(file_path):
             return version_title_element[0].text
    
     return None
-    
+
+
+@bp.route("/check_lock", methods=["POST"])
+@handle_api_errors
+def check_lock_route():
+    """Checks if a single file is locked."""
+    data = request.get_json()
+    file_path = data.get("file_path")
+    if not file_path:
+        raise ApiError("File path is required.")
+    return jsonify(check_lock(file_path))
+
+@bp.route("/heartbeat", methods=["POST"])
+@handle_api_errors
+def heartbeat():
+    """
+    Refreshes the lock for a given file path.
+    This acts as a heartbeat to prevent a lock from becoming stale.
+    """
+    data = request.get_json()
+    file_path = data.get("file_path")
+    if not file_path:
+        raise ApiError("File path is required for heartbeat.")
+
+    # The existing acquire_lock function already handles refreshing
+    # a lock if it's owned by the same session.
+    if acquire_lock(file_path):
+        return jsonify({"status": "lock_refreshed"})
+    else:
+        # This would happen if the lock was lost or taken by another user.
+        raise ApiError("Failed to refresh lock. It may have been acquired by another session.", status_code=409)

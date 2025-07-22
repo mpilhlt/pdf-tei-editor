@@ -216,6 +216,14 @@ async function load(state, { xml, pdf }) {
 
   // XML
   if (xml) {
+    // Check for lock before loading
+    const { is_locked } = await client.post('/api/files/check_lock', { file_path: xml });
+    if (is_locked) {
+        dialog.error(`The file "${xml}" is currently being edited by another user and cannot be opened.`);
+        // clear the selection in the dropdown to reflect that the file is not loaded
+        ui.toolbar.xml.value = ''
+        return; // Abort loading
+    }
     removeMergeView(state)
     await updateState(state, { xmlPath: null, diffXmlPath: null })
     logger.info("Loading XML: " + xml)

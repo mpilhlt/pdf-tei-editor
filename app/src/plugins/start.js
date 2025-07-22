@@ -132,6 +132,33 @@ async function start(state) {
     // save dirty editor content after an update
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty() )
 
+    // Heartbeat mechanism for file locking
+    let heartbeatInterval = null;
+    const LOCK_TIMEOUT_SECONDS = 60; // Should match server's timeout
+
+    const startHeartbeat = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      
+      const heartbeatFrequency = (LOCK_TIMEOUT_SECONDS / 2) * 1000;
+      heartbeatInterval = setInterval(async () => {
+        const filePath = ui.toolbar.xml.value;
+        if (!filePath) return;
+
+        logger.debug(`Sending heartbeat for ${filePath}`);
+        try {
+          await client.post('/api/files/heartbeat', { file_path: filePath });
+        } catch (error) {
+          if (error.status === 409 || error.status === 423) {
+            stopHeartbeat();
+            dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+            ui.toolbar.documentActions.saveRevision.disabled = true;
+          }
+        }
+      }, heartbeatFrequency);
+    };
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_READY, startHeartbeat, { once: true });
+  
+
     // xml vaidation events
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
       /** @type Diagnostic[] */

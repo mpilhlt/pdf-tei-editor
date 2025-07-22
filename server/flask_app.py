@@ -13,6 +13,7 @@ from glob import glob
 from dotenv import load_dotenv
 import tempfile
 from pathlib import Path
+import uuid
 
 load_dotenv()
 
@@ -42,6 +43,9 @@ data_root = project_root / 'data' if local_webdav_root is None else local_webdav
 
 # Flask app
 app = Flask(__name__, static_folder=str(project_root))
+
+# Generate a unique session ID for the application instance
+app.config['SESSION_ID'] = str(uuid.uuid4())
 
 # Dynamically register blueprints from the 'api' folder
 api_folder = os.path.join(server_root, 'api')
