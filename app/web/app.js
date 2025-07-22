@@ -42621,14 +42621,16 @@ async function populateSelectboxes(state) {
             // @ts-ignore
             option.size = "small";
             option.value = version.path;
-            option.textContent = version.label;
+            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+            option.disabled = version.is_locked;
             ui$1.toolbar.xml.appendChild(option);
             // diff 
             option = new option_default();
             // @ts-ignore
             option.size = "small";
             option.value = version.path;
-            option.textContent = version.label;
+            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+            option.disabled = version.is_locked;
             ui$1.toolbar.diff.appendChild(option);
           });
         }
@@ -43939,6 +43941,14 @@ async function load$1(state, { xml, pdf }) {
 
   // XML
   if (xml) {
+    // Check for lock before loading
+    const { is_locked } = await api$6.post('/api/files/check_lock', { file_path: xml });
+    if (is_locked) {
+        api$9.error(`The file "${xml}" is currently being edited by another user and cannot be opened.`);
+        // clear the selection in the dropdown to reflect that the file is not loaded
+        ui$1.toolbar.xml.value = '';
+        return; // Abort loading
+    }
     removeMergeView(state);
     await updateState(state, { xmlPath: null, diffXmlPath: null });
     api$b.info("Loading XML: " + xml);
@@ -53880,6 +53890,33 @@ async function start(state) {
 
     // save dirty editor content after an update
     api$8.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty() );
+
+    // Heartbeat mechanism for file locking
+    let heartbeatInterval = null;
+    const LOCK_TIMEOUT_SECONDS = 60; // Should match server's timeout
+
+    const startHeartbeat = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      
+      const heartbeatFrequency = (LOCK_TIMEOUT_SECONDS / 2) * 1000;
+      heartbeatInterval = setInterval(async () => {
+        const filePath = ui$1.toolbar.xml.value;
+        if (!filePath) return;
+
+        api$b.debug(`Sending heartbeat for ${filePath}`);
+        try {
+          await client.post('/api/files/heartbeat', { file_path: filePath });
+        } catch (error) {
+          if (error.status === 409 || error.status === 423) {
+            stopHeartbeat();
+            api$9.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+            ui$1.toolbar.documentActions.saveRevision.disabled = true;
+          }
+        }
+      }, heartbeatFrequency);
+    };
+    api$8.addEventListener(XMLEditor.EVENT_EDITOR_READY, startHeartbeat, { once: true });
+  
 
     // xml vaidation events
     api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
