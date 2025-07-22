@@ -23,9 +23,8 @@ import { plugin as floatingPanelPlugin, api as floatingPanel } from './plugins/f
 import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
 import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
-import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
-
+import { plugin as startPlugin } from './plugins/start.js'
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
 /**
@@ -49,15 +48,26 @@ let state = {
   webdavEnabled: false
 }
 
+/**
+ * @typedef {object} Plugin
+ * @property {string} name - The name of the plugin
+ * @property {string[]} deps - The names of the plugins this plugin depends on
+ * @property {function(ApplicationState):Promise<void>} install - The function to install the plugin
+ */
+
+/** @type {Plugin[]} */
 const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
   pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
-  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, startPlugin
-]
+  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin,  
+  /* must be the last plugin */ startPlugin]
+
+// add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
+startPlugin.deps = plugins.slice(0,-1).map(p => p.name)
 
 // register plugins
 for (const plugin of plugins) {
-  console.log(`Registering plugin '${plugin}'...`)
+  console.log(`Registering plugin '${plugin.name}'...`)
   pluginManager.register(plugin)
 }
 
@@ -100,6 +110,6 @@ await invoke(ep.start, state)
 //
 // Exports
 // 
-export { state, ep as endpoints, invoke, updateState }
-export { pluginManager, logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
+export { state, ep as endpoints, invoke, updateState, pluginManager, plugins }
+export { logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
   services, floatingPanel, promptEditor, urlHash, appInfo }

@@ -16,6 +16,7 @@ import { setDiagnostics } from '@codemirror/lint'
 
 /**
  * Plugin object
+ * dependencies are automatically set to all other plugins, so that it is the last one to be installed
  */
 const plugin = {
   name: "start",
@@ -23,9 +24,6 @@ const plugin = {
   validation: {
     result: onValidationResult
   },
-  // should be the last plugin to be installed, so correctly all of the other plugins should be listed here, 
-  // just using the next-to-last one for convenience
-  deps: ["tei-validation"],
   start
 }
 

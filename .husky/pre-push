@@ -1,7 +1,7 @@
 npm run build
 if [[ `git status --porcelain` ]]; then
   git add -A
-  git commit -m "Added build files"
+  git commit -m "Update build files"
 else
   echo "No changes"
 fi
