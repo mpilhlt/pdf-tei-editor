@@ -40127,6 +40127,87 @@ function isExtension(extension){
   return extension && typeof extension == "object"
 }
 
+
+/**
+ * Given an XML string, figures out whether the XML uses tabs or spaces for indentation,
+ * and, if spaces, calculates the number of spaces per indentation level with some heuristic.
+ * It's more robust against tabs in content or mixed indentation.
+ *
+ * @param {string} xmlString The XML string to analyze.
+ * @param {string} [defaultIndentation="  "] The default indentation to return if the XML cannot be reliably analyzed.
+ *                                          Defaults to two spaces.
+ * @returns {string} '\t' if the majority of indents are tabs, or a number of space characters (2, 4, etc.) if spaces are used.
+ * If the indentation cannot be reliably determined, it returns 2.
+ * 
+ */
+function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
+  const lines = xmlString.split('\n');
+  let tabIndentedLines = 0;
+  let spaceIndentedLines = 0;
+  const spaceIndentations = [];
+
+  for (const line of lines) {
+    const match = line.match(/^(\s*)/);
+    if (match) {
+      const indentation = match[1];
+      if (indentation.length > 0) {
+        if (indentation.includes('\t')) {
+          tabIndentedLines++;
+        } else if (indentation.includes(' ')) {
+          spaceIndentedLines++;
+          if (!spaceIndentations.includes(indentation.length)) {
+            spaceIndentations.push(indentation.length);
+          }
+        }
+      }
+    }
+  }
+
+  // Determine if the majority of indented lines use tabs
+  if (tabIndentedLines > spaceIndentedLines) {
+    return '\t';
+  }
+
+  // If the majority is not tabs, proceed with space-based indentation logic
+  if (spaceIndentations.length > 0) {
+    spaceIndentations.sort((a, b) => a - b);
+
+    if (spaceIndentations.length === 1) {
+      return spaceIndentations[0];
+    }
+
+    // Heuristic: Find the greatest common divisor (GCD) of the indentation differences.
+    const differences = [];
+    for (let i = 1; i < spaceIndentations.length; i++) {
+        const diff = spaceIndentations[i] - spaceIndentations[i-1];
+        if(diff > 0){
+            differences.push(diff);
+        }
+    }
+
+    if(differences.length > 0) {
+        const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+        let result = differences[0];
+        for (let i = 1; i < differences.length; i++) {
+          result = gcd(result, differences[i]);
+        }
+
+        // If the GCD is a common indentation number (2 or 4), it's a strong candidate.
+        if (result === 2 || result === 4) {
+          return " ".repeat(result);
+        }
+    }
+
+
+    // As a fallback, find the smallest indentation unit.
+    if(spaceIndentations[0] > 1) {
+        return " ".repeat(spaceIndentations[0]);
+    }
+  }
+
+  return defaultIndentation; // Default value if indentation cannot be reliably determined
+}
+
 /**
  * @import {SyntaxNode, Tree} from '@lezer/common'
  * @import {Extension, Range} from '@codemirror/state'
@@ -40245,6 +40326,9 @@ class XMLEditor extends EventTarget {
   #updateListenerCompartment = new Compartment()
   #selectionChangeCompartment = new Compartment()
   #lineWrappingCompartment = new Compartment()
+  #tabSizeCompartment = new Compartment()
+  #indentationCompartment = new Compartment()
+
 
   /**
    * Constructs an XMLEditor instance.
@@ -40265,13 +40349,15 @@ class XMLEditor extends EventTarget {
     const extensions = [
       basicSetup,
       xml(),
-      keymap.of([indentWithTab]),
       this.#linterCompartment.of([]),
       this.#selectionChangeCompartment.of([]),
       this.#updateListenerCompartment.of([]),
       this.#mergeViewCompartment.of([]),
       this.#autocompleteCompartment.of([]),
-      this.#lineWrappingCompartment.of([])
+      this.#lineWrappingCompartment.of([]),
+      keymap.of([indentWithTab]),
+      this.#tabSizeCompartment.of([]),
+      this.#indentationCompartment.of([]),
     ];
 
     if (tagData) {
@@ -40282,7 +40368,14 @@ class XMLEditor extends EventTarget {
       state: EditorState.create({ doc: "", extensions }),
       parent: editorDiv
     });
+
+    // indentation and tab size
+    this.configureIntenation("  ", 4);
+
+    // xml serializer
     this.#serializer = new XMLSerializer();
+
+    // state change listeners
     this.addSelectionChangeListener(this.#onSelectionChange.bind(this));
     this.addUpdateListener(this.#onUpdate.bind(this));
   }
@@ -40345,6 +40438,20 @@ class XMLEditor extends EventTarget {
   }
 
   /**
+   * Configures the indentation unit and tab size for the editor.
+   * @param {string} indentUnitString The indentation unit string, default is "  " for two spaces
+   * @param {Number} tabSize The tab size, default is 4 spaces
+   */
+  configureIntenation(indentUnitString = "  ", tabSize=4) {
+    this.#view.dispatch({
+      effects: [
+        this.#tabSizeCompartment.reconfigure(EditorState.tabSize.of(tabSize)),
+        this.#indentationCompartment.reconfigure(indentUnit.of(indentUnitString))
+      ]
+    });
+  }
+
+  /**
    * Returns the current state of the editor. If false await the promise returned from 
    * isReadyPromise()
    * @returns {boolean} - Returns true if the editor is ready and the XML document is loaded
@@ -40385,6 +40492,11 @@ class XMLEditor extends EventTarget {
     console.warn("Loading XML");
     const xml = await this.#fetchXml(xmlPathOrString);
 
+    // detect the indentation mode
+    const indentUnit = detectXmlIndentation(xml);
+    console.warn("Detected indentation unit: ", JSON.stringify(indentUnit));
+    this.configureIntenation(indentUnit, 4); // default tab size of 4 spaces, needs to be configurable
+    
     // display xml in editor, this triggers the update handlers
     console.warn("XML was loaded, dispatch to editor");
     this.#view.dispatch({
@@ -41070,11 +41182,10 @@ class XMLEditor extends EventTarget {
     const regex = /\d+/g;
     const matches = location.match(regex);
     if (matches && matches.length >= 2) {
-      let from, to;
       const line = parseInt(matches[0], 10);
       const column = parseInt(matches[1], 10);
-      ({ from, to } = this.#view.state.doc.line(line));
-      from += column;
+      let { from, to } = this.#view.state.doc.line(line);
+      from = from + column - 1;
       // @ts-ignore
       return { message, severity, line, column, from, to }
     }
@@ -41093,7 +41204,7 @@ class XMLEditor extends EventTarget {
       const diagnostic = this.#parseErrorNode(errorNode);
       // @ts-ignore
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`);
-      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: diagnostic }));
+      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: [diagnostic] }));
       this.#xmlTree = null;
       return false;
     }
@@ -41812,7 +41923,7 @@ async function lintSource(view) {
           let from, to;
           if (error.line !== undefined && error.column !== undefined) {
             ({ from, to } = doc.line(error.line));
-            from += error.column;
+            from = from + error.column -1;
           } else {
             throw new Error("Invalid response from remote validation:", error)
           }
@@ -42432,6 +42543,7 @@ async function reloadFileData(state) {
   // update the fileData variable
   fileData.length = 0; // clear the array
   fileData.push(...data);
+  stateCache = null;
   return fileData;
 }
 
@@ -53642,15 +53754,17 @@ async function start(state) {
       }
     });
 
-    // if validation is disabled, save dirty editor content
-    api$8.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, evt => {
-      if (api$7.isDisabled()) {
-        saveIfDirty();
-      } 
-    });
+    // save dirty editor content after an update
+    api$8.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty() );
 
     // xml vaidation events
     api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+      /** @type Diagnostic[] */
+      
+      const diagnostics = evt.detail;
+      console.warn("XML is not well-formed", diagnostics);
+      api$8.getView().dispatch(setDiagnostics(api$8.getView().state, diagnostics));
+      
       ui$1.statusBar.statusMessageXml.textContent = "Invalid XML";
       // @ts-ignore
       ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
@@ -53658,6 +53772,7 @@ async function start(state) {
     api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
       // @ts-ignore
       ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
+      api$8.getView().dispatch(setDiagnostics(api$8.getView().state, []));
       ui$1.statusBar.statusMessageXml.textContent = "";
     });
 
