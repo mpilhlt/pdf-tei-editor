@@ -43880,12 +43880,12 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    ui$1.statusBar.statusMessageXml.textContent = "Saving XML...";  
+    ui$1.statusBar.statusMessageXml.textContent = "Saving XML...";
     return await api$6.saveXml(api$8.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     throw e
   } finally {
-    setTimeout( () => {ui$1.statusBar.statusMessageXml.textContent = "";}, 1000); // clear status message after 1 second 
+    setTimeout(() => { ui$1.statusBar.statusMessageXml.textContent = ""; }, 1000); // clear status message after 1 second 
   }
 }
 
@@ -43945,7 +43945,7 @@ async function deleteCurrentVersion(state) {
       const xml = ui$1.toolbar.xml.firstChild?.value;
       await load$1(state, { xml });
       notify(`Version "${versionName}" has been deleted.`);
-      syncFiles(state, false)
+      syncFiles(state)
         .then(summary => summary && notify("Synchronized files"))
         .catch(e => console.error(e));
     } catch (error) {
@@ -43977,7 +43977,7 @@ async function deleteAllVersions(state) {
     // load the gold version
     await load$1(state, { xml: xmlPaths[0] });
     notify("All version have been deleted");
-    syncFiles(state, false)
+    syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
   } catch (error) {
@@ -44020,7 +44020,7 @@ async function deleteAll(state) {
       xml: api$5.fileData[0].xml
     });
     notify(`${filePathsToDelete.length} files have been deleted.`);
-    syncFiles(state, false)
+    syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
   } catch (error) {
@@ -44032,21 +44032,13 @@ async function deleteAll(state) {
 /**
  * Synchronizes the files on the server with the WebDAV backend, if so configured
  * @param {ApplicationState} state 
- * @param {boolean} showSpinner Whether to show a blocking spinner
  */
-async function syncFiles(state, showSpinner = true) {
+async function syncFiles(state) {
   if (state.webdavEnabled) {
-    try {
-      api$b.debug("Synchronizing files on the server");
-      showSpinner && ui$1.spinner.show('Synchronizing files, please wait...');
-      const summary = await api$6.syncFiles();
-      api$b.debug(summary);
-      return summary
-    } catch (e) {
-      throw e
-    } finally {
-      showSpinner && ui$1.spinner.hide();
-    }
+    api$b.debug("Synchronizing files on the server");
+    const summary = await api$6.syncFiles();
+    api$b.debug(summary);
+    return summary
   }
   return false
 }
@@ -44157,7 +44149,7 @@ async function onClickSaveRevisionButton(state) {
   const respStmt = {
     persId: dialog.persId.value,
     persName: dialog.persName.value,
-    resp: "Contributor"
+    resp: "Annotator"
   };
 
   /** @type {RevisionChange} */
@@ -44171,7 +44163,7 @@ async function onClickSaveRevisionButton(state) {
     await addTeiHeaderInfo(respStmt, null, revisionChange);
     await saveXml(state.xmlPath);
     notify("Document was saved.");
-    syncFiles(state, false)
+    syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
 
@@ -44211,7 +44203,7 @@ async function onClickCreateNewVersionButton(state) {
   const respStmt = {
     persId: dialog.persId.value,
     persName: dialog.persName.value,
-    resp: "Contributor"
+    resp: "Annotator"
   };
 
   /** @type {Edition} */
@@ -44234,7 +44226,7 @@ async function onClickCreateNewVersionButton(state) {
     // dirty state
     api$8.isDirty = false;
     notify("Document was duplicated. You are now editing the copy.");
-    syncFiles(state, false)
+    syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
   } catch (e) {
@@ -44247,7 +44239,15 @@ async function onClickCreateNewVersionButton(state) {
 }
 
 async function onClickSyncBtn(state) {
-  const summary = await syncFiles(state);
+  let summary;
+  ui$1.spinner.show('Synchronizing files, please wait...');
+  try {
+    summary = await syncFiles(state);
+  } catch (e) {
+    throw e
+  } finally {
+    ui$1.spinner.hide();
+  }
   if (summary) {
     let msg = [];
     for (const [action, count] of Object.entries(summary)) {
@@ -44897,7 +44897,8 @@ function dialogOnRequestClose(event) {
 
 /** @type {Enhancement[]} */
 const enhancements = [
-  prettyPrintXml
+  prettyPrintXml,
+//  removeBlankLines // doesn't work as expected, needs more testing
 ];
 
 /**
@@ -53628,9 +53629,10 @@ async function start(state) {
     }
 
     // manually show diagnostics if validation is disabled
-    api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+    api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
       if (api$7.isDisabled()) {
         let view = api$8.getView();
+        // @ts-ignore
         let diagnostic = evt.detail;
         try {
           view.dispatch(setDiagnostics(view.state, [diagnostic]));
@@ -53650,10 +53652,12 @@ async function start(state) {
     // xml vaidation events
     api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
       ui$1.statusBar.statusMessageXml.textContent = "Invalid XML";
-      //ui.statusBar.statusMessageXml.classList.add("error")
+      // @ts-ignore
+      ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
     });
     api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
-      //ui.statusBar.statusMessageXml.classList.remove("error")
+      // @ts-ignore
+      ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
       ui$1.statusBar.statusMessageXml.textContent = "";
     });
 
@@ -53686,6 +53690,14 @@ async function onValidationResult(diagnostics) {
  */
 async function saveIfDirty() {
   const filePath = String(ui$1.toolbar.xml.value);
+
+  // track weird bug where the xmlEditor is not initialized yet
+  if (!api$8 || !api$8.isDirty) {
+    api$b.warn("XML Editor is not initialized yet, cannot save.");
+    console.log(api$8);
+    return
+  }
+
   if (filePath && api$8.getXmlTree() && api$8.isDirty()) {
     const result = await api$3.saveXml(filePath);
     if (result.status == "unchanged") {
