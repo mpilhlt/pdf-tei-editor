@@ -124,6 +124,7 @@ async function reloadFileData(state) {
   // update the fileData variable
   fileData.length = 0; // clear the array
   fileData.push(...data);
+  stateCache = null;
   return fileData;
 }
 

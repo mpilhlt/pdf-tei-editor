@@ -21,10 +21,20 @@ def file_list():
         file_path = data.get("xml", None)
         if file_path is not None:
             metadata = get_tei_metadata(get_data_file_path(file_path))
-            if "".join(metadata.values()).strip() == "":
-                label = data['id']
-            else:
+            if metadata is None:
+                current_app.logger.warning(f"Could not retrieve metadata for {file_path}")
+                metadata = {}
+            # add label to metadata
+            author = metadata.get('author', '')
+            title = metadata.get('title', '')
+            date = metadata.get('date', '')
+            idno = metadata.get('idno', '')
+            if author and title and date:
                 label = f"{metadata.get('author', '')}, {metadata.get('title', '')[:25]}... ({metadata.get('date','')})"
+            elif idno:
+                label = idno
+            else:
+                label = data['id']
                 
             metadata['label'] = label
             if metadata:
@@ -276,16 +286,22 @@ def get_tei_metadata(file_path):
     """
     Retrieves TEI metadata from the specified file.
     """
-    tree = etree.parse(file_path)
+    try:
+        tree = etree.parse(file_path)
+    except etree.XMLSyntaxError as e:
+        current_app.logger.error(f"XML Syntax Error in {file_path}: {e}")
+        return None
     root = tree.getroot()
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
     author = root.find("./tei:teiHeader//tei:author//tei:surname", ns)
     title = root.find("./tei:teiHeader//tei:title", ns)
     date = root.find("./tei:teiHeader//tei:date", ns)
+    idno = root.find("./tei:teiHeader//tei:idno", ns)
     return {
         "author": author.text if author is not None else "",
         "title": title.text if title is not None else "",
-        "date": date.text if date is not None else ""
+        "date": date.text if date is not None else "",
+        "idno": idno.text if idno is not None else ""
     }
 
 
@@ -293,15 +309,19 @@ def get_version_name(file_path):
     """
     Retrieves version title from the specified file, encoded in teiHeader/fileDesc/editionStmt/edition/title
     """
-    tree = etree.parse(file_path)
+    try:
+        tree = etree.parse(file_path)
+    except etree.XMLSyntaxError as e:
+        current_app.logger.error(f"XML Syntax Error in {file_path}: {e}")
+        
     root = tree.getroot()
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    
     edition_stmts = root.xpath("//tei:editionStmt", namespaces=ns)
-    if not edition_stmts:
-        return None
-    version_title_element = edition_stmts[-1].xpath("./tei:edition/tei:title", namespaces=ns)
-    if version_title_element:
-        return version_title_element[0].text
-    else:
-        return None
+    if edition_stmts:
+        version_title_element = edition_stmts[-1].xpath("./tei:edition/tei:title", namespaces=ns)
+        if version_title_element:
+            return version_title_element[0].text
+   
+    return None
     

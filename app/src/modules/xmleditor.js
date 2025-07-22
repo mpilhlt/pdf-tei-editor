@@ -11,12 +11,12 @@ import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectCh
 import { EditorView, keymap } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { createCompletionSource } from './autocomplete.js';
-import { syntaxTree, syntaxParserRunning } from "@codemirror/language"
+import { syntaxTree, syntaxParserRunning, indentUnit } from "@codemirror/language"
 import { indentWithTab } from "@codemirror/commands"
 
 // custom modules
 
-import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension } from './codemirror_utils.js';
+import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension, detectXmlIndentation } from './codemirror_utils.js';
 import { $$ } from './browser-utils.js';
 
 /**
@@ -129,6 +129,9 @@ export class XMLEditor extends EventTarget {
   #updateListenerCompartment = new Compartment()
   #selectionChangeCompartment = new Compartment()
   #lineWrappingCompartment = new Compartment()
+  #tabSizeCompartment = new Compartment()
+  #indentationCompartment = new Compartment()
+
 
   /**
    * Constructs an XMLEditor instance.
@@ -149,13 +152,15 @@ export class XMLEditor extends EventTarget {
     const extensions = [
       basicSetup,
       xml(),
-      keymap.of([indentWithTab]),
       this.#linterCompartment.of([]),
       this.#selectionChangeCompartment.of([]),
       this.#updateListenerCompartment.of([]),
       this.#mergeViewCompartment.of([]),
       this.#autocompleteCompartment.of([]),
-      this.#lineWrappingCompartment.of([])
+      this.#lineWrappingCompartment.of([]),
+      keymap.of([indentWithTab]),
+      this.#tabSizeCompartment.of([]),
+      this.#indentationCompartment.of([]),
     ];
 
     if (tagData) {
@@ -166,7 +171,14 @@ export class XMLEditor extends EventTarget {
       state: EditorState.create({ doc: "", extensions }),
       parent: editorDiv
     });
+
+    // indentation and tab size
+    this.configureIntenation("  ", 4)
+
+    // xml serializer
     this.#serializer = new XMLSerializer();
+
+    // state change listeners
     this.addSelectionChangeListener(this.#onSelectionChange.bind(this))
     this.addUpdateListener(this.#onUpdate.bind(this))
   }
@@ -229,6 +241,20 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
+   * Configures the indentation unit and tab size for the editor.
+   * @param {string} indentUnitString The indentation unit string, default is "  " for two spaces
+   * @param {Number} tabSize The tab size, default is 4 spaces
+   */
+  configureIntenation(indentUnitString = "  ", tabSize=4) {
+    this.#view.dispatch({
+      effects: [
+        this.#tabSizeCompartment.reconfigure(EditorState.tabSize.of(tabSize)),
+        this.#indentationCompartment.reconfigure(indentUnit.of(indentUnitString))
+      ]
+    });
+  }
+
+  /**
    * Returns the current state of the editor. If false await the promise returned from 
    * isReadyPromise()
    * @returns {boolean} - Returns true if the editor is ready and the XML document is loaded
@@ -269,6 +295,11 @@ export class XMLEditor extends EventTarget {
     console.warn("Loading XML")
     const xml = await this.#fetchXml(xmlPathOrString);
 
+    // detect the indentation mode
+    const indentUnit = detectXmlIndentation(xml);
+    console.warn("Detected indentation unit: ", JSON.stringify(indentUnit))
+    this.configureIntenation(indentUnit, 4); // default tab size of 4 spaces, needs to be configurable
+    
     // display xml in editor, this triggers the update handlers
     console.warn("XML was loaded, dispatch to editor")
     this.#view.dispatch({
@@ -955,11 +986,10 @@ export class XMLEditor extends EventTarget {
     const regex = /\d+/g;
     const matches = location.match(regex);
     if (matches && matches.length >= 2) {
-      let from, to;
       const line = parseInt(matches[0], 10);
       const column = parseInt(matches[1], 10);
-      ({ from, to } = this.#view.state.doc.line(line))
-      from += column
+      let { from, to } = this.#view.state.doc.line(line);
+      from = from + column - 1
       // @ts-ignore
       return { message, severity, line, column, from, to }
     }
@@ -978,7 +1008,7 @@ export class XMLEditor extends EventTarget {
       const diagnostic = this.#parseErrorNode(errorNode)
       // @ts-ignore
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
-      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: diagnostic }))
+      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: [diagnostic] }))
       this.#xmlTree = null;
       return false;
     }

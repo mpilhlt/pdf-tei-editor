@@ -131,15 +131,17 @@ async function start(state) {
       }
     })
 
-    // if validation is disabled, save dirty editor content
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, evt => {
-      if (validation.isDisabled()) {
-        saveIfDirty()
-      } 
-    })
+    // save dirty editor content after an update
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty() )
 
     // xml vaidation events
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+      /** @type Diagnostic[] */
+      
+      const diagnostics = evt.detail
+      console.warn("XML is not well-formed", diagnostics)
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
+      
       ui.statusBar.statusMessageXml.textContent = "Invalid XML"
       // @ts-ignore
       ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
@@ -147,6 +149,7 @@ async function start(state) {
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
       // @ts-ignore
       ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
       ui.statusBar.statusMessageXml.textContent = ""
     })
 

@@ -137,7 +137,7 @@ async function lintSource(view) {
           let from, to;
           if (error.line !== undefined && error.column !== undefined) {
             ({ from, to } = doc.line(error.line))
-            from += error.column
+            from = from + error.column -1
           } else {
             throw new Error("Invalid response from remote validation:", error)
           }

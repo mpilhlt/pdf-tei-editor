@@ -242,3 +242,84 @@ export function resolveXPath(view, xpath) {
 export function isExtension(extension){
   return extension && typeof extension == "object"
 }
+
+
+/**
+ * Given an XML string, figures out whether the XML uses tabs or spaces for indentation,
+ * and, if spaces, calculates the number of spaces per indentation level with some heuristic.
+ * It's more robust against tabs in content or mixed indentation.
+ *
+ * @param {string} xmlString The XML string to analyze.
+ * @param {string} [defaultIndentation="  "] The default indentation to return if the XML cannot be reliably analyzed.
+ *                                          Defaults to two spaces.
+ * @returns {string} '\t' if the majority of indents are tabs, or a number of space characters (2, 4, etc.) if spaces are used.
+ * If the indentation cannot be reliably determined, it returns 2.
+ * 
+ */
+export function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
+  const lines = xmlString.split('\n');
+  let tabIndentedLines = 0;
+  let spaceIndentedLines = 0;
+  const spaceIndentations = [];
+
+  for (const line of lines) {
+    const match = line.match(/^(\s*)/);
+    if (match) {
+      const indentation = match[1];
+      if (indentation.length > 0) {
+        if (indentation.includes('\t')) {
+          tabIndentedLines++;
+        } else if (indentation.includes(' ')) {
+          spaceIndentedLines++;
+          if (!spaceIndentations.includes(indentation.length)) {
+            spaceIndentations.push(indentation.length);
+          }
+        }
+      }
+    }
+  }
+
+  // Determine if the majority of indented lines use tabs
+  if (tabIndentedLines > spaceIndentedLines) {
+    return '\t';
+  }
+
+  // If the majority is not tabs, proceed with space-based indentation logic
+  if (spaceIndentations.length > 0) {
+    spaceIndentations.sort((a, b) => a - b);
+
+    if (spaceIndentations.length === 1) {
+      return spaceIndentations[0];
+    }
+
+    // Heuristic: Find the greatest common divisor (GCD) of the indentation differences.
+    const differences = [];
+    for (let i = 1; i < spaceIndentations.length; i++) {
+        const diff = spaceIndentations[i] - spaceIndentations[i-1];
+        if(diff > 0){
+            differences.push(diff);
+        }
+    }
+
+    if(differences.length > 0) {
+        const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+        let result = differences[0];
+        for (let i = 1; i < differences.length; i++) {
+          result = gcd(result, differences[i]);
+        }
+
+        // If the GCD is a common indentation number (2 or 4), it's a strong candidate.
+        if (result === 2 || result === 4) {
+          return " ".repeat(result);
+        }
+    }
+
+
+    // As a fallback, find the smallest indentation unit.
+    if(spaceIndentations[0] > 1) {
+        return " ".repeat(spaceIndentations[0]);
+    }
+  }
+
+  return defaultIndentation; // Default value if indentation cannot be reliably determined
+}
