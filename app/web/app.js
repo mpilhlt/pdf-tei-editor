@@ -53635,6 +53635,132 @@ function close() {
 }
 
 /**
+ * This plugin allows moving files to a different collection.
+ */
+
+
+const plugin$1 = {
+  name: "move-files",
+  deps: ['services'],
+  install: install$1
+};
+
+//
+// UI
+//
+
+const moveBtn = Object.assign(document.createElement('sl-button'), {
+  innerHTML: `<sl-icon name="folder-symlink"></sl-icon>`,
+  variant: 'default',
+  size: 'small',
+  name: 'moveFiles'
+});
+
+/**
+ * @typedef {object} MoveFilesDialog
+ * @property {SlDialog} self
+ * @property {SlSelect} collectionName
+ * @property {SlButton} newCollectionBtn
+ * @property {SlButton} cancel
+ * @property {SlButton} submit
+ */
+
+/** @type {SlDialog & MoveFilesDialog} */
+// @ts-ignore
+const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
+
+
+//
+// Implementation
+//
+
+/**
+ * @param {ApplicationState} state
+ */
+async function install$1(state) {
+  api$b.debug(`Installing plugin "${plugin$1.name}"`);
+
+  // install button & dialog
+  ui$1.toolbar.documentActions.self.append(moveBtn);
+  document.body.append(moveFilesDialog);
+  updateUi();
+
+  // add event listener
+  moveBtn.addEventListener('click', () => showMoveFilesDialog(state));
+  moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
+    const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
+    if (newCollectionName) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
+        api$9.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
+        return;
+      }
+      const option = Object.assign(document.createElement('sl-option'), {
+        value: newCollectionName,
+        textContent: newCollectionName.replaceAll("_", " ").trim()
+      });
+      moveFilesDialog.collectionName.append(option);
+      moveFilesDialog.collectionName.value = newCollectionName;
+    }
+  });
+}
+
+/**
+ * @param {ApplicationState} state
+ */
+async function showMoveFilesDialog(state) {
+  const { xmlPath, pdfPath } = state;
+  if (!xmlPath || !pdfPath) {
+    api$9.error("Cannot move files, PDF or XML path is missing.");
+    return;
+  }
+
+  const currentCollection = pdfPath.split('/')[3];
+
+  const collectionSelectBox = moveFilesDialog.collectionName;
+  collectionSelectBox.innerHTML = "";
+  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections || '[]').filter(c => c !== currentCollection);
+  for (const collection_name of collections) {
+    const option = Object.assign(document.createElement('sl-option'), {
+      value: collection_name,
+      textContent: collection_name.replaceAll("_", " ").trim()
+    });
+    collectionSelectBox.append(option);
+  }
+
+  try {
+    moveFilesDialog.show();
+    await new Promise((resolve, reject) => {
+      moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
+      moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
+      moveFilesDialog.self.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
+    });
+  } catch (e) {
+    api$b.warn("User cancelled move files dialog");
+    return;
+  } finally {
+    moveFilesDialog.hide();
+  }
+
+  const destinationCollection = String(collectionSelectBox.value);
+  if (!destinationCollection) {
+    api$9.error("No collection selected.");
+    return;
+  }
+
+  ui$1.spinner.show('Moving files, please wait...');
+  try {
+    const { new_pdf_path, new_xml_path } = await api$6.moveFiles(pdfPath, xmlPath, destinationCollection);
+    await api$5.reload(state);
+    await api$3.load(state, { pdf: new_pdf_path, xml: new_xml_path });
+    api$9.success("Files moved successfully.");
+  } catch (error) {
+    api$9.error(`Error moving files: ${error.message}`);
+  } finally {
+    ui$1.spinner.hide();
+  }
+}
+
+/**
  * Plugin which hosts the start function, which is responsible for loading the documents at startup
  * Does not export any API
  */
@@ -53642,16 +53768,14 @@ function close() {
 
 /**
  * Plugin object
+ * dependencies are automatically set to all other plugins, so that it is the last one to be installed
  */
-const plugin$1 = {
+const plugin = {
   name: "start",
-  install: install$1,
+  install,
   validation: {
     result: onValidationResult
   },
-  // should be the last plugin to be installed, so correctly all of the other plugins should be listed here, 
-  // just using the next-to-last one for convenience
-  deps: ["tei-validation"],
   start
 };
 
@@ -53666,8 +53790,8 @@ let spinner;
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-async function install$1(state) {
-  api$b.debug(`Installing plugin "${plugin$1.name}"`);
+async function install(state) {
+  api$b.debug(`Installing plugin "${plugin.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -53824,138 +53948,11 @@ async function saveIfDirty() {
 }
 
 /**
- * This plugin allows moving files to a different collection.
- */
-
-
-const plugin = {
-  name: "move-files",
-  deps: ['services'],
-  install
-};
-
-//
-// UI
-//
-
-const moveBtn = Object.assign(document.createElement('sl-button'), {
-  innerHTML: `<sl-icon name="folder-symlink"></sl-icon>`,
-  variant: 'default',
-  size: 'small',
-  name: 'moveFiles'
-});
-
-/**
- * @typedef {object} MoveFilesDialog
- * @property {SlDialog} self
- * @property {SlSelect} collectionName
- * @property {SlButton} newCollectionBtn
- * @property {SlButton} cancel
- * @property {SlButton} submit
- */
-
-/** @type {SlDialog & MoveFilesDialog} */
-// @ts-ignore
-const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
-
-
-//
-// Implementation
-//
-
-/**
- * @param {ApplicationState} state
- */
-async function install(state) {
-  api$b.debug(`Installing plugin "${plugin.name}"`);
-
-  // install button & dialog
-  ui$1.toolbar.documentActions.self.append(moveBtn);
-  document.body.append(moveFilesDialog);
-  updateUi();
-
-  // add event listener
-  moveBtn.addEventListener('click', () => showMoveFilesDialog(state));
-  moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
-    const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
-    if (newCollectionName) {
-      if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
-        api$9.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
-        return;
-      }
-      const option = Object.assign(document.createElement('sl-option'), {
-        value: newCollectionName,
-        textContent: newCollectionName.replaceAll("_", " ").trim()
-      });
-      moveFilesDialog.collectionName.append(option);
-      moveFilesDialog.collectionName.value = newCollectionName;
-    }
-  });
-}
-
-/**
- * @param {ApplicationState} state
- */
-async function showMoveFilesDialog(state) {
-  const { xmlPath, pdfPath } = state;
-  if (!xmlPath || !pdfPath) {
-    api$9.error("Cannot move files, PDF or XML path is missing.");
-    return;
-  }
-
-  const currentCollection = pdfPath.split('/')[3];
-
-  const collectionSelectBox = moveFilesDialog.collectionName;
-  collectionSelectBox.innerHTML = "";
-  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections || '[]').filter(c => c !== currentCollection);
-  for (const collection_name of collections) {
-    const option = Object.assign(document.createElement('sl-option'), {
-      value: collection_name,
-      textContent: collection_name.replaceAll("_", " ").trim()
-    });
-    collectionSelectBox.append(option);
-  }
-
-  try {
-    moveFilesDialog.show();
-    await new Promise((resolve, reject) => {
-      moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
-      moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
-      moveFilesDialog.self.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
-    });
-  } catch (e) {
-    api$b.warn("User cancelled move files dialog");
-    return;
-  } finally {
-    moveFilesDialog.hide();
-  }
-
-  const destinationCollection = String(collectionSelectBox.value);
-  if (!destinationCollection) {
-    api$9.error("No collection selected.");
-    return;
-  }
-
-  ui$1.spinner.show('Moving files, please wait...');
-  try {
-    const { new_pdf_path, new_xml_path } = await api$6.moveFiles(pdfPath, xmlPath, destinationCollection);
-    await api$5.reload(state);
-    await api$3.load(state, { pdf: new_pdf_path, xml: new_xml_path });
-    api$9.success("Files moved successfully.");
-  } catch (error) {
-    api$9.error(`Error moving files: ${error.message}`);
-  } finally {
-    ui$1.spinner.hide();
-  }
-}
-
-/**
  * PDF-TEI-Editor (working title)
  * 
  * @author Christian Boulanger (@cboulanger), Max Planck Institute for Legal History and Legal Theory
  * @license 
  */
-
 
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
@@ -53980,15 +53977,26 @@ let state = {
   webdavEnabled: false
 };
 
+/**
+ * @typedef {object} Plugin
+ * @property {string} name - The name of the plugin
+ * @property {string[]} deps - The names of the plugins this plugin depends on
+ * @property {function(ApplicationState):Promise<void>} install - The function to install the plugin
+ */
+
+/** @type {Plugin[]} */
 const plugins = [plugin$f, plugin$e, plugin$d,
   plugin$c, plugin$b, plugin$9, plugin$8,
   plugin$6, plugin$7, plugin$5, plugin$4,
-  plugin$3, plugin$a, plugin$2, plugin, plugin$1
-];
+  plugin$3, plugin$a, plugin$2, plugin$1,  
+  /* must be the last plugin */ plugin];
+
+// add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
+plugin.deps = plugins.slice(0,-1).map(p => p.name);
 
 // register plugins
 for (const plugin of plugins) {
-  console.log(`Registering plugin '${plugin}'...`);
+  console.log(`Registering plugin '${plugin.name}'...`);
   pluginManager.register(plugin);
 }
 
@@ -54028,4 +54036,4 @@ await invoke(endpoints.install, state);
 // start the application 
 await invoke(endpoints.start, state);
 
-export { api as appInfo, api$6 as client, api$9 as dialog, endpoints, api$4 as extraction, api$5 as fileselection, api$2 as floatingPanel, invoke, api$b as logger, pdfViewer, pluginManager, api$1 as promptEditor, api$3 as services, state, updateState, api$a as urlHash, api$7 as validation, api$8 as xmlEditor };
+export { api as appInfo, api$6 as client, api$9 as dialog, endpoints, api$4 as extraction, api$5 as fileselection, api$2 as floatingPanel, invoke, api$b as logger, pdfViewer, pluginManager, plugins, api$1 as promptEditor, api$3 as services, state, updateState, api$a as urlHash, api$7 as validation, api$8 as xmlEditor };
