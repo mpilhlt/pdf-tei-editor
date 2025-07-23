@@ -9,7 +9,7 @@
  */
 import ui, { updateUi } from '../ui.js'
 import {
-  updateState, client, logger, dialog,
+  updateState, client, logger, dialog, statusbar,
   fileselection, xmlEditor, pdfViewer, services, validation
 } from '../app.js'
 import { createHtmlElements } from '../ui.js'
@@ -299,7 +299,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    ui.statusBar.statusMessageXml.textContent = "Saving XML..."
+    statusbar.addMessage("Saving XML...", "xml", "saving") 
     return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     switch (e.status_code) {
@@ -312,7 +312,8 @@ async function saveXml(filePath, saveAsNewVersion = false) {
         throw new Error(`Could not save XML: ${e.message}`)
     }
   } finally {
-    setTimeout(() => { ui.statusBar.statusMessageXml.textContent = "" }, 1000) // clear status message after 1 second 
+    // clear status message after 1 second 
+    setTimeout(() => { statusbar.removeMessage("xml", "saving")}, 1000) 
   }
 }
 

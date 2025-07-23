@@ -1,5 +1,5 @@
 /**
- * PDF-TEI-Editor (working title)
+ * PDF-TEI-Editor
  * 
  * @author Christian Boulanger (@cboulanger), Max Planck Institute for Legal History and Legal Theory
  * @license 
@@ -11,6 +11,7 @@ import ep from './endpoints.js'
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
 import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
+import { plugin as statusbarPlugin, api as statusbar} from './plugins/statusbar.js'
 import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
 import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
 import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
@@ -63,7 +64,7 @@ let state = {
 const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
   pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
-  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin,  
+  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, statusbarPlugin,
   /* must be the last plugin */ startPlugin]
 
 // add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
@@ -116,4 +117,4 @@ await invoke(ep.start, state)
 // 
 export { state, ep as endpoints, invoke, updateState, pluginManager, plugins }
 export { logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
-  services, floatingPanel, promptEditor, urlHash, appInfo }
+  services, floatingPanel, promptEditor, urlHash, appInfo, statusbar }

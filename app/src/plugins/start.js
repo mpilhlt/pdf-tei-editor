@@ -8,7 +8,8 @@
  * @import { Diagnostic } from '@codemirror/lint'
  */
 import ui from '../ui.js'
-import { updateState, logger, services, dialog, validation, floatingPanel, urlHash, xmlEditor, fileselection, client } from '../app.js'
+import { updateState, logger, services, dialog, validation, floatingPanel, 
+  urlHash, xmlEditor, fileselection, client, statusbar } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -142,7 +143,7 @@ async function start(state) {
       console.warn("XML is not well-formed", diagnostics)
       xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
 
-      ui.statusBar.statusMessageXml.textContent = "Invalid XML"
+      statusbar.addMessage("Invalid XML", "xml", "xml-status") 
       // @ts-ignore
       ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
     })
@@ -150,7 +151,7 @@ async function start(state) {
       // @ts-ignore
       ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
       xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
-      ui.statusBar.statusMessageXml.textContent = ""
+      statusbar.removeMessage("xml", "xml-status")
     })
 
     // Heartbeat mechanism for file locking and offline detection

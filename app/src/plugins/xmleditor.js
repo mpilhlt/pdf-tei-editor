@@ -8,7 +8,7 @@
  */
 
 import ui from '../ui.js'
-import { updateState, validation, services, client } from '../app.js'
+import { validation, services, statusbar } from '../app.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { api as logger } from './logger.js'
@@ -78,25 +78,6 @@ async function install(state) {
   // save dirty editor content after an update
   xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
 
-
-  // xml validation events
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-    /** @type Diagnostic[] */
-
-    const diagnostics = evt.detail
-    console.warn("XML is not well-formed", diagnostics)
-    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
-
-    ui.statusBar.statusMessageXml.textContent = "Invalid XML"
-    // @ts-ignore
-    ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
-  })
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
-    // @ts-ignore
-    ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
-    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
-    ui.statusBar.statusMessageXml.textContent = ""
-  })
 }
 
 /**
@@ -111,11 +92,10 @@ async function update(state) {
     logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`)
     if (state.editorReadOnly) {
       ui.xmlEditor.classList.add("editor-readonly")
-      console.warn(ui.statusBar.statusMessageXml)
-      ui.statusBar.statusMessageXml.textContent = "🔒 File is read-only"
+      statusbar.addMessage("🔒 File is read-only", "xml", "readonly-state")
     } else {
       ui.xmlEditor.classList.remove("editor-readonly")
-      ui.statusBar.statusMessageXml.textContent = ""
+      statusbar.removeMessage("xml", "readonly-state")
     }
   }
 
