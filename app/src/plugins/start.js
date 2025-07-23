@@ -236,7 +236,8 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
       }
 
       try {
-        logger.debug("Sending heartbeat to server to keep file lock alive...");
+        
+        logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
         await client.sendHeartbeat(filePath);
 
         // If we are here, the request was successful. Check if we were offline.

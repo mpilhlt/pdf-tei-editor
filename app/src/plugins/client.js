@@ -131,59 +131,67 @@ export default plugin
  *                           or rejects with an error message if the request fails.
  */
 async function callApi(endpoint, method = 'GET', body = null) {
+  const url = `${api_base_url}${endpoint}`;
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    keepAlive: true
+  };
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+  // send request
+  const response = await fetch(url, options);
+
+  // save the last  HTTP status code for later use   
+  lastHttpStatus = response.status
+
+  let result;
   try {
-    const url = `${api_base_url}${endpoint}`;
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      keepAlive: true
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    // send request
-    const response = await fetch(url, options);
-    let result;
-    try {
-      result = await response.json()
-    } catch (jsonError) {
-      throw new Error("Failed to parse error response as JSON:", jsonError);
-    }
-    // simple error protocol if the server doesn't return a special status code
-    if (result && typeof result === "object" && result.error) {
-      throw new Error(result.error);
-    }
-    return result
-  } catch (error) {
-    // save the last  HTTP status code for later use   
-    lastHttpStatus = error.status || 500;
+    result = await response.json()
+  } catch (jsonError) {
+    throw new ServerError("Failed to parse error response as JSON");
+  }
+
+  if (response.status != 200) {
+    console.warn(`Error status: ${response.status}`)
+
+    const message = result.error
 
     // notify the user about the error
-    notify(error.message, 'error');
+    notify(message, 'error');
 
     // handle specific error types
-    switch (error.status) {
+    switch (response.status) {
       case 400:
-        console.warn("General API error:", error.message);
+        console.warn("General API error:", message);
         throw new ApiError(error.message);
       case 404:
-        console.warn("Not found:", error.message);
-        throw new NotFoundError(error.message);
+        console.warn("Not found:", message);
+        throw new NotFoundError(message);
       case 504:
-        console.error("Connection timeout:", error.message);
-        throw new ConnectionError(error.message);
+        console.error("Connection timeout:", message);
+        throw new ConnectionError(message);
       default:
-        if (error.status && String(error.status)[0]=== '4' ) {
+        if (response.status && String(response.status)[0] === '4') {
           // Client-side error
-          console.warn("Client-side error:", error.message);
-          throw new ApiError(error.message, error.status);  
+          console.warn("Client-side error:", message);
+          throw new ApiError(error.message, response.status);
         }
-        console.error("Server error:", error.message);
-        throw new ServerError(error.message);
+        console.error("Server error:", message);
+        throw new ServerError(message);
     }
   }
+
+  // simple error protocol if the server doesn't return a special status code
+  if (result && typeof result === "object" && result.error) {
+    throw new Error(result.error);
+  }
+
+  // everything is in order
+  return result
 }
 
 /**
