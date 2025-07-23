@@ -42747,8 +42747,12 @@ async function callApi(endpoint, method = 'GET', body = null) {
       case 504:
         console.error("Connection timeout:", error.message);
         throw new ConnectionError(error.message);
-      case 500:
       default:
+        if (error.status && String(error.status)[0]=== '4' ) {
+          // Client-side error
+          console.warn("Client-side error:", error.message);
+          throw new ApiError(error.message, error.status);  
+        }
         console.error("Server error:", error.message);
         throw new ServerError(error.message);
     }
@@ -54164,8 +54168,6 @@ async function start(state) {
       configureHeartbeat(state);
     }
 
-
-
     // finish initialization
     ui$1.spinner.hide();
     api$2.show();
@@ -54236,7 +54238,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
     heartbeatInterval = setInterval(async () => {
 
-      console.warn("Sending heartbeat to server to keep file lock alive...");
+      api$a.debug("Sending heartbeat to server to keep file lock alive...");
 
       const filePath = ui$1.toolbar.xml.value;
       if (!filePath) {
@@ -54262,7 +54264,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
             notify("Connection to the server was lost. File synchronization has been disabled.", "warning");
             updateState(state, { webdavEnabled: false, offline: true });
           }
-        } else if (error.status === 409 || error.status === 423) {
+        } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
           api$a.error("Lock lost for file: " + filePath);
           api$8.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
@@ -54277,7 +54279,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
         }
       }
     }, heartbeatFrequency);
-    api$a.debug("Heartbeat started.");
+    api$a.info("Heartbeat started.");
   };
   startHeartbeat();
   window.addEventListener('beforeunload', stopHeartbeat);
