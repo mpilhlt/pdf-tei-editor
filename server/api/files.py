@@ -9,7 +9,7 @@ from server.lib.decorators import handle_api_errors
 from server.lib.server_utils import (
     ApiError, make_timestamp, get_data_file_path, 
     safe_file_path, remove_obsolete_marker_if_exists,
-    acquire_lock, release_lock, get_all_active_locks, check_lock
+    acquire_lock, release_lock, get_all_active_locks, check_lock, get_server_id
 )
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
@@ -21,8 +21,8 @@ file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
 def file_list():
     data_root = current_app.config["DATA_ROOT"]
     active_locks = get_all_active_locks()
-    current_session_id = current_app.config['SESSION_ID']
     webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
+    server_id = get_server_id(current_app)
 
     files_data = create_file_data(data_root)
     for idx, data in enumerate(files_data):
@@ -31,11 +31,11 @@ def file_list():
             # Add lock information to each file version
             if "versions" in data:
                 for version in data["versions"]:
-                    version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != current_session_id
+                    version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != server_id
 
             file_path = data.get("xml", None)
             # Add lock information for the main XML file
-            data['is_locked'] = file_path in active_locks and active_locks[file_path] != current_session_id
+            data['is_locked'] = file_path in active_locks and active_locks[file_path] != server_id
         
         if file_path is not None:
             metadata = get_tei_metadata(get_data_file_path(file_path))
