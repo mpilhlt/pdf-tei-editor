@@ -183,7 +183,7 @@ const endpoints = {
     warn: "log.warn",
     
     /** Function signature: ({message: string}) => void */
-    critical: "log.fatal"
+    critical: "log.critical"
   },
   state: {
     /**
@@ -281,8 +281,10 @@ const api$a = {
    * @param {string} message 
    * @returns {void}
    */
-  critical: message => pluginManager.invoke(endpoints.log.fatal, {message})
+  critical: message => pluginManager.invoke(endpoints.log.critical, {message})
 };
+
+api$a.error = api$a.critical; // alias for critical
 
 /**
  * component plugin
@@ -44181,15 +44183,22 @@ async function load$1(state, { xml, pdf }) {
   if (xml) {
     // Check for lock before loading
     if (!state.offline && state.webdavEnabled) {
-      if (state.xmlPath && state.xmlPath !== xml) {
+      if (state.xmlPath !== xml) {
         try {
-          await api$6.releaseLock(state.xmlPath);
+          ui$1.spinner.show('Loading file, please wait...');
+          if (state.xmlPath) {
+            await api$6.releaseLock(state.xmlPath);
+          }
           const { is_locked } = await api$6.checkLock(xml);
+          api$a.debug(`Lock status for ${xml}: ${is_locked}`);
           if (is_locked) {
+            api$a.debug(`File ${xml} is locked, loading in read-only mode`);
             xmlEditor.setReadOnly(true);
           }
-        } catch (error) {
-          console.warn("Cannot release lock on XML file:", error.message);
+        } catch (error) {       
+          console.error("Cannot release lock on XML file:", error.message);
+        } finally {
+          ui$1.spinner.hide();
         }
       }
     }
@@ -54266,7 +54275,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           }
         } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
-          api$a.error("Lock lost for file: " + filePath);
+          api$a.critical("Lock lost for file: " + filePath);
           api$8.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
           updateState(state, { editorReadOnly: true });
         } else {
