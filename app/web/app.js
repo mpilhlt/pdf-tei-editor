@@ -42745,28 +42745,21 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     }
 
     // handle error responses
-    console.warn(`Error status: ${response.status}`);
-
     const message = result.error;
 
-    // handle specific error types
+    // handle app-specific error types
     switch (response.status) {
-      case 400:
-        console.warn("General API error:", message);
-        throw new ApiError(error.message);
       case 404:
-        console.warn("Not found:", message);
+        // Resource not found
         throw new NotFoundError(message);
       case 504:
-        console.error("Connection timeout:", message);
+        // Timeout
         throw new ConnectionError(message);
       default:
+        // other 4XX errors
         if (response.status && String(response.status)[0] === '4') {
-          // Client-side error
-          console.warn("Client-side error:", message);
           throw new ApiError(message, response.status);
         }
-        console.error("Server error:", message);
         throw new ServerError(message);
     }
   };
@@ -42791,6 +42784,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
+  api$a.warn([error.statusCode, error.name, error.message]);
   notify(error.message, 'error');
   throw error
 }
@@ -44205,6 +44199,7 @@ async function inProgress(validationPromise) {
 async function load$1(state, { xml, pdf }) {
 
   const promises = [];
+  let file_is_locked = false;
 
   // PDF 
   if (pdf) {
@@ -44220,14 +44215,14 @@ async function load$1(state, { xml, pdf }) {
       if (state.xmlPath !== xml) {
         try {
           ui$1.spinner.show('Loading file, please wait...');
-          if (state.xmlPath) {
+          if (state.xmlPath && !state.editorReadOnly) {
             await api$6.releaseLock(state.xmlPath);
           }
           const { is_locked } = await api$6.checkLock(xml);
           api$a.debug(`Lock status for ${xml}: ${is_locked}`);
           if (is_locked) {
             api$a.debug(`File ${xml} is locked, loading in read-only mode`);
-            xmlEditor.setReadOnly(true);
+            file_is_locked = true;
           }
         } catch (error) {       
           console.error("Cannot release lock on XML file:", error.message);
@@ -44237,7 +44232,7 @@ async function load$1(state, { xml, pdf }) {
       }
     }
     removeMergeView(state);
-    await updateState(state, { xmlPath: null, diffXmlPath: null });
+    await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked });
     api$a.info("Loading XML: " + xml);
     promises.push(xmlEditor.loadXml(xml));
   }
@@ -54282,21 +54277,29 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
     heartbeatInterval = setInterval(async () => {
 
       const filePath = ui$1.toolbar.xml.value;
-      if (!filePath || state.offline || !state.webdavEnabled) {
-        // No file is selected, do nothing.
-        api$a.debug("No file selected, offline, or WebDAV is disabled, skipping heartbeat.");
-        return;
+      const reasonsToSkip = {
+        "No file path specified": !filePath,
+        "Application is offline": state.offline,
+        "WebDAV is not enabled": !state.webdavEnabled,
+        "Editor is in read-only mode": state.editorReadOnly,
+      };
+
+      for (const reason in reasonsToSkip) {
+        if (reasonsToSkip[reason]) {
+          api$a.debug(`Skipping heartbeat: ${reason}.`);
+          return;
+        }
       }
 
       try {
-        
+
         api$a.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
         await api$6.sendHeartbeat(filePath);
 
         // If we are here, the request was successful. Check if we were offline.
         if (!state.webdavEnabled) {
           api$a.info("Connection restored. Re-enabling WebDAV features.");
-          notify("Connection restored. File synchronization is active.");
+          notify("Connection restored.");
           updateState(state, { webdavEnabled: true, offline: false });
         }
       } catch (error) {
