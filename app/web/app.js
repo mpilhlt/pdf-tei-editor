@@ -54279,6 +54279,8 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           api$a.critical("Lock lost for file: " + filePath);
           api$8.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
           updateState(state, { editorReadOnly: true });
+        } else if (error.statusCode === 504) {
+          api$a.warn("Temporary connection failure, will try again...");
         } else {
           // Another server-side error occurred
           if (state.webdavEnabled) {
