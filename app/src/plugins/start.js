@@ -229,21 +229,29 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
     heartbeatInterval = setInterval(async () => {
 
       const filePath = ui.toolbar.xml.value;
-      if (!filePath || state.offline || !state.webdavEnabled) {
-        // No file is selected, do nothing.
-        logger.debug("No file selected, offline, or WebDAV is disabled, skipping heartbeat.");
-        return;
+      const reasonsToSkip = {
+        "No file path specified": !filePath,
+        "Application is offline": state.offline,
+        "WebDAV is not enabled": !state.webdavEnabled,
+        "Editor is in read-only mode": state.editorReadOnly,
+      };
+
+      for (const reason in reasonsToSkip) {
+        if (reasonsToSkip[reason]) {
+          logger.debug(`Skipping heartbeat: ${reason}.`);
+          return;
+        }
       }
 
       try {
-        
+
         logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
         await client.sendHeartbeat(filePath);
 
         // If we are here, the request was successful. Check if we were offline.
         if (!state.webdavEnabled) {
           logger.info("Connection restored. Re-enabling WebDAV features.");
-          notify("Connection restored. File synchronization is active.");
+          notify("Connection restored.");
           updateState(state, { webdavEnabled: true, offline: false });
         }
       } catch (error) {

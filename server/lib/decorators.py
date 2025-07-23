@@ -20,7 +20,7 @@ def handle_api_errors(f):
         except ConnectTimeout as e:
             # Handle connection timeout errors specifically
             current_app.logger.error(f"Connection Timeout: {str(e)}")
-            return jsonify({"error": "Connection timed out. Please try again later."}), 504
+            return jsonify({"error": str(e)}), 504
 
         except Exception as e:
             # Handle unexpected errors (all other exceptions)

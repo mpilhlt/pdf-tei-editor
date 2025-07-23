@@ -212,6 +212,7 @@ async function inProgress(validationPromise) {
 async function load(state, { xml, pdf }) {
 
   const promises = []
+  let file_is_locked = false
 
   // PDF 
   if (pdf) {
@@ -227,14 +228,14 @@ async function load(state, { xml, pdf }) {
       if (state.xmlPath !== xml) {
         try {
           ui.spinner.show('Loading file, please wait...')
-          if (state.xmlPath) {
+          if (state.xmlPath && !state.editorReadOnly) {
             await client.releaseLock(state.xmlPath)
           }
           const { is_locked } = await client.checkLock(xml);
           logger.debug(`Lock status for ${xml}: ${is_locked}`);
           if (is_locked) {
             logger.debug(`File ${xml} is locked, loading in read-only mode`);
-            xmlEditor.setReadOnly(true);
+            file_is_locked = true
           }
         } catch (error) {       
           console.error("Cannot release lock on XML file:", error.message)
@@ -244,7 +245,7 @@ async function load(state, { xml, pdf }) {
       }
     }
     removeMergeView(state)
-    await updateState(state, { xmlPath: null, diffXmlPath: null })
+    await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked })
     logger.info("Loading XML: " + xml)
     promises.push(xmlEditor.loadXml(xml))
   }

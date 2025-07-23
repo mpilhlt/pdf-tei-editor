@@ -190,11 +190,9 @@ def release_lock(file_path):
     except Exception as e:
         message = f"Error releasing lock for {file_path}: {str(e)}"
         current_app.logger.error(message)
-        # Re-raise as an ApiError for consistent handling by the endpoint.
-        if isinstance(e, ApiError):
-            raise e
-        else:
-            raise ApiError(message, status_code=500)
+        # Re-raise 
+        e.args = (message)
+        raise
     
 
 def purge_stale_locks():
@@ -262,9 +260,10 @@ def get_all_active_locks():
                 except Exception as e:
                     current_app.logger.error(f"Error reading lock file {lock['name']}: {e}")
     except FileNotFoundError:
+        current_app.logger.warning(f"Could not find locks directory")
         return {}
     except Exception as e:
-        current_app.logger.error(f"Error listing active locks: {e}")
+        raise e
     
     return active_locks
 

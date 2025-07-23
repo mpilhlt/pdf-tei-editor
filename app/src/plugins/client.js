@@ -171,28 +171,21 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     }
 
     // handle error responses
-    console.warn(`Error status: ${response.status}`)
-
     const message = result.error
 
-    // handle specific error types
+    // handle app-specific error types
     switch (response.status) {
-      case 400:
-        console.warn("General API error:", message);
-        throw new ApiError(error.message);
       case 404:
-        console.warn("Not found:", message);
+        // Resource not found
         throw new NotFoundError(message);
       case 504:
-        console.error("Connection timeout:", message);
+        // Timeout
         throw new ConnectionError(message);
       default:
+        // other 4XX errors
         if (response.status && String(response.status)[0] === '4') {
-          // Client-side error
-          console.warn("Client-side error:", message);
           throw new ApiError(message, response.status);
         }
-        console.error("Server error:", message);
         throw new ServerError(message);
     }
   }
@@ -217,6 +210,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
+  logger.warn([error.statusCode, error.name, error.message])
   notify(error.message, 'error');
   throw error
 }
