@@ -10897,7 +10897,7 @@ var ui$1 = ui;
 // Plugin API
 const api$8 = {
   info,
-  error: error$1,
+  error: error$2,
   success
 };
 
@@ -10949,7 +10949,7 @@ function info(message) {
  * Shows an error dialog
  * @param {string} message 
  */
-function error$1(message) {
+function error$2(message) {
   ui$1.dialog.self.setAttribute("label", "Error");
   ui$1.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
   ui$1.dialog.message.innerHTML = message;
@@ -42706,59 +42706,67 @@ const plugin$9 = {
  *                           or rejects with an error message if the request fails.
  */
 async function callApi(endpoint, method = 'GET', body = null) {
+  const url = `${api_base_url}${endpoint}`;
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    keepAlive: true
+  };
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+  // send request
+  const response = await fetch(url, options);
+
+  // save the last  HTTP status code for later use   
+  lastHttpStatus = response.status;
+
+  let result;
   try {
-    const url = `${api_base_url}${endpoint}`;
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      keepAlive: true
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    // send request
-    const response = await fetch(url, options);
-    let result;
-    try {
-      result = await response.json();
-    } catch (jsonError) {
-      throw new Error("Failed to parse error response as JSON:", jsonError);
-    }
-    // simple error protocol if the server doesn't return a special status code
-    if (result && typeof result === "object" && result.error) {
-      throw new Error(result.error);
-    }
-    return result
-  } catch (error) {
-    // save the last  HTTP status code for later use   
-    lastHttpStatus = error.status || 500;
+    result = await response.json();
+  } catch (jsonError) {
+    throw new ServerError("Failed to parse error response as JSON");
+  }
+
+  if (response.status != 200) {
+    console.warn(`Error status: ${response.status}`);
+
+    const message = result.error;
 
     // notify the user about the error
-    notify(error.message, 'error');
+    notify(message, 'error');
 
     // handle specific error types
-    switch (error.status) {
+    switch (response.status) {
       case 400:
-        console.warn("General API error:", error.message);
+        console.warn("General API error:", message);
         throw new ApiError(error.message);
       case 404:
-        console.warn("Not found:", error.message);
-        throw new NotFoundError(error.message);
+        console.warn("Not found:", message);
+        throw new NotFoundError(message);
       case 504:
-        console.error("Connection timeout:", error.message);
-        throw new ConnectionError(error.message);
+        console.error("Connection timeout:", message);
+        throw new ConnectionError(message);
       default:
-        if (error.status && String(error.status)[0]=== '4' ) {
+        if (response.status && String(response.status)[0] === '4') {
           // Client-side error
-          console.warn("Client-side error:", error.message);
-          throw new ApiError(error.message, error.status);  
+          console.warn("Client-side error:", message);
+          throw new ApiError(error.message, response.status);
         }
-        console.error("Server error:", error.message);
-        throw new ServerError(error.message);
+        console.error("Server error:", message);
+        throw new ServerError(message);
     }
   }
+
+  // simple error protocol if the server doesn't return a special status code
+  if (result && typeof result === "object" && result.error) {
+    throw new Error(result.error);
+  }
+
+  // everything is in order
+  return result
 }
 
 /**
@@ -52599,7 +52607,7 @@ const stringFromCharCode = String.fromCharCode;
  * @param {String} type The error type.
  * @returns {Error} Throws a `RangeError` with the applicable error message.
  */
-function error(type) {
+function error$1(type) {
 	throw new RangeError(errors[type]);
 }
 
@@ -52774,7 +52782,7 @@ const decode = function(input) {
 	for (let j = 0; j < basic; ++j) {
 		// if it's not a basic code point
 		if (input.charCodeAt(j) >= 0x80) {
-			error('not-basic');
+			error$1('not-basic');
 		}
 		output.push(input.charCodeAt(j));
 	}
@@ -52793,16 +52801,16 @@ const decode = function(input) {
 		for (let w = 1, k = base; /* no condition */; k += base) {
 
 			if (index >= inputLength) {
-				error('invalid-input');
+				error$1('invalid-input');
 			}
 
 			const digit = basicToDigit(input.charCodeAt(index++));
 
 			if (digit >= base) {
-				error('invalid-input');
+				error$1('invalid-input');
 			}
 			if (digit > floor((maxInt - i) / w)) {
-				error('overflow');
+				error$1('overflow');
 			}
 
 			i += digit * w;
@@ -52814,7 +52822,7 @@ const decode = function(input) {
 
 			const baseMinusT = base - t;
 			if (w > floor(maxInt / baseMinusT)) {
-				error('overflow');
+				error$1('overflow');
 			}
 
 			w *= baseMinusT;
@@ -52827,7 +52835,7 @@ const decode = function(input) {
 		// `i` was supposed to wrap around from `out` to `0`,
 		// incrementing `n` each time, so we'll fix that now:
 		if (floor(i / out) > maxInt - n) {
-			error('overflow');
+			error$1('overflow');
 		}
 
 		n += floor(i / out);
@@ -52896,7 +52904,7 @@ const encode = function(input) {
 		// but guard against overflow.
 		const handledCPCountPlusOne = handledCPCount + 1;
 		if (m - n > floor((maxInt - delta) / handledCPCountPlusOne)) {
-			error('overflow');
+			error$1('overflow');
 		}
 
 		delta += (m - n) * handledCPCountPlusOne;
@@ -52904,7 +52912,7 @@ const encode = function(input) {
 
 		for (const currentValue of input) {
 			if (currentValue < n && ++delta > maxInt) {
-				error('overflow');
+				error$1('overflow');
 			}
 			if (currentValue === n) {
 				// Represent delta as a generalized variable-length integer.
@@ -54255,7 +54263,8 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
       }
 
       try {
-        api$a.debug("Sending heartbeat to server to keep file lock alive...");
+        
+        api$a.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
         await api$6.sendHeartbeat(filePath);
 
         // If we are here, the request was successful. Check if we were offline.
