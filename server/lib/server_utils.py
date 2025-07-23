@@ -95,7 +95,7 @@ def get_lock_path(file_path):
     """Constructs the remote lock file path."""
     remote_root = os.environ['WEBDAV_REMOTE_ROOT']
     # We use the relative path of the file to create a unique lock file name
-    lock_file_name = safe_file_path(file_path).replace('/', '_$_') + '.lock'
+    lock_file_name = safe_file_path(file_path).replace('/', '$$$') + '.lock'
     return f"{remote_root.rstrip('/')}/locks/{lock_file_name}"
 
 def get_file_from_lock_path(lock_path):
@@ -103,7 +103,7 @@ def get_file_from_lock_path(lock_path):
     # Remove the remote root and replace underscores with slashes
     remote_root = os.environ['WEBDAV_REMOTE_ROOT']
     relative_path = lock_path.replace(remote_root, '').lstrip('/').replace('.lock', '')
-    relative_path = relative_path.replace('_$_', '/')
+    relative_path = relative_path.replace('$$$', '/')
     return relative_path.lstrip('/locks')
 
 
