@@ -1,6 +1,7 @@
 from flask import request, jsonify, current_app
 from functools import wraps
 from server.lib.server_utils import ApiError
+from httpx import ConnectTimeout
 
 def handle_api_errors(f):
     """
@@ -14,7 +15,12 @@ def handle_api_errors(f):
         except ApiError as e:
             # Handle API-specific errors
             current_app.logger.warning(f"API Error: {str(e)}")
-            return jsonify({"error": str(e)}), 400  
+            return jsonify({"error": str(e)}), e.status_code or 400
+        
+        except ConnectTimeout as e:
+            # Handle connection timeout errors specifically
+            current_app.logger.error(f"Connection Timeout: {str(e)}")
+            return jsonify({"error": "Connection timed out. Please try again later."}), 504
 
         except Exception as e:
             # Handle unexpected errors (all other exceptions)

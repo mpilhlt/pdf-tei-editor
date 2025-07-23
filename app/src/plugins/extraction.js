@@ -26,7 +26,8 @@ const api = {
 const plugin = {
   name: "extraction",
   deps: ['services'],
-  install
+  install,
+  update
 }
 
 export { api, plugin }
@@ -67,7 +68,6 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0]
 //
 
 /**
- * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
 async function install(state) {
@@ -81,6 +81,14 @@ async function install(state) {
   // add event listeners
   ui.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state))
   ui.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state))
+}
+
+/**
+ * @param {ApplicationState} state
+ */
+async function update(state) {
+  extractionBtnGroup.self.disabled = state.offline
+  extractionBtnGroup.extractCurrent.disabled = !state.pdfPath
 }
 
 /**

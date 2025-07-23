@@ -37,6 +37,7 @@ import { plugin as startPlugin } from './plugins/start.js'
  * @property {string|null} xpath - The current xpath used to select a node in the editor
  * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
+ * @property {boolean} offline  - Whether the application is in offline mode
  */
 /**
  * @type{ApplicationState}
@@ -47,7 +48,8 @@ let state = {
   diffXmlPath: null,
   xpath: null,
   webdavEnabled: false,
-  editorReadOnly: false
+  editorReadOnly: false,
+  offline: false
 }
 
 /**

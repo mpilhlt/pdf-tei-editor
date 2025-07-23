@@ -171,6 +171,12 @@ async function update(state) {
 
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
+
+  da.self.childNodes.forEach(el => el.disabled = state.offline)
+  if (state.offline) {  
+    return
+  } 
+
   da.deleteAll.disabled = fileselection.fileData.length < 2 // at least on PDF must be present
   da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2
   da.deleteCurrentVersion.disabled = ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
@@ -217,14 +223,17 @@ async function load(state, { xml, pdf }) {
   // XML
   if (xml) {
     // Check for lock before loading
-    if (state.webdavEnabled) {
+    if (!state.offline && state.webdavEnabled) {
       if (state.xmlPath && state.xmlPath !== xml) {
-        await client.releaseLock(state.xmlPath)
-      }
-
-      const { is_locked } = await client.checkLock(xml);
-      if (is_locked) {
-        xmlEditor.setReadOnly(true);
+        try {
+          await client.releaseLock(state.xmlPath)
+          const { is_locked } = await client.checkLock(xml);
+          if (is_locked) {
+            xmlEditor.setReadOnly(true);
+          }
+        } catch (error) {
+          console.warn("Cannot release lock on XML file:", error.message)
+        }
       }
     }
     removeMergeView(state)
@@ -283,7 +292,15 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     ui.statusBar.statusMessageXml.textContent = "Saving XML..."
     return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
-    throw e
+    switch (e.status_code) {
+      case 504: // Gateway Timeout
+        // ignore this error, it is handled by the client
+      break;
+      default:
+        console.error("Error while saving XML:", e.message)
+        dialog.error(`Could not save XML: ${e.message}`)
+        throw new Error(`Could not save XML: ${e.message}`)
+    }
   } finally {
     setTimeout(() => { ui.statusBar.statusMessageXml.textContent = "" }, 1000) // clear status message after 1 second 
   }

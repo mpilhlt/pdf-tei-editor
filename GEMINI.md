@@ -1,9 +1,5 @@
 This document outlines the conventions and architecture of the PDF-TEI Editor project for the Gemini CLI.
 
-## Feature Development
-
-Always create a new feature branch when working on a new feature.
-
 ## Project Architecture
 
 The PDF-TEI Editor is a web application with a Python/Flask backend and a JavaScript frontend.
@@ -24,3 +20,10 @@ The frontend is a single-page application that uses a plugin-based architecture.
 - **UI:** The UI is built with WebComponents, primarily from the Shoelace library. The UI elements are organized into a nested object structure, defined in `app/src/ui.js`, which mirrors the DOM structure. This allows for easy access to UI elements from anywhere in the application. UI components are generated from HTML templates located in the `app/src/templates` directory. The `createHtmlElements` function in `app/src/ui.js` is used to load these templates and create the corresponding UI elements.
 - **State Management:** The application state is managed in `app/src/app.js` and passed to the plugins. When the state changes, the `state.update` endpoint is invoked, allowing each plugin to update the part of the UI it is responsible for.
 - **Client-Server Communication:** The frontend communicates with the backend via the `client.js` plugin, which provides a simple API for making requests to the Flask backend.
+
+# General rules for code changes
+
+- Make sure to follow the existing code style and conventions.
+- When adding new features, ensure that you are on a feature branch and ask the user if you should create one if the current branch is not a feature branch.
+- Always re-read the relevant files since the user may have made changes that you are not aware of.
+- Always outline your plan and ask the user for confirmation before beginning to implement changes.

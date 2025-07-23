@@ -78,11 +78,6 @@ async function install(state) {
   // save dirty editor content after an update
   xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
 
-  // send heartbeat to the server to keep the file lock alive
-  if (state.webdavEnabled) {
-    // configure heartbeat mechanism
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => configureHearbeat(state), { once: true })
-  }
 
   // xml validation events
   xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
@@ -197,36 +192,3 @@ async function saveIfDirty() {
   }
 }
 
-/**
- * Heartbeat mechanism for file locking
- * @param {ApplicationState} state 
- * @param {Number} [lockTimeoutSeconds] Default is 60 seconds 
- */
-function configureHearbeat(state, lockTimeoutSeconds = 60) {
-  let heartbeatInterval = null;
-
-  const startHeartbeat = () => {
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
-
-    const heartbeatFrequency = (lockTimeoutSeconds / 2) * 1000;
-    heartbeatInterval = setInterval(async () => {
-      // get the current file path from the editor
-      const filePath = String(ui.toolbar.xml.value);
-      if (!filePath) return;
-
-      logger.debug(`Sending heartbeat for ${filePath}`);
-      try {
-        await client.sendHeartbeat(filePath);
-      } catch (error) {
-        if (error.status === 409 || error.status === 423) {
-          clearInterval(heartbeatInterval);
-          dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-          updateState(state, { editorReadOnly: true });
-        } else {
-          throw error; // rethrow other errors
-        }
-      }
-    }, heartbeatFrequency);
-  };
-  startHeartbeat();
-}

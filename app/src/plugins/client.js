@@ -8,6 +8,70 @@
  */
 import { api as dialog } from './dialog.js'
 
+import { notify } from '../modules/sl-utils.js';
+
+/**
+ * Parent class for all API errors
+ * @extends {Error}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class ApiError extends Error {
+  constructor(message, statusCode = 400) {
+    super(message);
+    this.name = "ApiError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating server-side connection issues, such as timeouts or unreachable endpoints.
+ * @extends {ApiError}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 504
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class ConnectionError extends ApiError {
+  constructor(message, statusCode = 504) {
+    super(message);
+    this.name = "ConnectError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating that a requested resource was not found.
+ * @extends {ApiError}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 404
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class NotFoundError extends ApiError {
+  constructor(message, statusCode = 404) {
+    super(message);
+    this.name = "NotFoundError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating an unexpected server-side error.
+ * @extends {Error}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 500
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class ServerError extends Error {
+  constructor(message, statusCode = 500) {
+    super(message);
+    this.name = "ServerError";
+    this.statusCode = statusCode;
+  }
+}
+
+
+
 // name of the component
 const name = "client"
 
@@ -66,7 +130,7 @@ export default plugin
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
-async function callApi(endpoint, method='GET', body = null) {
+async function callApi(endpoint, method = 'GET', body = null) {
   try {
     const url = `${api_base_url}${endpoint}`;
     const options = {
@@ -87,18 +151,34 @@ async function callApi(endpoint, method='GET', body = null) {
     } catch (jsonError) {
       throw new Error("Failed to parse error response as JSON:", jsonError);
     }
-    // simple error protocol
-    // we don't distinguish 400 and 500 errors for the moment, although this should probably be 
-    // handled as warning and error, respectively 
+    // simple error protocol if the server doesn't return a special status code
     if (result && typeof result === "object" && result.error) {
       throw new Error(result.error);
     }
     return result
   } catch (error) {
-    dialog.error(error.message)
+    // save the last  HTTP status code for later use   
     lastHttpStatus = error.status || 500;
-    // rethrow
-    throw error
+
+    // notify the user about the error
+    notify(error.message, 'error');
+
+    // handle specific error types
+    switch (error.status) {
+      case 400:
+        console.warn("General API error:", error.message);
+        throw new ApiError(error.message);
+      case 404:
+        console.warn("Not found:", error.message);
+        throw new NotFoundError(error.message);
+      case 504:
+        console.error("Connection timeout:", error.message);
+        throw new ConnectionError(error.message);
+      case 500:
+      default:
+        console.error("Server error:", error.message);
+        throw new ServerError(error.message);
+    }
   }
 }
 
@@ -119,7 +199,7 @@ async function getFileList() {
  * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
  */
 async function validateXml(xmlString) {
-  return await  callApi('/validate', 'POST', { xml_string: xmlString });
+  return await callApi('/validate', 'POST', { xml_string: xmlString });
 }
 
 /**
@@ -141,7 +221,7 @@ async function saveXml(xmlString, filePath, saveAsNewVersion) {
  * @returns {Promise<Object>}
  */
 async function extractReferences(filename, options) {
-  return await  callApi('/extract', 'POST', { pdf: filename, ...options });
+  return await callApi('/extract', 'POST', { pdf: filename, ...options });
 }
 
 /**
@@ -149,7 +229,7 @@ async function extractReferences(filename, options) {
  * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
  */
 async function loadInstructions() {
-  return await  callApi('/config/instructions', 'GET');
+  return await callApi('/config/instructions', 'GET');
 }
 
 /**
@@ -162,7 +242,7 @@ async function saveInstructions(instructions) {
     throw new Error("Instructions must be an array");
   }
   // Send the instructions to the server
-  return await  callApi('/config/instructions', 'POST', instructions);
+  return await callApi('/config/instructions', 'POST', instructions);
 }
 
 
@@ -174,7 +254,7 @@ async function deleteFiles(filePaths) {
   if (!Array.isArray(filePaths)) {
     throw new Error("Timestamps must be an array");
   }
-  return await  callApi('/files/delete', 'POST', filePaths);
+  return await callApi('/files/delete', 'POST', filePaths);
 }
 
 /**
@@ -289,7 +369,7 @@ async function releaseLock(filePath) {
  */
 async function getAllLocks() {
   return await callApi('/files/locks', 'GET');
-} 
+}
 
 /**
  * Uploads a file selected by the user to a specified URL using `fetch()`.
