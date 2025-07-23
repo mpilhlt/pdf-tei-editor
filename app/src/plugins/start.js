@@ -256,7 +256,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           }
         } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
-          logger.error("Lock lost for file: " + filePath);
+          logger.critical("Lock lost for file: " + filePath);
           dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
           updateState(state, { editorReadOnly: true });
         } else {

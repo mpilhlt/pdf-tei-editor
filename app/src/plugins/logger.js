@@ -69,6 +69,8 @@ const api = {
   critical: message => pluginManager.invoke(ep.log.fatal, {message})
 }
 
+api.error = api.critical // alias for critical
+
 /**
  * component plugin
  */
