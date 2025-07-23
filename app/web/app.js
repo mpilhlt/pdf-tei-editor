@@ -396,7 +396,7 @@ const plugin$e = {
   name: "url-hash-state",
   install: install$d,
   state: {
-    update: update$6
+    update: update$8
   }
 };
 
@@ -408,7 +408,7 @@ async function install$d(state){
   api$a.debug(`Installing plugin "${plugin$e.name}"`);
 }
 
-async function update$6(state) {
+async function update$8(state) {
   //console.warn("update", plugin.name, state)
   updateUrlHashfromState(state);
 }
@@ -2333,7 +2333,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$5);
+    const documentElementObserver = new MutationObserver(update$7);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2354,9 +2354,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$5();
+    update$7();
 }
-function update$5() {
+function update$7() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -11381,7 +11381,7 @@ pdfViewer.hide();
 const plugin$c = {
   name: "pdfviewer",
   install: install$b,
-  state: { update: update$4 }
+  state: { update: update$6 }
 };
 
 //
@@ -11405,7 +11405,7 @@ let lastNode = null;
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$4(state) {
+async function update$6(state) {
 
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
@@ -41722,9 +41722,9 @@ const plugin$b = {
   name: "xmleditor",
   install: install$a,
   state: {
-    update: update$3,
+    update: update$5,
     validation: {
-      result: onValidationResult
+      result: onValidationResult$1
     }
   }
 };
@@ -41765,13 +41765,8 @@ async function install$a(state) {
   });
 
   // save dirty editor content after an update
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty());
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty$1());
 
-  // send heartbeat to the server to keep the file lock alive
-  if (state.webdavEnabled) {
-    // configure heartbeat mechanism
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => configureHearbeat(state), { once: true });
-  }
 
   // xml validation events
   xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
@@ -41796,7 +41791,7 @@ async function install$a(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$3(state) {
+async function update$5(state) {
   //console.warn("update", plugin.name, state)
 
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
@@ -41860,16 +41855,16 @@ async function onSelectionChange(state) {
  * Used to save the document after successful validation
  * @param {Diagnostic[]} diagnostics 
  */
-async function onValidationResult(diagnostics) {
+async function onValidationResult$1(diagnostics) {
   if (diagnostics.length === 0) {
-    saveIfDirty();
+    saveIfDirty$1();
   }
 }
 
 /**
  * Save the current XML file if the editor is "dirty"
  */
-async function saveIfDirty() {
+async function saveIfDirty$1() {
   const filePath = String(ui$1.toolbar.xml.value);
 
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
@@ -41880,40 +41875,6 @@ async function saveIfDirty() {
       api$a.debug(`Saved file to ${result.path}`);
     }
   }
-}
-
-/**
- * Heartbeat mechanism for file locking
- * @param {ApplicationState} state 
- * @param {Number} [lockTimeoutSeconds] Default is 60 seconds 
- */
-function configureHearbeat(state, lockTimeoutSeconds = 60) {
-  let heartbeatInterval = null;
-
-  const startHeartbeat = () => {
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
-
-    const heartbeatFrequency = (lockTimeoutSeconds / 2) * 1000;
-    heartbeatInterval = setInterval(async () => {
-      // get the current file path from the editor
-      const filePath = String(ui$1.toolbar.xml.value);
-      if (!filePath) return;
-
-      api$a.debug(`Sending heartbeat for ${filePath}`);
-      try {
-        await api$6.sendHeartbeat(filePath);
-      } catch (error) {
-        if (error.status === 409 || error.status === 423) {
-          clearInterval(heartbeatInterval);
-          dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-          updateState(state, { editorReadOnly: true });
-        } else {
-          throw error; // rethrow other errors
-        }
-      }
-    }, heartbeatFrequency);
-  };
-  startHeartbeat();
 }
 
 /**
@@ -41933,6 +41894,7 @@ const plugin$a = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install: install$9,
+  update: update$4,
   validation: {
     validate,
     inProgress: inProgress$1
@@ -41967,6 +41929,16 @@ async function install$9(state) {
   // listen for delayed editor updates
   // @ts-ignore
   xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (evt) => removeDiagnosticsInChangedRanges(evt.detail));
+}
+
+/**
+ * @param {ApplicationState} state 
+ */
+async function update$4(state) {
+  if (state.offline || state.editorReadOnly) {
+    // if we are offline, disable validation
+    configure({ mode: "off" });
+  } 
 }
 
 /**
@@ -42203,952 +42175,6 @@ function removeDiagnosticsInChangedRanges(update) {
 
   // remove the diagnostics from the editor
   xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
-}
-
-/**
- * Plugin providing a link to server-side methods
- * This is not really a plugin as it does not implement any endpoints (yet)
- */
-
-
-// name of the component
-const name = "client";
-
-let lastHttpStatus = null;
-
-const api_base_url = '/api';
-const upload_route = '/api/upload';
-
-/**
- * plugin API
- */
-const api$6 = {
-  get lastHttpStatus() {
-    return lastHttpStatus
-  },
-  callApi,
-  getFileList,
-  validateXml: validateXml$1,
-  saveXml: saveXml$1,
-  extractReferences,
-  loadInstructions,
-  saveInstructions,
-  deleteFiles,
-  createVersionFromUpload,
-  uploadFile,
-  getConfigValue,
-  setConfigValue,
-  syncFiles: syncFiles$1,
-  moveFiles,
-  state: state$1,
-  sendHeartbeat,
-  checkLock,
-  releaseLock,
-  getAllLocks
-};
-
-
-/**
- * component plugin
- */
-const plugin$9 = {
-  name
-};
-
-/**
- * A generic function to make API requests against the application backend. 
- * Expects a JSON response which is an arbitrary value in case of success or a 
- * `{errror: "Error message"}` object in case of an error handled by the API methods. 
- *
- * @param {string} endpoint - The API endpoint to call.
- * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
- * @param {object} body - The request body (optional).  Will be stringified to JSON.
- * @returns {Promise<any>} - A promise that resolves to the response data,
- *                           or rejects with an error message if the request fails.
- */
-async function callApi(endpoint, method='GET', body = null) {
-  try {
-    const url = `${api_base_url}${endpoint}`;
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      keepAlive: true
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    // send request
-    const response = await fetch(url, options);
-    let result;
-    try {
-      result = await response.json();
-    } catch (jsonError) {
-      throw new Error("Failed to parse error response as JSON:", jsonError);
-    }
-    // simple error protocol
-    // we don't distinguish 400 and 500 errors for the moment, although this should probably be 
-    // handled as warning and error, respectively 
-    if (result && typeof result === "object" && result.error) {
-      throw new Error(result.error);
-    }
-    return result
-  } catch (error) {
-    api$8.error(error.message);
-    lastHttpStatus = error.status || 500;
-    // rethrow
-    throw error
-  }
-}
-
-/**
- * Gets a list of pdf/tei files from the server, including their relative paths
- *
- * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
- *  objects with keys "id", "pdf", and "tei".
- */
-async function getFileList() {
-  return await callApi('/files/list', 'GET');
-}
-
-/**
- * Lints a TEI XML string against the Flask API endpoint.
- *
- * @param {string} xmlString - The TEI XML string to validate.
- * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
- */
-async function validateXml$1(xmlString) {
-  return await  callApi('/validate', 'POST', { xml_string: xmlString });
-}
-
-/**
- * Saves the XML string to a file on the server, optionally as a new version
- * @param {string} xmlString 
- * @param {string} filePath 
- * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
- * @returns {Promise<Object>}
- */
-async function saveXml$1(xmlString, filePath, saveAsNewVersion) {
-  return await callApi('/files/save', 'POST',
-    { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
-}
-
-/**
- * Extracts the references from the given PDF and returns the XML with the extracted data
- * @param {string} filename The filename of the PDF to extract
- * @param {Object} options The options for the extractions, such as DOI, additional instructions, etc. 
- * @returns {Promise<Object>}
- */
-async function extractReferences(filename, options) {
-  return await  callApi('/extract', 'POST', { pdf: filename, ...options });
-}
-
-/**
- * Returns the current prompt extraction instruction data
- * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
- */
-async function loadInstructions() {
-  return await  callApi('/config/instructions', 'GET');
-}
-
-/**
- * Returns the current prompt extraction instruction data
- * @param {Array<Object>} instructions An array of {active,label,text} objects
- * @returns {Promise<Object>} The result object
- */
-async function saveInstructions(instructions) {
-  if (!Array.isArray(instructions)) {
-    throw new Error("Instructions must be an array");
-  }
-  // Send the instructions to the server
-  return await  callApi('/config/instructions', 'POST', instructions);
-}
-
-
-/**
- * Deletes all extraction document versions with the given timestamps 
- * @returns {Promise<Object>} The result object
- */
-async function deleteFiles(filePaths) {
-  if (!Array.isArray(filePaths)) {
-    throw new Error("Timestamps must be an array");
-  }
-  return await  callApi('/files/delete', 'POST', filePaths);
-}
-
-/**
- * Creates a new version of a file from an uploaded file.
- * @param {string} tempFilename 
- * @param {string} filePath 
- * @returns {Promise<Object>}
- */
-async function createVersionFromUpload(tempFilename, filePath) {
-  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
-}
-
-/**
- * Retrieves the server application state
- * @returns {Promise<Object>}
- */
-async function state$1() {
-  return await callApi('/config/state')
-}
-
-/**
- * Synchronizes the files on the server with a (WebDav) Backend, if exists
- * @returns {Promise<Object>}
- */
-async function syncFiles$1() {
-  return await callApi('/files/sync')
-}
-
-/**
- * Moves the given files to a new collection
- * @param {string} pdfPath
- * @param {string} xmlPath
- * @param {string} destinationCollection
- * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
- */
-async function moveFiles(pdfPath, xmlPath, destinationCollection) {
-  return await callApi('/files/move', 'POST', {
-    pdf_path: pdfPath,
-    xml_path: xmlPath,
-    destination_collection: destinationCollection
-  });
-}
-
-
-/**
- * Retrieves a configuration value from the server
- */
-async function getConfigValue(key) {
-  if (typeof key !== "string" || key.length === 0) {
-    throw new Error("Key must be a non-empty string");
-  }
-  const path = `/config/get/${encodeURIComponent(key)}`;
-  const value = await callApi(path, 'GET');
-  return value;
-}
-
-/**
- * Sets a configuration value on the server.
- */
-async function setConfigValue(key, value) {
-  if (typeof key !== "string" || key.length === 0) {
-    throw new Error("Key must be a non-empty string");
-  }
-
-  const data = {
-    key: key,
-    value: value,
-  };
-
-  // The server is expected to return { result: "OK" } on success
-  const response = await callApi('/config/set', 'POST', data);
-  return response;
-}
-
-/**
- * Sends a heartbeat to the server to keep the file lock alive.
- * @param {string} filePath The file path to send the heartbeat for
- * @returns {Promise<{status:string}>} The response from the server 
- * @throws {Error} If the file path is not provided or if the heartbeat fails
- */
-async function sendHeartbeat(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required for heartbeat");
-  }
-  return await callApi('/files/heartbeat', 'POST', { file_path: filePath });
-}
-
-/**
- * Checks if a file is locked by another user.
- * @param {string} filePath The file path to check the lock for
- * @returns {Promise<{is_locked: boolean}>} The response from the server indicating if the file is locked
- * @throws {Error} If the file path is not provided or if the lock check fails
- */
-async function checkLock(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required to check lock");
-  }
-  return await callApi('/files/check_lock', 'POST', { file_path: filePath });
-}
-
-async function releaseLock(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required to release lock");
-  }
-  return await callApi('/files/release_lock', 'POST', { file_path: filePath });
-}
-
-
-/**
- * Retrieves an object mapping all currently locked files to the session id that locked them.
- * @returns {Promise<{[string]:Number}>} An object mapping locked file paths to session ids 
- */
-async function getAllLocks() {
-  return await callApi('/files/locks', 'GET');
-} 
-
-/**
- * Uploads a file selected by the user to a specified URL using `fetch()`.
- *
- * @author Gemini 2.0
- * @param {string} uploadUrl - The URL to which the file will be uploaded.
- * @param {object} [options={}] - Optional configuration options.
- * @param {string} [options.method='POST'] - The HTTP method to use for the upload.
- * @param {string} [options.fieldName='file'] - The name of the form field for the file.
- * @param {object} [options.headers={}] - Additional headers to include in the request.
- * @param {function} [options.onProgress] - A callback function to handle upload progress events.
- *    The function receives a progress event object as an argument.
- * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
- *    This is a string that will be set as the `accept` attribute of the file
- * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
- *    from the `fetch()` call, which must be an object, or rejects with an error.
- *    The object should contain the uploaded file's metadata, such as its path or ID.
- *    It will always contain a key "originalFilename" with the original name of the file,
- *    (as the server can change the filename). Ff the upload fails on the server side, 
- *   it will contain an "error" key with the error message.
- * @throws {Error} If the upload fails or if no file is selected.
- * @example
- * // Async/Await example (requires an async function context):
- * async function myUploadFunction() {
- *   try {
- *     const response = await uploadFile('https://example.com/upload', {
- *       fieldName: 'my_file',
- *       headers: {
- *         'X-Custom-Header': 'value'
- *       },
- *       onProgress: (event) => {
- *         if (event.lengthComputable) {
- *           const percentComplete = (event.loaded / event.total) * 100;
- *           logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
- *         } else {
- *           logger.info("Total size is unknown");
- *         }
- *       } 
- *     });
- *
- *     if (response.ok) {
- *       const data = await response.json();
- *       logger.info('Upload successful:', data);
- *     } else {
- *       throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
- *     }
- *   } catch (error) {
- *     console.error('Error uploading file:', error);
- *   }
- * }
- */
-async function uploadFile(uploadUrl = upload_route, options = {}) {
-  return new Promise((resolve, reject) => {
-    const {
-      method = 'POST',
-      fieldName = 'file',
-      headers = {},
-      onProgress,
-      accept = '.pdf, .xml'
-    } = options;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = accept;
-    input.addEventListener('change', async () => {
-      const file = input.files && input.files[0];
-      if (!file) {
-        reject(new Error('No file selected.'));
-        return;
-      }
-      const formData = new FormData();
-      console.debug("Uploading file:", file.name, "to", uploadUrl);
-      formData.append(fieldName, file);
-      const fetchOptions = {
-        method: method,
-        body: formData,
-        headers: headers
-      };
-      try {
-        const response = await fetch(uploadUrl, fetchOptions);
-        if (!response.ok) {
-          reject(new Error(`HTTP error! Status: ${response.status}`));
-          return;
-        }
-        let result = await response.json();
-        if (typeof result !== 'object' || !result) {
-          reject(new Error("Invalid response format, expected an object"));
-          return;
-        }
-        // Ensure the result contains the original filename
-        if (!result.originalFilename) {
-          result.originalFilename = file.name; //   Fallback to the input file name
-        }
-        if (result.error) {
-          reject(result.error);
-        }
-        resolve(result);
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    // Programmatically trigger the file chooser dialog.  Crucially, this must be initiated from a user action,
-    // such as a button click, to work correctly in most browsers. Directly calling input.click() on page 
-    // load will generally be blocked.
-    input.click();
-  });
-}
-
-/**
- * This implements the UI for the file selection
- */
-
-
-/**
- * The data about the pdf and xml files on the server
- * @type {Array<object>}
- */
-const fileData = [];
-
-/**
- * plugin API
- */
-const api$5 = {
-  reload,
-  update: update$2,
-  fileData
-};
-
-/**
- * component plugin
- */
-const plugin$8 = {
-  name: "file-selection",
-
-  install: install$8,
-  state: {
-    update: update$2
-  }
-};
-
-//
-// UI
-//
-
-// see ui.js for @typedef 
-const fileSelectionControls = await createHtmlElements('file-selection.html');
-
-//
-// Implementation
-//
-
-// API
-
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {ApplicationState} state
- */
-async function install$8(state) {
-
-  api$a.debug(`Installing plugin "${plugin$8.name}"`);
-  
-  // install controls on menubar
-  ui$1.toolbar.self.append(...fileSelectionControls);
-  updateUi();
-  
-  /**  @type {[SlSelect,function][]} */
-  const handlers = [
-    [ui$1.toolbar.pdf, onChangePdfSelection],
-    [ui$1.toolbar.xml, onChangeXmlSelection],
-    [ui$1.toolbar.diff, onChangeDiffSelection]
-  ];
-
-  for (const [select, handler] of handlers) {
-    // add event handler for the selectbox
-    select.addEventListener('sl-change', () => handler(state));
-
-    // this works around a problem with the z-index of the select dropdown being bound 
-    // to the z-index of the parent toolbar (and therefore being hidden by the editors)
-    select.addEventListener('sl-show', () => {
-      select.closest('#toolbar')?.classList.add('dropdown-open');
-    });
-
-    select.addEventListener('sl-hide', () => {
-      select.closest('#toolbar')?.classList.remove('dropdown-open');
-    });
-  }
-}
-
-/**
- * 
- * @param {ApplicationState} state 
- */
-async function update$2(state) {
-  //console.warn("update", plugin.name, state)
-  await populateSelectboxes(state);
-  ui$1.toolbar.pdf.value = state.pdfPath || "";
-  ui$1.toolbar.xml.value = state.xmlPath || "";
-  ui$1.toolbar.diff.value = state.diffXmlPath || "";
-}
-
-
-/**
- * Reloads data and then updates based on the application state
- * @param {ApplicationState} state
- */
-async function reload(state) {
-  await reloadFileData();
-  await populateSelectboxes(state);
-}
-
-/**
- * Reloads the file data from the server
- * @param {ApplicationState} state
- */
-async function reloadFileData(state) {
-  api$a.debug("Reloading file data");
-  let data = await api$6.getFileList();
-  if (!data || data.length === 0) {
-    api$8.error("No files found");
-  }
-  // update the fileData variable
-  fileData.length = 0; // clear the array
-  fileData.push(...data);
-  stateCache = null;
-  return fileData;
-}
-
-let stateCache;
-
-/**
- * Populates the selectboxes for file name and version
- * @param {ApplicationState} state
- */
-async function populateSelectboxes(state) {
-
-  // check if state has changed
-  const { xmlPath, pdfPath, diffXmlPath } = state;
-  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath });
-  if (jsonState === stateCache) {
-    //logger.debug("Not repopulating selectboxes as state hasn't changed")
-    return
-  }
-  stateCache = jsonState;
-
-  api$a.debug("Populating selectboxes");
-
-  if (fileData === null) {
-    await reloadFileData();
-  }
-
-  // Clear existing options
-  for (const name of ["pdf", "xml", "diff"]) {
-    ui$1.toolbar[name].innerHTML = "";
-  }
-
-  // sort into groups by directory
-  const dirname = (path) => path.split('/').slice(0, -1).join('/');
-  const basename = (path) => path.split('/').pop();
-  const grouped_files = fileData.reduce((groups, file) => {
-    const collection_name = basename(dirname(file.pdf));
-    (groups[collection_name] = groups[collection_name] || []).push(file);
-    return groups
-  }, {});
-
-  // save the collections, this tight coupling is not ideal
-  const collections = Object.keys(grouped_files).sort();
-  ui$1.toolbar.pdf.dataset.collections = JSON.stringify(collections);
-
-  // get items to be selected from app state or use first element
-  for (const collection_name of collections) {
-    
-    await createHtmlElements(`<small>${collection_name.replaceAll("_"," ").trim()}</small>`, ui$1.toolbar.pdf);
-    
-    // get a list of file data sorted by label
-    const files = grouped_files[collection_name]
-      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0 );
-
-    for (const file of files) {
-      // populate pdf select box 
-      const option = Object.assign(new option_default, {
-        value: file.pdf,
-        textContent: file.label,
-        size: "small",
-      });
-
-      // save scalar file properties in option
-      const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'));
-      Object.assign(option.dataset, data);
-
-      ui$1.toolbar.pdf.hoist = true;
-      ui$1.toolbar.pdf.appendChild(option);
-
-      if (file.pdf === state.pdfPath) {
-        // populate the version and diff selectboxes depending on the selected file
-        if (file.versions) {
-          file.versions.forEach((version) => {
-            // xml
-            let option = new option_default();
-            // @ts-ignore
-            option.size = "small";
-            option.value = version.path;
-            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-            option.disabled = version.is_locked;
-            ui$1.toolbar.xml.appendChild(option);
-            // diff 
-            option = new option_default();
-            // @ts-ignore
-            option.size = "small";
-            option.value = version.path;
-            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-            option.disabled = version.is_locked;
-            ui$1.toolbar.diff.appendChild(option);
-          });
-        }
-      }
-    }
-    ui$1.toolbar.pdf.appendChild(new divider_default);
-  }
-
-
-  // update selection
-  ui$1.toolbar.pdf.value = state.pdfPath || '';
-  ui$1.toolbar.xml.value = state.xmlPath || '';
-  ui$1.toolbar.diff.value = state.diffXmlPath || '';
-
-}
-
-// Event handlers
-
-/**
- * Called when the selection in the PDF selectbox changes
- * @param {ApplicationState} state
- */
-async function onChangePdfSelection(state) {
-  const selectedFile = fileData.find(file => file.pdf === ui$1.toolbar.pdf.value);
-  const pdf = selectedFile.pdf;
-  const xml = selectedFile.xml;
-  const filesToLoad = {};
-
-  if (pdf && pdf !== state.pdfPath) {
-    filesToLoad.pdf = pdf;
-  }
-  if (xml && xml !== state.xmlPath) {
-    filesToLoad.xml = xml;
-  }
-
-  if (Object.keys(filesToLoad).length > 0) {
-    try {
-      api$3.removeMergeView(state);
-      // @ts-ignore
-      await api$3.load(state, filesToLoad);
-    }
-    catch (error) {
-      console.error(error);
-    }
-  }
-}
-
-
-/**
- * Called when the selection in the XML selectbox changes
- * @param {ApplicationState} state
- */
-async function onChangeXmlSelection(state) {
-  const xml = ui$1.toolbar.xml.value;
-  if (xml && typeof xml == "string" && xml !== state.xmlPath) {
-    try {
-      api$3.removeMergeView(state);
-      await api$3.load(state, { xml });
-    } catch (error) {
-      console.error(error);
-    }
-  }
-}
-
-/**
- * Called when the selection in the diff version selectbox  changes
- * @param {ApplicationState} state
- */
-async function onChangeDiffSelection(state) {
-  const diff = ui$1.toolbar.diff.value;
-  if (diff && typeof diff == "string" && diff !== ui$1.toolbar.xml.value) {
-    try {
-      await api$3.showMergeView(state, diff);
-    } catch (error) {
-      console.error(error);
-    }
-  } else {
-    api$3.removeMergeView(state);
-  }
-  updateState(state, { diffXmlPath: diff });
-}
-
-/**
- * This implements the UI and the services for extracting references from the current or a new PDF
- */
-
-
-/**
- * plugin API
- */
-const api$4 = {
-  extractFromCurrentPDF,
-  extractFromNewPdf,
-  extractFromPDF
-};
-
-/**
- * plugin object
- */
-const plugin$7 = {
-  name: "extraction",
-  deps: ['services'],
-  install: install$7
-};
-
-//
-// UI
-//
-
-/**
- * Extraction actions button group
- * @typedef {object} extractionActionsComponent
- * @property {SlButtonGroup} self
- * @property {SlButton} extractNew 
- * @property {SlButton} extractCurrent
- * @property {SlButton} editInstructions - added by prompt-editor plugin
- */
-/** @type {SlButtonGroup & extractionActionsComponent} */
-// @ts-ignore
-const extractionBtnGroup = await createHtmlElements('extraction-buttons.html');
-
-
-/**
- * Extraction options dialog
- * @typedef {object} extractionOptionsDialog
- * @property {SlDialog} self
- * @property {SlInput} doi 
- * @property {SlSelect} collectionName
- * @property {SlSelect} modelIndex 
- * @property {SlSelect} instructionIndex
- */
-/** @type {extractionOptionsDialog & SlDialog} */
-// @ts-ignore
-const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
-
-//
-// Implementation
-//
-
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {ApplicationState} state
- */
-async function install$7(state) {
-  api$a.debug(`Installing plugin "${plugin$7.name}"`);
-
-  // install controls on menubar
-  ui$1.toolbar.self.append(...extractionBtnGroup);
-  document.body.append(optionsDialog);
-  updateUi();
-
-  // add event listeners
-  ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state));
-  ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state));
-}
-
-/**
- * Extract references from the currently loaded PDF
- * @param {ApplicationState} state
- */
-async function extractFromCurrentPDF(state) {
-  let doi;
-  try {
-    doi = getDoiFromXml();
-  } catch (error) {
-    console.warn("Cannot get DOI from document:", error.message);
-  }
-  try {
-    doi = doi || getDoiFromFilename(state.pdfPath);
-    if (state.pdfPath) {
-      let { xml } = await extractFromPDF(state, { doi });
-      await api$3.showMergeView(state, xml);
-    }
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-/**
- * Upload a new PDF and extract from it
- * @param {ApplicationState} state
- */
-async function extractFromNewPdf(state) {
-  try {
-    const { type, filename, originalFilename } = await api$6.uploadFile();
-    if (type !== "pdf") {
-      api$8.error("Extraction is only possible from PDF files");
-      return
-    }
-
-    const doi = getDoiFromFilename(originalFilename);
-    const { xml, pdf } = await extractFromPDF(state, { doi, filename });
-    await api$3.load(state, { xml, pdf });
-
-  } catch (error) {
-    api$8.error(error.message);
-    console.error(error);
-  }
-}
-
-/**
- * Extracts references from the given PDF file, letting the user choose the extraction options
- * @param {ApplicationState} state
- * @param {{doi:string}?} defaultOptions Optional default option object passed to the extraction service,
- * user will be prompted to choose own ones.
- * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
- * @throws {Error} If the DOI is not valid or the user aborts the dialog
- */
-async function extractFromPDF(state, defaultOptions) {
-  if(!state.pdfPath) throw new Error("Missing PDF path")
-
-  // get DOI and instructions from user
-  const options = await promptForExtractionOptions(defaultOptions);
-  if (options === null) throw new Error("User abort")
-
-  ui$1.spinner.show('Extracting references, please wait');
-  let result;
-  try {
-    const filename = options.filename || state.pdfPath;
-    result = await api$6.extractReferences(filename, options);
-    await api$5.reload(state);  // todo uncouple
-    return result
-  } finally {
-    ui$1.spinner.hide();
-  }
-}
-
-// utilities
-
-/**
- * 
- * @param {{doi:string}?} options Optional default option object
- * @returns 
- */
-async function promptForExtractionOptions(options) {
-
-  // load instructions
-  const instructionsData = await api$6.loadInstructions();
-  const instructions = [];
-
-  // populate dialog
-  /** @type {SlInput|null} */
-  if (options && typeof options =="object" && 'doi' in options) {
-    optionsDialog.doi.value = options.doi;
-  } else {
-    optionsDialog.doi.value = "";
-  }
-
-  // configure collections selectbox 
-  /** @type {SlSelect|null} */
-  const collectionSelectBox = optionsDialog.collectionName;
-  collectionSelectBox.innerHTML="";
-  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections);
-  collections.unshift('__inbox');
-  for (const collection_name of collections){
-    const option = Object.assign(new option_default, {
-      value: collection_name,
-      textContent: collection_name.replaceAll("_", " ").trim()
-    });
-    collectionSelectBox.append(option);
-  } 
-  collectionSelectBox.value = "__inbox";
-  
-  // configure instructions selectbox 
-  /** @type {SlSelect|null} */
-  const instructionsSelectBox = optionsDialog.instructionIndex;
-  instructionsSelectBox.innerHTML ="";
-  for (const [idx, { label, text }] of instructionsData.entries()) {
-    const option = Object.assign(new option_default, {
-      value: String(idx),
-      textContent: label
-    });
-    instructions[idx] = text.join("\n");
-    instructionsSelectBox.appendChild(option);
-  }
-  instructionsSelectBox.value = "0";
-
-  // display the dialog and await the user's response
-  const result = await new Promise(resolve => {
-    // user cancels
-    function cancel() {
-      resolve(false);
-    }
-    // user submits their input
-    function submit() {
-      resolve(true);
-    }
-
-    // event listeners
-    optionsDialog.addEventListener("sl-request-close", cancel, { once: true });
-    optionsDialog.cancel.addEventListener("click", cancel, { once: true });
-    optionsDialog.submit.addEventListener("click", submit, { once: true });
-
-    optionsDialog.show();
-  });
-  optionsDialog.hide();
-
-  if (result === false) {
-    // user has cancelled the form
-    return null
-  }
-
-  const formData = {
-    'doi': optionsDialog.doi.value,
-    'instructions': instructions[parseInt(optionsDialog.instructionIndex.value)],
-    'collection': optionsDialog.collectionName.value
-  };
-  
-  if (formData.doi == "" || !isDoi(formData.doi)) {
-    api$8.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
-    return
-  }
-
-  return Object.assign(formData, options)
-}
-
-function getDoiFromXml() {
-  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
-}
-
-function getDoiFromFilename(filename) {
-  let doi = null;
-  console.debug("Extracting DOI from filename:", filename);
-  if (filename.match(/^10\./)) {
-    // treat as a DOI-like filename
-    // do we have URL-encoded filenames?
-    doi = filename.slice(0, -4);
-    if (decodeURIComponent(doi) !== doi) {
-      // filename is URL-encoded DOI
-      doi = decodeURIComponent(doi);
-    } else {
-      // custom decoding
-      doi = doi.replaceAll(/__/g, '/');
-      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
-    }
-    console.debug("Extracted DOI from filename:", doi);
-    if (isDoi(doi)) {
-      return doi
-    }
-  }
-  return null
-}
-
-
-function isDoi(doi) {
-  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
-  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
-  return Boolean(doi.match(DOI_REGEX))
 }
 
 // src/components/alert/alert.styles.ts
@@ -43553,6 +42579,1038 @@ function notify(message, variant = 'primary', icon = 'info-circle', duration = 3
     document.body.append(alert);
     return alert.toast();
   }
+
+/**
+ * Plugin providing a link to server-side methods
+ * This is not really a plugin as it does not implement any endpoints (yet)
+ */
+
+
+/**
+ * Parent class for all API errors
+ * @extends {Error}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class ApiError extends Error {
+  constructor(message, statusCode = 400) {
+    super(message);
+    this.name = "ApiError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating server-side connection issues, such as timeouts or unreachable endpoints.
+ * @extends {ApiError}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 504
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class ConnectionError extends ApiError {
+  constructor(message, statusCode = 504) {
+    super(message);
+    this.name = "ConnectError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating that a requested resource was not found.
+ * @extends {ApiError}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 404
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class NotFoundError extends ApiError {
+  constructor(message, statusCode = 404) {
+    super(message);
+    this.name = "NotFoundError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating an unexpected server-side error.
+ * @extends {Error}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 500
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class ServerError extends Error {
+  constructor(message, statusCode = 500) {
+    super(message);
+    this.name = "ServerError";
+    this.statusCode = statusCode;
+  }
+}
+
+
+
+// name of the component
+const name = "client";
+
+let lastHttpStatus = null;
+
+const api_base_url = '/api';
+const upload_route = '/api/upload';
+
+/**
+ * plugin API
+ */
+const api$6 = {
+  get lastHttpStatus() {
+    return lastHttpStatus
+  },
+  callApi,
+  getFileList,
+  validateXml: validateXml$1,
+  saveXml: saveXml$1,
+  extractReferences,
+  loadInstructions,
+  saveInstructions,
+  deleteFiles,
+  createVersionFromUpload,
+  uploadFile,
+  getConfigValue,
+  setConfigValue,
+  syncFiles: syncFiles$1,
+  moveFiles,
+  state: state$1,
+  sendHeartbeat,
+  checkLock,
+  releaseLock,
+  getAllLocks
+};
+
+
+/**
+ * component plugin
+ */
+const plugin$9 = {
+  name
+};
+
+/**
+ * A generic function to make API requests against the application backend. 
+ * Expects a JSON response which is an arbitrary value in case of success or a 
+ * `{errror: "Error message"}` object in case of an error handled by the API methods. 
+ *
+ * @param {string} endpoint - The API endpoint to call.
+ * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
+ * @param {object} body - The request body (optional).  Will be stringified to JSON.
+ * @returns {Promise<any>} - A promise that resolves to the response data,
+ *                           or rejects with an error message if the request fails.
+ */
+async function callApi(endpoint, method = 'GET', body = null) {
+  try {
+    const url = `${api_base_url}${endpoint}`;
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      keepAlive: true
+    };
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+    // send request
+    const response = await fetch(url, options);
+    let result;
+    try {
+      result = await response.json();
+    } catch (jsonError) {
+      throw new Error("Failed to parse error response as JSON:", jsonError);
+    }
+    // simple error protocol if the server doesn't return a special status code
+    if (result && typeof result === "object" && result.error) {
+      throw new Error(result.error);
+    }
+    return result
+  } catch (error) {
+    // save the last  HTTP status code for later use   
+    lastHttpStatus = error.status || 500;
+
+    // notify the user about the error
+    notify(error.message, 'error');
+
+    // handle specific error types
+    switch (error.status) {
+      case 400:
+        console.warn("General API error:", error.message);
+        throw new ApiError(error.message);
+      case 404:
+        console.warn("Not found:", error.message);
+        throw new NotFoundError(error.message);
+      case 504:
+        console.error("Connection timeout:", error.message);
+        throw new ConnectionError(error.message);
+      case 500:
+      default:
+        console.error("Server error:", error.message);
+        throw new ServerError(error.message);
+    }
+  }
+}
+
+/**
+ * Gets a list of pdf/tei files from the server, including their relative paths
+ *
+ * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
+ *  objects with keys "id", "pdf", and "tei".
+ */
+async function getFileList() {
+  return await callApi('/files/list', 'GET');
+}
+
+/**
+ * Lints a TEI XML string against the Flask API endpoint.
+ *
+ * @param {string} xmlString - The TEI XML string to validate.
+ * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
+ */
+async function validateXml$1(xmlString) {
+  return await callApi('/validate', 'POST', { xml_string: xmlString });
+}
+
+/**
+ * Saves the XML string to a file on the server, optionally as a new version
+ * @param {string} xmlString 
+ * @param {string} filePath 
+ * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
+ * @returns {Promise<Object>}
+ */
+async function saveXml$1(xmlString, filePath, saveAsNewVersion) {
+  return await callApi('/files/save', 'POST',
+    { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
+}
+
+/**
+ * Extracts the references from the given PDF and returns the XML with the extracted data
+ * @param {string} filename The filename of the PDF to extract
+ * @param {Object} options The options for the extractions, such as DOI, additional instructions, etc. 
+ * @returns {Promise<Object>}
+ */
+async function extractReferences(filename, options) {
+  return await callApi('/extract', 'POST', { pdf: filename, ...options });
+}
+
+/**
+ * Returns the current prompt extraction instruction data
+ * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
+ */
+async function loadInstructions() {
+  return await callApi('/config/instructions', 'GET');
+}
+
+/**
+ * Returns the current prompt extraction instruction data
+ * @param {Array<Object>} instructions An array of {active,label,text} objects
+ * @returns {Promise<Object>} The result object
+ */
+async function saveInstructions(instructions) {
+  if (!Array.isArray(instructions)) {
+    throw new Error("Instructions must be an array");
+  }
+  // Send the instructions to the server
+  return await callApi('/config/instructions', 'POST', instructions);
+}
+
+
+/**
+ * Deletes all extraction document versions with the given timestamps 
+ * @returns {Promise<Object>} The result object
+ */
+async function deleteFiles(filePaths) {
+  if (!Array.isArray(filePaths)) {
+    throw new Error("Timestamps must be an array");
+  }
+  return await callApi('/files/delete', 'POST', filePaths);
+}
+
+/**
+ * Creates a new version of a file from an uploaded file.
+ * @param {string} tempFilename 
+ * @param {string} filePath 
+ * @returns {Promise<Object>}
+ */
+async function createVersionFromUpload(tempFilename, filePath) {
+  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
+}
+
+/**
+ * Retrieves the server application state
+ * @returns {Promise<Object>}
+ */
+async function state$1() {
+  return await callApi('/config/state')
+}
+
+/**
+ * Synchronizes the files on the server with a (WebDav) Backend, if exists
+ * @returns {Promise<Object>}
+ */
+async function syncFiles$1() {
+  return await callApi('/files/sync')
+}
+
+/**
+ * Moves the given files to a new collection
+ * @param {string} pdfPath
+ * @param {string} xmlPath
+ * @param {string} destinationCollection
+ * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
+ */
+async function moveFiles(pdfPath, xmlPath, destinationCollection) {
+  return await callApi('/files/move', 'POST', {
+    pdf_path: pdfPath,
+    xml_path: xmlPath,
+    destination_collection: destinationCollection
+  });
+}
+
+
+/**
+ * Retrieves a configuration value from the server
+ */
+async function getConfigValue(key) {
+  if (typeof key !== "string" || key.length === 0) {
+    throw new Error("Key must be a non-empty string");
+  }
+  const path = `/config/get/${encodeURIComponent(key)}`;
+  const value = await callApi(path, 'GET');
+  return value;
+}
+
+/**
+ * Sets a configuration value on the server.
+ */
+async function setConfigValue(key, value) {
+  if (typeof key !== "string" || key.length === 0) {
+    throw new Error("Key must be a non-empty string");
+  }
+
+  const data = {
+    key: key,
+    value: value,
+  };
+
+  // The server is expected to return { result: "OK" } on success
+  const response = await callApi('/config/set', 'POST', data);
+  return response;
+}
+
+/**
+ * Sends a heartbeat to the server to keep the file lock alive.
+ * @param {string} filePath The file path to send the heartbeat for
+ * @returns {Promise<{status:string}>} The response from the server 
+ * @throws {Error} If the file path is not provided or if the heartbeat fails
+ */
+async function sendHeartbeat(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required for heartbeat");
+  }
+  return await callApi('/files/heartbeat', 'POST', { file_path: filePath });
+}
+
+/**
+ * Checks if a file is locked by another user.
+ * @param {string} filePath The file path to check the lock for
+ * @returns {Promise<{is_locked: boolean}>} The response from the server indicating if the file is locked
+ * @throws {Error} If the file path is not provided or if the lock check fails
+ */
+async function checkLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to check lock");
+  }
+  return await callApi('/files/check_lock', 'POST', { file_path: filePath });
+}
+
+async function releaseLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to release lock");
+  }
+  return await callApi('/files/release_lock', 'POST', { file_path: filePath });
+}
+
+
+/**
+ * Retrieves an object mapping all currently locked files to the session id that locked them.
+ * @returns {Promise<{[string]:Number}>} An object mapping locked file paths to session ids 
+ */
+async function getAllLocks() {
+  return await callApi('/files/locks', 'GET');
+}
+
+/**
+ * Uploads a file selected by the user to a specified URL using `fetch()`.
+ *
+ * @author Gemini 2.0
+ * @param {string} uploadUrl - The URL to which the file will be uploaded.
+ * @param {object} [options={}] - Optional configuration options.
+ * @param {string} [options.method='POST'] - The HTTP method to use for the upload.
+ * @param {string} [options.fieldName='file'] - The name of the form field for the file.
+ * @param {object} [options.headers={}] - Additional headers to include in the request.
+ * @param {function} [options.onProgress] - A callback function to handle upload progress events.
+ *    The function receives a progress event object as an argument.
+ * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
+ *    This is a string that will be set as the `accept` attribute of the file
+ * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
+ *    from the `fetch()` call, which must be an object, or rejects with an error.
+ *    The object should contain the uploaded file's metadata, such as its path or ID.
+ *    It will always contain a key "originalFilename" with the original name of the file,
+ *    (as the server can change the filename). Ff the upload fails on the server side, 
+ *   it will contain an "error" key with the error message.
+ * @throws {Error} If the upload fails or if no file is selected.
+ * @example
+ * // Async/Await example (requires an async function context):
+ * async function myUploadFunction() {
+ *   try {
+ *     const response = await uploadFile('https://example.com/upload', {
+ *       fieldName: 'my_file',
+ *       headers: {
+ *         'X-Custom-Header': 'value'
+ *       },
+ *       onProgress: (event) => {
+ *         if (event.lengthComputable) {
+ *           const percentComplete = (event.loaded / event.total) * 100;
+ *           logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
+ *         } else {
+ *           logger.info("Total size is unknown");
+ *         }
+ *       } 
+ *     });
+ *
+ *     if (response.ok) {
+ *       const data = await response.json();
+ *       logger.info('Upload successful:', data);
+ *     } else {
+ *       throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+ *     }
+ *   } catch (error) {
+ *     console.error('Error uploading file:', error);
+ *   }
+ * }
+ */
+async function uploadFile(uploadUrl = upload_route, options = {}) {
+  return new Promise((resolve, reject) => {
+    const {
+      method = 'POST',
+      fieldName = 'file',
+      headers = {},
+      onProgress,
+      accept = '.pdf, .xml'
+    } = options;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      if (!file) {
+        reject(new Error('No file selected.'));
+        return;
+      }
+      const formData = new FormData();
+      console.debug("Uploading file:", file.name, "to", uploadUrl);
+      formData.append(fieldName, file);
+      const fetchOptions = {
+        method: method,
+        body: formData,
+        headers: headers
+      };
+      try {
+        const response = await fetch(uploadUrl, fetchOptions);
+        if (!response.ok) {
+          reject(new Error(`HTTP error! Status: ${response.status}`));
+          return;
+        }
+        let result = await response.json();
+        if (typeof result !== 'object' || !result) {
+          reject(new Error("Invalid response format, expected an object"));
+          return;
+        }
+        // Ensure the result contains the original filename
+        if (!result.originalFilename) {
+          result.originalFilename = file.name; //   Fallback to the input file name
+        }
+        if (result.error) {
+          reject(result.error);
+        }
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    // Programmatically trigger the file chooser dialog.  Crucially, this must be initiated from a user action,
+    // such as a button click, to work correctly in most browsers. Directly calling input.click() on page 
+    // load will generally be blocked.
+    input.click();
+  });
+}
+
+/**
+ * This implements the UI for the file selection
+ */
+
+
+/**
+ * The data about the pdf and xml files on the server
+ * @type {Array<object>}
+ */
+const fileData = [];
+
+/**
+ * plugin API
+ */
+const api$5 = {
+  reload,
+  update: update$3,
+  fileData
+};
+
+/**
+ * component plugin
+ */
+const plugin$8 = {
+  name: "file-selection",
+
+  install: install$8,
+  state: {
+    update: update$3
+  }
+};
+
+//
+// UI
+//
+
+// see ui.js for @typedef 
+const fileSelectionControls = await createHtmlElements('file-selection.html');
+
+//
+// Implementation
+//
+
+// API
+
+/**
+ * Runs when the main app starts so the plugins can register the app components they supply
+ * @param {ApplicationState} state
+ */
+async function install$8(state) {
+
+  api$a.debug(`Installing plugin "${plugin$8.name}"`);
+  
+  // install controls on menubar
+  ui$1.toolbar.self.append(...fileSelectionControls);
+  updateUi();
+  
+  /**  @type {[SlSelect,function][]} */
+  const handlers = [
+    [ui$1.toolbar.pdf, onChangePdfSelection],
+    [ui$1.toolbar.xml, onChangeXmlSelection],
+    [ui$1.toolbar.diff, onChangeDiffSelection]
+  ];
+
+  for (const [select, handler] of handlers) {
+    // add event handler for the selectbox
+    select.addEventListener('sl-change', () => handler(state));
+
+    // this works around a problem with the z-index of the select dropdown being bound 
+    // to the z-index of the parent toolbar (and therefore being hidden by the editors)
+    select.addEventListener('sl-show', () => {
+      select.closest('#toolbar')?.classList.add('dropdown-open');
+    });
+
+    select.addEventListener('sl-hide', () => {
+      select.closest('#toolbar')?.classList.remove('dropdown-open');
+    });
+  }
+}
+
+/**
+ * 
+ * @param {ApplicationState} state 
+ */
+async function update$3(state) {
+  //console.warn("update", plugin.name, state)
+  await populateSelectboxes(state);
+  ui$1.toolbar.pdf.value = state.pdfPath || "";
+  ui$1.toolbar.xml.value = state.xmlPath || "";
+  ui$1.toolbar.diff.value = state.diffXmlPath || "";
+}
+
+
+/**
+ * Reloads data and then updates based on the application state
+ * @param {ApplicationState} state
+ */
+async function reload(state) {
+  await reloadFileData();
+  await populateSelectboxes(state);
+}
+
+/**
+ * Reloads the file data from the server
+ * @param {ApplicationState} state
+ */
+async function reloadFileData(state) {
+  api$a.debug("Reloading file data");
+  let data = await api$6.getFileList();
+  if (!data || data.length === 0) {
+    api$8.error("No files found");
+  }
+  // update the fileData variable
+  fileData.length = 0; // clear the array
+  fileData.push(...data);
+  stateCache = null;
+  return fileData;
+}
+
+let stateCache;
+
+/**
+ * Populates the selectboxes for file name and version
+ * @param {ApplicationState} state
+ */
+async function populateSelectboxes(state) {
+
+  // check if state has changed
+  const { xmlPath, pdfPath, diffXmlPath } = state;
+  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath });
+  if (jsonState === stateCache) {
+    //logger.debug("Not repopulating selectboxes as state hasn't changed")
+    return
+  }
+  stateCache = jsonState;
+
+  api$a.debug("Populating selectboxes");
+
+  if (fileData === null) {
+    await reloadFileData();
+  }
+
+  // Clear existing options
+  for (const name of ["pdf", "xml", "diff"]) {
+    ui$1.toolbar[name].innerHTML = "";
+  }
+
+  // sort into groups by directory
+  const dirname = (path) => path.split('/').slice(0, -1).join('/');
+  const basename = (path) => path.split('/').pop();
+  const grouped_files = fileData.reduce((groups, file) => {
+    const collection_name = basename(dirname(file.pdf));
+    (groups[collection_name] = groups[collection_name] || []).push(file);
+    return groups
+  }, {});
+
+  // save the collections, this tight coupling is not ideal
+  const collections = Object.keys(grouped_files).sort();
+  ui$1.toolbar.pdf.dataset.collections = JSON.stringify(collections);
+
+  // get items to be selected from app state or use first element
+  for (const collection_name of collections) {
+    
+    await createHtmlElements(`<small>${collection_name.replaceAll("_"," ").trim()}</small>`, ui$1.toolbar.pdf);
+    
+    // get a list of file data sorted by label
+    const files = grouped_files[collection_name]
+      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0 );
+
+    for (const file of files) {
+      // populate pdf select box 
+      const option = Object.assign(new option_default, {
+        value: file.pdf,
+        textContent: file.label,
+        size: "small",
+      });
+
+      // save scalar file properties in option
+      const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'));
+      Object.assign(option.dataset, data);
+
+      ui$1.toolbar.pdf.hoist = true;
+      ui$1.toolbar.pdf.appendChild(option);
+
+      if (file.pdf === state.pdfPath) {
+        // populate the version and diff selectboxes depending on the selected file
+        if (file.versions) {
+          file.versions.forEach((version) => {
+            // xml
+            let option = new option_default();
+            // @ts-ignore
+            option.size = "small";
+            option.value = version.path;
+            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+            option.disabled = version.is_locked;
+            ui$1.toolbar.xml.appendChild(option);
+            // diff 
+            option = new option_default();
+            // @ts-ignore
+            option.size = "small";
+            option.value = version.path;
+            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+            option.disabled = version.is_locked;
+            ui$1.toolbar.diff.appendChild(option);
+          });
+        }
+      }
+    }
+    ui$1.toolbar.pdf.appendChild(new divider_default);
+  }
+
+
+  // update selection
+  ui$1.toolbar.pdf.value = state.pdfPath || '';
+  ui$1.toolbar.xml.value = state.xmlPath || '';
+  ui$1.toolbar.diff.value = state.diffXmlPath || '';
+
+}
+
+// Event handlers
+
+/**
+ * Called when the selection in the PDF selectbox changes
+ * @param {ApplicationState} state
+ */
+async function onChangePdfSelection(state) {
+  const selectedFile = fileData.find(file => file.pdf === ui$1.toolbar.pdf.value);
+  const pdf = selectedFile.pdf;
+  const xml = selectedFile.xml;
+  const filesToLoad = {};
+
+  if (pdf && pdf !== state.pdfPath) {
+    filesToLoad.pdf = pdf;
+  }
+  if (xml && xml !== state.xmlPath) {
+    filesToLoad.xml = xml;
+  }
+
+  if (Object.keys(filesToLoad).length > 0) {
+    try {
+      api$3.removeMergeView(state);
+      // @ts-ignore
+      await api$3.load(state, filesToLoad);
+    }
+    catch (error) {
+      console.error(error);
+    }
+  }
+}
+
+
+/**
+ * Called when the selection in the XML selectbox changes
+ * @param {ApplicationState} state
+ */
+async function onChangeXmlSelection(state) {
+  const xml = ui$1.toolbar.xml.value;
+  if (xml && typeof xml == "string" && xml !== state.xmlPath) {
+    try {
+      api$3.removeMergeView(state);
+      await api$3.load(state, { xml });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+}
+
+/**
+ * Called when the selection in the diff version selectbox  changes
+ * @param {ApplicationState} state
+ */
+async function onChangeDiffSelection(state) {
+  const diff = ui$1.toolbar.diff.value;
+  if (diff && typeof diff == "string" && diff !== ui$1.toolbar.xml.value) {
+    try {
+      await api$3.showMergeView(state, diff);
+    } catch (error) {
+      console.error(error);
+    }
+  } else {
+    api$3.removeMergeView(state);
+  }
+  updateState(state, { diffXmlPath: diff });
+}
+
+/**
+ * This implements the UI and the services for extracting references from the current or a new PDF
+ */
+
+
+/**
+ * plugin API
+ */
+const api$4 = {
+  extractFromCurrentPDF,
+  extractFromNewPdf,
+  extractFromPDF
+};
+
+/**
+ * plugin object
+ */
+const plugin$7 = {
+  name: "extraction",
+  deps: ['services'],
+  install: install$7,
+  update: update$2
+};
+
+//
+// UI
+//
+
+/**
+ * Extraction actions button group
+ * @typedef {object} extractionActionsComponent
+ * @property {SlButtonGroup} self
+ * @property {SlButton} extractNew 
+ * @property {SlButton} extractCurrent
+ * @property {SlButton} editInstructions - added by prompt-editor plugin
+ */
+/** @type {SlButtonGroup & extractionActionsComponent} */
+// @ts-ignore
+const extractionBtnGroup = await createHtmlElements('extraction-buttons.html');
+
+
+/**
+ * Extraction options dialog
+ * @typedef {object} extractionOptionsDialog
+ * @property {SlDialog} self
+ * @property {SlInput} doi 
+ * @property {SlSelect} collectionName
+ * @property {SlSelect} modelIndex 
+ * @property {SlSelect} instructionIndex
+ */
+/** @type {extractionOptionsDialog & SlDialog} */
+// @ts-ignore
+const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
+
+//
+// Implementation
+//
+
+/**
+ * @param {ApplicationState} state
+ */
+async function install$7(state) {
+  api$a.debug(`Installing plugin "${plugin$7.name}"`);
+
+  // install controls on menubar
+  ui$1.toolbar.self.append(...extractionBtnGroup);
+  document.body.append(optionsDialog);
+  updateUi();
+
+  // add event listeners
+  ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state));
+  ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state));
+}
+
+/**
+ * @param {ApplicationState} state
+ */
+async function update$2(state) {
+  extractionBtnGroup.self.disabled = state.offline;
+  extractionBtnGroup.extractCurrent.disabled = !state.pdfPath;
+}
+
+/**
+ * Extract references from the currently loaded PDF
+ * @param {ApplicationState} state
+ */
+async function extractFromCurrentPDF(state) {
+  let doi;
+  try {
+    doi = getDoiFromXml();
+  } catch (error) {
+    console.warn("Cannot get DOI from document:", error.message);
+  }
+  try {
+    doi = doi || getDoiFromFilename(state.pdfPath);
+    if (state.pdfPath) {
+      let { xml } = await extractFromPDF(state, { doi });
+      await api$3.showMergeView(state, xml);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+/**
+ * Upload a new PDF and extract from it
+ * @param {ApplicationState} state
+ */
+async function extractFromNewPdf(state) {
+  try {
+    const { type, filename, originalFilename } = await api$6.uploadFile();
+    if (type !== "pdf") {
+      api$8.error("Extraction is only possible from PDF files");
+      return
+    }
+
+    const doi = getDoiFromFilename(originalFilename);
+    const { xml, pdf } = await extractFromPDF(state, { doi, filename });
+    await api$3.load(state, { xml, pdf });
+
+  } catch (error) {
+    api$8.error(error.message);
+    console.error(error);
+  }
+}
+
+/**
+ * Extracts references from the given PDF file, letting the user choose the extraction options
+ * @param {ApplicationState} state
+ * @param {{doi:string}?} defaultOptions Optional default option object passed to the extraction service,
+ * user will be prompted to choose own ones.
+ * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
+ * @throws {Error} If the DOI is not valid or the user aborts the dialog
+ */
+async function extractFromPDF(state, defaultOptions) {
+  if(!state.pdfPath) throw new Error("Missing PDF path")
+
+  // get DOI and instructions from user
+  const options = await promptForExtractionOptions(defaultOptions);
+  if (options === null) throw new Error("User abort")
+
+  ui$1.spinner.show('Extracting references, please wait');
+  let result;
+  try {
+    const filename = options.filename || state.pdfPath;
+    result = await api$6.extractReferences(filename, options);
+    await api$5.reload(state);  // todo uncouple
+    return result
+  } finally {
+    ui$1.spinner.hide();
+  }
+}
+
+// utilities
+
+/**
+ * 
+ * @param {{doi:string}?} options Optional default option object
+ * @returns 
+ */
+async function promptForExtractionOptions(options) {
+
+  // load instructions
+  const instructionsData = await api$6.loadInstructions();
+  const instructions = [];
+
+  // populate dialog
+  /** @type {SlInput|null} */
+  if (options && typeof options =="object" && 'doi' in options) {
+    optionsDialog.doi.value = options.doi;
+  } else {
+    optionsDialog.doi.value = "";
+  }
+
+  // configure collections selectbox 
+  /** @type {SlSelect|null} */
+  const collectionSelectBox = optionsDialog.collectionName;
+  collectionSelectBox.innerHTML="";
+  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections);
+  collections.unshift('__inbox');
+  for (const collection_name of collections){
+    const option = Object.assign(new option_default, {
+      value: collection_name,
+      textContent: collection_name.replaceAll("_", " ").trim()
+    });
+    collectionSelectBox.append(option);
+  } 
+  collectionSelectBox.value = "__inbox";
+  
+  // configure instructions selectbox 
+  /** @type {SlSelect|null} */
+  const instructionsSelectBox = optionsDialog.instructionIndex;
+  instructionsSelectBox.innerHTML ="";
+  for (const [idx, { label, text }] of instructionsData.entries()) {
+    const option = Object.assign(new option_default, {
+      value: String(idx),
+      textContent: label
+    });
+    instructions[idx] = text.join("\n");
+    instructionsSelectBox.appendChild(option);
+  }
+  instructionsSelectBox.value = "0";
+
+  // display the dialog and await the user's response
+  const result = await new Promise(resolve => {
+    // user cancels
+    function cancel() {
+      resolve(false);
+    }
+    // user submits their input
+    function submit() {
+      resolve(true);
+    }
+
+    // event listeners
+    optionsDialog.addEventListener("sl-request-close", cancel, { once: true });
+    optionsDialog.cancel.addEventListener("click", cancel, { once: true });
+    optionsDialog.submit.addEventListener("click", submit, { once: true });
+
+    optionsDialog.show();
+  });
+  optionsDialog.hide();
+
+  if (result === false) {
+    // user has cancelled the form
+    return null
+  }
+
+  const formData = {
+    'doi': optionsDialog.doi.value,
+    'instructions': instructions[parseInt(optionsDialog.instructionIndex.value)],
+    'collection': optionsDialog.collectionName.value
+  };
+  
+  if (formData.doi == "" || !isDoi(formData.doi)) {
+    api$8.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
+    return
+  }
+
+  return Object.assign(formData, options)
+}
+
+function getDoiFromXml() {
+  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
+}
+
+function getDoiFromFilename(filename) {
+  let doi = null;
+  console.debug("Extracting DOI from filename:", filename);
+  if (filename.match(/^10\./)) {
+    // treat as a DOI-like filename
+    // do we have URL-encoded filenames?
+    doi = filename.slice(0, -4);
+    if (decodeURIComponent(doi) !== doi) {
+      // filename is URL-encoded DOI
+      doi = decodeURIComponent(doi);
+    } else {
+      // custom decoding
+      doi = doi.replaceAll(/__/g, '/');
+      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
+    }
+    console.debug("Extracted DOI from filename:", doi);
+    if (isDoi(doi)) {
+      return doi
+    }
+  }
+  return null
+}
+
+
+function isDoi(doi) {
+  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
+  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
+  return Boolean(doi.match(DOI_REGEX))
+}
 
 const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
 
@@ -44066,6 +44124,12 @@ async function update$1(state) {
 
   // disable deletion if there are no versions or gold is selected
   const da = ui$1.toolbar.documentActions;
+
+  da.self.childNodes.forEach(el => el.disabled = state.offline);
+  if (state.offline) {  
+    return
+  } 
+
   da.deleteAll.disabled = api$5.fileData.length < 2; // at least on PDF must be present
   da.deleteAllVersions.disabled = ui$1.toolbar.xml.childElementCount < 2;
   da.deleteCurrentVersion.disabled = ui$1.toolbar.xml.value === ui$1.toolbar.xml.firstChild?.value;
@@ -44112,14 +44176,17 @@ async function load$1(state, { xml, pdf }) {
   // XML
   if (xml) {
     // Check for lock before loading
-    if (state.webdavEnabled) {
+    if (!state.offline && state.webdavEnabled) {
       if (state.xmlPath && state.xmlPath !== xml) {
-        await api$6.releaseLock(state.xmlPath);
-      }
-
-      const { is_locked } = await api$6.checkLock(xml);
-      if (is_locked) {
-        xmlEditor.setReadOnly(true);
+        try {
+          await api$6.releaseLock(state.xmlPath);
+          const { is_locked } = await api$6.checkLock(xml);
+          if (is_locked) {
+            xmlEditor.setReadOnly(true);
+          }
+        } catch (error) {
+          console.warn("Cannot release lock on XML file:", error.message);
+        }
       }
     }
     removeMergeView(state);
@@ -44178,7 +44245,15 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     ui$1.statusBar.statusMessageXml.textContent = "Saving XML...";
     return await api$6.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
-    throw e
+    switch (e.status_code) {
+      case 504: // Gateway Timeout
+        // ignore this error, it is handled by the client
+      break;
+      default:
+        console.error("Error while saving XML:", e.message);
+        api$8.error(`Could not save XML: ${e.message}`);
+        throw new Error(`Could not save XML: ${e.message}`)
+    }
   } finally {
     setTimeout(() => { ui$1.statusBar.statusMessageXml.textContent = ""; }, 1000); // clear status message after 1 second 
   }
@@ -53949,6 +54024,7 @@ async function showMoveFilesDialog(state) {
  */
 
 
+
 /**
  * Plugin object
  * dependencies are automatically set to all other plugins, so that it is the last one to be installed
@@ -53956,8 +54032,13 @@ async function showMoveFilesDialog(state) {
 const plugin = {
   name: "start",
   install,
+  validation: {
+    result: onValidationResult
+  },
   start
 };
+
+
 //
 // Implementation
 //
@@ -53996,7 +54077,7 @@ async function start(state) {
     api$9.updateState(state);
 
     // disable regular validation so that we have more control over it
-    api$7.configure({mode:"off"});
+    api$7.configure({ mode: "off" });
 
     // get document paths from URL hash or from the first entry of the selectboxes
     // @ts-ignore
@@ -54028,7 +54109,7 @@ async function start(state) {
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
         api$a.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
-        api$7.configure({mode: seconds > 3 ? "off": "auto"});
+        api$7.configure({ mode: seconds > 3 ? "off" : "auto" });
       });
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
@@ -54042,6 +54123,49 @@ async function start(state) {
       updateState(state);
     }
 
+    // manually show diagnostics if validation is disabled
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+      if (api$7.isDisabled()) {
+        let view = xmlEditor.getView();
+        // @ts-ignore
+        let diagnostic = evt.detail;
+        try {
+          view.dispatch(setDiagnostics(view.state, [diagnostic]));
+        } catch (error) {
+          api$a.warn("Error setting diagnostics: " + error.message);
+        }
+      }
+    });
+
+    // save dirty editor content after an update
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty());
+
+    // xml vaidation events
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+      /** @type Diagnostic[] */
+
+      const diagnostics = evt.detail;
+      console.warn("XML is not well-formed", diagnostics);
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
+
+      ui$1.statusBar.statusMessageXml.textContent = "Invalid XML";
+      // @ts-ignore
+      ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
+    });
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+      // @ts-ignore
+      ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
+      ui$1.statusBar.statusMessageXml.textContent = "";
+    });
+
+    // Heartbeat mechanism for file locking and offline detection
+    if (state.webdavEnabled) {
+      configureHeartbeat(state);
+    }
+
+
+
     // finish initialization
     ui$1.spinner.hide();
     api$2.show();
@@ -54053,6 +54177,110 @@ async function start(state) {
     api$8.error(error.message);
     throw error
   }
+}
+
+/**
+ * Called when a validation has been done. 
+ * Used to save the document after successful validation
+ * @param {Diagnostic[]} diagnostics 
+ */
+async function onValidationResult(diagnostics) {
+  if (diagnostics.length === 0) {
+    saveIfDirty();
+  }
+}
+
+/**
+ * Save the current XML file if the editor is "dirty"
+ */
+async function saveIfDirty() {
+  const filePath = String(ui$1.toolbar.xml.value);
+
+  // track weird bug where the xmlEditor is not initialized yet
+  if (!xmlEditor || !xmlEditor.isDirty) {
+    api$a.warn("XML Editor is not initialized yet, cannot save.");
+    console.log(xmlEditor);
+    return
+  }
+
+  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
+    const result = await api$3.saveXml(filePath);
+    if (result.status == "unchanged") {
+      api$a.debug(`File has not changed`);
+    } else {
+      api$a.debug(`Saved file to ${result.path}`);
+    }
+  }
+}
+
+/**
+ * Configures the heartbeat mechanism for file locking and offline detection.
+ * @param {ApplicationState} state 
+ * @param {number} [lockTimeoutSeconds=60]
+ */
+function configureHeartbeat(state, lockTimeoutSeconds = 60) {
+  let heartbeatInterval = null;
+  const heartbeatFrequency = (lockTimeoutSeconds / 2) * 1000;
+
+  const stopHeartbeat = () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+      api$a.debug("Heartbeat stopped.");
+    }
+    const filePath = ui$1.toolbar.xml.value;
+    api$6.releaseLock(filePath);
+  };
+
+  const startHeartbeat = () => {
+
+    heartbeatInterval = setInterval(async () => {
+
+      console.warn("Sending heartbeat to server to keep file lock alive...");
+
+      const filePath = ui$1.toolbar.xml.value;
+      if (!filePath) {
+        // No file is selected, do nothing.
+        return;
+      }
+
+      try {
+        await api$6.sendHeartbeat(filePath);
+
+        // If we are here, the request was successful. Check if we were offline.
+        if (!state.webdavEnabled) {
+          api$a.info("Connection restored. Re-enabling WebDAV features.");
+          notify("Connection restored. File synchronization is active.");
+          updateState(state, { webdavEnabled: true, offline: false });
+        }
+      } catch (error) {
+        // Handle different types of errors
+        if (error instanceof TypeError) {
+          // This is likely a network error (client is offline)
+          if (state.webdavEnabled) {
+            api$a.warn("Connection lost. Disabling WebDAV features.");
+            notify("Connection to the server was lost. File synchronization has been disabled.", "warning");
+            updateState(state, { webdavEnabled: false, offline: true });
+          }
+        } else if (error.status === 409 || error.status === 423) {
+          // Lock was lost or taken by another user
+          api$a.error("Lock lost for file: " + filePath);
+          api$8.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+          updateState(state, { editorReadOnly: true });
+        } else {
+          // Another server-side error occurred
+          if (state.webdavEnabled) {
+            api$a.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
+            api$8.error("An unexpected server error occurred. File synchronization has been disabled for safety.", "Server Error");
+            updateState(state, { webdavEnabled: false });
+          }
+        }
+      }
+    }, heartbeatFrequency);
+    api$a.debug("Heartbeat started.");
+  };
+  startHeartbeat();
+  window.addEventListener('beforeunload', stopHeartbeat);
 }
 
 /**
@@ -54074,6 +54302,7 @@ async function start(state) {
  * @property {string|null} xpath - The current xpath used to select a node in the editor
  * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
+ * @property {boolean} offline  - Whether the application is in offline mode
  */
 /**
  * @type{ApplicationState}
@@ -54084,7 +54313,8 @@ let state = {
   diffXmlPath: null,
   xpath: null,
   webdavEnabled: false,
-  editorReadOnly: false
+  editorReadOnly: false,
+  offline: false
 };
 
 /**
