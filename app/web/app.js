@@ -10897,7 +10897,7 @@ var ui$1 = ui;
 // Plugin API
 const api$8 = {
   info,
-  error: error$2,
+  error: error$1,
   success
 };
 
@@ -10949,7 +10949,7 @@ function info(message) {
  * Shows an error dialog
  * @param {string} message 
  */
-function error$2(message) {
+function error$1(message) {
   ui$1.dialog.self.setAttribute("label", "Error");
   ui$1.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
   ui$1.dialog.message.innerHTML = message;
@@ -42702,10 +42702,11 @@ const plugin$9 = {
  * @param {string} endpoint - The API endpoint to call.
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
  * @param {object} body - The request body (optional).  Will be stringified to JSON.
+ * @param {Number} [retryAttempts] - The number of retry attempts after a timeout
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
-async function callApi(endpoint, method = 'GET', body = null) {
+async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
   const url = `${api_base_url}${endpoint}`;
   const options = {
     method,
@@ -42717,26 +42718,36 @@ async function callApi(endpoint, method = 'GET', body = null) {
   if (body) {
     options.body = JSON.stringify(body);
   }
-  // send request
-  const response = await fetch(url, options);
 
-  // save the last  HTTP status code for later use   
-  lastHttpStatus = response.status;
+  // function to send the request which can be repeatedly called in case of a timeout
+  const sendRequest = async () => {
 
-  let result;
-  try {
-    result = await response.json();
-  } catch (jsonError) {
-    throw new ServerError("Failed to parse error response as JSON");
-  }
+    // send request
+    const response = await fetch(url, options);
 
-  if (response.status != 200) {
+    // save the last  HTTP status code for later use   
+    lastHttpStatus = response.status;
+
+    let result;
+    try {
+      result = await response.json();
+    } catch (jsonError) {
+      throw new ServerError("Failed to parse error response as JSON");
+    }
+
+    if (response.status === 200) {
+      // simple error protocol if the server doesn't return a special status code
+      if (result && typeof result === "object" && result.error) {
+        throw new Error(result.error);
+      }
+      // success! 
+      return result
+    }
+
+    // handle error responses
     console.warn(`Error status: ${response.status}`);
 
     const message = result.error;
-
-    // notify the user about the error
-    notify(message, 'error');
 
     // handle specific error types
     switch (response.status) {
@@ -42753,20 +42764,35 @@ async function callApi(endpoint, method = 'GET', body = null) {
         if (response.status && String(response.status)[0] === '4') {
           // Client-side error
           console.warn("Client-side error:", message);
-          throw new ApiError(error.message, response.status);
+          throw new ApiError(message, response.status);
         }
         console.error("Server error:", message);
         throw new ServerError(message);
     }
-  }
+  };
 
-  // simple error protocol if the server doesn't return a special status code
-  if (result && typeof result === "object" && result.error) {
-    throw new Error(result.error);
-  }
+  let error;
+  do {
+    try {
+      // return the non-error result
+      return await sendRequest()
+    } catch (e) {
+      error = e;
+      if (error instanceof ConnectionError) {
+        // retry in case of ConnectionError
+        api$a.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
+        // wait one second
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } else {
+        // throw the error 
+        break;
+      }
+    }
+  } while (retryAttempts-- > 0);
 
-  // everything is in order
-  return result
+  // notify the user about the error
+  notify(error.message, 'error');
+  throw error
 }
 
 /**
@@ -43259,7 +43285,7 @@ async function populateSelectboxes(state) {
             option.size = "small";
             option.value = version.path;
             option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-            option.disabled = version.is_locked;
+            //option.disabled = version.is_locked;
             ui$1.toolbar.xml.appendChild(option);
             // diff 
             option = new option_default();
@@ -52607,7 +52633,7 @@ const stringFromCharCode = String.fromCharCode;
  * @param {String} type The error type.
  * @returns {Error} Throws a `RangeError` with the applicable error message.
  */
-function error$1(type) {
+function error(type) {
 	throw new RangeError(errors[type]);
 }
 
@@ -52782,7 +52808,7 @@ const decode = function(input) {
 	for (let j = 0; j < basic; ++j) {
 		// if it's not a basic code point
 		if (input.charCodeAt(j) >= 0x80) {
-			error$1('not-basic');
+			error('not-basic');
 		}
 		output.push(input.charCodeAt(j));
 	}
@@ -52801,16 +52827,16 @@ const decode = function(input) {
 		for (let w = 1, k = base; /* no condition */; k += base) {
 
 			if (index >= inputLength) {
-				error$1('invalid-input');
+				error('invalid-input');
 			}
 
 			const digit = basicToDigit(input.charCodeAt(index++));
 
 			if (digit >= base) {
-				error$1('invalid-input');
+				error('invalid-input');
 			}
 			if (digit > floor((maxInt - i) / w)) {
-				error$1('overflow');
+				error('overflow');
 			}
 
 			i += digit * w;
@@ -52822,7 +52848,7 @@ const decode = function(input) {
 
 			const baseMinusT = base - t;
 			if (w > floor(maxInt / baseMinusT)) {
-				error$1('overflow');
+				error('overflow');
 			}
 
 			w *= baseMinusT;
@@ -52835,7 +52861,7 @@ const decode = function(input) {
 		// `i` was supposed to wrap around from `out` to `0`,
 		// incrementing `n` each time, so we'll fix that now:
 		if (floor(i / out) > maxInt - n) {
-			error$1('overflow');
+			error('overflow');
 		}
 
 		n += floor(i / out);
@@ -52904,7 +52930,7 @@ const encode = function(input) {
 		// but guard against overflow.
 		const handledCPCountPlusOne = handledCPCount + 1;
 		if (m - n > floor((maxInt - delta) / handledCPCountPlusOne)) {
-			error$1('overflow');
+			error('overflow');
 		}
 
 		delta += (m - n) * handledCPCountPlusOne;
@@ -52912,7 +52938,7 @@ const encode = function(input) {
 
 		for (const currentValue of input) {
 			if (currentValue < n && ++delta > maxInt) {
-				error$1('overflow');
+				error('overflow');
 			}
 			if (currentValue === n) {
 				// Represent delta as a generalized variable-length integer.
