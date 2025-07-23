@@ -9,6 +9,7 @@
 import { api as dialog } from './dialog.js'
 
 import { notify } from '../modules/sl-utils.js';
+import { logger } from '../app.js';
 
 /**
  * Parent class for all API errors
@@ -127,10 +128,11 @@ export default plugin
  * @param {string} endpoint - The API endpoint to call.
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
  * @param {object} body - The request body (optional).  Will be stringified to JSON.
+ * @param {Number} [retryAttempts] - The number of retry attempts after a timeout
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
-async function callApi(endpoint, method = 'GET', body = null) {
+async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
   const url = `${api_base_url}${endpoint}`;
   const options = {
     method,
@@ -142,26 +144,36 @@ async function callApi(endpoint, method = 'GET', body = null) {
   if (body) {
     options.body = JSON.stringify(body);
   }
-  // send request
-  const response = await fetch(url, options);
 
-  // save the last  HTTP status code for later use   
-  lastHttpStatus = response.status
+  // function to send the request which can be repeatedly called in case of a timeout
+  const sendRequest = async () => {
 
-  let result;
-  try {
-    result = await response.json()
-  } catch (jsonError) {
-    throw new ServerError("Failed to parse error response as JSON");
-  }
+    // send request
+    const response = await fetch(url, options);
 
-  if (response.status != 200) {
+    // save the last  HTTP status code for later use   
+    lastHttpStatus = response.status
+
+    let result;
+    try {
+      result = await response.json()
+    } catch (jsonError) {
+      throw new ServerError("Failed to parse error response as JSON");
+    }
+
+    if (response.status === 200) {
+      // simple error protocol if the server doesn't return a special status code
+      if (result && typeof result === "object" && result.error) {
+        throw new Error(result.error);
+      }
+      // success! 
+      return result
+    }
+
+    // handle error responses
     console.warn(`Error status: ${response.status}`)
 
     const message = result.error
-
-    // notify the user about the error
-    notify(message, 'error');
 
     // handle specific error types
     switch (response.status) {
@@ -178,20 +190,35 @@ async function callApi(endpoint, method = 'GET', body = null) {
         if (response.status && String(response.status)[0] === '4') {
           // Client-side error
           console.warn("Client-side error:", message);
-          throw new ApiError(error.message, response.status);
+          throw new ApiError(message, response.status);
         }
         console.error("Server error:", message);
         throw new ServerError(message);
     }
   }
 
-  // simple error protocol if the server doesn't return a special status code
-  if (result && typeof result === "object" && result.error) {
-    throw new Error(result.error);
-  }
+  let error;
+  do {
+    try {
+      // return the non-error result
+      return await sendRequest()
+    } catch (e) {
+      error = e
+      if (error instanceof ConnectionError) {
+        // retry in case of ConnectionError
+        logger.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`)
+        // wait one second
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      } else {
+        // throw the error 
+        break;
+      }
+    }
+  } while (retryAttempts-- > 0);
 
-  // everything is in order
-  return result
+  // notify the user about the error
+  notify(error.message, 'error');
+  throw error
 }
 
 /**

@@ -203,7 +203,7 @@ async function populateSelectboxes(state) {
             option.size = "small"
             option.value = version.path;
             option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-            option.disabled = version.is_locked;
+            //option.disabled = version.is_locked;
             ui.toolbar.xml.appendChild(option);
             // diff 
             option = new SlOption()
