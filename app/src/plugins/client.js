@@ -174,8 +174,12 @@ async function callApi(endpoint, method = 'GET', body = null) {
       case 504:
         console.error("Connection timeout:", error.message);
         throw new ConnectionError(error.message);
-      case 500:
       default:
+        if (error.status && String(error.status)[0]=== '4' ) {
+          // Client-side error
+          console.warn("Client-side error:", error.message);
+          throw new ApiError(error.message, error.status);  
+        }
         console.error("Server error:", error.message);
         throw new ServerError(error.message);
     }

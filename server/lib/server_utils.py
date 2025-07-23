@@ -137,26 +137,30 @@ def release_lock(file_path):
     """Releases the lock for a given file if it is held by the current session."""
     client = get_webdav_client()
     if not client:
-        return # Silently fail if WebDAV is not on
+        return # If WebDAV is off, there are no locks to release.
 
     lock_path = get_lock_path(file_path)
     session_id = current_app.config['SESSION_ID']
 
     try:
-        # Verify we own the lock before deleting
         info = client.info(lock_path)
         if info:
             existing_lock_id = _read_lock_id(client, lock_path)
             if existing_lock_id == session_id:
                 client.remove(lock_path)
                 current_app.logger.info(f"Lock released for {file_path} by session {session_id}")
+                return True
             else:
-                current_app.logger.warning(f"Session {session_id} attempted to release a lock owned by {existing_lock_id}")
+                # This is an unexpected state. Fail loudly.
+                raise ApiError(f"Session {session_id} attempted to release a lock owned by {existing_lock_id}", status_code=409)
     except FileNotFoundError:
-        # Lock already gone, which is fine.
-        pass
+        # Lock already gone, which is a success state.
+        current_app.logger.info(f"Attempted to release lock for {file_path}, but it was already gone.")
+        return True
     except Exception as e:
-        current_app.logger.error(f"Error releasing lock for {file_path}: {e}")
+        current_app.logger.error(f"An unexpected error occurred while releasing lock for {file_path}: {e}")
+        # Re-raise as an ApiError for consistent handling by the endpoint.
+        raise ApiError("An unexpected error occurred during lock release.", status_code=500)
 
 
 def purge_stale_locks():

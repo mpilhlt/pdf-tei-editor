@@ -362,6 +362,7 @@ def check_lock_route():
         raise ApiError("File path is required.")
     return jsonify(check_lock(file_path))
 
+
 @bp.route("/release_lock", methods=["POST"])
 @handle_api_errors
 def release_lock_route():

@@ -158,8 +158,6 @@ async function start(state) {
       configureHeartbeat(state);
     }
 
-
-
     // finish initialization
     ui.spinner.hide()
     floatingPanel.show()
@@ -230,7 +228,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
     heartbeatInterval = setInterval(async () => {
 
-      console.warn("Sending heartbeat to server to keep file lock alive...");
+      logger.debug("Sending heartbeat to server to keep file lock alive...");
 
       const filePath = ui.toolbar.xml.value;
       if (!filePath) {
@@ -256,7 +254,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
             notify("Connection to the server was lost. File synchronization has been disabled.", "warning");
             updateState(state, { webdavEnabled: false, offline: true });
           }
-        } else if (error.status === 409 || error.status === 423) {
+        } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
           logger.error("Lock lost for file: " + filePath);
           dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
@@ -271,7 +269,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
         }
       }
     }, heartbeatFrequency);
-    logger.debug("Heartbeat started.");
+    logger.info("Heartbeat started.");
   };
   startHeartbeat();
   window.addEventListener('beforeunload', stopHeartbeat);
