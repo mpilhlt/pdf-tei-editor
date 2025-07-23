@@ -260,6 +260,8 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           logger.critical("Lock lost for file: " + filePath);
           dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
           updateState(state, { editorReadOnly: true });
+        } else if (error.statusCode === 504) {
+          logger.warn("Temporary connection failure, will try again...")
         } else {
           // Another server-side error occurred
           if (state.webdavEnabled) {

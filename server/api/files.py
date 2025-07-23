@@ -25,6 +25,7 @@ def file_list():
     server_id = get_server_id(current_app)
 
     files_data = create_file_data(data_root)
+    current_app.logger.debug(active_locks)
     for idx, data in enumerate(files_data):
         
         if webdav_enabled:
@@ -33,10 +34,7 @@ def file_list():
                 for version in data["versions"]:
                     version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != server_id
 
-            file_path = data.get("xml", None)
-            # Add lock information for the main XML file
-            data['is_locked'] = file_path in active_locks and active_locks[file_path] != server_id
-        
+        file_path = data.get("xml", None)
         if file_path is not None:
             metadata = get_tei_metadata(get_data_file_path(file_path))
             if metadata is None:

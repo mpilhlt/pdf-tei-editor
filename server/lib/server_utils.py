@@ -95,14 +95,24 @@ def get_lock_path(file_path):
     """Constructs the remote lock file path."""
     remote_root = os.environ['WEBDAV_REMOTE_ROOT']
     # We use the relative path of the file to create a unique lock file name
-    lock_file_name = safe_file_path(file_path).replace('/', '_') + '.lock'
+    lock_file_name = safe_file_path(file_path).replace('/', '_$_') + '.lock'
     return f"{remote_root.rstrip('/')}/locks/{lock_file_name}"
+
+def get_file_from_lock_path(lock_path):
+    """Extracts the original file path from a lock file path."""
+    # Remove the remote root and replace underscores with slashes
+    remote_root = os.environ['WEBDAV_REMOTE_ROOT']
+    relative_path = lock_path.replace(remote_root, '').lstrip('/').replace('.lock', '')
+    relative_path = relative_path.replace('_$_', '/')
+    return relative_path.lstrip('/locks')
+
 
 def is_lock_stale(lock_mtime):
     """Checks if a lock's modification time is older than the timeout."""
     if not lock_mtime:
         return True
     return (datetime.now(timezone.utc) - lock_mtime) > timedelta(seconds=LOCK_TIMEOUT_SECONDS)
+
 
 def acquire_lock(file_path):
     """
@@ -230,6 +240,7 @@ def get_all_active_locks():
 
     remote_root = os.environ['WEBDAV_REMOTE_ROOT']
     locks_dir =  f"{remote_root.rstrip('/')}/locks/"
+    current_app.logger.debug(f"Fetching active locks from {locks_dir}")
     if not client.exists(locks_dir):
         try:
             client.mkdir(locks_dir)
@@ -241,14 +252,13 @@ def get_all_active_locks():
 
     try:
         lock_files = client.ls(locks_dir, detail=True)
+        current_app.logger.debug(f"Found {len(lock_files)} lock files in {locks_dir}")
         for lock in lock_files:
             if lock['type'] == 'file' and not is_lock_stale(lock.get('modified')):
                 try:
-                    server_id = _read_lock_id(client, lock['name'])
-                    # The lock file name is the original file path with slashes replaced by underscores
-                    original_file_path_part = lock['name'].split('/')[-1].replace('.lock', '')
-                    original_file_path = original_file_path_part.replace('_', '/')
-                    active_locks["/data/" + original_file_path] = server_id
+                    lock_file_server_id = _read_lock_id(client, lock['name'])
+                    original_file_path = get_file_from_lock_path(lock['name'])
+                    active_locks["/data/" + original_file_path] = lock_file_server_id
                 except Exception as e:
                     current_app.logger.error(f"Error reading lock file {lock['name']}: {e}")
     except FileNotFoundError:
