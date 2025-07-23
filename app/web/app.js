@@ -54247,15 +54247,15 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
     heartbeatInterval = setInterval(async () => {
 
-      api$a.debug("Sending heartbeat to server to keep file lock alive...");
-
       const filePath = ui$1.toolbar.xml.value;
-      if (!filePath) {
+      if (!filePath || state.offline || !state.webdavEnabled) {
         // No file is selected, do nothing.
+        api$a.debug("No file selected, offline, or WebDAV is disabled, skipping heartbeat.");
         return;
       }
 
       try {
+        api$a.debug("Sending heartbeat to server to keep file lock alive...");
         await api$6.sendHeartbeat(filePath);
 
         // If we are here, the request was successful. Check if we were offline.
@@ -54265,6 +54265,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           updateState(state, { webdavEnabled: true, offline: false });
         }
       } catch (error) {
+        console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
         // Handle different types of errors
         if (error instanceof TypeError) {
           // This is likely a network error (client is offline)
