@@ -398,7 +398,7 @@ const plugin$e = {
   name: "url-hash-state",
   install: install$d,
   state: {
-    update: update$8
+    update: update$9
   }
 };
 
@@ -410,7 +410,7 @@ async function install$d(state){
   api$a.debug(`Installing plugin "${plugin$e.name}"`);
 }
 
-async function update$8(state) {
+async function update$9(state) {
   //console.warn("update", plugin.name, state)
   updateUrlHashfromState(state);
 }
@@ -2335,7 +2335,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$7);
+    const documentElementObserver = new MutationObserver(update$8);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2356,9 +2356,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$7();
+    update$8();
 }
-function update$7() {
+function update$8() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -11383,7 +11383,7 @@ pdfViewer.hide();
 const plugin$c = {
   name: "pdfviewer",
   install: install$b,
-  state: { update: update$6 }
+  state: { update: update$7 }
 };
 
 //
@@ -11407,7 +11407,7 @@ let lastNode = null;
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$6(state) {
+async function update$7(state) {
 
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
@@ -41724,7 +41724,7 @@ const plugin$b = {
   name: "xmleditor",
   install: install$a,
   state: {
-    update: update$5,
+    update: update$6,
     validation: {
       result: onValidationResult$1
     }
@@ -41793,7 +41793,7 @@ async function install$a(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$5(state) {
+async function update$6(state) {
   //console.warn("update", plugin.name, state)
 
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
@@ -41802,6 +41802,7 @@ async function update$5(state) {
     api$a.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     if (state.editorReadOnly) {
       ui$1.xmlEditor.classList.add("editor-readonly");
+      console.warn(ui$1.statusBar.statusMessageXml);
       ui$1.statusBar.statusMessageXml.textContent = "🔒 File is read-only";
     } else {
       ui$1.xmlEditor.classList.remove("editor-readonly");
@@ -41896,7 +41897,7 @@ const plugin$a = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install: install$9,
-  update: update$4,
+  update: update$5,
   validation: {
     validate,
     inProgress: inProgress$1
@@ -41936,7 +41937,7 @@ async function install$9(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$4(state) {
+async function update$5(state) {
   if (state.offline || state.editorReadOnly) {
     // if we are offline, disable validation
     configure({ mode: "off" });
@@ -43101,7 +43102,7 @@ const fileData = [];
  */
 const api$5 = {
   reload,
-  update: update$3,
+  update: update$4,
   fileData
 };
 
@@ -43113,7 +43114,7 @@ const plugin$8 = {
 
   install: install$8,
   state: {
-    update: update$3
+    update: update$4
   }
 };
 
@@ -43169,7 +43170,7 @@ async function install$8(state) {
  * 
  * @param {ApplicationState} state 
  */
-async function update$3(state) {
+async function update$4(state) {
   //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
   ui$1.toolbar.pdf.value = state.pdfPath || "";
@@ -43391,7 +43392,7 @@ const plugin$7 = {
   name: "extraction",
   deps: ['services'],
   install: install$7,
-  update: update$2
+  update: update$3
 };
 
 //
@@ -43447,7 +43448,7 @@ async function install$7(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$2(state) {
+async function update$3(state) {
   extractionBtnGroup.self.disabled = state.offline;
   extractionBtnGroup.extractCurrent.disabled = !state.pdfPath;
 }
@@ -44036,7 +44037,7 @@ const plugin$6 = {
   name: "services",
   deps: ['file-selection'],
   install: install$6,
-  state: { update: update$1 },
+  state: { update: update$2 },
   validation: { inProgress }
 };
 
@@ -44153,7 +44154,7 @@ async function install$6(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$1(state) {
+async function update$2(state) {
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -44175,8 +44176,11 @@ async function update$1(state) {
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xmlPath);
 
-  // disable sync if webdav is not enabled
-  da.sync.disabled = !state.webdavEnabled;
+  // disable sync and upload if webdav is not enabled
+  da.sync.disabled = da.upload.disabled  = !state.webdavEnabled; 
+  // no uploads if editor is readonly
+  da.upload.disabled = state.editorReadOnly;
+  
 }
 
 
@@ -44241,7 +44245,6 @@ async function load$1(state, { xml, pdf }) {
   try {
     await Promise.all(promises);
   } catch (error) {
-
     console.error(error.message);
     if (error.status === 404) {
       await api$5.reload(state);
@@ -44763,7 +44766,7 @@ const api$2 = {
 const plugin$5 = {
   name: "floating-panel",
   install: install$5,
-  state: { update }
+  state: { update: update$1 }
 };
 
 //
@@ -44888,7 +44891,7 @@ async function install$5(state) {
  * Reacts to application state changes
  * @param {ApplicationState} state 
  */
-async function update(state) {
+async function update$1(state) {
   //console.warn("update", plugin.name, state)
   // show the xpath selector
   if (state.xpath) {
@@ -45323,6 +45326,7 @@ const enhancements = [
 const plugin$3 = {
   name: "tei-wizard",
   install: install$3,
+  update,
   deps: ['services']
 };
 
@@ -45345,12 +45349,12 @@ async function install$3(state) {
   ui$1.toolbar.teiActions.self.append(teiWizardButton);
   document.body.append(teiWizardDialog);
   updateUi();
-  
+
   // @ts-ignore
   ui$1.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard);
 
   // @ts-ignore
-  const dialog = ui$1.teiWizardDialog;  
+  const dialog = ui$1.teiWizardDialog;
 
   // Populate enhancement list
   enhancements.forEach(async enhancement => {
@@ -45374,12 +45378,19 @@ async function install$3(state) {
 }
 
 
+/**
+ * @param {ApplicationState} state 
+ */
+async function update(state) {
+  teiWizardButton.disabled = state.editorReadOnly;
+}
+
 async function getSelectedEnhancements() {
   // @ts-ignore
   const dialog = ui$1.teiWizardDialog;
   dialog.self.show();
-  return new Promise((resolve) => {  
-    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([])); 
+  return new Promise((resolve) => {
+    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([]));
     dialog.executeBtn.addEventListener('click', () => {
       const enhancementFunctions = Array.from(dialog.enhancementList.querySelectorAll('sl-checkbox'))
         .filter(checkbox => checkbox.checked)
@@ -45421,10 +45432,10 @@ async function runTeiWizard() {
   //@ts-ignore
   let xmlstring = (new XMLSerializer()).serializeToString(teiDoc);
   xmlstring = xmlstring.replace(/(?<!<TEI[^>]*)\sxmlns=".+?"/, '');
-  
+
   // Display the result in the merge view
   xmlEditor.showMergeView(xmlstring);
-  
+
   // enable diff navigation buttons
   ui$1.floatingPanel.diffNavigation.self
     .querySelectorAll("button")
