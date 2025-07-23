@@ -80,7 +80,7 @@ def save():
     if webdav_enabled:
         if not acquire_lock(lock_file_path):
             # Use a specific error message for the frontend to catch
-            raise ApiError("Failed to acquire lock. The file may be edited by another user.", status_code=423)
+            raise ApiError("Failed to acquire lock", status_code = 423)
         current_app.logger.info(f"Acquired lock for {lock_file_path}")
     
     try:

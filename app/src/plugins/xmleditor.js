@@ -111,6 +111,7 @@ async function update(state) {
     logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`)
     if (state.editorReadOnly) {
       ui.xmlEditor.classList.add("editor-readonly")
+      console.warn(ui.statusBar.statusMessageXml)
       ui.statusBar.statusMessageXml.textContent = "🔒 File is read-only"
     } else {
       ui.xmlEditor.classList.remove("editor-readonly")

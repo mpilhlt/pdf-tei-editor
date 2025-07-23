@@ -2,7 +2,7 @@ import datetime
 import os
 from flask import current_app
 import uuid
-from webdav4.client import Client, ResourceAlreadyExists
+from webdav4.client import Client, ResourceAlreadyExists, ResourceNotFound
 from datetime import datetime, timezone, timedelta
 import io
 import requests
@@ -183,7 +183,7 @@ def release_lock(file_path):
             else:
                 # This is an unexpected state. Fail loudly.
                 raise ApiError(f"Session {server_id} attempted to release a lock owned by {existing_lock_id}", status_code=409)
-    except FileNotFoundError:
+    except (FileNotFoundError, ResourceNotFound):
         # Lock already gone, which is a success state.
         current_app.logger.info(f"Attempted to release lock for {file_path}, but it was already gone.")
         return True
@@ -191,7 +191,7 @@ def release_lock(file_path):
         message = f"Error releasing lock for {file_path}: {str(e)}"
         current_app.logger.error(message)
         # Re-raise 
-        e.args = (message)
+        e.args = (message,)
         raise
     
 

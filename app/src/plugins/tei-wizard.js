@@ -16,6 +16,7 @@ import { notify } from '../modules/sl-utils.js'
 const plugin = {
   name: "tei-wizard",
   install,
+  update,
   deps: ['services']
 }
 
@@ -41,12 +42,12 @@ async function install(state) {
   ui.toolbar.teiActions.self.append(teiWizardButton)
   document.body.append(teiWizardDialog)
   updateUi()
-  
+
   // @ts-ignore
   ui.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard)
 
   // @ts-ignore
-  const dialog = ui.teiWizardDialog;  
+  const dialog = ui.teiWizardDialog;
 
   // Populate enhancement list
   enhancements.forEach(async enhancement => {
@@ -70,12 +71,19 @@ async function install(state) {
 }
 
 
+/**
+ * @param {ApplicationState} state 
+ */
+async function update(state) {
+  teiWizardButton.disabled = state.editorReadOnly
+}
+
 async function getSelectedEnhancements() {
   // @ts-ignore
   const dialog = ui.teiWizardDialog;
   dialog.self.show();
-  return new Promise((resolve) => {  
-    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([])); 
+  return new Promise((resolve) => {
+    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([]));
     dialog.executeBtn.addEventListener('click', () => {
       const enhancementFunctions = Array.from(dialog.enhancementList.querySelectorAll('sl-checkbox'))
         .filter(checkbox => checkbox.checked)
@@ -117,10 +125,10 @@ async function runTeiWizard() {
   //@ts-ignore
   let xmlstring = (new XMLSerializer()).serializeToString(teiDoc)
   xmlstring = xmlstring.replace(/(?<!<TEI[^>]*)\sxmlns=".+?"/, '');
-  
+
   // Display the result in the merge view
   xmlEditor.showMergeView(xmlstring);
-  
+
   // enable diff navigation buttons
   ui.floatingPanel.diffNavigation.self
     .querySelectorAll("button")

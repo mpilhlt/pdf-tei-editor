@@ -1,7 +1,8 @@
 from flask import request, jsonify, current_app
 from functools import wraps
 from server.lib.server_utils import ApiError
-from httpx import ConnectTimeout
+from httpx import ConnectTimeout, ReadTimeout
+from webdav4.client import HTTPError
 
 def handle_api_errors(f):
     """
@@ -11,13 +12,18 @@ def handle_api_errors(f):
     @wraps(f)  # Preserves function metadata for debugging
     def decorated_function(*args, **kwargs):
         try:
-            return f(*args, **kwargs)  # Execute the decorated function
+            return f(*args, **kwargs) 
+        except HTTPError:
+            # WebDAV-specific connection problems raised as Timeout so that the client tries again
+            current_app.logger.error(f"WebDAV connection problem: {str(e)}")
+            return jsonify({"error": str(e)}), 504
+            
         except ApiError as e:
             # Handle API-specific errors
             current_app.logger.warning(f"API Error: {str(e)}")
             return jsonify({"error": str(e)}), e.status_code or 400
         
-        except ConnectTimeout as e:
+        except (ConnectTimeout, ReadTimeout) as e:
             # Handle connection timeout errors specifically
             current_app.logger.error(f"Connection Timeout: {str(e)}")
             return jsonify({"error": str(e)}), 504

@@ -188,8 +188,11 @@ async function update(state) {
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xmlPath)
 
-  // disable sync if webdav is not enabled
-  da.sync.disabled = !state.webdavEnabled
+  // disable sync and upload if webdav is not enabled
+  da.sync.disabled = da.upload.disabled  = !state.webdavEnabled 
+  // no uploads if editor is readonly
+  da.upload.disabled = state.editorReadOnly
+  
 }
 
 
@@ -254,7 +257,6 @@ async function load(state, { xml, pdf }) {
   try {
     await Promise.all(promises)
   } catch (error) {
-
     console.error(error.message)
     if (error.status === 404) {
       await fileselection.reload(state)
