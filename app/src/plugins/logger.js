@@ -66,7 +66,7 @@ const api = {
    * @param {string} message 
    * @returns {void}
    */
-  critical: message => pluginManager.invoke(ep.log.fatal, {message})
+  critical: message => pluginManager.invoke(ep.log.critical, {message})
 }
 
 api.error = api.critical // alias for critical

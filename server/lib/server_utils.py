@@ -158,10 +158,14 @@ def release_lock(file_path):
         current_app.logger.info(f"Attempted to release lock for {file_path}, but it was already gone.")
         return True
     except Exception as e:
-        current_app.logger.error(f"An unexpected error occurred while releasing lock for {file_path}: {e}")
+        message = f"Error releasing lock for {file_path}: {str(e)}"
+        current_app.logger.error(message)
         # Re-raise as an ApiError for consistent handling by the endpoint.
-        raise ApiError("An unexpected error occurred during lock release.", status_code=500)
-
+        if isinstance(e, ApiError):
+            raise e
+        else:
+            raise ApiError(message, status_code=500)
+    
 
 def purge_stale_locks():
     """Removes all stale lock files from the WebDAV server."""

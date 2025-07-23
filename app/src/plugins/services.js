@@ -224,15 +224,22 @@ async function load(state, { xml, pdf }) {
   if (xml) {
     // Check for lock before loading
     if (!state.offline && state.webdavEnabled) {
-      if (state.xmlPath && state.xmlPath !== xml) {
+      if (state.xmlPath !== xml) {
         try {
-          await client.releaseLock(state.xmlPath)
+          ui.spinner.show('Loading file, please wait...')
+          if (state.xmlPath) {
+            await client.releaseLock(state.xmlPath)
+          }
           const { is_locked } = await client.checkLock(xml);
+          logger.debug(`Lock status for ${xml}: ${is_locked}`);
           if (is_locked) {
+            logger.debug(`File ${xml} is locked, loading in read-only mode`);
             xmlEditor.setReadOnly(true);
           }
-        } catch (error) {
-          console.warn("Cannot release lock on XML file:", error.message)
+        } catch (error) {       
+          console.error("Cannot release lock on XML file:", error.message)
+        } finally {
+          ui.spinner.hide()
         }
       }
     }
