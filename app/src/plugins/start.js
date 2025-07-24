@@ -137,9 +137,7 @@ async function start(state) {
 
     // xml vaidation events
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-      /** @type Diagnostic[] */
-
-      const diagnostics = evt.detail
+      const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
       console.warn("XML is not well-formed", diagnostics)
       xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
 
@@ -229,7 +227,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
     heartbeatInterval = setInterval(async () => {
 
-      const filePath = ui.toolbar.xml.value;
+      const filePath = String(ui.toolbar.xml.value);
       const reasonsToSkip = {
         "No file path specified": !filePath,
         "Application is offline": state.offline,
@@ -276,7 +274,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           // Another server-side error occurred
           if (state.webdavEnabled) {
             logger.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
-            dialog.error("An unexpected server error occurred. File synchronization has been disabled for safety.", "Server Error");
+            dialog.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
             updateState(state, { webdavEnabled: false });
           }
         }
