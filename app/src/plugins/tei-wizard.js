@@ -5,6 +5,7 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
+ * @import { SlButton } from '../ui.js'
  */
 import ui from '../ui.js';
 import { xmlEditor, logger } from '../app.js';
@@ -16,7 +17,7 @@ import { notify } from '../modules/sl-utils.js'
 const plugin = {
   name: "tei-wizard",
   install,
-  update,
+  state: {update},
   deps: ['services']
 }
 
@@ -75,7 +76,9 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
+  // @ts-ignore
   teiWizardButton.disabled = state.editorReadOnly
+  //console.warn(plugin.name,"done")
 }
 
 async function getSelectedEnhancements() {

@@ -99,6 +99,7 @@ async function update(state) {
   ui.toolbar.pdf.value = state.pdfPath || ""
   ui.toolbar.xml.value = state.xmlPath || ""
   ui.toolbar.diff.value = state.diffXmlPath || ""
+  //console.warn(plugin.name,"done")
 }
 
 

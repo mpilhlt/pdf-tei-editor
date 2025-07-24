@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from webdav4.fsspec import WebdavFileSystem
 
 from server.lib.decorators import handle_api_errors
-from server.lib.server_utils import ApiError, purge_stale_locks
+from server.lib.server_utils import ApiError
+from server.lib.locking import purge_stale_locks
 
 bp = Blueprint("files", __name__, url_prefix="/api/files")
 

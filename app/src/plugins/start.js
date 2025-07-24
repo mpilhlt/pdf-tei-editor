@@ -7,6 +7,7 @@
  * @import { ApplicationState } from '../app.js' 
  * @import { Diagnostic } from '@codemirror/lint'
  */
+import { v4 as uuidv4 } from 'uuid';
 import ui from '../ui.js'
 import { updateState, logger, services, dialog, validation, floatingPanel, 
   urlHash, xmlEditor, fileselection, client, statusbar } from '../app.js'
@@ -63,13 +64,18 @@ async function start(state) {
   // async operations
   try {
 
-    // update the file lists
-    await fileselection.reload(state)
+    logger.info("Configuring application state from URL")
+    urlHash.updateStateFromUrlHash(state)
+
+    // if we don't have a session id, create one
+    const sessionId = state.sessionId || uuidv4()
+    logger.info(`Session id is ${sessionId}`)
+    await updateState(state, {sessionId})
 
     ui.spinner.show('Loading documents, please wait...')
 
-    logger.info("Configuring application state from URL")
-    urlHash.updateState(state)
+    // update the file lists
+    await fileselection.reload(state)
 
     // disable regular validation so that we have more control over it
     validation.configure({ mode: "off" })
@@ -117,6 +123,9 @@ async function start(state) {
       // update the UI
       updateState(state)
     }
+
+    // Find the currently selected node's contents in the PDF
+    xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents) 
 
     // manually show diagnostics if validation is disabled
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
@@ -284,4 +293,18 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
   };
   startHeartbeat();
   window.addEventListener('beforeunload', stopHeartbeat);
+}
+
+let lastNode = null; 
+async function searchNodeContents() {
+  // workaround for the node selection not being updated immediately
+  await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
+  // trigger auto-search if enabled and if a new node has been selected
+  const autoSearchSwitch = ui.floatingPanel.switchAutoSearch
+  const node = xmlEditor.selectedNode
+
+  if (autoSearchSwitch.checked && node && node !== lastNode) {
+      await services.searchNodeContentsInPdf(node)
+      lastNode = node
+  }
 }

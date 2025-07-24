@@ -10,7 +10,8 @@
     "@codemirror/lint": "../../node_modules/@codemirror/lint/dist/index.js",
     "@codemirror/view": "../../node_modules/@codemirror/view/dist/index.js",
     "markdown-it": "../../node_modules/markdown-it/index.mjs",
-    "codemirror": "../../node_modules/codemirror/dist/index.js"
+    "codemirror": "../../node_modules/codemirror/dist/index.js",
+    "uuid": "../../node_modules/uuid/dist/esm-browser/index.js"
   },
   "scopes": {
     "../../node_modules/@shoelace-style/shoelace/": {

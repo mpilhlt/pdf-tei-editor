@@ -396,9 +396,9 @@ const api$a = {
  */
 const plugin$f = {
   name: "url-hash-state",
-  install: install$e,
+  install: install,
   state: {
-    update: update$a
+    update: update
   }
 };
 
@@ -406,11 +406,11 @@ const plugin$f = {
 // implementation
 //
 
-async function install$e(state){
+async function install(state){
   api$b.debug(`Installing plugin "${plugin$f.name}"`);
 }
 
-async function update$a(state) {
+async function update(state) {
   //console.warn("update", plugin.name, state)
   updateUrlHashfromState(state);
 }

@@ -8,8 +8,10 @@ from glob import glob
 from server.lib.decorators import handle_api_errors
 from server.lib.server_utils import (
     ApiError, make_timestamp, get_data_file_path, 
-    safe_file_path, remove_obsolete_marker_if_exists,
-    acquire_lock, release_lock, get_all_active_locks, check_lock, get_server_id
+    safe_file_path, remove_obsolete_marker_if_exists, get_session_id
+)
+from server.lib.locking import (
+    acquire_lock, release_lock, get_all_active_locks, check_lock
 )
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
@@ -22,7 +24,7 @@ def file_list():
     data_root = current_app.config["DATA_ROOT"]
     active_locks = get_all_active_locks()
     webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
-    server_id = get_server_id(current_app)
+    session_id = get_session_id(request)
 
     files_data = create_file_data(data_root)
     current_app.logger.debug(active_locks)
@@ -32,7 +34,7 @@ def file_list():
             # Add lock information to each file version
             if "versions" in data:
                 for version in data["versions"]:
-                    version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != server_id
+                    version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != session_id
 
         file_path = data.get("xml", None)
         if file_path is not None:
@@ -69,7 +71,7 @@ def save():
     xml_string = data.get("xml_string")
     file_path_rel = data.get("file_path") 
     save_as_new_version = data.get("new_version", False)
-    webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
+    session_id = get_session_id(request)
 
     if not xml_string or not file_path_rel:
         raise ApiError("XML content and file path are required.")
@@ -77,11 +79,10 @@ def save():
     # The file path used for locking must be consistent
     lock_file_path = file_path_rel
 
-    if webdav_enabled:
-        if not acquire_lock(lock_file_path):
-            # Use a specific error message for the frontend to catch
-            raise ApiError("Failed to acquire lock", status_code = 423)
-        current_app.logger.info(f"Acquired lock for {lock_file_path}")
+    if not acquire_lock(lock_file_path, session_id):
+        # Use a specific error message for the frontend to catch
+        raise ApiError("Failed to acquire lock", status_code = 423)
+    current_app.logger.info(f"Acquired lock for {lock_file_path}")
     
     try:
         data_root = current_app.config["DATA_ROOT"]
@@ -116,7 +117,7 @@ def save():
 
     finally:
         # Always release the lock
-        release_lock(lock_file_path)
+        release_lock(lock_file_path, session_id)
 
 
 @bp.route("/delete", methods=["POST"])
@@ -358,7 +359,8 @@ def check_lock_route():
     file_path = data.get("file_path")
     if not file_path:
         raise ApiError("File path is required.")
-    return jsonify(check_lock(file_path))
+    session_id = get_session_id(request)
+    return jsonify(check_lock(file_path, session_id))
 
 
 @bp.route("/release_lock", methods=["POST"])
@@ -369,8 +371,8 @@ def release_lock_route():
     file_path = data.get("file_path")
     if not file_path:
         raise ApiError("File path is required.")
-    
-    if release_lock(file_path):
+    session_id = get_session_id(request)
+    if release_lock(file_path, session_id):
         return jsonify({"status": "lock_released"})
     else:
         raise ApiError("Failed to release lock. It may have been acquired by another session.", status_code=409)    
@@ -387,10 +389,10 @@ def heartbeat():
     file_path = data.get("file_path")
     if not file_path:
         raise ApiError("File path is required for heartbeat.")
-
+    session_id = get_session_id(request)
     # The existing acquire_lock function already handles refreshing
     # a lock if it's owned by the same session.
-    if acquire_lock(file_path):
+    if acquire_lock(file_path, session_id):
         return jsonify({"status": "lock_refreshed"})
     else:
         # This would happen if the lock was lost or taken by another user.

@@ -3,20 +3,18 @@
  * This is not really a plugin as it does not implement any endpoints (yet)
  */
 
-/**
- * @import { Diagnostic } from '@codemirror/lint'
+/** 
+ * @import { ApplicationState } from '../app.js' 
  */
-import { api as dialog } from './dialog.js'
 
-import { notify } from '../modules/sl-utils.js';
 import { logger } from '../app.js';
+import { notify } from '../modules/sl-utils.js';
 
 /**
  * Parent class for all API errors
  * @extends {Error}
- * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
- * @property {string} name - The name of the error, defaults to "ApiError"
  * @property {string} message - The error message
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
  */
 class ApiError extends Error {
   constructor(message, statusCode = 400) {
@@ -29,29 +27,11 @@ class ApiError extends Error {
 /**
  * Error indicating server-side connection issues, such as timeouts or unreachable endpoints.
  * @extends {ApiError}
- * @property {number} statusCode - The HTTP status code associated with the error, defaults to 504
- * @property {string} name - The name of the error, defaults to "ApiError"
- * @property {string} message - The error message
  */
 class ConnectionError extends ApiError {
   constructor(message, statusCode = 504) {
     super(message);
     this.name = "ConnectError";
-    this.statusCode = statusCode;
-  }
-}
-
-/**
- * Error indicating that a requested resource was not found.
- * @extends {ApiError}
- * @property {number} statusCode - The HTTP status code associated with the error, defaults to 404
- * @property {string} name - The name of the error, defaults to "ApiError"
- * @property {string} message - The error message
- */
-class NotFoundError extends ApiError {
-  constructor(message, statusCode = 404) {
-    super(message);
-    this.name = "NotFoundError";
     this.statusCode = statusCode;
   }
 }
@@ -71,11 +51,7 @@ class ServerError extends Error {
   }
 }
 
-
-
-// name of the component
-const name = "client"
-
+let sessionId;
 let lastHttpStatus = null;
 
 const api_base_url = '/api';
@@ -114,11 +90,27 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name
+  name: "client",
+  state: {
+    update
+  }
 }
 
 export { api, plugin }
 export default plugin
+
+/**
+ * 
+ * @param {ApplicationState} state 
+ */
+async function update(state) {
+  if (sessionId !== state.sessionId) {
+    sessionId = state.sessionId
+    logger.debug(`Setting session id to ${sessionId}`)
+  }
+  //console.warn(plugin.name,"done")
+  return sessionId
+}
 
 /**
  * A generic function to make API requests against the application backend. 
@@ -138,6 +130,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     method,
     headers: {
       'Content-Type': 'application/json',
+      'X-Session-ID': sessionId,
     },
     keepAlive: true
   };
@@ -175,9 +168,6 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 
     // handle app-specific error types
     switch (response.status) {
-      case 404:
-        // Resource not found
-        throw new NotFoundError(message);
       case 504:
         // Timeout
         throw new ConnectionError(message);
@@ -210,7 +200,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
-  logger.warn([error.statusCode, error.name, error.message])
+  logger.warn([error.statusCode, error.name, error.message].toString())
   notify(error.message, 'error');
   throw error
 }
@@ -398,7 +388,7 @@ async function releaseLock(filePath) {
 
 /**
  * Retrieves an object mapping all currently locked files to the session id that locked them.
- * @returns {Promise<{[string]:Number}>} An object mapping locked file paths to session ids 
+ * @returns {Promise<{[key:string]:Number}>} An object mapping locked file paths to session ids 
  */
 async function getAllLocks() {
   return await callApi('/files/locks', 'GET');

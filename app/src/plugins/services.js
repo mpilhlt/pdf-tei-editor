@@ -192,7 +192,7 @@ async function update(state) {
   da.sync.disabled = da.upload.disabled  = !state.webdavEnabled 
   // no uploads if editor is readonly
   da.upload.disabled = state.editorReadOnly
-  
+  //console.warn(plugin.name,"done")
 }
 
 

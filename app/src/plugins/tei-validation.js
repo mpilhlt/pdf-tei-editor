@@ -19,7 +19,7 @@ const plugin = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install,
-  update,
+  state: {update},
   validation: {
     validate,
     inProgress
@@ -68,7 +68,8 @@ async function update(state) {
   if (state.offline || state.editorReadOnly) {
     // if we are offline, disable validation
     configure({ mode: "off" })
-  } 
+  }
+  //console.warn(plugin.name,"done") 
 }
 
 /**

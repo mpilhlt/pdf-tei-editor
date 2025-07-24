@@ -32,6 +32,7 @@ import { plugin as startPlugin } from './plugins/start.js'
  * The application state, which is often passed to the plugin endpoints
  * 
  * @typedef {object} ApplicationState
+ * @property {string|null} sessionId - The session id of the particular app instance in a browser tab/window
  * @property {string|null} pdfPath - The path to the PDF file in the viewer
  * @property {string|null} xmlPath - The path to the XML file in the editor
  * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
@@ -50,14 +51,16 @@ let state = {
   xpath: null,
   webdavEnabled: false,
   editorReadOnly: false,
-  offline: false
+  offline: false,
+  sessionId: null
 }
 
 /**
  * @typedef {object} Plugin
  * @property {string} name - The name of the plugin
- * @property {string[]} deps - The names of the plugins this plugin depends on
- * @property {function(ApplicationState):Promise<void>} install - The function to install the plugin
+ * @property {string[]} [deps] - The names of the plugins this plugin depends on
+ * @property {function(ApplicationState):Promise<*>} [install] - The function to install the plugin
+ * @property {function(ApplicationState):Promise<*>} [update] - The function to respond to state updates
  */
 
 /** @type {Plugin[]} */
@@ -84,6 +87,7 @@ for (const plugin of plugins) {
  */
 async function invoke(endpoint, param) {
   const promises = pluginManager.invoke(endpoint, param)
+  //console.warn(promises)
   const result = await Promise.all(promises)
   return result
 }
@@ -92,7 +96,7 @@ async function invoke(endpoint, param) {
  * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
  * @param {ApplicationState} state The application state object
  * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<void>}
+ * @returns {Promise<Array>} Returns an array of return values of the plugin's `update` methods
  */
 async function updateState(state, changes={}) {
   Object.assign(state, changes)

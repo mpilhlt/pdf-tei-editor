@@ -30,10 +30,7 @@ const plugin = {
   name: "xmleditor",
   install,
   state: {
-    update,
-    validation: {
-      result: onValidationResult
-    }
+    update
   }
 }
 
@@ -103,18 +100,20 @@ async function update(state) {
   if (!state.xpath || !state.xmlPath) {
     return
   }
-  await xmlEditor.whenReady()
-  const { index, pathBeforePredicates } = parseXPath(state.xpath)
-  // select the node by index
-  try {
-    const size = xmlEditor.countDomNodesByXpath(state.xpath)
-    if (size > 0 && (index !== xmlEditor.currentIndex)) {
-      xmlEditor.parentPath = pathBeforePredicates
-      xmlEditor.selectByIndex(index || 1)
+  if (xmlEditor.isReady()) {
+    const { index, pathBeforePredicates } = parseXPath(state.xpath)
+    // select the node by index
+    try {
+      const size = xmlEditor.countDomNodesByXpath(state.xpath)
+      if (size > 0 && (index !== xmlEditor.currentIndex)) {
+        xmlEditor.parentPath = pathBeforePredicates
+        xmlEditor.selectByIndex(index || 1)
+      }
+    } catch (e) {
+      console.error(e)
     }
-  } catch (e) {
-    console.error(e)
   }
+  //console.warn(plugin.name,"done")
 }
 
 
@@ -145,17 +144,6 @@ async function onSelectionChange(state) {
   }
 }
 
-
-/**
- * Called when a validation has been done. 
- * Used to save the document after successful validation
- * @param {Diagnostic[]} diagnostics 
- */
-async function onValidationResult(diagnostics) {
-  if (diagnostics.length === 0) {
-    saveIfDirty()
-  }
-}
 
 /**
  * Save the current XML file if the editor is "dirty"

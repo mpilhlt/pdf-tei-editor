@@ -6,14 +6,13 @@
 # message which is an arbitrary value in case of success or a `{errror: "Error message"}`
 # object in case of an errors. 
 
-from flask import Flask, send_from_directory, jsonify, redirect
+from flask import Flask, send_from_directory, jsonify, redirect, request, current_app
 import os
 import importlib.util
 from glob import glob
 from dotenv import load_dotenv
 import tempfile
 from pathlib import Path
-from .lib.server_utils import get_server_id
 
 load_dotenv()
 
@@ -43,6 +42,13 @@ data_root = project_root / 'data' if local_webdav_root is None else local_webdav
 
 # Flask app
 app = Flask(__name__, static_folder=str(project_root))
+
+@app.before_request
+def log_session_id():
+    if 'X-Session-ID' in request.headers:
+        session_id = request.headers.get('X-Session-ID')
+        current_app.logger.info(f"Request from session: {session_id}")
+    
 
 # Dynamically register blueprints from the 'api' folder
 api_folder = os.path.join(server_root, 'api')
@@ -82,10 +88,6 @@ print(f"Data files served from {data_root}")
 # Provide a temporary directory for file uploads
 app.config['UPLOAD_DIR'] = tempfile.mkdtemp()
 print(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
-
-# Generate a unique but persistent server ID
-server_id = get_server_id(app)
-print(f"Server ID: {server_id}")
 
 ### Routes for serving static files ###
 

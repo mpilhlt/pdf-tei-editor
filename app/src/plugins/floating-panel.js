@@ -180,6 +180,7 @@ async function update(state) {
   ui.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
     node.disabled = !state.diffXmlPath || state.diffXmlPath === state.xmlPath
   })
+  //console.warn(plugin.name,"done")
 }
 
 /**

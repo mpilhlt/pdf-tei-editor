@@ -27,7 +27,7 @@ const plugin = {
   name: "extraction",
   deps: ['services'],
   install,
-  update
+  state: {update}
 }
 
 export { api, plugin }
@@ -47,7 +47,7 @@ export default plugin
  */
 /** @type {SlButtonGroup & extractionActionsComponent} */
 // @ts-ignore
-const extractionBtnGroup = await createHtmlElements('extraction-buttons.html')
+const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0]
 
 
 /**
@@ -74,7 +74,7 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // install controls on menubar
-  ui.toolbar.self.append(...extractionBtnGroup)
+  ui.toolbar.self.append(extractionBtnGroup)
   document.body.append(optionsDialog)
   updateUi()
 
@@ -87,8 +87,10 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
-  extractionBtnGroup.self.disabled = state.offline
+  // @ts-ignore
+  extractionBtnGroup.self.childNodes.forEach(child => child.disabled = state.offline) 
   extractionBtnGroup.extractCurrent.disabled = !state.pdfPath
+  //console.warn(plugin.name,"done")
 }
 
 /**
@@ -138,7 +140,7 @@ async function extractFromNewPdf(state) {
 /**
  * Extracts references from the given PDF file, letting the user choose the extraction options
  * @param {ApplicationState} state
- * @param {{doi:string}?} defaultOptions Optional default option object passed to the extraction service,
+ * @param {{doi:string}} [defaultOptions] Optional default option object passed to the extraction service,
  * user will be prompted to choose own ones.
  * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
  * @throws {Error} If the DOI is not valid or the user aborts the dialog
@@ -239,7 +241,7 @@ async function promptForExtractionOptions(options) {
 
   const formData = {
     'doi': optionsDialog.doi.value,
-    'instructions': instructions[parseInt(optionsDialog.instructionIndex.value)],
+    'instructions': instructions[parseInt(String(optionsDialog.instructionIndex.value))],
     'collection': optionsDialog.collectionName.value
   }
   

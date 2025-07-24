@@ -24,30 +24,31 @@ const api = {
 const plugin = {
   name: "statusbar",
   install,
-  state: {
-    update
-  }
+  //state: {
+  //  update
+  //}
 }
 
 export { api, plugin }
 export default plugin
 
-
-/**
+/** 
  * @param {ApplicationState} state 
  */
-async function install(state) {
-
-
+async function install(state){
+  logger.debug(`Installing plugin "${plugin.name}"`)
 }
 
 /**
  * @param {ApplicationState} state 
  */
-async function update(state) {
+//async function update(state) {}
 
-}
-
+/**
+ * Returns the status bar DIV of either the PDF viewer or the XML editor
+ * @param {string} type 
+ * @returns {HTMLDivElement}
+ */
 function getStatusBar(type) {
   if (!["xml","pdf"].includes(type)){
     throw new Error(`${type} must be "xml" or "pdf"`)
