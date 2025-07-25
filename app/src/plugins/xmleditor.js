@@ -83,6 +83,11 @@ async function install(state) {
 async function update(state) {
   //console.warn("update", plugin.name, state)
 
+  if (state.xmlPath === null) {
+    xmlEditor.clear()
+    return 
+  }
+
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
     // update the editor read-only state
     xmlEditor.setReadOnly(state.editorReadOnly)

@@ -320,6 +320,18 @@ export class XMLEditor extends EventTarget {
   markAsClean() {
     this.#editorIsDirty = false;
   }
+  
+  /**
+   * Clears the editor content completely
+   */
+  clear() {
+    this.#view.dispatch({
+      changes: { from: 0, to: this.#view.state.doc.length, insert: "" },
+      selection: EditorSelection.cursor(0)
+    });
+    this.#documentVersion = 0;
+    this.#editorIsDirty = false;
+  }
 
   /**
    * Checks if the editor has unsaved changes, i.e. the content of the 

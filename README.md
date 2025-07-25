@@ -93,6 +93,22 @@ npx husky init
 mkdir -p ~/.config/husky/ && echo "source .venv/bin/activate" > ~/.config/husky/init.sh && chmod +x ~/.config/husky/init.sh
 ```
 
+## Authentication and User Management
+
+The application uses a simple, file-based authentication system. User data is stored in `db/users.json`. You can manage users with the `bin/manage.py` script.
+
+### User management commands
+
+- **List users:** `bin/manage.py user list`
+- **Add a user:** `bin/manage.py user add <username> --password <password> --fullname "<Full Name>"`
+- **Remove a user:** `bin/manage.py user remove <username>`
+- **Update a user's password:** `bin/manage.py user update-password <username> --password <new_password>`
+- **Add a role to a user:** `bin/manage.py user add-role <username> <rolename>`
+- **Remove a role from a user:** `bin/manage.py user remove-role <username> <rolename>`
+- **Set a user's property:** `bin/manage.py user set <username> <property> <value>`
+
+For more information, run `bin/manage.py help` or `bin/manage.py help user`.
+
 ## Update the XSD schema
 
 The XSD schema of the documents is downloaded and cached. Currently, there is no mechanism to clear the cache through the user interface. Simply delete the `schema/cache` directory manually to clear the cache.

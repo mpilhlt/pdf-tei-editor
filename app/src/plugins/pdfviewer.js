@@ -5,7 +5,6 @@
 /** @import { ApplicationState } from '../app.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { logger, services, xmlEditor } from '../app.js'
-import ui from '../ui.js'
 
 /**
  * Expose the PDFViewer API
@@ -16,6 +15,7 @@ const pdfViewer = new PDFJSViewer('pdf-viewer')
 // hide it until ready
 pdfViewer.hide()
 
+let currentFile;
 
 /**
  * plugin object
@@ -23,7 +23,7 @@ pdfViewer.hide()
 const plugin = {
   name: "pdfviewer",
   install,
-  //state: { update }
+  state: { update }
 }
 
 export { plugin, pdfViewer as api }
@@ -44,10 +44,15 @@ async function install(state) {
   pdfViewer.show()
 }
 
-
-
 /**
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-//async function update(state) {}
+async function update(state) {
+  if (state.pdfPath !== currentFile) {
+    currentFile = state.pdfPath;
+    //if (state.pdfPath === null && state.user === null) {
+    //  pdfViewer.load('empty.pdf')
+    //}
+  }
+}

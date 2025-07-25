@@ -232,6 +232,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
       const filePath = String(ui.toolbar.xml.value);
       const reasonsToSkip = {
+        "No user is logged in": state.user === null,
         "No file path specified": !filePath,
         "Application is offline": state.offline,
         "Editor is in read-only mode": state.editorReadOnly,

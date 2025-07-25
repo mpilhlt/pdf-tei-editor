@@ -150,7 +150,7 @@ async function _logout() {
     await client.logout();
     await updateState(state, { user: null, sessionId: null });
     await updateStateSessionId(state)
-    _showLoginDialog();
+    await _showLoginDialog();
   } catch (error) {
     logger.error('Logout failed:', error);
   }
