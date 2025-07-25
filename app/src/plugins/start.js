@@ -249,7 +249,11 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           logger.info("Connection restored. Re-enabling WebDAV features.");
           notify("Connection restored.");
           updateState(state, { webdavEnabled: true, offline: false });
-        }
+        } 
+
+         // reload file list to see updates
+        fileselection.reload(state)
+      
       } catch (error) {
         console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
         // Handle different types of errors

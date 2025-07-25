@@ -191,7 +191,8 @@ async function update(state) {
   da.download.disabled = !Boolean(state.xmlPath)
 
   // disable sync and upload if webdav is not enabled
-  da.sync.disabled = da.upload.disabled = !state.webdavEnabled
+  da.sync.disabled = !state.webdavEnabled
+
   // no uploads if editor is readonly
   da.upload.disabled = state.editorReadOnly
   //console.warn(plugin.name,"done")
@@ -242,8 +243,10 @@ async function load(state, { xml, pdf }) {
         } catch (error) {
           if (error instanceof client.LockedError) {
             logger.debug(`File ${xml} is locked, loading in read-only mode`);
+            notify(`File is being edited by another user, loading in read-only mode`)
             file_is_locked = true
           } else {
+            dialog.error(error.message)
             throw error
           }
         }
