@@ -92,7 +92,8 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
  * @property {SlInput} editionNote 
  */
 
-/** @type {newVersionDialog} */
+/** @type {newVersionDialog & SlDialog} */
+// @ts-ignore
 const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0]
 
 /**
@@ -104,8 +105,10 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
  * @property {SlInput} changeDesc 
  */
 
-/** @type {newRevisionChangeDialog} */
+/** @type {newRevisionChangeDialog & SlDialog} */
+// @ts-ignore
 const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0]
+
 
 //
 // Implementation
@@ -125,11 +128,10 @@ async function install(state) {
 
   const tb = ui.toolbar.self
 
-  // install dialogs
-
   // === Document button group ===
 
   const da = ui.toolbar.documentActions
+
   // save a revision
   da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
   // enable save button on dirty editor
@@ -173,9 +175,9 @@ async function update(state) {
   const da = ui.toolbar.documentActions
 
   da.self.childNodes.forEach(el => el.disabled = state.offline)
-  if (state.offline) {  
+  if (state.offline) {
     return
-  } 
+  }
 
   da.deleteAll.disabled = fileselection.fileData.length < 2 // at least on PDF must be present
   da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2
@@ -189,7 +191,7 @@ async function update(state) {
   da.download.disabled = !Boolean(state.xmlPath)
 
   // disable sync and upload if webdav is not enabled
-  da.sync.disabled = da.upload.disabled  = !state.webdavEnabled 
+  da.sync.disabled = da.upload.disabled = !state.webdavEnabled
   // no uploads if editor is readonly
   da.upload.disabled = state.editorReadOnly
   //console.warn(plugin.name,"done")
@@ -227,26 +229,26 @@ async function load(state, { xml, pdf }) {
   // XML
   if (xml) {
     // Check for lock before loading
-    if (!state.offline && state.webdavEnabled) {
-      if (state.xmlPath !== xml) {
-        try {
-          ui.spinner.show('Loading file, please wait...')
-          if (state.xmlPath && !state.editorReadOnly) {
-            await client.releaseLock(state.xmlPath)
-          }
-          const { is_locked } = await client.checkLock(xml);
-          logger.debug(`Lock status for ${xml}: ${is_locked}`);
-          if (is_locked) {
-            logger.debug(`File ${xml} is locked, loading in read-only mode`);
-            file_is_locked = true
-          }
-        } catch (error) {       
-          console.error("Cannot release lock on XML file:", error.message)
-        } finally {
-          ui.spinner.hide()
+
+    if (state.xmlPath !== xml) {
+      try {
+        ui.spinner.show('Loading file, please wait...')
+        if (state.xmlPath && !state.editorReadOnly) {
+          await client.releaseLock(state.xmlPath)
         }
+        const { is_locked } = await client.checkLock(xml);
+        logger.debug(`Lock status for ${xml}: ${is_locked}`);
+        if (is_locked) {
+          logger.debug(`File ${xml} is locked, loading in read-only mode`);
+          file_is_locked = true
+        }
+      } catch (error) {
+        console.error("Cannot release lock on XML file:", error.message)
+      } finally {
+        ui.spinner.hide()
       }
     }
+
     removeMergeView(state)
     await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked })
     logger.info("Loading XML: " + xml)
@@ -299,13 +301,13 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    statusbar.addMessage("Saving XML...", "xml", "saving") 
+    statusbar.addMessage("Saving XML...", "xml", "saving")
     return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     switch (e.status_code) {
       case 504: // Gateway Timeout
         // ignore this error, it is handled by the client
-      break;
+        break;
       default:
         console.error("Error while saving XML:", e.message)
         dialog.error(`Could not save XML: ${e.message}`)
@@ -313,7 +315,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     }
   } finally {
     // clear status message after 1 second 
-    setTimeout(() => { statusbar.removeMessage("xml", "saving")}, 1000) 
+    setTimeout(() => { statusbar.removeMessage("xml", "saving") }, 1000)
   }
 }
 

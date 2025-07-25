@@ -13,7 +13,7 @@ def handle_api_errors(f):
     def decorated_function(*args, **kwargs):
         try:
             return f(*args, **kwargs) 
-        except HTTPError:
+        except HTTPError as e:
             # WebDAV-specific connection problems raised as Timeout so that the client tries again
             current_app.logger.error(f"WebDAV connection problem: {str(e)}")
             return jsonify({"error": str(e)}), 504
@@ -33,4 +33,15 @@ def handle_api_errors(f):
             current_app.logger.exception(f"Unexpected Error: {str(e)}")
             return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
 
+    return decorated_function
+
+def session_required(f):
+    """
+    Decorator to ensure a session ID is present in the request header.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'X-Session-Id' not in request.headers:
+            return jsonify(error="Access denied: session ID missing."), 403
+        return f(*args, **kwargs)
     return decorated_function

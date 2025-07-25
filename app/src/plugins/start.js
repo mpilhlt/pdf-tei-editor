@@ -7,7 +7,6 @@
  * @import { ApplicationState } from '../app.js' 
  * @import { Diagnostic } from '@codemirror/lint'
  */
-import { v4 as uuidv4 } from 'uuid';
 import ui from '../ui.js'
 import { updateState, logger, services, dialog, validation, floatingPanel, 
   urlHash, xmlEditor, fileselection, client, statusbar } from '../app.js'
@@ -63,14 +62,6 @@ async function start(state) {
 
   // async operations
   try {
-
-    logger.info("Configuring application state from URL")
-    urlHash.updateStateFromUrlHash(state)
-
-    // if we don't have a session id, create one
-    const sessionId = state.sessionId || uuidv4()
-    logger.info(`Session id is ${sessionId}`)
-    await updateState(state, {sessionId})
 
     ui.spinner.show('Loading documents, please wait...')
 

@@ -7,6 +7,7 @@
 
 import pluginManager from "./modules/plugin.js"
 import ep from './endpoints.js'
+import { v4 as uuidv4 } from 'uuid';
 
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
@@ -103,15 +104,28 @@ async function updateState(state, changes={}) {
   return await invoke(ep.state.update, state)
 }
 
+// 
+// Application bootstrapping
+//
+
 // log level
 await invoke(ep.log.setLogLevel, {level: logLevel.DEBUG})
+
+// let the plugins install their components
+await invoke(ep.install, state)
 
 // get the server-side state 
 const server_state = await client.state()
 Object.assign(state, server_state)
 
-// let the plugins install their components
-await invoke(ep.install, state)
+logger.info("Configuring application state from URL")
+urlHash.updateStateFromUrlHash(state)
+
+// if we don't have a session id, create one
+const sessionId = state.sessionId || uuidv4()
+logger.info(`Session id is ${sessionId}`)
+await updateState(state, {sessionId})
+
 
 // start the application 
 await invoke(ep.start, state)

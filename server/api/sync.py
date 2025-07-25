@@ -4,7 +4,7 @@ import unicodedata
 from datetime import datetime, timezone
 from webdav4.fsspec import WebdavFileSystem
 
-from server.lib.decorators import handle_api_errors
+from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError
 from server.lib.locking import purge_stale_locks
 
@@ -92,6 +92,7 @@ def _download_and_align(fs: WebdavFileSystem, remote_path: str, local_path: str,
 
 @bp.route("/sync", methods=["GET"])
 @handle_api_errors
+@session_required
 def sync():
     """
     Performs a robust bidirectional synchronization by aligning timestamps after transfers

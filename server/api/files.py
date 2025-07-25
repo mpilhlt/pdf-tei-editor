@@ -5,7 +5,7 @@ from lxml import etree
 from pathlib import Path
 from glob import glob
 
-from server.lib.decorators import handle_api_errors
+from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
     ApiError, make_timestamp, get_data_file_path, 
     safe_file_path, remove_obsolete_marker_if_exists, get_session_id
@@ -20,6 +20,7 @@ file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
 
 @bp.route("/list", methods=["GET"])
 @handle_api_errors
+@session_required
 def file_list():
     data_root = current_app.config["DATA_ROOT"]
     active_locks = get_all_active_locks()
@@ -63,6 +64,7 @@ def file_list():
 
 @bp.route("/save", methods=["POST"])
 @handle_api_errors
+@session_required
 def save():
     """
     Save the given xml as a file, with file locking.
@@ -122,6 +124,7 @@ def save():
 
 @bp.route("/delete", methods=["POST"])
 @handle_api_errors      
+@session_required
 def delete():
     """
     Delete the given files
@@ -150,6 +153,7 @@ def delete():
 
 @bp.route("/create_version_from_upload", methods=["POST"])
 @handle_api_errors
+@session_required
 def create_version_from_upload():
     """
     Creates a new version of a file from an uploaded file.
@@ -191,6 +195,7 @@ def create_version_from_upload():
 
 @bp.route("/move", methods=["POST"])
 @handle_api_errors
+@session_required
 def move_files():
     """
     Moves a pair of PDF and XML files to a different collection.
@@ -249,7 +254,7 @@ def create_file_data(data_root):
     extensions. Each file is identified by its ID, which is the filename without the suffix.
     Files in the "data/versions" directory are treated as  (temporary) versions created with 
     prompt modifications or different models 
-    The JSON file contains the file ID and the paths to the corresponding PDF and XML files.
+    The JSON file contains the file ID and the corresponding PDF and XML files.
     NB: This has become quite convoluted and needs a rewrite
     """
     file_id_data = {}
@@ -353,6 +358,7 @@ def get_version_name(file_path):
 
 @bp.route("/check_lock", methods=["POST"])
 @handle_api_errors
+@session_required
 def check_lock_route():
     """Checks if a single file is locked."""
     data = request.get_json()
@@ -365,6 +371,7 @@ def check_lock_route():
 
 @bp.route("/release_lock", methods=["POST"])
 @handle_api_errors
+@session_required
 def release_lock_route():
     """Releases the lock for a given file path."""
     data = request.get_json()
@@ -380,6 +387,7 @@ def release_lock_route():
 
 @bp.route("/heartbeat", methods=["POST"])
 @handle_api_errors
+@session_required
 def heartbeat():
     """
     Refreshes the lock for a given file path.
@@ -400,8 +408,10 @@ def heartbeat():
     
 @bp.route("/locks", methods=["GET"])
 @handle_api_errors
+@session_required
 def get_all_locks_route():  
     """Fetches all active locks."""
     active_locks = get_all_active_locks()
     return jsonify(active_locks)
+
 

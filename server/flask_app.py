@@ -47,7 +47,7 @@ app = Flask(__name__, static_folder=str(project_root))
 def log_session_id():
     if 'X-Session-ID' in request.headers:
         session_id = request.headers.get('X-Session-ID')
-        current_app.logger.info(f"Request from session: {session_id}")
+        current_app.logger.info(f"===== Request for {request.endpoint} from session {session_id}")
     
 
 # Dynamically register blueprints from the 'api' folder

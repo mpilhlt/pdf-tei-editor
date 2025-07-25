@@ -97,10 +97,7 @@ async function update(state) {
   }
 
   // xpath state => selection
-  if (!state.xpath || !state.xmlPath) {
-    return
-  }
-  if (xmlEditor.isReady()) {
+  if (xmlEditor.isReady() && state.xpath && state.xmlPath) {
     const { index, pathBeforePredicates } = parseXPath(state.xpath)
     // select the node by index
     try {
@@ -143,7 +140,6 @@ async function onSelectionChange(state) {
     //updateState(state, {xpath})
   }
 }
-
 
 /**
  * Save the current XML file if the editor is "dirty"
