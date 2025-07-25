@@ -61,12 +61,12 @@ export class CookieStorage {
   }
 
   /**
-   * Returns true if the key exists in the cookies or false if not
+   * Returns true if the key exists in the cookies or false if not. 
    * @param {string} key The key of the hash parameter to retrieve.
    * @returns {boolean}
    */
-  static has(key) {
-    return this['get'](key) !== null;
+  has(key) {
+    return this.get(key) !== null;
   }
 
   /**

@@ -5,8 +5,14 @@ from lxml import etree
 from pathlib import Path
 from glob import glob
 
-from server.lib.decorators import handle_api_errors
-from server.lib.server_utils import ApiError, make_timestamp, get_data_file_path, safe_file_path, remove_obsolete_marker_if_exists
+from server.lib.decorators import handle_api_errors, session_required
+from server.lib.server_utils import (
+    ApiError, make_timestamp, get_data_file_path, 
+    safe_file_path, remove_obsolete_marker_if_exists, get_session_id
+)
+from server.lib.locking import (
+    acquire_lock, release_lock, get_all_active_locks, check_lock
+)
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
@@ -14,10 +20,23 @@ file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
 
 @bp.route("/list", methods=["GET"])
 @handle_api_errors
+@session_required
 def file_list():
     data_root = current_app.config["DATA_ROOT"]
+    active_locks = get_all_active_locks()
+    webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
+    session_id = get_session_id(request)
+
     files_data = create_file_data(data_root)
+    current_app.logger.debug(active_locks)
     for idx, data in enumerate(files_data):
+        
+        if webdav_enabled:
+            # Add lock information to each file version
+            if "versions" in data:
+                for version in data["versions"]:
+                    version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != session_id
+
         file_path = data.get("xml", None)
         if file_path is not None:
             metadata = get_tei_metadata(get_data_file_path(file_path))
@@ -45,58 +64,67 @@ def file_list():
 
 @bp.route("/save", methods=["POST"])
 @handle_api_errors
+@session_required
 def save():
     """
-    Save the given xml as a file
+    Save the given xml as a file, with file locking.
     """
-    data_root = current_app.config["DATA_ROOT"]
-    
-    # parameters
     data = request.get_json()
     xml_string = data.get("xml_string")
-    file = safe_file_path(data.get("file_path"))
+    file_path_rel = data.get("file_path") 
     save_as_new_version = data.get("new_version", False)
-    
-    # validate input
-    if not xml_string:
-        raise ApiError("No XML string provided")
+    session_id = get_session_id(request)
 
-    # save the file
-    result = {}
-    if save_as_new_version:
-        file_id = Path(file).stem
-        version = make_timestamp().replace(" ", "_").replace(":", "-")
-        file = os.path.join("versions", version, file_id + ".xml") 
-        current_app.logger.info(f"Saving XML as new version")
-        result['status'] = "new"
+    if not xml_string or not file_path_rel:
+        raise ApiError("XML content and file path are required.")
 
-    file_path = os.path.join(data_root, file)
-    remove_obsolete_marker_if_exists(file_path, current_app.logger)
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    # The file path used for locking must be consistent
+    lock_file_path = file_path_rel
+
+    if not acquire_lock(lock_file_path, session_id):
+        # Use a specific error message for the frontend to catch
+        raise ApiError("Failed to acquire lock", status_code = 423)
+    current_app.logger.info(f"Acquired lock for {lock_file_path}")
     
-    save = True
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding='utf-8') as f:
-            xml_old = f.read()
-        if xml_string == xml_old:
-            current_app.logger.info(f"Content has not changed, not saving.")
-            result['status'] = "unchanged"
-            save = False
-                
-    if save:
-        current_app.logger.info(f"Saving current XML")
-        result['status'] = "saved"
+    try:
+        data_root = current_app.config["DATA_ROOT"]
         
-        with open(file_path, "w", encoding="utf-8") as f:
+        # Determine the final save path
+        if save_as_new_version:
+            file_id = Path(safe_file_path(file_path_rel)).stem
+            version = make_timestamp().replace(" ", "_").replace(":", "-")
+            final_file_rel = os.path.join("versions", version, file_id + ".xml")
+            status = "new"
+        else:
+            final_file_rel = safe_file_path(file_path_rel)
+            status = "saved"
+
+        full_save_path = os.path.join(data_root, final_file_rel)
+        remove_obsolete_marker_if_exists(full_save_path, current_app.logger)
+        os.makedirs(os.path.dirname(full_save_path), exist_ok=True)
+
+        # Avoid saving if content is identical
+        if not save_as_new_version and os.path.exists(full_save_path):
+            with open(full_save_path, "r", encoding='utf-8') as f:
+                if f.read() == xml_string:
+                    current_app.logger.info("Content unchanged, not saving.")
+                    return jsonify({'status': 'unchanged', 'path': "/data/" + final_file_rel})
+        
+        # Write the file
+        with open(full_save_path, "w", encoding="utf-8") as f:
             f.write(xml_string)
-        current_app.logger.info(f"Saved file to {file_path}")
-            
-    result['path'] = "/data/" + file
-    return jsonify(result)
+        current_app.logger.info(f"Saved file to {full_save_path}")
+
+        return jsonify({'status': status, 'path': "/data/" + final_file_rel})
+
+    finally:
+        # Always release the lock
+        release_lock(lock_file_path, session_id)
 
 
 @bp.route("/delete", methods=["POST"])
 @handle_api_errors      
+@session_required
 def delete():
     """
     Delete the given files
@@ -125,6 +153,7 @@ def delete():
 
 @bp.route("/create_version_from_upload", methods=["POST"])
 @handle_api_errors
+@session_required
 def create_version_from_upload():
     """
     Creates a new version of a file from an uploaded file.
@@ -166,6 +195,7 @@ def create_version_from_upload():
 
 @bp.route("/move", methods=["POST"])
 @handle_api_errors
+@session_required
 def move_files():
     """
     Moves a pair of PDF and XML files to a different collection.
@@ -224,7 +254,7 @@ def create_file_data(data_root):
     extensions. Each file is identified by its ID, which is the filename without the suffix.
     Files in the "data/versions" directory are treated as  (temporary) versions created with 
     prompt modifications or different models 
-    The JSON file contains the file ID and the paths to the corresponding PDF and XML files.
+    The JSON file contains the file ID and the corresponding PDF and XML files.
     NB: This has become quite convoluted and needs a rewrite
     """
     file_id_data = {}
@@ -324,4 +354,80 @@ def get_version_name(file_path):
             return version_title_element[0].text
    
     return None
+
+
+@bp.route("/check_lock", methods=["POST"])
+@handle_api_errors
+@session_required
+def check_lock_route():
+    """Checks if a single file is locked."""
+    data = request.get_json()
+    file_path = data.get("file_path")
+    if not file_path:
+        raise ApiError("File path is required.")
+    session_id = get_session_id(request)
+    return jsonify(check_lock(file_path, session_id))
+
+
+@bp.route("/acquire_lock", methods=["POST"])
+@handle_api_errors
+@session_required
+def acquire_lock_route():
+    """Acquire a lock for this file."""
+    data = request.get_json()
+    file_path = data.get("file_path")
+    if not file_path:
+        raise ApiError("File path is required.")
+    session_id = get_session_id(request)
+    if acquire_lock(file_path, session_id):
+        return jsonify("OK")
+    # could not acquire lock
+    raise ApiError(f'Could not acquire lock for {file_path}', 423)
     
+
+@bp.route("/release_lock", methods=["POST"])
+@handle_api_errors
+@session_required
+def release_lock_route():
+    """Releases the lock for a given file path."""
+    data = request.get_json()
+    file_path = data.get("file_path")
+    if not file_path:
+        raise ApiError("File path is required.")
+    session_id = get_session_id(request)
+    if release_lock(file_path, session_id):
+        return jsonify({"status": "lock_released"})
+    else:
+        raise ApiError("Failed to release lock. It may have been acquired by another session.", status_code=409)    
+
+
+@bp.route("/heartbeat", methods=["POST"])
+@handle_api_errors
+@session_required
+def heartbeat():
+    """
+    Refreshes the lock for a given file path.
+    This acts as a heartbeat to prevent a lock from becoming stale.
+    """
+    data = request.get_json()
+    file_path = data.get("file_path")
+    if not file_path:
+        raise ApiError("File path is required for heartbeat.")
+    session_id = get_session_id(request)
+    # The existing acquire_lock function already handles refreshing
+    # a lock if it's owned by the same session.
+    if acquire_lock(file_path, session_id):
+        return jsonify({"status": "lock_refreshed"})
+    else:
+        # This would happen if the lock was lost or taken by another user.
+        raise ApiError("Failed to refresh lock. It may have been acquired by another session.", status_code=409)
+    
+@bp.route("/locks", methods=["GET"])
+@handle_api_errors
+@session_required
+def get_all_locks_route():  
+    """Fetches all active locks."""
+    active_locks = get_all_active_locks()
+    return jsonify(active_locks)
+
+

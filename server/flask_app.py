@@ -6,13 +6,14 @@
 # message which is an arbitrary value in case of success or a `{errror: "Error message"}`
 # object in case of an errors. 
 
-from flask import Flask, send_from_directory, jsonify, redirect
+from flask import Flask, send_from_directory, jsonify, redirect, request, current_app
 import os
 import importlib.util
 from glob import glob
 from dotenv import load_dotenv
 import tempfile
 from pathlib import Path
+import shutil
 
 load_dotenv()
 
@@ -42,6 +43,16 @@ data_root = project_root / 'data' if local_webdav_root is None else local_webdav
 
 # Flask app
 app = Flask(__name__, static_folder=str(project_root))
+
+# Dir to place app data in
+app_db_dir = project_root / 'db'
+app.config['DB_DIR'] = app_db_dir
+
+# Initialize users.json if it doesn't exist
+users_json_path = app_db_dir / 'users.json'
+if not users_json_path.exists():
+    shutil.copy(project_root / 'users.json.dist', users_json_path)
+    print(f"Copied users.json.dist to {users_json_path}")
 
 # Dynamically register blueprints from the 'api' folder
 api_folder = os.path.join(server_root, 'api')
@@ -82,6 +93,15 @@ print(f"Data files served from {data_root}")
 app.config['UPLOAD_DIR'] = tempfile.mkdtemp()
 print(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
 
+### Routes ###
+
+@app.before_request
+def log_session_id():
+    if 'X-Session-ID' in request.headers:
+        session_id = request.headers.get('X-Session-ID')
+        current_app.logger.info(f"===== Request for {request.endpoint} from session {session_id}")
+
+
 # Serve from node_modules during development
 @app.route('/node_modules/<path:path>')
 def serve_node_modules(path):
@@ -97,7 +117,7 @@ def serve_src(path):
 def serve_static(path):
     return send_from_directory(data_root, path)
 
-# Serve config files
+# Serve config files 
 @app.route('/config/<path:path>')
 def serve_config(path):
     return send_from_directory(project_root / 'config', path)

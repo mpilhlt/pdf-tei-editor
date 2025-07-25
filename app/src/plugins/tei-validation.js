@@ -19,6 +19,7 @@ const plugin = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install,
+  state: {update},
   validation: {
     validate,
     inProgress
@@ -56,6 +57,19 @@ async function install(state) {
   // listen for delayed editor updates
   // @ts-ignore
   xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (evt) => removeDiagnosticsInChangedRanges(evt.detail));
+}
+
+let modeCache;
+
+/**
+ * @param {ApplicationState} state 
+ */
+async function update(state) {
+  if (state.offline || state.editorReadOnly) {
+    // if we are offline, disable validation
+    configure({ mode: "off" })
+  }
+  //console.warn(plugin.name,"done") 
 }
 
 /**
@@ -190,6 +204,7 @@ function configure({ mode = "auto" }) {
     default:
       throw new Error("Invalid mode parameter")
   }
+  modeCache = mode
 }
 
 /**

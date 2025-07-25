@@ -4,7 +4,7 @@ from werkzeug.utils import secure_filename
 from pathlib import Path
 import mimetypes
 
-from server.lib.decorators import handle_api_errors
+from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError
 
 try:
@@ -20,6 +20,7 @@ ALLOWED_MIME_TYPES = {'application/pdf', 'application/xml', 'text/xml'}  # Use M
 
 @bp.route('', methods=['POST'])
 @handle_api_errors
+@session_required
 def upload_file():
     """
     Handles file uploads to the server.  Saves the uploaded file to the UPLOAD_FOLDER.

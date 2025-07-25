@@ -3,14 +3,83 @@
  * This is not really a plugin as it does not implement any endpoints (yet)
  */
 
-/**
- * @import { Diagnostic } from '@codemirror/lint'
+/** 
+ * @import { ApplicationState } from '../app.js' 
  */
-import { api as dialog } from './dialog.js'
 
-// name of the component
-const name = "client"
+import { logger } from '../app.js';
+import { notify } from '../modules/sl-utils.js';
 
+/**
+ * Parent class for all API errors
+ * @extends {Error}
+ * @property {string} message - The error message
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
+ */
+class ApiError extends Error {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 400
+   */  
+  constructor(message, statusCode = 400) {
+    super(message);
+    this.name = "ApiError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating that a resource is locked
+ * @extends {ApiError}
+ */
+class LockedError extends ApiError {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 423
+   */    
+  constructor(message, statusCode = 423) {
+    super(message);
+    this.name = "LockedError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating server-side connection issues, such as timeouts or unreachable endpoints.
+ * @extends {ApiError}
+ */
+class ConnectionError extends ApiError {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 504
+   */    
+  constructor(message, statusCode = 504) {
+    super(message);
+    this.name = "ConnectError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating an unexpected server-side error.
+ * @extends {Error}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 500
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class ServerError extends Error {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 500
+   */    
+  constructor(message, statusCode = 500) {
+    super(message);
+    this.name = "ServerError";
+    this.statusCode = statusCode;
+  }
+}
+
+let sessionId;
 let lastHttpStatus = null;
 
 const api_base_url = '/api';
@@ -23,6 +92,10 @@ const api = {
   get lastHttpStatus() {
     return lastHttpStatus
   },
+  ApiError,
+  LockedError,
+  ConnectionError,
+  ServerError,
   callApi,
   getFileList,
   validateXml,
@@ -37,7 +110,15 @@ const api = {
   setConfigValue,
   syncFiles,
   moveFiles,
-  state
+  state,
+  sendHeartbeat,
+  checkLock,
+  acquireLock,
+  releaseLock,
+  getAllLocks,
+  login,
+  logout,
+  status
 }
 
 
@@ -45,11 +126,27 @@ const api = {
  * component plugin
  */
 const plugin = {
-  name
+  name: "client",
+  state: {
+    update
+  }
 }
 
 export { api, plugin }
 export default plugin
+
+/**
+ * 
+ * @param {ApplicationState} state 
+ */
+async function update(state) {
+  if (sessionId !== state.sessionId) {
+    sessionId = state.sessionId
+    logger.debug(`Setting session id to ${sessionId}`)
+  }
+  //console.warn(plugin.name,"done")
+  return sessionId
+}
 
 /**
  * A generic function to make API requests against the application backend. 
@@ -59,43 +156,120 @@ export default plugin
  * @param {string} endpoint - The API endpoint to call.
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
  * @param {object} body - The request body (optional).  Will be stringified to JSON.
+ * @param {Number} [retryAttempts] - The number of retry attempts after a timeout
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
-async function callApi(endpoint, method='GET', body = null) {
-  try {
-    const url = `${api_base_url}${endpoint}`;
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      keepAlive: true
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
+async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
+  const url = `${api_base_url}${endpoint}`;
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Session-ID': sessionId,
+    },
+    keepAlive: true
+  };
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+
+  // function to send the request which can be repeatedly called in case of a timeout
+  const sendRequest = async () => {
+
     // send request
     const response = await fetch(url, options);
+
+    // save the last  HTTP status code for later use   
+    lastHttpStatus = response.status
+
     let result;
     try {
       result = await response.json()
     } catch (jsonError) {
-      throw new Error("Failed to parse error response as JSON:", jsonError);
+      throw new ServerError("Failed to parse error response as JSON");
     }
-    // simple error protocol
-    // we don't distinguish 400 and 500 errors for the moment, although this should probably be 
-    // handled as warning and error, respectively 
-    if (result && typeof result === "object" && result.error) {
-      throw new Error(result.error);
+
+    if (response.status === 200) {
+      // simple error protocol if the server doesn't return a special status code
+      if (result && typeof result === "object" && result.error) {
+        throw new Error(result.error);
+      }
+      // success! 
+      return result
     }
-    return result
-  } catch (error) {
-    dialog.error(error.message)
-    lastHttpStatus = error.status || 500;
-    // rethrow
-    throw error
+
+    // handle error responses
+    const message = result.error
+
+    // handle app-specific error types
+    switch (response.status) {
+      case 423:
+        throw new LockedError(message)
+      case 504:
+        // Timeout
+        throw new ConnectionError(message)
+      default:
+        // other 4XX errors
+        if (response.status && String(response.status)[0] === '4') {
+          throw new ApiError(message, response.status);
+        }
+        throw new ServerError(message);
+    }
   }
+
+  let error;
+  do {
+    try {
+      // return the non-error result
+      return await sendRequest()
+    } catch (e) {
+      error = e
+      if (error instanceof ConnectionError) {
+        // retry in case of ConnectionError
+        logger.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`)
+        // wait one second
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      } else {
+        // throw the error 
+        break;
+      }
+    }
+  } while (retryAttempts-- > 0);
+
+  // notify the user about the error
+  logger.warn([error.statusCode, error.name, error.message].toString())
+  if (!(error instanceof LockedError)) {
+    notify(error.message, 'error');
+  }
+  throw error
+}
+
+
+/**
+ * Logs in a user
+ * @param {string} username
+ * @param {string} passwd_hash
+ * @returns {Promise<any>}
+ */
+async function login(username, passwd_hash) {
+  return await callApi('/auth/login', 'POST', { username, passwd_hash });
+}
+
+/**
+ * Logs out the current user
+ * @returns {Promise<any>}
+ */
+async function logout() {
+  return await callApi('/auth/logout', 'POST', {});
+}
+
+/**
+ * Checks the authentication status of the current user
+ * @returns {Promise<any>}
+ */
+async function status() {
+  return await callApi('/auth/status', 'GET');
 }
 
 /**
@@ -115,7 +289,7 @@ async function getFileList() {
  * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
  */
 async function validateXml(xmlString) {
-  return await  callApi('/validate', 'POST', { xml_string: xmlString });
+  return await callApi('/validate', 'POST', { xml_string: xmlString });
 }
 
 /**
@@ -137,7 +311,7 @@ async function saveXml(xmlString, filePath, saveAsNewVersion) {
  * @returns {Promise<Object>}
  */
 async function extractReferences(filename, options) {
-  return await  callApi('/extract', 'POST', { pdf: filename, ...options });
+  return await callApi('/extract', 'POST', { pdf: filename, ...options });
 }
 
 /**
@@ -145,7 +319,7 @@ async function extractReferences(filename, options) {
  * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
  */
 async function loadInstructions() {
-  return await  callApi('/config/instructions', 'GET');
+  return await callApi('/config/instructions', 'GET');
 }
 
 /**
@@ -158,7 +332,7 @@ async function saveInstructions(instructions) {
     throw new Error("Instructions must be an array");
   }
   // Send the instructions to the server
-  return await  callApi('/config/instructions', 'POST', instructions);
+  return await callApi('/config/instructions', 'POST', instructions);
 }
 
 
@@ -170,7 +344,7 @@ async function deleteFiles(filePaths) {
   if (!Array.isArray(filePaths)) {
     throw new Error("Timestamps must be an array");
   }
-  return await  callApi('/files/delete', 'POST', filePaths);
+  return await callApi('/files/delete', 'POST', filePaths);
 }
 
 /**
@@ -245,6 +419,55 @@ async function setConfigValue(key, value) {
   return response;
 }
 
+/**
+ * Sends a heartbeat to the server to keep the file lock alive.
+ * @param {string} filePath The file path to send the heartbeat for
+ * @returns {Promise<{status:string}>} The response from the server 
+ * @throws {Error} If the file path is not provided or if the heartbeat fails
+ */
+async function sendHeartbeat(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required for heartbeat");
+  }
+  return await callApi('/files/heartbeat', 'POST', { file_path: filePath });
+}
+
+/**
+ * Checks if a file is locked by another user.
+ * @param {string} filePath The file path to check the lock for
+ * @returns {Promise<{is_locked: boolean}>} The response from the server indicating if the file is locked
+ * @throws {Error} If the file path is not provided or if the lock check fails
+ */
+async function checkLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to check lock");
+  }
+  return await callApi('/files/check_lock', 'POST', { file_path: filePath });
+}
+
+async function acquireLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to check lock");
+  }
+  return await callApi('/files/acquire_lock', 'POST', { file_path: filePath });
+}
+
+
+async function releaseLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to release lock");
+  }
+  return await callApi('/files/release_lock', 'POST', { file_path: filePath });
+}
+
+
+/**
+ * Retrieves an object mapping all currently locked files to the session id that locked them.
+ * @returns {Promise<{[key:string]:Number}>} An object mapping locked file paths to session ids 
+ */
+async function getAllLocks() {
+  return await callApi('/files/locks', 'GET');
+}
 
 /**
  * Uploads a file selected by the user to a specified URL using `fetch()`.

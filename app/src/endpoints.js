@@ -31,7 +31,7 @@ const endpoints = {
     warn: "log.warn",
     
     /** Function signature: ({message: string}) => void */
-    critical: "log.fatal"
+    critical: "log.critical"
   },
   state: {
     /**

@@ -9,7 +9,7 @@
  */
 import ui, { updateUi } from '../ui.js'
 import {
-  updateState, client, logger, dialog,
+  updateState, client, logger, dialog, statusbar,
   fileselection, xmlEditor, pdfViewer, services, validation
 } from '../app.js'
 import { createHtmlElements } from '../ui.js'
@@ -92,7 +92,8 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
  * @property {SlInput} editionNote 
  */
 
-/** @type {newVersionDialog} */
+/** @type {newVersionDialog & SlDialog} */
+// @ts-ignore
 const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0]
 
 /**
@@ -104,8 +105,10 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
  * @property {SlInput} changeDesc 
  */
 
-/** @type {newRevisionChangeDialog} */
+/** @type {newRevisionChangeDialog & SlDialog} */
+// @ts-ignore
 const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0]
+
 
 //
 // Implementation
@@ -125,11 +128,10 @@ async function install(state) {
 
   const tb = ui.toolbar.self
 
-  // install dialogs
-
   // === Document button group ===
 
   const da = ui.toolbar.documentActions
+
   // save a revision
   da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
   // enable save button on dirty editor
@@ -171,6 +173,12 @@ async function update(state) {
 
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
+
+  da.self.childNodes.forEach(el => el.disabled = state.offline)
+  if (state.offline) {
+    return
+  }
+
   da.deleteAll.disabled = fileselection.fileData.length < 2 // at least on PDF must be present
   da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2
   da.deleteCurrentVersion.disabled = ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
@@ -182,8 +190,12 @@ async function update(state) {
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xmlPath)
 
-  // disable sync if webdav is not enabled
+  // disable sync and upload if webdav is not enabled
   da.sync.disabled = !state.webdavEnabled
+
+  // no uploads if editor is readonly
+  da.upload.disabled = state.editorReadOnly
+  //console.warn(plugin.name,"done")
 }
 
 
@@ -206,6 +218,7 @@ async function inProgress(validationPromise) {
 async function load(state, { xml, pdf }) {
 
   const promises = []
+  let file_is_locked = false
 
   // PDF 
   if (pdf) {
@@ -216,8 +229,34 @@ async function load(state, { xml, pdf }) {
 
   // XML
   if (xml) {
+    // Check for lock before loading
+
+    if (state.xmlPath !== xml) {
+      try {
+        ui.spinner.show('Loading file, please wait...')
+        if (state.xmlPath && !state.editorReadOnly) {
+          await client.releaseLock(state.xmlPath)
+        }
+        try {
+          await client.acquireLock(xml);
+          logger.debug(`Acquired lock for file ${xml}`);
+        } catch (error) {
+          if (error instanceof client.LockedError) {
+            logger.debug(`File ${xml} is locked, loading in read-only mode`);
+            notify(`File is being edited by another user, loading in read-only mode`)
+            file_is_locked = true
+          } else {
+            dialog.error(error.message)
+            throw error
+          }
+        }
+      } finally {
+        ui.spinner.hide()
+      }
+    }
+
     removeMergeView(state)
-    await updateState(state, { xmlPath: null, diffXmlPath: null })
+    await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked })
     logger.info("Loading XML: " + xml)
     promises.push(xmlEditor.loadXml(xml))
   }
@@ -226,7 +265,6 @@ async function load(state, { xml, pdf }) {
   try {
     await Promise.all(promises)
   } catch (error) {
-
     console.error(error.message)
     if (error.status === 404) {
       await fileselection.reload(state)
@@ -262,6 +300,7 @@ async function validateXml() {
  * @param {string} filePath The path to the XML file on the server
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<{path:string, status:string}>} An object with a path property, containing the path to the saved version
+ * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
   logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
@@ -269,12 +308,15 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    ui.statusBar.statusMessageXml.textContent = "Saving XML..."
+    statusbar.addMessage("Saving XML...", "xml", "saving")
     return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
-    throw e
+    console.error("Error while saving XML:", e.message)
+    dialog.error(`Could not save XML: ${e.message}`)
+    throw new Error(`Could not save XML: ${e.message}`)
   } finally {
-    setTimeout(() => { ui.statusBar.statusMessageXml.textContent = "" }, 1000) // clear status message after 1 second 
+    // clear status message after 1 second 
+    setTimeout(() => { statusbar.removeMessage("xml", "saving") }, 1000)
   }
 }
 
@@ -387,7 +429,9 @@ async function deleteAll(state) {
 
   // @ts-ignore
   const filePathsToDelete = [ui.toolbar.pdf.value]
+    // @ts-ignore
     .concat(Array.from(ui.toolbar.xml.childNodes).map(option => option.value))
+    // @ts-ignore
     .concat(Array.from(ui.toolbar.diff.childNodes).map(option => option.value))
 
   if (filePathsToDelete.length > 0) {
@@ -457,6 +501,7 @@ function downloadXml(state) {
  */
 async function uploadXml(state) {
   const { filename: tempFilename } = await client.uploadFile(undefined, { accept: '.xml' })
+  // @ts-ignore
   const { path } = await client.createVersionFromUpload(tempFilename, state.xmlPath)
   await fileselection.reload(state)
   await load(state, { xml: path })
@@ -557,7 +602,7 @@ async function onClickSaveRevisionButton(state) {
       .catch(e => console.error(e))
 
     // dirty state
-    xmlEditor.isDirty = false
+    xmlEditor.markAsClean()
   } catch (e) {
     console.error(e)
     alert(e.message)

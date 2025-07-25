@@ -19,7 +19,8 @@
     "codemirror": "^6.0.1",
     "glob": "^11.0.1",
     "js-plugin": "^1.1.0",
-    "markdown-it": "^14.1.0"
+    "markdown-it": "^14.1.0",
+    "uuid": "^11.1.0"
   },
   "resolutions": {
     "@codemirror/state": "6.5.2"
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@jsenv/importmap-node-module": "^7.1.1",
     "@rollup/plugin-node-resolve": "^16.0.1",
+    "@types/uuid": "^10.0.0",
     "husky": "^9.1.7",
     "rollup": "^4.40.2"
   }

@@ -183,7 +183,7 @@ const endpoints = {
     warn: "log.warn",
     
     /** Function signature: ({message: string}) => void */
-    critical: "log.fatal"
+    critical: "log.critical"
   },
   state: {
     /**
@@ -225,7 +225,7 @@ const endpoints = {
 
 
 // name of the plugin
-const name$2 = "logger";
+const name$1 = "logger";
 
 /**
  * A object mapping human readable log level names to numbers
@@ -246,7 +246,7 @@ let currentLogLevel = logLevel.INFO;
 /**
  * Easy to use logging API which will  send log events to all registered log plugins 
  */
-const api$b = {
+const api$c = {
   /**
    * Sets the log level {@see logLevel}
    * @param {Number} level The log level
@@ -281,15 +281,17 @@ const api$b = {
    * @param {string} message 
    * @returns {void}
    */
-  critical: message => pluginManager.invoke(endpoints.log.fatal, {message})
+  critical: message => pluginManager.invoke(endpoints.log.critical, {message})
 };
+
+api$c.error = api$c.critical; // alias for critical
 
 /**
  * component plugin
  */
-const plugin$f = {
-  name: name$2,
-  install: install$e,
+const plugin$h = {
+  name: name$1,
+  install: install$g,
   log: {
     setLogLevel,
     debug,
@@ -303,8 +305,8 @@ const plugin$f = {
 // implementation
 //
 
-async function install$e(state) {
-  console.log(`Installing plugin "${plugin$f.name}"`);
+async function install$g(state) {
+  console.log(`Installing plugin "${plugin$h.name}"`);
 }
 
 
@@ -383,20 +385,21 @@ function critical({message}) {
  */
 
 // this needs to be made configurable
-const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath'];
+const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'sessionId'];
 
-const api$a = {
-  updateState: updateStateFromUrlHash
+const api$b = {
+  updateUrlHashfromState,
+  updateStateFromUrlHash
 };
 
 /**
  * component plugin
  */
-const plugin$e = {
+const plugin$g = {
   name: "url-hash-state",
-  install: install$d,
+  install: install$f,
   state: {
-    update: update$6
+    update: update$b
   }
 };
 
@@ -404,17 +407,23 @@ const plugin$e = {
 // implementation
 //
 
-async function install$d(state){
-  api$b.debug(`Installing plugin "${plugin$e.name}"`);
+/** 
+ * @param {ApplicationState} state 
+ */
+async function install$f(state){
+  api$c.debug(`Installing plugin "${plugin$g.name}"`);
 }
 
-async function update$6(state) {
-  //console.warn("update", plugin.name, state)
+/** 
+ * @param {ApplicationState} state 
+ */
+async function update$b(state) {
   updateUrlHashfromState(state);
+  //console.warn(plugin.name,"done")
+  //console.warn(plugin.name,"done")
 }
 
 /**
- * 
  * @param {ApplicationState} state 
  */
 function updateUrlHashfromState(state) {
@@ -424,14 +433,18 @@ function updateUrlHashfromState(state) {
     .filter(([key]) => allowedUrlHashParams.includes(key))
     .forEach(([key, value]) => {
       if (value) {
-        urlHashParams.set(key, value);
+        urlHashParams.set(key, String(value));
       } else {
         urlHashParams.delete(key);
       }
     });
-  url.hash = `#${urlHashParams.toString()}`;
-  //window.history.replaceState({}, '', url);
-  window.history.pushState({}, '', url);
+  let hash = `#${urlHashParams.toString()}`;
+  if (hash !== url.hash) {
+    //logger.debug(`url hash changed to ${hash}`)
+    url.hash = hash;
+    //window.history.replaceState({}, '', url);
+    window.history.pushState({}, '', url);
+  }
 }
 
 
@@ -442,7 +455,7 @@ function updateUrlHashfromState(state) {
 function updateStateFromUrlHash(state) {
   const urlParams = new URLSearchParams(window.location.hash.slice(1));
   for (const [key, value] of urlParams.entries()) {
-    if (key in state) {
+    if (key in state && allowedUrlHashParams.includes(key)) {
       state[key] = value;
     }
   }
@@ -2333,7 +2346,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$5);
+    const documentElementObserver = new MutationObserver(update$a);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2354,9 +2367,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$5();
+    update$a();
 }
-function update$5() {
+function update$a() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -10794,6 +10807,7 @@ SlDivider.define("sl-divider");
  * @import {documentActionsComponent, teiServicesComponents} from './plugins/services.js'
  * @import {extractionActionsComponent, extractionOptionsDialog} from './plugins/extraction.js'
  * @import {infoDialogComponent} from './plugins/info.js'
+ * @import {loginDialog} from './plugins/authentication.js'
  */
 
 /**
@@ -10809,6 +10823,7 @@ SlDivider.define("sl-divider");
  * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
  * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
  * @property {statusBarComponent} statusBar - A status bar to display messages about the current state of the application
+ * @property {loginDialog} loginDialog - A dialog for login
  */
 
 /**
@@ -10821,6 +10836,7 @@ SlDivider.define("sl-divider");
  * @property {documentActionsComponent} documentActions 
  * @property {teiServicesComponents} teiActions
  * @property {extractionActionsComponent} extractionActions
+ * @property {SlButton} logoutButton
  */
 
 /**
@@ -10886,6 +10902,84 @@ updateUi();
 var ui$1 = ui;
 
 /**
+ * This implements the application statusbar
+ */
+
+
+/**
+ * plugin API
+ */
+const api$a = {
+  addMessage,
+  removeMessage
+};
+
+/**
+ * component plugin
+ */
+const plugin$f = {
+  name: "statusbar",
+  install: install$e,
+  //state: {
+  //  update
+  //}
+};
+
+/** 
+ * @param {ApplicationState} state 
+ */
+async function install$e(state){
+  api$c.debug(`Installing plugin "${plugin$f.name}"`);
+}
+
+/**
+ * @param {ApplicationState} state 
+ */
+//async function update(state) {}
+
+/**
+ * Returns the status bar DIV of either the PDF viewer or the XML editor
+ * @param {string} type 
+ * @returns {HTMLDivElement}
+ */
+function getStatusBar(type) {
+  if (!["xml","pdf"].includes(type)){
+    throw new Error(`${type} must be "xml" or "pdf"`)
+  }
+  return type === "xml" ? ui$1.statusBar.statusMessageXml : ui$1.statusBar.statusMessagePdf
+}
+
+/**
+ * Adds/replaces a message to the statusbar with a given id
+ * @param {string} message The message to display
+ * @param {string} type Either "pdf" or "xml"
+ * @param {string} id The id of the message (by which it can be removed)
+ */
+function addMessage(message, type, id) {
+  const statusbar = getStatusBar(type);
+  const span = statusbar.querySelector(`[name="${id}"]`) || document.createElement('span');
+  span.setAttribute('name', id); 
+  span.innerHTML = message;
+  statusbar.append(span);
+}
+
+/**
+ * Removes a message to the statusbar identified by its id
+ * @param {string} type Either "pdf" or "xml"
+ * @param {string} id The id of the message (by which it can be removed)
+ * @throws {Error} if no message(s) with that id can be found
+ */
+function removeMessage(type, id) {
+  const statusbar = getStatusBar(type);
+  const span = statusbar.querySelector(`[name="${id}"]`);
+  if (span) {
+    statusbar.removeChild(span);
+  } else {
+    api$c.warn(`${type} statusbar does not contain a message with id ${id}`);
+  }
+}
+
+/**
  * This application plugin implements a dialog registered as the "diaolog" property of the app
  */
 
@@ -10900,9 +10994,9 @@ const api$9 = {
 };
 
 // Plugin object
-const plugin$d = {
+const plugin$e = {
   name: "dialog",
-  install: install$c
+  install: install$d
 };
 
 //
@@ -10925,8 +11019,8 @@ const plugin$d = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-async function install$c(app) {
-  api$b.debug(`Installing plugin "${plugin$d.name}"`);
+async function install$d(app) {
+  api$c.debug(`Installing plugin "${plugin$e.name}"`);
   await createHtmlElements("dialog.html", document.body);
   updateUi();
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.self.hide());
@@ -11374,14 +11468,15 @@ const pdfViewer = new PDFJSViewer('pdf-viewer');
 // hide it until ready
 pdfViewer.hide();
 
+let currentFile;
 
 /**
  * plugin object
  */
-const plugin$c = {
+const plugin$d = {
   name: "pdfviewer",
-  install: install$b,
-  state: { update: update$4 }
+  install: install$c,
+  state: { update: update$9 }
 };
 
 //
@@ -11392,31 +11487,23 @@ const plugin$c = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$b(state) {
-  api$b.debug(`Installing plugin "${plugin$c.name}"`);
+async function install$c(state) {
+  api$c.debug(`Installing plugin "${plugin$d.name}"`);
   await pdfViewer.isReady();
-  api$b.info("PDF Viewer ready.");
+  api$c.info("PDF Viewer ready.");
   pdfViewer.show();
 }
-
-let lastNode = null; 
 
 /**
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$4(state) {
-
-  // workaround for the node selection not being updated immediately
-  await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
-
-  // trigger auto-search if enabled and if a new node has been selected
-  const autoSearchSwitch = ui$1.floatingPanel.switchAutoSearch;
-  const node = api$8.selectedNode;
-
-  if (autoSearchSwitch.checked && node && node !== lastNode) {
-      await api$3.searchNodeContentsInPdf(node);
-      lastNode = node;
+async function update$9(state) {
+  if (state.pdfPath !== currentFile) {
+    currentFile = state.pdfPath;
+    //if (state.pdfPath === null && state.user === null) {
+    //  pdfViewer.load('empty.pdf')
+    //}
   }
 }
 
@@ -28774,7 +28861,7 @@ function getStyleTags(node) {
     return rule || null;
 }
 const t = Tag.define;
-const comment$1 = t(), name$1 = t(), typeName = t(name$1), propertyName = t(name$1), literal = t(), string = t(literal), number = t(literal), content = t(), heading$1 = t(content), keyword = t(), operator = t(), punctuation = t(), bracket = t(punctuation), meta = t();
+const comment$1 = t(), name = t(), typeName = t(name), propertyName = t(name), literal = t(), string = t(literal), number = t(literal), content = t(), heading$1 = t(content), keyword = t(), operator = t(), punctuation = t(), bracket = t(punctuation), meta = t();
 /**
 The default set of highlighting [tags](#highlight.Tag).
 
@@ -28815,11 +28902,11 @@ const tags = {
     /**
     Any kind of identifier.
     */
-    name: name$1,
+    name,
     /**
     The [name](#highlight.tags.name) of a variable.
     */
-    variableName: t(name$1),
+    variableName: t(name),
     /**
     A type [name](#highlight.tags.name).
     */
@@ -28839,19 +28926,19 @@ const tags = {
     /**
     The [name](#highlight.tags.name) of a class.
     */
-    className: t(name$1),
+    className: t(name),
     /**
     A label [name](#highlight.tags.name).
     */
-    labelName: t(name$1),
+    labelName: t(name),
     /**
     A namespace [name](#highlight.tags.name).
     */
-    namespace: t(name$1),
+    namespace: t(name),
     /**
     The [name](#highlight.tags.name) of a macro.
     */
-    macroName: t(name$1),
+    macroName: t(name),
     /**
     A literal value.
     */
@@ -40222,48 +40309,22 @@ function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
  */
 class XMLEditor extends EventTarget {
 
-  /**
-   * @event SectionChangedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  // events
+
+  /** dispatched a {CustomEvent} with a {RangeWithNode} detail when the selection changes */
   static EVENT_SELECTION_CHANGED = "selectionChanged";
-
-  /**
-   * @event XmlChangedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatches an {Event} object when the editor is ready for user interaction */
   static EVENT_EDITOR_READY = "editorReady";
-
-  /**
-   * @event EditorUpdateEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatched with a CustomEvent with an {Update} detail when the editor content was changed*/
   static EVENT_EDITOR_UPDATE = "editorUpdate"
-
-  /**
-   * @event EditorUpdateDelayedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatched with a CustomEvent with an {Update} object one second after the editor content was last changed */
   static EVENT_EDITOR_DELAYED_UPDATE = "editorUpdateDelayed"
-
-  /**
-   * @event EditorXmlNotWellFormedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatches an {Event} object when the editor content is well-formed accoring to XML syntax */
   static EVENT_EDITOR_XML_NOT_WELL_FORMED = "editorXmlNotWellFormed"
-
-
-  /**
-   * @event EditorXmlWellFormedEvent
-   * @type {ViewUpdate}
-   */
-  /** @type {string} */
+  /** dispatches an {Event} object when the editor content is not well-formed accoring to XML syntax */
   static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
+  /** dispatched with a CustomEvent with a boolean detail which is true if the editor is set to read-only mode */
+  static EVENT_EDITOR_READONLY = "editorReadOnly"
 
   // private members
 
@@ -40301,6 +40362,13 @@ class XMLEditor extends EventTarget {
    */
   #editorIsDirty = false
 
+
+  /**
+   * true if the editor is read-only
+   * @type {boolean}
+   */
+  #editorIsReadOnly = false 
+
   /**
    * The original XML document, when in merge view mode
    * @type {string} 
@@ -40328,6 +40396,7 @@ class XMLEditor extends EventTarget {
   #lineWrappingCompartment = new Compartment()
   #tabSizeCompartment = new Compartment()
   #indentationCompartment = new Compartment()
+  #readOnlyCompartment = new Compartment()
 
 
   /**
@@ -40358,6 +40427,7 @@ class XMLEditor extends EventTarget {
       keymap.of([indentWithTab]),
       this.#tabSizeCompartment.of([]),
       this.#indentationCompartment.of([]),
+      this.#readOnlyCompartment.of([]),
     ];
 
     if (tagData) {
@@ -40452,6 +40522,27 @@ class XMLEditor extends EventTarget {
   }
 
   /**
+   * Sets the editor to read-only mode, i.e. the user cannot edit the content of the editor.
+   * @param {Boolean} value 
+   */
+  setReadOnly(value) { 
+    this.#editorIsReadOnly = Boolean(value);
+    this.#view.dispatch({
+      effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
+    });
+    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_READONLY, { detail: this.#editorIsReadOnly }));
+  }
+
+
+  /**
+   * Returns true if the editor is read-only, i.e. the user cannot edit the content of the editor.
+   * @returns {boolean} 
+   */
+  isReadOnly() {  
+    return this.#editorIsReadOnly
+  }
+
+  /**
    * Returns the current state of the editor. If false await the promise returned from 
    * isReadyPromise()
    * @returns {boolean} - Returns true if the editor is ready and the XML document is loaded
@@ -40489,16 +40580,15 @@ class XMLEditor extends EventTarget {
     this.#markAsNotReady();
 
     // fetch xml if path 
-    console.warn("Loading XML");
+    //console.warn("Loading XML")
     const xml = await this.#fetchXml(xmlPathOrString);
 
     // detect the indentation mode
     const indentUnit = detectXmlIndentation(xml);
-    console.warn("Detected indentation unit: ", JSON.stringify(indentUnit));
+    console.log("Detected indentation unit: ", JSON.stringify(indentUnit));
     this.configureIntenation(indentUnit, 4); // default tab size of 4 spaces, needs to be configurable
     
     // display xml in editor, this triggers the update handlers
-    console.warn("XML was loaded, dispatch to editor");
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
       selection: EditorSelection.cursor(0)
@@ -40506,13 +40596,24 @@ class XMLEditor extends EventTarget {
     this.#documentVersion = 0;
     this.#editorIsDirty = false;
     await this.isReadyPromise();
-    console.warn("XML document is loaded");
   }
 
   /**
-   * Marks the editor as saved, i.e. no changes are pending. 
+   * Marks the editor as clean, i.e. no changes are pending. 
    */
-  markAsSaved() {
+  markAsClean() {
+    this.#editorIsDirty = false;
+  }
+  
+  /**
+   * Clears the editor content completely
+   */
+  clear() {
+    this.#view.dispatch({
+      changes: { from: 0, to: this.#view.state.doc.length, insert: "" },
+      selection: EditorSelection.cursor(0)
+    });
+    this.#documentVersion = 0;
     this.#editorIsDirty = false;
   }
 
@@ -41711,60 +41812,98 @@ const tagDataPath = '/config/tei.json';
  * component is an instance of NavXmlEditor
  * @type {NavXmlEditor}
  */
-const api$8 = new NavXmlEditor('codemirror-container');
+const xmlEditor = new NavXmlEditor('codemirror-container');
 
 /**
  * component plugin
  */
-const plugin$b = {
+const plugin$c = {
   name: "xmleditor",
-  install: install$a,
-  state: { update: update$3 }
+  install: install$b,
+  state: {
+    update: update$8
+  }
 };
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$a(state) {
-  api$b.debug(`Installing plugin "${plugin$b.name}"`);
+async function install$b(state) {
+  api$c.debug(`Installing plugin "${plugin$c.name}"`);
   // load autocomplete data
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
-    api$8.startAutocomplete(tagData);
-    api$b.info("Loaded autocompletion data...");
+    xmlEditor.startAutocomplete(tagData);
+    api$c.info("Loaded autocompletion data...");
   } catch (error) {
     console.error('Error fetching from', tagDataPath, ":", error);
   }
 
   // selection => xpath state
-  api$8.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
-    api$8.whenReady().then(() => onSelectionChange(state));
+  xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
+    xmlEditor.whenReady().then(() => onSelectionChange(state));
   });
+
+  // manually show diagnostics if validation is disabled
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+    if (api$8.isDisabled()) {
+      let view = xmlEditor.getView();
+      // @ts-ignore
+      let diagnostic = evt.detail;
+      try {
+        view.dispatch(setDiagnostics(view.state, [diagnostic]));
+      } catch (error) {
+        api$c.warn("Error setting diagnostics: " + error.message);
+      }
+    }
+  });
+
+  // save dirty editor content after an update
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty$1());
+
 }
 
 /**
  * @param {ApplicationState} state
  */
-async function update$3(state) {
+async function update$8(state) {
   //console.warn("update", plugin.name, state)
-  // xpath state => selection
-  if (!state.xpath || !state.xmlPath) {
-    return
+
+  if (state.xmlPath === null) {
+    xmlEditor.clear();
+    return 
   }
-  await api$8.whenReady();
-  const { index, pathBeforePredicates } = parseXPath(state.xpath);
-  // select the node by index
-  try {
-    const size = api$8.countDomNodesByXpath(state.xpath);
-    if (size > 0 && (index !== api$8.currentIndex)) {
-      api$8.parentPath = pathBeforePredicates;
-      api$8.selectByIndex(index || 1);
+
+  if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
+    // update the editor read-only state
+    xmlEditor.setReadOnly(state.editorReadOnly);
+    api$c.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
+    if (state.editorReadOnly) {
+      ui$1.xmlEditor.classList.add("editor-readonly");
+      api$a.addMessage("🔒 File is read-only", "xml", "readonly-state");
+    } else {
+      ui$1.xmlEditor.classList.remove("editor-readonly");
+      api$a.removeMessage("xml", "readonly-state");
     }
-  } catch (e) {
-    console.error(e);
   }
+
+  // xpath state => selection
+  if (xmlEditor.isReady() && state.xpath && state.xmlPath) {
+    const { index, pathBeforePredicates } = parseXPath(state.xpath);
+    // select the node by index
+    try {
+      const size = xmlEditor.countDomNodesByXpath(state.xpath);
+      if (size > 0 && (index !== xmlEditor.currentIndex)) {
+        xmlEditor.parentPath = pathBeforePredicates;
+        xmlEditor.selectByIndex(index || 1);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  //console.warn(plugin.name,"done")
 }
 
 
@@ -41773,22 +41912,38 @@ async function update$3(state) {
  * @param {ApplicationState} state
  */
 async function onSelectionChange(state) {
-  if (!(api$8.selectedXpath && state.xpath)) {
+  if (!(xmlEditor.selectedXpath && state.xpath)) {
     // this usually means that the editor is not ready yet
     //console.warn("Could not determine xpath of last selected node")
     return
   }
   // update state from the xpath of the nearest selection node
 
-  const cursorXpath = api$8.selectedXpath;
+  const cursorXpath = xmlEditor.selectedXpath;
   const cursorParts = parseXPath(cursorXpath);
   const stateParts = parseXPath(state.xpath);
-  
+
   ui$1.floatingPanel.xpath.value;
   const index = cursorParts.index;
 
   // todo: use isXPathsubset()
-  if (index !== null && cursorParts.tagName === stateParts.tagName && index !== api$8.currentIndex + 1) ;
+  if (index !== null && cursorParts.tagName === stateParts.tagName && index !== xmlEditor.currentIndex + 1) ;
+}
+
+/**
+ * Save the current XML file if the editor is "dirty"
+ */
+async function saveIfDirty$1() {
+  const filePath = String(ui$1.toolbar.xml.value);
+
+  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
+    const result = await api$4.saveXml(filePath);
+    if (result.status == "unchanged") {
+      api$c.debug(`File has not changed`);
+    } else {
+      api$c.debug(`Saved file to ${result.path}`);
+    }
+  }
 }
 
 /**
@@ -41797,17 +41952,18 @@ async function onSelectionChange(state) {
  */
 
 
-const api$7 = {
+const api$8 = {
   configure,
   validate,
   isValidDocument,
   isDisabled
 };
 
-const plugin$a = {
+const plugin$b = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
-  install: install$9,
+  install: install$a,
+  state: {update: update$7},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -41828,10 +41984,10 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-async function install$9(state) {
-  api$b.debug(`Installing plugin "${plugin$a.name}"`);
+async function install$a(state) {
+  api$c.debug(`Installing plugin "${plugin$b.name}"`);
   // add the linter to the editor
-  api$8.addLinter([
+  xmlEditor.addLinter([
     linter(lintSource, { 
       autoPanel: true, 
       delay: 2000, 
@@ -41841,7 +41997,18 @@ async function install$9(state) {
   ]);
   // listen for delayed editor updates
   // @ts-ignore
-  api$8.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (evt) => removeDiagnosticsInChangedRanges(evt.detail));
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (evt) => removeDiagnosticsInChangedRanges(evt.detail));
+}
+
+/**
+ * @param {ApplicationState} state 
+ */
+async function update$7(state) {
+  if (state.offline || state.editorReadOnly) {
+    // if we are offline, disable validation
+    configure({ mode: "off" });
+  }
+  //console.warn(plugin.name,"done") 
 }
 
 /**
@@ -41882,19 +42049,19 @@ async function lintSource(view) {
   const doc = view.state.doc;
   const xml = doc.toString();
   if (xml == "") {
-    api$b.debug("Nothing to validate.");
+    api$c.debug("Nothing to validate.");
     return [];
   }
 
   // don't validate if disabled and use last diagnostics
   if (_isDisabled) {
-    api$b.debug("Ignoring validation request: Validation is disabled");
+    api$c.debug("Ignoring validation request: Validation is disabled");
     return lastDiagnostics;
   }
 
   // if this is called while another validation is ongoing, return the last diagnostics
   if (validationInProgress) {
-    api$b.debug("Ignoring validation request: Validation is ongoing.");
+    api$c.debug("Ignoring validation request: Validation is ongoing.");
     return lastDiagnostics;
   }
 
@@ -41903,20 +42070,20 @@ async function lintSource(view) {
   validationPromise = new Promise(async (resolve, reject) => {
     let validationErrors;
     while (true) {
-      validatedVersion = api$8.getDocumentVersion(); // rewrite this!
-      api$b.debug(`Requesting validation for document version ${validatedVersion}...`);
+      validatedVersion = xmlEditor.getDocumentVersion(); // rewrite this!
+      api$c.debug(`Requesting validation for document version ${validatedVersion}...`);
       // inform other plugins
       invoke(endpoints.validation.inProgress, validationPromise);
       // send request to server
       try {
-        validationErrors = await api$6.validateXml(xml);
+        validationErrors = await api$7.validateXml(xml);
       } catch (error) {
         return reject(error);
       }
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`);
       // check if document has changed in the meantime
-      if (validatedVersion != api$8.getDocumentVersion()) {
-        api$b.debug("Document has changed, restarting validation...");
+      if (validatedVersion != xmlEditor.getDocumentVersion()) {
+        api$c.debug("Document has changed, restarting validation...");
       } else {
         // convert xmllint errors to Diagnostic objects
         const diagnostics = validationErrors.map(/** @type {object} */ error => {
@@ -41940,8 +42107,8 @@ async function lintSource(view) {
     diagnostics = await validationPromise;
   } catch (error) {
     // stop querying
-    if (api$6.lastHttpStatus >= 400) {
-      console.debug("Disabling validation because of server error " + api$6.lastHttpStatus);
+    if (api$7.lastHttpStatus >= 400) {
+      console.debug("Disabling validation because of server error " + api$7.lastHttpStatus);
       configure({mode: "off"});
     }
     return lastDiagnostics
@@ -41967,11 +42134,11 @@ function configure({ mode = "auto" }) {
   switch (mode) {
     case "auto":
       _isDisabled = false;
-      api$b.info("Validation is enabled");
+      api$c.info("Validation is enabled");
       break
     case "off":
       _isDisabled = true;
-      api$b.info("Validation is disabled");
+      api$c.info("Validation is disabled");
       break
     default:
       throw new Error("Invalid mode parameter")
@@ -41986,7 +42153,7 @@ function configure({ mode = "auto" }) {
 async function validate() {
   if (isValidating()) {
     // if a validation is ongoing, we can wait for it to finish and use the result
-    api$b.debug("Validation is ongoing, waiting for it to finish");
+    api$c.debug("Validation is ongoing, waiting for it to finish");
     return await anyCurrentValidation()
   }
 
@@ -42021,7 +42188,7 @@ async function validate() {
  */
 function clearDiagnostics() {
   updateCachedDiagnostics([]);
-  api$8.getView().dispatch(setDiagnostics(api$8.getView().state, []));
+  xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
 }
 
 
@@ -42056,7 +42223,7 @@ function updateCachedDiagnostics(diagnostics) {
  * @param {ViewUpdate} update 
  */
 function removeDiagnosticsInChangedRanges(update) {
-  const viewState = api$8.getView().state;
+  const viewState = xmlEditor.getView().state;
   const diagnostics = [];
   // @ts-ignore
   // update.changedRanges is not in the documentation but exists in the object
@@ -42070,913 +42237,14 @@ function removeDiagnosticsInChangedRanges(update) {
       d.to = to;
       diagnostics.push(d);
     } else {
-      api$b.debug("Removing diagnostic " + JSON.stringify(d));
+      api$c.debug("Removing diagnostic " + JSON.stringify(d));
     }
   });
 
   lastDiagnostics = diagnostics;
 
   // remove the diagnostics from the editor
-  api$8.getView().dispatch(setDiagnostics(viewState, diagnostics));
-}
-
-/**
- * Plugin providing a link to server-side methods
- * This is not really a plugin as it does not implement any endpoints (yet)
- */
-
-
-// name of the component
-const name = "client";
-
-let lastHttpStatus = null;
-
-const api_base_url = '/api';
-const upload_route = '/api/upload';
-
-/**
- * plugin API
- */
-const api$6 = {
-  get lastHttpStatus() {
-    return lastHttpStatus
-  },
-  callApi,
-  getFileList,
-  validateXml: validateXml$1,
-  saveXml: saveXml$1,
-  extractReferences,
-  loadInstructions,
-  saveInstructions,
-  deleteFiles,
-  createVersionFromUpload,
-  uploadFile,
-  getConfigValue,
-  setConfigValue,
-  syncFiles: syncFiles$1,
-  moveFiles,
-  state: state$1
-};
-
-
-/**
- * component plugin
- */
-const plugin$9 = {
-  name
-};
-
-/**
- * A generic function to make API requests against the application backend. 
- * Expects a JSON response which is an arbitrary value in case of success or a 
- * `{errror: "Error message"}` object in case of an error handled by the API methods. 
- *
- * @param {string} endpoint - The API endpoint to call.
- * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
- * @param {object} body - The request body (optional).  Will be stringified to JSON.
- * @returns {Promise<any>} - A promise that resolves to the response data,
- *                           or rejects with an error message if the request fails.
- */
-async function callApi(endpoint, method='GET', body = null) {
-  try {
-    const url = `${api_base_url}${endpoint}`;
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      keepAlive: true
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    // send request
-    const response = await fetch(url, options);
-    let result;
-    try {
-      result = await response.json();
-    } catch (jsonError) {
-      throw new Error("Failed to parse error response as JSON:", jsonError);
-    }
-    // simple error protocol
-    // we don't distinguish 400 and 500 errors for the moment, although this should probably be 
-    // handled as warning and error, respectively 
-    if (result && typeof result === "object" && result.error) {
-      throw new Error(result.error);
-    }
-    return result
-  } catch (error) {
-    api$9.error(error.message);
-    lastHttpStatus = error.status || 500;
-    // rethrow
-    throw error
-  }
-}
-
-/**
- * Gets a list of pdf/tei files from the server, including their relative paths
- *
- * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
- *  objects with keys "id", "pdf", and "tei".
- */
-async function getFileList() {
-  return await callApi('/files/list', 'GET');
-}
-
-/**
- * Lints a TEI XML string against the Flask API endpoint.
- *
- * @param {string} xmlString - The TEI XML string to validate.
- * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
- */
-async function validateXml$1(xmlString) {
-  return await  callApi('/validate', 'POST', { xml_string: xmlString });
-}
-
-/**
- * Saves the XML string to a file on the server, optionally as a new version
- * @param {string} xmlString 
- * @param {string} filePath 
- * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
- * @returns {Promise<Object>}
- */
-async function saveXml$1(xmlString, filePath, saveAsNewVersion) {
-  return await callApi('/files/save', 'POST',
-    { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
-}
-
-/**
- * Extracts the references from the given PDF and returns the XML with the extracted data
- * @param {string} filename The filename of the PDF to extract
- * @param {Object} options The options for the extractions, such as DOI, additional instructions, etc. 
- * @returns {Promise<Object>}
- */
-async function extractReferences(filename, options) {
-  return await  callApi('/extract', 'POST', { pdf: filename, ...options });
-}
-
-/**
- * Returns the current prompt extraction instruction data
- * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
- */
-async function loadInstructions() {
-  return await  callApi('/config/instructions', 'GET');
-}
-
-/**
- * Returns the current prompt extraction instruction data
- * @param {Array<Object>} instructions An array of {active,label,text} objects
- * @returns {Promise<Object>} The result object
- */
-async function saveInstructions(instructions) {
-  if (!Array.isArray(instructions)) {
-    throw new Error("Instructions must be an array");
-  }
-  // Send the instructions to the server
-  return await  callApi('/config/instructions', 'POST', instructions);
-}
-
-
-/**
- * Deletes all extraction document versions with the given timestamps 
- * @returns {Promise<Object>} The result object
- */
-async function deleteFiles(filePaths) {
-  if (!Array.isArray(filePaths)) {
-    throw new Error("Timestamps must be an array");
-  }
-  return await  callApi('/files/delete', 'POST', filePaths);
-}
-
-/**
- * Creates a new version of a file from an uploaded file.
- * @param {string} tempFilename 
- * @param {string} filePath 
- * @returns {Promise<Object>}
- */
-async function createVersionFromUpload(tempFilename, filePath) {
-  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
-}
-
-/**
- * Retrieves the server application state
- * @returns {Promise<Object>}
- */
-async function state$1() {
-  return await callApi('/config/state')
-}
-
-/**
- * Synchronizes the files on the server with a (WebDav) Backend, if exists
- * @returns {Promise<Object>}
- */
-async function syncFiles$1() {
-  return await callApi('/files/sync')
-}
-
-/**
- * Moves the given files to a new collection
- * @param {string} pdfPath
- * @param {string} xmlPath
- * @param {string} destinationCollection
- * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
- */
-async function moveFiles(pdfPath, xmlPath, destinationCollection) {
-  return await callApi('/files/move', 'POST', {
-    pdf_path: pdfPath,
-    xml_path: xmlPath,
-    destination_collection: destinationCollection
-  });
-}
-
-
-/**
- * Retrieves a configuration value from the server
- */
-async function getConfigValue(key) {
-  if (typeof key !== "string" || key.length === 0) {
-    throw new Error("Key must be a non-empty string");
-  }
-  const path = `/config/get/${encodeURIComponent(key)}`;
-  const value = await callApi(path, 'GET');
-  return value;
-}
-
-/**
- * Sets a configuration value on the server.
- */
-async function setConfigValue(key, value) {
-  if (typeof key !== "string" || key.length === 0) {
-    throw new Error("Key must be a non-empty string");
-  }
-
-  const data = {
-    key: key,
-    value: value,
-  };
-
-  // The server is expected to return { result: "OK" } on success
-  const response = await callApi('/config/set', 'POST', data);
-  return response;
-}
-
-
-/**
- * Uploads a file selected by the user to a specified URL using `fetch()`.
- *
- * @author Gemini 2.0
- * @param {string} uploadUrl - The URL to which the file will be uploaded.
- * @param {object} [options={}] - Optional configuration options.
- * @param {string} [options.method='POST'] - The HTTP method to use for the upload.
- * @param {string} [options.fieldName='file'] - The name of the form field for the file.
- * @param {object} [options.headers={}] - Additional headers to include in the request.
- * @param {function} [options.onProgress] - A callback function to handle upload progress events.
- *    The function receives a progress event object as an argument.
- * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
- *    This is a string that will be set as the `accept` attribute of the file
- * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
- *    from the `fetch()` call, which must be an object, or rejects with an error.
- *    The object should contain the uploaded file's metadata, such as its path or ID.
- *    It will always contain a key "originalFilename" with the original name of the file,
- *    (as the server can change the filename). Ff the upload fails on the server side, 
- *   it will contain an "error" key with the error message.
- * @throws {Error} If the upload fails or if no file is selected.
- * @example
- * // Async/Await example (requires an async function context):
- * async function myUploadFunction() {
- *   try {
- *     const response = await uploadFile('https://example.com/upload', {
- *       fieldName: 'my_file',
- *       headers: {
- *         'X-Custom-Header': 'value'
- *       },
- *       onProgress: (event) => {
- *         if (event.lengthComputable) {
- *           const percentComplete = (event.loaded / event.total) * 100;
- *           logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
- *         } else {
- *           logger.info("Total size is unknown");
- *         }
- *       } 
- *     });
- *
- *     if (response.ok) {
- *       const data = await response.json();
- *       logger.info('Upload successful:', data);
- *     } else {
- *       throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
- *     }
- *   } catch (error) {
- *     console.error('Error uploading file:', error);
- *   }
- * }
- */
-async function uploadFile(uploadUrl = upload_route, options = {}) {
-  return new Promise((resolve, reject) => {
-    const {
-      method = 'POST',
-      fieldName = 'file',
-      headers = {},
-      onProgress,
-      accept = '.pdf, .xml'
-    } = options;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = accept;
-    input.addEventListener('change', async () => {
-      const file = input.files && input.files[0];
-      if (!file) {
-        reject(new Error('No file selected.'));
-        return;
-      }
-      const formData = new FormData();
-      console.debug("Uploading file:", file.name, "to", uploadUrl);
-      formData.append(fieldName, file);
-      const fetchOptions = {
-        method: method,
-        body: formData,
-        headers: headers
-      };
-      try {
-        const response = await fetch(uploadUrl, fetchOptions);
-        if (!response.ok) {
-          reject(new Error(`HTTP error! Status: ${response.status}`));
-          return;
-        }
-        let result = await response.json();
-        if (typeof result !== 'object' || !result) {
-          reject(new Error("Invalid response format, expected an object"));
-          return;
-        }
-        // Ensure the result contains the original filename
-        if (!result.originalFilename) {
-          result.originalFilename = file.name; //   Fallback to the input file name
-        }
-        if (result.error) {
-          reject(result.error);
-        }
-        resolve(result);
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    // Programmatically trigger the file chooser dialog.  Crucially, this must be initiated from a user action,
-    // such as a button click, to work correctly in most browsers. Directly calling input.click() on page 
-    // load will generally be blocked.
-    input.click();
-  });
-}
-
-/**
- * This implements the UI for the file selection
- */
-
-
-/**
- * The data about the pdf and xml files on the server
- * @type {Array<object>}
- */
-const fileData = [];
-
-/**
- * plugin API
- */
-const api$5 = {
-  reload,
-  update: update$2,
-  fileData
-};
-
-/**
- * component plugin
- */
-const plugin$8 = {
-  name: "file-selection",
-
-  install: install$8,
-  state: {
-    update: update$2
-  }
-};
-
-//
-// UI
-//
-
-// see ui.js for @typedef 
-const fileSelectionControls = await createHtmlElements('file-selection.html');
-
-//
-// Implementation
-//
-
-// API
-
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {ApplicationState} state
- */
-async function install$8(state) {
-
-  api$b.debug(`Installing plugin "${plugin$8.name}"`);
-  
-  // install controls on menubar
-  ui$1.toolbar.self.append(...fileSelectionControls);
-  updateUi();
-  
-  /**  @type {[SlSelect,function][]} */
-  const handlers = [
-    [ui$1.toolbar.pdf, onChangePdfSelection],
-    [ui$1.toolbar.xml, onChangeXmlSelection],
-    [ui$1.toolbar.diff, onChangeDiffSelection]
-  ];
-
-  for (const [select, handler] of handlers) {
-    // add event handler for the selectbox
-    select.addEventListener('sl-change', () => handler(state));
-
-    // this works around a problem with the z-index of the select dropdown being bound 
-    // to the z-index of the parent toolbar (and therefore being hidden by the editors)
-    select.addEventListener('sl-show', () => {
-      select.closest('#toolbar')?.classList.add('dropdown-open');
-    });
-
-    select.addEventListener('sl-hide', () => {
-      select.closest('#toolbar')?.classList.remove('dropdown-open');
-    });
-  }
-}
-
-/**
- * 
- * @param {ApplicationState} state 
- */
-async function update$2(state) {
-  //console.warn("update", plugin.name, state)
-  await populateSelectboxes(state);
-  ui$1.toolbar.pdf.value = state.pdfPath || "";
-  ui$1.toolbar.xml.value = state.xmlPath || "";
-  ui$1.toolbar.diff.value = state.diffXmlPath || "";
-}
-
-
-/**
- * Reloads data and then updates based on the application state
- * @param {ApplicationState} state
- */
-async function reload(state) {
-  await reloadFileData();
-  await populateSelectboxes(state);
-}
-
-/**
- * Reloads the file data from the server
- * @param {ApplicationState} state
- */
-async function reloadFileData(state) {
-  api$b.debug("Reloading file data");
-  let data = await api$6.getFileList();
-  if (!data || data.length === 0) {
-    api$9.error("No files found");
-  }
-  // update the fileData variable
-  fileData.length = 0; // clear the array
-  fileData.push(...data);
-  stateCache = null;
-  return fileData;
-}
-
-let stateCache;
-
-/**
- * Populates the selectboxes for file name and version
- * @param {ApplicationState} state
- */
-async function populateSelectboxes(state) {
-
-  // check if state has changed
-  const { xmlPath, pdfPath, diffXmlPath } = state;
-  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath });
-  if (jsonState === stateCache) {
-    //logger.debug("Not repopulating selectboxes as state hasn't changed")
-    return
-  }
-  stateCache = jsonState;
-
-  api$b.debug("Populating selectboxes");
-
-  if (fileData === null) {
-    await reloadFileData();
-  }
-
-  // Clear existing options
-  for (const name of ["pdf", "xml", "diff"]) {
-    ui$1.toolbar[name].innerHTML = "";
-  }
-
-  // sort into groups by directory
-  const dirname = (path) => path.split('/').slice(0, -1).join('/');
-  const basename = (path) => path.split('/').pop();
-  const grouped_files = fileData.reduce((groups, file) => {
-    const collection_name = basename(dirname(file.pdf));
-    (groups[collection_name] = groups[collection_name] || []).push(file);
-    return groups
-  }, {});
-
-  // save the collections, this tight coupling is not ideal
-  const collections = Object.keys(grouped_files).sort();
-  ui$1.toolbar.pdf.dataset.collections = JSON.stringify(collections);
-
-  // get items to be selected from app state or use first element
-  for (const collection_name of collections) {
-    
-    await createHtmlElements(`<small>${collection_name.replaceAll("_"," ").trim()}</small>`, ui$1.toolbar.pdf);
-    
-    // get a list of file data sorted by label
-    const files = grouped_files[collection_name]
-      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0 );
-
-    for (const file of files) {
-      // populate pdf select box 
-      const option = Object.assign(new option_default, {
-        value: file.pdf,
-        textContent: file.label,
-        size: "small",
-      });
-
-      // save scalar file properties in option
-      const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'));
-      Object.assign(option.dataset, data);
-
-      ui$1.toolbar.pdf.hoist = true;
-      ui$1.toolbar.pdf.appendChild(option);
-
-      if (file.pdf === state.pdfPath) {
-        // populate the version and diff selectboxes depending on the selected file
-        if (file.versions) {
-          file.versions.forEach((version) => {
-            // xml
-            let option = new option_default();
-            // @ts-ignore
-            option.size = "small";
-            option.value = version.path;
-            option.textContent = version.label;
-            ui$1.toolbar.xml.appendChild(option);
-            // diff 
-            option = new option_default();
-            // @ts-ignore
-            option.size = "small";
-            option.value = version.path;
-            option.textContent = version.label;
-            ui$1.toolbar.diff.appendChild(option);
-          });
-        }
-      }
-    }
-    ui$1.toolbar.pdf.appendChild(new divider_default);
-  }
-
-
-  // update selection
-  ui$1.toolbar.pdf.value = state.pdfPath || '';
-  ui$1.toolbar.xml.value = state.xmlPath || '';
-  ui$1.toolbar.diff.value = state.diffXmlPath || '';
-
-}
-
-// Event handlers
-
-/**
- * Called when the selection in the PDF selectbox changes
- * @param {ApplicationState} state
- */
-async function onChangePdfSelection(state) {
-  const selectedFile = fileData.find(file => file.pdf === ui$1.toolbar.pdf.value);
-  const pdf = selectedFile.pdf;
-  const xml = selectedFile.xml;
-  const filesToLoad = {};
-
-  if (pdf && pdf !== state.pdfPath) {
-    filesToLoad.pdf = pdf;
-  }
-  if (xml && xml !== state.xmlPath) {
-    filesToLoad.xml = xml;
-  }
-
-  if (Object.keys(filesToLoad).length > 0) {
-    try {
-      api$3.removeMergeView(state);
-      // @ts-ignore
-      await api$3.load(state, filesToLoad);
-    }
-    catch (error) {
-      console.error(error);
-    }
-  }
-}
-
-
-/**
- * Called when the selection in the XML selectbox changes
- * @param {ApplicationState} state
- */
-async function onChangeXmlSelection(state) {
-  const xml = ui$1.toolbar.xml.value;
-  if (xml && typeof xml == "string" && xml !== state.xmlPath) {
-    try {
-      api$3.removeMergeView(state);
-      await api$3.load(state, { xml });
-    } catch (error) {
-      console.error(error);
-    }
-  }
-}
-
-/**
- * Called when the selection in the diff version selectbox  changes
- * @param {ApplicationState} state
- */
-async function onChangeDiffSelection(state) {
-  const diff = ui$1.toolbar.diff.value;
-  if (diff && typeof diff == "string" && diff !== ui$1.toolbar.xml.value) {
-    try {
-      await api$3.showMergeView(state, diff);
-    } catch (error) {
-      console.error(error);
-    }
-  } else {
-    api$3.removeMergeView(state);
-  }
-  updateState(state, { diffXmlPath: diff });
-}
-
-/**
- * This implements the UI and the services for extracting references from the current or a new PDF
- */
-
-
-/**
- * plugin API
- */
-const api$4 = {
-  extractFromCurrentPDF,
-  extractFromNewPdf,
-  extractFromPDF
-};
-
-/**
- * plugin object
- */
-const plugin$7 = {
-  name: "extraction",
-  deps: ['services'],
-  install: install$7
-};
-
-//
-// UI
-//
-
-/**
- * Extraction actions button group
- * @typedef {object} extractionActionsComponent
- * @property {SlButtonGroup} self
- * @property {SlButton} extractNew 
- * @property {SlButton} extractCurrent
- * @property {SlButton} editInstructions - added by prompt-editor plugin
- */
-/** @type {SlButtonGroup & extractionActionsComponent} */
-// @ts-ignore
-const extractionBtnGroup = await createHtmlElements('extraction-buttons.html');
-
-
-/**
- * Extraction options dialog
- * @typedef {object} extractionOptionsDialog
- * @property {SlDialog} self
- * @property {SlInput} doi 
- * @property {SlSelect} collectionName
- * @property {SlSelect} modelIndex 
- * @property {SlSelect} instructionIndex
- */
-/** @type {extractionOptionsDialog & SlDialog} */
-// @ts-ignore
-const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
-
-//
-// Implementation
-//
-
-/**
- * Runs when the main app starts so the plugins can register the app components they supply
- * @param {ApplicationState} state
- */
-async function install$7(state) {
-  api$b.debug(`Installing plugin "${plugin$7.name}"`);
-
-  // install controls on menubar
-  ui$1.toolbar.self.append(...extractionBtnGroup);
-  document.body.append(optionsDialog);
-  updateUi();
-
-  // add event listeners
-  ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state));
-  ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state));
-}
-
-/**
- * Extract references from the currently loaded PDF
- * @param {ApplicationState} state
- */
-async function extractFromCurrentPDF(state) {
-  let doi;
-  try {
-    doi = getDoiFromXml();
-  } catch (error) {
-    console.warn("Cannot get DOI from document:", error.message);
-  }
-  try {
-    doi = doi || getDoiFromFilename(state.pdfPath);
-    if (state.pdfPath) {
-      let { xml } = await extractFromPDF(state, { doi });
-      await api$3.showMergeView(state, xml);
-    }
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-/**
- * Upload a new PDF and extract from it
- * @param {ApplicationState} state
- */
-async function extractFromNewPdf(state) {
-  try {
-    const { type, filename, originalFilename } = await api$6.uploadFile();
-    if (type !== "pdf") {
-      api$9.error("Extraction is only possible from PDF files");
-      return
-    }
-
-    const doi = getDoiFromFilename(originalFilename);
-    const { xml, pdf } = await extractFromPDF(state, { doi, filename });
-    await api$3.load(state, { xml, pdf });
-
-  } catch (error) {
-    api$9.error(error.message);
-    console.error(error);
-  }
-}
-
-/**
- * Extracts references from the given PDF file, letting the user choose the extraction options
- * @param {ApplicationState} state
- * @param {{doi:string}?} defaultOptions Optional default option object passed to the extraction service,
- * user will be prompted to choose own ones.
- * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
- * @throws {Error} If the DOI is not valid or the user aborts the dialog
- */
-async function extractFromPDF(state, defaultOptions) {
-  if(!state.pdfPath) throw new Error("Missing PDF path")
-
-  // get DOI and instructions from user
-  const options = await promptForExtractionOptions(defaultOptions);
-  if (options === null) throw new Error("User abort")
-
-  ui$1.spinner.show('Extracting references, please wait');
-  let result;
-  try {
-    const filename = options.filename || state.pdfPath;
-    result = await api$6.extractReferences(filename, options);
-    await api$5.reload(state);  // todo uncouple
-    return result
-  } finally {
-    ui$1.spinner.hide();
-  }
-}
-
-// utilities
-
-/**
- * 
- * @param {{doi:string}?} options Optional default option object
- * @returns 
- */
-async function promptForExtractionOptions(options) {
-
-  // load instructions
-  const instructionsData = await api$6.loadInstructions();
-  const instructions = [];
-
-  // populate dialog
-  /** @type {SlInput|null} */
-  if (options && typeof options =="object" && 'doi' in options) {
-    optionsDialog.doi.value = options.doi;
-  } else {
-    optionsDialog.doi.value = "";
-  }
-
-  // configure collections selectbox 
-  /** @type {SlSelect|null} */
-  const collectionSelectBox = optionsDialog.collectionName;
-  collectionSelectBox.innerHTML="";
-  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections);
-  collections.unshift('__inbox');
-  for (const collection_name of collections){
-    const option = Object.assign(new option_default, {
-      value: collection_name,
-      textContent: collection_name.replaceAll("_", " ").trim()
-    });
-    collectionSelectBox.append(option);
-  } 
-  collectionSelectBox.value = "__inbox";
-  
-  // configure instructions selectbox 
-  /** @type {SlSelect|null} */
-  const instructionsSelectBox = optionsDialog.instructionIndex;
-  instructionsSelectBox.innerHTML ="";
-  for (const [idx, { label, text }] of instructionsData.entries()) {
-    const option = Object.assign(new option_default, {
-      value: String(idx),
-      textContent: label
-    });
-    instructions[idx] = text.join("\n");
-    instructionsSelectBox.appendChild(option);
-  }
-  instructionsSelectBox.value = "0";
-
-  // display the dialog and await the user's response
-  const result = await new Promise(resolve => {
-    // user cancels
-    function cancel() {
-      resolve(false);
-    }
-    // user submits their input
-    function submit() {
-      resolve(true);
-    }
-
-    // event listeners
-    optionsDialog.addEventListener("sl-request-close", cancel, { once: true });
-    optionsDialog.cancel.addEventListener("click", cancel, { once: true });
-    optionsDialog.submit.addEventListener("click", submit, { once: true });
-
-    optionsDialog.show();
-  });
-  optionsDialog.hide();
-
-  if (result === false) {
-    // user has cancelled the form
-    return null
-  }
-
-  const formData = {
-    'doi': optionsDialog.doi.value,
-    'instructions': instructions[parseInt(optionsDialog.instructionIndex.value)],
-    'collection': optionsDialog.collectionName.value
-  };
-  
-  if (formData.doi == "" || !isDoi(formData.doi)) {
-    api$9.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
-    return
-  }
-
-  return Object.assign(formData, options)
-}
-
-function getDoiFromXml() {
-  return api$8.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
-}
-
-function getDoiFromFilename(filename) {
-  let doi = null;
-  console.debug("Extracting DOI from filename:", filename);
-  if (filename.match(/^10\./)) {
-    // treat as a DOI-like filename
-    // do we have URL-encoded filenames?
-    doi = filename.slice(0, -4);
-    if (decodeURIComponent(doi) !== doi) {
-      // filename is URL-encoded DOI
-      doi = decodeURIComponent(doi);
-    } else {
-      // custom decoding
-      doi = doi.replaceAll(/__/g, '/');
-      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
-    }
-    console.debug("Extracted DOI from filename:", doi);
-    if (isDoi(doi)) {
-      return doi
-    }
-  }
-  return null
-}
-
-
-function isDoi(doi) {
-  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
-  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
-  return Boolean(doi.match(DOI_REGEX))
+  xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
 }
 
 // src/components/alert/alert.styles.ts
@@ -43382,6 +42650,1139 @@ function notify(message, variant = 'primary', icon = 'info-circle', duration = 3
     return alert.toast();
   }
 
+/**
+ * Plugin providing a link to server-side methods
+ * This is not really a plugin as it does not implement any endpoints (yet)
+ */
+
+
+/**
+ * Parent class for all API errors
+ * @extends {Error}
+ * @property {string} message - The error message
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
+ */
+class ApiError extends Error {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 400
+   */  
+  constructor(message, statusCode = 400) {
+    super(message);
+    this.name = "ApiError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating that a resource is locked
+ * @extends {ApiError}
+ */
+class LockedError extends ApiError {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 423
+   */    
+  constructor(message, statusCode = 423) {
+    super(message);
+    this.name = "LockedError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating server-side connection issues, such as timeouts or unreachable endpoints.
+ * @extends {ApiError}
+ */
+class ConnectionError extends ApiError {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 504
+   */    
+  constructor(message, statusCode = 504) {
+    super(message);
+    this.name = "ConnectError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating an unexpected server-side error.
+ * @extends {Error}
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 500
+ * @property {string} name - The name of the error, defaults to "ApiError"
+ * @property {string} message - The error message
+ */
+class ServerError extends Error {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 500
+   */    
+  constructor(message, statusCode = 500) {
+    super(message);
+    this.name = "ServerError";
+    this.statusCode = statusCode;
+  }
+}
+
+let sessionId;
+let lastHttpStatus = null;
+
+const api_base_url = '/api';
+const upload_route = '/api/upload';
+
+/**
+ * plugin API
+ */
+const api$7 = {
+  get lastHttpStatus() {
+    return lastHttpStatus
+  },
+  ApiError,
+  LockedError,
+  ConnectionError,
+  ServerError,
+  callApi,
+  getFileList,
+  validateXml: validateXml$1,
+  saveXml: saveXml$1,
+  extractReferences,
+  loadInstructions,
+  saveInstructions,
+  deleteFiles,
+  createVersionFromUpload,
+  uploadFile,
+  getConfigValue,
+  setConfigValue,
+  syncFiles: syncFiles$1,
+  moveFiles,
+  state: state$1,
+  sendHeartbeat,
+  checkLock,
+  acquireLock,
+  releaseLock,
+  getAllLocks,
+  login,
+  logout,
+  status
+};
+
+
+/**
+ * component plugin
+ */
+const plugin$a = {
+  name: "client",
+  state: {
+    update: update$6
+  }
+};
+
+/**
+ * 
+ * @param {ApplicationState} state 
+ */
+async function update$6(state) {
+  if (sessionId !== state.sessionId) {
+    sessionId = state.sessionId;
+    api$c.debug(`Setting session id to ${sessionId}`);
+  }
+  //console.warn(plugin.name,"done")
+  return sessionId
+}
+
+/**
+ * A generic function to make API requests against the application backend. 
+ * Expects a JSON response which is an arbitrary value in case of success or a 
+ * `{errror: "Error message"}` object in case of an error handled by the API methods. 
+ *
+ * @param {string} endpoint - The API endpoint to call.
+ * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
+ * @param {object} body - The request body (optional).  Will be stringified to JSON.
+ * @param {Number} [retryAttempts] - The number of retry attempts after a timeout
+ * @returns {Promise<any>} - A promise that resolves to the response data,
+ *                           or rejects with an error message if the request fails.
+ */
+async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
+  const url = `${api_base_url}${endpoint}`;
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Session-ID': sessionId,
+    },
+    keepAlive: true
+  };
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+
+  // function to send the request which can be repeatedly called in case of a timeout
+  const sendRequest = async () => {
+
+    // send request
+    const response = await fetch(url, options);
+
+    // save the last  HTTP status code for later use   
+    lastHttpStatus = response.status;
+
+    let result;
+    try {
+      result = await response.json();
+    } catch (jsonError) {
+      throw new ServerError("Failed to parse error response as JSON");
+    }
+
+    if (response.status === 200) {
+      // simple error protocol if the server doesn't return a special status code
+      if (result && typeof result === "object" && result.error) {
+        throw new Error(result.error);
+      }
+      // success! 
+      return result
+    }
+
+    // handle error responses
+    const message = result.error;
+
+    // handle app-specific error types
+    switch (response.status) {
+      case 423:
+        throw new LockedError(message)
+      case 504:
+        // Timeout
+        throw new ConnectionError(message)
+      default:
+        // other 4XX errors
+        if (response.status && String(response.status)[0] === '4') {
+          throw new ApiError(message, response.status);
+        }
+        throw new ServerError(message);
+    }
+  };
+
+  let error;
+  do {
+    try {
+      // return the non-error result
+      return await sendRequest()
+    } catch (e) {
+      error = e;
+      if (error instanceof ConnectionError) {
+        // retry in case of ConnectionError
+        api$c.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
+        // wait one second
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } else {
+        // throw the error 
+        break;
+      }
+    }
+  } while (retryAttempts-- > 0);
+
+  // notify the user about the error
+  api$c.warn([error.statusCode, error.name, error.message].toString());
+  if (!(error instanceof LockedError)) {
+    notify(error.message, 'error');
+  }
+  throw error
+}
+
+
+/**
+ * Logs in a user
+ * @param {string} username
+ * @param {string} passwd_hash
+ * @returns {Promise<any>}
+ */
+async function login(username, passwd_hash) {
+  return await callApi('/auth/login', 'POST', { username, passwd_hash });
+}
+
+/**
+ * Logs out the current user
+ * @returns {Promise<any>}
+ */
+async function logout() {
+  return await callApi('/auth/logout', 'POST', {});
+}
+
+/**
+ * Checks the authentication status of the current user
+ * @returns {Promise<any>}
+ */
+async function status() {
+  return await callApi('/auth/status', 'GET');
+}
+
+/**
+ * Gets a list of pdf/tei files from the server, including their relative paths
+ *
+ * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
+ *  objects with keys "id", "pdf", and "tei".
+ */
+async function getFileList() {
+  return await callApi('/files/list', 'GET');
+}
+
+/**
+ * Lints a TEI XML string against the Flask API endpoint.
+ *
+ * @param {string} xmlString - The TEI XML string to validate.
+ * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
+ */
+async function validateXml$1(xmlString) {
+  return await callApi('/validate', 'POST', { xml_string: xmlString });
+}
+
+/**
+ * Saves the XML string to a file on the server, optionally as a new version
+ * @param {string} xmlString 
+ * @param {string} filePath 
+ * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
+ * @returns {Promise<Object>}
+ */
+async function saveXml$1(xmlString, filePath, saveAsNewVersion) {
+  return await callApi('/files/save', 'POST',
+    { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
+}
+
+/**
+ * Extracts the references from the given PDF and returns the XML with the extracted data
+ * @param {string} filename The filename of the PDF to extract
+ * @param {Object} options The options for the extractions, such as DOI, additional instructions, etc. 
+ * @returns {Promise<Object>}
+ */
+async function extractReferences(filename, options) {
+  return await callApi('/extract', 'POST', { pdf: filename, ...options });
+}
+
+/**
+ * Returns the current prompt extraction instruction data
+ * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
+ */
+async function loadInstructions() {
+  return await callApi('/config/instructions', 'GET');
+}
+
+/**
+ * Returns the current prompt extraction instruction data
+ * @param {Array<Object>} instructions An array of {active,label,text} objects
+ * @returns {Promise<Object>} The result object
+ */
+async function saveInstructions(instructions) {
+  if (!Array.isArray(instructions)) {
+    throw new Error("Instructions must be an array");
+  }
+  // Send the instructions to the server
+  return await callApi('/config/instructions', 'POST', instructions);
+}
+
+
+/**
+ * Deletes all extraction document versions with the given timestamps 
+ * @returns {Promise<Object>} The result object
+ */
+async function deleteFiles(filePaths) {
+  if (!Array.isArray(filePaths)) {
+    throw new Error("Timestamps must be an array");
+  }
+  return await callApi('/files/delete', 'POST', filePaths);
+}
+
+/**
+ * Creates a new version of a file from an uploaded file.
+ * @param {string} tempFilename 
+ * @param {string} filePath 
+ * @returns {Promise<Object>}
+ */
+async function createVersionFromUpload(tempFilename, filePath) {
+  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
+}
+
+/**
+ * Retrieves the server application state
+ * @returns {Promise<Object>}
+ */
+async function state$1() {
+  return await callApi('/config/state')
+}
+
+/**
+ * Synchronizes the files on the server with a (WebDav) Backend, if exists
+ * @returns {Promise<Object>}
+ */
+async function syncFiles$1() {
+  return await callApi('/files/sync')
+}
+
+/**
+ * Moves the given files to a new collection
+ * @param {string} pdfPath
+ * @param {string} xmlPath
+ * @param {string} destinationCollection
+ * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
+ */
+async function moveFiles(pdfPath, xmlPath, destinationCollection) {
+  return await callApi('/files/move', 'POST', {
+    pdf_path: pdfPath,
+    xml_path: xmlPath,
+    destination_collection: destinationCollection
+  });
+}
+
+
+/**
+ * Retrieves a configuration value from the server
+ */
+async function getConfigValue(key) {
+  if (typeof key !== "string" || key.length === 0) {
+    throw new Error("Key must be a non-empty string");
+  }
+  const path = `/config/get/${encodeURIComponent(key)}`;
+  const value = await callApi(path, 'GET');
+  return value;
+}
+
+/**
+ * Sets a configuration value on the server.
+ */
+async function setConfigValue(key, value) {
+  if (typeof key !== "string" || key.length === 0) {
+    throw new Error("Key must be a non-empty string");
+  }
+
+  const data = {
+    key: key,
+    value: value,
+  };
+
+  // The server is expected to return { result: "OK" } on success
+  const response = await callApi('/config/set', 'POST', data);
+  return response;
+}
+
+/**
+ * Sends a heartbeat to the server to keep the file lock alive.
+ * @param {string} filePath The file path to send the heartbeat for
+ * @returns {Promise<{status:string}>} The response from the server 
+ * @throws {Error} If the file path is not provided or if the heartbeat fails
+ */
+async function sendHeartbeat(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required for heartbeat");
+  }
+  return await callApi('/files/heartbeat', 'POST', { file_path: filePath });
+}
+
+/**
+ * Checks if a file is locked by another user.
+ * @param {string} filePath The file path to check the lock for
+ * @returns {Promise<{is_locked: boolean}>} The response from the server indicating if the file is locked
+ * @throws {Error} If the file path is not provided or if the lock check fails
+ */
+async function checkLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to check lock");
+  }
+  return await callApi('/files/check_lock', 'POST', { file_path: filePath });
+}
+
+async function acquireLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to check lock");
+  }
+  return await callApi('/files/acquire_lock', 'POST', { file_path: filePath });
+}
+
+
+async function releaseLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to release lock");
+  }
+  return await callApi('/files/release_lock', 'POST', { file_path: filePath });
+}
+
+
+/**
+ * Retrieves an object mapping all currently locked files to the session id that locked them.
+ * @returns {Promise<{[key:string]:Number}>} An object mapping locked file paths to session ids 
+ */
+async function getAllLocks() {
+  return await callApi('/files/locks', 'GET');
+}
+
+/**
+ * Uploads a file selected by the user to a specified URL using `fetch()`.
+ *
+ * @author Gemini 2.0
+ * @param {string} uploadUrl - The URL to which the file will be uploaded.
+ * @param {object} [options={}] - Optional configuration options.
+ * @param {string} [options.method='POST'] - The HTTP method to use for the upload.
+ * @param {string} [options.fieldName='file'] - The name of the form field for the file.
+ * @param {object} [options.headers={}] - Additional headers to include in the request.
+ * @param {function} [options.onProgress] - A callback function to handle upload progress events.
+ *    The function receives a progress event object as an argument.
+ * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
+ *    This is a string that will be set as the `accept` attribute of the file
+ * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
+ *    from the `fetch()` call, which must be an object, or rejects with an error.
+ *    The object should contain the uploaded file's metadata, such as its path or ID.
+ *    It will always contain a key "originalFilename" with the original name of the file,
+ *    (as the server can change the filename). Ff the upload fails on the server side, 
+ *   it will contain an "error" key with the error message.
+ * @throws {Error} If the upload fails or if no file is selected.
+ * @example
+ * // Async/Await example (requires an async function context):
+ * async function myUploadFunction() {
+ *   try {
+ *     const response = await uploadFile('https://example.com/upload', {
+ *       fieldName: 'my_file',
+ *       headers: {
+ *         'X-Custom-Header': 'value'
+ *       },
+ *       onProgress: (event) => {
+ *         if (event.lengthComputable) {
+ *           const percentComplete = (event.loaded / event.total) * 100;
+ *           logger.info(`Uploaded: ${percentComplete.toFixed(2)}%`);
+ *         } else {
+ *           logger.info("Total size is unknown");
+ *         }
+ *       } 
+ *     });
+ *
+ *     if (response.ok) {
+ *       const data = await response.json();
+ *       logger.info('Upload successful:', data);
+ *     } else {
+ *       throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+ *     }
+ *   } catch (error) {
+ *     console.error('Error uploading file:', error);
+ *   }
+ * }
+ */
+async function uploadFile(uploadUrl = upload_route, options = {}) {
+  return new Promise((resolve, reject) => {
+    const {
+      method = 'POST',
+      fieldName = 'file',
+      headers = {},
+      onProgress,
+      accept = '.pdf, .xml'
+    } = options;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      if (!file) {
+        reject(new Error('No file selected.'));
+        return;
+      }
+      const formData = new FormData();
+      console.debug("Uploading file:", file.name, "to", uploadUrl);
+      formData.append(fieldName, file);
+      const fetchOptions = {
+        method: method,
+        body: formData,
+        headers: headers
+      };
+      try {
+        const response = await fetch(uploadUrl, fetchOptions);
+        if (!response.ok) {
+          reject(new Error(`HTTP error! Status: ${response.status}`));
+          return;
+        }
+        let result = await response.json();
+        if (typeof result !== 'object' || !result) {
+          reject(new Error("Invalid response format, expected an object"));
+          return;
+        }
+        // Ensure the result contains the original filename
+        if (!result.originalFilename) {
+          result.originalFilename = file.name; //   Fallback to the input file name
+        }
+        if (result.error) {
+          reject(result.error);
+        }
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    // Programmatically trigger the file chooser dialog.  Crucially, this must be initiated from a user action,
+    // such as a button click, to work correctly in most browsers. Directly calling input.click() on page 
+    // load will generally be blocked.
+    input.click();
+  });
+}
+
+/**
+ * This implements the UI for the file selection
+ */
+
+
+/**
+ * The data about the pdf and xml files on the server
+ * @type {Array<object>}
+ */
+const fileData = [];
+
+/**
+ * plugin API
+ */
+const api$6 = {
+  reload,
+  update: update$5,
+  fileData
+};
+
+/**
+ * component plugin
+ */
+const plugin$9 = {
+  name: "file-selection",
+
+  install: install$9,
+  state: {
+    update: update$5
+  }
+};
+
+//
+// UI
+//
+
+// see ui.js for @typedef 
+const fileSelectionControls = await createHtmlElements('file-selection.html');
+
+//
+// Implementation
+//
+
+// API
+
+/**
+ * Runs when the main app starts so the plugins can register the app components they supply
+ * @param {ApplicationState} state
+ */
+async function install$9(state) {
+
+  api$c.debug(`Installing plugin "${plugin$9.name}"`);
+  
+  // install controls on menubar
+  ui$1.toolbar.self.append(...fileSelectionControls);
+  updateUi();
+  
+  /**  @type {[SlSelect,function][]} */
+  const handlers = [
+    [ui$1.toolbar.pdf, onChangePdfSelection],
+    [ui$1.toolbar.xml, onChangeXmlSelection],
+    [ui$1.toolbar.diff, onChangeDiffSelection]
+  ];
+
+  for (const [select, handler] of handlers) {
+    // add event handler for the selectbox
+    select.addEventListener('sl-change', () => handler(state));
+
+    // this works around a problem with the z-index of the select dropdown being bound 
+    // to the z-index of the parent toolbar (and therefore being hidden by the editors)
+    select.addEventListener('sl-show', () => {
+      select.closest('#toolbar')?.classList.add('dropdown-open');
+    });
+
+    select.addEventListener('sl-hide', () => {
+      select.closest('#toolbar')?.classList.remove('dropdown-open');
+    });
+  }
+}
+
+/**
+ * 
+ * @param {ApplicationState} state 
+ */
+async function update$5(state) {
+  //console.warn("update", plugin.name, state)
+  await populateSelectboxes(state);
+  ui$1.toolbar.pdf.value = state.pdfPath || "";
+  ui$1.toolbar.xml.value = state.xmlPath || "";
+  ui$1.toolbar.diff.value = state.diffXmlPath || "";
+  //console.warn(plugin.name,"done")
+}
+
+
+/**
+ * Reloads data and then updates based on the application state
+ * @param {ApplicationState} state
+ */
+async function reload(state) {
+  await reloadFileData();
+  await populateSelectboxes(state);
+}
+
+/**
+ * Reloads the file data from the server
+ * @param {ApplicationState} state
+ */
+async function reloadFileData(state) {
+  api$c.debug("Reloading file data");
+  let data = await api$7.getFileList();
+  if (!data || data.length === 0) {
+    api$9.error("No files found");
+  }
+  // update the fileData variable
+  fileData.length = 0; // clear the array
+  fileData.push(...data);
+  stateCache = null;
+  return fileData;
+}
+
+let stateCache;
+
+/**
+ * Populates the selectboxes for file name and version
+ * @param {ApplicationState} state
+ */
+async function populateSelectboxes(state) {
+
+  // check if state has changed
+  const { xmlPath, pdfPath, diffXmlPath } = state;
+  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath });
+  if (jsonState === stateCache) {
+    //logger.debug("Not repopulating selectboxes as state hasn't changed")
+    return
+  }
+  stateCache = jsonState;
+
+  api$c.debug("Populating selectboxes");
+
+  if (fileData === null) {
+    await reloadFileData();
+  }
+
+  // Clear existing options
+  for (const name of ["pdf", "xml", "diff"]) {
+    ui$1.toolbar[name].innerHTML = "";
+  }
+
+  // sort into groups by directory
+  const dirname = (path) => path.split('/').slice(0, -1).join('/');
+  const basename = (path) => path.split('/').pop();
+  const grouped_files = fileData.reduce((groups, file) => {
+    const collection_name = basename(dirname(file.pdf));
+    (groups[collection_name] = groups[collection_name] || []).push(file);
+    return groups
+  }, {});
+
+  // save the collections, this tight coupling is not ideal
+  const collections = Object.keys(grouped_files).sort();
+  ui$1.toolbar.pdf.dataset.collections = JSON.stringify(collections);
+
+  // get items to be selected from app state or use first element
+  for (const collection_name of collections) {
+    
+    await createHtmlElements(`<small>${collection_name.replaceAll("_"," ").trim()}</small>`, ui$1.toolbar.pdf);
+    
+    // get a list of file data sorted by label
+    const files = grouped_files[collection_name]
+      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0 );
+
+    for (const file of files) {
+      // populate pdf select box 
+      const option = Object.assign(new option_default, {
+        value: file.pdf,
+        textContent: file.label,
+        size: "small",
+      });
+
+      // save scalar file properties in option
+      const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'));
+      Object.assign(option.dataset, data);
+
+      ui$1.toolbar.pdf.hoist = true;
+      ui$1.toolbar.pdf.appendChild(option);
+
+      if (file.pdf === state.pdfPath) {
+        // populate the version and diff selectboxes depending on the selected file
+        if (file.versions) {
+          file.versions.forEach((version) => {
+            // xml
+            let option = new option_default();
+            // @ts-ignore
+            option.size = "small";
+            option.value = version.path;
+            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+            //option.disabled = version.is_locked;
+            ui$1.toolbar.xml.appendChild(option);
+            // diff 
+            option = new option_default();
+            // @ts-ignore
+            option.size = "small";
+            option.value = version.path;
+            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+            option.disabled = version.is_locked;
+            ui$1.toolbar.diff.appendChild(option);
+          });
+        }
+      }
+    }
+    ui$1.toolbar.pdf.appendChild(new divider_default);
+  }
+
+
+  // update selection
+  ui$1.toolbar.pdf.value = state.pdfPath || '';
+  ui$1.toolbar.xml.value = state.xmlPath || '';
+  ui$1.toolbar.diff.value = state.diffXmlPath || '';
+
+}
+
+// Event handlers
+
+/**
+ * Called when the selection in the PDF selectbox changes
+ * @param {ApplicationState} state
+ */
+async function onChangePdfSelection(state) {
+  const selectedFile = fileData.find(file => file.pdf === ui$1.toolbar.pdf.value);
+  const pdf = selectedFile.pdf;
+  const xml = selectedFile.xml;
+  const filesToLoad = {};
+
+  if (pdf && pdf !== state.pdfPath) {
+    filesToLoad.pdf = pdf;
+  }
+  if (xml && xml !== state.xmlPath) {
+    filesToLoad.xml = xml;
+  }
+
+  if (Object.keys(filesToLoad).length > 0) {
+    try {
+      api$4.removeMergeView(state);
+      // @ts-ignore
+      await api$4.load(state, filesToLoad);
+    }
+    catch (error) {
+      console.error(error);
+    }
+  }
+}
+
+
+/**
+ * Called when the selection in the XML selectbox changes
+ * @param {ApplicationState} state
+ */
+async function onChangeXmlSelection(state) {
+  const xml = ui$1.toolbar.xml.value;
+  if (xml && typeof xml == "string" && xml !== state.xmlPath) {
+    try {
+      api$4.removeMergeView(state);
+      await api$4.load(state, { xml });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+}
+
+/**
+ * Called when the selection in the diff version selectbox  changes
+ * @param {ApplicationState} state
+ */
+async function onChangeDiffSelection(state) {
+  const diff = ui$1.toolbar.diff.value;
+  if (diff && typeof diff == "string" && diff !== ui$1.toolbar.xml.value) {
+    try {
+      await api$4.showMergeView(state, diff);
+    } catch (error) {
+      console.error(error);
+    }
+  } else {
+    api$4.removeMergeView(state);
+  }
+  updateState(state, { diffXmlPath: diff });
+}
+
+/**
+ * This implements the UI and the services for extracting references from the current or a new PDF
+ */
+
+
+/**
+ * plugin API
+ */
+const api$5 = {
+  extractFromCurrentPDF,
+  extractFromNewPdf,
+  extractFromPDF
+};
+
+/**
+ * plugin object
+ */
+const plugin$8 = {
+  name: "extraction",
+  deps: ['services'],
+  install: install$8,
+  state: {update: update$4}
+};
+
+//
+// UI
+//
+
+/**
+ * Extraction actions button group
+ * @typedef {object} extractionActionsComponent
+ * @property {SlButtonGroup} self
+ * @property {SlButton} extractNew 
+ * @property {SlButton} extractCurrent
+ * @property {SlButton} editInstructions - added by prompt-editor plugin
+ */
+/** @type {SlButtonGroup & extractionActionsComponent} */
+// @ts-ignore
+const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0];
+
+
+/**
+ * Extraction options dialog
+ * @typedef {object} extractionOptionsDialog
+ * @property {SlDialog} self
+ * @property {SlInput} doi 
+ * @property {SlSelect} collectionName
+ * @property {SlSelect} modelIndex 
+ * @property {SlSelect} instructionIndex
+ */
+/** @type {extractionOptionsDialog & SlDialog} */
+// @ts-ignore
+const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
+
+//
+// Implementation
+//
+
+/**
+ * @param {ApplicationState} state
+ */
+async function install$8(state) {
+  api$c.debug(`Installing plugin "${plugin$8.name}"`);
+
+  // install controls on menubar
+  ui$1.toolbar.self.append(extractionBtnGroup);
+  document.body.append(optionsDialog);
+  updateUi();
+
+  // add event listeners
+  ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state));
+  ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state));
+}
+
+/**
+ * @param {ApplicationState} state
+ */
+async function update$4(state) {
+  // @ts-ignore
+  extractionBtnGroup.self.childNodes.forEach(child => child.disabled = state.offline); 
+  extractionBtnGroup.extractCurrent.disabled = !state.pdfPath;
+  //console.warn(plugin.name,"done")
+}
+
+/**
+ * Extract references from the currently loaded PDF
+ * @param {ApplicationState} state
+ */
+async function extractFromCurrentPDF(state) {
+  let doi;
+  try {
+    doi = getDoiFromXml();
+  } catch (error) {
+    console.warn("Cannot get DOI from document:", error.message);
+  }
+  try {
+    doi = doi || getDoiFromFilename(state.pdfPath);
+    if (state.pdfPath) {
+      let { xml } = await extractFromPDF(state, { doi });
+      await api$4.showMergeView(state, xml);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+/**
+ * Upload a new PDF and extract from it
+ * @param {ApplicationState} state
+ */
+async function extractFromNewPdf(state) {
+  try {
+    const { type, filename, originalFilename } = await api$7.uploadFile();
+    if (type !== "pdf") {
+      api$9.error("Extraction is only possible from PDF files");
+      return
+    }
+
+    const doi = getDoiFromFilename(originalFilename);
+    const { xml, pdf } = await extractFromPDF(state, { doi, filename });
+    await api$4.load(state, { xml, pdf });
+
+  } catch (error) {
+    api$9.error(error.message);
+    console.error(error);
+  }
+}
+
+/**
+ * Extracts references from the given PDF file, letting the user choose the extraction options
+ * @param {ApplicationState} state
+ * @param {{doi:string}} [defaultOptions] Optional default option object passed to the extraction service,
+ * user will be prompted to choose own ones.
+ * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
+ * @throws {Error} If the DOI is not valid or the user aborts the dialog
+ */
+async function extractFromPDF(state, defaultOptions) {
+  if(!state.pdfPath) throw new Error("Missing PDF path")
+
+  // get DOI and instructions from user
+  const options = await promptForExtractionOptions(defaultOptions);
+  if (options === null) throw new Error("User abort")
+
+  ui$1.spinner.show('Extracting references, please wait');
+  let result;
+  try {
+    const filename = options.filename || state.pdfPath;
+    result = await api$7.extractReferences(filename, options);
+    await api$6.reload(state);  // todo uncouple
+    return result
+  } finally {
+    ui$1.spinner.hide();
+  }
+}
+
+// utilities
+
+/**
+ * 
+ * @param {{doi:string}?} options Optional default option object
+ * @returns 
+ */
+async function promptForExtractionOptions(options) {
+
+  // load instructions
+  const instructionsData = await api$7.loadInstructions();
+  const instructions = [];
+
+  // populate dialog
+  /** @type {SlInput|null} */
+  if (options && typeof options =="object" && 'doi' in options) {
+    optionsDialog.doi.value = options.doi;
+  } else {
+    optionsDialog.doi.value = "";
+  }
+
+  // configure collections selectbox 
+  /** @type {SlSelect|null} */
+  const collectionSelectBox = optionsDialog.collectionName;
+  collectionSelectBox.innerHTML="";
+  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections);
+  collections.unshift('__inbox');
+  for (const collection_name of collections){
+    const option = Object.assign(new option_default, {
+      value: collection_name,
+      textContent: collection_name.replaceAll("_", " ").trim()
+    });
+    collectionSelectBox.append(option);
+  } 
+  collectionSelectBox.value = "__inbox";
+  
+  // configure instructions selectbox 
+  /** @type {SlSelect|null} */
+  const instructionsSelectBox = optionsDialog.instructionIndex;
+  instructionsSelectBox.innerHTML ="";
+  for (const [idx, { label, text }] of instructionsData.entries()) {
+    const option = Object.assign(new option_default, {
+      value: String(idx),
+      textContent: label
+    });
+    instructions[idx] = text.join("\n");
+    instructionsSelectBox.appendChild(option);
+  }
+  instructionsSelectBox.value = "0";
+
+  // display the dialog and await the user's response
+  const result = await new Promise(resolve => {
+    // user cancels
+    function cancel() {
+      resolve(false);
+    }
+    // user submits their input
+    function submit() {
+      resolve(true);
+    }
+
+    // event listeners
+    optionsDialog.addEventListener("sl-request-close", cancel, { once: true });
+    optionsDialog.cancel.addEventListener("click", cancel, { once: true });
+    optionsDialog.submit.addEventListener("click", submit, { once: true });
+
+    optionsDialog.show();
+  });
+  optionsDialog.hide();
+
+  if (result === false) {
+    // user has cancelled the form
+    return null
+  }
+
+  const formData = {
+    'doi': optionsDialog.doi.value,
+    'instructions': instructions[parseInt(String(optionsDialog.instructionIndex.value))],
+    'collection': optionsDialog.collectionName.value
+  };
+  
+  if (formData.doi == "" || !isDoi(formData.doi)) {
+    api$9.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
+    return
+  }
+
+  return Object.assign(formData, options)
+}
+
+function getDoiFromXml() {
+  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
+}
+
+function getDoiFromFilename(filename) {
+  let doi = null;
+  console.debug("Extracting DOI from filename:", filename);
+  if (filename.match(/^10\./)) {
+    // treat as a DOI-like filename
+    // do we have URL-encoded filenames?
+    doi = filename.slice(0, -4);
+    if (decodeURIComponent(doi) !== doi) {
+      // filename is URL-encoded DOI
+      doi = decodeURIComponent(doi);
+    } else {
+      // custom decoding
+      doi = doi.replaceAll(/__/g, '/');
+      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
+    }
+    console.debug("Extracted DOI from filename:", doi);
+    if (isDoi(doi)) {
+      return doi
+    }
+  }
+  return null
+}
+
+
+function isDoi(doi) {
+  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
+  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
+  return Boolean(doi.match(DOI_REGEX))
+}
+
 const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
 
 /**
@@ -43748,7 +44149,7 @@ var prettyPrintXml = {
 /**
  * plugin API
  */
-const api$3 = {
+const api$4 = {
   load: load$1,
   validateXml,
   saveXml,
@@ -43768,11 +44169,11 @@ const api$3 = {
 /**
  * component plugin
  */
-const plugin$6 = {
+const plugin$7 = {
   name: "services",
   deps: ['file-selection'],
-  install: install$6,
-  state: { update: update$1 },
+  install: install$7,
+  state: { update: update$3 },
   validation: { inProgress }
 };
 
@@ -43815,7 +44216,8 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
  * @property {SlInput} editionNote 
  */
 
-/** @type {newVersionDialog} */
+/** @type {newVersionDialog & SlDialog} */
+// @ts-ignore
 const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0];
 
 /**
@@ -43827,8 +44229,10 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
  * @property {SlInput} changeDesc 
  */
 
-/** @type {newRevisionChangeDialog} */
+/** @type {newRevisionChangeDialog & SlDialog} */
+// @ts-ignore
 const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0];
+
 
 //
 // Implementation
@@ -43837,8 +44241,8 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 /**
  * @param {ApplicationState} state
  */
-async function install$6(state) {
-  api$b.debug(`Installing plugin "${plugin$6.name}"`);
+async function install$7(state) {
+  api$c.debug(`Installing plugin "${plugin$7.name}"`);
 
   // install controls on menubar
   ui$1.toolbar.self.append(...documentActionButtons);
@@ -43848,15 +44252,14 @@ async function install$6(state) {
 
   ui$1.toolbar.self;
 
-  // install dialogs
-
   // === Document button group ===
 
   const da = ui$1.toolbar.documentActions;
+
   // save a revision
   da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
   // enable save button on dirty editor
-  api$8.addEventListener(
+  xmlEditor.addEventListener(
     XMLEditor.EVENT_EDITOR_READY,
     () => da.saveRevision.disabled = false
   );
@@ -43889,12 +44292,18 @@ async function install$6(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$1(state) {
+async function update$3(state) {
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
   const da = ui$1.toolbar.documentActions;
-  da.deleteAll.disabled = api$5.fileData.length < 2; // at least on PDF must be present
+
+  da.self.childNodes.forEach(el => el.disabled = state.offline);
+  if (state.offline) {
+    return
+  }
+
+  da.deleteAll.disabled = api$6.fileData.length < 2; // at least on PDF must be present
   da.deleteAllVersions.disabled = ui$1.toolbar.xml.childElementCount < 2;
   da.deleteCurrentVersion.disabled = ui$1.toolbar.xml.value === ui$1.toolbar.xml.firstChild?.value;
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled;
@@ -43905,8 +44314,12 @@ async function update$1(state) {
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xmlPath);
 
-  // disable sync if webdav is not enabled
+  // disable sync and upload if webdav is not enabled
   da.sync.disabled = !state.webdavEnabled;
+
+  // no uploads if editor is readonly
+  da.upload.disabled = state.editorReadOnly;
+  //console.warn(plugin.name,"done")
 }
 
 
@@ -43929,30 +44342,56 @@ async function inProgress(validationPromise) {
 async function load$1(state, { xml, pdf }) {
 
   const promises = [];
+  let file_is_locked = false;
 
   // PDF 
   if (pdf) {
     await updateState(state, { pdfPath: null, xmlPath: null, diffXmlPath: null });
-    api$b.info("Loading PDF: " + pdf);
+    api$c.info("Loading PDF: " + pdf);
     promises.push(pdfViewer.load(pdf));
   }
 
   // XML
   if (xml) {
+    // Check for lock before loading
+
+    if (state.xmlPath !== xml) {
+      try {
+        ui$1.spinner.show('Loading file, please wait...');
+        if (state.xmlPath && !state.editorReadOnly) {
+          await api$7.releaseLock(state.xmlPath);
+        }
+        try {
+          await api$7.acquireLock(xml);
+          api$c.debug(`Acquired lock for file ${xml}`);
+        } catch (error) {
+          if (error instanceof api$7.LockedError) {
+            api$c.debug(`File ${xml} is locked, loading in read-only mode`);
+            notify(`File is being edited by another user, loading in read-only mode`);
+            file_is_locked = true;
+          } else {
+            api$9.error(error.message);
+            throw error
+          }
+        }
+      } finally {
+        ui$1.spinner.hide();
+      }
+    }
+
     removeMergeView(state);
-    await updateState(state, { xmlPath: null, diffXmlPath: null });
-    api$b.info("Loading XML: " + xml);
-    promises.push(api$8.loadXml(xml));
+    await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked });
+    api$c.info("Loading XML: " + xml);
+    promises.push(xmlEditor.loadXml(xml));
   }
 
   // await promises in parallel
   try {
     await Promise.all(promises);
   } catch (error) {
-
     console.error(error.message);
     if (error.status === 404) {
-      await api$5.reload(state);
+      await api$6.reload(state);
       return
     }
     throw error
@@ -43961,7 +44400,7 @@ async function load$1(state, { xml, pdf }) {
   if (pdf) {
     state.pdfPath = pdf;
     // update selectboxes in the toolbar
-    await api$5.update(state);
+    await api$6.update(state);
   }
   if (xml) {
     state.xmlPath = xml;
@@ -43976,8 +44415,8 @@ async function load$1(state, { xml, pdf }) {
  * @returns {Promise<object[]>}
  */
 async function validateXml() {
-  api$b.info("Validating XML...");
-  return await api$7.validate() // todo use endpoint instead
+  api$c.info("Validating XML...");
+  return await api$8.validate() // todo use endpoint instead
 }
 
 /**
@@ -43985,19 +44424,23 @@ async function validateXml() {
  * @param {string} filePath The path to the XML file on the server
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<{path:string, status:string}>} An object with a path property, containing the path to the saved version
+ * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
-  api$b.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
-  if (!api$8.getXmlTree()) {
+  api$c.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+  if (!xmlEditor.getXmlTree()) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    ui$1.statusBar.statusMessageXml.textContent = "Saving XML...";
-    return await api$6.saveXml(api$8.getXML(), filePath, saveAsNewVersion)
+    api$a.addMessage("Saving XML...", "xml", "saving");
+    return await api$7.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
-    throw e
+    console.error("Error while saving XML:", e.message);
+    api$9.error(`Could not save XML: ${e.message}`);
+    throw new Error(`Could not save XML: ${e.message}`)
   } finally {
-    setTimeout(() => { ui$1.statusBar.statusMessageXml.textContent = ""; }, 1000); // clear status message after 1 second 
+    // clear status message after 1 second 
+    setTimeout(() => { api$a.removeMessage("xml", "saving"); }, 1000);
   }
 }
 
@@ -44007,13 +44450,13 @@ async function saveXml(filePath, saveAsNewVersion = false) {
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
 async function showMergeView(state, diff) {
-  api$b.info("Loading diff XML: " + diff);
+  api$c.info("Loading diff XML: " + diff);
   ui$1.spinner.show('Computing file differences, please wait...');
   try {
-    await api$8.showMergeView(diff);
+    await xmlEditor.showMergeView(diff);
     updateState(state, { diffXmlPath: diff });
     // turn validation off as it creates too much visual noise
-    api$7.configure({ mode: "off" });
+    api$8.configure({ mode: "off" });
   } finally {
     ui$1.spinner.hide();
   }
@@ -44023,9 +44466,9 @@ async function showMergeView(state, diff) {
  * Removes all remaining diffs
  */
 function removeMergeView(state) {
-  api$8.hideMergeView();
+  xmlEditor.hideMergeView();
   // re-enable validation
-  api$7.configure({ mode: "auto" });
+  api$8.configure({ mode: "auto" });
   UrlHash.remove("diff");
   updateState(state, { diffXmlPath: null });
 }
@@ -44046,12 +44489,12 @@ async function deleteCurrentVersion(state) {
     const versionName = ui$1.toolbar.xml.selectedOptions[0].textContent;
     const msg = `Are you sure you want to delete the current version "${versionName}"?`;
     if (!confirm(msg)) return; // todo use dialog
-    api$3.removeMergeView(state);
+    api$4.removeMergeView(state);
     // delete the file
-    await api$6.deleteFiles(filePathsToDelete);
+    await api$7.deleteFiles(filePathsToDelete);
     try {
       // update the file data
-      await api$5.reload(state);
+      await api$6.reload(state);
       // load the gold version
       // @ts-ignore
       const xml = ui$1.toolbar.xml.firstChild?.value;
@@ -44079,13 +44522,13 @@ async function deleteAllVersions(state) {
     const msg = "Are you sure you want to delete all versions of this document and leave only the current gold standard version? This cannot be undone.";
     if (!confirm(msg)) return; // todo use dialog
   }
-  api$3.removeMergeView(state);
+  api$4.removeMergeView(state);
   // delete
-  await api$6.deleteFiles(filePathsToDelete);
+  await api$7.deleteFiles(filePathsToDelete);
   try {
 
     // update the file data
-    await api$5.reload(state);
+    await api$6.reload(state);
     // load the gold version
     await load$1(state, { xml: xmlPaths[0] });
     notify("All version have been deleted");
@@ -44110,7 +44553,9 @@ async function deleteAll(state) {
 
   // @ts-ignore
   const filePathsToDelete = [ui$1.toolbar.pdf.value]
+    // @ts-ignore
     .concat(Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value))
+    // @ts-ignore
     .concat(Array.from(ui$1.toolbar.diff.childNodes).map(option => option.value));
 
   if (filePathsToDelete.length > 0) {
@@ -44118,18 +44563,18 @@ async function deleteAll(state) {
     if (!confirm(msg)) return; // todo use dialog
   }
 
-  api$3.removeMergeView(state);
+  api$4.removeMergeView(state);
   console.debug("Deleting files:", filePathsToDelete);
-  await api$6.deleteFiles(filePathsToDelete);
+  await api$7.deleteFiles(filePathsToDelete);
 
   try {
     // update the file data
-    await api$5.reload(state);
+    await api$6.reload(state);
 
     // load the first PDF and XML file 
     await load$1(state, {
-      pdf: api$5.fileData[0].pdf,
-      xml: api$5.fileData[0].xml
+      pdf: api$6.fileData[0].pdf,
+      xml: api$6.fileData[0].xml
     });
     notify(`${filePathsToDelete.length} files have been deleted.`);
     syncFiles(state)
@@ -44147,9 +44592,9 @@ async function deleteAll(state) {
  */
 async function syncFiles(state) {
   if (state.webdavEnabled) {
-    api$b.debug("Synchronizing files on the server");
-    const summary = await api$6.syncFiles();
-    api$b.debug(summary);
+    api$c.debug("Synchronizing files on the server");
+    const summary = await api$7.syncFiles();
+    api$c.debug(summary);
     return summary
   }
   return false
@@ -44163,7 +44608,7 @@ function downloadXml(state) {
   if (!state.xmlPath) {
     throw new TypeError("State does not contain an xml path")
   }
-  const xml = api$8.getXML();
+  const xml = xmlEditor.getXML();
   const blob = new Blob([xml], { type: 'application/xml' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -44179,9 +44624,10 @@ function downloadXml(state) {
  * @param {ApplicationState} state 
  */
 async function uploadXml(state) {
-  const { filename: tempFilename } = await api$6.uploadFile(undefined, { accept: '.xml' });
-  const { path } = await api$6.createVersionFromUpload(tempFilename, state.xmlPath);
-  await api$5.reload(state);
+  const { filename: tempFilename } = await api$7.uploadFile(undefined, { accept: '.xml' });
+  // @ts-ignore
+  const { path } = await api$7.createVersionFromUpload(tempFilename, state.xmlPath);
+  await api$6.reload(state);
   await load$1(state, { xml: path });
   notify("Document was uploaded. You are now editing the new version.");
 }
@@ -44280,7 +44726,7 @@ async function onClickSaveRevisionButton(state) {
       .catch(e => console.error(e));
 
     // dirty state
-    api$8.isDirty = false;
+    xmlEditor.markAsClean();
   } catch (e) {
     console.error(e);
     alert(e.message);
@@ -44332,11 +44778,11 @@ async function onClickCreateNewVersionButton(state) {
     let { path } = await saveXml(state.xmlPath, true);
     state.xmlPath = path;
     state.diffXmlPath = path;
-    await api$5.reload(state);
+    await api$6.reload(state);
     await updateState(state);
 
     // dirty state
-    api$8.isDirty = false;
+    xmlEditor.isDirty = false;
     notify("Document was duplicated. You are now editing the copy.");
     syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
@@ -44370,7 +44816,7 @@ async function onClickSyncBtn(state) {
     if (msg.length > 0) {
       notify(msg.join(", "));
       // something has changed, reload the file data
-      await api$5.reload(state);
+      await api$6.reload(state);
     }
   }
 }
@@ -44413,7 +44859,7 @@ function getTextNodes(node) {
  */
 async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 
-  const xmlDoc = api$8.getXmlTree();
+  const xmlDoc = xmlEditor.getXmlTree();
   if (!xmlDoc) {
     throw new Error("No XML document loaded")
   }
@@ -44431,7 +44877,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
   if (edition) {
     const versionName = edition.title;
     const nameExistsInDoc = Array.from(xmlDoc.querySelector('edition > title') || []).some(elem => elem.textContent === versionName);
-    const nameExistsInVersions = api$5.fileData.some(file => file.label === versionName);
+    const nameExistsInVersions = api$6.fileData.some(file => file.label === versionName);
     if (nameExistsInDoc || nameExistsInVersions) {
       throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
     }
@@ -44441,7 +44887,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
     addRevisionChange(xmlDoc, revisionChange);
   }
   prettyPrintXmlDom(xmlDoc);
-  await api$8.updateEditorFromXmlTree();
+  await xmlEditor.updateEditorFromXmlTree();
 }
 
 /** 
@@ -44452,7 +44898,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 /**
  * plugin API
  */
-const api$2 = {
+const api$3 = {
   show: () => ui$1.floatingPanel.self.classList.remove("hidden"),
   hide: () => ui$1.floatingPanel.self.classList.add("hidden"),
 };
@@ -44460,10 +44906,10 @@ const api$2 = {
 /**
  * component plugin
  */
-const plugin$5 = {
+const plugin$6 = {
   name: "floating-panel",
-  install: install$5,
-  state: { update }
+  install: install$6,
+  state: { update: update$2 }
 };
 
 //
@@ -44507,8 +44953,8 @@ const pluginId = "floating-panel";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$5(state) {
-  api$b.debug(`Installing plugin "${plugin$5.name}"`);
+async function install$6(state) {
+  api$c.debug(`Installing plugin "${plugin$6.name}"`);
 
   document.body.append(...floatingPanelControls);
   updateUi();
@@ -44530,7 +44976,7 @@ async function install$5(state) {
   /**
    * @type {{value:string, label:string}[]}
    */
-  const selectBoxData = await api$6.getConfigValue("navigation.xpath.list");
+  const selectBoxData = await api$7.getConfigValue("navigation.xpath.list");
   selectBoxData.forEach(item => {
     const option = document.createElement('option');
     option.value = item.value || '';
@@ -44555,15 +45001,15 @@ async function install$5(state) {
   fp.nextNode.addEventListener('click', () => changeNodeIndex(state, 1));
 
   // diff navigation
-  fp.diffNavigation.prevDiff.addEventListener('click', () => api$8.goToPreviousDiff());
-  fp.diffNavigation.nextDiff.addEventListener('click', () => api$8.goToNextDiff());
+  fp.diffNavigation.prevDiff.addEventListener('click', () => xmlEditor.goToPreviousDiff());
+  fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff());
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
-    api$8.rejectAllDiffs();
-    api$3.removeMergeView(state);
+    xmlEditor.rejectAllDiffs();
+    api$4.removeMergeView(state);
   });
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
-    api$8.acceptAllDiffs();
-    api$3.removeMergeView(state);
+    xmlEditor.acceptAllDiffs();
+    api$4.removeMergeView(state);
   });
 
   // @ts-ignore
@@ -44575,10 +45021,10 @@ async function install$5(state) {
     if (!state.xpath) {
       return
     }
-    api$8.selectByXpath(state.xpath);
-    if (api$8.selectedNode) {
+    xmlEditor.selectByXpath(state.xpath);
+    if (xmlEditor.selectedNode) {
       $$('.node-status').forEach(btn => btn.disabled = true);
-      await api$8.setNodeStatus(api$8.selectedNode, evt.target.dataset.status);
+      await xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status);
       $$('.node-status').forEach(btn => btn.disabled = false);
     }
   }));
@@ -44588,7 +45034,7 @@ async function install$5(state) {
  * Reacts to application state changes
  * @param {ApplicationState} state 
  */
-async function update(state) {
+async function update$2(state) {
   //console.warn("update", plugin.name, state)
   // show the xpath selector
   if (state.xpath) {
@@ -44608,7 +45054,7 @@ async function update(state) {
       ui$1.floatingPanel.xpath.options[lastIdx].disabled = false;
     }
     // update counter with index and size
-    api$8.whenReady().then(() => updateCounter(nonIndexedPath, index));
+    xmlEditor.whenReady().then(() => updateCounter(nonIndexedPath, index));
   }
 
   // configure node status buttons
@@ -44618,6 +45064,7 @@ async function update(state) {
   ui$1.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
     node.disabled = !state.diffXmlPath || state.diffXmlPath === state.xmlPath;
   });
+  //console.warn(plugin.name,"done")
 }
 
 /**
@@ -44629,7 +45076,7 @@ async function update(state) {
 function updateCounter(xpath, index) {
   let size;
   try {
-    size = api$8.countDomNodesByXpath(xpath);
+    size = xmlEditor.countDomNodesByXpath(xpath);
   } catch (e) {
     console.error(e);
     size = 0;
@@ -44645,7 +45092,7 @@ async function changeNodeIndex(state, delta) {
   }
   const normativeXpath = ui$1.floatingPanel.xpath.value;
   let { index } = parseXPath(state.xpath);
-  const size = api$8.countDomNodesByXpath(normativeXpath);
+  const size = xmlEditor.countDomNodesByXpath(normativeXpath);
   if (size < 2) return
   if (index === null) index = 1;
   index += delta;
@@ -44666,9 +45113,9 @@ async function changeNodeIndex(state, delta) {
  */
 async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked;
-  api$b.info(`Auto search is: ${checked}`);
-  if (checked && api$8.selectedNode) {
-    await api$3.searchNodeContentsInPdf(api$8.selectedNode);
+  api$c.info(`Auto search is: ${checked}`);
+  if (checked && xmlEditor.selectedNode) {
+    await api$4.searchNodeContentsInPdf(xmlEditor.selectedNode);
   }
 }
 
@@ -44680,7 +45127,7 @@ function onClickSelectionIndex() {
   let index = prompt('Enter node index');
   if (!index) return;
   try {
-    api$8.selectByIndex(parseInt(index));
+    xmlEditor.selectByIndex(parseInt(index));
   } catch (error) {
     api$9.error(error.message);
   }
@@ -44691,7 +45138,7 @@ function onClickSelectionIndex() {
  * @param {ApplicationState} state 
  */
 async function onEditXpath(state) {
-  const xmlDoc = api$8.getXmlTree();
+  const xmlDoc = xmlEditor.getXmlTree();
   if (xmlDoc === null) {
     return
   }
@@ -44700,7 +45147,7 @@ async function onEditXpath(state) {
   const xpath = prompt("Enter custom xpath", custom.value);
   if (!xpath) return
 
-  if (!isValidXPath(xpath, xmlDoc, api$8.namespaceResolver)) {
+  if (!isValidXPath(xpath, xmlDoc, xmlEditor.namespaceResolver)) {
     api$9.error(`'${xpath} is not a valid XPath expression'`);
   }
 
@@ -44781,7 +45228,7 @@ function makeDraggable(element) {
 /**
  * plugin API
  */
-const api$1 = {
+const api$2 = {
   open: open$1,
   edit,
   duplicate: duplicateInstructions,
@@ -44794,10 +45241,10 @@ const api$1 = {
 /**
  * Plugin object
  */
-const plugin$4 = {
+const plugin$5 = {
   name: "prompt-editor",
   deps: ['extraction'],
-  install: install$4
+  install: install$5
 };
 
 //
@@ -44832,8 +45279,8 @@ const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$4(state) {
-  api$b.debug(`Installing plugin "${plugin$4.name}"`);
+async function install$5(state) {
+  api$c.debug(`Installing plugin "${plugin$5.name}"`);
   
   // add prompt editor component
   document.body.append(promptEditorDialog);
@@ -44849,7 +45296,7 @@ async function install$4(state) {
 
   // add a button to the command bar to show dialog with prompt editor
   ui$1.toolbar.extractionActions.self.append(promptEditorButton);
-  promptEditorButton.addEventListener("click", () => api$1.open());
+  promptEditorButton.addEventListener("click", () => api$2.open());
 }
 
 // API
@@ -44870,13 +45317,13 @@ let currentIndex = 0;
 async function open$1() {
   if (!prompts){
     ui$1.promptEditor.labelMenu.childNodes.forEach(node => node.remove());
-    prompts = await api$6.loadInstructions();
+    prompts = await api$7.loadInstructions();
     for (const [idx, prompt] of prompts.entries()) {
       addSlMenuItem(idx, prompt.label);
     }
   }
   ui$1.promptEditor.delete.disabled = prompts.length < 2;
-  api$1.edit(currentIndex);
+  api$2.edit(currentIndex);
   ui$1.promptEditor.self.show();
 }
 
@@ -44913,7 +45360,7 @@ function duplicateInstructions() {
  */
 async function save() {
   saveCurrentPrompt();
-  api$6.saveInstructions(prompts);
+  api$7.saveInstructions(prompts);
 }
 
 /**
@@ -44978,7 +45425,7 @@ function menuOnSelect(event) {
   // @ts-ignore
   ui$1.promptEditor.labelMenu.childNodes[currentIndex].checked = false;
   currentIndex = item.value;
-  api$1.edit(currentIndex);
+  api$2.edit(currentIndex);
 }
 
 /**
@@ -45020,9 +45467,10 @@ const enhancements = [
 
 
 
-const plugin$3 = {
+const plugin$4 = {
   name: "tei-wizard",
-  install: install$3,
+  install: install$4,
+  state: {update: update$1},
   deps: ['services']
 };
 
@@ -45038,19 +45486,19 @@ const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 /**
  * @param {ApplicationState} state 
  */
-async function install$3(state) {
-  api$b.debug(`Installing plugin "${plugin$3.name}"`);
+async function install$4(state) {
+  api$c.debug(`Installing plugin "${plugin$4.name}"`);
 
   // button
   ui$1.toolbar.teiActions.self.append(teiWizardButton);
   document.body.append(teiWizardDialog);
   updateUi();
-  
+
   // @ts-ignore
   ui$1.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard);
 
   // @ts-ignore
-  const dialog = ui$1.teiWizardDialog;  
+  const dialog = ui$1.teiWizardDialog;
 
   // Populate enhancement list
   enhancements.forEach(async enhancement => {
@@ -45074,12 +45522,21 @@ async function install$3(state) {
 }
 
 
+/**
+ * @param {ApplicationState} state 
+ */
+async function update$1(state) {
+  // @ts-ignore
+  teiWizardButton.disabled = state.editorReadOnly;
+  //console.warn(plugin.name,"done")
+}
+
 async function getSelectedEnhancements() {
   // @ts-ignore
   const dialog = ui$1.teiWizardDialog;
   dialog.self.show();
-  return new Promise((resolve) => {  
-    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([])); 
+  return new Promise((resolve) => {
+    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([]));
     dialog.executeBtn.addEventListener('click', () => {
       const enhancementFunctions = Array.from(dialog.enhancementList.querySelectorAll('sl-checkbox'))
         .filter(checkbox => checkbox.checked)
@@ -45091,7 +45548,7 @@ async function getSelectedEnhancements() {
 }
 
 async function runTeiWizard() {
-  let teiDoc = api$8.getXmlTree();
+  let teiDoc = xmlEditor.getXmlTree();
   if (!teiDoc) {
     console.error("TEI document not available.");
     return;
@@ -45121,10 +45578,10 @@ async function runTeiWizard() {
   //@ts-ignore
   let xmlstring = (new XMLSerializer()).serializeToString(teiDoc);
   xmlstring = xmlstring.replace(/(?<!<TEI[^>]*)\sxmlns=".+?"/, '');
-  
+
   // Display the result in the merge view
-  api$8.showMergeView(xmlstring);
-  
+  xmlEditor.showMergeView(xmlstring);
+
   // enable diff navigation buttons
   ui$1.floatingPanel.diffNavigation.self
     .querySelectorAll("button")
@@ -53497,7 +53954,7 @@ MarkdownIt.prototype.renderInline = function (src, env) {
 /**
  * plugin API
  */
-const api = {
+const api$1 = {
   open,
   load,
   close
@@ -53506,9 +53963,9 @@ const api = {
 /**
  * Plugin object
  */
-const plugin$2 = {
+const plugin$3 = {
   name: "info",
-  install: install$2
+  install: install$3
 };
 
 //
@@ -53561,8 +54018,8 @@ const docsBasePath = "../../docs";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$2(state) {
-  api$b.debug(`Installing plugin "${plugin$2.name}"`);
+async function install$3(state) {
+  api$c.debug(`Installing plugin "${plugin$3.name}"`);
   // add the component html
   await createHtmlElements(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.self.hide());
@@ -53571,7 +54028,7 @@ async function install$2(state) {
   const button = (await createHtmlElements(buttonHtml))[0];
   ui$1.toolbar.self.append(button);
   updateUi();
-  button.addEventListener("click", () => api.open());
+  button.addEventListener("click", () => api$1.open());
   
   // configure markdown parser
   const options = {
@@ -53582,7 +54039,7 @@ async function install$2(state) {
   md = MarkdownIt(options);
   
   // @ts-ignore
-  window.appInfo = api;
+  window.appInfo = api$1;
   load('index.md');
 }
 
@@ -53639,10 +54096,10 @@ function close() {
  */
 
 
-const plugin$1 = {
+const plugin$2 = {
   name: "move-files",
   deps: ['services'],
-  install: install$1
+  install: install$2
 };
 
 //
@@ -53677,8 +54134,8 @@ const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
 /**
  * @param {ApplicationState} state
  */
-async function install$1(state) {
-  api$b.debug(`Installing plugin "${plugin$1.name}"`);
+async function install$2(state) {
+  api$c.debug(`Installing plugin "${plugin$2.name}"`);
 
   // install button & dialog
   ui$1.toolbar.documentActions.self.append(moveBtn);
@@ -53735,7 +54192,7 @@ async function showMoveFilesDialog(state) {
       moveFilesDialog.self.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
-    api$b.warn("User cancelled move files dialog");
+    api$c.warn("User cancelled move files dialog");
     return;
   } finally {
     moveFilesDialog.hide();
@@ -53749,9 +54206,9 @@ async function showMoveFilesDialog(state) {
 
   ui$1.spinner.show('Moving files, please wait...');
   try {
-    const { new_pdf_path, new_xml_path } = await api$6.moveFiles(pdfPath, xmlPath, destinationCollection);
-    await api$5.reload(state);
-    await api$3.load(state, { pdf: new_pdf_path, xml: new_xml_path });
+    const { new_pdf_path, new_xml_path } = await api$7.moveFiles(pdfPath, xmlPath, destinationCollection);
+    await api$6.reload(state);
+    await api$4.load(state, { pdf: new_pdf_path, xml: new_xml_path });
     api$9.success("Files moved successfully.");
   } catch (error) {
     api$9.error(`Error moving files: ${error.message}`);
@@ -53766,13 +54223,14 @@ async function showMoveFilesDialog(state) {
  */
 
 
+
 /**
  * Plugin object
  * dependencies are automatically set to all other plugins, so that it is the last one to be installed
  */
-const plugin = {
+const plugin$1 = {
   name: "start",
-  install,
+  install: install$1,
   validation: {
     result: onValidationResult
   },
@@ -53790,8 +54248,8 @@ let spinner;
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-async function install(state) {
-  api$b.debug(`Installing plugin "${plugin.name}"`);
+async function install$1(state) {
+  api$c.debug(`Installing plugin "${plugin$1.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -53809,26 +54267,28 @@ async function start(state) {
   // async operations
   try {
 
-    // update the file lists
-    await api$5.reload(state);
+    // Authenticate user, otherwise we don't proceed further
+    const userData = await api.ensureAuthenticated();
+
+    api$c.info(`Welcome, ${userData.fullname}!`);
 
     ui$1.spinner.show('Loading documents, please wait...');
 
-    api$b.info("Configuring application state from URL");
-    api$a.updateState(state);
+    // update the file lists
+    await api$6.reload(state);
 
     // disable regular validation so that we have more control over it
-    api$7.configure({mode:"off"});
+    api$8.configure({ mode: "off" });
 
     // get document paths from URL hash or from the first entry of the selectboxes
     // @ts-ignore
-    const defaultFile = api$5.fileData.length && api$5.fileData[0];
+    const defaultFile = api$6.fileData.length && api$6.fileData[0];
     const pdf = state.pdfPath || defaultFile?.pdf;
     const xml = state.xmlPath || defaultFile?.xml;
     const diff = state.diffXmlPath;
 
     // lod the documents
-    await api$3.load(state, { pdf, xml, diff });
+    await api$4.load(state, { pdf, xml, diff });
 
     // two alternative initial states:
     // a) if the diff param was given and is different from the xml param, show a diff/merge view 
@@ -53836,21 +54296,21 @@ async function start(state) {
     if (diff && diff !== xml) {
       // a) load the diff view
       try {
-        await api$3.showMergeView(state, diff);
+        await api$4.showMergeView(state, diff);
       } catch (error) {
-        api$b.warn("Error loading diff view: " + error.message);
+        api$c.warn("Error loading diff view: " + error.message);
       }
     } else {
       // b) validation & xpath selection
 
       // measure how long it takes to validate the document
       const startTime = new Date().getTime();
-      api$3.validateXml().then(() => {
+      api$4.validateXml().then(() => {
         const endTime = new Date().getTime();
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
-        api$b.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
-        api$7.configure({mode: seconds > 3 ? "off": "auto"});
+        api$c.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
+        api$8.configure({ mode: seconds > 3 ? "off" : "auto" });
       });
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
@@ -53864,47 +54324,51 @@ async function start(state) {
       updateState(state);
     }
 
+    // Find the currently selected node's contents in the PDF
+    xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents); 
+
     // manually show diagnostics if validation is disabled
-    api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
-      if (api$7.isDisabled()) {
-        let view = api$8.getView();
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+      if (api$8.isDisabled()) {
+        let view = xmlEditor.getView();
         // @ts-ignore
         let diagnostic = evt.detail;
         try {
           view.dispatch(setDiagnostics(view.state, [diagnostic]));
         } catch (error) {
-          api$b.warn("Error setting diagnostics: " + error.message);
+          api$c.warn("Error setting diagnostics: " + error.message);
         }
       }
     });
 
     // save dirty editor content after an update
-    api$8.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty() );
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty());
 
     // xml vaidation events
-    api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-      /** @type Diagnostic[] */
-      
-      const diagnostics = evt.detail;
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+      const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
       console.warn("XML is not well-formed", diagnostics);
-      api$8.getView().dispatch(setDiagnostics(api$8.getView().state, diagnostics));
-      
-      ui$1.statusBar.statusMessageXml.textContent = "Invalid XML";
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
+
+      api$a.addMessage("Invalid XML", "xml", "xml-status"); 
       // @ts-ignore
       ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
     });
-    api$8.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
       // @ts-ignore
       ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
-      api$8.getView().dispatch(setDiagnostics(api$8.getView().state, []));
-      ui$1.statusBar.statusMessageXml.textContent = "";
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
+      api$a.removeMessage("xml", "xml-status");
     });
+
+    // Heartbeat mechanism for file locking and offline detection
+    configureHeartbeat(state);
 
     // finish initialization
     ui$1.spinner.hide();
-    api$2.show();
-    api$8.setLineWrapping(true);
-    api$b.info("Application ready.");
+    api$3.show();
+    xmlEditor.setLineWrapping(true);
+    api$c.info("Application ready.");
 
   } catch (error) {
     ui$1.spinner.hide();
@@ -53931,24 +54395,342 @@ async function saveIfDirty() {
   const filePath = String(ui$1.toolbar.xml.value);
 
   // track weird bug where the xmlEditor is not initialized yet
-  if (!api$8 || !api$8.isDirty) {
-    api$b.warn("XML Editor is not initialized yet, cannot save.");
-    console.log(api$8);
+  if (!xmlEditor || !xmlEditor.isDirty) {
+    api$c.warn("XML Editor is not initialized yet, cannot save.");
+    console.log(xmlEditor);
     return
   }
 
-  if (filePath && api$8.getXmlTree() && api$8.isDirty()) {
-    const result = await api$3.saveXml(filePath);
+  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
+    const result = await api$4.saveXml(filePath);
     if (result.status == "unchanged") {
-      api$b.debug(`File has not changed`);
+      api$c.debug(`File has not changed`);
     } else {
-      api$b.debug(`Saved file to ${result.path}`);
+      api$c.debug(`Saved file to ${result.path}`);
     }
   }
 }
 
 /**
- * PDF-TEI-Editor (working title)
+ * Configures the heartbeat mechanism for file locking and offline detection.
+ * @param {ApplicationState} state 
+ * @param {number} [lockTimeoutSeconds=60]
+ */
+function configureHeartbeat(state, lockTimeoutSeconds = 60) {
+  let heartbeatInterval = null;
+  const heartbeatFrequency = (lockTimeoutSeconds / 2) * 1000;
+
+  const stopHeartbeat = () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+      api$c.debug("Heartbeat stopped.");
+    }
+    const filePath = ui$1.toolbar.xml.value;
+    api$7.releaseLock(filePath);
+  };
+
+  const startHeartbeat = () => {
+
+    heartbeatInterval = setInterval(async () => {
+
+      const filePath = String(ui$1.toolbar.xml.value);
+      const reasonsToSkip = {
+        "No user is logged in": state.user === null,
+        "No file path specified": !filePath,
+        "Application is offline": state.offline,
+        "Editor is in read-only mode": state.editorReadOnly,
+      };
+
+      for (const reason in reasonsToSkip) {
+        if (reasonsToSkip[reason]) {
+          api$c.debug(`Skipping heartbeat: ${reason}.`);
+          return;
+        }
+      }
+
+      try {
+
+        api$c.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
+        await api$7.sendHeartbeat(filePath);
+
+        // If we are here, the request was successful. Check if we were offline.
+        if (!state.webdavEnabled) {
+          api$c.info("Connection restored. Re-enabling WebDAV features.");
+          notify("Connection restored.");
+          updateState(state, { webdavEnabled: true, offline: false });
+        } 
+
+         // reload file list to see updates
+        api$6.reload(state);
+      
+      } catch (error) {
+        console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
+        // Handle different types of errors
+        if (error instanceof TypeError) {
+          // This is likely a network error (client is offline)
+          if (state.webdavEnabled) {
+            api$c.warn("Connection lost. Disabling WebDAV features.");
+            notify("Connection to the server was lost. File synchronization has been disabled.", "warning");
+            updateState(state, { webdavEnabled: false, offline: true });
+          }
+        } else if (error.statusCode === 409 || error.statusCode === 423) {
+          // Lock was lost or taken by another user
+          api$c.critical("Lock lost for file: " + filePath);
+          api$9.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+          updateState(state, { editorReadOnly: true });
+        } else if (error.statusCode === 504) {
+          api$c.warn("Temporary connection failure, will try again...");
+        } else {
+          // Another server-side error occurred
+          if (state.webdavEnabled) {
+            api$c.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
+            api$9.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
+            updateState(state, { webdavEnabled: false });
+          }
+        }
+      }
+    }, heartbeatFrequency);
+    api$c.info("Heartbeat started.");
+  };
+  startHeartbeat();
+  window.addEventListener('beforeunload', stopHeartbeat);
+}
+
+let lastNode = null; 
+async function searchNodeContents() {
+  // workaround for the node selection not being updated immediately
+  await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
+  // trigger auto-search if enabled and if a new node has been selected
+  const autoSearchSwitch = ui$1.floatingPanel.switchAutoSearch;
+  const node = xmlEditor.selectedNode;
+
+  if (autoSearchSwitch.checked && node && node !== lastNode) {
+      await api$4.searchNodeContentsInPdf(node);
+      lastNode = node;
+  }
+}
+
+const byteToHex = [];
+for (let i = 0; i < 256; ++i) {
+    byteToHex.push((i + 0x100).toString(16).slice(1));
+}
+function unsafeStringify(arr, offset = 0) {
+    return (byteToHex[arr[offset + 0]] +
+        byteToHex[arr[offset + 1]] +
+        byteToHex[arr[offset + 2]] +
+        byteToHex[arr[offset + 3]] +
+        '-' +
+        byteToHex[arr[offset + 4]] +
+        byteToHex[arr[offset + 5]] +
+        '-' +
+        byteToHex[arr[offset + 6]] +
+        byteToHex[arr[offset + 7]] +
+        '-' +
+        byteToHex[arr[offset + 8]] +
+        byteToHex[arr[offset + 9]] +
+        '-' +
+        byteToHex[arr[offset + 10]] +
+        byteToHex[arr[offset + 11]] +
+        byteToHex[arr[offset + 12]] +
+        byteToHex[arr[offset + 13]] +
+        byteToHex[arr[offset + 14]] +
+        byteToHex[arr[offset + 15]]).toLowerCase();
+}
+
+let getRandomValues;
+const rnds8 = new Uint8Array(16);
+function rng() {
+    if (!getRandomValues) {
+        if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
+            throw new Error('crypto.getRandomValues() not supported. See https://github.com/uuidjs/uuid#getrandomvalues-not-supported');
+        }
+        getRandomValues = crypto.getRandomValues.bind(crypto);
+    }
+    return getRandomValues(rnds8);
+}
+
+const randomUUID = typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID.bind(crypto);
+var native = { randomUUID };
+
+function v4(options, buf, offset) {
+    if (native.randomUUID && true && !options) {
+        return native.randomUUID();
+    }
+    options = options || {};
+    const rnds = options.random ?? options.rng?.() ?? rng();
+    if (rnds.length < 16) {
+        throw new Error('Random bytes length must be >= 16');
+    }
+    rnds[6] = (rnds[6] & 0x0f) | 0x40;
+    rnds[8] = (rnds[8] & 0x3f) | 0x80;
+    return unsafeStringify(rnds);
+}
+
+/**
+ * Plugin that takes care of user authentication
+ */
+
+
+// 
+// UI
+//
+
+/**
+ * @typedef {SlDialog & {
+ *  form: HTMLFormElement,
+ *  username: SlInput,
+ *  password: SlInput,
+ *  submit: SlButton,
+ *  message: HTMLDivElement
+ * }} loginDialog
+ */
+
+await createHtmlElements('login-dialog.html', document.body);
+const buttonElement = (await createHtmlElements('logout-button.html'))[0];
+
+/**
+ * Public API for the authentication plugin
+ */
+const api = {
+  updateStateSessionId,
+  ensureAuthenticated
+};
+
+/**
+ * Plugin definition
+ */
+const plugin = {
+  name: "authentication",
+  deps: ['client'],
+  install,
+  update
+};
+
+//
+// State
+//
+
+let user = null;
+
+//
+// Implementation
+//
+
+/**
+ * Installs the plugin.
+ * @param {ApplicationState} state
+ */
+async function install(state) {
+  api$c.debug(`Installing plugin "${plugin.name}"`);
+  state.user = null;
+  // @ts-ignore
+  ui$1.toolbar.self.insertAdjacentElement("beforeend", buttonElement);
+  updateUi();
+  ui$1.toolbar.logoutButton.addEventListener("click", _logout);
+  // prevent dialog from closing
+  ui$1.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
+}
+
+/**
+ * Handles state updates, specifically for updating the UI based on user login status.
+ * @param {ApplicationState} state
+ */
+async function update(state) {
+  if (state.user !== user) {
+    user = state.user;
+    ui$1.toolbar.logoutButton.hidden = user === null;
+  }
+}
+
+/**
+ * Ensures that a session id exists in the state and generates a random one if not. 
+ * @param {ApplicationState} state 
+ * @returns {Promise<string>} the session id 
+ */
+async function updateStateSessionId(state) {
+  const sessionId = state.sessionId || v4();
+  api$c.info(`Session id is ${sessionId}`);
+  await updateState(state, {sessionId});
+  return sessionId
+}
+
+/**
+ * Checks if the user is authenticated. If not, it shows a login dialog
+ * and returns a promise that resolves only after a successful login.
+ * @returns {Promise<Object>} the userdata
+ */
+async function ensureAuthenticated() {
+  try {
+    const userData = await api$7.status();
+    await updateState(state, { user: userData });
+    return userData
+  } catch (error) {
+    // Not authenticated, proceed to show login dialog
+    return _showLoginDialog();
+  }
+}
+
+/**
+ * Creates and displays the login dialog.
+ * @returns {Promise<Object>} A promise that resolves on successful login with the user data.
+ * @private
+ */
+function _showLoginDialog() {
+  const dialog = ui$1.loginDialog;
+  return new Promise(resolve => {
+    dialog.submit.addEventListener('click', async () => {
+      const username = dialog.username.value;
+      const password = dialog.password.value;
+      dialog.message.textContent = '';
+      const passwd_hash = await _hashPassword(password);
+      try {
+        const userData = await api$7.login(username, passwd_hash);
+        await updateState(state, { user: userData });
+        dialog.hide();
+        dialog.username.value = "";
+        dialog.password.value = "";
+        resolve(userData); // Resolve the promise on successful login
+      } catch (error) {
+        dialog.message.textContent = 'Wrong username or password';
+        api$c.error('Login failed:', error.message);
+      }
+    }, {once:true});
+    dialog.show();
+  });
+}
+
+/**
+ * Logs the user out.
+ * @private
+ */
+async function _logout() {
+  try {
+    await api$7.logout();
+    await updateState(state, { user: null, sessionId: null });
+    await updateStateSessionId(state);
+    await _showLoginDialog();
+  } catch (error) {
+    api$c.error('Logout failed:', error);
+  }
+}
+
+/**
+ * Hashes a password using SHA-256.
+ * @param {string} password
+ * @returns {Promise<string>}
+ * @private
+ */
+async function _hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * PDF-TEI-Editor
  * 
  * @author Christian Boulanger (@cboulanger), Max Planck Institute for Legal History and Legal Theory
  * @license 
@@ -53960,11 +54742,15 @@ async function saveIfDirty() {
  * The application state, which is often passed to the plugin endpoints
  * 
  * @typedef {object} ApplicationState
+ * @property {string|null} sessionId - The session id of the particular app instance in a browser tab/window
  * @property {string|null} pdfPath - The path to the PDF file in the viewer
  * @property {string|null} xmlPath - The path to the XML file in the editor
  * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
  * @property {string|null} xpath - The current xpath used to select a node in the editor
- * @property {boolean} webdavEnabled - Wether on the server, we have a WebDAV backend
+ * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
+ * @property {boolean} editorReadOnly - Whether the XML editor is read-only
+ * @property {boolean} offline  - Whether the application is in offline mode
+ * @property {object|null} user - The currently logged-in user
  */
 /**
  * @type{ApplicationState}
@@ -53974,25 +54760,31 @@ let state = {
   xmlPath: null,
   diffXmlPath: null,
   xpath: null,
-  webdavEnabled: false
+  webdavEnabled: false,
+  editorReadOnly: false,
+  offline: false,
+  sessionId: null,
+  user: null
 };
 
 /**
  * @typedef {object} Plugin
  * @property {string} name - The name of the plugin
- * @property {string[]} deps - The names of the plugins this plugin depends on
- * @property {function(ApplicationState):Promise<void>} install - The function to install the plugin
+ * @property {string[]} [deps] - The names of the plugins this plugin depends on
+ * @property {function(ApplicationState):Promise<*>} [install] - The function to install the plugin
+ * @property {function(ApplicationState):Promise<*>} [update] - The function to respond to state updates
  */
 
 /** @type {Plugin[]} */
-const plugins = [plugin$f, plugin$e, plugin$d,
-  plugin$c, plugin$b, plugin$9, plugin$8,
-  plugin$6, plugin$7, plugin$5, plugin$4,
-  plugin$3, plugin$a, plugin$2, plugin$1,  
-  /* must be the last plugin */ plugin];
+const plugins = [plugin$h, plugin$g, plugin$e,
+  plugin$d, plugin$c, plugin$a, plugin$9,
+  plugin$7, plugin$8, plugin$6, plugin$5,
+  plugin$4, plugin$b, plugin$3, plugin$2, plugin$f,
+  plugin,
+  /* must be the last plugin */ plugin$1];
 
 // add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
-plugin.deps = plugins.slice(0,-1).map(p => p.name);
+plugin$1.deps = plugins.slice(0,-1).map(p => p.name);
 
 // register plugins
 for (const plugin of plugins) {
@@ -54008,6 +54800,7 @@ for (const plugin of plugins) {
  */
 async function invoke(endpoint, param) {
   const promises = pluginManager.invoke(endpoint, param);
+  //console.warn(promises)
   const result = await Promise.all(promises);
   return result
 }
@@ -54016,24 +54809,34 @@ async function invoke(endpoint, param) {
  * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
  * @param {ApplicationState} state The application state object
  * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<void>}
+ * @returns {Promise<Array>} Returns an array of return values of the plugin's `update` methods
  */
 async function updateState(state, changes={}) {
   Object.assign(state, changes);
   return await invoke(endpoints.state.update, state)
 }
 
+// 
+// Application bootstrapping
+//
+
 // log level
 await invoke(endpoints.log.setLogLevel, {level: logLevel.DEBUG});
-
-// get the server-side state 
-const server_state = await api$6.state();
-Object.assign(state, server_state);
 
 // let the plugins install their components
 await invoke(endpoints.install, state);
 
+// get the server-side state 
+const server_state = await api$7.state();
+Object.assign(state, server_state);
+
+api$c.info("Configuring application state from URL");
+api$b.updateStateFromUrlHash(state);
+
+// if we don't have a session id, create one
+api.updateStateSessionId(state);
+
 // start the application 
 await invoke(endpoints.start, state);
 
-export { api as appInfo, api$6 as client, api$9 as dialog, endpoints, api$4 as extraction, api$5 as fileselection, api$2 as floatingPanel, invoke, api$b as logger, pdfViewer, pluginManager, plugins, api$1 as promptEditor, api$3 as services, state, updateState, api$a as urlHash, api$7 as validation, api$8 as xmlEditor };
+export { api$1 as appInfo, api as authentication, api$7 as client, api$9 as dialog, endpoints, api$5 as extraction, api$6 as fileselection, api$3 as floatingPanel, invoke, api$c as logger, pdfViewer, pluginManager, plugins, api$2 as promptEditor, api$4 as services, state, api$a as statusbar, updateState, api$b as urlHash, api$8 as validation, xmlEditor };

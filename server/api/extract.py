@@ -12,7 +12,7 @@ from llamore import TeiBiblStruct
 import datetime
 
 
-from server.lib.decorators import handle_api_errors
+from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError, make_timestamp, remove_obsolete_marker_if_exists
 
 DOI_REGEX = r"^10.\d{4,9}/[-._;()/:A-Z0-9]+$"  # from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
@@ -28,6 +28,7 @@ TEI_SCHEMA_LOCATION = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/
 
 @bp.route("", methods=["POST"])
 @handle_api_errors
+@session_required
 def extract():
     if "GeminiExtractor" not in globals():
         raise ApiError("Extraction service not available (Install LLamore first)")

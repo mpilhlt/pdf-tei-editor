@@ -99,6 +99,7 @@ async function update(state) {
   ui.toolbar.pdf.value = state.pdfPath || ""
   ui.toolbar.xml.value = state.xmlPath || ""
   ui.toolbar.diff.value = state.diffXmlPath || ""
+  //console.warn(plugin.name,"done")
 }
 
 
@@ -202,14 +203,16 @@ async function populateSelectboxes(state) {
             // @ts-ignore
             option.size = "small"
             option.value = version.path;
-            option.textContent = version.label;
+            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+            //option.disabled = version.is_locked;
             ui.toolbar.xml.appendChild(option);
             // diff 
             option = new SlOption()
             // @ts-ignore
             option.size = "small"
             option.value = version.path;
-            option.textContent = version.label;
+            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+            option.disabled = version.is_locked;
             ui.toolbar.diff.appendChild(option)
           })
         }

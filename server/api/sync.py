@@ -4,8 +4,9 @@ import unicodedata
 from datetime import datetime, timezone
 from webdav4.fsspec import WebdavFileSystem
 
-from server.lib.decorators import handle_api_errors
+from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError
+from server.lib.locking import purge_stale_locks
 
 bp = Blueprint("files", __name__, url_prefix="/api/files")
 
@@ -91,10 +92,11 @@ def _download_and_align(fs: WebdavFileSystem, remote_path: str, local_path: str,
 
 @bp.route("/sync", methods=["GET"])
 @handle_api_errors
+@session_required
 def sync():
     """
     Performs a robust bidirectional synchronization by aligning timestamps after transfers
-    to prevent re-syncing of identical files.
+    to prevent re-syncing of identical files. Also purges stale locks.
     """
     
     logger = current_app.logger
@@ -103,6 +105,11 @@ def sync():
         logger.info("WebDAV sync not enabled")
         return {"error": "WebDAV sync is not enabled."}
     
+    # Purge stale locks before starting the sync process
+    purged_count = purge_stale_locks()
+    if purged_count > 0:
+        logger.info(f"Purged {purged_count} stale lock(s).")
+
     keep_deleted_markers = os.environ.get('WEBDAV_KEEP_DELETED', '0') == '1'
     local_root = os.environ['WEBDAV_LOCAL_ROOT']
     remote_root = os.environ['WEBDAV_REMOTE_ROOT']
@@ -117,6 +124,7 @@ def sync():
         "uploads": 0, "downloads": 0, "remote_deletes": 0,
         "local_deletes": 0, "conflicts_resolved": 0,
         "local_markers_cleaned_up": 0,
+        "stale_locks_purged": purged_count
     }
 
     local_map = _get_local_map(local_root)
