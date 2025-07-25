@@ -218,6 +218,62 @@ const endpoints = {
   }
 };
 
+const byteToHex = [];
+for (let i = 0; i < 256; ++i) {
+    byteToHex.push((i + 0x100).toString(16).slice(1));
+}
+function unsafeStringify(arr, offset = 0) {
+    return (byteToHex[arr[offset + 0]] +
+        byteToHex[arr[offset + 1]] +
+        byteToHex[arr[offset + 2]] +
+        byteToHex[arr[offset + 3]] +
+        '-' +
+        byteToHex[arr[offset + 4]] +
+        byteToHex[arr[offset + 5]] +
+        '-' +
+        byteToHex[arr[offset + 6]] +
+        byteToHex[arr[offset + 7]] +
+        '-' +
+        byteToHex[arr[offset + 8]] +
+        byteToHex[arr[offset + 9]] +
+        '-' +
+        byteToHex[arr[offset + 10]] +
+        byteToHex[arr[offset + 11]] +
+        byteToHex[arr[offset + 12]] +
+        byteToHex[arr[offset + 13]] +
+        byteToHex[arr[offset + 14]] +
+        byteToHex[arr[offset + 15]]).toLowerCase();
+}
+
+let getRandomValues;
+const rnds8 = new Uint8Array(16);
+function rng() {
+    if (!getRandomValues) {
+        if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
+            throw new Error('crypto.getRandomValues() not supported. See https://github.com/uuidjs/uuid#getrandomvalues-not-supported');
+        }
+        getRandomValues = crypto.getRandomValues.bind(crypto);
+    }
+    return getRandomValues(rnds8);
+}
+
+const randomUUID = typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID.bind(crypto);
+var native = { randomUUID };
+
+function v4(options, buf, offset) {
+    if (native.randomUUID && true && !options) {
+        return native.randomUUID();
+    }
+    options = options || {};
+    const rnds = options.random ?? options.rng?.() ?? rng();
+    if (rnds.length < 16) {
+        throw new Error('Random bytes length must be >= 16');
+    }
+    rnds[6] = (rnds[6] & 0x0f) | 0x40;
+    rnds[8] = (rnds[8] & 0x3f) | 0x80;
+    return unsafeStringify(rnds);
+}
+
 /**
  * This plugin provides logging endpoints and an API to invoke them. The implementation uses
  * console.* methods
@@ -225,7 +281,7 @@ const endpoints = {
 
 
 // name of the plugin
-const name$2 = "logger";
+const name$1 = "logger";
 
 /**
  * A object mapping human readable log level names to numbers
@@ -290,7 +346,7 @@ api$b.error = api$b.critical; // alias for critical
  * component plugin
  */
 const plugin$g = {
-  name: name$2,
+  name: name$1,
   install: install$f,
   log: {
     setLogLevel,
@@ -385,10 +441,11 @@ function critical({message}) {
  */
 
 // this needs to be made configurable
-const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath'];
+const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'sessionId'];
 
 const api$a = {
-  updateState: updateStateFromUrlHash
+  updateUrlHashfromState,
+  updateStateFromUrlHash
 };
 
 /**
@@ -396,9 +453,9 @@ const api$a = {
  */
 const plugin$f = {
   name: "url-hash-state",
-  install: install,
+  install: install$e,
   state: {
-    update: update
+    update: update$9
   }
 };
 
@@ -406,17 +463,23 @@ const plugin$f = {
 // implementation
 //
 
-async function install(state){
+/** 
+ * @param {ApplicationState} state 
+ */
+async function install$e(state){
   api$b.debug(`Installing plugin "${plugin$f.name}"`);
 }
 
-async function update(state) {
-  //console.warn("update", plugin.name, state)
+/** 
+ * @param {ApplicationState} state 
+ */
+async function update$9(state) {
   updateUrlHashfromState(state);
+  //console.warn(plugin.name,"done")
+  //console.warn(plugin.name,"done")
 }
 
 /**
- * 
  * @param {ApplicationState} state 
  */
 function updateUrlHashfromState(state) {
@@ -426,14 +489,18 @@ function updateUrlHashfromState(state) {
     .filter(([key]) => allowedUrlHashParams.includes(key))
     .forEach(([key, value]) => {
       if (value) {
-        urlHashParams.set(key, value);
+        urlHashParams.set(key, String(value));
       } else {
         urlHashParams.delete(key);
       }
     });
-  url.hash = `#${urlHashParams.toString()}`;
-  //window.history.replaceState({}, '', url);
-  window.history.pushState({}, '', url);
+  let hash = `#${urlHashParams.toString()}`;
+  if (hash !== url.hash) {
+    //logger.debug(`url hash changed to ${hash}`)
+    url.hash = hash;
+    //window.history.replaceState({}, '', url);
+    window.history.pushState({}, '', url);
+  }
 }
 
 
@@ -444,7 +511,7 @@ function updateUrlHashfromState(state) {
 function updateStateFromUrlHash(state) {
   const urlParams = new URLSearchParams(window.location.hash.slice(1));
   for (const [key, value] of urlParams.entries()) {
-    if (key in state) {
+    if (key in state && allowedUrlHashParams.includes(key)) {
       state[key] = value;
     }
   }
@@ -2335,7 +2402,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$9);
+    const documentElementObserver = new MutationObserver(update$8);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2356,9 +2423,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$9();
+    update$8();
 }
-function update$9() {
+function update$8() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -10906,27 +10973,28 @@ const api$9 = {
 const plugin$e = {
   name: "statusbar",
   install: install$d,
-  state: {
-    update: update$8
-  }
+  //state: {
+  //  update
+  //}
 };
 
-
-/**
+/** 
  * @param {ApplicationState} state 
  */
-async function install$d(state) {
-
-
+async function install$d(state){
+  api$b.debug(`Installing plugin "${plugin$e.name}"`);
 }
 
 /**
  * @param {ApplicationState} state 
  */
-async function update$8(state) {
+//async function update(state) {}
 
-}
-
+/**
+ * Returns the status bar DIV of either the PDF viewer or the XML editor
+ * @param {string} type 
+ * @returns {HTMLDivElement}
+ */
 function getStatusBar(type) {
   if (!["xml","pdf"].includes(type)){
     throw new Error(`${type} must be "xml" or "pdf"`)
@@ -11460,7 +11528,7 @@ pdfViewer.hide();
 const plugin$c = {
   name: "pdfviewer",
   install: install$b,
-  state: { update: update$7 }
+  //state: { update }
 };
 
 //
@@ -11478,26 +11546,13 @@ async function install$b(state) {
   pdfViewer.show();
 }
 
-let lastNode = null; 
+
 
 /**
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$7(state) {
-
-  // workaround for the node selection not being updated immediately
-  await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
-
-  // trigger auto-search if enabled and if a new node has been selected
-  const autoSearchSwitch = ui$1.floatingPanel.switchAutoSearch;
-  const node = xmlEditor.selectedNode;
-
-  if (autoSearchSwitch.checked && node && node !== lastNode) {
-      await api$3.searchNodeContentsInPdf(node);
-      lastNode = node;
-  }
-}
+//async function update(state) {}
 
 // These are filled with ranges (rangeFrom[i] up to but not including
 // rangeTo[i]) of code points that count as extending characters.
@@ -28853,7 +28908,7 @@ function getStyleTags(node) {
     return rule || null;
 }
 const t = Tag.define;
-const comment$1 = t(), name$1 = t(), typeName = t(name$1), propertyName = t(name$1), literal = t(), string = t(literal), number = t(literal), content = t(), heading$1 = t(content), keyword = t(), operator = t(), punctuation = t(), bracket = t(punctuation), meta = t();
+const comment$1 = t(), name = t(), typeName = t(name), propertyName = t(name), literal = t(), string = t(literal), number = t(literal), content = t(), heading$1 = t(content), keyword = t(), operator = t(), punctuation = t(), bracket = t(punctuation), meta = t();
 /**
 The default set of highlighting [tags](#highlight.Tag).
 
@@ -28894,11 +28949,11 @@ const tags = {
     /**
     Any kind of identifier.
     */
-    name: name$1,
+    name,
     /**
     The [name](#highlight.tags.name) of a variable.
     */
-    variableName: t(name$1),
+    variableName: t(name),
     /**
     A type [name](#highlight.tags.name).
     */
@@ -28918,19 +28973,19 @@ const tags = {
     /**
     The [name](#highlight.tags.name) of a class.
     */
-    className: t(name$1),
+    className: t(name),
     /**
     A label [name](#highlight.tags.name).
     */
-    labelName: t(name$1),
+    labelName: t(name),
     /**
     A namespace [name](#highlight.tags.name).
     */
-    namespace: t(name$1),
+    namespace: t(name),
     /**
     The [name](#highlight.tags.name) of a macro.
     */
-    macroName: t(name$1),
+    macroName: t(name),
     /**
     A literal value.
     */
@@ -41801,10 +41856,7 @@ const plugin$b = {
   name: "xmleditor",
   install: install$a,
   state: {
-    update: update$6,
-    validation: {
-      result: onValidationResult$1
-    }
+    update: update$7
   }
 };
 
@@ -41851,7 +41903,7 @@ async function install$a(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$6(state) {
+async function update$7(state) {
   //console.warn("update", plugin.name, state)
 
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
@@ -41868,21 +41920,20 @@ async function update$6(state) {
   }
 
   // xpath state => selection
-  if (!state.xpath || !state.xmlPath) {
-    return
-  }
-  await xmlEditor.whenReady();
-  const { index, pathBeforePredicates } = parseXPath(state.xpath);
-  // select the node by index
-  try {
-    const size = xmlEditor.countDomNodesByXpath(state.xpath);
-    if (size > 0 && (index !== xmlEditor.currentIndex)) {
-      xmlEditor.parentPath = pathBeforePredicates;
-      xmlEditor.selectByIndex(index || 1);
+  if (xmlEditor.isReady() && state.xpath && state.xmlPath) {
+    const { index, pathBeforePredicates } = parseXPath(state.xpath);
+    // select the node by index
+    try {
+      const size = xmlEditor.countDomNodesByXpath(state.xpath);
+      if (size > 0 && (index !== xmlEditor.currentIndex)) {
+        xmlEditor.parentPath = pathBeforePredicates;
+        xmlEditor.selectByIndex(index || 1);
+      }
+    } catch (e) {
+      console.error(e);
     }
-  } catch (e) {
-    console.error(e);
   }
+  //console.warn(plugin.name,"done")
 }
 
 
@@ -41907,18 +41958,6 @@ async function onSelectionChange(state) {
 
   // todo: use isXPathsubset()
   if (index !== null && cursorParts.tagName === stateParts.tagName && index !== xmlEditor.currentIndex + 1) ;
-}
-
-
-/**
- * Called when a validation has been done. 
- * Used to save the document after successful validation
- * @param {Diagnostic[]} diagnostics 
- */
-async function onValidationResult$1(diagnostics) {
-  if (diagnostics.length === 0) {
-    saveIfDirty$1();
-  }
 }
 
 /**
@@ -41954,7 +41993,7 @@ const plugin$a = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install: install$9,
-  update: update$5,
+  state: {update: update$6},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -41994,11 +42033,12 @@ async function install$9(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$5(state) {
+async function update$6(state) {
   if (state.offline || state.editorReadOnly) {
     // if we are offline, disable validation
     configure({ mode: "off" });
-  } 
+  }
+  //console.warn(plugin.name,"done") 
 }
 
 /**
@@ -42649,11 +42689,14 @@ function notify(message, variant = 'primary', icon = 'info-circle', duration = 3
 /**
  * Parent class for all API errors
  * @extends {Error}
- * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
- * @property {string} name - The name of the error, defaults to "ApiError"
  * @property {string} message - The error message
+ * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
  */
 class ApiError extends Error {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 400
+   */  
   constructor(message, statusCode = 400) {
     super(message);
     this.name = "ApiError";
@@ -42662,31 +42705,33 @@ class ApiError extends Error {
 }
 
 /**
- * Error indicating server-side connection issues, such as timeouts or unreachable endpoints.
+ * Error indicating that a resource is locked
  * @extends {ApiError}
- * @property {number} statusCode - The HTTP status code associated with the error, defaults to 504
- * @property {string} name - The name of the error, defaults to "ApiError"
- * @property {string} message - The error message
  */
-class ConnectionError extends ApiError {
-  constructor(message, statusCode = 504) {
+class LockedError extends ApiError {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 423
+   */    
+  constructor(message, statusCode = 423) {
     super(message);
-    this.name = "ConnectError";
+    this.name = "LockedError";
     this.statusCode = statusCode;
   }
 }
 
 /**
- * Error indicating that a requested resource was not found.
+ * Error indicating server-side connection issues, such as timeouts or unreachable endpoints.
  * @extends {ApiError}
- * @property {number} statusCode - The HTTP status code associated with the error, defaults to 404
- * @property {string} name - The name of the error, defaults to "ApiError"
- * @property {string} message - The error message
  */
-class NotFoundError extends ApiError {
-  constructor(message, statusCode = 404) {
+class ConnectionError extends ApiError {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 504
+   */    
+  constructor(message, statusCode = 504) {
     super(message);
-    this.name = "NotFoundError";
+    this.name = "ConnectError";
     this.statusCode = statusCode;
   }
 }
@@ -42699,6 +42744,10 @@ class NotFoundError extends ApiError {
  * @property {string} message - The error message
  */
 class ServerError extends Error {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 500
+   */    
   constructor(message, statusCode = 500) {
     super(message);
     this.name = "ServerError";
@@ -42706,11 +42755,7 @@ class ServerError extends Error {
   }
 }
 
-
-
-// name of the component
-const name = "client";
-
+let sessionId$1;
 let lastHttpStatus = null;
 
 const api_base_url = '/api';
@@ -42723,6 +42768,10 @@ const api$6 = {
   get lastHttpStatus() {
     return lastHttpStatus
   },
+  ApiError,
+  LockedError,
+  ConnectionError,
+  ServerError,
   callApi,
   getFileList,
   validateXml: validateXml$1,
@@ -42740,6 +42789,7 @@ const api$6 = {
   state: state$1,
   sendHeartbeat,
   checkLock,
+  acquireLock,
   releaseLock,
   getAllLocks
 };
@@ -42749,8 +42799,24 @@ const api$6 = {
  * component plugin
  */
 const plugin$9 = {
-  name
+  name: "client",
+  state: {
+    update: update$5
+  }
 };
+
+/**
+ * 
+ * @param {ApplicationState} state 
+ */
+async function update$5(state) {
+  if (sessionId$1 !== state.sessionId) {
+    sessionId$1 = state.sessionId;
+    api$b.debug(`Setting session id to ${sessionId$1}`);
+  }
+  //console.warn(plugin.name,"done")
+  return sessionId$1
+}
 
 /**
  * A generic function to make API requests against the application backend. 
@@ -42770,6 +42836,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     method,
     headers: {
       'Content-Type': 'application/json',
+      'X-Session-ID': sessionId$1,
     },
     keepAlive: true
   };
@@ -42807,12 +42874,11 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 
     // handle app-specific error types
     switch (response.status) {
-      case 404:
-        // Resource not found
-        throw new NotFoundError(message);
+      case 423:
+        throw new LockedError(message)
       case 504:
         // Timeout
-        throw new ConnectionError(message);
+        throw new ConnectionError(message)
       default:
         // other 4XX errors
         if (response.status && String(response.status)[0] === '4') {
@@ -42842,8 +42908,10 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
-  api$b.warn([error.statusCode, error.name, error.message]);
-  notify(error.message, 'error');
+  api$b.warn([error.statusCode, error.name, error.message].toString());
+  if (!(error instanceof LockedError)) {
+    notify(error.message, 'error');
+  }
   throw error
 }
 
@@ -43020,6 +43088,14 @@ async function checkLock(filePath) {
   return await callApi('/files/check_lock', 'POST', { file_path: filePath });
 }
 
+async function acquireLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to check lock");
+  }
+  return await callApi('/files/acquire_lock', 'POST', { file_path: filePath });
+}
+
+
 async function releaseLock(filePath) {
   if (!filePath) {
     throw new Error("File path is required to release lock");
@@ -43030,7 +43106,7 @@ async function releaseLock(filePath) {
 
 /**
  * Retrieves an object mapping all currently locked files to the session id that locked them.
- * @returns {Promise<{[string]:Number}>} An object mapping locked file paths to session ids 
+ * @returns {Promise<{[key:string]:Number}>} An object mapping locked file paths to session ids 
  */
 async function getAllLocks() {
   return await callApi('/files/locks', 'GET');
@@ -43233,6 +43309,7 @@ async function update$4(state) {
   ui$1.toolbar.pdf.value = state.pdfPath || "";
   ui$1.toolbar.xml.value = state.xmlPath || "";
   ui$1.toolbar.diff.value = state.diffXmlPath || "";
+  //console.warn(plugin.name,"done")
 }
 
 
@@ -43449,7 +43526,7 @@ const plugin$7 = {
   name: "extraction",
   deps: ['services'],
   install: install$7,
-  update: update$3
+  state: {update: update$3}
 };
 
 //
@@ -43466,7 +43543,7 @@ const plugin$7 = {
  */
 /** @type {SlButtonGroup & extractionActionsComponent} */
 // @ts-ignore
-const extractionBtnGroup = await createHtmlElements('extraction-buttons.html');
+const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0];
 
 
 /**
@@ -43493,7 +43570,7 @@ async function install$7(state) {
   api$b.debug(`Installing plugin "${plugin$7.name}"`);
 
   // install controls on menubar
-  ui$1.toolbar.self.append(...extractionBtnGroup);
+  ui$1.toolbar.self.append(extractionBtnGroup);
   document.body.append(optionsDialog);
   updateUi();
 
@@ -43506,8 +43583,10 @@ async function install$7(state) {
  * @param {ApplicationState} state
  */
 async function update$3(state) {
-  extractionBtnGroup.self.disabled = state.offline;
+  // @ts-ignore
+  extractionBtnGroup.self.childNodes.forEach(child => child.disabled = state.offline); 
   extractionBtnGroup.extractCurrent.disabled = !state.pdfPath;
+  //console.warn(plugin.name,"done")
 }
 
 /**
@@ -43557,7 +43636,7 @@ async function extractFromNewPdf(state) {
 /**
  * Extracts references from the given PDF file, letting the user choose the extraction options
  * @param {ApplicationState} state
- * @param {{doi:string}?} defaultOptions Optional default option object passed to the extraction service,
+ * @param {{doi:string}} [defaultOptions] Optional default option object passed to the extraction service,
  * user will be prompted to choose own ones.
  * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
  * @throws {Error} If the DOI is not valid or the user aborts the dialog
@@ -43658,7 +43737,7 @@ async function promptForExtractionOptions(options) {
 
   const formData = {
     'doi': optionsDialog.doi.value,
-    'instructions': instructions[parseInt(optionsDialog.instructionIndex.value)],
+    'instructions': instructions[parseInt(String(optionsDialog.instructionIndex.value))],
     'collection': optionsDialog.collectionName.value
   };
   
@@ -44137,7 +44216,8 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
  * @property {SlInput} editionNote 
  */
 
-/** @type {newVersionDialog} */
+/** @type {newVersionDialog & SlDialog} */
+// @ts-ignore
 const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0];
 
 /**
@@ -44149,8 +44229,10 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
  * @property {SlInput} changeDesc 
  */
 
-/** @type {newRevisionChangeDialog} */
+/** @type {newRevisionChangeDialog & SlDialog} */
+// @ts-ignore
 const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0];
+
 
 //
 // Implementation
@@ -44170,11 +44252,10 @@ async function install$6(state) {
 
   ui$1.toolbar.self;
 
-  // install dialogs
-
   // === Document button group ===
 
   const da = ui$1.toolbar.documentActions;
+
   // save a revision
   da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
   // enable save button on dirty editor
@@ -44218,9 +44299,9 @@ async function update$2(state) {
   const da = ui$1.toolbar.documentActions;
 
   da.self.childNodes.forEach(el => el.disabled = state.offline);
-  if (state.offline) {  
+  if (state.offline) {
     return
-  } 
+  }
 
   da.deleteAll.disabled = api$5.fileData.length < 2; // at least on PDF must be present
   da.deleteAllVersions.disabled = ui$1.toolbar.xml.childElementCount < 2;
@@ -44234,10 +44315,11 @@ async function update$2(state) {
   da.download.disabled = !Boolean(state.xmlPath);
 
   // disable sync and upload if webdav is not enabled
-  da.sync.disabled = da.upload.disabled  = !state.webdavEnabled; 
+  da.sync.disabled = !state.webdavEnabled;
+
   // no uploads if editor is readonly
   da.upload.disabled = state.editorReadOnly;
-  
+  //console.warn(plugin.name,"done")
 }
 
 
@@ -44272,26 +44354,31 @@ async function load$1(state, { xml, pdf }) {
   // XML
   if (xml) {
     // Check for lock before loading
-    if (!state.offline && state.webdavEnabled) {
-      if (state.xmlPath !== xml) {
-        try {
-          ui$1.spinner.show('Loading file, please wait...');
-          if (state.xmlPath && !state.editorReadOnly) {
-            await api$6.releaseLock(state.xmlPath);
-          }
-          const { is_locked } = await api$6.checkLock(xml);
-          api$b.debug(`Lock status for ${xml}: ${is_locked}`);
-          if (is_locked) {
-            api$b.debug(`File ${xml} is locked, loading in read-only mode`);
-            file_is_locked = true;
-          }
-        } catch (error) {       
-          console.error("Cannot release lock on XML file:", error.message);
-        } finally {
-          ui$1.spinner.hide();
+
+    if (state.xmlPath !== xml) {
+      try {
+        ui$1.spinner.show('Loading file, please wait...');
+        if (state.xmlPath && !state.editorReadOnly) {
+          await api$6.releaseLock(state.xmlPath);
         }
+        try {
+          await api$6.acquireLock(xml);
+          api$b.debug(`Acquired lock for file ${xml}`);
+        } catch (error) {
+          if (error instanceof api$6.LockedError) {
+            api$b.debug(`File ${xml} is locked, loading in read-only mode`);
+            notify(`File is being edited by another user, loading in read-only mode`);
+            file_is_locked = true;
+          } else {
+            api$8.error(error.message);
+            throw error
+          }
+        }
+      } finally {
+        ui$1.spinner.hide();
       }
     }
+
     removeMergeView(state);
     await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked });
     api$b.info("Loading XML: " + xml);
@@ -44337,6 +44424,7 @@ async function validateXml() {
  * @param {string} filePath The path to the XML file on the server
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<{path:string, status:string}>} An object with a path property, containing the path to the saved version
+ * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
   api$b.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
@@ -44344,21 +44432,15 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    api$9.addMessage("Saving XML...", "xml", "saving"); 
+    api$9.addMessage("Saving XML...", "xml", "saving");
     return await api$6.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
-    switch (e.status_code) {
-      case 504: // Gateway Timeout
-        // ignore this error, it is handled by the client
-      break;
-      default:
-        console.error("Error while saving XML:", e.message);
-        api$8.error(`Could not save XML: ${e.message}`);
-        throw new Error(`Could not save XML: ${e.message}`)
-    }
+    console.error("Error while saving XML:", e.message);
+    api$8.error(`Could not save XML: ${e.message}`);
+    throw new Error(`Could not save XML: ${e.message}`)
   } finally {
     // clear status message after 1 second 
-    setTimeout(() => { api$9.removeMessage("xml", "saving");}, 1000); 
+    setTimeout(() => { api$9.removeMessage("xml", "saving"); }, 1000);
   }
 }
 
@@ -44471,7 +44553,9 @@ async function deleteAll(state) {
 
   // @ts-ignore
   const filePathsToDelete = [ui$1.toolbar.pdf.value]
+    // @ts-ignore
     .concat(Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value))
+    // @ts-ignore
     .concat(Array.from(ui$1.toolbar.diff.childNodes).map(option => option.value));
 
   if (filePathsToDelete.length > 0) {
@@ -44541,6 +44625,7 @@ function downloadXml(state) {
  */
 async function uploadXml(state) {
   const { filename: tempFilename } = await api$6.uploadFile(undefined, { accept: '.xml' });
+  // @ts-ignore
   const { path } = await api$6.createVersionFromUpload(tempFilename, state.xmlPath);
   await api$5.reload(state);
   await load$1(state, { xml: path });
@@ -44979,6 +45064,7 @@ async function update$1(state) {
   ui$1.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
     node.disabled = !state.diffXmlPath || state.diffXmlPath === state.xmlPath;
   });
+  //console.warn(plugin.name,"done")
 }
 
 /**
@@ -45384,7 +45470,7 @@ const enhancements = [
 const plugin$3 = {
   name: "tei-wizard",
   install: install$3,
-  update,
+  state: {update},
   deps: ['services']
 };
 
@@ -45440,7 +45526,9 @@ async function install$3(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
+  // @ts-ignore
   teiWizardButton.disabled = state.editorReadOnly;
+  //console.warn(plugin.name,"done")
 }
 
 async function getSelectedEnhancements() {
@@ -54179,13 +54267,10 @@ async function start(state) {
   // async operations
   try {
 
-    // update the file lists
-    await api$5.reload(state);
-
     ui$1.spinner.show('Loading documents, please wait...');
 
-    api$b.info("Configuring application state from URL");
-    api$a.updateState(state);
+    // update the file lists
+    await api$5.reload(state);
 
     // disable regular validation so that we have more control over it
     api$7.configure({ mode: "off" });
@@ -54234,6 +54319,9 @@ async function start(state) {
       updateState(state);
     }
 
+    // Find the currently selected node's contents in the PDF
+    xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents); 
+
     // manually show diagnostics if validation is disabled
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
       if (api$7.isDisabled()) {
@@ -54253,9 +54341,7 @@ async function start(state) {
 
     // xml vaidation events
     xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-      /** @type Diagnostic[] */
-
-      const diagnostics = evt.detail;
+      const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
       console.warn("XML is not well-formed", diagnostics);
       xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
 
@@ -54271,9 +54357,7 @@ async function start(state) {
     });
 
     // Heartbeat mechanism for file locking and offline detection
-    if (state.webdavEnabled) {
-      configureHeartbeat(state);
-    }
+    configureHeartbeat(state);
 
     // finish initialization
     ui$1.spinner.hide();
@@ -54345,11 +54429,10 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
     heartbeatInterval = setInterval(async () => {
 
-      const filePath = ui$1.toolbar.xml.value;
+      const filePath = String(ui$1.toolbar.xml.value);
       const reasonsToSkip = {
         "No file path specified": !filePath,
         "Application is offline": state.offline,
-        "WebDAV is not enabled": !state.webdavEnabled,
         "Editor is in read-only mode": state.editorReadOnly,
       };
 
@@ -54370,7 +54453,11 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           api$b.info("Connection restored. Re-enabling WebDAV features.");
           notify("Connection restored.");
           updateState(state, { webdavEnabled: true, offline: false });
-        }
+        } 
+
+         // reload file list to see updates
+        api$5.reload(state);
+      
       } catch (error) {
         console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
         // Handle different types of errors
@@ -54392,7 +54479,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           // Another server-side error occurred
           if (state.webdavEnabled) {
             api$b.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
-            api$8.error("An unexpected server error occurred. File synchronization has been disabled for safety.", "Server Error");
+            api$8.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
             updateState(state, { webdavEnabled: false });
           }
         }
@@ -54402,6 +54489,20 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
   };
   startHeartbeat();
   window.addEventListener('beforeunload', stopHeartbeat);
+}
+
+let lastNode = null; 
+async function searchNodeContents() {
+  // workaround for the node selection not being updated immediately
+  await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
+  // trigger auto-search if enabled and if a new node has been selected
+  const autoSearchSwitch = ui$1.floatingPanel.switchAutoSearch;
+  const node = xmlEditor.selectedNode;
+
+  if (autoSearchSwitch.checked && node && node !== lastNode) {
+      await api$3.searchNodeContentsInPdf(node);
+      lastNode = node;
+  }
 }
 
 /**
@@ -54417,6 +54518,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
  * The application state, which is often passed to the plugin endpoints
  * 
  * @typedef {object} ApplicationState
+ * @property {string|null} sessionId - The session id of the particular app instance in a browser tab/window
  * @property {string|null} pdfPath - The path to the PDF file in the viewer
  * @property {string|null} xmlPath - The path to the XML file in the editor
  * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
@@ -54435,14 +54537,16 @@ let state = {
   xpath: null,
   webdavEnabled: false,
   editorReadOnly: false,
-  offline: false
+  offline: false,
+  sessionId: null
 };
 
 /**
  * @typedef {object} Plugin
  * @property {string} name - The name of the plugin
- * @property {string[]} deps - The names of the plugins this plugin depends on
- * @property {function(ApplicationState):Promise<void>} install - The function to install the plugin
+ * @property {string[]} [deps] - The names of the plugins this plugin depends on
+ * @property {function(ApplicationState):Promise<*>} [install] - The function to install the plugin
+ * @property {function(ApplicationState):Promise<*>} [update] - The function to respond to state updates
  */
 
 /** @type {Plugin[]} */
@@ -54469,6 +54573,7 @@ for (const plugin of plugins) {
  */
 async function invoke(endpoint, param) {
   const promises = pluginManager.invoke(endpoint, param);
+  //console.warn(promises)
   const result = await Promise.all(promises);
   return result
 }
@@ -54477,22 +54582,35 @@ async function invoke(endpoint, param) {
  * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
  * @param {ApplicationState} state The application state object
  * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<void>}
+ * @returns {Promise<Array>} Returns an array of return values of the plugin's `update` methods
  */
 async function updateState(state, changes={}) {
   Object.assign(state, changes);
   return await invoke(endpoints.state.update, state)
 }
 
+// 
+// Application bootstrapping
+//
+
 // log level
 await invoke(endpoints.log.setLogLevel, {level: logLevel.DEBUG});
+
+// let the plugins install their components
+await invoke(endpoints.install, state);
 
 // get the server-side state 
 const server_state = await api$6.state();
 Object.assign(state, server_state);
 
-// let the plugins install their components
-await invoke(endpoints.install, state);
+api$b.info("Configuring application state from URL");
+api$a.updateStateFromUrlHash(state);
+
+// if we don't have a session id, create one
+const sessionId = state.sessionId || v4();
+api$b.info(`Session id is ${sessionId}`);
+await updateState(state, {sessionId});
+
 
 // start the application 
 await invoke(endpoints.start, state);
