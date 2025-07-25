@@ -109,10 +109,12 @@ class LocalLockStorage(LockStorage):
         os.makedirs(self.locks_dir, exist_ok=True)
 
 def get_lock_storage():
-    if current_app.config.get('WEBDAV_ENABLED'):
-        return WebDavLockStorage()
-    else:
-        return LocalLockStorage()
+#    if current_app.config.get('WEBDAV_ENABLED'):
+#        return WebDavLockStorage()
+#    else:
+    
+    # always use local storage at the moment
+    return LocalLockStorage()
 
 def get_lock_path(file_path):
     """Constructs the lock file path."""

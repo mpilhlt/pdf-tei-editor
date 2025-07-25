@@ -1,6 +1,7 @@
 from flask import request, jsonify, current_app
 from functools import wraps
 from server.lib.server_utils import ApiError
+from server.lib import auth
 from httpx import ConnectTimeout, ReadTimeout
 from webdav4.client import HTTPError
 
@@ -37,11 +38,27 @@ def handle_api_errors(f):
 
 def session_required(f):
     """
-    Decorator to ensure a session ID is present in the request header.
+    Decorator to ensure a session ID is present in the request header and corresponds to a valid user session.
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'X-Session-Id' not in request.headers:
-            return jsonify(error="Access denied: session ID missing."), 403
+        session_id = request.headers.get('X-Session-Id')
+        if not session_id or not auth.get_user_by_session_id(session_id):
+            return jsonify(error="Access denied: session ID missing or invalid."), 403
         return f(*args, **kwargs)
     return decorated_function
+
+def role_required(role):
+    """
+    Decorator factory to require a specific role for a route.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            session_id = request.headers.get('X-Session-Id')
+            user = auth.get_user_by_session_id(session_id)
+            if not user or role not in user.get('roles', []):
+                return jsonify(error=f"Access denied: '{role}' role required."), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator

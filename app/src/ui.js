@@ -36,6 +36,7 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
  * @import {documentActionsComponent, teiServicesComponents} from './plugins/services.js'
  * @import {extractionActionsComponent, extractionOptionsDialog} from './plugins/extraction.js'
  * @import {infoDialogComponent} from './plugins/info.js'
+ * @import {loginDialog} from './plugins/authentication.js'
  */
 
 /**
@@ -51,6 +52,7 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
  * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
  * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
  * @property {statusBarComponent} statusBar - A status bar to display messages about the current state of the application
+ * @property {loginDialog} loginDialog - A dialog for login
  */
 
 /**
@@ -63,6 +65,7 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
  * @property {documentActionsComponent} documentActions 
  * @property {teiServicesComponents} teiActions
  * @property {extractionActionsComponent} extractionActions
+ * @property {SlButton} logoutButton
  */
 
 /**

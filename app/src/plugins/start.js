@@ -9,7 +9,7 @@
  */
 import ui from '../ui.js'
 import { updateState, logger, services, dialog, validation, floatingPanel, 
-  urlHash, xmlEditor, fileselection, client, statusbar } from '../app.js'
+  urlHash, xmlEditor, fileselection, client, statusbar, authentication } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -62,6 +62,11 @@ async function start(state) {
 
   // async operations
   try {
+
+    // Authenticate user, otherwise we don't proceed further
+    const userData = await authentication.ensureAuthenticated();
+
+    logger.info(`Welcome, ${userData.fullname}!`)
 
     ui.spinner.show('Loading documents, please wait...')
 

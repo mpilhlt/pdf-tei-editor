@@ -115,7 +115,10 @@ const api = {
   checkLock,
   acquireLock,
   releaseLock,
-  getAllLocks
+  getAllLocks,
+  login,
+  logout,
+  status
 }
 
 
@@ -240,6 +243,33 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     notify(error.message, 'error');
   }
   throw error
+}
+
+
+/**
+ * Logs in a user
+ * @param {string} username
+ * @param {string} passwd_hash
+ * @returns {Promise<any>}
+ */
+async function login(username, passwd_hash) {
+  return await callApi('/auth/login', 'POST', { username, passwd_hash });
+}
+
+/**
+ * Logs out the current user
+ * @returns {Promise<any>}
+ */
+async function logout() {
+  return await callApi('/auth/logout', 'POST', {});
+}
+
+/**
+ * Checks the authentication status of the current user
+ * @returns {Promise<any>}
+ */
+async function status() {
+  return await callApi('/auth/status', 'GET');
 }
 
 /**

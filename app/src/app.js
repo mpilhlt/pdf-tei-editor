@@ -6,8 +6,7 @@
  */
 
 import pluginManager from "./modules/plugin.js"
-import ep from './endpoints.js'
-import { v4 as uuidv4 } from 'uuid';
+import ep from './endpoints.js' 
 
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
@@ -27,6 +26,7 @@ import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 import { plugin as startPlugin } from './plugins/start.js'
+import { plugin as authenticationPlugin, api as authentication } from './plugins/authentication.js'
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
 /**
@@ -41,6 +41,7 @@ import { plugin as startPlugin } from './plugins/start.js'
  * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
  * @property {boolean} offline  - Whether the application is in offline mode
+ * @property {object|null} user - The currently logged-in user
  */
 /**
  * @type{ApplicationState}
@@ -53,7 +54,8 @@ let state = {
   webdavEnabled: false,
   editorReadOnly: false,
   offline: false,
-  sessionId: null
+  sessionId: null,
+  user: null
 }
 
 /**
@@ -69,6 +71,7 @@ const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
   pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
   teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, statusbarPlugin,
+  authenticationPlugin,
   /* must be the last plugin */ startPlugin]
 
 // add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
@@ -122,10 +125,7 @@ logger.info("Configuring application state from URL")
 urlHash.updateStateFromUrlHash(state)
 
 // if we don't have a session id, create one
-const sessionId = state.sessionId || uuidv4()
-logger.info(`Session id is ${sessionId}`)
-await updateState(state, {sessionId})
-
+authentication.updateStateSessionId(state)
 
 // start the application 
 await invoke(ep.start, state)
@@ -135,4 +135,4 @@ await invoke(ep.start, state)
 // 
 export { state, ep as endpoints, invoke, updateState, pluginManager, plugins }
 export { logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
-  services, floatingPanel, promptEditor, urlHash, appInfo, statusbar }
+  services, floatingPanel, promptEditor, urlHash, appInfo, statusbar, authentication }
