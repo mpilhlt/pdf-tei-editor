@@ -11,7 +11,7 @@ class ApiError(RuntimeError):
         status_code -- the HTTP (or other) status code associated with the error
         
     """
-    def __init__(self, message, status_code=500):
+    def __init__(self, message, status_code=400):
         super().__init__(message)
         self.status_code = status_code
 

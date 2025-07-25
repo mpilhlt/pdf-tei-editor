@@ -17,9 +17,29 @@ import { notify } from '../modules/sl-utils.js';
  * @property {number} statusCode - The HTTP status code associated with the error, defaults to 400
  */
 class ApiError extends Error {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 400
+   */  
   constructor(message, statusCode = 400) {
     super(message);
     this.name = "ApiError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Error indicating that a resource is locked
+ * @extends {ApiError}
+ */
+class LockedError extends ApiError {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 423
+   */    
+  constructor(message, statusCode = 423) {
+    super(message);
+    this.name = "LockedError";
     this.statusCode = statusCode;
   }
 }
@@ -29,6 +49,10 @@ class ApiError extends Error {
  * @extends {ApiError}
  */
 class ConnectionError extends ApiError {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 504
+   */    
   constructor(message, statusCode = 504) {
     super(message);
     this.name = "ConnectError";
@@ -44,6 +68,10 @@ class ConnectionError extends ApiError {
  * @property {string} message - The error message
  */
 class ServerError extends Error {
+  /**
+   * @param {string} message - The error message
+   * @param {number} statusCode - The HTTP status code associated with the error, defaults to 500
+   */    
   constructor(message, statusCode = 500) {
     super(message);
     this.name = "ServerError";
@@ -64,6 +92,10 @@ const api = {
   get lastHttpStatus() {
     return lastHttpStatus
   },
+  ApiError,
+  LockedError,
+  ConnectionError,
+  ServerError,
   callApi,
   getFileList,
   validateXml,
@@ -81,6 +113,7 @@ const api = {
   state,
   sendHeartbeat,
   checkLock,
+  acquireLock,
   releaseLock,
   getAllLocks
 }
@@ -168,9 +201,11 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 
     // handle app-specific error types
     switch (response.status) {
+      case 423:
+        throw new LockedError(message)
       case 504:
         // Timeout
-        throw new ConnectionError(message);
+        throw new ConnectionError(message)
       default:
         // other 4XX errors
         if (response.status && String(response.status)[0] === '4') {
@@ -201,7 +236,9 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 
   // notify the user about the error
   logger.warn([error.statusCode, error.name, error.message].toString())
-  notify(error.message, 'error');
+  if (!(error instanceof LockedError)) {
+    notify(error.message, 'error');
+  }
   throw error
 }
 
@@ -377,6 +414,14 @@ async function checkLock(filePath) {
   }
   return await callApi('/files/check_lock', 'POST', { file_path: filePath });
 }
+
+async function acquireLock(filePath) {
+  if (!filePath) {
+    throw new Error("File path is required to check lock");
+  }
+  return await callApi('/files/acquire_lock', 'POST', { file_path: filePath });
+}
+
 
 async function releaseLock(filePath) {
   if (!filePath) {

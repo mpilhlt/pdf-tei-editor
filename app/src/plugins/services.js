@@ -236,14 +236,17 @@ async function load(state, { xml, pdf }) {
         if (state.xmlPath && !state.editorReadOnly) {
           await client.releaseLock(state.xmlPath)
         }
-        const { is_locked } = await client.checkLock(xml);
-        logger.debug(`Lock status for ${xml}: ${is_locked}`);
-        if (is_locked) {
-          logger.debug(`File ${xml} is locked, loading in read-only mode`);
-          file_is_locked = true
+        try {
+          await client.acquireLock(xml);
+          logger.debug(`Acquired lock for file ${xml}`);
+        } catch (error) {
+          if (error instanceof client.LockedError) {
+            logger.debug(`File ${xml} is locked, loading in read-only mode`);
+            file_is_locked = true
+          } else {
+            throw error
+          }
         }
-      } catch (error) {
-        console.error("Cannot release lock on XML file:", error.message)
       } finally {
         ui.spinner.hide()
       }
@@ -294,6 +297,7 @@ async function validateXml() {
  * @param {string} filePath The path to the XML file on the server
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<{path:string, status:string}>} An object with a path property, containing the path to the saved version
+ * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
   logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
@@ -304,15 +308,9 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     statusbar.addMessage("Saving XML...", "xml", "saving")
     return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
-    switch (e.status_code) {
-      case 504: // Gateway Timeout
-        // ignore this error, it is handled by the client
-        break;
-      default:
-        console.error("Error while saving XML:", e.message)
-        dialog.error(`Could not save XML: ${e.message}`)
-        throw new Error(`Could not save XML: ${e.message}`)
-    }
+    console.error("Error while saving XML:", e.message)
+    dialog.error(`Could not save XML: ${e.message}`)
+    throw new Error(`Could not save XML: ${e.message}`)
   } finally {
     // clear status message after 1 second 
     setTimeout(() => { statusbar.removeMessage("xml", "saving") }, 1000)
@@ -428,7 +426,9 @@ async function deleteAll(state) {
 
   // @ts-ignore
   const filePathsToDelete = [ui.toolbar.pdf.value]
+    // @ts-ignore
     .concat(Array.from(ui.toolbar.xml.childNodes).map(option => option.value))
+    // @ts-ignore
     .concat(Array.from(ui.toolbar.diff.childNodes).map(option => option.value))
 
   if (filePathsToDelete.length > 0) {
@@ -498,6 +498,7 @@ function downloadXml(state) {
  */
 async function uploadXml(state) {
   const { filename: tempFilename } = await client.uploadFile(undefined, { accept: '.xml' })
+  // @ts-ignore
   const { path } = await client.createVersionFromUpload(tempFilename, state.xmlPath)
   await fileselection.reload(state)
   await load(state, { xml: path })

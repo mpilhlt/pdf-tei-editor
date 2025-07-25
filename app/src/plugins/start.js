@@ -153,9 +153,7 @@ async function start(state) {
     })
 
     // Heartbeat mechanism for file locking and offline detection
-    if (state.webdavEnabled) {
-      configureHeartbeat(state);
-    }
+    configureHeartbeat(state);
 
     // finish initialization
     ui.spinner.hide()
@@ -231,7 +229,6 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
       const reasonsToSkip = {
         "No file path specified": !filePath,
         "Application is offline": state.offline,
-        "WebDAV is not enabled": !state.webdavEnabled,
         "Editor is in read-only mode": state.editorReadOnly,
       };
 

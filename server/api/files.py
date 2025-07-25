@@ -369,6 +369,22 @@ def check_lock_route():
     return jsonify(check_lock(file_path, session_id))
 
 
+@bp.route("/acquire_lock", methods=["POST"])
+@handle_api_errors
+@session_required
+def acquire_lock_route():
+    """Acquire a lock for this file."""
+    data = request.get_json()
+    file_path = data.get("file_path")
+    if not file_path:
+        raise ApiError("File path is required.")
+    session_id = get_session_id(request)
+    if acquire_lock(file_path, session_id):
+        return jsonify("OK")
+    # could not acquire lock
+    raise ApiError(f'Could not acquire lock for {file_path}', 423)
+    
+
 @bp.route("/release_lock", methods=["POST"])
 @handle_api_errors
 @session_required
