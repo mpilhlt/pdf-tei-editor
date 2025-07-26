@@ -54377,11 +54377,10 @@ async function start(state) {
     // disable regular validation so that we have more control over it
     api$8.configure({ mode: "off" });
 
-    // get document paths from URL hash or from the first entry of the selectboxes
+    // get document paths from URL hash 
     // @ts-ignore
-    const defaultFile = api$6.fileData.length && api$6.fileData[0];
-    const pdf = state.pdfPath || defaultFile?.pdf;
-    const xml = state.xmlPath || defaultFile?.xml;
+    const pdf = state.pdfPath || null;
+    const xml = state.xmlPath || null;
     const diff = state.diffXmlPath;
 
     // lod the documents
