@@ -19,6 +19,8 @@ import { indentWithTab } from "@codemirror/commands"
 import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension, detectXmlIndentation } from './codemirror_utils.js';
 import { $$ } from './browser-utils.js';
 
+import { encodeXML } from 'entities';
+
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
  * tree in sync as far as possible, and provides linting and diffing.
@@ -521,13 +523,55 @@ export class XMLEditor extends EventTarget {
 
   /**
    * Returns the string representation of the XML tree, if one exists
+   * @param {Object} [config] - Configuration object.
+   * @param {boolean} [config.escapeXmlEntities=false] - Whether to escape XML entities.
+   * @param {string[]} [config.entityList] - A list of characters to escape.
    * @returns {string} 
    */
-  getXML() {
-    if (this.#xmlTree) {
-      return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
+  getXML(config = {}) {
+    if (!this.#xmlTree) {
+      return ''
     }
-    return ''
+
+    if (!config.escapeXmlEntities) {
+      return this.#serialize(this.#xmlTree, false);
+    }
+
+    const clonedTree = this.#xmlTree.cloneNode(true);
+
+    const escapeNodes = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        let text = node.textContent;
+        if (config.entityList) {
+          for (const char of config.entityList) {
+            text = text.replace(new RegExp(char, 'g'), encodeXML(char));
+          }
+        } else {
+          text = encodeXML(text);
+        }
+        node.textContent = text;
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = /** @type {Element} */ (node);
+        for (const attr of Array.from(element.attributes)) {
+          let value = attr.value;
+          if (config.entityList) {
+            for (const char of config.entityList) {
+              value = value.replace(new RegExp(char, 'g', encodeXML(char)));
+            }
+          } else {
+            value = encodeXML(value);
+          }
+          attr.value = value;
+        }
+        for (const child of Array.from(node.childNodes)) {
+          escapeNodes(child);
+        }
+      }
+    };
+
+    escapeNodes(clonedTree);
+
+    return this.#serialize(clonedTree, false);
   }
 
   /**

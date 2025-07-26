@@ -17,6 +17,7 @@
     "@codemirror/search": "^6.5.10",
     "@shoelace-style/shoelace": "2.20",
     "codemirror": "^6.0.1",
+    "entities": "^6.0.1",
     "glob": "^11.0.1",
     "js-plugin": "^1.1.0",
     "markdown-it": "^14.1.0",

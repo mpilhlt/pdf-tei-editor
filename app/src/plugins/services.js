@@ -309,7 +309,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
   }
   try {
     statusbar.addMessage("Saving XML...", "xml", "saving")
-    return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
+    return await client.saveXml(xmlEditor.getXML({escapeXmlEntities:true}), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message)
     dialog.error(`Could not save XML: ${e.message}`)
