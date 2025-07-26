@@ -1,6 +1,5 @@
 /**
  * Plugin providing a link to server-side methods
- * This is not really a plugin as it does not implement any endpoints (yet)
  */
 
 /** 
@@ -106,7 +105,7 @@ const api = {
   deleteFiles,
   createVersionFromUpload,
   uploadFile,
-  getConfigValue,
+  getConfigData,
   setConfigValue,
   syncFiles,
   moveFiles,
@@ -388,17 +387,12 @@ async function moveFiles(pdfPath, xmlPath, destinationCollection) {
   });
 }
 
-
 /**
- * Retrieves a configuration value from the server
+ * Returns all server-side configuration values for this application
+ * @returns {Object} 
  */
-async function getConfigValue(key) {
-  if (typeof key !== "string" || key.length === 0) {
-    throw new Error("Key must be a non-empty string");
-  }
-  const path = `/config/get/${encodeURIComponent(key)}`;
-  const value = await callApi(path, 'GET');
-  return value;
+async function getConfigData() {
+  return await callApi('/config', 'GET')
 }
 
 /**

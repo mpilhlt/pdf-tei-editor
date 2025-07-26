@@ -120,11 +120,11 @@ def serve_src(path):
 def serve_static(path):
     return send_from_directory(data_root, path)
 
-# Serve config files 
+# Serve config files - todo: this needs to be converted into real api routes!
 @app.route('/config/<path:path>')
 def serve_config(path):
     # selectively allow access
-    if path in ["config.json", "tei.json", "prompt.json"]:
+    if path in ["tei.json"]:
         return send_from_directory(app_db_dir, path)
     return jsonify({"error": "Access denied"}), 403
 

@@ -40,7 +40,15 @@ def write_config(config_data:dict):
             print(f"Error writing config file {CONFIG_FILE_PATH}: {e}")
             # Re-raise the exception
             raise e
-        
+
+
+@bp.route("/", methods=["GET"])
+@handle_api_errors
+def api_config_route():
+    config_data = read_config()
+    return jsonify(config_data), 200
+
+
 @bp.route("/get/<key>", methods=["GET"])
 @handle_api_errors 
 def get_config_value(key):

@@ -1,6 +1,8 @@
 /**
  * Plugin which hosts the start function, which is responsible for loading the documents at startup
- * Does not export any API
+ * and configures the general behavior of the application. General rule: behavior that depends solely 
+ * on a particular plugin should be configured in the plugin, behavior that depends on the interplay
+ * of several plugins should be configured here.
  */
 
 /** 
@@ -8,8 +10,10 @@
  * @import { Diagnostic } from '@codemirror/lint'
  */
 import ui from '../ui.js'
-import { updateState, logger, services, dialog, validation, floatingPanel, 
-  urlHash, xmlEditor, fileselection, client, statusbar, authentication } from '../app.js'
+import {
+  updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
+  config, statusbar, authentication
+} from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -24,9 +28,6 @@ import { notify } from '../modules/sl-utils.js'
 const plugin = {
   name: "start",
   install,
-  validation: {
-    result: onValidationResult
-  },
   start
 }
 
@@ -67,6 +68,9 @@ async function start(state) {
     const userData = await authentication.ensureAuthenticated();
 
     logger.info(`Welcome, ${userData.fullname}!`)
+
+    // load config data
+    await config.load()
 
     ui.spinner.show('Loading documents, please wait...')
 
@@ -120,45 +124,11 @@ async function start(state) {
       updateState(state)
     }
 
-    // Find the currently selected node's contents in the PDF
-    xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents) 
-
-    // manually show diagnostics if validation is disabled
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
-      if (validation.isDisabled()) {
-        let view = xmlEditor.getView()
-        // @ts-ignore
-        let diagnostic = evt.detail
-        try {
-          view.dispatch(setDiagnostics(view.state, [diagnostic]))
-        } catch (error) {
-          logger.warn("Error setting diagnostics: " + error.message)
-        }
-      }
-    })
-
-    // save dirty editor content after an update
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
-
-    // xml vaidation events
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-      const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
-      console.warn("XML is not well-formed", diagnostics)
-      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
-
-      statusbar.addMessage("Invalid XML", "xml", "xml-status") 
-      // @ts-ignore
-      ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
-    })
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
-      // @ts-ignore
-      ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
-      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
-      statusbar.removeMessage("xml", "xml-status")
-    })
+    // configure the xml editor events
+    configureXmlEditor()
 
     // Heartbeat mechanism for file locking and offline detection
-    configureHeartbeat(state);
+    configureHeartbeat(state, await config.get('heartbeat.interval', 10));
 
     // finish initialization
     ui.spinner.hide()
@@ -173,16 +143,6 @@ async function start(state) {
   }
 }
 
-/**
- * Called when a validation has been done. 
- * Used to save the document after successful validation
- * @param {Diagnostic[]} diagnostics 
- */
-async function onValidationResult(diagnostics) {
-  if (diagnostics.length === 0) {
-    saveIfDirty()
-  }
-}
 
 /**
  * Save the current XML file if the editor is "dirty"
@@ -207,14 +167,56 @@ async function saveIfDirty() {
   }
 }
 
+function configureXmlEditor() {
+  // Find the currently selected node's contents in the PDF
+  xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents)
+
+  // manually show diagnostics if validation is disabled
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+    if (validation.isDisabled()) {
+      let view = xmlEditor.getView()
+      // @ts-ignore
+      let diagnostic = evt.detail
+      try {
+        view.dispatch(setDiagnostics(view.state, [diagnostic]))
+      } catch (error) {
+        logger.warn("Error setting diagnostics: " + error.message)
+      }
+    }
+  })
+
+  // save dirty editor content after an update
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
+
+  // xml vaidation events
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+    const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
+    console.warn("XML is not well-formed", diagnostics)
+    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
+    statusbar.addMessage("Invalid XML", "xml", "xml-status")
+    // @ts-ignore
+    ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
+  })
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+    // @ts-ignore
+    ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
+    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
+    statusbar.removeMessage("xml", "xml-status")
+  })
+}
+
 /**
  * Configures the heartbeat mechanism for file locking and offline detection.
  * @param {ApplicationState} state 
  * @param {number} [lockTimeoutSeconds=60]
  */
 function configureHeartbeat(state, lockTimeoutSeconds = 60) {
+  if (!Number.isInteger(lockTimeoutSeconds)) {
+    throw new Error(`Invalid timeout value: ${lockTimeoutSeconds}`)
+  }
+  logger.debug(`Configuring a heartbeat of ${lockTimeoutSeconds} seconds`)
   let heartbeatInterval = null;
-  const heartbeatFrequency = (lockTimeoutSeconds / 2) * 1000;
+  const heartbeatFrequency = lockTimeoutSeconds * 1000;
 
   const stopHeartbeat = () => {
     if (heartbeatInterval) {
@@ -228,14 +230,14 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
   const startHeartbeat = () => {
 
+    let editorReadOnlyState;
+
     heartbeatInterval = setInterval(async () => {
 
       const filePath = String(ui.toolbar.xml.value);
       const reasonsToSkip = {
         "No user is logged in": state.user === null,
-        "No file path specified": !filePath,
-        "Application is offline": state.offline,
-        "Editor is in read-only mode": state.editorReadOnly,
+        "No file path specified": !filePath
       };
 
       for (const reason in reasonsToSkip) {
@@ -247,29 +249,36 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
       try {
 
-        logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-        await client.sendHeartbeat(filePath);
+        if (!state.editorReadOnly) {
+          logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
+          await client.sendHeartbeat(filePath);
+        }
 
-        // If we are here, the request was successful. Check if we were offline.
-        if (!state.webdavEnabled) {
-          logger.info("Connection restored. Re-enabling WebDAV features.");
+        // reload file list to see updates
+        await fileselection.reload(state)
+
+        // If we are here, the request was successful. Check if we were offline before.
+        if (state.offline) {
+          logger.info("Connection restored.");
           notify("Connection restored.");
-          updateState(state, { webdavEnabled: true, offline: false });
-        } 
-
-         // reload file list to see updates
-        fileselection.reload(state)
-      
+          updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
+        }
       } catch (error) {
         console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
         // Handle different types of errors
         if (error instanceof TypeError) {
           // This is likely a network error (client is offline)
-          if (state.webdavEnabled) {
-            logger.warn("Connection lost. Disabling WebDAV features.");
-            notify("Connection to the server was lost. File synchronization has been disabled.", "warning");
-            updateState(state, { webdavEnabled: false, offline: true });
+          if (state.offline) {
+            // we are still offline
+            const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`
+            logger.warn(message)
+            notify(message)
+            return
           }
+          logger.warn("Connection lost.");
+          notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
+          editorReadOnlyState = state.editorReadOnly
+          updateState(state, { offline: true, editorReadOnly: true });
         } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
           logger.critical("Lock lost for file: " + filePath);
@@ -293,7 +302,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
   window.addEventListener('beforeunload', stopHeartbeat);
 }
 
-let lastNode = null; 
+let lastNode = null;
 async function searchNodeContents() {
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
@@ -302,7 +311,7 @@ async function searchNodeContents() {
   const node = xmlEditor.selectedNode
 
   if (autoSearchSwitch.checked && node && node !== lastNode) {
-      await services.searchNodeContentsInPdf(node)
-      lastNode = node
+    await services.searchNodeContentsInPdf(node)
+    lastNode = node
   }
 }

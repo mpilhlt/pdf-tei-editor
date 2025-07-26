@@ -27,3 +27,6 @@ The frontend is a single-page application that uses a plugin-based architecture.
 - When adding new features, ensure that you are on a feature branch and ask the user if you should create one if the current branch is not a feature branch.
 - Always re-read the relevant files since the user may have made changes that you are not aware of.
 - Always outline your plan and ask the user for confirmation before beginning to implement changes.
+- When tasked with writing a new plugin, always review the plugin files in app/src/plugins first to remind yourself how the different kind of plugins of this application are architected.
+- Always re-read files first that you are attempting to edit, since they might have changed since the last task.
+

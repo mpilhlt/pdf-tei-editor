@@ -2,7 +2,7 @@
  * @import { ApplicationState } from '../app.js'
  * @import { Switch } from '../modules/switch.js'
  */
-import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
+import { updateState, client, logger, services, dialog, xmlEditor, config } from '../app.js'
 import { $$, isValidXPath } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
 import { createHtmlElements, updateUi } from '../ui.js'
@@ -92,7 +92,7 @@ async function install(state) {
   /**
    * @type {{value:string, label:string}[]}
    */
-  const selectBoxData = await client.getConfigValue("navigation.xpath.list")
+  const selectBoxData = await config.get("navigation.xpath.list")
   selectBoxData.forEach(item => {
     const option = document.createElement('option');
     option.value = item.value || ''

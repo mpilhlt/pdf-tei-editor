@@ -10,6 +10,7 @@ import ep from './endpoints.js'
 
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
+import { plugin as configPlugin, api as config } from './plugins/config.js'
 import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
 import { plugin as statusbarPlugin, api as statusbar} from './plugins/statusbar.js'
 import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
@@ -67,8 +68,8 @@ let state = {
  */
 
 /** @type {Plugin[]} */
-const plugins = [loggerPlugin, urlHashStatePlugin, dialogPlugin,
-  pdfViewerPlugin, xmlEditorPlugin, clientPlugin, fileselectionPlugin,
+const plugins = [loggerPlugin, urlHashStatePlugin, clientPlugin, configPlugin, 
+  dialogPlugin, pdfViewerPlugin, xmlEditorPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
   teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, statusbarPlugin,
   authenticationPlugin,
@@ -134,5 +135,5 @@ await invoke(ep.start, state)
 // Exports
 // 
 export { state, ep as endpoints, invoke, updateState, pluginManager, plugins }
-export { logger, dialog, pdfViewer, xmlEditor, client, validation, fileselection, extraction,
+export { logger, dialog, pdfViewer, xmlEditor, client, config, validation, fileselection, extraction,
   services, floatingPanel, promptEditor, urlHash, appInfo, statusbar, authentication }
