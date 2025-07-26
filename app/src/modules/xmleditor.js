@@ -525,7 +525,7 @@ export class XMLEditor extends EventTarget {
    * Returns the string representation of the XML tree, if one exists
    * @returns {string} 
    */
-  getXML(config = {}) {
+  getXML() {
     if (!this.#xmlTree) {
       return ''
     }

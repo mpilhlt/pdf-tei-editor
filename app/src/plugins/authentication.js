@@ -33,7 +33,8 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0]
  */
 const api = {
   updateStateSessionId,
-  ensureAuthenticated
+  ensureAuthenticated,
+  getUser
 };
 
 /**
@@ -43,7 +44,7 @@ const plugin = {
   name: "authentication",
   deps: ['client'],
   install,
-  update
+  state: {update}
 };
 
 export { api, plugin };
@@ -52,6 +53,13 @@ export { api, plugin };
 // State
 //
 
+/**
+ * @typedef {Object} UserData 
+ * @param {string} username
+ * @param {string} fullname
+ * @param {string[]} roles
+ */
+/** @type {UserData} */
 let user = null;
 
 //
@@ -80,7 +88,7 @@ async function install(state) {
 async function update(state) {
   if (state.user !== user) {
     user = state.user;
-    ui.toolbar.logoutButton.hidden = user === null
+    ui.toolbar.logoutButton.disabled = user === null
   }
 }
 
@@ -110,6 +118,14 @@ async function ensureAuthenticated() {
     // Not authenticated, proceed to show login dialog
     return _showLoginDialog();
   }
+}
+
+/**
+ * Returns the current user or null if none has been authenticated
+ * @returns {UserData|null}
+ */
+function getUser() {
+  return user
 }
 
 /**

@@ -6,11 +6,12 @@
  * @import { ApplicationState } from '../app.js' 
  * @import { SlButton, SlButtonGroup, SlDialog, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
+ * @import { UserData } from '../plugins/authentication.js'
  */
 import ui, { updateUi } from '../ui.js'
 import {
   updateState, client, logger, dialog, statusbar,
-  fileselection, xmlEditor, pdfViewer, services, validation
+  fileselection, xmlEditor, pdfViewer, services, validation, authentication
 } from '../app.js'
 import { createHtmlElements } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
@@ -309,7 +310,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
   }
   try {
     statusbar.addMessage("Saving XML...", "xml", "saving")
-    return await client.saveXml(xmlEditor.getXML({escapeXmlEntities:true}), filePath, saveAsNewVersion)
+    return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message)
     dialog.error(`Could not save XML: ${e.message}`)
@@ -554,6 +555,24 @@ async function onClickValidateButton() {
   notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`)
 }
 
+
+/**
+ * Given a user object, get an id (typically by using the initials)
+ * @param {UserData} userData 
+ */
+function getIdFromUser(userData) {
+  let names = userData.fullname
+  if (names && names.trim() !== "") {
+    names = userData.fullname.split(" ")
+  } else {
+    return userData.username
+  }
+  if (names.length > 1) {
+    return names.map(n => n[0]).join("").toLocaleLowerCase()
+  }
+  return names[0].slice(0, 3)
+}
+
 /**
  * Called when the "saveRevision" button is executed
  * @param {ApplicationState} state
@@ -564,6 +583,12 @@ async function onClickSaveRevisionButton(state) {
   const dialog = document.querySelector('[name="newRevisionChangeDialog"]')
   dialog.changeDesc.value = "Corrections"
   try {
+    const user = authentication.getUser()
+    console.warn(user)
+    if (user) {
+      dialog.persId.value = getIdFromUser(user)
+      dialog.persName.value = user.fullname
+    }
     dialog.show()
     await new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', resolve, { once: true })
@@ -620,6 +645,11 @@ async function onClickCreateNewVersionButton(state) {
   /** @type {newVersionDialog} */
   const dialog = document.querySelector('[name="newVersionDialog"]')
   try {
+    const user = authentication.getUser()
+    if (user) {
+      dialog.persId.value = getIdFromUser(user)
+      dialog.persName.value = user.fullname
+    }    
     dialog.show()
     await new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', resolve, { once: true })
