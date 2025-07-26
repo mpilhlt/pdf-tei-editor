@@ -40680,6 +40680,9 @@ class XMLEditor extends EventTarget {
     console.log("Detected indentation unit: ", JSON.stringify(indentUnit));
     this.configureIntenation(indentUnit, 4); // default tab size of 4 spaces, needs to be configurable
     
+    // (un)escape xml entities
+    // todo
+    
     // display xml in editor, this triggers the update handlers
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },
@@ -42834,7 +42837,7 @@ const api$7 = {
   releaseLock,
   getAllLocks,
   login,
-  logout,
+  logout: logout$1,
   status
 };
 
@@ -42974,7 +42977,7 @@ async function login(username, passwd_hash) {
  * Logs out the current user
  * @returns {Promise<any>}
  */
-async function logout() {
+async function logout$1() {
   return await callApi('/auth/logout', 'POST', {});
 }
 
@@ -44014,9 +44017,10 @@ function addEdition(xmlDoc, edition) {
     throw new Error("teiHeader/fileDesc/titleStmt not found in the document.");
   }
   
-  const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
+  
   const editionStmt = xmlDoc.createElementNS(teiNamespaceURI, 'editionStmt');
   const fileDesc = fileDescs[0];
+  const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
   const titleStmt = titleStmts[0];
   
   if (editionStmts.length > 0) {
@@ -44055,20 +44059,129 @@ function addEdition(xmlDoc, edition) {
 }
 
 /**
+ * Escapes special XML characters in a string to their corresponding entities.
+ * The order of replacements is important to avoid double-escaping.
+ * Ampersand (&) must be replaced first.
+ *
+ * @param {string} unsafeString The raw string that may contain special characters.
+ * @returns {string} The string with special characters converted to XML entities.
+ */
+function escapeXml(unsafeString) {
+  if (typeof unsafeString !== 'string') {
+    return '';
+  }
+  return unsafeString
+    .replaceAll(/&/g, '&amp;')  
+    .replaceAll(/</g, '&lt;') 
+    .replaceAll(/>/g, '&gt;')    
+    .replaceAll(/"/g, '&quot;') 
+    .replaceAll(/'/g, '&apos;'); 
+}
+
+/**
+ * Un-escapes common XML/HTML entities in a string back to their original characters.
+ * The order is important here as well; ampersand (&) must be last.
+ *
+ * @param {string} escapedString The string containing XML entities.
+ * @returns {string} The string with entities converted back to characters.
+ */
+function unescapeXml(escapedString) {
+  if (typeof escapedString !== 'string') {
+    return '';
+  }
+  return escapedString
+    .replaceAll(/&quot;/g, '"')
+    .replaceAll(/&apos;/g, "'")
+    .replaceAll(/&lt;/g, '<')
+    .replaceAll(/&gt;/g, '>')
+    .replaceAll(/&amp;/g, '&'); 
+}
+
+/**
+ * Escapes special characters in XML content using a manual string-parsing approach.
+ *
+ * This function iterates through the string, keeping track of whether the
+ * current position is inside a tag or in the content between tags, and
+ * only applies escaping to the content portion.
+ *
+ * @param {string} xmlString The raw XML string to be processed.
+ * @returns {string} A new XML string with its node content properly escaped.
+ */
+function encodeXmlEntities(xmlString) {
+  if (typeof xmlString !== 'string') {
+    return "";
+  }
+
+  let inTag = false;
+  const resultParts = [];
+  let contentBuffer = [];
+
+  for (const char of xmlString) {
+    if (char === '<') {
+      // When a '<' is found, the preceding text in the buffer is content.
+      // Un-escape it first to prevent double-escaping, then re-escape it.
+      if (contentBuffer.length > 0) {
+        const contentToProcess = contentBuffer.join('');
+        const unescapedContent = unescapeXml(contentToProcess);
+        const escapedContent = escapeXml(unescapedContent);
+        resultParts.push(escapedContent);
+        contentBuffer = []; // Reset the buffer.
+      }
+
+      inTag = true;
+      resultParts.push(char);
+
+    } else if (char === '>') {
+      // A '>' signifies the end of a tag.
+      inTag = false;
+      resultParts.push(char);
+
+    } else {
+      if (inTag) {
+        // Characters inside a tag are appended directly.
+        resultParts.push(char);
+      } else {
+        // Characters outside a tag are content and are buffered.
+        contentBuffer.push(char);
+      }
+    }
+  }
+
+  // After the loop, process any final remaining content from the buffer.
+  if (contentBuffer.length > 0) {
+    const contentToProcess = contentBuffer.join('');
+    const unescapedContent = unescapeXml(contentToProcess);
+    const escapedContent = escapeXml(unescapedContent);
+    resultParts.push(escapedContent);
+  }
+
+  return resultParts.join('');
+}
+
+/**
  * @file Enhancement: Pretty-prints an XML DOM Document by inserting whitespace text nodes.
  */
 
 /**
- * This modifies the original document object in place and returns it.
+ * This modifies the original document or node object in place and returns it.
  *
- * @param {Document} xmlDoc - The XML DOM Document object.
+ * @param {Document} xmlDoc - The XML DOM Document object
+ * @param {string|null} selector - A selector for `querySelector()` that targets a sub-node for pretty-printing
  * @param {string} [spacing='  '] - The string to use for each level of indentation (e.g., '  ' or '\t').
- * @returns {Document} - The modified XML DOM Document object.
+ * @returns {Document|Node} - The modified XML DOM Document object.
  */
-function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
-  if (!xmlDoc || typeof xmlDoc.documentElement === 'undefined') {
-    console.error("Invalid XML Document object provided for pretty-printing.");
-    return xmlDoc; // Return unchanged if input is invalid
+function prettyPrintXmlDom(xmlDoc, selector = null, spacing = '  ') {
+  if (!(xmlDoc instanceof Document)) {
+    throw new Error(`Invalid parameter: Expected document, got ${xmlDoc}`)
+  }
+  let root;
+  if (selector) {
+    root = xmlDoc.querySelector(selector);
+    if (!root) {
+      throw new Error(`Invalid selector: no node found for "${selector}"`) 
+    }
+  } else {
+    root = xmlDoc.documentElement;
   }
 
   // Helper function to remove existing pure whitespace text nodes
@@ -44148,13 +44261,7 @@ function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
   // --- Main pretty-printing logic ---
 
   // Start by cleaning up any existing mixed whitespace/indentation
-  removeWhitespaceNodes(xmlDoc.documentElement);
-
-  const root = xmlDoc.documentElement;
-  if (!root) {
-    // Should have been caught above, but double check
-    return xmlDoc;
-  }
+  removeWhitespaceNodes(root);
 
   // Add indentation for children of the root element
   // The root itself doesn't get preceding indentation (relative to nothing)
@@ -44323,7 +44430,7 @@ async function install$7(state) {
   const da = ui$1.toolbar.documentActions;
 
   // save a revision
-  da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
+  da.saveRevision.addEventListener('click', () => saveRevision(state));
   // enable save button on dirty editor
   xmlEditor.addEventListener(
     XMLEditor.EVENT_EDITOR_READY,
@@ -44336,7 +44443,7 @@ async function install$7(state) {
   da.deleteAll.addEventListener('click', () => deleteAll(state));
 
   // new version
-  da.createNewVersion.addEventListener("click", () => onClickCreateNewVersionButton(state));
+  da.createNewVersion.addEventListener("click", () => createNewVersion(state));
 
   // sync
   da.sync.addEventListener("click", () => onClickSyncBtn(state));
@@ -44670,11 +44777,14 @@ async function syncFiles(state) {
  * Downloads the current XML file
  * @param {ApplicationState} state
  */
-function downloadXml(state) {
+async function downloadXml(state) {
   if (!state.xmlPath) {
     throw new TypeError("State does not contain an xml path")
   }
-  const xml = xmlEditor.getXML();
+  let xml = xmlEditor.getXML();
+  if (await api$c.get('xml.encode-entities.server')) {
+    xml = encodeXmlEntities(xml);
+  }
   const blob = new Blob([xml], { type: 'application/xml' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -44766,7 +44876,7 @@ function getIdFromUser(userData) {
  * Called when the "saveRevision" button is executed
  * @param {ApplicationState} state
  */
-async function onClickSaveRevisionButton(state) {
+async function saveRevision(state) {
 
   /** @type {newVersionDialog} */
   const dialog = document.querySelector('[name="newRevisionChangeDialog"]');
@@ -44775,8 +44885,8 @@ async function onClickSaveRevisionButton(state) {
     const user = api.getUser();
     console.warn(user);
     if (user) {
-      dialog.persId.value = getIdFromUser(user);
-      dialog.persName.value = user.fullname;
+      dialog.persId.value = dialog.persId.value || getIdFromUser(user);
+      dialog.persName.value = dialog.persName.value || user.fullname;
     }
     dialog.show();
     await new Promise((resolve, reject) => {
@@ -44829,15 +44939,15 @@ async function onClickSaveRevisionButton(state) {
  * Called when the "Create new version" button is executed
  * @param {ApplicationState} state
  */
-async function onClickCreateNewVersionButton(state) {
+async function createNewVersion(state) {
 
   /** @type {newVersionDialog} */
   const dialog = document.querySelector('[name="newVersionDialog"]');
   try {
     const user = api.getUser();
     if (user) {
-      dialog.persId.value = getIdFromUser(user);
-      dialog.persName.value = user.fullname;
+      dialog.persId.value = dialog.persId.value || getIdFromUser(user);
+      dialog.persName.value = dialog.persName.value || user.fullname;
     }    
     dialog.show();
     await new Promise((resolve, reject) => {
@@ -44867,21 +44977,31 @@ async function onClickCreateNewVersionButton(state) {
 
   ui$1.toolbar.documentActions.saveRevision.disabled = true;
   try {
-    await addTeiHeaderInfo(respStmt, editionStmt);
-
-    // save new version
+    // save new version first
     let { path } = await saveXml(state.xmlPath, true);
+
+    // update the state to load the new document
     state.xmlPath = path;
     state.diffXmlPath = path;
-    await api$6.reload(state);
     await updateState(state);
 
-    // dirty state
-    xmlEditor.isDirty = false;
+    // now modify the header
+    await addTeiHeaderInfo(respStmt, editionStmt);
+
+    // save again to the new path
+    await saveXml(path);
+    xmlEditor.markAsClean(); 
+
+    // reload the file data to display the new name and inform the user
+    await api$6.reload(state);
     notify("Document was duplicated. You are now editing the copy.");
-    syncFiles(state)
+    
+    // sync the new file to the WebDav server
+    if (state.webdavEnabled) {
+      syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
+    }
   } catch (e) {
     console.error(e);
     alert(e.message);
@@ -44981,7 +45101,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
   if (revisionChange) {
     addRevisionChange(xmlDoc, revisionChange);
   }
-  prettyPrintXmlDom(xmlDoc);
+  prettyPrintXmlDom(xmlDoc, 'teiHeader');
   await xmlEditor.updateEditorFromXmlTree();
 }
 
@@ -54446,13 +54566,6 @@ async function start(state) {
 async function saveIfDirty() {
   const filePath = String(ui$1.toolbar.xml.value);
 
-  // track weird bug where the xmlEditor is not initialized yet
-  if (!xmlEditor || !xmlEditor.isDirty) {
-    api$d.warn("XML Editor is not initialized yet, cannot save.");
-    console.log(xmlEditor);
-    return
-  }
-
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
     const result = await api$4.saveXml(filePath);
     if (result.status == "unchanged") {
@@ -54582,6 +54695,9 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           updateState(state, { editorReadOnly: true });
         } else if (error.statusCode === 504) {
           api$d.warn("Temporary connection failure, will try again...");
+        } else if (error.statusCode === 403) {
+          notify("You have been logged out"); 
+          api.logout();
         } else {
           // Another server-side error occurred
           if (state.webdavEnabled) {
@@ -54696,7 +54812,8 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0];
 const api = {
   updateStateSessionId,
   ensureAuthenticated,
-  getUser
+  getUser,
+  logout
 };
 
 /**
@@ -54736,7 +54853,7 @@ async function install(state) {
   // @ts-ignore
   ui$1.toolbar.self.insertAdjacentElement("beforeend", buttonElement);
   updateUi();
-  ui$1.toolbar.logoutButton.addEventListener("click", _logout);
+  ui$1.toolbar.logoutButton.addEventListener("click", logout);
   // prevent dialog from closing
   ui$1.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
 }
@@ -54821,7 +54938,7 @@ function _showLoginDialog() {
  * Logs the user out.
  * @private
  */
-async function _logout() {
+async function logout() {
   try {
     await api$7.logout();
     await updateState(state, { user: null, sessionId: null });
