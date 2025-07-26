@@ -166,9 +166,10 @@ export function addEdition(xmlDoc, edition) {
     throw new Error("teiHeader/fileDesc/titleStmt not found in the document.");
   }
   
-  const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
+  
   const editionStmt = xmlDoc.createElementNS(teiNamespaceURI, 'editionStmt');
   const fileDesc = fileDescs[0]
+  const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
   const titleStmt = titleStmts[0]
   
   if (editionStmts.length > 0) {
@@ -204,4 +205,104 @@ export function addEdition(xmlDoc, edition) {
   }
   
   editionStmt.appendChild(editionElem);
+}
+
+/**
+ * Escapes special XML characters in a string to their corresponding entities.
+ * The order of replacements is important to avoid double-escaping.
+ * Ampersand (&) must be replaced first.
+ *
+ * @param {string} unsafeString The raw string that may contain special characters.
+ * @returns {string} The string with special characters converted to XML entities.
+ */
+export function escapeXml(unsafeString) {
+  if (typeof unsafeString !== 'string') {
+    return '';
+  }
+  return unsafeString
+    .replaceAll(/&/g, '&amp;')  
+    .replaceAll(/</g, '&lt;') 
+    .replaceAll(/>/g, '&gt;')    
+    .replaceAll(/"/g, '&quot;') 
+    .replaceAll(/'/g, '&apos;'); 
+}
+
+/**
+ * Un-escapes common XML/HTML entities in a string back to their original characters.
+ * The order is important here as well; ampersand (&) must be last.
+ *
+ * @param {string} escapedString The string containing XML entities.
+ * @returns {string} The string with entities converted back to characters.
+ */
+export function unescapeXml(escapedString) {
+  if (typeof escapedString !== 'string') {
+    return '';
+  }
+  return escapedString
+    .replaceAll(/&quot;/g, '"')
+    .replaceAll(/&apos;/g, "'")
+    .replaceAll(/&lt;/g, '<')
+    .replaceAll(/&gt;/g, '>')
+    .replaceAll(/&amp;/g, '&'); 
+}
+
+/**
+ * Escapes special characters in XML content using a manual string-parsing approach.
+ *
+ * This function iterates through the string, keeping track of whether the
+ * current position is inside a tag or in the content between tags, and
+ * only applies escaping to the content portion.
+ *
+ * @param {string} xmlString The raw XML string to be processed.
+ * @returns {string} A new XML string with its node content properly escaped.
+ */
+export function encodeXmlEntities(xmlString) {
+  if (typeof xmlString !== 'string') {
+    return "";
+  }
+
+  let inTag = false;
+  const resultParts = [];
+  let contentBuffer = [];
+
+  for (const char of xmlString) {
+    if (char === '<') {
+      // When a '<' is found, the preceding text in the buffer is content.
+      // Un-escape it first to prevent double-escaping, then re-escape it.
+      if (contentBuffer.length > 0) {
+        const contentToProcess = contentBuffer.join('');
+        const unescapedContent = unescapeXml(contentToProcess);
+        const escapedContent = escapeXml(unescapedContent);
+        resultParts.push(escapedContent);
+        contentBuffer = []; // Reset the buffer.
+      }
+
+      inTag = true;
+      resultParts.push(char);
+
+    } else if (char === '>') {
+      // A '>' signifies the end of a tag.
+      inTag = false;
+      resultParts.push(char);
+
+    } else {
+      if (inTag) {
+        // Characters inside a tag are appended directly.
+        resultParts.push(char);
+      } else {
+        // Characters outside a tag are content and are buffered.
+        contentBuffer.push(char);
+      }
+    }
+  }
+
+  // After the loop, process any final remaining content from the buffer.
+  if (contentBuffer.length > 0) {
+    const contentToProcess = contentBuffer.join('');
+    const unescapedContent = unescapeXml(contentToProcess);
+    const escapedContent = escapeXml(unescapedContent);
+    resultParts.push(escapedContent);
+  }
+
+  return resultParts.join('');
 }

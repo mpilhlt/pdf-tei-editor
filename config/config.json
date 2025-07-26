@@ -27,6 +27,7 @@
       "label":"LLamore"
     }
   ],
-  "xml.encode-entities": true,
+  "xml.encode-entities.server": true,
+  "xml.encode-entities.client": false,
   "heartbeat.interval": 30
 }

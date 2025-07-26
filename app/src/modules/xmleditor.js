@@ -306,6 +306,9 @@ export class XMLEditor extends EventTarget {
     console.log("Detected indentation unit: ", JSON.stringify(indentUnit))
     this.configureIntenation(indentUnit, 4); // default tab size of 4 spaces, needs to be configurable
     
+    // (un)escape xml entities
+    // todo
+    
     // display xml in editor, this triggers the update handlers
     this.#view.dispatch({
       changes: { from: 0, to: this.#view.state.doc.length, insert: xml },

@@ -81,19 +81,9 @@ def save():
         raise ApiError("XML content and file path are required.")
     
     # encode xml entities as per configuration
-    if read_config().get("xml.encode-entities", False) == True:
+    if read_config().get("xml.encode-entities.server", False) == True:
         current_app.logger.debug("Encoding XML entities")
         xml_string = encode_xml_entities(xml_string)
-
-    # The file path used for locking must be consistent
-    lock_file_path = file_path_rel
-
-    if not acquire_lock(lock_file_path, session_id):
-        # Use a specific error message for the frontend to catch
-        raise ApiError("Failed to acquire lock", status_code = 423)
-    current_app.logger.info(f"Acquired lock for {lock_file_path}")
-    
-    data_root = current_app.config["DATA_ROOT"]
     
     # Determine the final save path
     if save_as_new_version:
@@ -105,9 +95,19 @@ def save():
         final_file_rel = safe_file_path(file_path_rel)
         status = "saved"
 
+    # Get a file lock for this path
+    lock_file_path = '/data/' + final_file_rel
+    if not acquire_lock(lock_file_path, session_id):
+        # Use a specific error message for the frontend to catch
+        raise ApiError("Failed to acquire lock", status_code = 423)
+    current_app.logger.info(f"Acquired lock for {lock_file_path}")
+    
+    # get the full path and create directories if necessary
+    data_root = current_app.config["DATA_ROOT"]
     full_save_path = os.path.join(data_root, final_file_rel)
-    remove_obsolete_marker_if_exists(full_save_path, current_app.logger)
     os.makedirs(os.path.dirname(full_save_path), exist_ok=True)
+    
+    remove_obsolete_marker_if_exists(full_save_path, current_app.logger)
     
     # Write the file
     with open(full_save_path, "w", encoding="utf-8") as f:

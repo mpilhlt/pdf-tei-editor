@@ -14,6 +14,8 @@ def _get_local_map(root_path: str) -> dict:
     """Gathers metadata for all local files and deletion markers."""
     local_map = {}
     for dirpath, _, filenames in os.walk(root_path):
+        if os.path.basename(dirpath) == "locks":
+            continue
         for filename in filenames:
             if os.path.basename(filename).startswith('.'):
                 continue
@@ -47,7 +49,8 @@ def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
         raise ApiError(f"Failed to list remote files from '{root_path}': {e}")
 
     for details in all_files.values():
-        if os.path.basename(details['name']).startswith('.') or details['type'] == 'directory':
+        basename = os.path.basename(details['name'])
+        if basename.startswith('.') or basename.endswith('.lock') or details['type'] == 'directory':
             continue
 
         relative_path = unicodedata.normalize('NFC', os.path.relpath(details['name'], root_path))
@@ -246,7 +249,7 @@ def sync():
                     summary['downloads'] += 1
 
         except Exception as e:
-            raise ApiError(f"Failed to sync path '{path}': {e}", exc_info=True)
+            raise ApiError(f"Failed to sync path '{path}': {e}")
 
     logger.info(f"Synchronization complete. Summary: {summary}")
     return summary

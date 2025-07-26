@@ -10,7 +10,7 @@
  */
 import ui, { updateUi } from '../ui.js'
 import {
-  updateState, client, logger, dialog, statusbar,
+  updateState, client, logger, dialog, statusbar, config,
   fileselection, xmlEditor, pdfViewer, services, validation, authentication
 } from '../app.js'
 import { createHtmlElements } from '../ui.js'
@@ -134,7 +134,7 @@ async function install(state) {
   const da = ui.toolbar.documentActions
 
   // save a revision
-  da.saveRevision.addEventListener('click', () => onClickSaveRevisionButton(state));
+  da.saveRevision.addEventListener('click', () => saveRevision(state));
   // enable save button on dirty editor
   xmlEditor.addEventListener(
     XMLEditor.EVENT_EDITOR_READY,
@@ -147,7 +147,7 @@ async function install(state) {
   da.deleteAll.addEventListener('click', () => deleteAll(state))
 
   // new version
-  da.createNewVersion.addEventListener("click", () => onClickCreateNewVersionButton(state))
+  da.createNewVersion.addEventListener("click", () => createNewVersion(state))
 
   // sync
   da.sync.addEventListener("click", () => onClickSyncBtn(state))
@@ -481,11 +481,14 @@ async function syncFiles(state) {
  * Downloads the current XML file
  * @param {ApplicationState} state
  */
-function downloadXml(state) {
+async function downloadXml(state) {
   if (!state.xmlPath) {
     throw new TypeError("State does not contain an xml path")
   }
-  const xml = xmlEditor.getXML()
+  let xml = xmlEditor.getXML()
+  if (await config.get('xml.encode-entities.server')) {
+    xml = tei_utils.encodeXmlEntities(xml)
+  }
   const blob = new Blob([xml], { type: 'application/xml' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -577,7 +580,7 @@ function getIdFromUser(userData) {
  * Called when the "saveRevision" button is executed
  * @param {ApplicationState} state
  */
-async function onClickSaveRevisionButton(state) {
+async function saveRevision(state) {
 
   /** @type {newVersionDialog} */
   const dialog = document.querySelector('[name="newRevisionChangeDialog"]')
@@ -586,8 +589,8 @@ async function onClickSaveRevisionButton(state) {
     const user = authentication.getUser()
     console.warn(user)
     if (user) {
-      dialog.persId.value = getIdFromUser(user)
-      dialog.persName.value = user.fullname
+      dialog.persId.value = dialog.persId.value || getIdFromUser(user)
+      dialog.persName.value = dialog.persName.value || user.fullname
     }
     dialog.show()
     await new Promise((resolve, reject) => {
@@ -640,15 +643,15 @@ async function onClickSaveRevisionButton(state) {
  * Called when the "Create new version" button is executed
  * @param {ApplicationState} state
  */
-async function onClickCreateNewVersionButton(state) {
+async function createNewVersion(state) {
 
   /** @type {newVersionDialog} */
   const dialog = document.querySelector('[name="newVersionDialog"]')
   try {
     const user = authentication.getUser()
     if (user) {
-      dialog.persId.value = getIdFromUser(user)
-      dialog.persName.value = user.fullname
+      dialog.persId.value = dialog.persId.value || getIdFromUser(user)
+      dialog.persName.value = dialog.persName.value || user.fullname
     }    
     dialog.show()
     await new Promise((resolve, reject) => {
@@ -678,21 +681,31 @@ async function onClickCreateNewVersionButton(state) {
 
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
-    await addTeiHeaderInfo(respStmt, editionStmt)
-
-    // save new version
+    // save new version first
     let { path } = await saveXml(state.xmlPath, true)
+
+    // update the state to load the new document
     state.xmlPath = path
     state.diffXmlPath = path
-    await fileselection.reload(state)
     await updateState(state)
 
-    // dirty state
-    xmlEditor.isDirty = false
+    // now modify the header
+    await addTeiHeaderInfo(respStmt, editionStmt)
+
+    // save again to the new path
+    await saveXml(path)
+    xmlEditor.markAsClean() 
+
+    // reload the file data to display the new name and inform the user
+    await fileselection.reload(state)
     notify("Document was duplicated. You are now editing the copy.")
-    syncFiles(state)
+    
+    // sync the new file to the WebDav server
+    if (state.webdavEnabled) {
+      syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
+    }
   } catch (e) {
     console.error(e)
     alert(e.message)
@@ -792,7 +805,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
   if (revisionChange) {
     tei_utils.addRevisionChange(xmlDoc, revisionChange)
   }
-  prettyPrintXmlDom(xmlDoc)
+  prettyPrintXmlDom(xmlDoc, 'teiHeader')
   await xmlEditor.updateEditorFromXmlTree()
 }
 

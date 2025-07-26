@@ -3,16 +3,25 @@
  */
 
 /**
- * This modifies the original document object in place and returns it.
+ * This modifies the original document or node object in place and returns it.
  *
- * @param {Document} xmlDoc - The XML DOM Document object.
+ * @param {Document} xmlDoc - The XML DOM Document object
+ * @param {string|null} selector - A selector for `querySelector()` that targets a sub-node for pretty-printing
  * @param {string} [spacing='  '] - The string to use for each level of indentation (e.g., '  ' or '\t').
- * @returns {Document} - The modified XML DOM Document object.
+ * @returns {Document|Node} - The modified XML DOM Document object.
  */
-export function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
-  if (!xmlDoc || typeof xmlDoc.documentElement === 'undefined') {
-    console.error("Invalid XML Document object provided for pretty-printing.");
-    return xmlDoc; // Return unchanged if input is invalid
+export function prettyPrintXmlDom(xmlDoc, selector = null, spacing = '  ') {
+  if (!(xmlDoc instanceof Document)) {
+    throw new Error(`Invalid parameter: Expected document, got ${xmlDoc}`)
+  }
+  let root;
+  if (selector) {
+    root = xmlDoc.querySelector(selector)
+    if (!root) {
+      throw new Error(`Invalid selector: no node found for "${selector}"`) 
+    }
+  } else {
+    root = xmlDoc.documentElement
   }
 
   // Helper function to remove existing pure whitespace text nodes
@@ -96,13 +105,7 @@ export function prettyPrintXmlDom(xmlDoc, spacing = '  ') {
   // --- Main pretty-printing logic ---
 
   // Start by cleaning up any existing mixed whitespace/indentation
-  removeWhitespaceNodes(xmlDoc.documentElement);
-
-  const root = xmlDoc.documentElement;
-  if (!root) {
-    // Should have been caught above, but double check
-    return xmlDoc;
-  }
+  removeWhitespaceNodes(root);
 
   // Add indentation for children of the root element
   // The root itself doesn't get preceding indentation (relative to nothing)

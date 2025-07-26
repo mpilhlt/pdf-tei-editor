@@ -34,7 +34,8 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0]
 const api = {
   updateStateSessionId,
   ensureAuthenticated,
-  getUser
+  getUser,
+  logout
 };
 
 /**
@@ -76,7 +77,7 @@ async function install(state) {
   // @ts-ignore
   ui.toolbar.self.insertAdjacentElement("beforeend", buttonElement)
   updateUi()
-  ui.toolbar.logoutButton.addEventListener("click", _logout)
+  ui.toolbar.logoutButton.addEventListener("click", logout)
   // prevent dialog from closing
   ui.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault())
 }
@@ -161,7 +162,7 @@ function _showLoginDialog() {
  * Logs the user out.
  * @private
  */
-async function _logout() {
+async function logout() {
   try {
     await client.logout();
     await updateState(state, { user: null, sessionId: null });

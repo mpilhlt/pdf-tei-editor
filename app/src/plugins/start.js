@@ -149,13 +149,6 @@ async function start(state) {
 async function saveIfDirty() {
   const filePath = String(ui.toolbar.xml.value)
 
-  // track weird bug where the xmlEditor is not initialized yet
-  if (!xmlEditor || !xmlEditor.isDirty) {
-    logger.warn("XML Editor is not initialized yet, cannot save.")
-    console.log(xmlEditor)
-    return
-  }
-
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
     const result = await services.saveXml(filePath)
     if (result.status == "unchanged") {
@@ -285,6 +278,9 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           updateState(state, { editorReadOnly: true });
         } else if (error.statusCode === 504) {
           logger.warn("Temporary connection failure, will try again...")
+        } else if (error.statusCode === 403) {
+          notify("You have been logged out") 
+          authentication.logout()
         } else {
           // Another server-side error occurred
           if (state.webdavEnabled) {
