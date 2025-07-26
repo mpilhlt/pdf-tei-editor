@@ -11,6 +11,7 @@
     "@codemirror/view": "../../node_modules/@codemirror/view/dist/index.js",
     "markdown-it": "../../node_modules/markdown-it/index.mjs",
     "codemirror": "../../node_modules/codemirror/dist/index.js",
+    "entities": "../../node_modules/entities/dist/esm/index.js",
     "uuid": "../../node_modules/uuid/dist/esm-browser/index.js"
   },
   "scopes": {
@@ -77,7 +78,7 @@
     "../../node_modules/markdown-it/": {
       "punycode.js": "../../node_modules/punycode.js/punycode.es6.js",
       "linkify-it": "../../node_modules/linkify-it/index.mjs",
-      "entities": "../../node_modules/entities/lib/esm/index.js",
+      "entities": "../../node_modules/markdown-it/node_modules/entities/lib/esm/index.js",
       "uc.micro": "../../node_modules/uc.micro/index.mjs",
       "mdurl": "../../node_modules/mdurl/index.mjs"
     },

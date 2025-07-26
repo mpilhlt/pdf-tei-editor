@@ -40295,6 +40295,54 @@ function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
   return defaultIndentation; // Default value if indentation cannot be reliably determined
 }
 
+const xmlReplacer = /["$&'<>\u0080-\uFFFF]/g;
+const xmlCodeMap = new Map([
+    [34, "&quot;"],
+    [38, "&amp;"],
+    [39, "&apos;"],
+    [60, "&lt;"],
+    [62, "&gt;"],
+]);
+// For compatibility with node < 4, we wrap `codePointAt`
+const getCodePoint = 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+String.prototype.codePointAt == null
+    ? (c, index) => (c.charCodeAt(index) & 64512) === 55296
+        ? (c.charCodeAt(index) - 55296) * 1024 +
+            c.charCodeAt(index + 1) -
+            56320 +
+            65536
+        : c.charCodeAt(index)
+    : // http://mathiasbynens.be/notes/javascript-encoding#surrogate-formulae
+        (input, index) => input.codePointAt(index);
+/**
+ * Encodes all non-ASCII characters, as well as characters not valid in XML
+ * documents using XML entities.
+ *
+ * If a character has no equivalent entity, a
+ * numeric hexadecimal reference (eg. `&#xfc;`) will be used.
+ */
+function encodeXML(input) {
+    let returnValue = "";
+    let lastIndex = 0;
+    let match;
+    while ((match = xmlReplacer.exec(input)) !== null) {
+        const { index } = match;
+        const char = input.charCodeAt(index);
+        const next = xmlCodeMap.get(char);
+        if (next === undefined) {
+            returnValue += `${input.substring(lastIndex, index)}&#x${getCodePoint(input, index).toString(16)};`;
+            // Increase by 1 if we have a surrogate pair
+            lastIndex = xmlReplacer.lastIndex += Number((char & 64512) === 55296);
+        }
+        else {
+            returnValue += input.substring(lastIndex, index) + next;
+            lastIndex = index + 1;
+        }
+    }
+    return returnValue + input.substr(lastIndex);
+}
+
 /**
  * @import {SyntaxNode, Tree} from '@lezer/common'
  * @import {Extension, Range} from '@codemirror/state'
@@ -40804,13 +40852,55 @@ class XMLEditor extends EventTarget {
 
   /**
    * Returns the string representation of the XML tree, if one exists
+   * @param {Object} [config] - Configuration object.
+   * @param {boolean} [config.escapeXmlEntities=false] - Whether to escape XML entities.
+   * @param {string[]} [config.entityList] - A list of characters to escape.
    * @returns {string} 
    */
-  getXML() {
-    if (this.#xmlTree) {
-      return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
+  getXML(config = {}) {
+    if (!this.#xmlTree) {
+      return ''
     }
-    return ''
+
+    if (!config.escapeXmlEntities) {
+      return this.#serialize(this.#xmlTree, false);
+    }
+
+    const clonedTree = this.#xmlTree.cloneNode(true);
+
+    const escapeNodes = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        let text = node.textContent;
+        if (config.entityList) {
+          for (const char of config.entityList) {
+            text = text.replace(new RegExp(char, 'g'), encodeXML(char));
+          }
+        } else {
+          text = encodeXML(text);
+        }
+        node.textContent = text;
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = /** @type {Element} */ (node);
+        for (const attr of Array.from(element.attributes)) {
+          let value = attr.value;
+          if (config.entityList) {
+            for (const char of config.entityList) {
+              value = value.replace(new RegExp(char, 'g', encodeXML(char)));
+            }
+          } else {
+            value = encodeXML(value);
+          }
+          attr.value = value;
+        }
+        for (const child of Array.from(node.childNodes)) {
+          escapeNodes(child);
+        }
+      }
+    };
+
+    escapeNodes(clonedTree);
+
+    return this.#serialize(clonedTree, false);
   }
 
   /**
@@ -44433,7 +44523,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
   }
   try {
     api$a.addMessage("Saving XML...", "xml", "saving");
-    return await api$7.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
+    return await api$7.saveXml(xmlEditor.getXML({escapeXmlEntities:true}), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message);
     api$9.error(`Could not save XML: ${e.message}`);
