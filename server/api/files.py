@@ -13,6 +13,8 @@ from server.lib.server_utils import (
 from server.lib.locking import (
     acquire_lock, release_lock, get_all_active_locks, check_lock
 )
+from server.lib.xml_utils import encode_xml_entities
+from server.api.config import read_config
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
@@ -77,6 +79,10 @@ def save():
 
     if not xml_string or not file_path_rel:
         raise ApiError("XML content and file path are required.")
+    
+    # encode xml entities as per configuration
+    if read_config().get("xml.encode-entities", False) == True:
+        xml_string = encode_xml_entities(xml_string)
 
     # The file path used for locking must be consistent
     lock_file_path = file_path_rel

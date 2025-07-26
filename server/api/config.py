@@ -1,5 +1,5 @@
 # Very simple json file based config management, configuration changes will lead to repo changes
-# Todo: user-specific config values
+# Todo: user-specific config values, protect route with authentication
 
 from flask import Blueprint, jsonify, request, current_app
 import os
@@ -12,14 +12,14 @@ from server.lib.server_utils import ApiError
 bp = Blueprint("config", __name__, url_prefix="/api/config")
 
 # Paths
-CONFIG_PATH = os.path.join("config")
+CONFIG_PATH = os.path.join("db")
 INSTRUCTION_DATA_PATH = os.path.join(CONFIG_PATH, "prompt.json")
 CONFIG_FILE_PATH = os.path.join(CONFIG_PATH,'config.json')
 
 # Concurrency lock
 config_lock = threading.Lock()
 
-def read_config():
+def read_config() -> dict:
     """Reads the config file, handling file not found and JSON errors."""
     with config_lock:
         try:
@@ -30,7 +30,7 @@ def read_config():
             # Re-raise the exception or return an error indicator
             raise e
 
-def write_config(config_data):
+def write_config(config_data:dict):
     """Writes the config data to the file safely."""
     with config_lock:
         try:

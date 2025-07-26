@@ -109,6 +109,18 @@ The application uses a simple, file-based authentication system. User data is st
 
 For more information, run `bin/manage.py help` or `bin/manage.py help user`.
 
+The default user is "admin" with a password of "admin". Please remove that user immediately and add your own instead:
+
+```bash
+./bin/manage.py user remove admin
+./bin/manage.py user add myusername --password myuserpass
+./bin/manage.py user set myusername fullname "Full Name"
+./bin/manage.py user add-role myusername admin
+
+```
+
+The roles ("user", "admin") are currently not used, but will be in future releases. 
+
 ## Update the XSD schema
 
 The XSD schema of the documents is downloaded and cached. Currently, there is no mechanism to clear the cache through the user interface. Simply delete the `schema/cache` directory manually to clear the cache.

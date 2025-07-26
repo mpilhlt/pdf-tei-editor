@@ -40,6 +40,7 @@ web_root = project_root / 'app' / 'web'
 node_modules_root = project_root / 'node_modules'
 src_root = project_root / 'app' / 'src'
 data_root = project_root / 'data' if local_webdav_root is None else local_webdav_root
+config_dir = project_root / 'config'
 
 # Flask app
 app = Flask(__name__, static_folder=str(project_root))
@@ -48,11 +49,13 @@ app = Flask(__name__, static_folder=str(project_root))
 app_db_dir = project_root / 'db'
 app.config['DB_DIR'] = app_db_dir
 
-# Initialize users.json if it doesn't exist
-users_json_path = app_db_dir / 'users.json'
-if not users_json_path.exists():
-    shutil.copy(project_root / 'users.json.dist', users_json_path)
-    print(f"Copied users.json.dist to {users_json_path}")
+# Initialize configuration and user management
+for file in os.listdir(config_dir):
+    if file.endswith('json'):
+        config_db_file = app_db_dir / file
+        if not config_db_file.exists():
+            shutil.copy(config_dir / file, config_db_file)
+            print(f"Copied {file} to {app_db_dir}")
 
 # Dynamically register blueprints from the 'api' folder
 api_folder = os.path.join(server_root, 'api')
@@ -120,7 +123,10 @@ def serve_static(path):
 # Serve config files 
 @app.route('/config/<path:path>')
 def serve_config(path):
-    return send_from_directory(project_root / 'config', path)
+    # selectively allow access
+    if path in ["config.json", "tei.json", "prompt.json"]:
+        return send_from_directory(app_db_dir, path)
+    return jsonify({"error": "Access denied"}), 403
 
 # Serve documentation
 @app.route('/docs/<path:path>')
