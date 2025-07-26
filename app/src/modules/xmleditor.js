@@ -19,6 +19,8 @@ import { indentWithTab } from "@codemirror/commands"
 import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension, detectXmlIndentation } from './codemirror_utils.js';
 import { $$ } from './browser-utils.js';
 
+import { encodeXML } from 'entities';
+
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
  * tree in sync as far as possible, and provides linting and diffing.
@@ -523,11 +525,11 @@ export class XMLEditor extends EventTarget {
    * Returns the string representation of the XML tree, if one exists
    * @returns {string} 
    */
-  getXML() {
-    if (this.#xmlTree) {
-      return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
+  getXML(config = {}) {
+    if (!this.#xmlTree) {
+      return ''
     }
-    return ''
+    return this.#serialize(this.#xmlTree, false);
   }
 
   /**

@@ -5,9 +5,12 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone, timedelta
 from flask import current_app
 from webdav4.client import Client, ResourceAlreadyExists, ResourceNotFound
+from server.api.config import read_config
 
 # a custom exception class is not needed since ApiError is defined in server_utils
 from .server_utils import ApiError
+
+LOCK_TIMEOUT_SECONDS = 60
 
 class LockStorage(ABC):
     @abstractmethod
@@ -128,7 +131,7 @@ def get_file_from_lock_path(lock_path):
     lock_file_name = os.path.basename(lock_path)
     return "/data/" + lock_file_name.replace('$$$', '/').replace('.lock', '')
 
-LOCK_TIMEOUT_SECONDS = 60
+
 
 def is_lock_stale(lock_mtime):
     """Checks if a lock's modification time is older than the timeout."""
@@ -166,8 +169,8 @@ def acquire_lock(file_path, session_id):
                 current_app.logger.info(f"Refreshed own lock for {file_path}")
                 return True
 
-            if is_lock_stale(storage.get_mtime(lock_path)):
-                # Lock is stale, take it over.
+            if not existing_lock_id or existing_lock_id =="" or is_lock_stale(storage.get_mtime(lock_path)):
+                # Lock is empty or stale, take it over.
                 write_lock(overwrite=True)
                 current_app.logger.warning(f"Took over stale lock for {file_path} and session id {session_id} from session {existing_lock_id}")
                 return True
@@ -176,8 +179,8 @@ def acquire_lock(file_path, session_id):
                 current_app.logger.warning(f"Failed to acquire lock for {file_path} and session id {session_id}. Held by {existing_lock_id}.")
                 return False
         except Exception as e:
-            current_app.logger.error(f"Error checking existing lock for {file_path}: {e}")
-            return False
+            raise RuntimeError(f"Error checking existing lock for {file_path}: {e}")
+            
         
 def release_lock(file_path, session_id):
     """Releases the lock for a given file if it is held by the current session."""

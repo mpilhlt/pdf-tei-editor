@@ -13,6 +13,8 @@ from server.lib.server_utils import (
 from server.lib.locking import (
     acquire_lock, release_lock, get_all_active_locks, check_lock
 )
+from server.lib.xml_utils import encode_xml_entities
+from server.api.config import read_config
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
@@ -77,6 +79,11 @@ def save():
 
     if not xml_string or not file_path_rel:
         raise ApiError("XML content and file path are required.")
+    
+    # encode xml entities as per configuration
+    if read_config().get("xml.encode-entities", False) == True:
+        current_app.logger.debug("Encoding XML entities")
+        xml_string = encode_xml_entities(xml_string)
 
     # The file path used for locking must be consistent
     lock_file_path = file_path_rel
@@ -86,40 +93,28 @@ def save():
         raise ApiError("Failed to acquire lock", status_code = 423)
     current_app.logger.info(f"Acquired lock for {lock_file_path}")
     
-    try:
-        data_root = current_app.config["DATA_ROOT"]
-        
-        # Determine the final save path
-        if save_as_new_version:
-            file_id = Path(safe_file_path(file_path_rel)).stem
-            version = make_timestamp().replace(" ", "_").replace(":", "-")
-            final_file_rel = os.path.join("versions", version, file_id + ".xml")
-            status = "new"
-        else:
-            final_file_rel = safe_file_path(file_path_rel)
-            status = "saved"
+    data_root = current_app.config["DATA_ROOT"]
+    
+    # Determine the final save path
+    if save_as_new_version:
+        file_id = Path(safe_file_path(file_path_rel)).stem
+        version = make_timestamp().replace(" ", "_").replace(":", "-")
+        final_file_rel = os.path.join("versions", version, file_id + ".xml")
+        status = "new"
+    else:
+        final_file_rel = safe_file_path(file_path_rel)
+        status = "saved"
 
-        full_save_path = os.path.join(data_root, final_file_rel)
-        remove_obsolete_marker_if_exists(full_save_path, current_app.logger)
-        os.makedirs(os.path.dirname(full_save_path), exist_ok=True)
+    full_save_path = os.path.join(data_root, final_file_rel)
+    remove_obsolete_marker_if_exists(full_save_path, current_app.logger)
+    os.makedirs(os.path.dirname(full_save_path), exist_ok=True)
+    
+    # Write the file
+    with open(full_save_path, "w", encoding="utf-8") as f:
+        f.write(xml_string)
+    current_app.logger.info(f"Saved file to {full_save_path}")
 
-        # Avoid saving if content is identical
-        if not save_as_new_version and os.path.exists(full_save_path):
-            with open(full_save_path, "r", encoding='utf-8') as f:
-                if f.read() == xml_string:
-                    current_app.logger.info("Content unchanged, not saving.")
-                    return jsonify({'status': 'unchanged', 'path': "/data/" + final_file_rel})
-        
-        # Write the file
-        with open(full_save_path, "w", encoding="utf-8") as f:
-            f.write(xml_string)
-        current_app.logger.info(f"Saved file to {full_save_path}")
-
-        return jsonify({'status': status, 'path': "/data/" + final_file_rel})
-
-    finally:
-        # Always release the lock
-        release_lock(lock_file_path, session_id)
+    return jsonify({'status': status, 'path': "/data/" + final_file_rel})
 
 
 @bp.route("/delete", methods=["POST"])
@@ -342,7 +337,8 @@ def get_version_name(file_path):
     try:
         tree = etree.parse(file_path)
     except etree.XMLSyntaxError as e:
-        current_app.logger.error(f"XML Syntax Error in {file_path}: {e}")
+        current_app.logger.warning(f"XML Syntax Error in {file_path}: {str(e)}")
+        return ""
         
     root = tree.getroot()
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}

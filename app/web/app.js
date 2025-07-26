@@ -20,7 +20,7 @@ function _isFunc(o) {
   return !!(o.constructor && o.call && o.apply);
 }
 
-function _get(obj, prop) {
+function _get$1(obj, prop) {
   var arr = prop.split('.');
   for (var i = 0; i < arr.length; i++) {
     if (!(arr[i] in obj)) return undefined;
@@ -123,11 +123,11 @@ var pluginManager = {
     var obj = arr.join('.');
 
     return this.getPlugins(prop).map(function (p) {
-      var method = _get(p, prop);
+      var method = _get$1(p, prop);
       if (!_isFunc(method) || noCall) return method;
       try {
         isDebug && console.log('Before', p.name, prop, args);
-        return method.apply(_get(p, obj), args);
+        return method.apply(_get$1(p, obj), args);
       } catch (err) {
         // When a plugin failed, doesn't break the app
         console.log('Failed to invoke plugin: ' + p.name + '!' + prop);
@@ -246,7 +246,7 @@ let currentLogLevel = logLevel.INFO;
 /**
  * Easy to use logging API which will  send log events to all registered log plugins 
  */
-const api$c = {
+const api$d = {
   /**
    * Sets the log level {@see logLevel}
    * @param {Number} level The log level
@@ -284,12 +284,12 @@ const api$c = {
   critical: message => pluginManager.invoke(endpoints.log.critical, {message})
 };
 
-api$c.error = api$c.critical; // alias for critical
+api$d.error = api$d.critical; // alias for critical
 
 /**
  * component plugin
  */
-const plugin$h = {
+const plugin$i = {
   name: name$1,
   install: install$g,
   log: {
@@ -306,7 +306,7 @@ const plugin$h = {
 //
 
 async function install$g(state) {
-  console.log(`Installing plugin "${plugin$h.name}"`);
+  console.log(`Installing plugin "${plugin$i.name}"`);
 }
 
 
@@ -375,6 +375,98 @@ function critical({message}) {
 }
 
 /**
+ * Plugin providing an application configuration related API
+ * The configuration is different from the application's state as it is stored on the server and typically 
+ * changes only if explicit and relatively permanent changes to the application's behavior are intended.
+ * It exposes only a public API and has no install or update lifecycle hooks 
+ */
+
+
+/**
+ * The public API of the config plugin.
+ * @namespace
+ */
+const api$c = {
+  get,
+  set,
+  load: updateConfigData
+};
+
+/**
+ * The configuration plugin definition.
+ * @type {Plugin}
+ */
+const plugin$h = {
+  name: "config",
+  deps: ['client']
+};
+
+/**
+ * A Map-like object holding the configuration data fetched from the server.
+ * @type {Object<string, any> | undefined}
+ */
+let configMap;
+
+/**
+ * Fetches the configuration data from the server and updates the local `configMap`.
+ * @async
+ * @returns {Promise<void>} A promise that resolves when the configuration is updated.
+ */
+async function updateConfigData () {
+  api$d.debug('Updating configuration data.');
+  configMap = await api$7.getConfigData();
+}
+
+/**
+ * Checks if a given key exists in the configuration data and returns it value. If the key does not exist,
+ * it either returns a default value if one has been passed, or throws a type error
+ * @param {string} key The configuration key to check.
+ * @param {string} [defaultValue] The value to return if the key does not exist
+ * @throws {TypeError} If the key does not exist in the configuration and no default value hass been passed
+ */
+async function _get(key, defaultValue){
+  if (configMap === undefined) {
+    throw new Error("Configuration data has not been loaded yet")
+  }
+  if (key in configMap) {
+    return configMap[key]
+  } 
+  if (defaultValue !== undefined) {
+    return defaultValue
+  }
+  throw new TypeError(`No configuration key "${key}" exists`)
+}
+
+/**
+ * Retrieves a configuration value for a given key.
+ * @async
+ * @param {string} key The key of the configuration value to retrieve.
+ * @param {string} [defaultValue] The value to return if the key does not exist
+ * @param {boolean} [updateFirst=false] - If true, forces an update from the server before getting the value.
+ * @returns {Promise<any>} A promise that resolves with the configuration value.
+ * @throws {TypeError} If the key does not exist.
+ */
+async function get(key, defaultValue, updateFirst=false) {
+  if (!configMap || updateFirst) {
+    await updateConfigData();
+  }
+  return await _get(key, defaultValue)
+}
+
+/**
+ * Sets a configuration value for a given key on the server.
+ * @async
+ * @param {string} key The key of the configuration value to set.
+ * @param {any} value The new value to set.
+ * @returns {Promise<void>} A promise that resolves when the value has been set.
+ * @throws {TypeError} If the key does not exist.
+ */
+async function set(key, value) {
+  await _get(key); // this checks the key 
+  await api$7.setConfigValue(key, value);
+}
+
+/**
  * This component sets all string properties of the application state as hash parameters of the URL
  * This might have to be changed later in case we do not want to show all string properties in the app state
  */
@@ -411,7 +503,7 @@ const plugin$g = {
  * @param {ApplicationState} state 
  */
 async function install$f(state){
-  api$c.debug(`Installing plugin "${plugin$g.name}"`);
+  api$d.debug(`Installing plugin "${plugin$g.name}"`);
 }
 
 /** 
@@ -10929,7 +11021,7 @@ const plugin$f = {
  * @param {ApplicationState} state 
  */
 async function install$e(state){
-  api$c.debug(`Installing plugin "${plugin$f.name}"`);
+  api$d.debug(`Installing plugin "${plugin$f.name}"`);
 }
 
 /**
@@ -10975,7 +11067,7 @@ function removeMessage(type, id) {
   if (span) {
     statusbar.removeChild(span);
   } else {
-    api$c.warn(`${type} statusbar does not contain a message with id ${id}`);
+    api$d.warn(`${type} statusbar does not contain a message with id ${id}`);
   }
 }
 
@@ -11020,7 +11112,7 @@ const plugin$e = {
  * @param {ApplicationState} app The main application
  */
 async function install$d(app) {
-  api$c.debug(`Installing plugin "${plugin$e.name}"`);
+  api$d.debug(`Installing plugin "${plugin$e.name}"`);
   await createHtmlElements("dialog.html", document.body);
   updateUi();
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.self.hide());
@@ -11488,9 +11580,9 @@ const plugin$d = {
  * @returns {Promise<void>}
  */
 async function install$c(state) {
-  api$c.debug(`Installing plugin "${plugin$d.name}"`);
+  api$d.debug(`Installing plugin "${plugin$d.name}"`);
   await pdfViewer.isReady();
-  api$c.info("PDF Viewer ready.");
+  api$d.info("PDF Viewer ready.");
   pdfViewer.show();
 }
 
@@ -40806,11 +40898,11 @@ class XMLEditor extends EventTarget {
    * Returns the string representation of the XML tree, if one exists
    * @returns {string} 
    */
-  getXML() {
-    if (this.#xmlTree) {
-      return this.#serialize(this.#xmlTree, /* do not remove namespace declaration */ false)
+  getXML(config = {}) {
+    if (!this.#xmlTree) {
+      return ''
     }
-    return ''
+    return this.#serialize(this.#xmlTree, false);
   }
 
   /**
@@ -41830,13 +41922,13 @@ const plugin$c = {
  * @param {ApplicationState} state
  */
 async function install$b(state) {
-  api$c.debug(`Installing plugin "${plugin$c.name}"`);
+  api$d.debug(`Installing plugin "${plugin$c.name}"`);
   // load autocomplete data
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
     xmlEditor.startAutocomplete(tagData);
-    api$c.info("Loaded autocompletion data...");
+    api$d.info("Loaded autocompletion data...");
   } catch (error) {
     console.error('Error fetching from', tagDataPath, ":", error);
   }
@@ -41855,14 +41947,10 @@ async function install$b(state) {
       try {
         view.dispatch(setDiagnostics(view.state, [diagnostic]));
       } catch (error) {
-        api$c.warn("Error setting diagnostics: " + error.message);
+        api$d.warn("Error setting diagnostics: " + error.message);
       }
     }
   });
-
-  // save dirty editor content after an update
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty$1());
-
 }
 
 /**
@@ -41879,7 +41967,7 @@ async function update$8(state) {
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
     // update the editor read-only state
     xmlEditor.setReadOnly(state.editorReadOnly);
-    api$c.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
+    api$d.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     if (state.editorReadOnly) {
       ui$1.xmlEditor.classList.add("editor-readonly");
       api$a.addMessage("🔒 File is read-only", "xml", "readonly-state");
@@ -41931,22 +42019,6 @@ async function onSelectionChange(state) {
 }
 
 /**
- * Save the current XML file if the editor is "dirty"
- */
-async function saveIfDirty$1() {
-  const filePath = String(ui$1.toolbar.xml.value);
-
-  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
-    const result = await api$4.saveXml(filePath);
-    if (result.status == "unchanged") {
-      api$c.debug(`File has not changed`);
-    } else {
-      api$c.debug(`Saved file to ${result.path}`);
-    }
-  }
-}
-
-/**
  * @import { Diagnostic } from '@codemirror/lint'
  * @import { ApplicationState } from '../app.js'
  */
@@ -41985,7 +42057,7 @@ let lastDiagnostics = [];
  * @param {ApplicationState} state 
  */
 async function install$a(state) {
-  api$c.debug(`Installing plugin "${plugin$b.name}"`);
+  api$d.debug(`Installing plugin "${plugin$b.name}"`);
   // add the linter to the editor
   xmlEditor.addLinter([
     linter(lintSource, { 
@@ -42049,19 +42121,19 @@ async function lintSource(view) {
   const doc = view.state.doc;
   const xml = doc.toString();
   if (xml == "") {
-    api$c.debug("Nothing to validate.");
+    api$d.debug("Nothing to validate.");
     return [];
   }
 
   // don't validate if disabled and use last diagnostics
   if (_isDisabled) {
-    api$c.debug("Ignoring validation request: Validation is disabled");
+    api$d.debug("Ignoring validation request: Validation is disabled");
     return lastDiagnostics;
   }
 
   // if this is called while another validation is ongoing, return the last diagnostics
   if (validationInProgress) {
-    api$c.debug("Ignoring validation request: Validation is ongoing.");
+    api$d.debug("Ignoring validation request: Validation is ongoing.");
     return lastDiagnostics;
   }
 
@@ -42071,7 +42143,7 @@ async function lintSource(view) {
     let validationErrors;
     while (true) {
       validatedVersion = xmlEditor.getDocumentVersion(); // rewrite this!
-      api$c.debug(`Requesting validation for document version ${validatedVersion}...`);
+      api$d.debug(`Requesting validation for document version ${validatedVersion}...`);
       // inform other plugins
       invoke(endpoints.validation.inProgress, validationPromise);
       // send request to server
@@ -42083,7 +42155,7 @@ async function lintSource(view) {
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`);
       // check if document has changed in the meantime
       if (validatedVersion != xmlEditor.getDocumentVersion()) {
-        api$c.debug("Document has changed, restarting validation...");
+        api$d.debug("Document has changed, restarting validation...");
       } else {
         // convert xmllint errors to Diagnostic objects
         const diagnostics = validationErrors.map(/** @type {object} */ error => {
@@ -42134,11 +42206,11 @@ function configure({ mode = "auto" }) {
   switch (mode) {
     case "auto":
       _isDisabled = false;
-      api$c.info("Validation is enabled");
+      api$d.info("Validation is enabled");
       break
     case "off":
       _isDisabled = true;
-      api$c.info("Validation is disabled");
+      api$d.info("Validation is disabled");
       break
     default:
       throw new Error("Invalid mode parameter")
@@ -42153,7 +42225,7 @@ function configure({ mode = "auto" }) {
 async function validate() {
   if (isValidating()) {
     // if a validation is ongoing, we can wait for it to finish and use the result
-    api$c.debug("Validation is ongoing, waiting for it to finish");
+    api$d.debug("Validation is ongoing, waiting for it to finish");
     return await anyCurrentValidation()
   }
 
@@ -42237,7 +42309,7 @@ function removeDiagnosticsInChangedRanges(update) {
       d.to = to;
       diagnostics.push(d);
     } else {
-      api$c.debug("Removing diagnostic " + JSON.stringify(d));
+      api$d.debug("Removing diagnostic " + JSON.stringify(d));
     }
   });
 
@@ -42652,7 +42724,6 @@ function notify(message, variant = 'primary', icon = 'info-circle', duration = 3
 
 /**
  * Plugin providing a link to server-side methods
- * This is not really a plugin as it does not implement any endpoints (yet)
  */
 
 
@@ -42752,7 +42823,7 @@ const api$7 = {
   deleteFiles,
   createVersionFromUpload,
   uploadFile,
-  getConfigValue,
+  getConfigData,
   setConfigValue,
   syncFiles: syncFiles$1,
   moveFiles,
@@ -42785,7 +42856,7 @@ const plugin$a = {
 async function update$6(state) {
   if (sessionId !== state.sessionId) {
     sessionId = state.sessionId;
-    api$c.debug(`Setting session id to ${sessionId}`);
+    api$d.debug(`Setting session id to ${sessionId}`);
   }
   //console.warn(plugin.name,"done")
   return sessionId
@@ -42870,7 +42941,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       error = e;
       if (error instanceof ConnectionError) {
         // retry in case of ConnectionError
-        api$c.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
+        api$d.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
@@ -42881,7 +42952,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
-  api$c.warn([error.statusCode, error.name, error.message].toString());
+  api$d.warn([error.statusCode, error.name, error.message].toString());
   if (!(error instanceof LockedError)) {
     notify(error.message, 'error');
   }
@@ -43031,17 +43102,12 @@ async function moveFiles(pdfPath, xmlPath, destinationCollection) {
   });
 }
 
-
 /**
- * Retrieves a configuration value from the server
+ * Returns all server-side configuration values for this application
+ * @returns {Object} 
  */
-async function getConfigValue(key) {
-  if (typeof key !== "string" || key.length === 0) {
-    throw new Error("Key must be a non-empty string");
-  }
-  const path = `/config/get/${encodeURIComponent(key)}`;
-  const value = await callApi(path, 'GET');
-  return value;
+async function getConfigData() {
+  return await callApi('/config', 'GET')
 }
 
 /**
@@ -43270,7 +43336,7 @@ const fileSelectionControls = await createHtmlElements('file-selection.html');
  */
 async function install$9(state) {
 
-  api$c.debug(`Installing plugin "${plugin$9.name}"`);
+  api$d.debug(`Installing plugin "${plugin$9.name}"`);
   
   // install controls on menubar
   ui$1.toolbar.self.append(...fileSelectionControls);
@@ -43327,7 +43393,7 @@ async function reload(state) {
  * @param {ApplicationState} state
  */
 async function reloadFileData(state) {
-  api$c.debug("Reloading file data");
+  api$d.debug("Reloading file data");
   let data = await api$7.getFileList();
   if (!data || data.length === 0) {
     api$9.error("No files found");
@@ -43356,7 +43422,7 @@ async function populateSelectboxes(state) {
   }
   stateCache = jsonState;
 
-  api$c.debug("Populating selectboxes");
+  api$d.debug("Populating selectboxes");
 
   if (fileData === null) {
     await reloadFileData();
@@ -43567,7 +43633,7 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
  * @param {ApplicationState} state
  */
 async function install$8(state) {
-  api$c.debug(`Installing plugin "${plugin$8.name}"`);
+  api$d.debug(`Installing plugin "${plugin$8.name}"`);
 
   // install controls on menubar
   ui$1.toolbar.self.append(extractionBtnGroup);
@@ -44242,7 +44308,7 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
  * @param {ApplicationState} state
  */
 async function install$7(state) {
-  api$c.debug(`Installing plugin "${plugin$7.name}"`);
+  api$d.debug(`Installing plugin "${plugin$7.name}"`);
 
   // install controls on menubar
   ui$1.toolbar.self.append(...documentActionButtons);
@@ -44347,7 +44413,7 @@ async function load$1(state, { xml, pdf }) {
   // PDF 
   if (pdf) {
     await updateState(state, { pdfPath: null, xmlPath: null, diffXmlPath: null });
-    api$c.info("Loading PDF: " + pdf);
+    api$d.info("Loading PDF: " + pdf);
     promises.push(pdfViewer.load(pdf));
   }
 
@@ -44363,10 +44429,10 @@ async function load$1(state, { xml, pdf }) {
         }
         try {
           await api$7.acquireLock(xml);
-          api$c.debug(`Acquired lock for file ${xml}`);
+          api$d.debug(`Acquired lock for file ${xml}`);
         } catch (error) {
           if (error instanceof api$7.LockedError) {
-            api$c.debug(`File ${xml} is locked, loading in read-only mode`);
+            api$d.debug(`File ${xml} is locked, loading in read-only mode`);
             notify(`File is being edited by another user, loading in read-only mode`);
             file_is_locked = true;
           } else {
@@ -44381,7 +44447,7 @@ async function load$1(state, { xml, pdf }) {
 
     removeMergeView(state);
     await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked });
-    api$c.info("Loading XML: " + xml);
+    api$d.info("Loading XML: " + xml);
     promises.push(xmlEditor.loadXml(xml));
   }
 
@@ -44415,7 +44481,7 @@ async function load$1(state, { xml, pdf }) {
  * @returns {Promise<object[]>}
  */
 async function validateXml() {
-  api$c.info("Validating XML...");
+  api$d.info("Validating XML...");
   return await api$8.validate() // todo use endpoint instead
 }
 
@@ -44427,13 +44493,13 @@ async function validateXml() {
  * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
-  api$c.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+  api$d.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
   if (!xmlEditor.getXmlTree()) {
     throw new Error("No XML valid document in the editor")
   }
   try {
     api$a.addMessage("Saving XML...", "xml", "saving");
-    return await api$7.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
+    return await api$7.saveXml(xmlEditor.getXML({escapeXmlEntities:true}), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message);
     api$9.error(`Could not save XML: ${e.message}`);
@@ -44450,7 +44516,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
 async function showMergeView(state, diff) {
-  api$c.info("Loading diff XML: " + diff);
+  api$d.info("Loading diff XML: " + diff);
   ui$1.spinner.show('Computing file differences, please wait...');
   try {
     await xmlEditor.showMergeView(diff);
@@ -44592,9 +44658,9 @@ async function deleteAll(state) {
  */
 async function syncFiles(state) {
   if (state.webdavEnabled) {
-    api$c.debug("Synchronizing files on the server");
+    api$d.debug("Synchronizing files on the server");
     const summary = await api$7.syncFiles();
-    api$c.debug(summary);
+    api$d.debug(summary);
     return summary
   }
   return false
@@ -44954,7 +45020,7 @@ const pluginId = "floating-panel";
  * @param {ApplicationState} state
  */
 async function install$6(state) {
-  api$c.debug(`Installing plugin "${plugin$6.name}"`);
+  api$d.debug(`Installing plugin "${plugin$6.name}"`);
 
   document.body.append(...floatingPanelControls);
   updateUi();
@@ -44976,7 +45042,7 @@ async function install$6(state) {
   /**
    * @type {{value:string, label:string}[]}
    */
-  const selectBoxData = await api$7.getConfigValue("navigation.xpath.list");
+  const selectBoxData = await api$c.get("navigation.xpath.list");
   selectBoxData.forEach(item => {
     const option = document.createElement('option');
     option.value = item.value || '';
@@ -45113,7 +45179,7 @@ async function changeNodeIndex(state, delta) {
  */
 async function onAutoSearchSwitchChange(evt) {
   const checked = evt.detail.checked;
-  api$c.info(`Auto search is: ${checked}`);
+  api$d.info(`Auto search is: ${checked}`);
   if (checked && xmlEditor.selectedNode) {
     await api$4.searchNodeContentsInPdf(xmlEditor.selectedNode);
   }
@@ -45280,7 +45346,7 @@ const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'
  * @param {ApplicationState} state The main application
  */
 async function install$5(state) {
-  api$c.debug(`Installing plugin "${plugin$5.name}"`);
+  api$d.debug(`Installing plugin "${plugin$5.name}"`);
   
   // add prompt editor component
   document.body.append(promptEditorDialog);
@@ -45487,7 +45553,7 @@ const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
  * @param {ApplicationState} state 
  */
 async function install$4(state) {
-  api$c.debug(`Installing plugin "${plugin$4.name}"`);
+  api$d.debug(`Installing plugin "${plugin$4.name}"`);
 
   // button
   ui$1.toolbar.teiActions.self.append(teiWizardButton);
@@ -54019,7 +54085,7 @@ const docsBasePath = "../../docs";
  * @param {ApplicationState} state The main application
  */
 async function install$3(state) {
-  api$c.debug(`Installing plugin "${plugin$3.name}"`);
+  api$d.debug(`Installing plugin "${plugin$3.name}"`);
   // add the component html
   await createHtmlElements(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.self.hide());
@@ -54135,7 +54201,7 @@ const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
  * @param {ApplicationState} state
  */
 async function install$2(state) {
-  api$c.debug(`Installing plugin "${plugin$2.name}"`);
+  api$d.debug(`Installing plugin "${plugin$2.name}"`);
 
   // install button & dialog
   ui$1.toolbar.documentActions.self.append(moveBtn);
@@ -54192,7 +54258,7 @@ async function showMoveFilesDialog(state) {
       moveFilesDialog.self.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
-    api$c.warn("User cancelled move files dialog");
+    api$d.warn("User cancelled move files dialog");
     return;
   } finally {
     moveFilesDialog.hide();
@@ -54219,7 +54285,9 @@ async function showMoveFilesDialog(state) {
 
 /**
  * Plugin which hosts the start function, which is responsible for loading the documents at startup
- * Does not export any API
+ * and configures the general behavior of the application. General rule: behavior that depends solely 
+ * on a particular plugin should be configured in the plugin, behavior that depends on the interplay
+ * of several plugins should be configured here.
  */
 
 
@@ -54231,9 +54299,6 @@ async function showMoveFilesDialog(state) {
 const plugin$1 = {
   name: "start",
   install: install$1,
-  validation: {
-    result: onValidationResult
-  },
   start
 };
 
@@ -54249,7 +54314,7 @@ let spinner;
  * @param {ApplicationState} state 
  */
 async function install$1(state) {
-  api$c.debug(`Installing plugin "${plugin$1.name}"`);
+  api$d.debug(`Installing plugin "${plugin$1.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -54270,7 +54335,10 @@ async function start(state) {
     // Authenticate user, otherwise we don't proceed further
     const userData = await api.ensureAuthenticated();
 
-    api$c.info(`Welcome, ${userData.fullname}!`);
+    api$d.info(`Welcome, ${userData.fullname}!`);
+
+    // load config data
+    await api$c.load();
 
     ui$1.spinner.show('Loading documents, please wait...');
 
@@ -54298,7 +54366,7 @@ async function start(state) {
       try {
         await api$4.showMergeView(state, diff);
       } catch (error) {
-        api$c.warn("Error loading diff view: " + error.message);
+        api$d.warn("Error loading diff view: " + error.message);
       }
     } else {
       // b) validation & xpath selection
@@ -54309,7 +54377,7 @@ async function start(state) {
         const endTime = new Date().getTime();
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
-        api$c.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
+        api$d.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
         api$8.configure({ mode: seconds > 3 ? "off" : "auto" });
       });
 
@@ -54324,51 +54392,17 @@ async function start(state) {
       updateState(state);
     }
 
-    // Find the currently selected node's contents in the PDF
-    xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents); 
-
-    // manually show diagnostics if validation is disabled
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
-      if (api$8.isDisabled()) {
-        let view = xmlEditor.getView();
-        // @ts-ignore
-        let diagnostic = evt.detail;
-        try {
-          view.dispatch(setDiagnostics(view.state, [diagnostic]));
-        } catch (error) {
-          api$c.warn("Error setting diagnostics: " + error.message);
-        }
-      }
-    });
-
-    // save dirty editor content after an update
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty());
-
-    // xml vaidation events
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-      const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
-      console.warn("XML is not well-formed", diagnostics);
-      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
-
-      api$a.addMessage("Invalid XML", "xml", "xml-status"); 
-      // @ts-ignore
-      ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
-    });
-    xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
-      // @ts-ignore
-      ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
-      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
-      api$a.removeMessage("xml", "xml-status");
-    });
+    // configure the xml editor events
+    configureXmlEditor();
 
     // Heartbeat mechanism for file locking and offline detection
-    configureHeartbeat(state);
+    configureHeartbeat(state, await api$c.get('heartbeat.interval', 10));
 
     // finish initialization
     ui$1.spinner.hide();
     api$3.show();
     xmlEditor.setLineWrapping(true);
-    api$c.info("Application ready.");
+    api$d.info("Application ready.");
 
   } catch (error) {
     ui$1.spinner.hide();
@@ -54377,16 +54411,6 @@ async function start(state) {
   }
 }
 
-/**
- * Called when a validation has been done. 
- * Used to save the document after successful validation
- * @param {Diagnostic[]} diagnostics 
- */
-async function onValidationResult(diagnostics) {
-  if (diagnostics.length === 0) {
-    saveIfDirty();
-  }
-}
 
 /**
  * Save the current XML file if the editor is "dirty"
@@ -54396,7 +54420,7 @@ async function saveIfDirty() {
 
   // track weird bug where the xmlEditor is not initialized yet
   if (!xmlEditor || !xmlEditor.isDirty) {
-    api$c.warn("XML Editor is not initialized yet, cannot save.");
+    api$d.warn("XML Editor is not initialized yet, cannot save.");
     console.log(xmlEditor);
     return
   }
@@ -54404,11 +54428,49 @@ async function saveIfDirty() {
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
     const result = await api$4.saveXml(filePath);
     if (result.status == "unchanged") {
-      api$c.debug(`File has not changed`);
+      api$d.debug(`File has not changed`);
     } else {
-      api$c.debug(`Saved file to ${result.path}`);
+      api$d.debug(`Saved file to ${result.path}`);
     }
   }
+}
+
+function configureXmlEditor() {
+  // Find the currently selected node's contents in the PDF
+  xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents);
+
+  // manually show diagnostics if validation is disabled
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+    if (api$8.isDisabled()) {
+      let view = xmlEditor.getView();
+      // @ts-ignore
+      let diagnostic = evt.detail;
+      try {
+        view.dispatch(setDiagnostics(view.state, [diagnostic]));
+      } catch (error) {
+        api$d.warn("Error setting diagnostics: " + error.message);
+      }
+    }
+  });
+
+  // save dirty editor content after an update
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty());
+
+  // xml vaidation events
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+    const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
+    console.warn("XML is not well-formed", diagnostics);
+    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
+    api$a.addMessage("Invalid XML", "xml", "xml-status");
+    // @ts-ignore
+    ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
+  });
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+    // @ts-ignore
+    ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
+    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
+    api$a.removeMessage("xml", "xml-status");
+  });
 }
 
 /**
@@ -54417,14 +54479,18 @@ async function saveIfDirty() {
  * @param {number} [lockTimeoutSeconds=60]
  */
 function configureHeartbeat(state, lockTimeoutSeconds = 60) {
+  if (!Number.isInteger(lockTimeoutSeconds)) {
+    throw new Error(`Invalid timeout value: ${lockTimeoutSeconds}`)
+  }
+  api$d.debug(`Configuring a heartbeat of ${lockTimeoutSeconds} seconds`);
   let heartbeatInterval = null;
-  const heartbeatFrequency = (lockTimeoutSeconds / 2) * 1000;
+  const heartbeatFrequency = lockTimeoutSeconds * 1000;
 
   const stopHeartbeat = () => {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = null;
-      api$c.debug("Heartbeat stopped.");
+      api$d.debug("Heartbeat stopped.");
     }
     const filePath = ui$1.toolbar.xml.value;
     api$7.releaseLock(filePath);
@@ -54432,72 +54498,79 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
   const startHeartbeat = () => {
 
+    let editorReadOnlyState;
+
     heartbeatInterval = setInterval(async () => {
 
       const filePath = String(ui$1.toolbar.xml.value);
       const reasonsToSkip = {
         "No user is logged in": state.user === null,
-        "No file path specified": !filePath,
-        "Application is offline": state.offline,
-        "Editor is in read-only mode": state.editorReadOnly,
+        "No file path specified": !filePath
       };
 
       for (const reason in reasonsToSkip) {
         if (reasonsToSkip[reason]) {
-          api$c.debug(`Skipping heartbeat: ${reason}.`);
+          api$d.debug(`Skipping heartbeat: ${reason}.`);
           return;
         }
       }
 
       try {
 
-        api$c.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-        await api$7.sendHeartbeat(filePath);
+        if (!state.editorReadOnly) {
+          api$d.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
+          await api$7.sendHeartbeat(filePath);
+        }
 
-        // If we are here, the request was successful. Check if we were offline.
-        if (!state.webdavEnabled) {
-          api$c.info("Connection restored. Re-enabling WebDAV features.");
+        // reload file list to see updates
+        await api$6.reload(state);
+
+        // If we are here, the request was successful. Check if we were offline before.
+        if (state.offline) {
+          api$d.info("Connection restored.");
           notify("Connection restored.");
-          updateState(state, { webdavEnabled: true, offline: false });
-        } 
-
-         // reload file list to see updates
-        api$6.reload(state);
-      
+          updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
+        }
       } catch (error) {
         console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
         // Handle different types of errors
         if (error instanceof TypeError) {
           // This is likely a network error (client is offline)
-          if (state.webdavEnabled) {
-            api$c.warn("Connection lost. Disabling WebDAV features.");
-            notify("Connection to the server was lost. File synchronization has been disabled.", "warning");
-            updateState(state, { webdavEnabled: false, offline: true });
+          if (state.offline) {
+            // we are still offline
+            const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`;
+            api$d.warn(message);
+            notify(message);
+            return
           }
+          api$d.warn("Connection lost.");
+          notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
+          editorReadOnlyState = state.editorReadOnly;
+          updateState(state, { offline: true, editorReadOnly: true });
         } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
-          api$c.critical("Lock lost for file: " + filePath);
+          api$d.critical("Lock lost for file: " + filePath);
           api$9.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
           updateState(state, { editorReadOnly: true });
         } else if (error.statusCode === 504) {
-          api$c.warn("Temporary connection failure, will try again...");
+          api$d.warn("Temporary connection failure, will try again...");
         } else {
           // Another server-side error occurred
           if (state.webdavEnabled) {
-            api$c.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
+            api$d.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
             api$9.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
             updateState(state, { webdavEnabled: false });
           }
         }
       }
     }, heartbeatFrequency);
-    api$c.info("Heartbeat started.");
+    api$d.info("Heartbeat started.");
   };
   startHeartbeat();
   window.addEventListener('beforeunload', stopHeartbeat);
 }
 
-let lastNode = null; 
+let lastNode = null;
 async function searchNodeContents() {
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
@@ -54506,8 +54579,8 @@ async function searchNodeContents() {
   const node = xmlEditor.selectedNode;
 
   if (autoSearchSwitch.checked && node && node !== lastNode) {
-      await api$4.searchNodeContentsInPdf(node);
-      lastNode = node;
+    await api$4.searchNodeContentsInPdf(node);
+    lastNode = node;
   }
 }
 
@@ -54622,7 +54695,7 @@ let user = null;
  * @param {ApplicationState} state
  */
 async function install(state) {
-  api$c.debug(`Installing plugin "${plugin.name}"`);
+  api$d.debug(`Installing plugin "${plugin.name}"`);
   state.user = null;
   // @ts-ignore
   ui$1.toolbar.self.insertAdjacentElement("beforeend", buttonElement);
@@ -54650,7 +54723,7 @@ async function update(state) {
  */
 async function updateStateSessionId(state) {
   const sessionId = state.sessionId || v4();
-  api$c.info(`Session id is ${sessionId}`);
+  api$d.info(`Session id is ${sessionId}`);
   await updateState(state, {sessionId});
   return sessionId
 }
@@ -54693,7 +54766,7 @@ function _showLoginDialog() {
         resolve(userData); // Resolve the promise on successful login
       } catch (error) {
         dialog.message.textContent = 'Wrong username or password';
-        api$c.error('Login failed:', error.message);
+        api$d.error('Login failed:', error.message);
       }
     }, {once:true});
     dialog.show();
@@ -54711,7 +54784,7 @@ async function _logout() {
     await updateStateSessionId(state);
     await _showLoginDialog();
   } catch (error) {
-    api$c.error('Logout failed:', error);
+    api$d.error('Logout failed:', error);
   }
 }
 
@@ -54776,8 +54849,8 @@ let state = {
  */
 
 /** @type {Plugin[]} */
-const plugins = [plugin$h, plugin$g, plugin$e,
-  plugin$d, plugin$c, plugin$a, plugin$9,
+const plugins = [plugin$i, plugin$g, plugin$a, plugin$h, 
+  plugin$e, plugin$d, plugin$c, plugin$9,
   plugin$7, plugin$8, plugin$6, plugin$5,
   plugin$4, plugin$b, plugin$3, plugin$2, plugin$f,
   plugin,
@@ -54830,7 +54903,7 @@ await invoke(endpoints.install, state);
 const server_state = await api$7.state();
 Object.assign(state, server_state);
 
-api$c.info("Configuring application state from URL");
+api$d.info("Configuring application state from URL");
 api$b.updateStateFromUrlHash(state);
 
 // if we don't have a session id, create one
@@ -54839,4 +54912,4 @@ api.updateStateSessionId(state);
 // start the application 
 await invoke(endpoints.start, state);
 
-export { api$1 as appInfo, api as authentication, api$7 as client, api$9 as dialog, endpoints, api$5 as extraction, api$6 as fileselection, api$3 as floatingPanel, invoke, api$c as logger, pdfViewer, pluginManager, plugins, api$2 as promptEditor, api$4 as services, state, api$a as statusbar, updateState, api$b as urlHash, api$8 as validation, xmlEditor };
+export { api$1 as appInfo, api as authentication, api$7 as client, api$c as config, api$9 as dialog, endpoints, api$5 as extraction, api$6 as fileselection, api$3 as floatingPanel, invoke, api$d as logger, pdfViewer, pluginManager, plugins, api$2 as promptEditor, api$4 as services, state, api$a as statusbar, updateState, api$b as urlHash, api$8 as validation, xmlEditor };

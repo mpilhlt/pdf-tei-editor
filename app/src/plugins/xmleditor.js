@@ -71,10 +71,6 @@ async function install(state) {
       }
     }
   })
-
-  // save dirty editor content after an update
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
-
 }
 
 /**

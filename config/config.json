@@ -23,7 +23,10 @@
   ],
   "model-configurations" : [
     {
-      "label":"foo"
+      "value": "llamore",
+      "label":"LLamore"
     }
-  ]
+  ],
+  "xml.encode-entities": true,
+  "heartbeat.interval": 30
 }
