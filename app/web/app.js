@@ -40898,7 +40898,7 @@ class XMLEditor extends EventTarget {
    * Returns the string representation of the XML tree, if one exists
    * @returns {string} 
    */
-  getXML(config = {}) {
+  getXML() {
     if (!this.#xmlTree) {
       return ''
     }
@@ -44499,7 +44499,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
   }
   try {
     api$a.addMessage("Saving XML...", "xml", "saving");
-    return await api$7.saveXml(xmlEditor.getXML({escapeXmlEntities:true}), filePath, saveAsNewVersion)
+    return await api$7.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message);
     api$9.error(`Could not save XML: ${e.message}`);
@@ -44744,6 +44744,24 @@ async function onClickValidateButton() {
   notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`);
 }
 
+
+/**
+ * Given a user object, get an id (typically by using the initials)
+ * @param {UserData} userData 
+ */
+function getIdFromUser(userData) {
+  let names = userData.fullname;
+  if (names && names.trim() !== "") {
+    names = userData.fullname.split(" ");
+  } else {
+    return userData.username
+  }
+  if (names.length > 1) {
+    return names.map(n => n[0]).join("").toLocaleLowerCase()
+  }
+  return names[0].slice(0, 3)
+}
+
 /**
  * Called when the "saveRevision" button is executed
  * @param {ApplicationState} state
@@ -44754,6 +44772,12 @@ async function onClickSaveRevisionButton(state) {
   const dialog = document.querySelector('[name="newRevisionChangeDialog"]');
   dialog.changeDesc.value = "Corrections";
   try {
+    const user = api.getUser();
+    console.warn(user);
+    if (user) {
+      dialog.persId.value = getIdFromUser(user);
+      dialog.persName.value = user.fullname;
+    }
     dialog.show();
     await new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', resolve, { once: true });
@@ -44810,6 +44834,11 @@ async function onClickCreateNewVersionButton(state) {
   /** @type {newVersionDialog} */
   const dialog = document.querySelector('[name="newVersionDialog"]');
   try {
+    const user = api.getUser();
+    if (user) {
+      dialog.persId.value = getIdFromUser(user);
+      dialog.persName.value = user.fullname;
+    }    
     dialog.show();
     await new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', resolve, { once: true });
@@ -54667,7 +54696,8 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0];
  */
 const api = {
   updateStateSessionId,
-  ensureAuthenticated
+  ensureAuthenticated,
+  getUser
 };
 
 /**
@@ -54677,13 +54707,20 @@ const plugin = {
   name: "authentication",
   deps: ['client'],
   install,
-  update
+  state: {update}
 };
 
 //
 // State
 //
 
+/**
+ * @typedef {Object} UserData 
+ * @param {string} username
+ * @param {string} fullname
+ * @param {string[]} roles
+ */
+/** @type {UserData} */
 let user = null;
 
 //
@@ -54712,7 +54749,7 @@ async function install(state) {
 async function update(state) {
   if (state.user !== user) {
     user = state.user;
-    ui$1.toolbar.logoutButton.hidden = user === null;
+    ui$1.toolbar.logoutButton.disabled = user === null;
   }
 }
 
@@ -54742,6 +54779,14 @@ async function ensureAuthenticated() {
     // Not authenticated, proceed to show login dialog
     return _showLoginDialog();
   }
+}
+
+/**
+ * Returns the current user or null if none has been authenticated
+ * @returns {UserData|null}
+ */
+function getUser() {
+  return user
 }
 
 /**
