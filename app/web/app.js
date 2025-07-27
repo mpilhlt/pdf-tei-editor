@@ -40395,6 +40395,16 @@ function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
  */
 
 
+
+/**
+ * An object containing custom configuration values for the editor
+ * @typedef {Object} EditorConfig 
+ * @property {{indentUnit: Number, tabSize: Number}} indentation 
+ * @property {Array} charsToEncode Additional characters beyond "<", ">" and "&" to encode as xml entities, for example "'" => "&apos;"
+ * @property {Object} autocompleteData The data used for autocompletion
+ */
+
+
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
  * tree in sync as far as possible, and provides linting and diffing.
@@ -40419,6 +40429,13 @@ class XMLEditor extends EventTarget {
   static EVENT_EDITOR_READONLY = "editorReadOnly"
 
   // private members
+
+  /** @type {EditorConfig?} */
+  #config = {
+    indentation: { tabSize: 2, indentUnit: "  "},
+    charsToEncode: [],
+    tagData: {}
+  }
 
   /** @type {EditorView} */
   #view // the EditorView instance
@@ -40453,7 +40470,6 @@ class XMLEditor extends EventTarget {
    * @type {boolean}
    */
   #editorIsDirty = false
-
 
   /**
    * true if the editor is read-only
@@ -40494,12 +40510,17 @@ class XMLEditor extends EventTarget {
   /**
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
-   * @param {Object?} tagData - Autocompletion data
+   * @param {EditorConfig} [config] - Optional editor configuration
    */
-  constructor(editorDivId, tagData) {
+  constructor(editorDivId, config) {
     super();
 
     this.#markAsNotReady();
+
+    // overwrite default configuration
+    if (config) {
+      Object.assign(this.#config, config);
+    }
 
     const editorDiv = document.getElementById(editorDivId);
     if (!editorDiv) {
@@ -40522,9 +40543,10 @@ class XMLEditor extends EventTarget {
       this.#readOnlyCompartment.of([]),
     ];
 
-    if (tagData) {
-      this.startAutocomplete(tagData);
+    if (config.autocompleteData) {
+      this.startAutocomplete(config.autocompleteData);
     }
+
     // editor view
     this.#view = new EditorView({
       state: EditorState.create({ doc: "", extensions }),
@@ -40845,14 +40867,19 @@ class XMLEditor extends EventTarget {
 
   /**
    * Given a data object with information on the XML schema, start suggesting autocompletions
-   * @param {Object} tagData The autocompletion data - todo document format
+   * @param {Object} [autocompleteData] Optional autocompletion data - todo document format
    */
-  startAutocomplete(tagData) {
-    const autocompleteExtension = xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) });
-    //this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+  startAutocomplete(autocompleteData) {
+    autocompleteData |= this.#config.autocompleteData;
+    if (autocompleteData.length == 0) {
+      api$d.warn("No autocomplete data available");
+      return
+    }
+    const autocompleteExtension = xmlLanguage.data.of({ autocomplete: createCompletionSource(autocompleteData) });
     this.#view.dispatch({
       effects: this.#autocompleteCompartment.reconfigure([autocompleteExtension])
     });
+    this.#config.autocompleteData = autocompleteData;
   }
 
   /**
@@ -41926,7 +41953,9 @@ const plugin$c = {
  */
 async function install$b(state) {
   api$d.debug(`Installing plugin "${plugin$c.name}"`);
+
   // load autocomplete data
+  // todo: fetch from route
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
@@ -41942,18 +41971,7 @@ async function install$b(state) {
   });
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
-    if (api$8.isDisabled()) {
-      let view = xmlEditor.getView();
-      // @ts-ignore
-      let diagnostic = evt.detail;
-      try {
-        view.dispatch(setDiagnostics(view.state, [diagnostic]));
-      } catch (error) {
-        api$d.warn("Error setting diagnostics: " + error.message);
-      }
-    }
-  });
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, onXmlNotWellFormed);
 }
 
 /**
@@ -41964,7 +41982,7 @@ async function update$8(state) {
 
   if (state.xmlPath === null) {
     xmlEditor.clear();
-    return 
+    return
   }
 
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
@@ -42019,6 +42037,23 @@ async function onSelectionChange(state) {
 
   // todo: use isXPathsubset()
   if (index !== null && cursorParts.tagName === stateParts.tagName && index !== xmlEditor.currentIndex + 1) ;
+}
+
+/**
+ * Called when the editor emits an event indicating that the xml content is not well formed
+ * @param {CustomEvent} evt 
+ */
+async function onXmlNotWellFormed(evt) {
+  if (api$8.isDisabled()) {
+    let view = xmlEditor.getView();
+    // @ts-ignore
+    let diagnostic = evt.detail;
+    try {
+      view.dispatch(setDiagnostics(view.state, [diagnostic]));
+    } catch (error) {
+      api$d.warn("Error setting diagnostics: " + error.message);
+    }
+  }
 }
 
 /**
