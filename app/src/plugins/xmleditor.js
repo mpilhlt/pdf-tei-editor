@@ -43,7 +43,9 @@ export default plugin
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
+
   // load autocomplete data
+  // todo: fetch from route
   try {
     const res = await fetch(tagDataPath);
     const tagData = await res.json();
@@ -59,18 +61,7 @@ async function install(state) {
   });
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
-    if (validation.isDisabled()) {
-      let view = xmlEditor.getView()
-      // @ts-ignore
-      let diagnostic = evt.detail
-      try {
-        view.dispatch(setDiagnostics(view.state, [diagnostic]))
-      } catch (error) {
-        logger.warn("Error setting diagnostics: " + error.message)
-      }
-    }
-  })
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, onXmlNotWellFormed)
 }
 
 /**
@@ -81,7 +72,7 @@ async function update(state) {
 
   if (state.xmlPath === null) {
     xmlEditor.clear()
-    return 
+    return
   }
 
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
@@ -139,6 +130,23 @@ async function onSelectionChange(state) {
     const xpath = `${normativeXpath}[${index}]`
     //logger.debug(xpath)
     //updateState(state, {xpath})
+  }
+}
+
+/**
+ * Called when the editor emits an event indicating that the xml content is not well formed
+ * @param {CustomEvent} evt 
+ */
+async function onXmlNotWellFormed(evt) {
+  if (validation.isDisabled()) {
+    let view = xmlEditor.getView()
+    // @ts-ignore
+    let diagnostic = evt.detail
+    try {
+      view.dispatch(setDiagnostics(view.state, [diagnostic]))
+    } catch (error) {
+      logger.warn("Error setting diagnostics: " + error.message)
+    }
   }
 }
 
