@@ -40500,7 +40500,10 @@ class XMLEditor extends EventTarget {
 
   /** @type {EditorConfig?} */
   #config = {
-    indentation: { tabSize: 2, indentUnit: "  "},
+    indentation: { 
+      tabSize: 2, 
+      indentUnit: "  "
+    },
     charsToEncode: [],
     tagData: {}
   }
