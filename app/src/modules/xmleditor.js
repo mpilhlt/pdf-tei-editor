@@ -18,8 +18,17 @@ import { indentWithTab } from "@codemirror/commands"
 
 import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension, detectXmlIndentation } from './codemirror_utils.js';
 import { $$ } from './browser-utils.js';
+import { logger } from '../app.js';
 
-import { encodeXML } from 'entities';
+
+/**
+ * An object containing custom configuration values for the editor
+ * @typedef {Object} EditorConfig 
+ * @property {{indentUnit: Number, tabSize: Number}} indentation 
+ * @property {Array} charsToEncode Additional characters beyond "<", ">" and "&" to encode as xml entities, for example "'" => "&apos;"
+ * @property {Object} autocompleteData The data used for autocompletion
+ */
+
 
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
@@ -45,6 +54,13 @@ export class XMLEditor extends EventTarget {
   static EVENT_EDITOR_READONLY = "editorReadOnly"
 
   // private members
+
+  /** @type {EditorConfig?} */
+  #config = {
+    indentation: { tabSize: 2, indentUnit: "  "},
+    charsToEncode: [],
+    tagData: {}
+  }
 
   /** @type {EditorView} */
   #view // the EditorView instance
@@ -79,7 +95,6 @@ export class XMLEditor extends EventTarget {
    * @type {boolean}
    */
   #editorIsDirty = false
-
 
   /**
    * true if the editor is read-only
@@ -120,12 +135,17 @@ export class XMLEditor extends EventTarget {
   /**
    * Constructs an XMLEditor instance.
    * @param {string} editorDivId - The ID of the div element where the XML editor will be shown.
-   * @param {Object?} tagData - Autocompletion data
+   * @param {EditorConfig} [config] - Optional editor configuration
    */
-  constructor(editorDivId, tagData) {
+  constructor(editorDivId, config) {
     super();
 
     this.#markAsNotReady()
+
+    // overwrite default configuration
+    if (config) {
+      Object.assign(this.#config, config)
+    }
 
     const editorDiv = document.getElementById(editorDivId);
     if (!editorDiv) {
@@ -148,9 +168,10 @@ export class XMLEditor extends EventTarget {
       this.#readOnlyCompartment.of([]),
     ];
 
-    if (tagData) {
-      this.startAutocomplete(tagData);
+    if (config.autocompleteData) {
+      this.startAutocomplete(config.autocompleteData);
     }
+
     // editor view
     this.#view = new EditorView({
       state: EditorState.create({ doc: "", extensions }),
@@ -472,14 +493,19 @@ export class XMLEditor extends EventTarget {
 
   /**
    * Given a data object with information on the XML schema, start suggesting autocompletions
-   * @param {Object} tagData The autocompletion data - todo document format
+   * @param {Object} [autocompleteData] Optional autocompletion data - todo document format
    */
-  startAutocomplete(tagData) {
-    const autocompleteExtension = xmlLanguage.data.of({ autocomplete: createCompletionSource(tagData) })
-    //this.#autocompleteCompartment.reconfigure([autocompleteExtension])
+  startAutocomplete(autocompleteData) {
+    autocompleteData |= this.#config.autocompleteData
+    if (autocompleteData.length == 0) {
+      logger.warn("No autocomplete data available")
+      return
+    }
+    const autocompleteExtension = xmlLanguage.data.of({ autocomplete: createCompletionSource(autocompleteData) })
     this.#view.dispatch({
       effects: this.#autocompleteCompartment.reconfigure([autocompleteExtension])
     });
+    this.#config.autocompleteData = autocompleteData
   }
 
   /**
