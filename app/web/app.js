@@ -43877,9 +43877,9 @@ function getTeiHeader(xmlDoc) {
  * @returns {Element || null}
  */
 function getRespStmtById(xmlDoc, id) {
-  for (const respStmtElem of xmlDoc.getElementsByTagName('respStmt') ) {
+  for (const respStmtElem of xmlDoc.getElementsByTagName('respStmt')) {
     for (const persNameElem of respStmtElem.getElementsByTagName('persName')) {
-      const xmlId = persNameElem.getAttributeNodeNS('http://www.w3.org/XML/1998/namespace','id').value; 
+      const xmlId = persNameElem.getAttributeNodeNS('http://www.w3.org/XML/1998/namespace', 'id').value;
       if (xmlId === id) {
         return respStmtElem
       }
@@ -43906,8 +43906,8 @@ function getRespStmtById(xmlDoc, id) {
  * @returns {void}
  */
 function addRespStmt(xmlDoc, respStmt) {
-  const { persName, persId, resp} = respStmt;
-  if (!persName || !resp || !persId ) {
+  const { persName, persId, resp } = respStmt;
+  if (!persName || !resp || !persId) {
     throw new Error("Missing required parameters: persName, resp, or persId.");
   }
   if (getRespStmtById(xmlDoc, persId)) {
@@ -43955,8 +43955,8 @@ function addRespStmt(xmlDoc, respStmt) {
  * @returns {void}
  */
 function addRevisionChange(xmlDoc, revisionChange) {
-  const {status="draft", persId, desc} = revisionChange;
-  if (!persId || ! desc) {
+  const { status = "draft", persId, desc } = revisionChange;
+  if (!persId || !desc) {
     throw new Error("persId and desc data required")
   }
   const currentDateString = new Date().toISOString();
@@ -43968,7 +43968,7 @@ function addRevisionChange(xmlDoc, revisionChange) {
   } else {
     revisionDescElement = revisionDescElement[0];
   }
-  
+
   // Create the <change> element
   const changeElem = xmlDoc.createElementNS(teiNamespaceURI, 'change');
   changeElem.setAttribute('when', currentDateString);
@@ -43977,14 +43977,14 @@ function addRevisionChange(xmlDoc, revisionChange) {
   if (persId) { // Conditional check for 'who' parameter
     changeElem.setAttribute('who', '#' + persId);
   }
-  
+
   if (desc) {
     const descElement = xmlDoc.createElementNS(teiNamespaceURI, 'desc');
-    const textNode = xmlDoc.createTextNode(desc); 
+    const textNode = xmlDoc.createTextNode(desc);
     descElement.appendChild(textNode);
     changeElem.appendChild(descElement);
   }
-  
+
   revisionDescElement.appendChild(changeElem);
 }
 
@@ -44004,7 +44004,7 @@ function addRevisionChange(xmlDoc, revisionChange) {
  * @returns {void}
  */
 function addEdition(xmlDoc, edition) {
-  const {title, note} = edition;
+  const { title, note } = edition;
   if (!title || title.trim() === '') {
     throw new Error("Missing 'title'")
   }
@@ -44013,18 +44013,18 @@ function addEdition(xmlDoc, edition) {
   const teiHeader = getTeiHeader(xmlDoc);
   const fileDescs = teiHeader.getElementsByTagName('fileDesc');
   const titleStmts = teiHeader.getElementsByTagName('titleStmt');
-  if (!fileDescs.length|| !titleStmts.length) {
+  if (!fileDescs.length || !titleStmts.length) {
     throw new Error("teiHeader/fileDesc/titleStmt not found in the document.");
   }
-  
-  
+
+
   const editionStmt = xmlDoc.createElementNS(teiNamespaceURI, 'editionStmt');
   const fileDesc = fileDescs[0];
   const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
   const titleStmt = titleStmts[0];
-  
+
   if (editionStmts.length > 0) {
-    const lastEditionStmt = editionStmts[editionStmts.length-1];
+    const lastEditionStmt = editionStmts[editionStmts.length - 1];
     fileDesc.replaceChild(editionStmt, lastEditionStmt);
   } else {
     if (titleStmt.nextSibling) {
@@ -44032,8 +44032,8 @@ function addEdition(xmlDoc, edition) {
     } else {
       fileDesc.appendChild(editionStmt);
     }
-  } 
-  
+  }
+
   // <edition> 
   const editionElem = xmlDoc.createElementNS(teiNamespaceURI, 'edition'); // Fixed: creating <edition> element
 
@@ -44047,14 +44047,14 @@ function addEdition(xmlDoc, edition) {
   const titleElem = xmlDoc.createElementNS(teiNamespaceURI, 'title');
   titleElem.textContent = title;
   editionElem.appendChild(titleElem);
-  
+
   // <note> 
-  if (note && note.trim() !== '') { 
+  if (note && note.trim() !== '') {
     const noteElem = xmlDoc.createElementNS(teiNamespaceURI, 'note');
     noteElem.textContent = note;
     editionElem.appendChild(noteElem);
   }
-  
+
   editionStmt.appendChild(editionElem);
 }
 
@@ -44071,11 +44071,11 @@ function escapeXml(unsafeString) {
     return '';
   }
   return unsafeString
-    .replaceAll(/&/g, '&amp;')  
-    .replaceAll(/</g, '&lt;') 
-    .replaceAll(/>/g, '&gt;')    
-    .replaceAll(/"/g, '&quot;') 
-    .replaceAll(/'/g, '&apos;'); 
+    .replaceAll(/&/g, '&amp;')
+    .replaceAll(/</g, '&lt;')
+    .replaceAll(/>/g, '&gt;')
+    .replaceAll(/"/g, '&quot;')
+    .replaceAll(/'/g, '&apos;');
 }
 
 /**
@@ -44094,7 +44094,7 @@ function unescapeXml(escapedString) {
     .replaceAll(/&apos;/g, "'")
     .replaceAll(/&lt;/g, '<')
     .replaceAll(/&gt;/g, '>')
-    .replaceAll(/&amp;/g, '&'); 
+    .replaceAll(/&amp;/g, '&');
 }
 
 /**
