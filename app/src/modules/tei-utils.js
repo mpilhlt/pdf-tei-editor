@@ -26,9 +26,9 @@ export function getTeiHeader(xmlDoc) {
  * @returns {Element || null}
  */
 export function getRespStmtById(xmlDoc, id) {
-  for (const respStmtElem of xmlDoc.getElementsByTagName('respStmt') ) {
+  for (const respStmtElem of xmlDoc.getElementsByTagName('respStmt')) {
     for (const persNameElem of respStmtElem.getElementsByTagName('persName')) {
-      const xmlId = persNameElem.getAttributeNodeNS('http://www.w3.org/XML/1998/namespace','id').value 
+      const xmlId = persNameElem.getAttributeNodeNS('http://www.w3.org/XML/1998/namespace', 'id').value
       if (xmlId === id) {
         return respStmtElem
       }
@@ -55,8 +55,8 @@ export function getRespStmtById(xmlDoc, id) {
  * @returns {void}
  */
 export function addRespStmt(xmlDoc, respStmt) {
-  const { persName, persId, resp} = respStmt
-  if (!persName || !resp || !persId ) {
+  const { persName, persId, resp } = respStmt
+  if (!persName || !resp || !persId) {
     throw new Error("Missing required parameters: persName, resp, or persId.");
   }
   if (getRespStmtById(xmlDoc, persId)) {
@@ -104,8 +104,8 @@ export function addRespStmt(xmlDoc, respStmt) {
  * @returns {void}
  */
 export function addRevisionChange(xmlDoc, revisionChange) {
-  const {status="draft", persId, desc} = revisionChange
-  if (!persId || ! desc) {
+  const { status = "draft", persId, desc } = revisionChange
+  if (!persId || !desc) {
     throw new Error("persId and desc data required")
   }
   const currentDateString = new Date().toISOString();
@@ -117,7 +117,7 @@ export function addRevisionChange(xmlDoc, revisionChange) {
   } else {
     revisionDescElement = revisionDescElement[0];
   }
-  
+
   // Create the <change> element
   const changeElem = xmlDoc.createElementNS(teiNamespaceURI, 'change');
   changeElem.setAttribute('when', currentDateString);
@@ -126,14 +126,14 @@ export function addRevisionChange(xmlDoc, revisionChange) {
   if (persId) { // Conditional check for 'who' parameter
     changeElem.setAttribute('who', '#' + persId);
   }
-  
+
   if (desc) {
     const descElement = xmlDoc.createElementNS(teiNamespaceURI, 'desc');
-    const textNode = xmlDoc.createTextNode(desc); 
+    const textNode = xmlDoc.createTextNode(desc);
     descElement.appendChild(textNode);
     changeElem.appendChild(descElement);
   }
-  
+
   revisionDescElement.appendChild(changeElem);
 }
 
@@ -153,7 +153,7 @@ export function addRevisionChange(xmlDoc, revisionChange) {
  * @returns {void}
  */
 export function addEdition(xmlDoc, edition) {
-  const {title, note} = edition
+  const { title, note } = edition
   if (!title || title.trim() === '') {
     throw new Error("Missing 'title'")
   }
@@ -162,18 +162,18 @@ export function addEdition(xmlDoc, edition) {
   const teiHeader = getTeiHeader(xmlDoc);
   const fileDescs = teiHeader.getElementsByTagName('fileDesc');
   const titleStmts = teiHeader.getElementsByTagName('titleStmt');
-  if (!fileDescs.length|| !titleStmts.length) {
+  if (!fileDescs.length || !titleStmts.length) {
     throw new Error("teiHeader/fileDesc/titleStmt not found in the document.");
   }
-  
-  
+
+
   const editionStmt = xmlDoc.createElementNS(teiNamespaceURI, 'editionStmt');
   const fileDesc = fileDescs[0]
   const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
   const titleStmt = titleStmts[0]
-  
+
   if (editionStmts.length > 0) {
-    const lastEditionStmt = editionStmts[editionStmts.length-1]
+    const lastEditionStmt = editionStmts[editionStmts.length - 1]
     fileDesc.replaceChild(editionStmt, lastEditionStmt)
   } else {
     if (titleStmt.nextSibling) {
@@ -181,8 +181,8 @@ export function addEdition(xmlDoc, edition) {
     } else {
       fileDesc.appendChild(editionStmt)
     }
-  } 
-  
+  }
+
   // <edition> 
   const editionElem = xmlDoc.createElementNS(teiNamespaceURI, 'edition'); // Fixed: creating <edition> element
 
@@ -196,14 +196,14 @@ export function addEdition(xmlDoc, edition) {
   const titleElem = xmlDoc.createElementNS(teiNamespaceURI, 'title');
   titleElem.textContent = title;
   editionElem.appendChild(titleElem);
-  
+
   // <note> 
-  if (note && note.trim() !== '') { 
+  if (note && note.trim() !== '') {
     const noteElem = xmlDoc.createElementNS(teiNamespaceURI, 'note');
     noteElem.textContent = note;
     editionElem.appendChild(noteElem);
   }
-  
+
   editionStmt.appendChild(editionElem);
 }
 
@@ -220,11 +220,11 @@ export function escapeXml(unsafeString) {
     return '';
   }
   return unsafeString
-    .replaceAll(/&/g, '&amp;')  
-    .replaceAll(/</g, '&lt;') 
-    .replaceAll(/>/g, '&gt;')    
-    .replaceAll(/"/g, '&quot;') 
-    .replaceAll(/'/g, '&apos;'); 
+    .replaceAll(/&/g, '&amp;')
+    .replaceAll(/</g, '&lt;')
+    .replaceAll(/>/g, '&gt;')
+    .replaceAll(/"/g, '&quot;')
+    .replaceAll(/'/g, '&apos;');
 }
 
 /**
@@ -243,7 +243,7 @@ export function unescapeXml(escapedString) {
     .replaceAll(/&apos;/g, "'")
     .replaceAll(/&lt;/g, '<')
     .replaceAll(/&gt;/g, '>')
-    .replaceAll(/&amp;/g, '&'); 
+    .replaceAll(/&amp;/g, '&');
 }
 
 /**
@@ -305,4 +305,108 @@ export function encodeXmlEntities(xmlString) {
   }
 
   return resultParts.join('');
+}
+
+/**
+ * Creates a CodeMirror autocomplete data structure from a compressed version sent
+ * by the server, which uses "#x" references which are reused at different places. This
+ * includes "#Mx" references which are macros containing. Returns the resolved version
+ * with the string references replaced by the actual object references.
+ * 
+ * Code generated by Claude Code with instructions by @cboulanger
+ * 
+ * @param {Object} data Map to be resolved
+ * @returns {Object} Resolved map
+ */
+export function resolveDeduplicated(data) {
+  // Create a copy to avoid modifying the original
+  const resolved = JSON.parse(JSON.stringify(data));
+
+  // Extract and resolve reference definitions (keys starting with #)
+  const refs = {};
+  Object.keys(resolved).forEach(key => {
+    if (key.startsWith('#')) {
+      refs[key] = resolved[key];
+      delete resolved[key];
+    }
+  });
+
+  // Pre-resolve all references to create shared objects
+  const resolvedRefs = {};
+
+  // First pass: resolve simple references and macros
+  Object.keys(refs).forEach(refId => {
+    if (refId.startsWith('#M')) {
+      // Macro reference - resolve to composite pattern
+      const macroContent = refs[refId];
+      if (typeof macroContent === 'string' && macroContent.includes(' ')) {
+        const refIds = macroContent.split(' ').filter(id => id.startsWith('#'));
+        resolvedRefs[refId] = mergeReferences(refIds, refs);
+      } else {
+        resolvedRefs[refId] = refs[refId];
+      }
+    } else {
+      // Simple reference - use as-is (will be shared)
+      resolvedRefs[refId] = refs[refId];
+    }
+  });
+
+  // Recursive function to resolve references using shared objects
+  function resolveRefs(obj) {
+    if (typeof obj === 'string' && obj.includes('#')) {
+      if (obj.startsWith('#') && !obj.includes(' ')) {
+        // Simple reference - return shared object
+        return resolvedRefs[obj] || obj;
+      } else if (obj.includes(' ')) {
+        // Composite reference like "#1 #23 #44"
+        const refIds = obj.split(' ').filter(id => id.startsWith('#'));
+        return mergeReferences(refIds, resolvedRefs);
+      }
+      return obj;
+    } else if (Array.isArray(obj)) {
+      return obj.map(resolveRefs);
+    } else if (obj && typeof obj === 'object') {
+      const result = {};
+      Object.keys(obj).forEach(key => {
+        result[key] = resolveRefs(obj[key]);
+      });
+      return result;
+    }
+    return obj;
+  }
+
+  // Function to merge multiple references into a single object/array
+  function mergeReferences(refIds, refSource) {
+    const resolved = refIds.map(id => refSource[id]).filter(Boolean);
+
+    if (resolved.length === 0) return null;
+    if (resolved.length === 1) return resolved[0]; // Share the single object
+
+    // Determine merge strategy based on types
+    const firstType = Array.isArray(resolved[0]) ? 'array' : typeof resolved[0];
+
+    if (firstType === 'object' && resolved.every(r => typeof r === 'object' && !Array.isArray(r))) {
+      // Merge objects - create new object but reference shared values where possible
+      const merged = {};
+      resolved.forEach(obj => {
+        Object.keys(obj).forEach(key => {
+          merged[key] = obj[key]; // This shares the value reference
+        });
+      });
+      return merged;
+    } else if (firstType === 'array' && resolved.every(r => Array.isArray(r))) {
+      // Concatenate arrays
+      return [].concat(...resolved);
+    } else {
+      // Mixed types - return as array
+      return resolved;
+    }
+  }
+
+  // Resolve all references in the main data
+  Object.keys(resolved).forEach(key => {
+    resolved[key] = resolveRefs(resolved[key]);
+  });
+
+  return resolved;
 }
