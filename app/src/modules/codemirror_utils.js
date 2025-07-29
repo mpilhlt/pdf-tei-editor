@@ -31,9 +31,26 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
       throw new Error("Invalid arguments. Syntax node and DOM node must not be null.");
     }
 
+    // Skip over processing instructions and other non-element nodes in both trees
+    // to find the matching elements to link
+    while (syntaxNode && syntaxNode.name !== "Element") {
+      syntaxNode = syntaxNode.nextSibling;
+    }
+    while (domNode && domNode.nodeType !== Node.ELEMENT_NODE) {
+      domNode = domNode.nextSibling;
+    }
+
+    // If we couldn't find matching element nodes, return empty maps
+    if (!syntaxNode || !domNode) {
+      return {
+        syntaxToDom: new Map(),
+        domToSyntax: new Map()
+      };
+    }
+
     // Check if the syntaxNode and domNode are valid
-    if (syntaxNode.name !== "Element" && syntaxNode.name !== "Document") {
-      throw new Error(`Unexpected node type: ${syntaxNode.name}. Expected "Element" or "Document".`);
+    if (syntaxNode.name !== "Element") {
+      throw new Error(`Unexpected node type: ${syntaxNode.name}. Expected "Element".`);
     }
 
     // make sure we have a tag name child

@@ -86,9 +86,11 @@ npm run update-importmap
 
 ### Development Workflow
 1. Frontend changes: Edit files in `app/src/`, test with `?dev` URL parameter
-2. After changes: Run `npm run build` to update bundled version
-3. Backend changes: Server auto-reloads in development mode
-4. Schema updates: Delete `schema/cache/` to refresh XSD cache
+2. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode
+3. Backend changes: Server auto-reloads automatically (Flask dev server detects changes)
+4. **DO NOT restart the server** - Flask development server auto-restarts on backend changes
+5. Schema updates: Delete `schema/cache/` to refresh XSD cache
+6. Building is only needed for production and is handled by pre-push git hooks
 
 ### Important File Paths
 - Entry point: `app/src/app.js`
