@@ -42022,8 +42022,17 @@ const plugin$c = {
  */
 async function install$b(state) {
   api$d.debug(`Installing plugin "${plugin$c.name}"`);
-  // Note: Autocomplete data is now loaded dynamically per document in services.js
-  // The static tagData loading has been removed in favor of schema-specific autocomplete data
+
+  // load autocomplete data
+  // todo: fetch from route
+  try {
+    const res = await fetch(tagDataPath);
+    const tagData = await res.json();
+    xmlEditor.startAutocomplete(tagData);
+    api$d.info("Loaded autocompletion data...");
+  } catch (error) {
+    console.error('Error fetching from', tagDataPath, ":", error);
+  }
 
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
