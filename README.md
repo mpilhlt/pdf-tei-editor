@@ -121,6 +121,60 @@ The default user is "admin" with a password of "admin". Please remove that user 
 
 The roles ("user", "admin") are currently not used, but will be in future releases. 
 
-## Update the XSD schema
+## XML Schema Validation and Autocomplete
 
-The XSD schema of the documents is downloaded and cached. Currently, there is no mechanism to clear the cache through the user interface. Simply delete the `schema/cache` directory manually to clear the cache.
+The PDF-TEI Editor supports two types of XML schema validation: **XSD (XML Schema Definition)** and **RelaxNG (Regular Language for XML Next Generation)**. The validation approach is automatically detected based on how the schema is declared in your XML documents.
+
+### XSD Validation
+
+For XSD-based validation, use the standard `xsi:schemaLocation` attribute in your root element:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://tei-c.org/release/xml/tei/custom/schema/xsd/tei_all.xsd">
+  <teiHeader>
+    <!-- Your TEI content -->
+  </teiHeader>
+</TEI>
+```
+
+**Features:**
+- Full validation against XSD schemas
+- No autocomplete support (XSD schemas are not compatible with the autocomplete generator)
+
+### RelaxNG Validation
+
+For RelaxNG-based validation, use the `xml-model` processing instruction:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-model href="https://tei-c.org/release/xml/tei/custom/schema/relaxng/tei_all.rng" 
+            type="application/xml" 
+            schematypens="http://relaxng.org/ns/structure/1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <!-- Your TEI content -->
+  </teiHeader>
+</TEI>
+```
+
+**Features:**
+
+- Full validation against RelaxNG schemas
+- **Intelligent autocomplete** with TEI documentation extracted directly from the schema
+- Context-aware suggestions for elements, attributes, and attribute values
+- Documentation popups with detailed explanations from the TEI schema
+
+The autocomplete system uses the schema file specified in the `xml-model` processing instruction to generate contextual suggestions with full TEI documentation support.
+
+### Schema Caching
+
+Both XSD and RelaxNG schemas are downloaded and cached automatically when first encountered. The cache is stored in the `schema/cache` directory. To refresh cached schemas, simply delete the `schema/cache` directory manually.
+
+### Best Practices
+
+- **For validation only**: Use XSD schemas with `xsi:schemaLocation`
+- **For validation + autocomplete**: Use RelaxNG schemas with `xml-model` processing instructions
+- **TEI Projects**: RelaxNG is recommended as it provides the full editing experience with intelligent autocomplete and documentation

@@ -15,7 +15,7 @@ import { api as logger } from './logger.js'
 import { setDiagnostics } from '@codemirror/lint'
 
 // the path to the autocompletion data
-const tagDataPath = '/config/tei.json'
+// Note: tagDataPath removed - autocomplete data now loaded dynamically per document
 
 /**
  * component is an instance of NavXmlEditor
@@ -43,15 +43,8 @@ export default plugin
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-  // load autocomplete data
-  try {
-    const res = await fetch(tagDataPath);
-    const tagData = await res.json();
-    xmlEditor.startAutocomplete(tagData)
-    logger.info("Loaded autocompletion data...");
-  } catch (error) {
-    console.error('Error fetching from', tagDataPath, ":", error);
-  }
+  // Note: Autocomplete data is now loaded dynamically per document in services.js
+  // The static tagData loading has been removed in favor of schema-specific autocomplete data
 
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {

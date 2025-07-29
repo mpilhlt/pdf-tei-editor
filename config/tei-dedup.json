@@ -1,0 +1,9058 @@
+{
+  "p": "#45",
+  "foreign": "#67",
+  "emph": "#69",
+  "hi": "#69",
+  "distinct": "#72",
+  "said": "#96",
+  "quote": "#98",
+  "q": "#101",
+  "cit": "#110",
+  "mentioned": "#67",
+  "soCalled": "#67",
+  "desc": "#122",
+  "gloss": "#124",
+  "term": "#126",
+  "ruby": "#128",
+  "rb": "#130",
+  "rt": "#132",
+  "sic": "#133",
+  "corr": "#135",
+  "choice": "#140",
+  "reg": "#135",
+  "orig": "#133",
+  "gap": "#142",
+  "ellipsis": "#144",
+  "add": "#146",
+  "del": "#146",
+  "unclear": "#148",
+  "name": "#150",
+  "rs": "#152",
+  "email": "#67",
+  "address": "#163",
+  "addrLine": "#165",
+  "street": "#165",
+  "postCode": {
+    "attrs": "#M1"
+  },
+  "postBox": {
+    "attrs": "#M1"
+  },
+  "num": "#168",
+  "measure": "#170",
+  "measureGrp": "#174",
+  "unit": "#175",
+  "date": "#180",
+  "time": "#180",
+  "abbr": "#181",
+  "expan": "#183",
+  "ptr": {
+    "attrs": "#184 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "ref": "#186",
+  "list": "#203",
+  "item": "#205",
+  "label": "#207",
+  "head": "#208",
+  "headLabel": "#165",
+  "headItem": "#165",
+  "note": "#211",
+  "noteGrp": "#213",
+  "index": "#216",
+  "media": "#218",
+  "graphic": "#220",
+  "binaryObject": {
+    "attrs": "#221 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "milestone": {
+    "attrs": "#222 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "gb": {
+    "attrs": "#M2"
+  },
+  "pb": {
+    "attrs": "#M2"
+  },
+  "lb": {
+    "attrs": "#M2"
+  },
+  "cb": {
+    "attrs": "#M2"
+  },
+  "analytic": "#230",
+  "monogr": "#240",
+  "series": "#246",
+  "author": "#248",
+  "editor": "#248",
+  "respStmt": "#253",
+  "resp": "#262",
+  "title": "#264",
+  "meeting": "#266",
+  "imprint": "#274",
+  "publisher": "#275",
+  "biblScope": "#277",
+  "citedRange": "#279",
+  "pubPlace": "#281",
+  "bibl": "#296",
+  "biblStruct": "#301",
+  "listBibl": "#307",
+  "relatedItem": "#312",
+  "l": "#316",
+  "lg": "#331",
+  "sp": "#339",
+  "speaker": "#341",
+  "stage": "#344",
+  "teiCorpus": "#349",
+  "divGen": "#350",
+  "textLang": "#352",
+  "teiHeader": "#356",
+  "fileDesc": "#361",
+  "titleStmt": "#367",
+  "sponsor": "#262",
+  "funder": "#262",
+  "principal": "#262",
+  "editionStmt": "#372",
+  "edition": "#165",
+  "extent": "#165",
+  "publicationStmt": "#380",
+  "distributor": "#275",
+  "authority": "#381",
+  "idno": "#384",
+  "availability": "#387",
+  "licence": "#389",
+  "seriesStmt": "#395",
+  "notesStmt": "#397",
+  "sourceDesc": "#400",
+  "biblFull": "#405",
+  "encodingDesc": "#414",
+  "schemaRef": "#416",
+  "projectDesc": "#418",
+  "samplingDecl": "#418",
+  "editorialDecl": "#425",
+  "correction": "#427",
+  "normalization": "#429",
+  "quotation": "#431",
+  "hyphenation": "#433",
+  "segmentation": "#418",
+  "stdVals": "#418",
+  "interpretation": "#418",
+  "punctuation": "#435",
+  "tagsDecl": "#438",
+  "tagUsage": "#440",
+  "namespace": "#442",
+  "rendition": "#444",
+  "styleDefDecl": "#446",
+  "refsDecl": "#450",
+  "citeStructure": "#453",
+  "citeData": {
+    "attrs": "#38 #39 #40 #41 #42 #43 #454"
+  },
+  "cRefPattern": "#456",
+  "prefixDef": "#458",
+  "listPrefixDef": "#460",
+  "refState": {
+    "attrs": "#38 #39 #40 #41 #42 #43 #461"
+  },
+  "classDecl": "#462",
+  "taxonomy": "#468",
+  "category": "#471",
+  "catDesc": "#478",
+  "geoDecl": "#480",
+  "unitDecl": "#481",
+  "unitDef": "#486",
+  "conversion": {
+    "attrs": "#38 #39 #40 #41 #42 #43 #487"
+  },
+  "appInfo": "#488",
+  "application": "#493",
+  "profileDesc": "#498",
+  "abstract": "#502",
+  "creation": "#506",
+  "langUsage": "#508",
+  "language": "#510",
+  "textClass": "#512",
+  "keywords": "#515",
+  "classCode": "#516",
+  "catRef": {
+    "attrs": "#38 #39 #40 #41 #42 #43 #517"
+  },
+  "calendarDesc": "#518",
+  "calendar": "#520",
+  "correspDesc": "#526",
+  "correspAction": "#537",
+  "correspContext": "#540",
+  "xenoData": {
+    "attrs": "#38 #39 #40 #41 #42 #43 #541 #70"
+  },
+  "revisionDesc": "#544",
+  "change": "#546",
+  "listChange": "#549",
+  "TEI": "#552",
+  "text": "#559",
+  "body": "#571",
+  "group": "#576",
+  "floatingText": "#578",
+  "div": "#588",
+  "div1": "#592",
+  "div2": "#595",
+  "div3": "#598",
+  "div4": "#601",
+  "div5": "#604",
+  "div6": "#607",
+  "div7": "#609",
+  "trailer": "#208",
+  "byline": "#612",
+  "dateline": "#614",
+  "argument": "#619",
+  "epigraph": "#623",
+  "opener": "#630",
+  "closer": "#633",
+  "salute": "#69",
+  "signed": "#69",
+  "postscript": "#638",
+  "titlePage": "#644",
+  "docTitle": "#649",
+  "titlePart": "#651",
+  "docAuthor": "#653",
+  "imprimatur": "#654",
+  "docEdition": "#654",
+  "docImprint": "#656",
+  "docDate": "#658",
+  "front": "#665",
+  "back": "#669",
+  "orgName": "#150",
+  "persName": "#150",
+  "surname": "#671",
+  "forename": "#671",
+  "nameLink": "#181",
+  "addName": "#671",
+  "roleName": "#671",
+  "link": {
+    "attrs": "#38 #39 #40 #41 #42 #43 #672 #70"
+  },
+  "linkGrp": "#675",
+  "ab": "#678",
+  "anchor": {
+    "attrs": "#109 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "seg": "#680",
+  "standOff": "#685",
+  "#1": [
+    "abbr",
+    "add"
+  ],
+  "#2": [
+    "addName",
+    "address"
+  ],
+  "#3": [
+    "anchor",
+    "bibl"
+  ],
+  "#4": [
+    "biblFull",
+    "biblStruct"
+  ],
+  "#5": [
+    "binaryObject",
+    "cb"
+  ],
+  "#6": [
+    "choice",
+    "cit"
+  ],
+  "#7": [
+    "corr",
+    "date"
+  ],
+  "#8": [
+    "del",
+    "desc"
+  ],
+  "#9": [
+    "distinct",
+    "ellipsis"
+  ],
+  "#10": [
+    "email",
+    "emph"
+  ],
+  "#11": [
+    "expan",
+    "floatingText"
+  ],
+  "#12": [
+    "foreign",
+    "forename"
+  ],
+  "#13": [
+    "gap",
+    "gb"
+  ],
+  "#14": [
+    "gloss",
+    "graphic"
+  ],
+  "#15": [
+    "hi",
+    "idno"
+  ],
+  "#16": [
+    "index",
+    "l"
+  ],
+  "#17": [
+    "label",
+    "lb"
+  ],
+  "#18": [
+    "lg",
+    "link"
+  ],
+  "#19": [
+    "linkGrp",
+    "list"
+  ],
+  "#20": [
+    "listBibl",
+    "measure"
+  ],
+  "#21": [
+    "measureGrp",
+    "media"
+  ],
+  "#22": [
+    "mentioned",
+    "milestone"
+  ],
+  "#23": [
+    "name",
+    "nameLink"
+  ],
+  "#24": [
+    "note",
+    "noteGrp"
+  ],
+  "#25": [
+    "num",
+    "orgName"
+  ],
+  "#26": [
+    "orig",
+    "pb"
+  ],
+  "#27": [
+    "persName",
+    "ptr"
+  ],
+  "#28": [
+    "q",
+    "quote"
+  ],
+  "#29": [
+    "ref",
+    "reg"
+  ],
+  "#30": [
+    "roleName",
+    "rs"
+  ],
+  "#31": [
+    "ruby",
+    "said"
+  ],
+  "#32": [
+    "seg",
+    "sic"
+  ],
+  "#33": [
+    "soCalled",
+    "stage"
+  ],
+  "#34": [
+    "surname",
+    "term"
+  ],
+  "#35": [
+    "time",
+    "title"
+  ],
+  "#36": [
+    "unclear",
+    "unit"
+  ],
+  "#37": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "binaryObject",
+    "cb",
+    "choice",
+    "cit",
+    "corr",
+    "date",
+    "del",
+    "desc",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "floatingText",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "quote",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "said",
+    "seg",
+    "sic",
+    "soCalled",
+    "stage",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#38": {
+    "rend": null
+  },
+  "#39": {
+    "cert": [
+      "high",
+      "medium",
+      "low",
+      "unknown",
+      "high",
+      "medium",
+      "low",
+      "unknown",
+      "high",
+      "medium",
+      "low",
+      "unknown"
+    ]
+  },
+  "#40": {
+    "resp": null
+  },
+  "#41": {
+    "xml:id": null
+  },
+  "#42": {
+    "n": null
+  },
+  "#43": {
+    "xml:lang": null
+  },
+  "#44": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "part": [
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F",
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F"
+    ],
+    "hand": null
+  },
+  "#45": {
+    "children": "#37",
+    "attrs": "#38 #39 #40 #41 #42 #43 #44"
+  },
+  "#46": [
+    "anchor",
+    "binaryObject"
+  ],
+  "#47": [
+    "cb",
+    "choice"
+  ],
+  "#48": [
+    "cit",
+    "corr"
+  ],
+  "#49": [
+    "date",
+    "del"
+  ],
+  "#50": [
+    "index",
+    "lb"
+  ],
+  "#51": [
+    "link",
+    "linkGrp"
+  ],
+  "#52": [
+    "measure",
+    "measureGrp"
+  ],
+  "#53": [
+    "media",
+    "mentioned"
+  ],
+  "#54": [
+    "milestone",
+    "name"
+  ],
+  "#55": [
+    "nameLink",
+    "note"
+  ],
+  "#56": [
+    "noteGrp",
+    "num"
+  ],
+  "#57": [
+    "orgName",
+    "orig"
+  ],
+  "#58": [
+    "pb",
+    "persName"
+  ],
+  "#59": [
+    "ptr",
+    "q"
+  ],
+  "#60": [
+    "quote",
+    "ref"
+  ],
+  "#61": [
+    "reg",
+    "roleName"
+  ],
+  "#62": [
+    "rs",
+    "ruby"
+  ],
+  "#63": [
+    "said",
+    "seg"
+  ],
+  "#64": [
+    "sic",
+    "soCalled"
+  ],
+  "#65": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "binaryObject",
+    "cb",
+    "choice",
+    "cit",
+    "corr",
+    "date",
+    "del",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "floatingText",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "quote",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "said",
+    "seg",
+    "sic",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#66": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ]
+  },
+  "#67": {
+    "children": "#65",
+    "attrs": "#38 #39 #40 #41 #42 #43 #66"
+  },
+  "#68": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "hand": null
+  },
+  "#69": {
+    "children": "#37",
+    "attrs": "#38 #39 #40 #41 #42 #43 #68"
+  },
+  "#70": {
+    "type": null
+  },
+  "#71": {
+    "time": null,
+    "space": null,
+    "social": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "subtype": null
+  },
+  "#72": {
+    "children": "#65",
+    "attrs": "#38 #39 #40 #41 #42 #43 #70 #71"
+  },
+  "#73": [
+    "ab",
+    "abbr"
+  ],
+  "#74": [
+    "add",
+    "addName"
+  ],
+  "#75": [
+    "address",
+    "anchor"
+  ],
+  "#76": [
+    "bibl",
+    "biblFull"
+  ],
+  "#77": [
+    "biblStruct",
+    "binaryObject"
+  ],
+  "#78": [
+    "desc",
+    "distinct"
+  ],
+  "#79": [
+    "ellipsis",
+    "email"
+  ],
+  "#80": [
+    "emph",
+    "expan"
+  ],
+  "#81": [
+    "floatingText",
+    "foreign"
+  ],
+  "#82": [
+    "forename",
+    "gap"
+  ],
+  "#83": [
+    "gb",
+    "gloss"
+  ],
+  "#84": [
+    "graphic",
+    "hi"
+  ],
+  "#85": [
+    "idno",
+    "index"
+  ],
+  "#86": [
+    "l",
+    "label"
+  ],
+  "#87": [
+    "lb",
+    "lg"
+  ],
+  "#88": [
+    "list",
+    "listBibl"
+  ],
+  "#89": [
+    "p",
+    "pb"
+  ],
+  "#90": [
+    "soCalled",
+    "sp"
+  ],
+  "#91": [
+    "stage",
+    "surname"
+  ],
+  "#92": [
+    "term",
+    "time"
+  ],
+  "#93": [
+    "title",
+    "unclear"
+  ],
+  "#94": [
+    "ab",
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "binaryObject",
+    "cb",
+    "choice",
+    "cit",
+    "corr",
+    "date",
+    "del",
+    "desc",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "floatingText",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "p",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "quote",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "said",
+    "seg",
+    "sic",
+    "soCalled",
+    "sp",
+    "stage",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#95": {
+    "aloud": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ],
+    "direct": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "who": null,
+    "toWhom": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ]
+  },
+  "#96": {
+    "children": "#94",
+    "attrs": "#38 #39 #40 #41 #42 #43 #95"
+  },
+  "#97": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "notation": null,
+    "subtype": null
+  },
+  "#98": {
+    "children": "#94",
+    "attrs": "#38 #39 #40 #41 #42 #43 #70 #97"
+  },
+  "#99": {
+    "type": [
+      "spoken",
+      "thought",
+      "written",
+      "soCalled",
+      "foreign",
+      "distinct",
+      "term",
+      "emph",
+      "mentioned",
+      "spoken",
+      "thought",
+      "written",
+      "soCalled",
+      "foreign",
+      "distinct",
+      "term",
+      "emph",
+      "mentioned"
+    ]
+  },
+  "#100": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "who": null,
+    "toWhom": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ]
+  },
+  "#101": {
+    "children": "#94",
+    "attrs": "#100 #38 #39 #40 #41 #42 #43 #99"
+  },
+  "#102": [
+    "cit",
+    "ellipsis"
+  ],
+  "#103": [
+    "floatingText",
+    "gap"
+  ],
+  "#104": [
+    "gb",
+    "graphic"
+  ],
+  "#105": [
+    "listBibl",
+    "media"
+  ],
+  "#106": [
+    "milestone",
+    "note"
+  ],
+  "#107": [
+    "noteGrp",
+    "pb"
+  ],
+  "#108": [
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "binaryObject",
+    "cb",
+    "cit",
+    "ellipsis",
+    "floatingText",
+    "gap",
+    "gb",
+    "graphic",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "listBibl",
+    "media",
+    "milestone",
+    "note",
+    "noteGrp",
+    "pb",
+    "ptr",
+    "q",
+    "quote",
+    "ref",
+    "said"
+  ],
+  "#109": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "subtype": null
+  },
+  "#110": {
+    "children": "#108",
+    "attrs": "#109 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#111": [
+    "abbr",
+    "addName"
+  ],
+  "#112": [
+    "address",
+    "bibl"
+  ],
+  "#113": [
+    "date",
+    "desc"
+  ],
+  "#114": [
+    "distinct",
+    "email"
+  ],
+  "#115": [
+    "forename",
+    "gloss"
+  ],
+  "#116": [
+    "label",
+    "list"
+  ],
+  "#117": [
+    "measureGrp",
+    "mentioned"
+  ],
+  "#118": [
+    "ref",
+    "roleName"
+  ],
+  "#119": [
+    "rs",
+    "said"
+  ],
+  "#120": [
+    "abbr",
+    "addName",
+    "address",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "choice",
+    "cit",
+    "date",
+    "desc",
+    "distinct",
+    "email",
+    "emph",
+    "expan",
+    "floatingText",
+    "foreign",
+    "forename",
+    "gloss",
+    "hi",
+    "idno",
+    "label",
+    "list",
+    "listBibl",
+    "measure",
+    "measureGrp",
+    "mentioned",
+    "name",
+    "nameLink",
+    "num",
+    "orgName",
+    "persName",
+    "ptr",
+    "q",
+    "quote",
+    "ref",
+    "roleName",
+    "rs",
+    "said",
+    "soCalled",
+    "stage",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unit"
+  ],
+  "#121": {
+    "type": [
+      "deprecationInfo",
+      "deprecationInfo"
+    ]
+  },
+  "#122": {
+    "children": "#120",
+    "attrs": "#109 #121 #38 #39 #40 #41 #42 #43"
+  },
+  "#123": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "cRef": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ],
+    "subtype": null
+  },
+  "#124": {
+    "children": "#65",
+    "attrs": "#123 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#125": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "cRef": null,
+    "key": null,
+    "ref": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ],
+    "sortKey": null,
+    "subtype": null
+  },
+  "#126": {
+    "children": "#65",
+    "attrs": "#125 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#127": [
+    "rb",
+    "rt"
+  ],
+  "#128": {
+    "children": "#127",
+    "attrs": "#109 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#129": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "subtype": null
+  },
+  "#130": {
+    "children": "#65",
+    "attrs": "#129 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#131": {
+    "target": null,
+    "from": null,
+    "to": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "evidence": [
+      "internal",
+      "external",
+      "conjecture",
+      "internal",
+      "external",
+      "conjecture"
+    ],
+    "instant": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ],
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "hand": null,
+    "status": null,
+    "cause": null,
+    "seq": null,
+    "subtype": null
+  },
+  "#132": {
+    "children": "#65",
+    "attrs": "#131 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#133": {
+    "children": "#37",
+    "attrs": "#38 #39 #40 #41 #42 #43 #66"
+  },
+  "#134": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "evidence": [
+      "internal",
+      "external",
+      "conjecture",
+      "internal",
+      "external",
+      "conjecture"
+    ],
+    "instant": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ],
+    "subtype": null
+  },
+  "#135": {
+    "children": "#37",
+    "attrs": "#134 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#136": [
+    "abbr",
+    "choice"
+  ],
+  "#137": [
+    "corr",
+    "expan"
+  ],
+  "#138": [
+    "orig",
+    "reg"
+  ],
+  "#139": [
+    "abbr",
+    "choice",
+    "corr",
+    "expan",
+    "orig",
+    "reg",
+    "seg",
+    "sic",
+    "unclear"
+  ],
+  "#140": {
+    "children": "#139",
+    "attrs": "#38 #39 #40 #41 #42 #43 #66"
+  },
+  "#141": {
+    "reason": [
+      "cancelled",
+      "deleted",
+      "editorial",
+      "illegible",
+      "inaudible",
+      "irrelevant",
+      "sampling",
+      "cancelled",
+      "deleted",
+      "editorial",
+      "illegible",
+      "inaudible",
+      "irrelevant",
+      "sampling"
+    ],
+    "agent": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "atLeast": null,
+    "atMost": null,
+    "min": null,
+    "max": null,
+    "confidence": null,
+    "unit": [
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char",
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char"
+    ],
+    "quantity": null,
+    "extent": null,
+    "precision": [
+      "high",
+      "medium",
+      "low",
+      "unknown",
+      "high",
+      "medium",
+      "low",
+      "unknown"
+    ],
+    "scope": null,
+    "evidence": [
+      "internal",
+      "external",
+      "conjecture",
+      "internal",
+      "external",
+      "conjecture"
+    ],
+    "instant": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ],
+    "start": null,
+    "end": null
+  },
+  "#142": {
+    "children": [
+      "desc"
+    ],
+    "attrs": "#141 #38 #39 #40 #41 #42 #43"
+  },
+  "#143": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "atLeast": null,
+    "atMost": null,
+    "min": null,
+    "max": null,
+    "confidence": null,
+    "unit": [
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char",
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char"
+    ],
+    "quantity": null,
+    "extent": null,
+    "precision": [
+      "high",
+      "medium",
+      "low",
+      "unknown",
+      "high",
+      "medium",
+      "low",
+      "unknown"
+    ],
+    "scope": null,
+    "start": null,
+    "end": null
+  },
+  "#144": {
+    "children": [
+      "desc"
+    ],
+    "attrs": "#143 #38 #39 #40 #41 #42 #43"
+  },
+  "#145": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "atLeast": null,
+    "atMost": null,
+    "min": null,
+    "max": null,
+    "confidence": null,
+    "unit": [
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char",
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char"
+    ],
+    "quantity": null,
+    "extent": null,
+    "precision": [
+      "high",
+      "medium",
+      "low",
+      "unknown",
+      "high",
+      "medium",
+      "low",
+      "unknown"
+    ],
+    "scope": null,
+    "evidence": [
+      "internal",
+      "external",
+      "conjecture",
+      "internal",
+      "external",
+      "conjecture"
+    ],
+    "instant": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ],
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "hand": null,
+    "status": null,
+    "cause": null,
+    "seq": null,
+    "subtype": null
+  },
+  "#146": {
+    "children": "#37",
+    "attrs": "#145 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#147": {
+    "reason": [
+      "illegible",
+      "inaudible",
+      "faded",
+      "background_noise",
+      "eccentric_ductus",
+      "illegible",
+      "inaudible",
+      "faded",
+      "background_noise",
+      "eccentric_ductus"
+    ],
+    "agent": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "atLeast": null,
+    "atMost": null,
+    "min": null,
+    "max": null,
+    "confidence": null,
+    "unit": [
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char",
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char"
+    ],
+    "quantity": null,
+    "extent": null,
+    "precision": [
+      "high",
+      "medium",
+      "low",
+      "unknown",
+      "high",
+      "medium",
+      "low",
+      "unknown"
+    ],
+    "scope": null,
+    "evidence": [
+      "internal",
+      "external",
+      "conjecture",
+      "internal",
+      "external",
+      "conjecture"
+    ],
+    "instant": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ]
+  },
+  "#148": {
+    "children": "#37",
+    "attrs": "#147 #38 #39 #40 #41 #42 #43"
+  },
+  "#149": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "evidence": [
+      "internal",
+      "external",
+      "conjecture",
+      "internal",
+      "external",
+      "conjecture"
+    ],
+    "instant": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ],
+    "key": null,
+    "ref": null,
+    "role": null,
+    "nymRef": null,
+    "full": [
+      "yes",
+      "abb",
+      "init",
+      "yes",
+      "abb",
+      "init"
+    ],
+    "sort": null,
+    "subtype": null
+  },
+  "#150": {
+    "children": "#65",
+    "attrs": "#149 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#151": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "key": null,
+    "ref": null,
+    "role": null,
+    "nymRef": null,
+    "subtype": null
+  },
+  "#152": {
+    "children": "#65",
+    "attrs": "#151 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#153": [
+    "addName",
+    "addrLine"
+  ],
+  "#154": [
+    "anchor",
+    "cb"
+  ],
+  "#155": [
+    "ellipsis",
+    "forename"
+  ],
+  "#156": [
+    "lb",
+    "link"
+  ],
+  "#157": [
+    "linkGrp",
+    "milestone"
+  ],
+  "#158": [
+    "orgName",
+    "pb"
+  ],
+  "#159": [
+    "persName",
+    "postBox"
+  ],
+  "#160": [
+    "postCode",
+    "roleName"
+  ],
+  "#161": [
+    "rs",
+    "street"
+  ],
+  "#162": [
+    "addName",
+    "addrLine",
+    "anchor",
+    "cb",
+    "ellipsis",
+    "forename",
+    "gap",
+    "gb",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "orgName",
+    "pb",
+    "persName",
+    "postBox",
+    "postCode",
+    "roleName",
+    "rs",
+    "street",
+    "surname"
+  ],
+  "#163": {
+    "children": "#162",
+    "attrs": "#38 #39 #40 #41 #42 #43 #66"
+  },
+  "#164": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ]
+  },
+  "#165": {
+    "children": "#65",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#166": {
+    "type": [
+      "cardinal",
+      "ordinal",
+      "fraction",
+      "percentage",
+      "cardinal",
+      "ordinal",
+      "fraction",
+      "percentage"
+    ]
+  },
+  "#167": {
+    "value": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "atLeast": null,
+    "atMost": null,
+    "min": null,
+    "max": null,
+    "confidence": null,
+    "subtype": null
+  },
+  "#168": {
+    "children": "#65",
+    "attrs": "#166 #167 #38 #39 #40 #41 #42 #43"
+  },
+  "#169": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "unit": [
+      "m",
+      "kg",
+      "s",
+      "Hz",
+      "Pa",
+      "Ω",
+      "L",
+      "t",
+      "ha",
+      "Å",
+      "mL",
+      "cm",
+      "dB",
+      "kbit",
+      "Kibit",
+      "kB",
+      "KiB",
+      "MB",
+      "MiB",
+      "m",
+      "kg",
+      "s",
+      "Hz",
+      "Pa",
+      "Ω",
+      "L",
+      "t",
+      "ha",
+      "Å",
+      "mL",
+      "cm",
+      "dB",
+      "kbit",
+      "Kibit",
+      "kB",
+      "KiB",
+      "MB",
+      "MiB"
+    ],
+    "unitRef": null,
+    "quantity": null,
+    "commodity": null,
+    "atLeast": null,
+    "atMost": null,
+    "min": null,
+    "max": null,
+    "confidence": null,
+    "subtype": null
+  },
+  "#170": {
+    "children": "#65",
+    "attrs": "#169 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#171": [
+    "num",
+    "unit"
+  ],
+  "#172": [
+    "measure",
+    "measureGrp",
+    "num",
+    "unit"
+  ],
+  "#173": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "unit": [
+      "m",
+      "kg",
+      "s",
+      "Hz",
+      "Pa",
+      "Ω",
+      "L",
+      "t",
+      "ha",
+      "Å",
+      "mL",
+      "cm",
+      "dB",
+      "kbit",
+      "Kibit",
+      "kB",
+      "KiB",
+      "MB",
+      "MiB",
+      "m",
+      "kg",
+      "s",
+      "Hz",
+      "Pa",
+      "Ω",
+      "L",
+      "t",
+      "ha",
+      "Å",
+      "mL",
+      "cm",
+      "dB",
+      "kbit",
+      "Kibit",
+      "kB",
+      "KiB",
+      "MB",
+      "MiB"
+    ],
+    "unitRef": null,
+    "quantity": null,
+    "commodity": null,
+    "subtype": null
+  },
+  "#174": {
+    "children": "#172",
+    "attrs": "#173 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#175": {
+    "children": "#65",
+    "attrs": "#173 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#176": [
+    "del",
+    "distinct"
+  ],
+  "#177": [
+    "ruby",
+    "seg"
+  ],
+  "#178": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "binaryObject",
+    "cb",
+    "choice",
+    "corr",
+    "date",
+    "del",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "seg",
+    "sic",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#179": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "calendar": null,
+    "key": null,
+    "ref": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "atLeast": null,
+    "atMost": null,
+    "min": null,
+    "max": null,
+    "confidence": null,
+    "unit": [
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char",
+      "cm",
+      "mm",
+      "in",
+      "line",
+      "char"
+    ],
+    "quantity": null,
+    "extent": null,
+    "precision": [
+      "high",
+      "medium",
+      "low",
+      "unknown",
+      "high",
+      "medium",
+      "low",
+      "unknown"
+    ],
+    "scope": null,
+    "evidence": [
+      "internal",
+      "external",
+      "conjecture",
+      "internal",
+      "external",
+      "conjecture"
+    ],
+    "instant": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ],
+    "subtype": null
+  },
+  "#180": {
+    "children": "#178",
+    "attrs": "#179 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#181": {
+    "children": "#65",
+    "attrs": "#109 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#182": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "evidence": [
+      "internal",
+      "external",
+      "conjecture",
+      "internal",
+      "external",
+      "conjecture"
+    ],
+    "instant": [
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "unknown",
+      "inapplicable",
+      "true",
+      "false"
+    ]
+  },
+  "#183": {
+    "children": "#65",
+    "attrs": "#182 #38 #39 #40 #41 #42 #43"
+  },
+  "#184": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "cRef": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "mimeType": null,
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ],
+    "subtype": null
+  },
+  "#185": {
+    "type": [
+      "footnote",
+      "idem",
+      "op-cit",
+      "bibl",
+      "footnote",
+      "idem",
+      "op-cit",
+      "bibl"
+    ]
+  },
+  "#186": {
+    "children": "#37",
+    "attrs": "#184 #185 #38 #39 #40 #41 #42 #43"
+  },
+  "#187": [
+    "anchor",
+    "argument"
+  ],
+  "#188": [
+    "byline",
+    "cb"
+  ],
+  "#189": [
+    "closer",
+    "dateline"
+  ],
+  "#190": [
+    "desc",
+    "docAuthor"
+  ],
+  "#191": [
+    "docDate",
+    "ellipsis"
+  ],
+  "#192": [
+    "epigraph",
+    "gap"
+  ],
+  "#193": [
+    "gb",
+    "head"
+  ],
+  "#194": [
+    "headItem",
+    "headLabel"
+  ],
+  "#195": [
+    "index",
+    "item"
+  ],
+  "#196": [
+    "meeting",
+    "milestone"
+  ],
+  "#197": [
+    "opener",
+    "pb"
+  ],
+  "#198": [
+    "postscript",
+    "salute"
+  ],
+  "#199": [
+    "signed",
+    "trailer"
+  ],
+  "#200": [
+    "anchor",
+    "argument",
+    "byline",
+    "cb",
+    "closer",
+    "dateline",
+    "desc",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "gap",
+    "gb",
+    "head",
+    "headItem",
+    "headLabel",
+    "index",
+    "item",
+    "label",
+    "lb",
+    "link",
+    "linkGrp",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "pb",
+    "postscript",
+    "salute",
+    "signed",
+    "trailer"
+  ],
+  "#201": {
+    "type": [
+      "gloss",
+      "index",
+      "instructions",
+      "litany",
+      "syllogism",
+      "gloss",
+      "index",
+      "instructions",
+      "litany",
+      "syllogism"
+    ]
+  },
+  "#202": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "sortKey": null,
+    "subtype": null
+  },
+  "#203": {
+    "children": "#200",
+    "attrs": "#201 #202 #38 #39 #40 #41 #42 #43"
+  },
+  "#204": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "sortKey": null
+  },
+  "#205": {
+    "children": "#94",
+    "attrs": "#204 #38 #39 #40 #41 #42 #43"
+  },
+  "#206": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "subtype": null,
+    "hand": null
+  },
+  "#207": {
+    "children": "#65",
+    "attrs": "#206 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#208": {
+    "children": "#37",
+    "attrs": "#206 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#209": {
+    "type": [
+      "footnote",
+      "signal",
+      "comment",
+      "document-type",
+      "footnote",
+      "signal",
+      "comment",
+      "document-type"
+    ]
+  },
+  "#210": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "anchored": [
+      "true",
+      "false"
+    ],
+    "targetEnd": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ],
+    "subtype": null,
+    "hand": null
+  },
+  "#211": {
+    "children": "#94",
+    "attrs": "#209 #210 #38 #39 #40 #41 #42 #43"
+  },
+  "#212": [
+    "desc",
+    "note",
+    "noteGrp"
+  ],
+  "#213": {
+    "children": "#212",
+    "attrs": "#210 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#214": [
+    "index",
+    "term"
+  ],
+  "#215": {
+    "indexName": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "spanTo": null
+  },
+  "#216": {
+    "children": "#214",
+    "attrs": "#215 #38 #39 #40 #41 #42 #43"
+  },
+  "#217": {
+    "mimeType": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "width": null,
+    "height": null,
+    "scale": null,
+    "url": null,
+    "start": null,
+    "end": null,
+    "subtype": null
+  },
+  "#218": {
+    "children": [
+      "desc"
+    ],
+    "attrs": "#217 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#219": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "mimeType": null,
+    "width": null,
+    "height": null,
+    "scale": null,
+    "url": null,
+    "subtype": null
+  },
+  "#220": {
+    "children": [
+      "desc"
+    ],
+    "attrs": "#219 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#221": {
+    "encoding": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "mimeType": null,
+    "width": null,
+    "height": null,
+    "scale": null,
+    "start": null,
+    "end": null,
+    "subtype": null
+  },
+  "#222": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "break": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "ed": null,
+    "edRef": null,
+    "unit": [
+      "page",
+      "column",
+      "line",
+      "book",
+      "poem",
+      "canto",
+      "speaker",
+      "stanza",
+      "act",
+      "scene",
+      "section",
+      "absent",
+      "unnumbered",
+      "page",
+      "column",
+      "line",
+      "book",
+      "poem",
+      "canto",
+      "speaker",
+      "stanza",
+      "act",
+      "scene",
+      "section",
+      "absent",
+      "unnumbered"
+    ],
+    "spanTo": null,
+    "subtype": null
+  },
+  "#223": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "break": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "ed": null,
+    "edRef": null,
+    "spanTo": null,
+    "subtype": null
+  },
+  "#224": [
+    "author",
+    "availability"
+  ],
+  "#225": [
+    "date",
+    "editor"
+  ],
+  "#226": [
+    "idno",
+    "ptr"
+  ],
+  "#227": [
+    "ref",
+    "respStmt"
+  ],
+  "#228": [
+    "textLang",
+    "title"
+  ],
+  "#229": [
+    "author",
+    "availability",
+    "date",
+    "editor",
+    "idno",
+    "ptr",
+    "ref",
+    "respStmt",
+    "textLang",
+    "title"
+  ],
+  "#230": {
+    "children": "#229",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#231": [
+    "author",
+    "authority"
+  ],
+  "#232": [
+    "availability",
+    "biblScope"
+  ],
+  "#233": [
+    "edition",
+    "editor"
+  ],
+  "#234": [
+    "extent",
+    "funder"
+  ],
+  "#235": [
+    "idno",
+    "imprint"
+  ],
+  "#236": [
+    "meeting",
+    "note"
+  ],
+  "#237": [
+    "noteGrp",
+    "ptr"
+  ],
+  "#238": [
+    "sponsor",
+    "textLang"
+  ],
+  "#239": [
+    "author",
+    "authority",
+    "availability",
+    "biblScope",
+    "edition",
+    "editor",
+    "extent",
+    "funder",
+    "idno",
+    "imprint",
+    "meeting",
+    "note",
+    "noteGrp",
+    "ptr",
+    "ref",
+    "respStmt",
+    "sponsor",
+    "textLang",
+    "title"
+  ],
+  "#240": {
+    "children": "#239",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#241": [
+    "anchor",
+    "availability"
+  ],
+  "#242": [
+    "biblScope",
+    "cb"
+  ],
+  "#243": [
+    "editor",
+    "ellipsis"
+  ],
+  "#244": [
+    "pb",
+    "ptr"
+  ],
+  "#245": [
+    "anchor",
+    "availability",
+    "biblScope",
+    "cb",
+    "editor",
+    "ellipsis",
+    "gap",
+    "gb",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "milestone",
+    "note",
+    "noteGrp",
+    "pb",
+    "ptr",
+    "ref",
+    "respStmt",
+    "textLang",
+    "title"
+  ],
+  "#246": {
+    "children": "#245",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#247": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "key": null,
+    "ref": null,
+    "role": null,
+    "nymRef": null
+  },
+  "#248": {
+    "children": "#65",
+    "attrs": "#247 #38 #39 #40 #41 #42 #43"
+  },
+  "#249": [
+    "name",
+    "note"
+  ],
+  "#250": [
+    "orgName",
+    "persName"
+  ],
+  "#251": [
+    "name",
+    "note",
+    "orgName",
+    "persName",
+    "resp"
+  ],
+  "#252": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null
+  },
+  "#253": {
+    "children": "#251",
+    "attrs": "#252 #38 #39 #40 #41 #42 #43"
+  },
+  "#254": [
+    "date",
+    "distinct"
+  ],
+  "#255": [
+    "gloss",
+    "hi"
+  ],
+  "#256": [
+    "linkGrp",
+    "measure"
+  ],
+  "#257": [
+    "q",
+    "ref"
+  ],
+  "#258": [
+    "soCalled",
+    "surname"
+  ],
+  "#259": [
+    "title",
+    "unit"
+  ],
+  "#260": [
+    "abbr",
+    "addName",
+    "address",
+    "anchor",
+    "cb",
+    "choice",
+    "date",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "ref",
+    "roleName",
+    "rs",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unit"
+  ],
+  "#261": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null
+  },
+  "#262": {
+    "children": "#260",
+    "attrs": "#261 #38 #39 #40 #41 #42 #43"
+  },
+  "#263": {
+    "level": [
+      "a",
+      "m",
+      "j",
+      "s",
+      "u",
+      "a",
+      "m",
+      "j",
+      "s",
+      "u"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "subtype": null
+  },
+  "#264": {
+    "children": "#37",
+    "attrs": "#263 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#265": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null
+  },
+  "#266": {
+    "children": "#120",
+    "attrs": "#265 #38 #39 #40 #41 #42 #43"
+  },
+  "#267": [
+    "anchor",
+    "biblScope"
+  ],
+  "#268": [
+    "catRef",
+    "cb"
+  ],
+  "#269": [
+    "classCode",
+    "date"
+  ],
+  "#270": [
+    "distributor",
+    "ellipsis"
+  ],
+  "#271": [
+    "pubPlace",
+    "publisher"
+  ],
+  "#272": [
+    "respStmt",
+    "time"
+  ],
+  "#273": [
+    "anchor",
+    "biblScope",
+    "catRef",
+    "cb",
+    "classCode",
+    "date",
+    "distributor",
+    "ellipsis",
+    "gap",
+    "gb",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "milestone",
+    "note",
+    "noteGrp",
+    "pb",
+    "pubPlace",
+    "publisher",
+    "respStmt",
+    "time"
+  ],
+  "#274": {
+    "children": "#273",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#275": {
+    "children": "#65",
+    "attrs": "#252 #38 #39 #40 #41 #42 #43"
+  },
+  "#276": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "unit": [
+      "volume",
+      "issue",
+      "page",
+      "line",
+      "chapter",
+      "part",
+      "column",
+      "entry",
+      "volume",
+      "issue",
+      "page",
+      "line",
+      "chapter",
+      "part",
+      "column",
+      "entry"
+    ],
+    "from": null,
+    "to": null
+  },
+  "#277": {
+    "children": "#65",
+    "attrs": "#276 #38 #39 #40 #41 #42 #43"
+  },
+  "#278": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "unit": [
+      "volume",
+      "issue",
+      "page",
+      "line",
+      "chapter",
+      "part",
+      "column",
+      "entry",
+      "volume",
+      "issue",
+      "page",
+      "line",
+      "chapter",
+      "part",
+      "column",
+      "entry"
+    ],
+    "from": null,
+    "to": null,
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ]
+  },
+  "#279": {
+    "children": "#65",
+    "attrs": "#278 #38 #39 #40 #41 #42 #43"
+  },
+  "#280": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "role": null,
+    "nymRef": null
+  },
+  "#281": {
+    "children": "#65",
+    "attrs": "#280 #38 #39 #40 #41 #42 #43"
+  },
+  "#282": [
+    "anchor",
+    "author"
+  ],
+  "#283": [
+    "availability",
+    "bibl"
+  ],
+  "#284": [
+    "choice",
+    "citedRange"
+  ],
+  "#285": [
+    "distributor",
+    "edition"
+  ],
+  "#286": [
+    "expan",
+    "extent"
+  ],
+  "#287": [
+    "funder",
+    "gap"
+  ],
+  "#288": [
+    "meeting",
+    "mentioned"
+  ],
+  "#289": [
+    "principal",
+    "ptr"
+  ],
+  "#290": [
+    "relatedItem",
+    "respStmt"
+  ],
+  "#291": [
+    "seg",
+    "series"
+  ],
+  "#292": [
+    "sponsor",
+    "surname"
+  ],
+  "#293": [
+    "term",
+    "textLang"
+  ],
+  "#294": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "author",
+    "availability",
+    "bibl",
+    "biblScope",
+    "cb",
+    "choice",
+    "citedRange",
+    "corr",
+    "date",
+    "del",
+    "distinct",
+    "distributor",
+    "edition",
+    "editor",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "extent",
+    "foreign",
+    "forename",
+    "funder",
+    "gap",
+    "gb",
+    "gloss",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "meeting",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "principal",
+    "ptr",
+    "pubPlace",
+    "publisher",
+    "q",
+    "quote",
+    "ref",
+    "reg",
+    "relatedItem",
+    "respStmt",
+    "roleName",
+    "rs",
+    "seg",
+    "series",
+    "sic",
+    "soCalled",
+    "sponsor",
+    "surname",
+    "term",
+    "textLang",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#295": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ],
+    "status": null,
+    "sortKey": null,
+    "subtype": null
+  },
+  "#296": {
+    "children": "#294",
+    "attrs": "#295 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#297": [
+    "analytic",
+    "citedRange"
+  ],
+  "#298": [
+    "monogr",
+    "note"
+  ],
+  "#299": [
+    "ref",
+    "relatedItem"
+  ],
+  "#300": [
+    "analytic",
+    "citedRange",
+    "monogr",
+    "note",
+    "noteGrp",
+    "ptr",
+    "ref",
+    "relatedItem",
+    "series"
+  ],
+  "#301": {
+    "children": "#300",
+    "attrs": "#295 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#302": [
+    "cb",
+    "desc"
+  ],
+  "#303": [
+    "lb",
+    "listBibl"
+  ],
+  "#304": [
+    "milestone",
+    "pb"
+  ],
+  "#305": [
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "cb",
+    "desc",
+    "gb",
+    "head",
+    "lb",
+    "listBibl",
+    "milestone",
+    "pb"
+  ],
+  "#306": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ],
+    "sortKey": null,
+    "subtype": null
+  },
+  "#307": {
+    "children": "#305",
+    "attrs": "#306 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#308": [
+    "biblStruct",
+    "listBibl"
+  ],
+  "#309": [
+    "ptr",
+    "ref"
+  ],
+  "#310": [
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "listBibl",
+    "ptr",
+    "ref"
+  ],
+  "#311": {
+    "target": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "subtype": null
+  },
+  "#312": {
+    "children": "#310",
+    "attrs": "#311 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#313": [
+    "index",
+    "label"
+  ],
+  "#314": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "binaryObject",
+    "cb",
+    "choice",
+    "cit",
+    "corr",
+    "date",
+    "del",
+    "desc",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "floatingText",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "label",
+    "lb",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "quote",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "said",
+    "seg",
+    "sic",
+    "soCalled",
+    "stage",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#315": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "part": [
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F",
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F"
+    ]
+  },
+  "#316": {
+    "children": "#314",
+    "attrs": "#315 #38 #39 #40 #41 #42 #43"
+  },
+  "#317": [
+    "add",
+    "anchor"
+  ],
+  "#318": [
+    "argument",
+    "byline"
+  ],
+  "#319": [
+    "cb",
+    "closer"
+  ],
+  "#320": [
+    "corr",
+    "dateline"
+  ],
+  "#321": [
+    "docAuthor",
+    "docDate"
+  ],
+  "#322": [
+    "ellipsis",
+    "epigraph"
+  ],
+  "#323": [
+    "head",
+    "index"
+  ],
+  "#324": [
+    "opener",
+    "orig"
+  ],
+  "#325": [
+    "pb",
+    "postscript"
+  ],
+  "#326": [
+    "reg",
+    "salute"
+  ],
+  "#327": [
+    "sic",
+    "signed"
+  ],
+  "#328": [
+    "stage",
+    "trailer"
+  ],
+  "#329": [
+    "add",
+    "anchor",
+    "argument",
+    "byline",
+    "cb",
+    "closer",
+    "corr",
+    "dateline",
+    "del",
+    "desc",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "orig",
+    "pb",
+    "postscript",
+    "reg",
+    "salute",
+    "sic",
+    "signed",
+    "stage",
+    "trailer",
+    "unclear"
+  ],
+  "#330": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "part": [
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F",
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F"
+    ],
+    "org": [
+      "composite",
+      "uniform",
+      "composite",
+      "uniform"
+    ],
+    "sample": [
+      "initial",
+      "medial",
+      "final",
+      "unknown",
+      "complete",
+      "initial",
+      "medial",
+      "final",
+      "unknown",
+      "complete"
+    ],
+    "subtype": null
+  },
+  "#331": {
+    "children": "#329",
+    "attrs": "#330 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#332": [
+    "ab",
+    "anchor"
+  ],
+  "#333": [
+    "cb",
+    "cit"
+  ],
+  "#334": [
+    "ellipsis",
+    "floatingText"
+  ],
+  "#335": [
+    "list",
+    "milestone"
+  ],
+  "#336": [
+    "said",
+    "speaker"
+  ],
+  "#337": [
+    "ab",
+    "anchor",
+    "cb",
+    "cit",
+    "ellipsis",
+    "floatingText",
+    "gap",
+    "gb",
+    "index",
+    "l",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "milestone",
+    "note",
+    "noteGrp",
+    "p",
+    "pb",
+    "q",
+    "quote",
+    "said",
+    "speaker",
+    "stage"
+  ],
+  "#338": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "who": null,
+    "toWhom": null,
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "hand": null
+  },
+  "#339": {
+    "children": "#337",
+    "attrs": "#338 #38 #39 #40 #41 #42 #43"
+  },
+  "#340": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "hand": null
+  },
+  "#341": {
+    "children": "#65",
+    "attrs": "#340 #38 #39 #40 #41 #42 #43"
+  },
+  "#342": {
+    "type": [
+      "setting",
+      "entrance",
+      "exit",
+      "business",
+      "novelistic",
+      "delivery",
+      "modifier",
+      "location",
+      "mixed",
+      "setting",
+      "entrance",
+      "exit",
+      "business",
+      "novelistic",
+      "delivery",
+      "modifier",
+      "location",
+      "mixed"
+    ]
+  },
+  "#343": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "who": null,
+    "toWhom": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "hand": null
+  },
+  "#344": {
+    "children": "#94",
+    "attrs": "#342 #343 #38 #39 #40 #41 #42 #43"
+  },
+  "#345": [
+    "TEI",
+    "standOff"
+  ],
+  "#346": [
+    "teiCorpus",
+    "teiHeader"
+  ],
+  "#347": [
+    "TEI",
+    "standOff",
+    "teiCorpus",
+    "teiHeader",
+    "text"
+  ],
+  "#348": {
+    "version": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "subtype": null
+  },
+  "#349": {
+    "children": "#347",
+    "attrs": "#348 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#350": {
+    "children": [
+      "head"
+    ],
+    "attrs": "#129 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#351": {
+    "mainLang": null,
+    "otherLangs": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ]
+  },
+  "#352": {
+    "children": "#94",
+    "attrs": "#351 #38 #39 #40 #41 #42 #43"
+  },
+  "#353": [
+    "encodingDesc",
+    "fileDesc"
+  ],
+  "#354": [
+    "profileDesc",
+    "revisionDesc"
+  ],
+  "#355": [
+    "encodingDesc",
+    "fileDesc",
+    "profileDesc",
+    "revisionDesc",
+    "xenoData"
+  ],
+  "#356": {
+    "children": "#355",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#357": [
+    "editionStmt",
+    "extent"
+  ],
+  "#358": [
+    "notesStmt",
+    "publicationStmt"
+  ],
+  "#359": [
+    "seriesStmt",
+    "sourceDesc"
+  ],
+  "#360": [
+    "editionStmt",
+    "extent",
+    "notesStmt",
+    "publicationStmt",
+    "seriesStmt",
+    "sourceDesc",
+    "titleStmt"
+  ],
+  "#361": {
+    "children": "#360",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#362": [
+    "author",
+    "editor"
+  ],
+  "#363": [
+    "funder",
+    "meeting"
+  ],
+  "#364": [
+    "principal",
+    "respStmt"
+  ],
+  "#365": [
+    "sponsor",
+    "title"
+  ],
+  "#366": [
+    "author",
+    "editor",
+    "funder",
+    "meeting",
+    "principal",
+    "respStmt",
+    "sponsor",
+    "title"
+  ],
+  "#367": {
+    "children": "#366",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#368": [
+    "ab",
+    "author"
+  ],
+  "#369": [
+    "p",
+    "principal"
+  ],
+  "#370": [
+    "respStmt",
+    "sponsor"
+  ],
+  "#371": [
+    "ab",
+    "author",
+    "edition",
+    "editor",
+    "funder",
+    "meeting",
+    "p",
+    "principal",
+    "respStmt",
+    "sponsor"
+  ],
+  "#372": {
+    "children": "#371",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#373": [
+    "ab",
+    "address"
+  ],
+  "#374": [
+    "authority",
+    "availability"
+  ],
+  "#375": [
+    "date",
+    "distributor"
+  ],
+  "#376": [
+    "idno",
+    "p"
+  ],
+  "#377": [
+    "ptr",
+    "pubPlace"
+  ],
+  "#378": [
+    "publisher",
+    "ref"
+  ],
+  "#379": [
+    "ab",
+    "address",
+    "authority",
+    "availability",
+    "date",
+    "distributor",
+    "idno",
+    "p",
+    "ptr",
+    "pubPlace",
+    "publisher",
+    "ref"
+  ],
+  "#380": {
+    "children": "#379",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#381": {
+    "children": "#260",
+    "attrs": "#252 #38 #39 #40 #41 #42 #43"
+  },
+  "#382": {
+    "type": [
+      "ISBN",
+      "ISSN",
+      "DOI",
+      "URI",
+      "VIAF",
+      "ESTC",
+      "OCLC",
+      "ISBN",
+      "ISSN",
+      "DOI",
+      "URI",
+      "VIAF",
+      "ESTC",
+      "OCLC"
+    ]
+  },
+  "#383": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "sortKey": null,
+    "subtype": null
+  },
+  "#384": {
+    "children": [
+      "idno"
+    ],
+    "attrs": "#38 #382 #383 #39 #40 #41 #42 #43"
+  },
+  "#385": [
+    "ab",
+    "licence",
+    "p"
+  ],
+  "#386": {
+    "status": [
+      "free",
+      "unknown",
+      "restricted",
+      "free",
+      "unknown",
+      "restricted"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "#387": {
+    "children": "#385",
+    "attrs": "#38 #386 #39 #40 #41 #42 #43"
+  },
+  "#388": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ]
+  },
+  "#389": {
+    "children": "#94",
+    "attrs": "#38 #388 #39 #40 #41 #42 #43"
+  },
+  "#390": [
+    "ab",
+    "biblScope"
+  ],
+  "#391": [
+    "editor",
+    "idno"
+  ],
+  "#392": [
+    "p",
+    "respStmt"
+  ],
+  "#393": [
+    "ab",
+    "biblScope",
+    "editor",
+    "idno",
+    "p",
+    "respStmt",
+    "title"
+  ],
+  "#394": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "#395": {
+    "children": "#393",
+    "attrs": "#38 #39 #394 #40 #41 #42 #43"
+  },
+  "#396": [
+    "note",
+    "noteGrp",
+    "relatedItem"
+  ],
+  "#397": {
+    "children": "#396",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#398": [
+    "ab",
+    "bibl"
+  ],
+  "#399": [
+    "ab",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "list",
+    "listBibl",
+    "p"
+  ],
+  "#400": {
+    "children": "#399",
+    "attrs": "#38 #39 #394 #40 #41 #42 #43"
+  },
+  "#401": [
+    "fileDesc",
+    "notesStmt"
+  ],
+  "#402": [
+    "profileDesc",
+    "publicationStmt"
+  ],
+  "#403": [
+    "editionStmt",
+    "extent",
+    "fileDesc",
+    "notesStmt",
+    "profileDesc",
+    "publicationStmt",
+    "seriesStmt",
+    "sourceDesc",
+    "titleStmt"
+  ],
+  "#404": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ],
+    "status": null,
+    "sortKey": null
+  },
+  "#405": {
+    "children": "#403",
+    "attrs": "#38 #39 #40 #404 #41 #42 #43"
+  },
+  "#406": [
+    "ab",
+    "appInfo"
+  ],
+  "#407": [
+    "classDecl",
+    "editorialDecl"
+  ],
+  "#408": [
+    "geoDecl",
+    "listPrefixDef"
+  ],
+  "#409": [
+    "p",
+    "projectDesc"
+  ],
+  "#410": [
+    "refsDecl",
+    "samplingDecl"
+  ],
+  "#411": [
+    "schemaRef",
+    "styleDefDecl"
+  ],
+  "#412": [
+    "tagsDecl",
+    "unitDecl"
+  ],
+  "#413": [
+    "ab",
+    "appInfo",
+    "classDecl",
+    "editorialDecl",
+    "geoDecl",
+    "listPrefixDef",
+    "p",
+    "projectDesc",
+    "refsDecl",
+    "samplingDecl",
+    "schemaRef",
+    "styleDefDecl",
+    "tagsDecl",
+    "unitDecl"
+  ],
+  "#414": {
+    "children": "#413",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#415": {
+    "key": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "url": null,
+    "subtype": null
+  },
+  "#416": {
+    "children": [
+      "desc"
+    ],
+    "attrs": "#38 #39 #40 #41 #415 #42 #43 #70"
+  },
+  "#417": [
+    "ab",
+    "p"
+  ],
+  "#418": {
+    "children": "#417",
+    "attrs": "#38 #39 #394 #40 #41 #42 #43"
+  },
+  "#419": [
+    "ab",
+    "correction"
+  ],
+  "#420": [
+    "hyphenation",
+    "interpretation"
+  ],
+  "#421": [
+    "normalization",
+    "p"
+  ],
+  "#422": [
+    "punctuation",
+    "quotation"
+  ],
+  "#423": [
+    "segmentation",
+    "stdVals"
+  ],
+  "#424": [
+    "ab",
+    "correction",
+    "hyphenation",
+    "interpretation",
+    "normalization",
+    "p",
+    "punctuation",
+    "quotation",
+    "segmentation",
+    "stdVals"
+  ],
+  "#425": {
+    "children": "#424",
+    "attrs": "#38 #39 #394 #40 #41 #42 #43"
+  },
+  "#426": {
+    "status": [
+      "high",
+      "medium",
+      "low",
+      "unknown",
+      "high",
+      "medium",
+      "low",
+      "unknown"
+    ],
+    "method": [
+      "silent",
+      "markup",
+      "silent",
+      "markup"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "#427": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #426 #43"
+  },
+  "#428": {
+    "method": [
+      "silent",
+      "markup",
+      "silent",
+      "markup"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "#429": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #428 #43"
+  },
+  "#430": {
+    "marks": [
+      "none",
+      "some",
+      "all",
+      "none",
+      "some",
+      "all"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "#431": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #43 #430"
+  },
+  "#432": {
+    "eol": [
+      "all",
+      "some",
+      "hard",
+      "none",
+      "all",
+      "some",
+      "hard",
+      "none"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "#433": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #43 #432"
+  },
+  "#434": {
+    "marks": [
+      "none",
+      "some",
+      "all",
+      "none",
+      "some",
+      "all"
+    ],
+    "placement": [
+      "internal",
+      "external",
+      "internal",
+      "external"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "#435": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #43 #434"
+  },
+  "#436": [
+    "namespace",
+    "rendition"
+  ],
+  "#437": {
+    "partial": [
+      "true",
+      "false"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ]
+  },
+  "#438": {
+    "children": "#436",
+    "attrs": "#38 #39 #40 #41 #42 #43 #437"
+  },
+  "#439": {
+    "gi": null,
+    "occurs": null,
+    "withId": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "datcat": null,
+    "valueDatcat": null,
+    "targetDatcat": null
+  },
+  "#440": {
+    "children": "#120",
+    "attrs": "#38 #39 #40 #41 #42 #43 #439"
+  },
+  "#441": {
+    "name": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ]
+  },
+  "#442": {
+    "children": [
+      "tagUsage"
+    ],
+    "attrs": "#38 #39 #40 #41 #42 #43 #441"
+  },
+  "#443": {
+    "scope": null,
+    "selector": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "scheme": [
+      "css",
+      "xslfo",
+      "free",
+      "other",
+      "css",
+      "xslfo",
+      "free",
+      "other"
+    ],
+    "schemeVersion": null
+  },
+  "#444": {
+    "children": "#120",
+    "attrs": "#38 #39 #40 #41 #42 #43 #443"
+  },
+  "#445": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ],
+    "scheme": [
+      "css",
+      "xslfo",
+      "free",
+      "other",
+      "css",
+      "xslfo",
+      "free",
+      "other"
+    ],
+    "schemeVersion": null
+  },
+  "#446": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #43 #445"
+  },
+  "#447": [
+    "ab",
+    "cRefPattern"
+  ],
+  "#448": [
+    "citeStructure",
+    "p"
+  ],
+  "#449": [
+    "ab",
+    "cRefPattern",
+    "citeStructure",
+    "p",
+    "refState"
+  ],
+  "#450": {
+    "children": "#449",
+    "attrs": "#38 #39 #394 #40 #41 #42 #43"
+  },
+  "#451": [
+    "citeData",
+    "citeStructure",
+    "desc"
+  ],
+  "#452": {
+    "match": null,
+    "delim": null,
+    "unit": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "use": null
+  },
+  "#453": {
+    "children": "#451",
+    "attrs": "#38 #39 #40 #41 #42 #43 #452"
+  },
+  "#454": {
+    "property": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "use": null
+  },
+  "#455": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "matchPattern": null,
+    "replacementPattern": null
+  },
+  "#456": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #43 #455"
+  },
+  "#457": {
+    "ident": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "matchPattern": null,
+    "replacementPattern": null
+  },
+  "#458": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #43 #457"
+  },
+  "#459": [
+    "desc",
+    "listPrefixDef",
+    "prefixDef"
+  ],
+  "#460": {
+    "children": "#459",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#461": {
+    "length": null,
+    "delim": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "ed": null,
+    "edRef": null,
+    "unit": [
+      "page",
+      "column",
+      "line",
+      "book",
+      "poem",
+      "canto",
+      "speaker",
+      "stanza",
+      "act",
+      "scene",
+      "section",
+      "absent",
+      "unnumbered",
+      "page",
+      "column",
+      "line",
+      "book",
+      "poem",
+      "canto",
+      "speaker",
+      "stanza",
+      "act",
+      "scene",
+      "section",
+      "absent",
+      "unnumbered"
+    ]
+  },
+  "#462": {
+    "children": [
+      "taxonomy"
+    ],
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#463": [
+    "biblStruct",
+    "category"
+  ],
+  "#464": [
+    "desc",
+    "gloss"
+  ],
+  "#465": [
+    "listBibl",
+    "taxonomy"
+  ],
+  "#466": [
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "category",
+    "desc",
+    "gloss",
+    "listBibl",
+    "taxonomy"
+  ],
+  "#467": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "datcat": null,
+    "valueDatcat": null,
+    "targetDatcat": null
+  },
+  "#468": {
+    "children": "#466",
+    "attrs": "#38 #39 #40 #41 #42 #43 #467"
+  },
+  "#469": [
+    "catDesc",
+    "category"
+  ],
+  "#470": [
+    "catDesc",
+    "category",
+    "desc",
+    "gloss"
+  ],
+  "#471": {
+    "children": "#470",
+    "attrs": "#38 #39 #40 #41 #42 #43 #467"
+  },
+  "#472": [
+    "address",
+    "choice"
+  ],
+  "#473": [
+    "expan",
+    "foreign"
+  ],
+  "#474": [
+    "mentioned",
+    "name"
+  ],
+  "#475": [
+    "nameLink",
+    "num"
+  ],
+  "#476": [
+    "rs",
+    "soCalled"
+  ],
+  "#477": [
+    "abbr",
+    "addName",
+    "address",
+    "choice",
+    "date",
+    "distinct",
+    "email",
+    "emph",
+    "expan",
+    "foreign",
+    "forename",
+    "gloss",
+    "hi",
+    "idno",
+    "measure",
+    "measureGrp",
+    "mentioned",
+    "name",
+    "nameLink",
+    "num",
+    "orgName",
+    "persName",
+    "ptr",
+    "q",
+    "ref",
+    "roleName",
+    "rs",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unit"
+  ],
+  "#478": {
+    "children": "#477",
+    "attrs": "#252 #38 #39 #40 #41 #42 #43"
+  },
+  "#479": {
+    "datum": [
+      "WGS84",
+      "MGRS",
+      "OSGB36",
+      "ED50",
+      "WGS84",
+      "MGRS",
+      "OSGB36",
+      "ED50"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ]
+  },
+  "#480": {
+    "children": "#65",
+    "attrs": "#38 #39 #40 #41 #42 #43 #479"
+  },
+  "#481": {
+    "children": [
+      "unitDef"
+    ],
+    "attrs": "#261 #38 #39 #40 #41 #42 #43"
+  },
+  "#482": [
+    "conversion",
+    "desc"
+  ],
+  "#483": [
+    "label",
+    "unit"
+  ],
+  "#484": [
+    "conversion",
+    "desc",
+    "label",
+    "unit"
+  ],
+  "#485": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "subtype": null
+  },
+  "#486": {
+    "children": "#484",
+    "attrs": "#38 #39 #40 #41 #42 #43 #485 #70"
+  },
+  "#487": {
+    "fromUnit": null,
+    "toUnit": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "formula": null,
+    "where": null
+  },
+  "#488": {
+    "children": [
+      "application"
+    ],
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#489": [
+    "ab",
+    "desc"
+  ],
+  "#490": [
+    "label",
+    "p"
+  ],
+  "#491": [
+    "ab",
+    "desc",
+    "label",
+    "p",
+    "ptr",
+    "ref"
+  ],
+  "#492": {
+    "ident": null,
+    "version": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "subtype": null
+  },
+  "#493": {
+    "children": "#491",
+    "attrs": "#38 #39 #40 #41 #42 #43 #492 #70"
+  },
+  "#494": [
+    "abstract",
+    "calendarDesc"
+  ],
+  "#495": [
+    "correspDesc",
+    "creation"
+  ],
+  "#496": [
+    "langUsage",
+    "textClass"
+  ],
+  "#497": [
+    "abstract",
+    "calendarDesc",
+    "correspDesc",
+    "creation",
+    "langUsage",
+    "textClass"
+  ],
+  "#498": {
+    "children": "#497",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#499": [
+    "ab",
+    "list"
+  ],
+  "#500": [
+    "listBibl",
+    "p"
+  ],
+  "#501": [
+    "ab",
+    "list",
+    "listBibl",
+    "p"
+  ],
+  "#502": {
+    "children": "#501",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#503": [
+    "listChange",
+    "measure"
+  ],
+  "#504": [
+    "abbr",
+    "addName",
+    "address",
+    "choice",
+    "date",
+    "distinct",
+    "email",
+    "emph",
+    "expan",
+    "foreign",
+    "forename",
+    "gloss",
+    "hi",
+    "idno",
+    "listChange",
+    "measure",
+    "measureGrp",
+    "mentioned",
+    "name",
+    "nameLink",
+    "num",
+    "orgName",
+    "persName",
+    "ptr",
+    "q",
+    "ref",
+    "roleName",
+    "rs",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unit"
+  ],
+  "#505": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null
+  },
+  "#506": {
+    "children": "#504",
+    "attrs": "#38 #39 #40 #41 #42 #43 #505"
+  },
+  "#507": [
+    "ab",
+    "language",
+    "p"
+  ],
+  "#508": {
+    "children": "#507",
+    "attrs": "#38 #39 #394 #40 #41 #42 #43"
+  },
+  "#509": {
+    "ident": null,
+    "usage": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "scope": [
+      "sole",
+      "major",
+      "minor",
+      "sole",
+      "major",
+      "minor"
+    ]
+  },
+  "#510": {
+    "children": "#260",
+    "attrs": "#38 #39 #40 #41 #42 #43 #509"
+  },
+  "#511": [
+    "catRef",
+    "classCode",
+    "keywords"
+  ],
+  "#512": {
+    "children": "#511",
+    "attrs": "#38 #39 #394 #40 #41 #42 #43"
+  },
+  "#513": [
+    "list",
+    "term"
+  ],
+  "#514": {
+    "scheme": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ]
+  },
+  "#515": {
+    "children": "#513",
+    "attrs": "#38 #39 #40 #41 #42 #43 #514"
+  },
+  "#516": {
+    "children": "#260",
+    "attrs": "#38 #39 #40 #41 #42 #43 #514"
+  },
+  "#517": {
+    "scheme": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ]
+  },
+  "#518": {
+    "children": [
+      "calendar"
+    ],
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#519": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ],
+    "subtype": null
+  },
+  "#520": {
+    "children": "#417",
+    "attrs": "#38 #39 #40 #41 #42 #43 #519 #70"
+  },
+  "#521": [
+    "ab",
+    "correspAction"
+  ],
+  "#522": [
+    "correspContext",
+    "note"
+  ],
+  "#523": [
+    "noteGrp",
+    "p"
+  ],
+  "#524": [
+    "ab",
+    "correspAction",
+    "correspContext",
+    "note",
+    "noteGrp",
+    "p"
+  ],
+  "#525": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ],
+    "subtype": null
+  },
+  "#526": {
+    "children": "#524",
+    "attrs": "#38 #39 #40 #41 #42 #43 #525 #70"
+  },
+  "#527": [
+    "ab",
+    "addName"
+  ],
+  "#528": [
+    "address",
+    "date"
+  ],
+  "#529": [
+    "email",
+    "forename"
+  ],
+  "#530": [
+    "idno",
+    "name"
+  ],
+  "#531": [
+    "noteGrp",
+    "orgName"
+  ],
+  "#532": [
+    "p",
+    "persName"
+  ],
+  "#533": [
+    "surname",
+    "time"
+  ],
+  "#534": [
+    "ab",
+    "addName",
+    "address",
+    "date",
+    "email",
+    "forename",
+    "idno",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "orgName",
+    "p",
+    "persName",
+    "roleName",
+    "rs",
+    "surname",
+    "time"
+  ],
+  "#535": {
+    "type": [
+      "sent",
+      "received",
+      "transmitted",
+      "redirected",
+      "forwarded",
+      "sent",
+      "received",
+      "transmitted",
+      "redirected",
+      "forwarded"
+    ]
+  },
+  "#536": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "sortKey": null,
+    "subtype": null
+  },
+  "#537": {
+    "children": "#534",
+    "attrs": "#38 #39 #40 #41 #42 #43 #535 #536"
+  },
+  "#538": [
+    "ab",
+    "note"
+  ],
+  "#539": [
+    "ab",
+    "note",
+    "noteGrp",
+    "p",
+    "ptr",
+    "ref"
+  ],
+  "#540": {
+    "children": "#539",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#541": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "default": [
+      "true",
+      "false",
+      "true",
+      "false"
+    ],
+    "subtype": null
+  },
+  "#542": [
+    "change",
+    "list",
+    "listChange"
+  ],
+  "#543": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "status": null
+  },
+  "#544": {
+    "children": "#542",
+    "attrs": "#38 #39 #40 #41 #42 #43 #543"
+  },
+  "#545": {
+    "target": null,
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "who": null,
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null,
+    "status": null,
+    "subtype": null
+  },
+  "#546": {
+    "children": "#94",
+    "attrs": "#38 #39 #40 #41 #42 #43 #545 #70"
+  },
+  "#547": [
+    "change",
+    "desc",
+    "listChange"
+  ],
+  "#548": {
+    "ordered": [
+      "true",
+      "false"
+    ],
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "sortKey": null,
+    "subtype": null
+  },
+  "#549": {
+    "children": "#547",
+    "attrs": "#38 #39 #40 #41 #42 #43 #548 #70"
+  },
+  "#550": [
+    "teiHeader",
+    "text"
+  ],
+  "#551": [
+    "TEI",
+    "standOff",
+    "teiHeader",
+    "text"
+  ],
+  "#552": {
+    "children": "#551",
+    "attrs": "#348 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#553": [
+    "anchor",
+    "back"
+  ],
+  "#554": [
+    "body",
+    "cb"
+  ],
+  "#555": [
+    "ellipsis",
+    "front"
+  ],
+  "#556": [
+    "group",
+    "index"
+  ],
+  "#557": [
+    "anchor",
+    "back",
+    "body",
+    "cb",
+    "ellipsis",
+    "front",
+    "gap",
+    "gb",
+    "group",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "milestone",
+    "note",
+    "noteGrp",
+    "pb"
+  ],
+  "#558": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "decls": null,
+    "subtype": null,
+    "hand": null
+  },
+  "#559": {
+    "children": "#557",
+    "attrs": "#38 #39 #40 #41 #42 #43 #558 #70"
+  },
+  "#560": [
+    "argument",
+    "bibl"
+  ],
+  "#561": [
+    "cit",
+    "closer"
+  ],
+  "#562": [
+    "dateline",
+    "desc"
+  ],
+  "#563": [
+    "div",
+    "div1"
+  ],
+  "#564": [
+    "divGen",
+    "docAuthor"
+  ],
+  "#565": [
+    "epigraph",
+    "floatingText"
+  ],
+  "#566": [
+    "opener",
+    "p"
+  ],
+  "#567": [
+    "said",
+    "salute"
+  ],
+  "#568": [
+    "signed",
+    "sp"
+  ],
+  "#569": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "div",
+    "div1",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#570": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "decls": null
+  },
+  "#571": {
+    "children": "#569",
+    "attrs": "#38 #39 #40 #41 #42 #43 #570"
+  },
+  "#572": [
+    "group",
+    "head"
+  ],
+  "#573": [
+    "signed",
+    "text"
+  ],
+  "#574": [
+    "anchor",
+    "argument",
+    "byline",
+    "cb",
+    "closer",
+    "dateline",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "gap",
+    "gb",
+    "group",
+    "head",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "pb",
+    "postscript",
+    "salute",
+    "signed",
+    "text",
+    "trailer"
+  ],
+  "#575": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "decls": null,
+    "subtype": null
+  },
+  "#576": {
+    "children": "#574",
+    "attrs": "#38 #39 #40 #41 #42 #43 #575 #70"
+  },
+  "#577": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "subtype": null
+  },
+  "#578": {
+    "children": "#557",
+    "attrs": "#38 #39 #40 #41 #42 #43 #577 #70"
+  },
+  "#579": [
+    "div",
+    "divGen"
+  ],
+  "#580": [
+    "listBibl",
+    "meeting"
+  ],
+  "#581": [
+    "noteGrp",
+    "opener"
+  ],
+  "#582": [
+    "postscript",
+    "q"
+  ],
+  "#583": [
+    "quote",
+    "said"
+  ],
+  "#584": [
+    "salute",
+    "signed"
+  ],
+  "#585": [
+    "sp",
+    "stage"
+  ],
+  "#586": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "div",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#587": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "decls": null,
+    "part": [
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F",
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F"
+    ],
+    "org": [
+      "composite",
+      "uniform",
+      "composite",
+      "uniform"
+    ],
+    "sample": [
+      "initial",
+      "medial",
+      "final",
+      "unknown",
+      "complete",
+      "initial",
+      "medial",
+      "final",
+      "unknown",
+      "complete"
+    ],
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "subtype": null,
+    "hand": null
+  },
+  "#588": {
+    "children": "#586",
+    "attrs": "#38 #39 #40 #41 #42 #43 #587 #70"
+  },
+  "#589": [
+    "div2",
+    "divGen"
+  ],
+  "#590": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "div2",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#591": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "decls": null,
+    "part": [
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F",
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F"
+    ],
+    "org": [
+      "composite",
+      "uniform",
+      "composite",
+      "uniform"
+    ],
+    "sample": [
+      "initial",
+      "medial",
+      "final",
+      "unknown",
+      "complete",
+      "initial",
+      "medial",
+      "final",
+      "unknown",
+      "complete"
+    ],
+    "subtype": null
+  },
+  "#592": {
+    "children": "#590",
+    "attrs": "#38 #39 #40 #41 #42 #43 #591 #70"
+  },
+  "#593": [
+    "div3",
+    "divGen"
+  ],
+  "#594": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "div3",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#595": {
+    "children": "#594",
+    "attrs": "#38 #39 #40 #41 #42 #43 #591 #70"
+  },
+  "#596": [
+    "div4",
+    "divGen"
+  ],
+  "#597": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "div4",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#598": {
+    "children": "#597",
+    "attrs": "#38 #39 #40 #41 #42 #43 #591 #70"
+  },
+  "#599": [
+    "div5",
+    "divGen"
+  ],
+  "#600": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "div5",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#601": {
+    "children": "#600",
+    "attrs": "#38 #39 #40 #41 #42 #43 #591 #70"
+  },
+  "#602": [
+    "div6",
+    "divGen"
+  ],
+  "#603": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "div6",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#604": {
+    "children": "#603",
+    "attrs": "#38 #39 #40 #41 #42 #43 #591 #70"
+  },
+  "#605": [
+    "div7",
+    "divGen"
+  ],
+  "#606": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "div7",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#607": {
+    "children": "#606",
+    "attrs": "#38 #39 #40 #41 #42 #43 #591 #70"
+  },
+  "#608": [
+    "ab",
+    "anchor",
+    "argument",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "byline",
+    "cb",
+    "cit",
+    "closer",
+    "dateline",
+    "desc",
+    "docAuthor",
+    "docDate",
+    "ellipsis",
+    "epigraph",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "salute",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#609": {
+    "children": "#608",
+    "attrs": "#38 #39 #40 #41 #42 #43 #591 #70"
+  },
+  "#610": [
+    "docAuthor",
+    "ellipsis"
+  ],
+  "#611": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "binaryObject",
+    "cb",
+    "choice",
+    "corr",
+    "date",
+    "del",
+    "distinct",
+    "docAuthor",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "seg",
+    "sic",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#612": {
+    "children": "#611",
+    "attrs": "#38 #39 #40 #41 #42 #43 #66"
+  },
+  "#613": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "binaryObject",
+    "cb",
+    "choice",
+    "corr",
+    "date",
+    "del",
+    "distinct",
+    "docDate",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "seg",
+    "sic",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#614": {
+    "children": "#613",
+    "attrs": "#38 #39 #40 #41 #42 #43 #68"
+  },
+  "#615": [
+    "biblStruct",
+    "cb"
+  ],
+  "#616": [
+    "cit",
+    "desc"
+  ],
+  "#617": [
+    "pb",
+    "q"
+  ],
+  "#618": [
+    "ab",
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "cb",
+    "cit",
+    "desc",
+    "ellipsis",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "milestone",
+    "note",
+    "noteGrp",
+    "p",
+    "pb",
+    "q",
+    "quote",
+    "said",
+    "sp",
+    "stage"
+  ],
+  "#619": {
+    "children": "#618",
+    "attrs": "#38 #39 #40 #41 #42 #43 #66"
+  },
+  "#620": [
+    "listBibl",
+    "milestone"
+  ],
+  "#621": [
+    "said",
+    "sp"
+  ],
+  "#622": [
+    "ab",
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "cb",
+    "cit",
+    "desc",
+    "ellipsis",
+    "floatingText",
+    "gap",
+    "gb",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "milestone",
+    "note",
+    "noteGrp",
+    "p",
+    "pb",
+    "q",
+    "quote",
+    "said",
+    "sp",
+    "stage"
+  ],
+  "#623": {
+    "children": "#622",
+    "attrs": "#38 #39 #40 #41 #42 #43 #66"
+  },
+  "#624": [
+    "binaryObject",
+    "byline"
+  ],
+  "#625": [
+    "dateline",
+    "del"
+  ],
+  "#626": [
+    "epigraph",
+    "expan"
+  ],
+  "#627": [
+    "ruby",
+    "salute"
+  ],
+  "#628": [
+    "signed",
+    "soCalled"
+  ],
+  "#629": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "argument",
+    "binaryObject",
+    "byline",
+    "cb",
+    "choice",
+    "corr",
+    "date",
+    "dateline",
+    "del",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "epigraph",
+    "expan",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "salute",
+    "seg",
+    "sic",
+    "signed",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#630": {
+    "children": "#629",
+    "attrs": "#38 #39 #40 #41 #42 #43 #68"
+  },
+  "#631": [
+    "salute",
+    "seg"
+  ],
+  "#632": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "binaryObject",
+    "cb",
+    "choice",
+    "corr",
+    "date",
+    "dateline",
+    "del",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "salute",
+    "seg",
+    "sic",
+    "signed",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#633": {
+    "children": "#632",
+    "attrs": "#38 #39 #40 #41 #42 #43 #68"
+  },
+  "#634": [
+    "desc",
+    "ellipsis"
+  ],
+  "#635": [
+    "said",
+    "signed"
+  ],
+  "#636": [
+    "ab",
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "cb",
+    "cit",
+    "closer",
+    "desc",
+    "ellipsis",
+    "floatingText",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "milestone",
+    "note",
+    "noteGrp",
+    "opener",
+    "p",
+    "pb",
+    "postscript",
+    "q",
+    "quote",
+    "said",
+    "signed",
+    "sp",
+    "stage",
+    "trailer"
+  ],
+  "#637": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "place": [
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace",
+      "top",
+      "bottom",
+      "margin",
+      "opposite",
+      "overleaf",
+      "above",
+      "right",
+      "below",
+      "left",
+      "end",
+      "inline",
+      "inspace"
+    ],
+    "hand": null
+  },
+  "#638": {
+    "children": "#636",
+    "attrs": "#38 #39 #40 #41 #42 #43 #637"
+  },
+  "#639": [
+    "cb",
+    "docAuthor"
+  ],
+  "#640": [
+    "docDate",
+    "docEdition"
+  ],
+  "#641": [
+    "docImprint",
+    "docTitle"
+  ],
+  "#642": [
+    "graphic",
+    "imprimatur"
+  ],
+  "#643": [
+    "anchor",
+    "argument",
+    "binaryObject",
+    "byline",
+    "cb",
+    "docAuthor",
+    "docDate",
+    "docEdition",
+    "docImprint",
+    "docTitle",
+    "ellipsis",
+    "epigraph",
+    "gap",
+    "gb",
+    "graphic",
+    "imprimatur",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "milestone",
+    "note",
+    "noteGrp",
+    "pb",
+    "titlePart"
+  ],
+  "#644": {
+    "children": "#643",
+    "attrs": "#129 #38 #39 #40 #41 #42 #43 #70"
+  },
+  "#645": [
+    "ellipsis",
+    "gap"
+  ],
+  "#646": [
+    "gb",
+    "index"
+  ],
+  "#647": [
+    "pb",
+    "titlePart"
+  ],
+  "#648": [
+    "anchor",
+    "cb",
+    "ellipsis",
+    "gap",
+    "gb",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "milestone",
+    "note",
+    "noteGrp",
+    "pb",
+    "titlePart"
+  ],
+  "#649": {
+    "children": "#648",
+    "attrs": "#252 #38 #39 #40 #41 #42 #43"
+  },
+  "#650": {
+    "type": [
+      "main",
+      "sub",
+      "alt",
+      "short",
+      "desc",
+      "main",
+      "sub",
+      "alt",
+      "short",
+      "desc"
+    ]
+  },
+  "#651": {
+    "children": "#37",
+    "attrs": "#129 #38 #39 #40 #41 #42 #43 #650"
+  },
+  "#652": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "key": null,
+    "ref": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ]
+  },
+  "#653": {
+    "children": "#65",
+    "attrs": "#38 #39 #40 #41 #42 #43 #652"
+  },
+  "#654": {
+    "children": "#37",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#655": [
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "binaryObject",
+    "cb",
+    "choice",
+    "corr",
+    "date",
+    "del",
+    "distinct",
+    "docDate",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "pubPlace",
+    "publisher",
+    "q",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "seg",
+    "sic",
+    "soCalled",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#656": {
+    "children": "#655",
+    "attrs": "#164 #38 #39 #40 #41 #42 #43"
+  },
+  "#657": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "calendar": null,
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "when-custom": null,
+    "notBefore-custom": null,
+    "notAfter-custom": null,
+    "from-custom": null,
+    "to-custom": null,
+    "datingPoint": null,
+    "datingMethod": null,
+    "when-iso": null,
+    "notBefore-iso": null,
+    "notAfter-iso": null,
+    "from-iso": null,
+    "to-iso": null,
+    "when": null,
+    "notBefore": null,
+    "notAfter": null,
+    "from": null,
+    "to": null,
+    "period": null
+  },
+  "#658": {
+    "children": "#65",
+    "attrs": "#38 #39 #40 #41 #42 #43 #657"
+  },
+  "#659": [
+    "dateline",
+    "div"
+  ],
+  "#660": [
+    "div1",
+    "divGen"
+  ],
+  "#661": [
+    "docEdition",
+    "docImprint"
+  ],
+  "#662": [
+    "docTitle",
+    "ellipsis"
+  ],
+  "#663": [
+    "titlePage",
+    "titlePart"
+  ],
+  "#664": [
+    "ab",
+    "anchor",
+    "argument",
+    "byline",
+    "cb",
+    "closer",
+    "dateline",
+    "div",
+    "div1",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "docEdition",
+    "docImprint",
+    "docTitle",
+    "ellipsis",
+    "epigraph",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "listBibl",
+    "meeting",
+    "milestone",
+    "note",
+    "noteGrp",
+    "p",
+    "pb",
+    "postscript",
+    "salute",
+    "signed",
+    "titlePage",
+    "titlePart",
+    "trailer"
+  ],
+  "#665": {
+    "children": "#664",
+    "attrs": "#38 #39 #40 #41 #42 #43 #570"
+  },
+  "#666": [
+    "signed",
+    "titlePage"
+  ],
+  "#667": [
+    "titlePart",
+    "trailer"
+  ],
+  "#668": [
+    "ab",
+    "anchor",
+    "argument",
+    "byline",
+    "cb",
+    "closer",
+    "dateline",
+    "div",
+    "div1",
+    "divGen",
+    "docAuthor",
+    "docDate",
+    "docEdition",
+    "docImprint",
+    "docTitle",
+    "ellipsis",
+    "epigraph",
+    "gap",
+    "gb",
+    "head",
+    "index",
+    "lb",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "milestone",
+    "note",
+    "noteGrp",
+    "p",
+    "pb",
+    "postscript",
+    "signed",
+    "titlePage",
+    "titlePart",
+    "trailer"
+  ],
+  "#669": {
+    "children": "#668",
+    "attrs": "#38 #39 #40 #41 #42 #43 #570"
+  },
+  "#670": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "key": null,
+    "ref": null,
+    "role": null,
+    "nymRef": null,
+    "full": [
+      "yes",
+      "abb",
+      "init",
+      "yes",
+      "abb",
+      "init"
+    ],
+    "sort": null,
+    "subtype": null
+  },
+  "#671": {
+    "children": "#65",
+    "attrs": "#38 #39 #40 #41 #42 #43 #670 #70"
+  },
+  "#672": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ],
+    "subtype": null
+  },
+  "#673": [
+    "desc",
+    "link",
+    "ptr"
+  ],
+  "#674": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "targetLang": null,
+    "target": null,
+    "evaluate": [
+      "all",
+      "one",
+      "none",
+      "all",
+      "one",
+      "none"
+    ],
+    "subtype": null,
+    "domains": null,
+    "targFunc": null
+  },
+  "#675": {
+    "children": "#673",
+    "attrs": "#38 #39 #40 #41 #42 #43 #674 #70"
+  },
+  "#676": [
+    "ab",
+    "abbr",
+    "add",
+    "addName",
+    "address",
+    "anchor",
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "binaryObject",
+    "cb",
+    "choice",
+    "cit",
+    "corr",
+    "date",
+    "del",
+    "desc",
+    "distinct",
+    "ellipsis",
+    "email",
+    "emph",
+    "expan",
+    "floatingText",
+    "foreign",
+    "forename",
+    "gap",
+    "gb",
+    "gloss",
+    "graphic",
+    "hi",
+    "idno",
+    "index",
+    "l",
+    "label",
+    "lb",
+    "lg",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "measure",
+    "measureGrp",
+    "media",
+    "mentioned",
+    "milestone",
+    "name",
+    "nameLink",
+    "note",
+    "noteGrp",
+    "num",
+    "orgName",
+    "orig",
+    "pb",
+    "persName",
+    "ptr",
+    "q",
+    "quote",
+    "ref",
+    "reg",
+    "roleName",
+    "rs",
+    "ruby",
+    "said",
+    "seg",
+    "sic",
+    "soCalled",
+    "stage",
+    "surname",
+    "term",
+    "time",
+    "title",
+    "unclear",
+    "unit"
+  ],
+  "#677": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "decls": null,
+    "part": [
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F",
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F"
+    ],
+    "subtype": null,
+    "hand": null
+  },
+  "#678": {
+    "children": "#676",
+    "attrs": "#38 #39 #40 #41 #42 #43 #677 #70"
+  },
+  "#679": {
+    "corresp": null,
+    "synch": null,
+    "sameAs": null,
+    "copyOf": null,
+    "next": null,
+    "prev": null,
+    "exclude": null,
+    "select": null,
+    "style": null,
+    "rendition": null,
+    "source": null,
+    "xml:base": null,
+    "xml:space": [
+      "default",
+      "preserve",
+      "default",
+      "preserve"
+    ],
+    "generatedBy": [
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified",
+      "human",
+      "template",
+      "system",
+      "bot",
+      "unspecified"
+    ],
+    "notation": null,
+    "datcat": null,
+    "valueDatcat": null,
+    "targetDatcat": null,
+    "part": [
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F",
+      "Y",
+      "N",
+      "I",
+      "M",
+      "F"
+    ],
+    "function": null,
+    "subtype": null,
+    "hand": null
+  },
+  "#680": {
+    "children": "#37",
+    "attrs": "#38 #39 #40 #41 #42 #43 #679 #70"
+  },
+  "#681": [
+    "biblStruct",
+    "index"
+  ],
+  "#682": [
+    "listChange",
+    "note"
+  ],
+  "#683": [
+    "seg",
+    "xenoData"
+  ],
+  "#684": [
+    "bibl",
+    "biblFull",
+    "biblStruct",
+    "index",
+    "link",
+    "linkGrp",
+    "list",
+    "listBibl",
+    "listChange",
+    "note",
+    "seg",
+    "xenoData"
+  ],
+  "#685": {
+    "children": "#684",
+    "attrs": "#38 #39 #40 #41 #42 #43 #575 #70"
+  },
+  "#M1": "#164 #38 #39 #40 #41 #42 #43",
+  "#M2": "#223 #38 #39 #40 #41 #42 #43 #70"
+}

@@ -98,6 +98,7 @@ const api = {
   callApi,
   getFileList,
   validateXml,
+  getAutocompleteData,
   saveXml,
   extractReferences,
   loadInstructions,
@@ -289,6 +290,17 @@ async function getFileList() {
  */
 async function validateXml(xmlString) {
   return await callApi('/validate', 'POST', { xml_string: xmlString });
+}
+
+/**
+ * Gets autocomplete data for the XML schema associated with the given XML string.
+ *
+ * @param {string} xmlString - The XML string containing schema information.
+ * @returns {Promise<object>} - A promise that resolves to the autocomplete data object,
+ *   which may be in a deduplicated format requiring resolution with resolveDeduplicated().
+ */
+async function getAutocompleteData(xmlString) {
+  return await callApi('/validate/autocomplete-data', 'POST', { xml_string: xmlString });
 }
 
 /**

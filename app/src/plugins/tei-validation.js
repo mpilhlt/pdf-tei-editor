@@ -150,8 +150,21 @@ async function lintSource(view) {
         const diagnostics = validationErrors.map(/** @type {object} */ error => {
           let from, to;
           if (error.line !== undefined && error.column !== undefined) {
-            ({ from, to } = doc.line(error.line))
-            from = from + error.column -1
+            // Ensure line number is valid (1-based from validation, but doc.line expects 1-based)
+            const lineNum = Math.max(1, Math.min(error.line, doc.lines));
+            try {
+              ({ from, to } = doc.line(lineNum));
+              // Ensure column is valid (0-based column position)
+              const columnOffset = Math.max(0, error.column);
+              from = Math.max(0, from + columnOffset);
+              // Ensure 'to' position is not beyond the line end
+              to = Math.min(to, from + 1);
+            } catch (e) {
+              console.warn(`Invalid line/column in validation error:`, error, e);
+              // Fallback to document start if line/column calculation fails
+              from = 0;
+              to = 1;
+            }
           } else {
             throw new Error("Invalid response from remote validation:", error)
           }
