@@ -40249,9 +40249,26 @@ function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
       throw new Error("Invalid arguments. Syntax node and DOM node must not be null.");
     }
 
+    // Skip over processing instructions and other non-element nodes in both trees
+    // to find the matching elements to link
+    while (syntaxNode && syntaxNode.name !== "Element") {
+      syntaxNode = syntaxNode.nextSibling;
+    }
+    while (domNode && domNode.nodeType !== Node.ELEMENT_NODE) {
+      domNode = domNode.nextSibling;
+    }
+
+    // If we couldn't find matching element nodes, return empty maps
+    if (!syntaxNode || !domNode) {
+      return {
+        syntaxToDom: new Map(),
+        domToSyntax: new Map()
+      };
+    }
+
     // Check if the syntaxNode and domNode are valid
-    if (syntaxNode.name !== "Element" && syntaxNode.name !== "Document") {
-      throw new Error(`Unexpected node type: ${syntaxNode.name}. Expected "Element" or "Document".`);
+    if (syntaxNode.name !== "Element") {
+      throw new Error(`Unexpected node type: ${syntaxNode.name}. Expected "Element".`);
     }
 
     // make sure we have a tag name child
@@ -40330,24 +40347,7 @@ function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     throw new Error("Invalid arguments. The root syntax node must be the top Document node and the DOM node must be a document. Received: " +
       `syntaxNode: ${syntaxNode.name}, domNode: ${Object.keys(Node)[domNode.nodeType - 1]}`);
   }
-
-  // Find the first Element child in the syntax tree, skipping processing instructions
-  let syntaxFirstElement = syntaxNode.firstChild;
-  while (syntaxFirstElement && syntaxFirstElement.name !== "Element") {
-    syntaxFirstElement = syntaxFirstElement.nextSibling;
-  }
-
-  // Find the first Element child in the DOM tree, skipping processing instructions and other non-element nodes
-  let domFirstElement = domNode.firstChild;
-  while (domFirstElement && domFirstElement.nodeType !== Node.ELEMENT_NODE) {
-    domFirstElement = domFirstElement.nextSibling;
-  }
-
-  if (!syntaxFirstElement || !domFirstElement) {
-    throw new Error("Could not find root element in syntax tree or DOM tree. This may be due to malformed XML or unsupported document structure.");
-  }
-
-  return recursiveLink(syntaxFirstElement, domFirstElement);
+  return recursiveLink(syntaxNode.firstChild, domNode.firstChild);
 }
 
 // Function to install the selection change listener
