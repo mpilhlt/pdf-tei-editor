@@ -50,16 +50,23 @@ def autocomplete_data_route():
         current_app.logger.debug('No schema location found in XML, cannot generate autocomplete data.')
         return jsonify({"error": "No schema location found in XML document"})
     
-    # For now, we only support the first schema location
-    # TODO: Handle multiple schemas if needed
-    schema_info = schema_locations[0]
+    # For autocomplete, prioritize RelaxNG schemas, fall back to first available
+    schema_info = None
+    for sl in schema_locations:
+        if sl.get('type') == 'relaxng':
+            schema_info = sl
+            break
+    if not schema_info:
+        schema_info = schema_locations[0]
+    
     namespace = schema_info['namespace']
     schema_location = schema_info['schemaLocation']
+    schema_type = schema_info.get('type', 'unknown')
     
     if not schema_location.startswith("http"):
         raise ApiError(f"Schema location must start with 'http': {schema_location}")
     
-    current_app.logger.debug(f"Generating autocomplete data for namespace {namespace} with schema at {schema_location}")
+    current_app.logger.debug(f"Generating autocomplete data for namespace {namespace} with {schema_type} schema at {schema_location}")
     
     # Get cache information
     schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location)
@@ -111,14 +118,38 @@ def autocomplete_data_route():
 
 
 def extract_schema_locations(xml_string):
-    schema_locations_match = re.search(r'schemaLocation="[^"]+"', xml_string)
-    if schema_locations_match is None:
-        return []
-    schema_locations_str = schema_locations_match.group(0) #extract the matched string
+    """
+    Extract schema locations from XML document, supporting both XSD and RelaxNG approaches:
+    - XSD: uses xsi:schemaLocation attribute
+    - RelaxNG: uses xml-model processing instruction
+    """
     results = []
-    parts = re.split(r'\s+', schema_locations_str[16:-1]) #remove 'schemaLocation="' and '"'
-    while len(parts) >= 2:
-        results.append({ "namespace": parts.pop(0), "schemaLocation": parts.pop(0) })
+    
+    # First try XSD-style schemaLocation attribute
+    schema_locations_match = re.search(r'schemaLocation="([^"]+)"', xml_string)
+    if schema_locations_match:
+        schema_locations_str = schema_locations_match.group(1)
+        parts = re.split(r'\s+', schema_locations_str.strip())
+        while len(parts) >= 2:
+            results.append({ 
+                "namespace": parts.pop(0), 
+                "schemaLocation": parts.pop(0),
+                "type": "xsd"
+            })
+    
+    # Then try RelaxNG-style xml-model processing instruction
+    xml_model_match = re.search(r'<\?xml-model\s+href="([^"]+)"[^>]*schematypens="http://relaxng\.org/ns/structure/1\.0"[^>]*\?>', xml_string)
+    if xml_model_match:
+        schema_location = xml_model_match.group(1)
+        # Extract namespace from root element (assuming TEI)
+        namespace_match = re.search(r'<\w+[^>]*xmlns="([^"]+)"', xml_string)
+        namespace = namespace_match.group(1) if namespace_match else "http://www.tei-c.org/ns/1.0"
+        results.append({
+            "namespace": namespace,
+            "schemaLocation": schema_location,
+            "type": "relaxng"
+        })
+    
     return results
 
 
@@ -162,7 +193,9 @@ def validate(xml_string):
     errors = []
     
     try:
-        xmldoc = etree.XML(xml_string, parser)
+        # Convert string to bytes to handle encoding declarations properly
+        xml_bytes = xml_string.encode('utf-8') if isinstance(xml_string, str) else xml_string
+        xmldoc = etree.XML(xml_bytes, parser)
     except XMLSyntaxError as e:
         # if xml is invalid, return right away
         for error in e.error_log:
@@ -182,34 +215,29 @@ def validate(xml_string):
     for sl in schema_locations:
         namespace = sl['namespace']
         schema_location = sl['schemaLocation']
+        schema_type = sl.get('type', 'unknown')
+        
         if not schema_location.startswith("http"):
             current_app.logger.warning(f"Not validating for namespace {namespace} with schema at {schema_location}: schema location must start with 'http'")
             continue
             
-        current_app.logger.debug(f"Validating doc for namespace {namespace} with schema at {schema_location}")
+        current_app.logger.debug(f"Validating doc for namespace {namespace} with {schema_type} schema at {schema_location}")
         schema_cache_dir, schema_cache_file, schema_file_name = get_schema_cache_info(schema_location)
-        schema_tree = etree.parse(schema_cache_file)
-        root_namespace = schema_tree.getroot().tag.split('}')[0][1:]
         
-        if root_namespace not in [XSD_NAMESPACE, RELAXNG_NAMESPACE]:
-            raise ApiError(f'Unsupported schema namespace: {root_namespace}')
-        
+        # Download schema if not cached
         if not os.path.isfile(schema_cache_file):
             current_app.logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
             os.makedirs(schema_cache_dir, exist_ok=True)
             try:
-                if root_namespace == RELAXNG_NAMESPACE:
-                    # Use the filename from the schema info
-                    schema_cache_file = os.path.join(schema_cache_dir, schema_file_name)
-
+                if schema_type == "relaxng":
                     # Download the RelaxNG schema file
                     with requests.get(schema_location, stream=True) as r:
-                        r.raise_for_status()  # This will raise an HTTPError for bad responses (4xx or 5xx)
+                        r.raise_for_status()
                         with open(schema_cache_file, 'wb') as f:
                             for chunk in r.iter_content(chunk_size=8192):
                                 f.write(chunk)
                 else:
-                    # xmlschema has a convenience method for this which will also download included XSD docs
+                    # For XSD, use xmlschema which handles includes/imports
                     xmlschema.download_schemas(schema_location, target=schema_cache_dir, save_remote=True)
             except HTTPError:
                 raise ApiError(f"Failed to download schema for {namespace} from {schema_location} - check the URL")
@@ -218,7 +246,30 @@ def validate(xml_string):
         else:
             current_app.logger.debug(f"Using cached version at {schema_cache_file}")
         
-        # Load the schema from the cache
+        # Parse schema to determine actual type from file content
+        try:
+            schema_tree = etree.parse(schema_cache_file)
+            root_namespace = schema_tree.getroot().tag.split('}')[0][1:]
+        except Exception as e:
+            raise ApiError(f"Failed to parse schema file {schema_cache_file}: {str(e)}")
+        
+        if root_namespace not in [XSD_NAMESPACE, RELAXNG_NAMESPACE]:
+            raise ApiError(f'Unsupported schema namespace: {root_namespace}')
+        
+        # Prepare XML document for validation based on schema type
+        if root_namespace == RELAXNG_NAMESPACE:
+            # For RelaxNG, remove schemaLocation attribute if present to avoid validation errors
+            validation_xml = re.sub(r'\s+xmlns:xsi="[^"]*"', '', xml_string)
+            validation_xml = re.sub(r'\s+xsi:schemaLocation="[^"]*"', '', validation_xml)
+            # Convert cleaned XML to bytes for parsing
+            validation_xml_bytes = validation_xml.encode('utf-8') if isinstance(validation_xml, str) else validation_xml
+            validation_xmldoc = etree.XML(validation_xml_bytes, parser)
+            current_app.logger.debug("Removed XSD-specific attributes for RelaxNG validation")
+        else:
+            # For XSD, use original XML
+            validation_xmldoc = xmldoc
+        
+        # Load and apply the schema
         try:
             if root_namespace == RELAXNG_NAMESPACE:
                 schema = RelaxNG(schema_tree)
@@ -226,13 +277,14 @@ def validate(xml_string):
                 schema = XMLSchema(schema_tree)                
         except XMLSchemaParseError as e:
             raise ApiError(f"Failed to load schema for {namespace} from {schema_cache_file}: {str(e)}")
+        
         try:
-            schema.assertValid(xmldoc)
+            schema.assertValid(validation_xmldoc)
         except DocumentInvalid:
             for error in schema.error_log:
                 errors.append({
                     "message": error.message.replace("{http://www.tei-c.org/ns/1.0}", "tei:"), # todo generalize this
                     "line": error.line,
                     "column": error.column
-            })
+                })
     return errors

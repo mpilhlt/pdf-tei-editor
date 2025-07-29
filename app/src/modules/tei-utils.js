@@ -331,8 +331,6 @@ export function resolveDeduplicated(data) {
     }
   });
 
-  console.warn("Resolving", Object.keys(refs).length, "references for", Object.keys(resolved).length, "elements");
-
   // Pre-resolve all references to create shared objects
   const resolvedRefs = {};
 
@@ -396,7 +394,12 @@ export function resolveDeduplicated(data) {
       const merged = {};
       resolved.forEach(obj => {
         Object.keys(obj).forEach(key => {
-          merged[key] = obj[key]; // This shares the value reference
+          if (key === 'doc' && merged[key]) {
+            // Merge documentation fields by concatenating with separator
+            merged[key] = merged[key] + ' | ' + obj[key];
+          } else {
+            merged[key] = obj[key]; // This shares the value reference
+          }
         });
       });
       return merged;

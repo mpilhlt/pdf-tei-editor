@@ -208,10 +208,18 @@ class RelaxNGParser:
         # Extract attributes
         attributes = self._extract_attributes(element)
         
-        self.element_definitions[name] = {
+        # Extract documentation
+        documentation = self._extract_documentation(element)
+        
+        element_data = {
             'children': children,
             'attrs': attributes
         }
+        
+        if documentation:
+            element_data['doc'] = documentation
+            
+        self.element_definitions[name] = element_data
     
     def _extract_child_elements(self, element: ET.Element, visited: Optional[Set[str]] = None) -> List[str]:
         """Extract allowed child elements from an element definition."""
@@ -261,7 +269,19 @@ class RelaxNGParser:
         
         return result
     
-    def _extract_attributes(self, element: ET.Element, visited: Optional[Set[str]] = None) -> Dict[str, Union[List[str], None]]:
+    def _extract_documentation(self, element: ET.Element) -> Optional[str]:
+        """Extract documentation from RelaxNG schema element."""
+        docs = []
+        
+        # Look for immediate a:documentation elements (avoid deep nesting)
+        for doc in element.findall('./a:documentation', {'a': 'http://relaxng.org/ns/compatibility/annotations/1.0'}):
+            if doc.text and doc.text.strip():
+                docs.append(doc.text.strip())
+        
+        # Return combined documentation or None
+        return ' '.join(docs) if docs else None
+    
+    def _extract_attributes(self, element: ET.Element, visited: Optional[Set[str]] = None) -> Dict[str, Union[List[str], Dict, None]]:
         """Extract attribute definitions from an element."""
         if visited is None:
             visited = set()
@@ -274,7 +294,16 @@ class RelaxNGParser:
             if attr_name:
                 # Check for value constraints
                 values = self._extract_attribute_values(attr)
-                attributes[attr_name] = values
+                # Extract documentation for this attribute
+                attr_doc = self._extract_documentation(attr)
+                
+                # Create attribute data structure
+                if attr_doc and values:
+                    attributes[attr_name] = {'values': values, 'doc': attr_doc}
+                elif attr_doc:
+                    attributes[attr_name] = {'doc': attr_doc}
+                else:
+                    attributes[attr_name] = values
         
         # Look for attributes in containers
         for container in element.findall('./{http://relaxng.org/ns/structure/1.0}choice') + \
@@ -283,7 +312,15 @@ class RelaxNGParser:
                          element.findall('./{http://relaxng.org/ns/structure/1.0}zeroOrMore') + \
                          element.findall('./{http://relaxng.org/ns/structure/1.0}oneOrMore'):
             container_attrs = self._extract_attributes(container, visited)
-            attributes.update(container_attrs)
+            # Merge attributes, preserving documentation
+            for attr_name, attr_data in container_attrs.items():
+                if attr_name not in attributes:
+                    attributes[attr_name] = attr_data
+                elif isinstance(attributes[attr_name], dict) and isinstance(attr_data, dict):
+                    # Merge both dict structures
+                    merged = attributes[attr_name].copy()
+                    merged.update(attr_data)
+                    attributes[attr_name] = merged
         
         # Look for attribute references (with cycle detection)
         for ref in element.findall('./{http://relaxng.org/ns/structure/1.0}ref'):
@@ -292,7 +329,15 @@ class RelaxNGParser:
                 visited.add(ref_name)
                 try:
                     ref_attrs = self._extract_attributes(self.defined_patterns[ref_name], visited)
-                    attributes.update(ref_attrs)
+                    # Merge referenced attributes, preserving documentation
+                    for attr_name, attr_data in ref_attrs.items():
+                        if attr_name not in attributes:
+                            attributes[attr_name] = attr_data
+                        elif isinstance(attributes[attr_name], dict) and isinstance(attr_data, dict):
+                            # Merge both dict structures
+                            merged = attributes[attr_name].copy()
+                            merged.update(attr_data)
+                            attributes[attr_name] = merged
                 finally:
                     visited.discard(ref_name)
         
@@ -352,7 +397,11 @@ class RelaxNGParser:
                     attrs = self._maybe_deduplicate(attrs)
                 element_data['attrs'] = attrs
             
-            # Only include element if it has children or attributes
+            # Add documentation if available
+            if 'doc' in definition and definition['doc']:
+                element_data['doc'] = definition['doc']
+            
+            # Only include element if it has children, attributes, or documentation
             if element_data:
                 if self.deduplicate:
                     element_data = self._maybe_deduplicate(element_data)

@@ -897,8 +897,6 @@ export class XMLEditor extends EventTarget {
       // treat argument as xml string
       xml = xmlUrlOrString;
     }
-    // remove xml declaration
-    xml = xml.replaceAll(/<\?xml.+?\?>/g, '').trim()
     return xml
   }
 
