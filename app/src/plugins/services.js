@@ -281,10 +281,35 @@ async function load(state, { xml, pdf }) {
   }
   if (xml) {
     state.xmlPath = xml
+    startAutocomplete()
   }
 
   // notify plugins
   await updateState(state)
+}
+
+async function startAutocomplete() {
+  // Load autocomplete data asynchronously after XML is loaded
+  try {
+    logger.debug("Loading autocomplete data for XML document")
+    const xmlContent = xmlEditor.getEditorContent()
+    if (xmlContent) {
+      const autocompleteData = await client.getAutocompleteData(xmlContent)
+      if (autocompleteData && !autocompleteData.error) {
+        // Resolve deduplicated references
+        const resolvedData = tei_utils.resolveDeduplicated(autocompleteData)
+        // Start autocomplete with the resolved data
+        xmlEditor.startAutocomplete(resolvedData)
+        logger.debug("Autocomplete data loaded and applied")
+        notify("Autocomplete is available")
+      } else if (autocompleteData && autocompleteData.error) {
+        logger.debug("No autocomplete data available: " + autocompleteData.error)
+      }
+    }
+  } catch (error) {
+    logger.warn("Failed to load autocomplete data: " + error.message)
+    // Don't block the loading process if autocomplete fails
+  }
 }
 
 /**

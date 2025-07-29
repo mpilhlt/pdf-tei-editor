@@ -331,6 +331,8 @@ export function resolveDeduplicated(data) {
     }
   });
 
+  console.warn("Resolving", Object.keys(refs).length, "references for", Object.keys(resolved).length, "elements");
+
   // Pre-resolve all references to create shared objects
   const resolvedRefs = {};
 
@@ -355,8 +357,12 @@ export function resolveDeduplicated(data) {
   function resolveRefs(obj) {
     if (typeof obj === 'string' && obj.includes('#')) {
       if (obj.startsWith('#') && !obj.includes(' ')) {
-        // Simple reference - return shared object
-        return resolvedRefs[obj] || obj;
+        // Simple reference - return shared object and recursively resolve its contents
+        const resolved = resolvedRefs[obj];
+        if (resolved) {
+          return resolveRefs(resolved); // Recursively resolve the contents
+        }
+        return obj;
       } else if (obj.includes(' ')) {
         // Composite reference like "#1 #23 #44"
         const refIds = obj.split(' ').filter(id => id.startsWith('#'));
