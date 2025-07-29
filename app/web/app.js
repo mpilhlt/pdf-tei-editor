@@ -40051,6 +40051,30 @@ const autoCloseTags = /*@__PURE__*/EditorView.inputHandler.of((view, from, to, t
 
 
 /**
+ * Creates a delayed info function that shows documentation after a timeout
+ * only if the user hasn't changed the selection
+ * @param {string} doc - The documentation text to show
+ * @returns {Function} Async function that returns documentation with delay
+ */
+function createDelayedInfo(doc) {
+  return function() {
+    return new Promise((resolve) => {
+      const delay = 800; // 800ms delay before showing documentation
+      
+      setTimeout(() => {
+        // Create a DOM node containing the documentation
+        const div = document.createElement('div');
+        div.textContent = doc;
+        div.style.maxWidth = '300px';
+        div.style.padding = '8px';
+        div.style.lineHeight = '1.4';
+        resolve(div);
+      }, delay);
+    });
+  };
+}
+
+/**
  * Walks the Lezer Syntax upwards to find all tag names
  * @param {SyntaxNode} node 
  * @param {EditorState} state 
@@ -40091,37 +40115,76 @@ function createCompletionSource(tagData) {
 
     switch (type) {
       case "StartTag":
-        options = tagData[parentTags[0]]?.children || [];
+        options = (tagData[parentTags[0]]?.children || []).map(childName => {
+          const childData = tagData[childName];
+          const doc = childData?.doc;
+          return {
+            label: childName,
+            type: "keyword",
+            detail: doc ? (doc.length > 50 ? doc.substring(0, 47) + "..." : doc) : undefined,
+            info: doc ? createDelayedInfo(doc) : undefined
+          };
+        });
         break;
       case "TagName":
-        options = tagData[parentTags[1]]?.children || [];
+        options = (tagData[parentTags[1]]?.children || []).map(childName => {
+          const childData = tagData[childName];
+          const doc = childData?.doc;
+          return {
+            label: childName,
+            type: "keyword",
+            detail: doc ? (doc.length > 50 ? doc.substring(0, 47) + "..." : doc) : undefined,
+            info: doc ? createDelayedInfo(doc) : undefined
+          };
+        });
         break;
       case "OpenTag":
       case "AttributeName":
         options = Object.keys(tagData[parentTags[0]]?.attrs || {})
-          .map(displayLabel => ({
-            displayLabel,
-            label: `${displayLabel}=""`,
-            type: "property",
-            apply: (view, completion, from, to) => {
-              view.dispatch({
-                changes: { from, to, insert: completion.label },
-                selection: { anchor: from + completion.label.length - 1 }
-              });
-              // start new autocomplete
-              setTimeout(() => startCompletion(view), 20);
-            }
-          }));
+          .map(attrName => {
+            const attrData = tagData[parentTags[0]].attrs[attrName];
+            const doc = (typeof attrData === 'object' && attrData.doc) ? attrData.doc : undefined;
+            
+            return {
+              displayLabel: attrName,
+              label: `${attrName}=""`,
+              type: "property",
+              detail: doc ? (doc.length > 30 ? doc.substring(0, 27) + "..." : doc) : undefined,
+              info: doc ? createDelayedInfo(doc) : undefined,
+              apply: (view, completion, from, to) => {
+                view.dispatch({
+                  changes: { from, to, insert: completion.label },
+                  selection: { anchor: from + completion.label.length - 1 }
+                });
+                // start new autocomplete
+                setTimeout(() => startCompletion(view), 20);
+              }
+            };
+          });
         break;
       case "AttributeValue":
         const attributeNode = node.prevSibling?.prevSibling;
         if (!attributeNode) break;
         const attributeTag = context.state.sliceDoc(attributeNode.from, attributeNode.to);
         const attrs = tagData[parentTags[0]]?.attrs;
-        options = (attrs && attrs[attributeTag]) || [];
-        options = options.map(option => ({
-          label: option,
+        const attrData = attrs && attrs[attributeTag];
+        
+        // Handle both old format (array) and new format (object with values and doc)
+        let values = [];
+        let attrDoc = undefined;
+        
+        if (Array.isArray(attrData)) {
+          values = attrData;
+        } else if (typeof attrData === 'object' && attrData) {
+          values = attrData.values || [];
+          attrDoc = attrData.doc;
+        }
+        
+        options = values.map(value => ({
+          label: value,
           type: "property",
+          detail: attrDoc ? (attrDoc.length > 40 ? attrDoc.substring(0, 37) + "..." : attrDoc) : undefined,
+          info: attrDoc ? createDelayedInfo(attrDoc) : undefined,
           apply: (view, completion, from, to) => {
             view.dispatch({
               changes: { from, to, insert: completion.label },
@@ -40140,8 +40203,13 @@ function createCompletionSource(tagData) {
     const from = ["StartTag", "OpenTag", "AttributeValue"].includes(type) ? pos : node.from;
     const to = pos;
 
-    // convert string options to completionResult objects
-    options = options.map(label => typeof label === "string" ? ({ label, type: completionType }) : label);
+    // convert string options to completionResult objects (only for legacy format)
+    options = options.map(option => {
+      if (typeof option === "string") {
+        return { label: option, type: completionType };
+      }
+      return option;
+    });
 
     return {
       from, to, options,
@@ -41270,8 +41338,6 @@ class XMLEditor extends EventTarget {
       // treat argument as xml string
       xml = xmlUrlOrString;
     }
-    // remove xml declaration
-    xml = xml.replaceAll(/<\?xml.+?\?>/g, '').trim();
     return xml
   }
 
@@ -42157,8 +42223,21 @@ async function lintSource(view) {
         const diagnostics = validationErrors.map(/** @type {object} */ error => {
           let from, to;
           if (error.line !== undefined && error.column !== undefined) {
-            ({ from, to } = doc.line(error.line));
-            from = from + error.column -1;
+            // Ensure line number is valid (1-based from validation, but doc.line expects 1-based)
+            const lineNum = Math.max(1, Math.min(error.line, doc.lines));
+            try {
+              ({ from, to } = doc.line(lineNum));
+              // Ensure column is valid (0-based column position)
+              const columnOffset = Math.max(0, error.column);
+              from = Math.max(0, from + columnOffset);
+              // Ensure 'to' position is not beyond the line end
+              to = Math.min(to, from + 1);
+            } catch (e) {
+              console.warn(`Invalid line/column in validation error:`, error, e);
+              // Fallback to document start if line/column calculation fails
+              from = 0;
+              to = 1;
+            }
           } else {
             throw new Error("Invalid response from remote validation:", error)
           }
@@ -44187,8 +44266,6 @@ function resolveDeduplicated(data) {
     }
   });
 
-  console.warn("Resolving", Object.keys(refs).length, "references for", Object.keys(resolved).length, "elements");
-
   // Pre-resolve all references to create shared objects
   const resolvedRefs = {};
 
@@ -44252,7 +44329,12 @@ function resolveDeduplicated(data) {
       const merged = {};
       resolved.forEach(obj => {
         Object.keys(obj).forEach(key => {
-          merged[key] = obj[key]; // This shares the value reference
+          if (key === 'doc' && merged[key]) {
+            // Merge documentation fields by concatenating with separator
+            merged[key] = merged[key] + ' | ' + obj[key];
+          } else {
+            merged[key] = obj[key]; // This shares the value reference
+          }
         });
       });
       return merged;
