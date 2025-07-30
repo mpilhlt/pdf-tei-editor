@@ -454,11 +454,11 @@ async function deleteAll(state) {
   }
 
   // @ts-ignore
-  const filePathsToDelete = [ui.toolbar.pdf.value]
+  const filePathsToDelete = Array.from(new Set([ui.toolbar.pdf.value]
     // @ts-ignore
     .concat(Array.from(ui.toolbar.xml.childNodes).map(option => option.value))
     // @ts-ignore
-    .concat(Array.from(ui.toolbar.diff.childNodes).map(option => option.value))
+    .concat(Array.from(ui.toolbar.diff.childNodes).map(option => option.value))))
 
   if (filePathsToDelete.length > 0) {
     const msg = `Are you sure you want to delete the following files: ${filePathsToDelete.join(", ")}? This cannot be undone.`
@@ -466,25 +466,25 @@ async function deleteAll(state) {
   }
 
   services.removeMergeView(state)
-  console.debug("Deleting files:", filePathsToDelete)
-  await client.deleteFiles(filePathsToDelete)
-
+  logger.debug("Deleting files:" + filePathsToDelete.join(", "))
+  
   try {
-    // update the file data
-    await fileselection.reload(state)
-
-    // load the first PDF and XML file 
-    await load(state, {
-      pdf: fileselection.fileData[0].pdf,
-      xml: fileselection.fileData[0].xml
-    })
+    await client.deleteFiles(filePathsToDelete)
     notify(`${filePathsToDelete.length} files have been deleted.`)
     syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
   } catch (error) {
-    console.error(error)
-    alert(error.message)
+    console.error(error.message)
+    notify(error.message, "warning")
+  } finally {
+    // update the file data
+    await fileselection.reload(state)
+    // load the first PDF and XML file 
+    await load(state, {
+      pdf: fileselection.fileData[0].pdf,
+      xml: fileselection.fileData[0].xml
+    })
   }
 }
 

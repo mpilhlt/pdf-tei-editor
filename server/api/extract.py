@@ -23,8 +23,8 @@ prompt_path = os.path.join(os.path.dirname(__file__), "..", "data", "prompt.json
 bp = Blueprint("extract", __name__, url_prefix="/api/extract")
 
 # the url of the TEI schema used, needs to go into app config
-TEI_SCHEMA_LOCATION = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd"
-
+TEI_XSD_SCHEMA_LOCATION = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/xsd/tei.xsd"
+TEI_RNG_SCHEMA_LOCATION = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/rng/tei-bib.rng"
 
 @bp.route("", methods=["POST"])
 @handle_api_errors
@@ -110,8 +110,8 @@ def check_doi(doi):
 
 
 def tei_from_pdf(pdf_path: str, options: dict = {}) -> str:
-    # the TEI doc
-    tei_doc = create_tei_doc(TEI_SCHEMA_LOCATION)
+    # the TEI doc with RelaxNG validation (default)
+    tei_doc = create_tei_doc(TEI_RNG_SCHEMA_LOCATION, "relaxng")
 
     # create the header
     doi = options.get("doi", "")
@@ -125,11 +125,34 @@ def tei_from_pdf(pdf_path: str, options: dict = {}) -> str:
 
     # serialize re-indented XML
     remove_whitespace(tei_doc)
-    tei_xml = etree.tostring(tei_doc, pretty_print=False, encoding="UTF-8").decode()
-    import xml.dom.minidom
-    tei_xml = xml.dom.minidom.parseString(tei_xml).toprettyxml(indent="  ", encoding="utf-8").decode()
-    # remove xml declaration
-    tei_xml = "\n".join(tei_xml.split("\n")[1:])
+    
+    # Handle RelaxNG processing instruction
+    relaxng_schema = tei_doc.get("_relaxng_schema")
+    if relaxng_schema:
+        # Remove the temporary attribute
+        del tei_doc.attrib["_relaxng_schema"]
+        
+        # Create the processing instruction
+        pi_content = f'href="{relaxng_schema}" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"'
+        
+        # Serialize the element
+        tei_xml = etree.tostring(tei_doc, pretty_print=False, encoding="UTF-8").decode()
+        import xml.dom.minidom
+        tei_xml = xml.dom.minidom.parseString(tei_xml).toprettyxml(indent="  ", encoding="utf-8").decode()
+        
+        # Remove xml declaration and add the processing instruction
+        lines = tei_xml.split("\n")[1:]  # Remove XML declaration
+        # Add RelaxNG processing instruction at the beginning
+        lines.insert(0, f'<?xml-model {pi_content}?>')
+        tei_xml = "\n".join(lines)
+    else:
+        # Standard serialization for XSD schema
+        tei_xml = etree.tostring(tei_doc, pretty_print=False, encoding="UTF-8").decode()
+        import xml.dom.minidom
+        tei_xml = xml.dom.minidom.parseString(tei_xml).toprettyxml(indent="  ", encoding="utf-8").decode()
+        # remove xml declaration
+        tei_xml = "\n".join(tei_xml.split("\n")[1:])
+    
     return tei_xml
 
 def remove_whitespace(element):
@@ -168,12 +191,20 @@ def extract_refs_from_pdf(pdf_path: str, options:dict = {}) -> etree.Element:
     return etree.fromstring(parser.to_xml(references))
 
 
-def create_tei_doc(schema_location: str) -> etree.Element:
+def create_tei_doc(schema_location: str, schema_type: str = "relaxng") -> etree.Element:
     tei = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})
-    tei.set(
-        "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
-        f"http://www.tei-c.org/ns/1.0 {schema_location}",
-    )
+    
+    if schema_type == "xmlschema":
+        # XSD schema validation
+        tei.set(
+            "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
+            f"http://www.tei-c.org/ns/1.0 {schema_location}",
+        )
+    elif schema_type == "relaxng":
+        # RelaxNG schema validation - add as processing instruction before the element
+        # This will be handled by the XML serialization to add the processing instruction
+        tei.set("_relaxng_schema", schema_location)
+    
     return tei
 
 def parse_crossref(doi):

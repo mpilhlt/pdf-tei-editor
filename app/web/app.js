@@ -43425,7 +43425,10 @@ async function uploadFile(uploadUrl = upload_route, options = {}) {
       const fetchOptions = {
         method: method,
         body: formData,
-        headers: headers
+        headers: {
+          ...headers,
+          'X-Session-ID': sessionId
+        }
       };
       try {
         const response = await fetch(uploadUrl, fetchOptions);
@@ -45033,11 +45036,11 @@ async function deleteAll(state) {
   }
 
   // @ts-ignore
-  const filePathsToDelete = [ui$1.toolbar.pdf.value]
+  const filePathsToDelete = Array.from(new Set([ui$1.toolbar.pdf.value]
     // @ts-ignore
     .concat(Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value))
     // @ts-ignore
-    .concat(Array.from(ui$1.toolbar.diff.childNodes).map(option => option.value));
+    .concat(Array.from(ui$1.toolbar.diff.childNodes).map(option => option.value))));
 
   if (filePathsToDelete.length > 0) {
     const msg = `Are you sure you want to delete the following files: ${filePathsToDelete.join(", ")}? This cannot be undone.`;
@@ -45045,25 +45048,25 @@ async function deleteAll(state) {
   }
 
   api$4.removeMergeView(state);
-  console.debug("Deleting files:", filePathsToDelete);
-  await api$7.deleteFiles(filePathsToDelete);
-
+  api$d.debug("Deleting files:" + filePathsToDelete.join(", "));
+  
   try {
-    // update the file data
-    await api$6.reload(state);
-
-    // load the first PDF and XML file 
-    await load$1(state, {
-      pdf: api$6.fileData[0].pdf,
-      xml: api$6.fileData[0].xml
-    });
+    await api$7.deleteFiles(filePathsToDelete);
     notify(`${filePathsToDelete.length} files have been deleted.`);
     syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
   } catch (error) {
-    console.error(error);
-    alert(error.message);
+    console.error(error.message);
+    notify(error.message, "warning");
+  } finally {
+    // update the file data
+    await api$6.reload(state);
+    // load the first PDF and XML file 
+    await load$1(state, {
+      pdf: api$6.fileData[0].pdf,
+      xml: api$6.fileData[0].xml
+    });
   }
 }
 
@@ -54732,7 +54735,7 @@ async function showMoveFilesDialog(state) {
     const { new_pdf_path, new_xml_path } = await api$7.moveFiles(pdfPath, xmlPath, destinationCollection);
     await api$6.reload(state);
     await api$4.load(state, { pdf: new_pdf_path, xml: new_xml_path });
-    api$9.success("Files moved successfully.");
+    notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
     api$9.error(`Error moving files: ${error.message}`);
   } finally {

@@ -7,6 +7,7 @@
  * @import { SlButton, SlSelect, SlOption, SlDialog } from '../ui.js'
  */
 import { client, services, dialog, fileselection, updateState, logger } from '../app.js'
+import { notify } from '../modules/sl-utils.js'
 import { createHtmlElements, updateUi } from '../ui.js'
 import ui from '../ui.js'
 
@@ -126,7 +127,7 @@ async function showMoveFilesDialog(state) {
     const { new_pdf_path, new_xml_path } = await client.moveFiles(pdfPath, xmlPath, destinationCollection);
     await fileselection.reload(state);
     await services.load(state, { pdf: new_pdf_path, xml: new_xml_path });
-    dialog.success("Files moved successfully.");
+    notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
     dialog.error(`Error moving files: ${error.message}`);
   } finally {
