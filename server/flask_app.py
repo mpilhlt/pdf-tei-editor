@@ -9,6 +9,7 @@
 from flask import Flask, send_from_directory, jsonify, redirect, request, current_app
 import os
 import importlib.util
+import logging
 from glob import glob
 from dotenv import load_dotenv
 import tempfile
@@ -42,8 +43,49 @@ src_root = project_root / 'app' / 'src'
 data_root = project_root / 'data' if local_webdav_root is None else local_webdav_root
 config_dir = project_root / 'config'
 
+# Colorized logging formatter for better visibility
+class ColoredFormatter(logging.Formatter):
+    """Add colors to log levels for better terminal visibility"""
+    
+    # ANSI color codes
+    COLORS = {
+        'DEBUG': '\033[36m',      # Cyan
+        'INFO': '\033[32m',       # Green  
+        'WARNING': '\033[33m',    # Yellow/Orange
+        'ERROR': '\033[31m',      # Red
+        'CRITICAL': '\033[91m',   # Bright Red
+    }
+    RESET = '\033[0m'  # Reset to default color
+    
+    def format(self, record):
+        # Get the original formatted message
+        original = super().format(record)
+        
+        # Add color based on log level
+        level_name = record.levelname
+        if level_name in self.COLORS:
+            # Color the entire log message
+            return f"{self.COLORS[level_name]}{original}{self.RESET}"
+        return original
+
 # Flask app
 app = Flask(__name__, static_folder=str(project_root))
+
+# Configure colorized logging for development
+if app.debug:
+    # Remove default handler
+    app.logger.handlers.clear()
+    
+    # Create new handler with colors
+    handler = logging.StreamHandler()
+    handler.setFormatter(ColoredFormatter(
+        '[%(asctime)s] %(levelname)s in %(name)s: %(message)s'
+    ))
+    
+    # Set level and add handler
+    app.logger.setLevel(logging.DEBUG)
+    app.logger.addHandler(handler)
+    app.logger.propagate = False
 
 # Dir to place app data in
 app_db_dir = project_root / 'db'
