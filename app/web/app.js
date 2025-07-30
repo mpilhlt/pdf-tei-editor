@@ -40227,7 +40227,7 @@ function createCompletionSource(tagData) {
 /**
  * Links CodeMirror's syntax tree nodes representing XML elements with their corresponding DOM elements
  * parsed by DOMParser by traversing both trees recursively and storing references to each other in 
- * two Maps.
+ * two Maps. Enhanced to handle XML processing instructions and other non-element nodes.
  *
  * @param {EditorView} view The CodeMirror EditorView instance.
  * @param {SyntaxNode} syntaxNode The root syntax node of the CodeMirror XML editor's syntax tree.
@@ -40243,38 +40243,76 @@ function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
 
   const getText = node => view.state.doc.sliceString(node.from, node.to);
 
+  /**
+   * Helper to find the first element node in a tree
+   * @param {SyntaxNode|Node} node Starting node
+   * @param {boolean} isDOM Whether this is a DOM node (true) or syntax node (false)
+   * @returns {SyntaxNode|Node|null} First element node found or null
+   */
+  function findFirstElement(node, isDOM = false) {
+    while (node) {
+      if (isDOM) {
+        // @ts-ignore - node is a DOM Node when isDOM is true
+        if (node.nodeType === Node.ELEMENT_NODE) return node;
+      } else {
+        // @ts-ignore - node is a SyntaxNode when isDOM is false
+        if (node.name === "Element") return node;
+      }
+      // @ts-ignore - both Node and SyntaxNode have nextSibling
+      node = node.nextSibling;
+    }
+    return null;
+  }
+
+  /**
+   * Collects all element children from a parent node
+   * @param {SyntaxNode|Node} parent Parent node
+   * @param {boolean} isDOM Whether this is a DOM node (true) or syntax node (false) 
+   * @returns {Array} Array of element nodes
+   */
+  function collectElementChildren(parent, isDOM = false) {
+    const elements = [];
+    let child = parent.firstChild;
+    
+    while (child) {
+      const element = findFirstElement(child, isDOM);
+      if (element) {
+        elements.push(element);
+        child = element.nextSibling;
+      } else {
+        break;
+      }
+    }
+    return elements;
+  }
+
   function recursiveLink(syntaxNode, domNode) {
 
     if (!syntaxNode || !domNode) {
       throw new Error("Invalid arguments. Syntax node and DOM node must not be null.");
     }
 
-    // Skip over processing instructions and other non-element nodes in both trees
-    // to find the matching elements to link
-    while (syntaxNode && syntaxNode.name !== "Element") {
-      syntaxNode = syntaxNode.nextSibling;
-    }
-    while (domNode && domNode.nodeType !== Node.ELEMENT_NODE) {
-      domNode = domNode.nextSibling;
-    }
+    // Enhanced: Find the first element in each tree, handling processing instructions
+    const syntaxElement = findFirstElement(syntaxNode, false);
+    const domElement = findFirstElement(domNode, true);
 
     // If we couldn't find matching element nodes, return empty maps
-    if (!syntaxNode || !domNode) {
+    if (!syntaxElement || !domElement) {
       return {
         syntaxToDom: new Map(),
         domToSyntax: new Map()
       };
     }
 
-    // Check if the syntaxNode and domNode are valid
-    if (syntaxNode.name !== "Element") {
-      throw new Error(`Unexpected node type: ${syntaxNode.name}. Expected "Element".`);
+    // Check if the found elements are valid
+    if (syntaxElement.name !== "Element") {
+      throw new Error(`Unexpected node type: ${syntaxElement.name}. Expected "Element".`);
     }
 
     // make sure we have a tag name child
-    let syntaxTagNode = syntaxNode.firstChild?.firstChild?.nextSibling;
+    let syntaxTagNode = syntaxElement.firstChild?.firstChild?.nextSibling;
     if (!syntaxTagNode || syntaxTagNode.name !== "TagName") {
-      const text = getText(syntaxNode);
+      const text = getText(syntaxElement);
       if (text === "<") {
         // hack
         syntaxTagNode = syntaxTagNode.nextSibling;
@@ -40284,7 +40322,7 @@ function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     }
 
     const syntaxTagName = getText(syntaxTagNode);
-    const domTagName = domNode.tagName;
+    const domTagName = domElement.tagName;
 
     // Verify that the tag names match
     if (syntaxTagName !== domTagName) {
@@ -40293,49 +40331,27 @@ function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
 
     // Store references to each other - since the syntax tree is regenerated on each lookup, 
     // we need to store the unique positions of each node as reference
-    syntaxToDom.set(syntaxNode.from, domNode);
-    domToSyntax.set(domNode, syntaxNode.from);
+    syntaxToDom.set(syntaxElement.from, domElement);
+    domToSyntax.set(domElement, syntaxElement.from);
 
-    // Recursively link the children. 
-    let syntaxChild = syntaxNode.firstChild;
-    let domChild = domNode.firstChild;
+    // Enhanced: Use robust child collection and pairing
+    const syntaxChildren = collectElementChildren(syntaxElement, false);
+    const domChildren = collectElementChildren(domElement, true);
 
-    while (syntaxChild && domChild) {
-      // skip any non-element child in the syntax tree and the DOM tree 
-      while (syntaxChild && syntaxChild.type.name !== "Element") {
-        syntaxChild = syntaxChild.nextSibling;
-      }
-      while (domChild && domChild.nodeType !== Node.ELEMENT_NODE) {
-        domChild = domChild.nextSibling;
-      }
-
-      // if we reach the end of one of the trees, stop
-      if (!syntaxChild || !domChild) {
-        break;
-      }
-
-      // recurse into the children, we are sure they are both of type element at this point
-      recursiveLink(syntaxChild, domChild);
-      domChild = domChild.nextSibling;
-      syntaxChild = syntaxChild.nextSibling;
+    // Recursively link the children by pairs
+    const minChildren = Math.min(syntaxChildren.length, domChildren.length);
+    for (let i = 0; i < minChildren; i++) {
+      recursiveLink(syntaxChildren[i], domChildren[i]);
     }
 
-    // we have reached the end of the branch we recursed into, either in the syntax tree or the DOM.
-    if (syntaxChild && !domChild) {
-      while (syntaxChild && syntaxChild.type.name !== "Element") {
-        syntaxChild = syntaxChild.nextSibling;
-      }
-      if (syntaxChild) {
-        throw new Error("Syntax tree has more child elements than the DOM tree:" + getText(syntaxChild));
-      }
+    // Check for mismatched child counts
+    if (syntaxChildren.length > domChildren.length) {
+      const extraSyntax = syntaxChildren.slice(domChildren.length);
+      throw new Error(`Syntax tree has more child elements than the DOM tree: ${extraSyntax.map(n => getText(n)).join(', ')}`);
     }
-    if (!syntaxChild && domChild && domChild.nodeType === Node.ELEMENT_NODE) {
-      while (domChild && domChild.nodeType !== Node.ELEMENT_NODE) {
-        domChild = domChild.nextSibling;
-      }
-      if (domChild) {
-        throw new Error("DOM tree has more child elements than the syntax tree:", domChild.tagName);
-      }
+    if (domChildren.length > syntaxChildren.length) {
+      const extraDOM = domChildren.slice(syntaxChildren.length);
+      throw new Error(`DOM tree has more child elements than the syntax tree: ${extraDOM.map(n => n.tagName).join(', ')}`);
     }
     return {
       syntaxToDom,
@@ -40347,7 +40363,20 @@ function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     throw new Error("Invalid arguments. The root syntax node must be the top Document node and the DOM node must be a document. Received: " +
       `syntaxNode: ${syntaxNode.name}, domNode: ${Object.keys(Node)[domNode.nodeType - 1]}`);
   }
-  return recursiveLink(syntaxNode.firstChild, domNode.firstChild);
+  
+  // Enhanced: Find root elements, skipping processing instructions and other non-element nodes
+  const syntaxRoot = syntaxNode.firstChild ? findFirstElement(syntaxNode.firstChild, false) : null;
+  const domRoot = domNode.firstChild ? findFirstElement(domNode.firstChild, true) : null;
+  
+  if (!syntaxRoot || !domRoot) {
+    console.warn("Could not find root elements in one or both trees");
+    return {
+      syntaxToDom: new Map(),
+      domToSyntax: new Map()
+    };
+  }
+  
+  return recursiveLink(syntaxRoot, domRoot);
 }
 
 // Function to install the selection change listener
@@ -40523,6 +40552,9 @@ class XMLEditor extends EventTarget {
 
   /** @type {Tree} */
   #syntaxTree // the lezer syntax tree
+
+  /** @type {Array} */
+  #processingInstructions = [] // processing instructions found in the document
 
   /** @type {boolean} */
   #isReady = false
@@ -40980,6 +41012,38 @@ class XMLEditor extends EventTarget {
    */
   getXmlTree() {
     return this.#xmlTree;
+  }
+
+  /**
+   * Returns any processing instructions found in the document
+   * @returns {Array} Array of processing instruction objects
+   */
+  getProcessingInstructions() {
+    return this.#processingInstructions;
+  }
+
+  /**
+   * Detects processing instructions in the loaded XML document
+   * @returns {Array} Array of processing instruction objects with target, data, and position
+   */
+  detectProcessingInstructions() {
+    if (!this.#xmlTree) return [];
+    
+    const processingInstructions = [];
+    for (let i = 0; i < this.#xmlTree.childNodes.length; i++) {
+      const node = this.#xmlTree.childNodes[i];
+      if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) {
+        // @ts-ignore - node is a ProcessingInstruction when nodeType matches
+        const piNode = node;
+        processingInstructions.push({
+          target: piNode.target,
+          data: piNode.data,
+          position: i,
+          fullText: `<?${piNode.target}${piNode.data ? ' ' + piNode.data : ''}?>`
+        });
+      }
+    }
+    return processingInstructions;
   }
 
   /**
@@ -41490,6 +41554,11 @@ class XMLEditor extends EventTarget {
     console.log("Document was updated and is well-formed.");
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, { detail: null }));
     this.#xmlTree = doc;
+
+    // Track processing instructions for better synchronization
+    this.#processingInstructions = this.detectProcessingInstructions();
+    
+    if (this.#processingInstructions.length > 0) ;
 
     // the syntax tree construction is async, so we need to wait for it to complete
     if (syntaxParserRunning(this.#view)) {
@@ -54722,9 +54791,9 @@ async function start(state) {
 
     // Authenticate user, otherwise we don't proceed further
     const userData = await api.ensureAuthenticated();
-
-    api$d.info(`Welcome, ${userData.fullname}!`);
-
+    api$d.info(`${userData.fullname} has logged in.`);
+    notify(`Welcome back, ${userData.fullname}!`);
+    
     // load config data
     await api$c.load();
 
@@ -54742,9 +54811,13 @@ async function start(state) {
     const xml = state.xmlPath || null;
     const diff = state.diffXmlPath;
 
-    // lod the documents
-    await api$4.load(state, { pdf, xml, diff });
-
+    if (pdf !== null) {
+      // lod the documents
+      await api$4.load(state, { pdf, xml, diff });
+    } else {
+      api$9.info("Load a PDF from the dropdown on the top left.");
+    }
+    
     // two alternative initial states:
     // a) if the diff param was given and is different from the xml param, show a diff/merge view 
     // b) if no diff, try to validate the document and select first match of xpath expression
