@@ -549,7 +549,10 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
       const fetchOptions = {
         method: method,
         body: formData,
-        headers: headers
+        headers: {
+          ...headers,
+          'X-Session-ID': sessionId
+        }
       };
       try {
         const response = await fetch(uploadUrl, fetchOptions);
