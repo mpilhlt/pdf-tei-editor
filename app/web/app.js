@@ -289,9 +289,9 @@ api$d.error = api$d.critical; // alias for critical
 /**
  * component plugin
  */
-const plugin$i = {
+const plugin$j = {
   name: name$1,
-  install: install$g,
+  install: install$h,
   log: {
     setLogLevel,
     debug,
@@ -305,8 +305,8 @@ const plugin$i = {
 // implementation
 //
 
-async function install$g(state) {
-  console.log(`Installing plugin "${plugin$i.name}"`);
+async function install$h(state) {
+  console.log(`Installing plugin "${plugin$j.name}"`);
 }
 
 
@@ -396,7 +396,7 @@ const api$c = {
  * The configuration plugin definition.
  * @type {Plugin}
  */
-const plugin$h = {
+const plugin$i = {
   name: "config",
   deps: ['client']
 };
@@ -487,11 +487,11 @@ const api$b = {
 /**
  * component plugin
  */
-const plugin$g = {
+const plugin$h = {
   name: "url-hash-state",
-  install: install$f,
+  install: install$g,
   state: {
-    update: update$b
+    update: update$c
   }
 };
 
@@ -502,14 +502,14 @@ const plugin$g = {
 /** 
  * @param {ApplicationState} state 
  */
-async function install$f(state){
-  api$d.debug(`Installing plugin "${plugin$g.name}"`);
+async function install$g(state){
+  api$d.debug(`Installing plugin "${plugin$h.name}"`);
 }
 
 /** 
  * @param {ApplicationState} state 
  */
-async function update$b(state) {
+async function update$c(state) {
   updateUrlHashfromState(state);
   //console.warn(plugin.name,"done")
   //console.warn(plugin.name,"done")
@@ -2438,7 +2438,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$a);
+    const documentElementObserver = new MutationObserver(update$b);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2459,9 +2459,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$a();
+    update$b();
 }
-function update$a() {
+function update$b() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -11009,9 +11009,9 @@ const api$a = {
 /**
  * component plugin
  */
-const plugin$f = {
+const plugin$g = {
   name: "statusbar",
-  install: install$e,
+  install: install$f,
   //state: {
   //  update
   //}
@@ -11020,8 +11020,8 @@ const plugin$f = {
 /** 
  * @param {ApplicationState} state 
  */
-async function install$e(state){
-  api$d.debug(`Installing plugin "${plugin$f.name}"`);
+async function install$f(state){
+  api$d.debug(`Installing plugin "${plugin$g.name}"`);
 }
 
 /**
@@ -11086,9 +11086,9 @@ const api$9 = {
 };
 
 // Plugin object
-const plugin$e = {
+const plugin$f = {
   name: "dialog",
-  install: install$d
+  install: install$e
 };
 
 //
@@ -11111,8 +11111,8 @@ const plugin$e = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-async function install$d(app) {
-  api$d.debug(`Installing plugin "${plugin$e.name}"`);
+async function install$e(app) {
+  api$d.debug(`Installing plugin "${plugin$f.name}"`);
   await createHtmlElements("dialog.html", document.body);
   updateUi();
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.self.hide());
@@ -11565,10 +11565,10 @@ let currentFile;
 /**
  * plugin object
  */
-const plugin$d = {
+const plugin$e = {
   name: "pdfviewer",
-  install: install$c,
-  state: { update: update$9 }
+  install: install$d,
+  state: { update: update$a }
 };
 
 //
@@ -11579,8 +11579,8 @@ const plugin$d = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$c(state) {
-  api$d.debug(`Installing plugin "${plugin$d.name}"`);
+async function install$d(state) {
+  api$d.debug(`Installing plugin "${plugin$e.name}"`);
   await pdfViewer.isReady();
   api$d.info("PDF Viewer ready.");
   pdfViewer.show();
@@ -11590,7 +11590,7 @@ async function install$c(state) {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$9(state) {
+async function update$a(state) {
   if (state.pdfPath !== currentFile) {
     currentFile = state.pdfPath;
     //if (state.pdfPath === null && state.user === null) {
@@ -42064,11 +42064,11 @@ const xmlEditor = new NavXmlEditor('codemirror-container');
 /**
  * component plugin
  */
-const plugin$c = {
+const plugin$d = {
   name: "xmleditor",
-  install: install$b,
+  install: install$c,
   state: {
-    update: update$8
+    update: update$9
   }
 };
 
@@ -42076,8 +42076,8 @@ const plugin$c = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$b(state) {
-  api$d.debug(`Installing plugin "${plugin$c.name}"`);
+async function install$c(state) {
+  api$d.debug(`Installing plugin "${plugin$d.name}"`);
   // Note: Autocomplete data is now loaded dynamically per document in services.js
   // The static tagData loading has been removed in favor of schema-specific autocomplete data
 
@@ -42104,7 +42104,7 @@ async function install$b(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$8(state) {
+async function update$9(state) {
   //console.warn("update", plugin.name, state)
 
   if (state.xmlPath === null) {
@@ -42179,11 +42179,11 @@ const api$8 = {
   isDisabled
 };
 
-const plugin$b = {
+const plugin$c = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
-  install: install$a,
-  state: {update: update$7},
+  install: install$b,
+  state: {update: update$8},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -42204,8 +42204,8 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-async function install$a(state) {
-  api$d.debug(`Installing plugin "${plugin$b.name}"`);
+async function install$b(state) {
+  api$d.debug(`Installing plugin "${plugin$c.name}"`);
   // add the linter to the editor
   xmlEditor.addLinter([
     linter(lintSource, { 
@@ -42223,7 +42223,7 @@ async function install$a(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$7(state) {
+async function update$8(state) {
   if (state.offline || state.editorReadOnly) {
     // if we are offline, disable validation
     configure({ mode: "off" });
@@ -43004,10 +43004,10 @@ const api$7 = {
 /**
  * component plugin
  */
-const plugin$a = {
+const plugin$b = {
   name: "client",
   state: {
-    update: update$6
+    update: update$7
   }
 };
 
@@ -43015,7 +43015,7 @@ const plugin$a = {
  * 
  * @param {ApplicationState} state 
  */
-async function update$6(state) {
+async function update$7(state) {
   if (sessionId !== state.sessionId) {
     sessionId = state.sessionId;
     api$d.debug(`Setting session id to ${sessionId}`);
@@ -43474,19 +43474,19 @@ const fileData = [];
  */
 const api$6 = {
   reload,
-  update: update$5,
+  update: update$6,
   fileData
 };
 
 /**
  * component plugin
  */
-const plugin$9 = {
+const plugin$a = {
   name: "file-selection",
 
-  install: install$9,
+  install: install$a,
   state: {
-    update: update$5
+    update: update$6
   }
 };
 
@@ -43507,9 +43507,9 @@ const fileSelectionControls = await createHtmlElements('file-selection.html');
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$9(state) {
+async function install$a(state) {
 
-  api$d.debug(`Installing plugin "${plugin$9.name}"`);
+  api$d.debug(`Installing plugin "${plugin$a.name}"`);
   
   // install controls on menubar
   ui$1.toolbar.self.append(...fileSelectionControls);
@@ -43542,7 +43542,7 @@ async function install$9(state) {
  * 
  * @param {ApplicationState} state 
  */
-async function update$5(state) {
+async function update$6(state) {
   //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
   ui$1.toolbar.pdf.value = state.pdfPath || "";
@@ -43761,11 +43761,11 @@ const api$5 = {
 /**
  * plugin object
  */
-const plugin$8 = {
+const plugin$9 = {
   name: "extraction",
   deps: ['services'],
-  install: install$8,
-  state: {update: update$4}
+  install: install$9,
+  state: {update: update$5}
 };
 
 //
@@ -43805,8 +43805,8 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
 /**
  * @param {ApplicationState} state
  */
-async function install$8(state) {
-  api$d.debug(`Installing plugin "${plugin$8.name}"`);
+async function install$9(state) {
+  api$d.debug(`Installing plugin "${plugin$9.name}"`);
 
   // install controls on menubar
   ui$1.toolbar.self.append(extractionBtnGroup);
@@ -43821,7 +43821,7 @@ async function install$8(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$4(state) {
+async function update$5(state) {
   // @ts-ignore
   extractionBtnGroup.self.childNodes.forEach(child => child.disabled = state.offline); 
   extractionBtnGroup.extractCurrent.disabled = !state.pdfPath;
@@ -44625,11 +44625,11 @@ const api$4 = {
 /**
  * component plugin
  */
-const plugin$7 = {
+const plugin$8 = {
   name: "services",
   deps: ['file-selection'],
-  install: install$7,
-  state: { update: update$3 },
+  install: install$8,
+  state: { update: update$4 },
   validation: { inProgress }
 };
 
@@ -44697,8 +44697,8 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 /**
  * @param {ApplicationState} state
  */
-async function install$7(state) {
-  api$d.debug(`Installing plugin "${plugin$7.name}"`);
+async function install$8(state) {
+  api$d.debug(`Installing plugin "${plugin$8.name}"`);
 
   // install controls on menubar
   ui$1.toolbar.self.append(...documentActionButtons);
@@ -44748,7 +44748,7 @@ async function install$7(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$3(state) {
+async function update$4(state) {
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -45167,7 +45167,7 @@ async function onClickValidateButton() {
  * Given a user object, get an id (typically by using the initials)
  * @param {UserData} userData 
  */
-function getIdFromUser(userData) {
+function getIdFromUser$1(userData) {
   let names = userData.fullname;
   if (names && names.trim() !== "") {
     names = userData.fullname.split(" ");
@@ -45193,7 +45193,7 @@ async function saveRevision(state) {
     const user = api.getUser();
     console.warn(user);
     if (user) {
-      dialog.persId.value = dialog.persId.value || getIdFromUser(user);
+      dialog.persId.value = dialog.persId.value || getIdFromUser$1(user);
       dialog.persName.value = dialog.persName.value || user.fullname;
     }
     dialog.show();
@@ -45254,7 +45254,7 @@ async function createNewVersion(state) {
   try {
     const user = api.getUser();
     if (user) {
-      dialog.persId.value = dialog.persId.value || getIdFromUser(user);
+      dialog.persId.value = dialog.persId.value || getIdFromUser$1(user);
       dialog.persName.value = dialog.persName.value || user.fullname;
     }    
     dialog.show();
@@ -45429,10 +45429,10 @@ const api$3 = {
 /**
  * component plugin
  */
-const plugin$6 = {
+const plugin$7 = {
   name: "floating-panel",
-  install: install$6,
-  state: { update: update$2 }
+  install: install$7,
+  state: { update: update$3 }
 };
 
 //
@@ -45476,8 +45476,8 @@ const pluginId = "floating-panel";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$6(state) {
-  api$d.debug(`Installing plugin "${plugin$6.name}"`);
+async function install$7(state) {
+  api$d.debug(`Installing plugin "${plugin$7.name}"`);
 
   document.body.append(...floatingPanelControls);
   updateUi();
@@ -45557,7 +45557,7 @@ async function install$6(state) {
  * Reacts to application state changes
  * @param {ApplicationState} state 
  */
-async function update$2(state) {
+async function update$3(state) {
   //console.warn("update", plugin.name, state)
   // show the xpath selector
   if (state.xpath) {
@@ -45764,10 +45764,10 @@ const api$2 = {
 /**
  * Plugin object
  */
-const plugin$5 = {
+const plugin$6 = {
   name: "prompt-editor",
   deps: ['extraction'],
-  install: install$5
+  install: install$6
 };
 
 //
@@ -45802,8 +45802,8 @@ const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$5(state) {
-  api$d.debug(`Installing plugin "${plugin$5.name}"`);
+async function install$6(state) {
+  api$d.debug(`Installing plugin "${plugin$6.name}"`);
   
   // add prompt editor component
   document.body.append(promptEditorDialog);
@@ -45990,10 +45990,10 @@ const enhancements = [
 
 
 
-const plugin$4 = {
+const plugin$5 = {
   name: "tei-wizard",
-  install: install$4,
-  state: {update: update$1},
+  install: install$5,
+  state: {update: update$2},
   deps: ['services']
 };
 
@@ -46009,8 +46009,8 @@ const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 /**
  * @param {ApplicationState} state 
  */
-async function install$4(state) {
-  api$d.debug(`Installing plugin "${plugin$4.name}"`);
+async function install$5(state) {
+  api$d.debug(`Installing plugin "${plugin$5.name}"`);
 
   // button
   ui$1.toolbar.teiActions.self.append(teiWizardButton);
@@ -46048,7 +46048,7 @@ async function install$4(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$1(state) {
+async function update$2(state) {
   // @ts-ignore
   teiWizardButton.disabled = state.editorReadOnly;
   //console.warn(plugin.name,"done")
@@ -54486,9 +54486,9 @@ const api$1 = {
 /**
  * Plugin object
  */
-const plugin$3 = {
+const plugin$4 = {
   name: "info",
-  install: install$3
+  install: install$4
 };
 
 //
@@ -54541,8 +54541,8 @@ const docsBasePath = "../../docs";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$3(state) {
-  api$d.debug(`Installing plugin "${plugin$3.name}"`);
+async function install$4(state) {
+  api$d.debug(`Installing plugin "${plugin$4.name}"`);
   // add the component html
   await createHtmlElements(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.self.hide());
@@ -54619,10 +54619,10 @@ function close() {
  */
 
 
-const plugin$2 = {
+const plugin$3 = {
   name: "move-files",
   deps: ['services'],
-  install: install$2
+  install: install$3
 };
 
 //
@@ -54657,8 +54657,8 @@ const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
 /**
  * @param {ApplicationState} state
  */
-async function install$2(state) {
-  api$d.debug(`Installing plugin "${plugin$2.name}"`);
+async function install$3(state) {
+  api$d.debug(`Installing plugin "${plugin$3.name}"`);
 
   // install button & dialog
   ui$1.toolbar.documentActions.self.append(moveBtn);
@@ -54738,6 +54738,441 @@ async function showMoveFilesDialog(state) {
   } finally {
     ui$1.spinner.hide();
   }
+}
+
+/**
+ * Document Status Plugin - Flexible document status management
+ * Supports draft, locked, and no status with split button dropdown UI
+ */
+
+
+const plugin$2 = {
+  name: "document-status",
+  deps: ['services'],
+  install: install$2,
+  state: { update: update$1 }
+};
+
+//
+// Status definitions
+//
+const STATUS_DEFINITIONS = {
+  draft: {
+    label: 'Draft',
+    icon: 'pencil-square', /* <sl-icon name="pencil-square"> */
+    description: 'Document is in draft state'
+  },
+  locked: {
+    label: 'Locked',
+    icon: 'lock-fill', /* <sl-icon name="lock-fill"> */
+    description: 'Document is locked for editing'
+  },
+  none: {
+    label: 'No Status',
+    icon: 'circle', /* <sl-icon name="circle"> */
+    description: 'No specific status set'
+  }
+};
+
+//
+// UI Components
+//
+let statusButton, statusDropdown, statusMenu;
+let currentStatus = 'none';
+
+//
+// Implementation
+//
+
+/**
+ * @param {ApplicationState} state
+ */
+async function install$2(state) {
+  api$d.debug(`Installing plugin "${plugin$2.name}"`);
+  
+  // Create status button with dropdown (similar to delete button pattern)
+  const buttonGroup = document.createElement('sl-button-group');
+  
+  statusDropdown = Object.assign(document.createElement('sl-dropdown'), {
+    placement: 'bottom-end'
+  });
+  
+  statusButton = Object.assign(document.createElement('sl-button'), {
+    name: 'statusBtn',
+    size: 'small',
+    slot: 'trigger',
+    caret: true,
+    innerHTML: `<sl-icon name="circle"></sl-icon>`
+  });
+  
+  statusMenu = document.createElement('sl-menu');
+  
+  // Create menu items for each status
+  for (const [statusKey, statusDef] of Object.entries(STATUS_DEFINITIONS)) {
+    const menuItem = Object.assign(document.createElement('sl-menu-item'), {
+      name: statusKey,
+      innerHTML: `<sl-icon name="${statusDef.icon}" slot="prefix"></sl-icon>${statusDef.label}`
+    });
+    statusMenu.appendChild(menuItem);
+  }
+  
+  statusDropdown.appendChild(statusButton);
+  statusDropdown.appendChild(statusMenu);
+  buttonGroup.appendChild(statusDropdown);
+  
+  // Add tooltip
+  const tooltip = Object.assign(document.createElement('sl-tooltip'), {
+    content: 'Set document status'
+  });
+  tooltip.appendChild(buttonGroup);
+  
+  // Insert into document actions after save revision button
+  const saveRevisionBtn = ui$1.toolbar.documentActions.saveRevision.parentElement;
+  saveRevisionBtn.parentElement.insertBefore(tooltip, saveRevisionBtn.nextSibling);
+  
+  updateUi();
+  
+  // Add event listeners
+  statusMenu.addEventListener('sl-select', (event) => {
+    const selectedStatus = event.detail.item.name;
+    setDocumentStatus(state, selectedStatus);
+  });
+  
+  // Add click listener to update checked state (radio behavior)
+  statusMenu.addEventListener('click', (event) => {
+    if (event.target.tagName.toLowerCase() === 'sl-menu-item') {
+      updateMenuItemSelection(event.target.name);
+    }
+  });
+}
+
+/**
+ * Update plugin state when application state changes
+ * @param {ApplicationState} state 
+ */
+async function update$1(state) {
+  if (!statusButton) return
+  
+  // Disable if offline or no XML loaded
+  const disabled = state.offline || !state.xmlPath;
+  statusButton.disabled = disabled;
+  
+  if (!disabled) {
+    // Update current status from TEI document
+    await updateCurrentStatusFromDocument();
+    updateStatusButtonAppearance();
+    
+    // Handle status inheritance for new versions
+    await handleStatusInheritance(state);
+  }
+}
+
+/**
+ * Set the document status
+ * @param {ApplicationState} state 
+ * @param {string} status 
+ */
+async function setDocumentStatus(state, status) {
+  api$d.debug(`Setting document status to: ${status}`);
+  
+  try {
+    if (status === 'locked') {
+      await setLockedStatus(state);
+    } else if (status === 'draft') {
+      await setDraftStatus(state);
+    } else {
+      await clearStatus(state);
+    }
+    
+    currentStatus = status;
+    updateStatusButtonAppearance();
+    notify(`Document status set to: ${STATUS_DEFINITIONS[status].label}`);
+    
+  } catch (error) {
+    api$d.error(`Failed to set status: ${error.message}`);
+    notify(`Failed to set status: ${error.message}`);
+  }
+}
+
+/**
+ * Set document to locked status with file locking
+ * @param {ApplicationState} state 
+ */
+async function setLockedStatus(state) {
+  const xmlDoc = xmlEditor.getXmlTree();
+  if (!xmlDoc) {
+    throw new Error("No XML document loaded")
+  }
+  
+  // Check if we can lock the file first
+  try {
+    await api$7.acquireLock(state.xmlPath);
+  } catch (error) {
+    if (error instanceof api$7.LockedError) {
+      throw new Error("Cannot set locked status: file is already locked by another user")
+    }
+    throw error
+  }
+  
+  // Add TEI change element for locked status
+  const user = api.getUser();
+  const persId = user ? getIdFromUser(user) : 'system';
+  
+  const revisionChange = {
+    status: 'locked',
+    persId: persId,
+    desc: 'Document locked for editing'
+  };
+  
+  // Add change element to TEI header
+  addRevisionChange(xmlDoc, revisionChange);
+  await xmlEditor.updateEditorFromXmlTree();
+  
+  // Save the document
+  await api$4.saveXml(state.xmlPath);
+  
+  api$d.debug("Document status set to locked with file lock maintained");
+}
+
+/**
+ * Set document to draft status
+ * @param {ApplicationState} state 
+ */
+async function setDraftStatus(state) {
+  const xmlDoc = xmlEditor.getXmlTree();
+  if (!xmlDoc) {
+    throw new Error("No XML document loaded")
+  }
+  
+  const user = api.getUser();
+  const persId = user ? getIdFromUser(user) : 'system';
+  
+  const revisionChange = {
+    status: 'draft',
+    persId: persId,
+    desc: 'Document marked as draft'
+  };
+  
+  addRevisionChange(xmlDoc, revisionChange);
+  await xmlEditor.updateEditorFromXmlTree();
+  await api$4.saveXml(state.xmlPath);
+}
+
+/**
+ * Clear document status
+ * @param {ApplicationState} state 
+ */
+async function clearStatus(state) {
+  // If clearing from a locked status, ensure we maintain the lock for the current user
+  // but don't add new change elements that would set a specific status
+  const xmlDoc = xmlEditor.getXmlTree();
+  if (xmlDoc) {
+    const user = api.getUser();
+    const persId = user ? getIdFromUser(user) : 'system';
+    
+    const revisionChange = {
+      status: 'cleared',
+      persId: persId,
+      desc: 'Document status cleared'
+    };
+    
+    // Add change element to record the status clearing
+    addRevisionChange(xmlDoc, revisionChange);
+    await xmlEditor.updateEditorFromXmlTree();
+    await api$4.saveXml(state.xmlPath);
+  }
+  
+  api$d.debug("Document status cleared - status change recorded");
+}
+
+/**
+ * Update current status from TEI document
+ * @param {ApplicationState} state 
+ */
+async function updateCurrentStatusFromDocument(state) {
+  const xmlDoc = xmlEditor.getXmlTree();
+  if (!xmlDoc) {
+    currentStatus = 'none';
+    return
+  }
+  
+  // Get the most recent change element with a status
+  const latestStatus = getLatestStatusFromTei(xmlDoc);
+  currentStatus = latestStatus || 'none';
+}
+
+/**
+ * Get the latest status from TEI change elements
+ * @param {Document} xmlDoc 
+ * @returns {string|null}
+ */
+function getLatestStatusFromTei(xmlDoc) {
+  try {
+    // Use getElementsByTagName to find change elements
+    const revisionDescs = xmlDoc.getElementsByTagName('revisionDesc');
+    if (!revisionDescs.length) {
+      return null
+    }
+    
+    const changeElements = revisionDescs[0].getElementsByTagName('change');
+    let latestTimestamp = null;
+    let latestStatus = null;
+    
+    for (let i = 0; i < changeElements.length; i++) {
+      const changeElement = changeElements[i];
+      const status = changeElement.getAttribute('status');
+      const when = changeElement.getAttribute('when');
+      
+      if (status && when) {
+        try {
+          const timestamp = new Date(when);
+          if (!isNaN(timestamp.getTime()) && (!latestTimestamp || timestamp > latestTimestamp)) {
+            latestTimestamp = timestamp;
+            // Treat "cleared" status as "none" for UI purposes
+            latestStatus = status === 'cleared' ? 'none' : status;
+          }
+        } catch (dateError) {
+          api$d.warn(`Invalid timestamp in TEI change element: ${when}`);
+        }
+      }
+    }
+    
+    return latestStatus
+  } catch (error) {
+    api$d.warn(`Error reading TEI status: ${error.message}`);
+    return null
+  }
+}
+
+/**
+ * Update the status button appearance based on current status
+ */
+function updateStatusButtonAppearance() {
+  if (!statusButton) return
+  
+  const statusDef = STATUS_DEFINITIONS[currentStatus] || STATUS_DEFINITIONS.none;
+  statusButton.innerHTML = `<sl-icon name="${statusDef.icon}"></sl-icon>`;
+  
+  // Update button variant based on status
+  switch (currentStatus) {
+    case 'locked':
+      statusButton.variant = 'danger';
+      break
+    case 'draft':
+      statusButton.variant = 'warning';
+      break
+    default:
+      statusButton.variant = 'default';
+  }
+  
+  // Update tooltip
+  const tooltip = statusButton.closest('sl-tooltip');
+  if (tooltip) {
+    tooltip.content = `Current status: ${statusDef.label}`;
+  }
+  
+  // Update menu item selection (radio behavior)
+  updateMenuItemSelection(currentStatus);
+}
+
+/**
+ * Update menu item selection to show current status (radio behavior)
+ * @param {string} selectedStatus 
+ */
+function updateMenuItemSelection(selectedStatus) {
+  if (!statusMenu) return
+  
+  // Remove checked attribute from all menu items
+  const menuItems = statusMenu.querySelectorAll('sl-menu-item');
+  menuItems.forEach(item => {
+    item.removeAttribute('checked');
+  });
+  
+  // Add checked attribute to selected item
+  const selectedItem = statusMenu.querySelector(`sl-menu-item[name="${selectedStatus}"]`);
+  if (selectedItem) {
+    selectedItem.setAttribute('checked', '');
+  }
+}
+
+/**
+ * Handle status inheritance for new versions
+ * @param {ApplicationState} state 
+ */
+async function handleStatusInheritance(state) {
+  if (!state.xmlPath) return
+  
+  // Check if this is a version file (versions are in /data/versions/ path)
+  const isVersionFile = state.xmlPath.includes('/versions/');
+  if (!isVersionFile) return
+  
+  const xmlDoc = xmlEditor.getXmlTree();
+  if (!xmlDoc) return
+  
+  // Check if this version already has status change elements
+  const existingChanges = xmlDoc.getElementsByTagName('revisionDesc');
+  if (existingChanges.length > 0) {
+    const changeElements = existingChanges[0].getElementsByTagName('change');
+    for (let i = 0; i < changeElements.length; i++) {
+      if (changeElements[i].getAttribute('status')) {
+        // Already has status, no inheritance needed
+        return
+      }
+    }
+  }
+  
+  // For new versions without status, inherit 'draft' status by default
+  // This indicates that the new version is a work in progress
+  try {
+    api$d.debug("Applying default draft status to new version");
+    await setDraftStatusQuietly(state);
+  } catch (error) {
+    api$d.warn(`Failed to apply inheritance status: ${error.message}`);
+  }
+}
+
+/**
+ * Set draft status without user notification (for inheritance)
+ * @param {ApplicationState} state 
+ */
+async function setDraftStatusQuietly(state) {
+  const xmlDoc = xmlEditor.getXmlTree();
+  if (!xmlDoc) return
+  
+  const user = api.getUser();
+  const persId = user ? getIdFromUser(user) : 'system';
+  
+  const revisionChange = {
+    status: 'draft',
+    persId: persId,
+    desc: 'New version created (auto-draft status)'
+  };
+  
+  addRevisionChange(xmlDoc, revisionChange);
+  await xmlEditor.updateEditorFromXmlTree();
+  // Note: Don't save automatically, let user save when ready
+  
+  // Update current status to reflect the change
+  currentStatus = 'draft';
+  updateStatusButtonAppearance();
+}
+
+/**
+ * Get user ID from user data (from services.js pattern)
+ * @param {Object} userData 
+ * @returns {string}
+ */
+function getIdFromUser(userData) {
+  let names = userData.fullname;
+  if (names && names.trim() !== "") {
+    names = userData.fullname.split(" ");
+  } else {
+    return userData.username
+  }
+  if (names.length > 1) {
+    return names.map(n => n[0]).join("").toLowerCase()
+  }
+  return names[0].slice(0, 3)
 }
 
 /**
@@ -55322,10 +55757,10 @@ let state = {
  */
 
 /** @type {Plugin[]} */
-const plugins = [plugin$i, plugin$g, plugin$a, plugin$h, 
-  plugin$e, plugin$d, plugin$c, plugin$9,
-  plugin$7, plugin$8, plugin$6, plugin$5,
-  plugin$4, plugin$b, plugin$3, plugin$2, plugin$f,
+const plugins = [plugin$j, plugin$h, plugin$b, plugin$i, 
+  plugin$f, plugin$e, plugin$d, plugin$a,
+  plugin$8, plugin$9, plugin$7, plugin$6,
+  plugin$5, plugin$c, plugin$4, plugin$3, plugin$2, plugin$g,
   plugin,
   /* must be the last plugin */ plugin$1];
 

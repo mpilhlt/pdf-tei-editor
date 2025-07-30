@@ -45,6 +45,12 @@ def file_list():
             if metadata is None:
                 current_app.logger.warning(f"Could not retrieve metadata for {file_path}")
                 metadata = {}
+            
+            # Get document status from TEI
+            document_status = get_document_status(get_data_file_path(file_path))
+            if document_status:
+                metadata['status'] = document_status
+                
             # add label to metadata
             author = metadata.get('author', '')
             title = metadata.get('title', '')
@@ -350,6 +356,48 @@ def get_version_name(file_path):
             return version_title_element[0].text
    
     return None
+
+
+def get_document_status(file_path):
+    """
+    Retrieves the latest document status from TEI change elements with timestamps.
+    Returns the most recent status based on the 'when' attribute.
+    """
+    try:
+        tree = etree.parse(file_path)
+    except etree.XMLSyntaxError as e:
+        current_app.logger.warning(f"XML Syntax Error in {file_path}: {str(e)}")
+        return None
+        
+    root = tree.getroot()
+    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    
+    # Find all change elements with status attribute
+    change_elements = root.xpath("//tei:revisionDesc/tei:change[@status and @when]", namespaces=ns)
+    
+    if not change_elements:
+        return None
+    
+    latest_timestamp = None
+    latest_status = None
+    
+    for change_elem in change_elements:
+        status = change_elem.get('status')
+        when = change_elem.get('when')
+        
+        if status and when:
+            try:
+                from datetime import datetime
+                timestamp = datetime.fromisoformat(when.replace('Z', '+00:00'))
+                if latest_timestamp is None or timestamp > latest_timestamp:
+                    latest_timestamp = timestamp
+                    latest_status = status
+            except ValueError:
+                current_app.logger.warning(f"Invalid timestamp in TEI change element: {when}")
+                continue
+    
+    # Convert 'cleared' status to None for consistency
+    return None if latest_status == 'cleared' else latest_status
 
 
 @bp.route("/check_lock", methods=["POST"])

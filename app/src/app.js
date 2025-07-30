@@ -26,6 +26,7 @@ import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/pro
 import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
 import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
+import { plugin as documentStatusPlugin } from './plugins/document-status.js'
 import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as authenticationPlugin, api as authentication } from './plugins/authentication.js'
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
@@ -71,7 +72,7 @@ let state = {
 const plugins = [loggerPlugin, urlHashStatePlugin, clientPlugin, configPlugin, 
   dialogPlugin, pdfViewerPlugin, xmlEditorPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
-  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, statusbarPlugin,
+  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, documentStatusPlugin, statusbarPlugin,
   authenticationPlugin,
   /* must be the last plugin */ startPlugin]
 
