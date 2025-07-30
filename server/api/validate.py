@@ -2,6 +2,10 @@ from flask import Blueprint, jsonify, request, current_app
 import os
 import re
 import json
+import subprocess
+import tempfile
+import signal
+import time
 from lxml import etree
 from lxml.etree import XMLSyntaxError, XMLSchema, RelaxNG, XMLSchemaParseError, DocumentInvalid
 import xmlschema # too slow for validation but has some nice features like exporting a local copy of the schema
@@ -14,6 +18,123 @@ from server.lib.relaxng_to_codemirror import generate_autocomplete_map
 
 RELAXNG_NAMESPACE = "http://relaxng.org/ns/structure/1.0"
 XSD_NAMESPACE = "http://www.w3.org/2001/XMLSchema"
+
+# Validation timeout in seconds
+VALIDATION_TIMEOUT = 30
+
+# Known schemas with special handling requirements
+SCHEMA_CONFIG = {
+    "https://raw.githubusercontent.com/kermitt2/grobid/refs/heads/master/grobid-home/schemas/rng/Grobid.rng": {
+        "timeout": 10,  # Reduced timeout for complex schemas
+        "reason": "Grobid RelaxNG schema is complex and may be slow"
+    }
+}
+
+class ValidationTimeoutError(Exception):
+    """Raised when schema validation times out"""
+    pass
+
+def create_validation_script():
+    """Create a standalone validation script that can be run in a subprocess"""
+    return '''#!/usr/bin/env python3
+import sys
+import json
+from lxml import etree
+from lxml.etree import XMLSyntaxError, XMLSchema, RelaxNG, DocumentInvalid
+
+def main():
+    if len(sys.argv) != 4:
+        print(json.dumps({"error": "Usage: script.py <schema_file> <xml_file> <namespace_type>"}))
+        sys.exit(1)
+    
+    schema_file, xml_file, namespace_type = sys.argv[1:4]
+    
+    try:
+        # Parse schema
+        schema_tree = etree.parse(schema_file)
+        
+        # Parse XML
+        with open(xml_file, 'rb') as f:
+            xml_bytes = f.read()
+        
+        parser = etree.XMLParser()
+        validation_xmldoc = etree.XML(xml_bytes, parser)
+        
+        # Load schema based on type
+        if namespace_type == "http://relaxng.org/ns/structure/1.0":
+            schema = RelaxNG(schema_tree)
+        else:
+            schema = XMLSchema(schema_tree)
+        
+        # Perform validation
+        errors = []
+        try:
+            schema.assertValid(validation_xmldoc)
+        except DocumentInvalid:
+            for error in schema.error_log:
+                errors.append({
+                    "message": error.message.replace("{http://www.tei-c.org/ns/1.0}", "tei:"),
+                    "line": error.line,
+                    "column": error.column
+                })
+        
+        print(json.dumps({"success": True, "errors": errors}))
+        
+    except Exception as e:
+        print(json.dumps({"success": False, "error": str(e)}))
+
+if __name__ == "__main__":
+    main()
+'''
+
+def validate_with_timeout(schema_file, validation_xml_bytes, namespace_type, timeout=VALIDATION_TIMEOUT):
+    """
+    Validate XML with a timeout using subprocess isolation.
+    Returns a list of validation errors or raises ValidationTimeoutError.
+    """
+    # Create temporary files for the validation script and XML data
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as script_file:
+        script_file.write(create_validation_script())
+        script_path = script_file.name
+    
+    with tempfile.NamedTemporaryFile(mode='wb', delete=False) as xml_file:
+        xml_file.write(validation_xml_bytes)
+        xml_path = xml_file.name
+    
+    try:
+        # Run validation in subprocess with timeout
+        result = subprocess.run([
+            'python3', script_path, schema_file, xml_path, namespace_type
+        ], 
+        capture_output=True, 
+        text=True, 
+        timeout=timeout
+        )
+        
+        if result.returncode != 0:
+            raise Exception(f"Validation process failed: {result.stderr}")
+        
+        # Parse the JSON response
+        try:
+            response = json.loads(result.stdout)
+            if response.get("success"):
+                return response.get("errors", [])
+            else:
+                raise Exception(response.get("error", "Unknown validation error"))
+        except json.JSONDecodeError:
+            raise Exception(f"Invalid response from validation process: {result.stdout}")
+            
+    except subprocess.TimeoutExpired:
+        raise ValidationTimeoutError(f"Schema validation timed out after {timeout} seconds")
+    except Exception as e:
+        raise Exception(f"Validation failed: {str(e)}")
+    finally:
+        # Clean up temporary files
+        try:
+            os.unlink(script_path)
+            os.unlink(xml_path)
+        except OSError:
+            pass  # Ignore cleanup errors
 
 
 bp = Blueprint('validate', __name__, url_prefix='/api/')
@@ -222,6 +343,14 @@ def validate(xml_string):
             continue
             
         current_app.logger.debug(f"Validating doc for namespace {namespace} with {schema_type} schema at {schema_location}")
+        
+        # Check for schema-specific configuration
+        validation_timeout = VALIDATION_TIMEOUT
+        if schema_location in SCHEMA_CONFIG:
+            schema_config = SCHEMA_CONFIG[schema_location]
+            validation_timeout = schema_config.get("timeout", VALIDATION_TIMEOUT)
+            current_app.logger.debug(f"Using custom timeout {validation_timeout}s for {schema_location}: {schema_config.get('reason', '')}")
+        
         schema_cache_dir, schema_cache_file, schema_file_name = get_schema_cache_info(schema_location)
         
         # Download schema if not cached
@@ -261,30 +390,36 @@ def validate(xml_string):
             # For RelaxNG, remove schemaLocation attribute if present to avoid validation errors
             validation_xml = re.sub(r'\s+xmlns:xsi="[^"]*"', '', xml_string)
             validation_xml = re.sub(r'\s+xsi:schemaLocation="[^"]*"', '', validation_xml)
-            # Convert cleaned XML to bytes for parsing
             validation_xml_bytes = validation_xml.encode('utf-8') if isinstance(validation_xml, str) else validation_xml
-            validation_xmldoc = etree.XML(validation_xml_bytes, parser)
-            current_app.logger.debug("Removed XSD-specific attributes for RelaxNG validation")
         else:
             # For XSD, use original XML
-            validation_xmldoc = xmldoc
-        
-        # Load and apply the schema
+            validation_xml_bytes = xml_string.encode('utf-8') if isinstance(xml_string, str) else xml_string
+            
+        # Perform validation with timeout protection using subprocess isolation
         try:
-            if root_namespace == RELAXNG_NAMESPACE:
-                schema = RelaxNG(schema_tree)
-            else:
-                schema = XMLSchema(schema_tree)                
-        except XMLSchemaParseError as e:
-            raise ApiError(f"Failed to load schema for {namespace} from {schema_cache_file}: {str(e)}")
-        
-        try:
-            schema.assertValid(validation_xmldoc)
-        except DocumentInvalid:
-            for error in schema.error_log:
-                errors.append({
-                    "message": error.message.replace("{http://www.tei-c.org/ns/1.0}", "tei:"), # todo generalize this
-                    "line": error.line,
-                    "column": error.column
-                })
+            current_app.logger.debug(f"Starting validation with {validation_timeout}s timeout")
+            validation_errors = validate_with_timeout(
+                schema_cache_file,  # Pass file path instead of tree
+                validation_xml_bytes, 
+                root_namespace, 
+                timeout=validation_timeout
+            )
+            errors.extend(validation_errors)
+            current_app.logger.debug(f"Validation completed with {len(validation_errors)} errors")
+            
+        except ValidationTimeoutError as e:
+            current_app.logger.warning(f"⏰ VALIDATION TIMEOUT: {namespace} schema validation timed out after {validation_timeout}s - {schema_location}")
+            errors.append({
+                "message": f"⏰ Schema validation timed out after {validation_timeout} seconds. The schema may be too complex or the document too large. Validation was skipped for performance reasons.",
+                "line": 1,
+                "column": 1,
+                "severity": "warning"
+            })
+        except Exception as e:
+            current_app.logger.error(f"Validation failed for {namespace}: {str(e)}")
+            errors.append({
+                "message": f"Validation error: {str(e)}",
+                "line": 1,
+                "column": 1
+            })
     return errors

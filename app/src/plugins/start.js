@@ -65,10 +65,10 @@ async function start(state) {
   try {
 
     // Authenticate user, otherwise we don't proceed further
-    const userData = await authentication.ensureAuthenticated();
-
-    logger.info(`Welcome, ${userData.fullname}!`)
-
+    const userData = await authentication.ensureAuthenticated()
+    logger.info(`${userData.fullname} has logged in.`)
+    notify(`Welcome back, ${userData.fullname}!`)
+    
     // load config data
     await config.load()
 
@@ -86,9 +86,13 @@ async function start(state) {
     const xml = state.xmlPath || null
     const diff = state.diffXmlPath
 
-    // lod the documents
-    await services.load(state, { pdf, xml, diff })
-
+    if (pdf !== null) {
+      // lod the documents
+      await services.load(state, { pdf, xml, diff })
+    } else {
+      dialog.info("Load a PDF from the dropdown on the top left.")
+    }
+    
     // two alternative initial states:
     // a) if the diff param was given and is different from the xml param, show a diff/merge view 
     // b) if no diff, try to validate the document and select first match of xpath expression

@@ -65,6 +65,9 @@ export class XMLEditor extends EventTarget {
   /** @type {Tree} */
   #syntaxTree // the lezer syntax tree
 
+  /** @type {Array} */
+  #processingInstructions = [] // processing instructions found in the document
+
   /** @type {boolean} */
   #isReady = false
 
@@ -522,6 +525,38 @@ export class XMLEditor extends EventTarget {
    */
   getXmlTree() {
     return this.#xmlTree;
+  }
+
+  /**
+   * Returns any processing instructions found in the document
+   * @returns {Array} Array of processing instruction objects
+   */
+  getProcessingInstructions() {
+    return this.#processingInstructions;
+  }
+
+  /**
+   * Detects processing instructions in the loaded XML document
+   * @returns {Array} Array of processing instruction objects with target, data, and position
+   */
+  detectProcessingInstructions() {
+    if (!this.#xmlTree) return [];
+    
+    const processingInstructions = [];
+    for (let i = 0; i < this.#xmlTree.childNodes.length; i++) {
+      const node = this.#xmlTree.childNodes[i];
+      if (node.nodeType === Node.PROCESSING_INSTRUCTION_NODE) {
+        // @ts-ignore - node is a ProcessingInstruction when nodeType matches
+        const piNode = node;
+        processingInstructions.push({
+          target: piNode.target,
+          data: piNode.data,
+          position: i,
+          fullText: `<?${piNode.target}${piNode.data ? ' ' + piNode.data : ''}?>`
+        });
+      }
+    }
+    return processingInstructions;
   }
 
   /**
@@ -1032,6 +1067,13 @@ export class XMLEditor extends EventTarget {
     console.log("Document was updated and is well-formed.")
     this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, { detail: null }))
     this.#xmlTree = doc;
+
+    // Track processing instructions for better synchronization
+    this.#processingInstructions = this.detectProcessingInstructions();
+    if (this.#processingInstructions.length > 0) {
+        //console.log(`Found ${this.#processingInstructions.length} processing instruction(s):`, 
+        this.#processingInstructions.map(pi => pi.fullText));
+    }
 
     // the syntax tree construction is async, so we need to wait for it to complete
     if (syntaxParserRunning(this.#view)) {
