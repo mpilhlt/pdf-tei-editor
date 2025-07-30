@@ -54759,17 +54759,17 @@ const plugin$2 = {
 const STATUS_DEFINITIONS = {
   draft: {
     label: 'Draft',
-    icon: 'pencil-square', /* <sl-icon name="pencil-square"> */
+    icon: 'pencil-square',
     description: 'Document is in draft state'
   },
   locked: {
     label: 'Locked',
-    icon: 'lock-fill', /* <sl-icon name="lock-fill"> */
+    icon: 'locked',
     description: 'Document is locked for editing'
   },
   none: {
     label: 'No Status',
-    icon: 'circle', /* <sl-icon name="circle"> */
+    icon: 'circle',
     description: 'No specific status set'
   }
 };
@@ -54868,6 +54868,68 @@ async function update$1(state) {
 }
 
 /**
+ * Shared helper function to update document status with role-based permissions
+ * @param {ApplicationState} state 
+ * @param {string} status 
+ * @param {string} description 
+ */
+async function updateDocumentStatus(state, status, description) {
+  const xmlDoc = xmlEditor.getXmlTree();
+  if (!xmlDoc || !state.xmlPath) {
+    api$d.warn("No XML document loaded, cannot set status");
+    return
+  }
+  
+  const user = api.getUser();
+  if (!user) {
+    api$d.warn("Cannot set status. No user is logged in.");
+    return
+  }
+  
+  const currentUserId = getIdFromUser(user);
+  const userRole = user.role || 'user'; // Default to 'user' role if not specified
+  
+  // Get the latest change element
+  const latestChangeInfo = getLatestChangeElement(xmlDoc);
+  
+  if (latestChangeInfo && latestChangeInfo.element) {
+    const latestChangePersId = latestChangeInfo.element.getAttribute('persId');
+    const isOwnChange = latestChangePersId === currentUserId;
+    const isAdmin = userRole === 'admin';
+    
+    if (isOwnChange || isAdmin) {
+      // Update existing change element status
+      latestChangeInfo.element.setAttribute('status', status);
+      latestChangeInfo.element.setAttribute('when', new Date().toISOString());
+      
+      // Update description to reflect status change
+      const descElement = latestChangeInfo.element.querySelector('desc');
+      if (descElement) {
+        descElement.textContent = description;
+      }
+      
+      api$d.debug(`Updated existing change element status to ${status} (${isAdmin ? 'admin override' : 'own change'})`);
+    } else {
+      // Current user cannot modify another user's change element (non-admin)
+      throw new Error(`Cannot set ${status} status: latest change belongs to another user and you don't have admin privileges`)
+    }
+  } else {
+    // No existing change elements, create a new one
+    const revisionChange = {
+      status: status,
+      persId: currentUserId,
+      desc: description
+    };
+    
+    addRevisionChange(xmlDoc, revisionChange);
+    api$d.debug(`Added new change element with ${status} status`);
+  }
+  
+  await xmlEditor.updateEditorFromXmlTree();
+  await api$4.saveXml(state.xmlPath);
+}
+
+/**
  * Set the document status
  * @param {ApplicationState} state 
  * @param {string} status 
@@ -54899,11 +54961,6 @@ async function setDocumentStatus(state, status) {
  * @param {ApplicationState} state 
  */
 async function setLockedStatus(state) {
-  const xmlDoc = xmlEditor.getXmlTree();
-  if (!xmlDoc) {
-    throw new Error("No XML document loaded")
-  }
-  
   // Check if we can lock the file first
   try {
     await api$7.acquireLock(state.xmlPath);
@@ -54914,23 +54971,7 @@ async function setLockedStatus(state) {
     throw error
   }
   
-  // Add TEI change element for locked status
-  const user = api.getUser();
-  const persId = user ? getIdFromUser(user) : 'system';
-  
-  const revisionChange = {
-    status: 'locked',
-    persId: persId,
-    desc: 'Document locked for editing'
-  };
-  
-  // Add change element to TEI header
-  addRevisionChange(xmlDoc, revisionChange);
-  await xmlEditor.updateEditorFromXmlTree();
-  
-  // Save the document
-  await api$4.saveXml(state.xmlPath);
-  
+  await updateDocumentStatus(state, 'locked', 'Document locked for editing');
   api$d.debug("Document status set to locked with file lock maintained");
 }
 
@@ -54939,23 +54980,7 @@ async function setLockedStatus(state) {
  * @param {ApplicationState} state 
  */
 async function setDraftStatus(state) {
-  const xmlDoc = xmlEditor.getXmlTree();
-  if (!xmlDoc) {
-    throw new Error("No XML document loaded")
-  }
-  
-  const user = api.getUser();
-  const persId = user ? getIdFromUser(user) : 'system';
-  
-  const revisionChange = {
-    status: 'draft',
-    persId: persId,
-    desc: 'Document marked as draft'
-  };
-  
-  addRevisionChange(xmlDoc, revisionChange);
-  await xmlEditor.updateEditorFromXmlTree();
-  await api$4.saveXml(state.xmlPath);
+  await updateDocumentStatus(state, 'draft', 'Document marked as draft');
 }
 
 /**
@@ -54963,25 +54988,7 @@ async function setDraftStatus(state) {
  * @param {ApplicationState} state 
  */
 async function clearStatus(state) {
-  // If clearing from a locked status, ensure we maintain the lock for the current user
-  // but don't add new change elements that would set a specific status
-  const xmlDoc = xmlEditor.getXmlTree();
-  if (xmlDoc) {
-    const user = api.getUser();
-    const persId = user ? getIdFromUser(user) : 'system';
-    
-    const revisionChange = {
-      status: 'cleared',
-      persId: persId,
-      desc: 'Document status cleared'
-    };
-    
-    // Add change element to record the status clearing
-    addRevisionChange(xmlDoc, revisionChange);
-    await xmlEditor.updateEditorFromXmlTree();
-    await api$4.saveXml(state.xmlPath);
-  }
-  
+  await updateDocumentStatus(state, 'cleared', 'Document status cleared');
   api$d.debug("Document status cleared - status change recorded");
 }
 
@@ -55002,11 +55009,11 @@ async function updateCurrentStatusFromDocument(state) {
 }
 
 /**
- * Get the latest status from TEI change elements
+ * Get the latest change element from TEI with timestamp info
  * @param {Document} xmlDoc 
- * @returns {string|null}
+ * @returns {{element: Element, timestamp: Date}|null}
  */
-function getLatestStatusFromTei(xmlDoc) {
+function getLatestChangeElement(xmlDoc) {
   try {
     // Use getElementsByTagName to find change elements
     const revisionDescs = xmlDoc.getElementsByTagName('revisionDesc');
@@ -55016,20 +55023,18 @@ function getLatestStatusFromTei(xmlDoc) {
     
     const changeElements = revisionDescs[0].getElementsByTagName('change');
     let latestTimestamp = null;
-    let latestStatus = null;
+    let latestElement = null;
     
     for (let i = 0; i < changeElements.length; i++) {
       const changeElement = changeElements[i];
-      const status = changeElement.getAttribute('status');
       const when = changeElement.getAttribute('when');
       
-      if (status && when) {
+      if (when) {
         try {
           const timestamp = new Date(when);
           if (!isNaN(timestamp.getTime()) && (!latestTimestamp || timestamp > latestTimestamp)) {
             latestTimestamp = timestamp;
-            // Treat "cleared" status as "none" for UI purposes
-            latestStatus = status === 'cleared' ? 'none' : status;
+            latestElement = changeElement;
           }
         } catch (dateError) {
           api$d.warn(`Invalid timestamp in TEI change element: ${when}`);
@@ -55037,11 +55042,27 @@ function getLatestStatusFromTei(xmlDoc) {
       }
     }
     
-    return latestStatus
+    return latestElement ? { element: latestElement, timestamp: latestTimestamp } : null
   } catch (error) {
-    api$d.warn(`Error reading TEI status: ${error.message}`);
+    api$d.warn(`Error reading TEI change elements: ${error.message}`);
     return null
   }
+}
+
+/**
+ * Get the latest status from TEI change elements
+ * @param {Document} xmlDoc 
+ * @returns {string|null}
+ */
+function getLatestStatusFromTei(xmlDoc) {
+  const latestChangeInfo = getLatestChangeElement(xmlDoc);
+  if (!latestChangeInfo) {
+    return null
+  }
+  
+  const status = latestChangeInfo.element.getAttribute('status');
+  // Treat "cleared" status as "none" for UI purposes
+  return status === 'cleared' ? 'none' : status
 }
 
 /**
