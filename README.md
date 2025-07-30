@@ -178,3 +178,8 @@ Both XSD and RelaxNG schemas are downloaded and cached automatically when first 
 - **For validation only**: Use XSD schemas with `xsi:schemaLocation`
 - **For validation + autocomplete**: Use RelaxNG schemas with `xml-model` processing instructions
 - **TEI Projects**: RelaxNG is recommended as it provides the full editing experience with intelligent autocomplete and documentation
+
+## Planned features
+ - [ ] Document ownership: lock document version for edits via ownership declaration in the xml until it is removed
+ - [ ] Slider to change size of editor window vs. pdf viewer
+ - [ ] Real statusbar implementation with permanent sections (such as document info, xpath breadcrumb, etc )
