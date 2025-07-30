@@ -1070,9 +1070,10 @@ export class XMLEditor extends EventTarget {
 
     // Track processing instructions for better synchronization
     this.#processingInstructions = this.detectProcessingInstructions();
+    
     if (this.#processingInstructions.length > 0) {
         //console.log(`Found ${this.#processingInstructions.length} processing instruction(s):`, 
-        this.#processingInstructions.map(pi => pi.fullText));
+        //this.#processingInstructions.map(pi => pi.fullText));
     }
 
     // the syntax tree construction is async, so we need to wait for it to complete
