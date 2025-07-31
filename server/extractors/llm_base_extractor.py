@@ -83,8 +83,6 @@ class LLMBaseExtractor(BaseExtractor, ABC):
         if not text_input:
             raise ValueError("text_input is required")
 
-        if 
-        
         try:
             # Get system prompt 
             system_prompt = self._get_system_prompt(self.get_info()['id'])
