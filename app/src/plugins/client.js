@@ -101,6 +101,7 @@ const api = {
   getAutocompleteData,
   saveXml,
   extractReferences,
+  getExtractorList,
   loadInstructions,
   saveInstructions,
   deleteFiles,
@@ -316,13 +317,30 @@ async function saveXml(xmlString, filePath, saveAsNewVersion) {
 }
 
 /**
+ * Gets a list of available extraction engines
+ * @returns {Promise<Array>} Array of extractor information objects
+ */
+async function getExtractorList() {
+  return await callApi('/extract/list', 'GET');
+}
+
+/**
  * Extracts the references from the given PDF and returns the XML with the extracted data
  * @param {string} filename The filename of the PDF to extract
  * @param {Object} options The options for the extractions, such as DOI, additional instructions, etc. 
  * @returns {Promise<Object>}
  */
 async function extractReferences(filename, options) {
-  return await callApi('/extract', 'POST', { pdf: filename, ...options });
+  // Extract extractor ID from options for new API format
+  const extractor = options.extractor || "llamore-gemini";
+  const extractionOptions = { ...options };
+  delete extractionOptions.extractor; // Remove extractor from options
+  
+  return await callApi('/extract', 'POST', { 
+    pdf: filename, 
+    extractor: extractor,
+    options: extractionOptions 
+  });
 }
 
 /**
