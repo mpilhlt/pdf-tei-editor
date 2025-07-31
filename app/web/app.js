@@ -42980,6 +42980,7 @@ const api$7 = {
   getAutocompleteData,
   saveXml: saveXml$1,
   extractReferences,
+  getExtractorList,
   loadInstructions,
   saveInstructions,
   deleteFiles,
@@ -43192,13 +43193,30 @@ async function saveXml$1(xmlString, filePath, saveAsNewVersion) {
 }
 
 /**
+ * Gets a list of available extraction engines
+ * @returns {Promise<Array>} Array of extractor information objects
+ */
+async function getExtractorList() {
+  return await callApi('/extract/list', 'GET');
+}
+
+/**
  * Extracts the references from the given PDF and returns the XML with the extracted data
  * @param {string} filename The filename of the PDF to extract
  * @param {Object} options The options for the extractions, such as DOI, additional instructions, etc. 
  * @returns {Promise<Object>}
  */
 async function extractReferences(filename, options) {
-  return await callApi('/extract', 'POST', { pdf: filename, ...options });
+  // Extract extractor ID from options for new API format
+  const extractor = options.extractor || "llamore-gemini";
+  const extractionOptions = { ...options };
+  delete extractionOptions.extractor; // Remove extractor from options
+  
+  return await callApi('/extract', 'POST', { 
+    pdf: filename, 
+    extractor: extractor,
+    options: extractionOptions 
+  });
 }
 
 /**
@@ -43801,6 +43819,13 @@ const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))
 // @ts-ignore
 const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
 
+/**
+ * @typedef {Object} ExtractionOptions
+ * @property {string} [doi] 
+ * @property {string} [filename]
+ * @property {string} [collection]
+ */
+
 //
 // Implementation
 //
@@ -43845,7 +43870,8 @@ async function extractFromCurrentPDF(state) {
   try {
     doi = doi || getDoiFromFilename(state.pdfPath);
     if (state.pdfPath) {
-      let { xml } = await extractFromPDF(state, { doi });
+      const collection = state.pdfPath.split("/").at(-2);
+      let { xml } = await extractFromPDF(state, { doi, collection });
       await api$4.showMergeView(state, xml);
     }
   } catch (error) {
@@ -43878,12 +43904,12 @@ async function extractFromNewPdf(state) {
 /**
  * Extracts references from the given PDF file, letting the user choose the extraction options
  * @param {ApplicationState} state
- * @param {{doi:string}} [defaultOptions] Optional default option object passed to the extraction service,
+ * @param {ExtractionOptions} [defaultOptions] Optional default option object passed to the extraction service,
  * user will be prompted to choose own ones.
  * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
  * @throws {Error} If the DOI is not valid or the user aborts the dialog
  */
-async function extractFromPDF(state, defaultOptions) {
+async function extractFromPDF(state, defaultOptions={}) {
   if(!state.pdfPath) throw new Error("Missing PDF path")
 
   // get DOI and instructions from user
@@ -43906,18 +43932,17 @@ async function extractFromPDF(state, defaultOptions) {
 
 /**
  * 
- * @param {{doi:string}?} options Optional default option object
- * @returns 
+ * @param {ExtractionOptions} options Optional default option object
+ * @returns {Promise<ExtractionOptions>}
  */
-async function promptForExtractionOptions(options) {
+async function promptForExtractionOptions(options={}) {
 
   // load instructions
   const instructionsData = await api$7.loadInstructions();
   const instructions = [];
 
-  // populate dialog
-  /** @type {SlInput|null} */
-  if (options && typeof options =="object" && 'doi' in options) {
+  // use doi if available
+  if ('doi' in options && options.doi) {
     optionsDialog.doi.value = options.doi;
   } else {
     optionsDialog.doi.value = "";
@@ -43927,7 +43952,8 @@ async function promptForExtractionOptions(options) {
   /** @type {SlSelect|null} */
   const collectionSelectBox = optionsDialog.collectionName;
   collectionSelectBox.innerHTML="";
-  const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections);
+  const collectionData = ui$1.toolbar.pdf.dataset.collections || '[]';
+  const collections = JSON.parse(collectionData);
   collections.unshift('__inbox');
   for (const collection_name of collections){
     const option = Object.assign(new option_default, {
@@ -43936,21 +43962,88 @@ async function promptForExtractionOptions(options) {
     });
     collectionSelectBox.append(option);
   } 
-  collectionSelectBox.value = "__inbox";
+  collectionSelectBox.value = options.collection || "__inbox";
+  // if we have a collection, it cannot be changed
+  collectionSelectBox.disabled = Boolean(options.collection);
+
+  // configure model selectbox with available extractors
+  /** @type {SlSelect|null} */
+  const modelSelectBox = optionsDialog.modelIndex;
+  modelSelectBox.innerHTML = "";
+  try {
+    const extractors = await api$7.getExtractorList();
+    // Filter extractors that support PDF input and TEI document output
+    const pdfToTeiExtractors = extractors.filter(extractor => 
+      extractor.input.includes("pdf") && extractor.output.includes("tei-document")
+    );
+    
+    for (const extractor of pdfToTeiExtractors) {
+      const option = Object.assign(new option_default, {
+        value: extractor.id,
+        textContent: extractor.name
+      });
+      modelSelectBox.appendChild(option);
+    }
+    
+    // Default to llamore-gemini if available
+    if (pdfToTeiExtractors.find(e => e.id === "llamore-gemini")) {
+      modelSelectBox.value = "llamore-gemini";
+    } else if (pdfToTeiExtractors.length > 0) {
+      modelSelectBox.value = pdfToTeiExtractors[0].id;
+    }
+  } catch (error) {
+    api$d.warn("Could not load extractor list:", error);
+    // Fallback to hardcoded option
+    const option = Object.assign(new option_default, {
+      value: "llamore-gemini",
+      textContent: "LLamore + Gemini"
+    });
+    modelSelectBox.appendChild(option);
+    modelSelectBox.value = "llamore-gemini";
+  }
   
-  // configure instructions selectbox 
+  // Add event listener to update instructions when model changes
+  const updateInstructions = () => {
+    const selectedExtractor = modelSelectBox.value || "llamore-gemini";
+    instructionsSelectBox.innerHTML = "";
+    
+    let instructionIndex = 0;
+    for (const [originalIdx, instructionData] of instructionsData.entries()) {
+      const { label, text, extractor = ["llamore-gemini"] } = instructionData;
+      
+      // Check if this instruction supports the selected extractor
+      if (extractor.includes(selectedExtractor)) {
+        const option = Object.assign(new option_default, {
+          value: String(instructionIndex),
+          textContent: label
+        });
+        instructions[instructionIndex] = text.join("\n");
+        instructionsSelectBox.appendChild(option);
+        instructionIndex++;
+      }
+    }
+    
+    // If no instructions found for this extractor, show a default option
+    if (instructionIndex === 0) {
+      const option = Object.assign(new option_default, {
+        value: "0",
+        textContent: "No custom instructions"
+      });
+      instructions[0] = "";
+      instructionsSelectBox.appendChild(option);
+    }
+    
+    instructionsSelectBox.value = "0";
+  };
+  
+  modelSelectBox.addEventListener('sl-change', updateInstructions);
+  
+  // configure instructions selectbox - filter by selected extractor
   /** @type {SlSelect|null} */
   const instructionsSelectBox = optionsDialog.instructionIndex;
-  instructionsSelectBox.innerHTML ="";
-  for (const [idx, { label, text }] of instructionsData.entries()) {
-    const option = Object.assign(new option_default, {
-      value: String(idx),
-      textContent: label
-    });
-    instructions[idx] = text.join("\n");
-    instructionsSelectBox.appendChild(option);
-  }
-  instructionsSelectBox.value = "0";
+  
+  // Initial population of instructions
+  updateInstructions();
 
   // display the dialog and await the user's response
   const result = await new Promise(resolve => {
@@ -43980,7 +44073,8 @@ async function promptForExtractionOptions(options) {
   const formData = {
     'doi': optionsDialog.doi.value,
     'instructions': instructions[parseInt(String(optionsDialog.instructionIndex.value))],
-    'collection': optionsDialog.collectionName.value
+    'collection': optionsDialog.collectionName.value,
+    'extractor': optionsDialog.modelIndex.value
   };
   
   if (formData.doi == "" || !isDoi(formData.doi)) {
@@ -45822,6 +45916,7 @@ const plugin$5 = {
  * @property {SlDialog} self
  * @property {SlInput} label
  * @property {SlMenu} labelMenu
+ * @property {SlSelect} extractorSelect
  * @property {SlTextarea} text
  * @property {SlButton} cancel
  * @property {SlButton} delete
@@ -45887,9 +45982,40 @@ async function open$1() {
       addSlMenuItem(idx, prompt.label);
     }
   }
+  
+  // Load available extractors for the select box
+  await populateExtractorSelect();
+  
   ui$1.promptEditor.delete.disabled = prompts.length < 2;
   api$2.edit(currentIndex);
   ui$1.promptEditor.self.show();
+}
+
+/**
+ * Populate the extractor select box with available extractors
+ */
+async function populateExtractorSelect() {
+  const extractorSelect = ui$1.promptEditor.extractorSelect;
+  extractorSelect.innerHTML = "";
+  
+  try {
+    const extractors = await api$7.getExtractorList();
+    for (const extractor of extractors) {
+      const option = Object.assign(new option_default, {
+        value: extractor.id,
+        textContent: extractor.name
+      });
+      extractorSelect.appendChild(option);
+    }
+  } catch (error) {
+    api$d.warn("Could not load extractor list for prompt editor:", error);
+    // Fallback to default extractor
+    const option = Object.assign(new option_default, {
+      value: "llamore-gemini",
+      textContent: "LLamore + Gemini"
+    });
+    extractorSelect.appendChild(option);
+  }
 }
 
 /**
@@ -45899,9 +46025,14 @@ async function open$1() {
 function edit(idx) {
   // @ts-ignore
   ui$1.promptEditor.labelMenu.childNodes[idx].checked = true;
-  const {label, text} = prompts[idx];
+  const prompt = prompts[idx];
+  const {label, text, extractor = ["llamore-gemini"]} = prompt;
+  
   ui$1.promptEditor.label.value = label;
   ui$1.promptEditor.text.value = Array.isArray(text) ? text.join("\n") : text;
+  
+  // Set selected extractors
+  ui$1.promptEditor.extractorSelect.value = extractor;
 }
 
 /**
@@ -45911,6 +46042,8 @@ function duplicateInstructions() {
   saveCurrentPrompt();
   const newPrompt = Object.assign({}, prompts[currentIndex]);
   newPrompt.label += " (Copy)";
+  // Deep copy the extractor array
+  newPrompt.extractor = [...(prompts[currentIndex].extractor || ["llamore-gemini"])];
   prompts.push(newPrompt);
   // @ts-ignore
   ui$1.promptEditor.labelMenu.childNodes[currentIndex].checked = false;
@@ -45972,7 +46105,9 @@ function addSlMenuItem(idx, label){
 function saveCurrentPrompt() {
   const label = ui$1.promptEditor.label.value;
   const text = ui$1.promptEditor.text.value.split("\n");
-  prompts[currentIndex] = {label, text};
+  const extractor = ui$1.promptEditor.extractorSelect.value || ["llamore-gemini"];
+  
+  prompts[currentIndex] = {label, text, extractor};
   // update menu item
   ui$1.promptEditor.labelMenu.childNodes[currentIndex].textContent = label;
 }
