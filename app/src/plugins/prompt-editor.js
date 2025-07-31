@@ -6,7 +6,7 @@
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
 import { logger, client } from '../app.js'
-import { createHtmlElements, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput } from '../ui.js'
+import { createHtmlElements, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput, SlSelect, SlOption } from '../ui.js'
 
 
 /**
@@ -44,6 +44,7 @@ export default plugin
  * @property {SlDialog} self
  * @property {SlInput} label
  * @property {SlMenu} labelMenu
+ * @property {SlSelect} extractorSelect
  * @property {SlTextarea} text
  * @property {SlButton} cancel
  * @property {SlButton} delete
@@ -109,9 +110,40 @@ async function open() {
       addSlMenuItem(idx, prompt.label)
     }
   }
+  
+  // Load available extractors for the select box
+  await populateExtractorSelect()
+  
   ui.promptEditor.delete.disabled = prompts.length < 2
   api.edit(currentIndex)
   ui.promptEditor.self.show()
+}
+
+/**
+ * Populate the extractor select box with available extractors
+ */
+async function populateExtractorSelect() {
+  const extractorSelect = ui.promptEditor.extractorSelect
+  extractorSelect.innerHTML = ""
+  
+  try {
+    const extractors = await client.getExtractorList()
+    for (const extractor of extractors) {
+      const option = Object.assign(new SlOption, {
+        value: extractor.id,
+        textContent: extractor.name
+      })
+      extractorSelect.appendChild(option)
+    }
+  } catch (error) {
+    logger.warn("Could not load extractor list for prompt editor:", error)
+    // Fallback to default extractor
+    const option = Object.assign(new SlOption, {
+      value: "llamore-gemini",
+      textContent: "LLamore + Gemini"
+    })
+    extractorSelect.appendChild(option)
+  }
 }
 
 /**
@@ -121,9 +153,14 @@ async function open() {
 function edit(idx) {
   // @ts-ignore
   ui.promptEditor.labelMenu.childNodes[idx].checked = true
-  const {label, text} = prompts[idx]
+  const prompt = prompts[idx]
+  const {label, text, extractor = ["llamore-gemini"]} = prompt
+  
   ui.promptEditor.label.value = label
   ui.promptEditor.text.value = Array.isArray(text) ? text.join("\n") : text
+  
+  // Set selected extractors
+  ui.promptEditor.extractorSelect.value = extractor
 }
 
 /**
@@ -133,6 +170,8 @@ function duplicateInstructions() {
   saveCurrentPrompt()
   const newPrompt = Object.assign({}, prompts[currentIndex])
   newPrompt.label += " (Copy)"
+  // Deep copy the extractor array
+  newPrompt.extractor = [...(prompts[currentIndex].extractor || ["llamore-gemini"])]
   prompts.push(newPrompt)
   // @ts-ignore
   ui.promptEditor.labelMenu.childNodes[currentIndex].checked = false
@@ -194,7 +233,9 @@ function addSlMenuItem(idx, label){
 function saveCurrentPrompt() {
   const label = ui.promptEditor.label.value
   const text = ui.promptEditor.text.value.split("\n")
-  prompts[currentIndex] = {label, text}
+  const extractor = ui.promptEditor.extractorSelect.value || ["llamore-gemini"]
+  
+  prompts[currentIndex] = {label, text, extractor}
   // update menu item
   ui.promptEditor.labelMenu.childNodes[currentIndex].textContent = label
 }

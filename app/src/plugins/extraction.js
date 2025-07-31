@@ -63,6 +63,13 @@ const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))
 // @ts-ignore
 const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0]
 
+/**
+ * @typedef {Object} ExtractionOptions
+ * @property {string} [doi] 
+ * @property {string} [filename]
+ * @property {string} [collection]
+ */
+
 //
 // Implementation
 //
@@ -107,7 +114,8 @@ async function extractFromCurrentPDF(state) {
   try {
     doi = doi || getDoiFromFilename(state.pdfPath)
     if (state.pdfPath) {
-      let { xml } = await extractFromPDF(state, { doi })
+      const collection = state.pdfPath.split("/").at(-2)
+      let { xml } = await extractFromPDF(state, { doi, collection })
       await services.showMergeView(state, xml)
     }
   } catch (error) {
@@ -140,12 +148,12 @@ async function extractFromNewPdf(state) {
 /**
  * Extracts references from the given PDF file, letting the user choose the extraction options
  * @param {ApplicationState} state
- * @param {{doi:string}} [defaultOptions] Optional default option object passed to the extraction service,
+ * @param {ExtractionOptions} [defaultOptions] Optional default option object passed to the extraction service,
  * user will be prompted to choose own ones.
  * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
  * @throws {Error} If the DOI is not valid or the user aborts the dialog
  */
-async function extractFromPDF(state, defaultOptions) {
+async function extractFromPDF(state, defaultOptions={}) {
   if(!state.pdfPath) throw new Error("Missing PDF path")
 
   // get DOI and instructions from user
@@ -168,18 +176,17 @@ async function extractFromPDF(state, defaultOptions) {
 
 /**
  * 
- * @param {{doi:string}?} options Optional default option object
- * @returns 
+ * @param {ExtractionOptions} options Optional default option object
+ * @returns {Promise<ExtractionOptions>}
  */
-async function promptForExtractionOptions(options) {
+async function promptForExtractionOptions(options={}) {
 
   // load instructions
   const instructionsData = await client.loadInstructions()
   const instructions = [];
 
-  // populate dialog
-  /** @type {SlInput|null} */
-  if (options && typeof options =="object" && 'doi' in options) {
+  // use doi if available
+  if ('doi' in options && options.doi) {
     optionsDialog.doi.value = options.doi
   } else {
     optionsDialog.doi.value = ""
@@ -189,7 +196,8 @@ async function promptForExtractionOptions(options) {
   /** @type {SlSelect|null} */
   const collectionSelectBox = optionsDialog.collectionName
   collectionSelectBox.innerHTML=""
-  const collections = JSON.parse(ui.toolbar.pdf.dataset.collections)
+  const collectionData = ui.toolbar.pdf.dataset.collections || '[]'
+  const collections = JSON.parse(collectionData)
   collections.unshift('__inbox')
   for (const collection_name of collections){
     const option = Object.assign(new SlOption, {
@@ -198,21 +206,88 @@ async function promptForExtractionOptions(options) {
     })
     collectionSelectBox.append(option)
   } 
-  collectionSelectBox.value = "__inbox"
+  collectionSelectBox.value = options.collection || "__inbox"
+  // if we have a collection, it cannot be changed
+  collectionSelectBox.disabled = Boolean(options.collection)
+
+  // configure model selectbox with available extractors
+  /** @type {SlSelect|null} */
+  const modelSelectBox = optionsDialog.modelIndex
+  modelSelectBox.innerHTML = ""
+  try {
+    const extractors = await client.getExtractorList()
+    // Filter extractors that support PDF input and TEI document output
+    const pdfToTeiExtractors = extractors.filter(extractor => 
+      extractor.input.includes("pdf") && extractor.output.includes("tei-document")
+    )
+    
+    for (const extractor of pdfToTeiExtractors) {
+      const option = Object.assign(new SlOption, {
+        value: extractor.id,
+        textContent: extractor.name
+      })
+      modelSelectBox.appendChild(option)
+    }
+    
+    // Default to llamore-gemini if available
+    if (pdfToTeiExtractors.find(e => e.id === "llamore-gemini")) {
+      modelSelectBox.value = "llamore-gemini"
+    } else if (pdfToTeiExtractors.length > 0) {
+      modelSelectBox.value = pdfToTeiExtractors[0].id
+    }
+  } catch (error) {
+    logger.warn("Could not load extractor list:", error)
+    // Fallback to hardcoded option
+    const option = Object.assign(new SlOption, {
+      value: "llamore-gemini",
+      textContent: "LLamore + Gemini"
+    })
+    modelSelectBox.appendChild(option)
+    modelSelectBox.value = "llamore-gemini"
+  }
   
-  // configure instructions selectbox 
+  // Add event listener to update instructions when model changes
+  const updateInstructions = () => {
+    const selectedExtractor = modelSelectBox.value || "llamore-gemini"
+    instructionsSelectBox.innerHTML = ""
+    
+    let instructionIndex = 0
+    for (const [originalIdx, instructionData] of instructionsData.entries()) {
+      const { label, text, extractor = ["llamore-gemini"] } = instructionData
+      
+      // Check if this instruction supports the selected extractor
+      if (extractor.includes(selectedExtractor)) {
+        const option = Object.assign(new SlOption, {
+          value: String(instructionIndex),
+          textContent: label
+        })
+        instructions[instructionIndex] = text.join("\n")
+        instructionsSelectBox.appendChild(option)
+        instructionIndex++
+      }
+    }
+    
+    // If no instructions found for this extractor, show a default option
+    if (instructionIndex === 0) {
+      const option = Object.assign(new SlOption, {
+        value: "0",
+        textContent: "No custom instructions"
+      })
+      instructions[0] = ""
+      instructionsSelectBox.appendChild(option)
+    }
+    
+    instructionsSelectBox.value = "0"
+  }
+  
+  modelSelectBox.addEventListener('sl-change', updateInstructions)
+  
+  // configure instructions selectbox - filter by selected extractor
   /** @type {SlSelect|null} */
   const instructionsSelectBox = optionsDialog.instructionIndex
-  instructionsSelectBox.innerHTML =""
-  for (const [idx, { label, text }] of instructionsData.entries()) {
-    const option = Object.assign(new SlOption, {
-      value: String(idx),
-      textContent: label
-    })
-    instructions[idx] = text.join("\n")
-    instructionsSelectBox.appendChild(option)
-  }
-  instructionsSelectBox.value = "0"
+  
+  // Initial population of instructions
+  updateInstructions()
 
   // display the dialog and await the user's response
   const result = await new Promise(resolve => {
@@ -242,7 +317,8 @@ async function promptForExtractionOptions(options) {
   const formData = {
     'doi': optionsDialog.doi.value,
     'instructions': instructions[parseInt(String(optionsDialog.instructionIndex.value))],
-    'collection': optionsDialog.collectionName.value
+    'collection': optionsDialog.collectionName.value,
+    'extractor': optionsDialog.modelIndex.value
   }
   
   if (formData.doi == "" || !isDoi(formData.doi)) {

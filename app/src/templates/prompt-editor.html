@@ -1,5 +1,5 @@
 <sl-dialog name="promptEditor" label="Edit prompt" class="dialog-big">
-  <p>Below are the parts of the LLM prompt specific to the reference instruction.</p>
+  <p>Here you can edit the LLM prompt specific to the reference extraction.</p>
   <div class="dialog-column">
     <div class="dialog-row">
       <sl-input name="label" help-text="A short description of the prompt additions"></sl-input>
@@ -8,7 +8,9 @@
         <sl-menu name="labelMenu"></sl-menu>
       </sl-dropdown>
     </div>
-    <sl-textarea name="text" rows="20"></sl-texarea>
+    <sl-select name="extractorSelect" label="Extractors" multiple clearable placeholder="Select extractors..." help-text="Choose which extractors can use this prompt">
+    </sl-select>
+    <sl-textarea name="text" rows="20"></sl-textarea>
   </div>
   <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
   <sl-button slot="footer" name="delete" disabled variant="danger">Delete prompt</sl-button>
