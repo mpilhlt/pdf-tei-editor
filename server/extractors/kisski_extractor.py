@@ -4,7 +4,6 @@ import requests
 import json
 from server.extractors.llm_base_extractor import LLMBaseExtractor
 
-
 class KisskiExtractor(LLMBaseExtractor):
     """
     Extractor that uses the KISSKI API for text processing tasks.
@@ -15,7 +14,7 @@ class KisskiExtractor(LLMBaseExtractor):
         """Return information about this extractor"""
         return {
             "id": "kisski-neural-chat",
-            "name": "KISSKI Neural Chat 7B",
+            "name": "KISSKI API",
             "description": "Text processing using KISSKI Academic Cloud API",
             "input": ["text"],
             "output": ["text"],
@@ -64,7 +63,8 @@ class KisskiExtractor(LLMBaseExtractor):
         url = "https://chat-ai.academiccloud.de/v1/chat/completions"
         
         # Use specified model or default
-        model_name = model if model else "intel-neural-chat-7b"
+        if not model or model == "":
+            raise RuntimeError("No model given")
         
         headers = {
             'Accept': 'application/json',
@@ -73,7 +73,7 @@ class KisskiExtractor(LLMBaseExtractor):
         }
         
         data = {
-            "model": model_name,
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}

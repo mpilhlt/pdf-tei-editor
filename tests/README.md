@@ -15,10 +15,6 @@ npm run test:sync
 node --test --experimental-test-coverage tests/*.test.js
 ```
 
-## Test Files
-
-- **sync-algorithm.test.js** - Comprehensive tests for the XML syntax tree <-> DOM synchronization algorithm, including processing instruction handling
-
 ## Test Structure
 
 Tests use Node.js built-in test runner (Node 18+) with:
