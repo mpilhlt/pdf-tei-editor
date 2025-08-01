@@ -1,6 +1,7 @@
 [
     {
         "label": "Default instructions",
+        "extractor": ["llamore-gemini"],
         "text": [
             "Always properly capitalize names. Do not use small or all caps even if they appear in the document. ",
             "",
@@ -12,7 +13,67 @@
             "",
             "A monograph must always have a title. A single analytic title without an additional monographic title does not exist. A book title is always the monographic title. For example, in \"Ludwig Wittgenstein, Tractatus logico-philosophicus, London 1922\", \"Tractatus logico-philosophicus\" is the monographic title, not the analytic.",
             "",
-            "When you encounter incomplete references such as in \"Vgl. die Artikel \u00bbFact\u00ab im Oxford English Dictionary und \u00bbThatsache\u00ab in Grimms W\u00f6rterbuch.\", extract the analytic titles (\"Fact\", \"Thatsache\") and monographic titles (\"Oxford English Dictionary\", \"Grimms W\u00f6rterbuch\")"
+            "When you encounter incomplete references such as in \"Vgl. die Artikel »Fact« im Oxford English Dictionary und »Thatsache« in Grimms Wörterbuch.\", extract the analytic titles (\"Fact\", \"Thatsache\") and monographic titles (\"Oxford English Dictionary\", \"Grimms Wörterbuch\")"
+        ]
+    },
+    {
+        "label": "Gemini Pro instructions",
+        "extractor": ["gemini-pro"],
+        "text": [
+            "You are an expert bibliographic reference extractor. Extract all references from academic texts with high precision.",
+            "",
+            "Always properly capitalize names. Do not use small or all caps even if they appear in the document.",
+            "",
+            "A monograph must always have a title. A book title is always the monographic title.",
+            "",
+            "For incomplete references, extract both analytic titles (article/chapter) and monographic titles (book/journal).",
+            "",
+            "Return results in structured format with clear distinction between authors, analytic titles, monographic titles, and publication details."
+        ]
+    },
+    {
+        "label": "Claude Sonnet instructions", 
+        "extractor": ["claude-sonnet"],
+        "text": [
+            "You are a specialized bibliographic reference extraction assistant. Your task is to identify and extract all bibliographic references from academic texts.",
+            "",
+            "Key requirements:",
+            "- Always properly capitalize names (no small caps or all caps)",
+            "- Distinguish between analytic titles (articles, chapters) and monographic titles (books, journals)",
+            "- A monograph must always have a title - book titles are monographic titles",
+            "- Extract incomplete references by identifying both analytic and monographic components",
+            "",
+            "Format your output as a clear, structured list with complete bibliographic information."
+        ]
+    },
+    {
+        "label": "KISSKI Neural Chat instructions",
+        "extractor": ["kisski-neural-chat"],
+        "text": [
+            "Extract bibliographic references from academic text. Focus on accuracy and completeness.",
+            "",
+            "Rules:",
+            "- Proper name capitalization (no small/all caps)",
+            "- Identify analytic titles (articles/chapters) vs monographic titles (books/journals)",
+            "- Books always have monographic titles",
+            "- Include incomplete references with available information",
+            "",
+            "Output: Structured list of references with authors, titles, publication info, and page numbers."
+        ]
+    },
+    {
+        "label": "Multi-LLM compatible instructions",
+        "extractor": ["gemini-pro", "claude-sonnet", "kisski-neural-chat"],
+        "text": [
+            "Extract all bibliographic references from the provided academic text with high accuracy.",
+            "",
+            "Standards:",
+            "- Always use proper capitalization for names",
+            "- Distinguish analytic titles (articles, chapters) from monographic titles (books, journals)",
+            "- Every monograph requires a title",
+            "- Process incomplete references by extracting available components",
+            "",
+            "Provide structured output with complete bibliographic details."
         ]
     }
 ]

@@ -90,7 +90,7 @@ def get_instructions():
         with open(INSTRUCTION_DATA_PATH, 'r', encoding='utf-8') as f:
             instructions = json.load(f)
     else:   
-        instructions = [{"label":"Default instructions", "text":[]}]
+        instructions = [{"label":"Default instructions", "extractor": ["llamore-gemini"], "text":[]}]
     return jsonify(instructions)
 
 @bp.route("/instructions", methods=["POST"])

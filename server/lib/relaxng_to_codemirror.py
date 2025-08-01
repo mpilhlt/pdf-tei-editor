@@ -345,27 +345,27 @@ class RelaxNGParser:
     
     def _extract_attribute_values(self, attr_element: ET.Element) -> Union[List[str], None]:
         """Extract possible values for an attribute."""
-        values = []
+        values = set()
         
         # Look for choice elements with value constraints
         for choice in attr_element.findall('.//{http://relaxng.org/ns/structure/1.0}choice'):
             for value in choice.findall('.//{http://relaxng.org/ns/structure/1.0}value'):
                 if value.text:
-                    values.append(value.text.strip())
+                    values.add(value.text.strip())
         
         # Look for direct value elements
         for value in attr_element.findall('.//{http://relaxng.org/ns/structure/1.0}value'):
             if value.text:
-                values.append(value.text.strip())
+                values.add(value.text.strip())
         
         # Check for data type constraints
         for data in attr_element.findall('.//{http://relaxng.org/ns/structure/1.0}data'):
             data_type = data.get('type')
             if data_type == 'boolean':
-                values.extend(['true', 'false'])
+                values.update(['true', 'false'])
         
-        # Return None for open attributes, list for constrained ones
-        return values if values else None
+        # Return None for open attributes, sorted list for constrained ones
+        return sorted(list(values)) if values else None
     
     def _build_autocomplete_map(self) -> Dict[str, Dict]:
         """Build the final autocomplete map."""
@@ -698,31 +698,6 @@ class RelaxNGParser:
             return f"fallback:{str(data)}"
     
     def _get_global_attributes(self) -> Dict[str, Union[List[str], None]]:
-        """Return common global attributes for TEI/XML."""
-        return {
-            # XML core attributes
-            'xml:id': None,
-            'xml:lang': None,
-            'xml:base': None,
-            'xml:space': ['default', 'preserve'],
-            
-            # Common TEI attributes
-            'n': None,
-            'rend': None,
-            'rendition': None,
-            'style': None,
-            'cert': ['high', 'medium', 'low', 'unknown'],
-            'resp': None,
-            'source': None,
-            'copyOf': None,
-            'corresp': None,
-            'synch': None,
-            'sameAs': None,
-            'exclude': None,
-            'select': None,
-            'next': None,
-            'prev': None,
-        }
         """Return common global attributes for TEI/XML."""
         return {
             # XML core attributes

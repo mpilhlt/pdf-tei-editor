@@ -404,18 +404,57 @@ export function resolveDeduplicated(data) {
       });
       return merged;
     } else if (firstType === 'array' && resolved.every(r => Array.isArray(r))) {
-      // Concatenate arrays
-      return [].concat(...resolved);
+      // Concatenate arrays and deduplicate
+      const concatenated = [].concat(...resolved);
+      const seen = new Set();
+      return concatenated.filter(item => {
+        if (seen.has(item)) return false;
+        seen.add(item);
+        return true;
+      });
     } else {
       // Mixed types - return as array
       return resolved;
     }
   }
 
+  // Helper function to deduplicate arrays, preserving order
+  function deduplicateArray(arr) {
+    if (!Array.isArray(arr)) return arr;
+    const seen = new Set();
+    return arr.filter(item => {
+      if (seen.has(item)) return false;
+      seen.add(item);
+      return true;
+    });
+  }
+
+  // Helper function to recursively deduplicate values arrays in objects
+  function deduplicateValues(obj) {
+    if (Array.isArray(obj)) {
+      return obj.map(deduplicateValues);
+    } else if (obj && typeof obj === 'object') {
+      const result = {};
+      Object.keys(obj).forEach(key => {
+        if (key === 'values' && Array.isArray(obj[key])) {
+          // Deduplicate values arrays specifically
+          result[key] = deduplicateArray(obj[key]);
+        } else {
+          result[key] = deduplicateValues(obj[key]);
+        }
+      });
+      return result;
+    }
+    return obj;
+  }
+
   // Resolve all references in the main data
   Object.keys(resolved).forEach(key => {
     resolved[key] = resolveRefs(resolved[key]);
   });
+  
+  // Deduplicate all values arrays in the resolved data
+  const finalResolved = deduplicateValues(resolved);
 
-  return resolved;
+  return finalResolved;
 }
