@@ -53,8 +53,6 @@ def extract():
     try:
         tei_xml = extractor.extract(pdf_path=pdf_path, xml_content=xml_content, options=options)
     except Exception as e:
-        if pdf_path and os.path.exists(pdf_path):
-            os.remove(pdf_path)  # cleanup on failure
         raise ApiError(f"Extraction failed: {e}")
     
     # Save the result if we processed a PDF

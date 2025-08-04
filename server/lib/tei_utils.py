@@ -115,6 +115,78 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     return teiHeader
 
 
+def create_edition_stmt(date: str, title: str) -> etree.Element:
+    """
+    Create an editionStmt element with date and title.
+    
+    Args:
+        date: ISO timestamp string
+        title: Edition title
+        
+    Returns:
+        editionStmt element
+    """
+    editionStmt = etree.Element("editionStmt")
+    edition = etree.SubElement(editionStmt, "edition")
+    date_elem = etree.SubElement(edition, "date", when=date)
+    date_elem.text = datetime.datetime.fromisoformat(date.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M:%S")
+    title_elem = etree.SubElement(edition, "title")
+    title_elem.text = title
+    return editionStmt
+
+
+def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, timestamp: str) -> etree.Element:
+    """
+    Create an encodingDesc element with GROBID application info.
+    
+    Args:
+        grobid_version: GROBID version string
+        grobid_revision: GROBID revision hash
+        timestamp: ISO timestamp string
+        
+    Returns:
+        encodingDesc element
+    """
+    encodingDesc = etree.Element("encodingDesc")
+    appInfo = etree.SubElement(encodingDesc, "appInfo")
+    
+    application = etree.SubElement(appInfo, "application", 
+                                 version=grobid_version, 
+                                 ident="GROBID", 
+                                 when=timestamp)
+    desc = etree.SubElement(application, "desc")
+    desc.text = "GROBID - A machine learning software for extracting information from scholarly documents"
+    
+    revision_label = etree.SubElement(application, "label", type="revision")
+    revision_label.text = grobid_revision
+    
+    params_label = etree.SubElement(application, "label", type="parameters")
+    params_label.text = "flavor=article/dh-law-footnotes"
+    
+    ref = etree.SubElement(application, "ref", target="https://github.com/kermitt2/grobid")
+    
+    return encodingDesc
+
+
+def create_revision_desc_with_status(timestamp: str, status: str, description: str) -> etree.Element:
+    """
+    Create a revisionDesc element with change tracking.
+    
+    Args:
+        timestamp: ISO timestamp string
+        status: Status of the change (e.g., "draft")
+        description: Description of the change
+        
+    Returns:
+        revisionDesc element
+    """
+    revisionDesc = etree.Element("revisionDesc")
+    change = etree.SubElement(revisionDesc, "change", when=timestamp, status=status)
+    desc = etree.SubElement(change, "desc")
+    desc.text = description
+    return revisionDesc
+
+
 def serialize_tei_xml(tei_doc: etree.Element) -> str:
     """
     Serialize TEI document to XML string with proper formatting and schema processing instructions.
