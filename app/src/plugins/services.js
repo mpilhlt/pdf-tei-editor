@@ -648,7 +648,15 @@ async function saveRevision(state) {
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     await addTeiHeaderInfo(respStmt, null, revisionChange)
-    await saveXml(state.xmlPath)
+    const result = await saveXml(state.xmlPath)
+    
+    // If migration occurred, first reload file data, then update state
+    if (result.status === "saved_with_migration") {
+      await fileselection.reload(state)
+      state.xmlPath = result.path
+      await updateState(state)
+    }
+    
     notify("Document was saved.")
     syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
