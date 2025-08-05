@@ -4,7 +4,10 @@ from pathlib import Path
 from shutil import move
 
 from server.lib.decorators import handle_api_errors, session_required
-from server.lib.server_utils import ApiError, make_timestamp, remove_obsolete_marker_if_exists
+from server.lib.server_utils import (
+    ApiError, make_timestamp, remove_obsolete_marker_if_exists,
+    get_version_full_path
+)
 from server.extractors.discovery import list_extractors, create_extractor
 
 bp = Blueprint("extract", __name__, url_prefix="/api/extract")
@@ -124,14 +127,16 @@ def _save_extraction_result(pdf_filename: str, tei_xml: str, options: dict) -> d
     
     if os.path.exists(target_tei_path):
         # we already have a gold file, so save as a version, not as the original
-        version = make_timestamp().replace(" ", "_").replace(":", "-")
-        final_tei_path = os.path.join(DATA_ROOT, "versions", version, file_id + ".tei.xml")
+        timestamp = make_timestamp().replace(" ", "_").replace(":", "-")
+        final_tei_path = get_version_full_path(file_id, DATA_ROOT, timestamp, ".tei.xml")
     
     remove_obsolete_marker_if_exists(final_tei_path, current_app.logger)
     os.makedirs(os.path.dirname(final_tei_path), exist_ok=True)
     
     with open(final_tei_path, "w", encoding="utf-8") as f:
         f.write(tei_xml)
+    
+    # No migration needed - extraction creates new files or versions
     
     # return result paths
     target_pdf_path = os.path.join(DATA_ROOT, "pdf", collection_name or "", file_id + ".pdf")

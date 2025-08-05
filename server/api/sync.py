@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, current_app
 import os
 import unicodedata
+import time
 from datetime import datetime, timezone
 from webdav4.fsspec import WebdavFileSystem
 
@@ -9,6 +10,55 @@ from server.lib.server_utils import ApiError
 from server.lib.locking import purge_stale_locks
 
 bp = Blueprint("files", __name__, url_prefix="/api/files")
+
+def _retry_operation(operation, *args, max_attempts=3, base_timeout=30, **kwargs):
+    """
+    Retry an operation with exponentially increasing timeouts.
+    
+    Args:
+        operation: The function to retry
+        max_attempts: Maximum number of attempts (default: 3)
+        base_timeout: Base timeout in seconds (default: 30)
+        *args, **kwargs: Arguments to pass to the operation
+    
+    Returns:
+        The result of the successful operation
+        
+    Raises:
+        ApiError: If all attempts fail
+    """
+    last_exception = None
+    
+    for attempt in range(max_attempts):
+        timeout = base_timeout * (2 ** attempt)  # Exponential backoff: 30s, 60s, 120s
+        
+        try:
+            current_app.logger.debug(f"Attempt {attempt + 1}/{max_attempts} with timeout {timeout}s")
+            
+            # Set timeout for webdav operations if applicable
+            if hasattr(operation, '__self__') and hasattr(operation.__self__, 'session'):
+                operation.__self__.session.timeout = timeout
+            
+            return operation(*args, **kwargs)
+            
+        except Exception as e:
+            last_exception = e
+            error_msg = str(e).lower()
+            
+            # Check if it's a timeout-related error
+            if any(keyword in error_msg for keyword in ['timeout', 'timed out', 'connection timeout']):
+                current_app.logger.warning(f"Attempt {attempt + 1} failed with timeout (timeout={timeout}s): {e}")
+                if attempt < max_attempts - 1:
+                    current_app.logger.info(f"Retrying in 5 seconds...")
+                    time.sleep(5)  # Brief pause between retries
+                    continue
+            else:
+                # Non-timeout error, don't retry
+                current_app.logger.error(f"Non-timeout error on attempt {attempt + 1}: {e}")
+                raise e
+    
+    # All attempts failed with timeout
+    raise ApiError(f"Operation failed after {max_attempts} attempts with increasing timeouts. Last error: {last_exception}")
 
 def _get_local_map(root_path: str) -> dict:
     """Gathers metadata for all local files and deletion markers."""
@@ -44,7 +94,8 @@ def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
     """Gathers metadata for all remote files and deletion markers."""
     remote_map = {}
     try:
-        all_files = fs.find(root_path, detail=True)
+        current_app.logger.info(f"Listing remote files from '{root_path}' with retry mechanism")
+        all_files = _retry_operation(fs.find, root_path, detail=True)
     except Exception as e:
         raise ApiError(f"Failed to list remote files from '{root_path}': {e}")
 
@@ -72,10 +123,14 @@ def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
 
 def _upload_and_align(fs: WebdavFileSystem, local_path: str, remote_path: str, logger):
     """Uploads a file and aligns the local mtime with the new remote mtime."""
-    fs.mkdirs(os.path.dirname(remote_path), exist_ok=True)
-    fs.upload(local_path, remote_path)
+    _retry_operation(fs.mkdirs, os.path.dirname(remote_path), exist_ok=True)
+    
+    # Use retry mechanism for the upload operation
+    logger.info(f"Uploading '{local_path}' to '{remote_path}' with retry mechanism")
+    _retry_operation(fs.upload, local_path, remote_path)
+    
     try:
-        new_remote_info = fs.info(remote_path)
+        new_remote_info = _retry_operation(fs.info, remote_path)
         if new_remote_info.get('modified'):
             new_mtime_ts = new_remote_info['modified'].timestamp()
             os.utime(local_path, (os.stat(local_path).st_atime, new_mtime_ts))
@@ -85,7 +140,11 @@ def _upload_and_align(fs: WebdavFileSystem, local_path: str, remote_path: str, l
 def _download_and_align(fs: WebdavFileSystem, remote_path: str, local_path: str, remote_mtime: datetime, logger):
     """Downloads a file and sets the local mtime to match the remote mtime."""
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
-    fs.download(remote_path, local_path)
+    
+    # Use retry mechanism for the download operation
+    logger.info(f"Downloading '{remote_path}' to '{local_path}' with retry mechanism")
+    _retry_operation(fs.download, remote_path, local_path)
+    
     if remote_mtime:
         try:
             mtime_ts = remote_mtime.timestamp()
@@ -163,14 +222,14 @@ def sync():
                             logger.info(f"Conflict: Local file '{path}' is newer than remote marker. Restoring remote file.")
                             remote_file_path = f"{remote_root.rstrip('/')}/{file_info['relative_path']}"
                             _upload_and_align(fs, local_path, remote_file_path, logger)
-                            fs.rm(remote_path) # Remove the old remote .deleted marker
+                            _retry_operation(fs.rm, remote_path) # Remove the old remote .deleted marker
                             summary['uploads'] += 1
                     else:
                         # The deletion marker is newer, so we propagate the deletion.
                         if marker_info == local_info: # Local marker is newer, delete remote file and replace with marker.
                             logger.info(f"Conflict: Local marker for '{path}' is newer. Deleting remote file.")
                             remote_marker_path = f"{remote_root.rstrip('/')}/{marker_info['relative_path']}"
-                            fs.rm(remote_path)
+                            _retry_operation(fs.rm, remote_path)
                             _upload_and_align(fs, local_path, remote_marker_path, logger)
                             summary['remote_deletes'] += 1
                             if not keep_deleted_markers:

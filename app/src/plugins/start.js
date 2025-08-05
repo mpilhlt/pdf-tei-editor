@@ -12,7 +12,7 @@
 import ui from '../ui.js'
 import {
   updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
-  config, statusbar, authentication
+  config, statusbar, authentication, state
 } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
@@ -157,6 +157,10 @@ async function saveIfDirty() {
     const result = await services.saveXml(filePath)
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
+    } else if (result.status == "saved_with_migration") {
+      logger.debug(`Saved file to ${result.path} with migration of old version files`)
+      // Migration occurred, reload file data to show updated version structure
+      await fileselection.reload(state)
     } else {
       logger.debug(`Saved file to ${result.path}`)
     }

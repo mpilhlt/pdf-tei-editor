@@ -8,7 +8,10 @@ from glob import glob
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
     ApiError, make_timestamp, get_data_file_path, 
-    safe_file_path, remove_obsolete_marker_if_exists, get_session_id
+    safe_file_path, remove_obsolete_marker_if_exists, get_session_id,
+    get_version_path, 
+    extract_file_id_from_version_filename, extract_version_label_from_path,
+    migrate_old_version_files
 )
 from server.lib.locking import (
     acquire_lock, release_lock, get_all_active_locks, check_lock
@@ -85,11 +88,18 @@ def save():
         current_app.logger.debug("Encoding XML entities")
         xml_string = encode_xml_entities(xml_string)
     
+    # Extract file_id for both new versions and regular saves (needed for migration)
+    file_path_safe = safe_file_path(file_path_rel)
+    file_id = Path(file_path_safe).stem
+    
+    # Handle .tei.xml files where Path.stem only removes .xml but leaves .tei
+    if file_id.endswith('.tei'):
+        file_id = file_id[:-4]  # Remove .tei suffix
+    
     # Determine the final save path
     if save_as_new_version:
-        file_id = Path(safe_file_path(file_path_rel)).stem
-        version = make_timestamp().replace(" ", "_").replace(":", "-")
-        final_file_rel = os.path.join("versions", version, file_id + ".xml")
+        timestamp = make_timestamp().replace(" ", "_").replace(":", "-")
+        final_file_rel = get_version_path(file_id, timestamp, ".xml")
         status = "new"
     else:
         final_file_rel = safe_file_path(file_path_rel)
@@ -113,6 +123,18 @@ def save():
     with open(full_save_path, "w", encoding="utf-8") as f:
         f.write(xml_string)
     current_app.logger.info(f"Saved file to {full_save_path}")
+
+    # Migration: For regular saves, migrate any existing old version files for this file_id
+    if not save_as_new_version:
+        migrated_count = migrate_old_version_files(
+            file_id, 
+            data_root, 
+            current_app.logger, 
+            current_app.config.get('WEBDAV_ENABLED', False)
+        )
+        if migrated_count > 0:
+            current_app.logger.info(f"Migrated {migrated_count} old version files during save of {file_id}")
+            status = "saved_with_migration"  # Special status to trigger frontend file data reload
 
     return jsonify({'status': status, 'path': "/data/" + final_file_rel})
 
@@ -170,8 +192,12 @@ def create_version_from_upload():
         raise ApiError(f"Temporary file {temp_filename} not found")
 
     file_id = Path(file_path).stem
-    version = make_timestamp().replace(" ", "_").replace(":", "-")
-    new_version_path = os.path.join("versions", version, file_id + ".xml")
+    
+    # Handle .tei.xml files where Path.stem only removes .xml but leaves .tei
+    if file_id.endswith('.tei'):
+        file_id = file_id[:-4]  # Remove .tei suffix
+    timestamp = make_timestamp().replace(" ", "_").replace(":", "-")
+    new_version_path = get_version_path(file_id, timestamp, ".xml")
     full_version_path = os.path.join(data_root, new_version_path)
     remove_obsolete_marker_if_exists(full_version_path, current_app.logger)
     os.makedirs(os.path.dirname(full_version_path), exist_ok=True)
@@ -186,6 +212,7 @@ def create_version_from_upload():
 
     os.remove(temp_filepath)
 
+    # No migration needed for new versions - we're creating a new file
     return jsonify({"path": "/data/" + new_version_path})
 
 @bp.route("/move", methods=["POST"])
@@ -259,7 +286,16 @@ def create_file_data(data_root):
         for suffix, type in file_types.items():
             if file_path.endswith(suffix):
                 file_type = type
-                file_id = path.name[:-len(suffix)]
+                filename_without_suffix = path.name[:-len(suffix)]
+                
+                # Extract file_id using common utility function
+                is_in_versions_dir = len(path.parts) >= 3 and path.parent.parent.name == "versions"
+                file_id, is_new_format = extract_file_id_from_version_filename(
+                    filename_without_suffix, is_in_versions_dir
+                )
+                
+                if is_new_format:
+                    current_app.logger.debug(f"Extracted file_id '{file_id}' from new format filename '{filename_without_suffix}'")
                 break
         if file_type is None:
             continue
@@ -281,8 +317,20 @@ def create_file_data(data_root):
             for file_path in files:
                 path = Path(file_path)
                 path_from_root = "/data/" + file_path
-                if path.parent.parent.name == "versions":
-                    label = get_version_name(get_data_file_path(path_from_root)) or path.parent.name.replace("_", " ")
+                # Check if this is a version file (either old or new structure)
+                is_version_file = (len(path.parts) >= 3 and path.parent.parent.name == "versions")
+                
+                if is_version_file:
+                    # Distinguish between old and new structure
+                    is_new_version = path.parent.name == file_id  # New: versions/file-id/timestamp-file-id.xml
+                    is_old_version = not is_new_version            # Old: versions/timestamp/file-id.xml
+                    
+                    current_app.logger.debug(f"Processing version file: {file_path}, file_id={file_id}, parent={path.parent.name}, is_new={is_new_version}")
+                    
+                    # Extract version label using common utility function
+                    fallback_label = extract_version_label_from_path(path, file_id, is_old_version)
+                    label = get_version_name(get_data_file_path(path_from_root)) or fallback_label
+                    
                     file_dict['versions'].append({
                         'label': label,
                         'path': path_from_root
