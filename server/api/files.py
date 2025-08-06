@@ -294,8 +294,8 @@ def create_file_data(data_root):
                     filename_without_suffix, is_in_versions_dir
                 )
                 
-                if is_new_format:
-                    current_app.logger.debug(f"Extracted file_id '{file_id}' from new format filename '{filename_without_suffix}'")
+                #if is_new_format:
+                #    current_app.logger.debug(f"Extracted file_id '{file_id}' from new format filename '{filename_without_suffix}'")
                 break
         if file_type is None:
             continue
@@ -325,7 +325,7 @@ def create_file_data(data_root):
                     is_new_version = path.parent.name == file_id  # New: versions/file-id/timestamp-file-id.xml
                     is_old_version = not is_new_version            # Old: versions/timestamp/file-id.xml
                     
-                    current_app.logger.debug(f"Processing version file: {file_path}, file_id={file_id}, parent={path.parent.name}, is_new={is_new_version}")
+                    #current_app.logger.debug(f"Processing version file: {file_path}, file_id={file_id}, parent={path.parent.name}, is_new={is_new_version}")
                     
                     # Extract version label using common utility function
                     fallback_label = extract_version_label_from_path(path, file_id, is_old_version)

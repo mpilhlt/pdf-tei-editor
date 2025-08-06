@@ -3,6 +3,7 @@ import os
 import unicodedata
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from webdav4.fsspec import WebdavFileSystem
 
 from server.lib.decorators import handle_api_errors, session_required
@@ -54,7 +55,7 @@ def _retry_operation(operation, *args, max_attempts=3, base_timeout=30, **kwargs
                     continue
             else:
                 # Non-timeout error, don't retry
-                current_app.logger.error(f"Non-timeout error on attempt {attempt + 1}: {e}")
+                current_app.logger.error(f"Non-timeout error on attempt {attempt + 1}: {type(e).__name__}: {e}")
                 raise e
     
     # All attempts failed with timeout
@@ -70,7 +71,7 @@ def _get_local_map(root_path: str) -> dict:
             if os.path.basename(filename).startswith('.'):
                 continue
             full_path = os.path.join(dirpath, filename)
-            relative_path = unicodedata.normalize('NFC', os.path.relpath(full_path, root_path))
+            relative_path = unicodedata.normalize('NFC', Path(full_path).relative_to(root_path).as_posix())
             is_deleted = relative_path.endswith('.deleted')
             original_name = relative_path[:-len('.deleted')] if is_deleted else relative_path
 
@@ -97,14 +98,14 @@ def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
         current_app.logger.info(f"Listing remote files from '{root_path}' with retry mechanism")
         all_files = _retry_operation(fs.find, root_path, detail=True)
     except Exception as e:
-        raise ApiError(f"Failed to list remote files from '{root_path}': {e}")
+        raise ApiError(f"Failed to list remote files from '{root_path}': {type(e).__name__}: {e}")
 
     for details in all_files.values():
         basename = os.path.basename(details['name'])
         if basename.startswith('.') or basename.endswith('.lock') or details['type'] == 'directory':
             continue
 
-        relative_path = unicodedata.normalize('NFC', os.path.relpath(details['name'], root_path))
+        relative_path = unicodedata.normalize('NFC', Path(details['name']).relative_to(root_path).as_posix())
         is_deleted = relative_path.endswith('.deleted')
         original_name = relative_path[:-len('.deleted')] if is_deleted else relative_path
         
@@ -123,11 +124,22 @@ def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
 
 def _upload_and_align(fs: WebdavFileSystem, local_path: str, remote_path: str, logger):
     """Uploads a file and aligns the local mtime with the new remote mtime."""
-    _retry_operation(fs.mkdirs, os.path.dirname(remote_path), exist_ok=True)
+    try:
+        _retry_operation(fs.mkdirs, os.path.dirname(remote_path), exist_ok=True)
+    except Exception as e:
+        raise ApiError(f"Failed to create remote directory for '{remote_path}': {e}")
     
     # Use retry mechanism for the upload operation
     logger.info(f"Uploading '{local_path}' to '{remote_path}' with retry mechanism")
-    _retry_operation(fs.upload, local_path, remote_path)
+    try:
+        # Check if local file exists before attempting upload
+        if not os.path.exists(local_path):
+            raise ApiError(f"Local file does not exist: '{local_path}'")
+        _retry_operation(fs.upload, local_path, remote_path)
+    except ApiError:
+        raise  # Re-raise our own ApiErrors
+    except Exception as e:
+        raise ApiError(f"Failed to upload '{local_path}' to '{remote_path}': {type(e).__name__}: {e}")
     
     try:
         new_remote_info = _retry_operation(fs.info, remote_path)
@@ -143,7 +155,15 @@ def _download_and_align(fs: WebdavFileSystem, remote_path: str, local_path: str,
     
     # Use retry mechanism for the download operation
     logger.info(f"Downloading '{remote_path}' to '{local_path}' with retry mechanism")
-    _retry_operation(fs.download, remote_path, local_path)
+    try:
+        # Check if remote file exists before attempting download
+        if not fs.exists(remote_path):
+            raise ApiError(f"Remote file does not exist: '{remote_path}'")
+        _retry_operation(fs.download, remote_path, local_path)
+    except ApiError:
+        raise  # Re-raise our own ApiErrors
+    except Exception as e:
+        raise ApiError(f"Failed to download '{remote_path}' to '{local_path}': {type(e).__name__}: {e}")
     
     if remote_mtime:
         try:
@@ -198,7 +218,8 @@ def sync():
         remote_info = remote_map.get(path)
         
         # Define paths consistently at the start of the loop
-        local_path = os.path.join(local_root, local_info['relative_path']) if local_info else None
+        # Convert relative paths to proper OS paths using pathlib to avoid separator mixups
+        local_path = str(Path(local_root) / local_info['relative_path']) if local_info else None
         remote_path = f"{remote_root.rstrip('/')}/{remote_info['relative_path']}" if remote_info else None
         
         try:
@@ -214,9 +235,9 @@ def sync():
                         # The file is newer than the deletion, so we restore the file.
                         if file_info == remote_info: # Remote file is newer, restore locally.
                             logger.info(f"Conflict: Remote file '{path}' is newer than local marker. Restoring local file.")
-                            local_file_path = os.path.join(local_root, file_info['relative_path'])
+                            local_file_path = str(Path(local_root) / file_info['relative_path'])
                             _download_and_align(fs, remote_path, local_file_path, remote_info['mtime'], logger)
-                            os.remove(os.path.join(local_root, marker_info['relative_path'])) # Remove the old local .deleted marker
+                            os.remove(str(Path(local_root) / marker_info['relative_path'])) # Remove the old local .deleted marker
                             summary['downloads'] += 1
                         else: # Local file is newer, restore remotely.
                             logger.info(f"Conflict: Local file '{path}' is newer than remote marker. Restoring remote file.")
@@ -238,7 +259,7 @@ def sync():
                                 summary['local_markers_cleaned_up'] += 1
                         else: # Remote marker is newer, delete local file and replace with marker.
                             logger.info(f"Conflict: Remote marker for '{path}' is newer. Deleting local file.")
-                            local_marker_path = os.path.join(local_root, marker_info['relative_path'])
+                            local_marker_path = str(Path(local_root) / marker_info['relative_path'])
                             os.remove(local_path)
                             if keep_deleted_markers:
                                 _download_and_align(fs, remote_path, local_marker_path, remote_info['mtime'], logger)
@@ -277,7 +298,7 @@ def sync():
                         summary['local_markers_cleaned_up'] += 1
                         # remove empty version directories
                         container_dir = os.path.dirname(local_path)
-                        if 'versions' in container_dir.split(os.sep) and len(os.listdir(container_dir)) == 0:
+                        if 'versions' in Path(container_dir).parts and len(os.listdir(container_dir)) == 0:
                             logger.info(f"Removing empty version directory '{container_dir}' after marker upload.")
                             os.rmdir(container_dir)    
                 # Otherwise, it's a new local file that needs to be uploaded.
@@ -294,7 +315,7 @@ def sync():
                     # If we are keeping markers, we need to create one locally to match.
                     if keep_deleted_markers:
                         logger.info(f"Marker for '{path}' exists only remotely. Creating local marker.")
-                        local_path_dest = os.path.join(local_root, remote_info['relative_path'])
+                        local_path_dest = str(Path(local_root) / remote_info['relative_path'])
                         _download_and_align(fs, remote_path, local_path_dest, remote_info['mtime'], logger)
                         summary['downloads'] += 1
                     # If we don't keep markers, we do nothing. The file is already gone locally.
@@ -303,12 +324,17 @@ def sync():
                 # Otherwise, it's a new remote file that needs to be downloaded.
                 else:
                     logger.info(f"File '{path}' exists only remotely. Downloading.")
-                    local_path_dest = os.path.join(local_root, remote_info['relative_path'])
+                    local_path_dest = str(Path(local_root) / remote_info['relative_path'])
                     _download_and_align(fs, remote_path, local_path_dest, remote_info['mtime'], logger)
                     summary['downloads'] += 1
 
         except Exception as e:
-            raise ApiError(f"Failed to sync path '{path}': {e}")
+            current_app.logger.error(f"Sync error for path '{path}': {type(e).__name__}: {e}")
+            current_app.logger.error(f"  Local info: {local_info}")
+            current_app.logger.error(f"  Remote info: {remote_info}")
+            current_app.logger.error(f"  Local path: {local_path}")
+            current_app.logger.error(f"  Remote path: {remote_path}")
+            raise ApiError(f"Failed to sync path '{path}': {type(e).__name__}: {e}")
 
     logger.info(f"Synchronization complete. Summary: {summary}")
     return summary

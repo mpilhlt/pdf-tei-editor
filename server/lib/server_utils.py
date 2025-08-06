@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+from pathlib import Path
 from flask import current_app
 
 class ApiError(RuntimeError):
@@ -72,7 +73,7 @@ def get_version_path(file_id, timestamp=None, file_extension=".tei.xml"):
     """
     if timestamp is None:
         timestamp = make_timestamp().replace(" ", "_").replace(":", "-")
-    return os.path.join("versions", file_id, f"{timestamp}-{file_id}{file_extension}")
+    return Path("versions", file_id, f"{timestamp}-{file_id}{file_extension}").as_posix()
 
 
 def get_version_full_path(file_id, data_root, timestamp=None, file_extension=".tei.xml"):
@@ -105,7 +106,7 @@ def get_old_version_path(file_id, timestamp, file_extension=".xml"):
     Returns:
         str: Relative path like "versions/timestamp/file-id.xml"
     """
-    return os.path.join("versions", timestamp, f"{file_id}{file_extension}")
+    return Path("versions", timestamp, f"{file_id}{file_extension}").as_posix()
 
 
 def get_old_version_full_path(file_id, data_root, timestamp, file_extension=".xml"):

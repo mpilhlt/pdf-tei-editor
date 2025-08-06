@@ -3,6 +3,7 @@ import io
 import requests
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from flask import current_app
 from webdav4.client import Client, ResourceAlreadyExists, ResourceNotFound
 from server.api.config import read_config
@@ -122,7 +123,10 @@ def get_lock_storage():
 def get_lock_path(file_path):
     """Constructs the lock file path."""
     from .server_utils import safe_file_path
-    lock_file_name = safe_file_path(file_path).replace('/', '$$$') + '.lock'
+    safe_path = safe_file_path(file_path)
+    # Convert to POSIX format to ensure consistent path separators
+    posix_path = Path(safe_path).as_posix()
+    lock_file_name = posix_path.replace('/', '$$$') + '.lock'
     storage = get_lock_storage()
     return os.path.join(storage.locks_dir, lock_file_name)
 
