@@ -28,7 +28,8 @@ def get_data_file_path(path):
 
 def safe_file_path(file_path):
     """
-    Removes any non-alphabetic leading characters for safety, and strips the "/data" prefix
+    Removes any non-alphabetic leading characters for safety, strips the "/data" prefix,
+    and replaces filesystem-incompatible characters with underscores in directory and filenames
     """
     if not file_path:
         raise ApiError("Invalid file path: path is empty", status_code=400)
@@ -36,8 +37,29 @@ def safe_file_path(file_path):
     while len(file_path) > 0 and not file_path[0].isalpha():
         file_path = file_path[1:]
     if not file_path.startswith("data/"):
-        raise ApiError(f"Invalid file path: {file_path}", status_code=400) 
-    return file_path.removeprefix('data/')
+        raise ApiError(f"Invalid file path: {file_path}", status_code=400)
+    
+    # Remove the 'data/' prefix
+    cleaned_path = file_path.removeprefix('data/')
+    
+    # Split path into components, sanitize each component, then rejoin
+    path_parts = cleaned_path.split('/')
+    sanitized_parts = []
+    
+    for part in path_parts:
+        if part:  # Skip empty parts
+            # Replace characters incompatible with Windows/POSIX filesystems
+            # Windows forbidden: < > : " | ? * and control chars (0-31)
+            # Also replace other problematic characters
+            sanitized_part = ''
+            for char in part:
+                if char in '<>:"|?*\\' or ord(char) < 32:
+                    sanitized_part += '_'
+                else:
+                    sanitized_part += char
+            sanitized_parts.append(sanitized_part)
+    
+    return '/'.join(sanitized_parts)
 
 def get_session_id(request):
     """
