@@ -22,6 +22,43 @@ def make_timestamp():
     formatted_time = now.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_time
 
+def make_version_timestamp():
+    """Create a timestamp formatted for version filenames (safe for filesystem)"""
+    return make_timestamp().replace(" ", "_").replace(":", "-")
+
+def find_collection_for_file_id(file_id, data_root):
+    """
+    Find which collection a file_id belongs to by scanning for existing files.
+    
+    Args:
+        file_id (str): The file ID to search for
+        data_root (str): The data root directory
+    
+    Returns:
+        str: Collection name if found, 'grobid' as default
+    """
+    from glob import glob
+    from pathlib import Path
+    
+    # Look for PDF files first (most reliable)
+    pdf_pattern = os.path.join(data_root, f"pdf/*/{file_id}.pdf")
+    pdf_matches = glob(pdf_pattern)
+    if pdf_matches:
+        # Extract collection from path: data/pdf/collection/file.pdf
+        collection = Path(pdf_matches[0]).parent.name
+        return collection
+    
+    # Fallback: look for existing TEI files  
+    tei_pattern = os.path.join(data_root, f"tei/*/{file_id}.tei.xml")
+    tei_matches = glob(tei_pattern)
+    if tei_matches:
+        # Extract collection from path: data/tei/collection/file.tei.xml
+        collection = Path(tei_matches[0]).parent.name
+        return collection
+    
+    # Default fallback
+    return 'grobid'
+
 def get_data_file_path(path):
     data_root = current_app.config["DATA_ROOT"]
     return os.path.join(data_root, safe_file_path(path))
@@ -53,7 +90,7 @@ def safe_file_path(file_path):
             # Also replace other problematic characters
             sanitized_part = ''
             for char in part:
-                if char in '<>:"|?*\\' or ord(char) < 32:
+                if char in '%<>:"|?*\\' or ord(char) < 32:
                     sanitized_part += '_'
                 else:
                     sanitized_part += char
@@ -65,9 +102,7 @@ def get_session_id(request):
     """
     Retrieves the session ID from the request header.
     """
-    session_id = request.headers.get('X-Session-ID')
-    if not session_id:
-        raise ApiError("X-Session-ID header is missing", status_code=400)
+    session_id = request.headers.get('X-Session-ID', None)
     return session_id
 
 
@@ -302,3 +337,21 @@ def migrate_old_version_files(file_id, data_root, logger, webdav_enabled=False):
         logger.info(f"Successfully migrated {migrated_count} version files for file_id '{file_id}'")
     
     return migrated_count
+
+
+def construct_variant_filename(file_id, variant=None, extension=".tei.xml"):
+    """
+    Construct a filename with optional variant suffix.
+    
+    Args:
+        file_id (str): The base file identifier
+        variant (str, optional): The variant identifier
+        extension (str): File extension
+        
+    Returns:
+        str: Constructed filename (file-id.variant-id.tei.xml or file-id.tei.xml)
+    """
+    if variant:
+        return f"{file_id}.{variant}{extension}"
+    else:
+        return f"{file_id}{extension}"

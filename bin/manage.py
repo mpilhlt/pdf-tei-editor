@@ -52,6 +52,7 @@ def add_user(args):
     users_data.append({
         "username": args.username,
         "fullname": args.fullname or "",
+        "email": args.email or "",
         "roles": ["user"],
         "passwd_hash": passwd_hash,
         "session_id": None
@@ -167,7 +168,7 @@ def remove_role(args):
     save_users_data(users_file, users_data)
 
 def list_users(args):
-    """Lists all users in the format 'Fullname (username): Role1, Role2'."""
+    """Lists all users in the format 'Fullname (username) [email]: Role1, Role2'."""
     project_root = Path(__file__).resolve().parent.parent
     db_dir = project_root / 'db'
     users_file = db_dir / 'users.json'
@@ -183,8 +184,10 @@ def list_users(args):
     for user in users_data:
         fullname = user.get('fullname') or 'N/A'
         username = user.get('username')
+        email = user.get('email', '')
         roles = ', '.join(user.get('roles', []))
-        print(f"{fullname} ({username}): {roles}")
+        email_part = f" [{email}]" if email else ""
+        print(f"{fullname} ({username}){email_part}: {roles}")
 
 def set_user_property(args):
     """Sets a scalar, unencrypted property for a user."""
@@ -238,6 +241,7 @@ if __name__ == '__main__':
     parser_add.add_argument('username', help='The username of the new user.')
     parser_add.add_argument('--password', help='The password for the new user. If not provided, it will be asked for interactively.', nargs='?', default=None)
     parser_add.add_argument('--fullname', help='The full name of the user.', default="")
+    parser_add.add_argument('--email', help='The email address of the user.', default="")
     parser_add.set_defaults(func=add_user)
 
     # user remove
@@ -248,7 +252,7 @@ if __name__ == '__main__':
     # user set
     parser_set = user_subparsers.add_parser('set', help='Set a user property.', description=set_user_property.__doc__)
     parser_set.add_argument('username', help='The username of the user to update.')
-    parser_set.add_argument('property', help='The property to set.', choices=['fullname', 'username'])
+    parser_set.add_argument('property', help='The property to set.', choices=['fullname', 'username', 'email'])
     parser_set.add_argument('value', help='The new value for the property.')
     parser_set.set_defaults(func=set_user_property)
 

@@ -254,7 +254,6 @@ def get_all_active_locks():
 
     try:
         lock_files = storage.list_locks()
-        current_app.logger.debug(f"Found {len(lock_files)} lock files.")
         for lock in lock_files:
             if lock['type'] == 'file' and not is_lock_stale(lock.get('modified')):
                 try:

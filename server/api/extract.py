@@ -9,6 +9,7 @@ from server.lib.server_utils import (
     get_version_full_path
 )
 from server.extractors.discovery import list_extractors, create_extractor
+from server.lib.debug_utils import log_extraction_response
 
 bp = Blueprint("extract", __name__, url_prefix="/api/extract")
 
@@ -55,7 +56,28 @@ def extract():
     # Perform extraction
     try:
         tei_xml = extractor.extract(pdf_path=pdf_path, xml_content=xml_content, options=options)
+        
+        # Log successful extraction result for debugging
+        if pdf_path:
+            log_extraction_response(extractor_id, pdf_path, tei_xml, ".result.xml")
+        
     except Exception as e:
+        current_app.logger.error(f"Extraction failed with {extractor_id}: {e}")
+        
+        # Log the error details with context
+        error_context = {
+            "extractor_id": extractor_id,
+            "pdf_path": pdf_path,
+            "options": options,
+            "error": str(e)
+        }
+        
+        if pdf_path:
+            # Create error log with context
+            import json
+            error_content = json.dumps(error_context, indent=2)
+            log_extraction_response(extractor_id, pdf_path, error_content, ".error.json")
+        
         raise ApiError(f"Extraction failed: {e}")
     
     # Save the result if we processed a PDF

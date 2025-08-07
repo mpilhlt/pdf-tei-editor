@@ -39,6 +39,7 @@ import { plugin as authenticationPlugin, api as authentication } from './plugins
  * @property {string|null} xmlPath - The path to the XML file in the editor
  * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
  * @property {string|null} xpath - The current xpath used to select a node in the editor
+ * @property {string|null} variant - The variant filter to show only files with matching variant-id
  * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
  * @property {boolean} offline  - Whether the application is in offline mode
@@ -52,6 +53,7 @@ let state = {
   xmlPath: null,
   diffXmlPath: null,
   xpath: null,
+  variant: null,
   webdavEnabled: false,
   editorReadOnly: false,
   offline: false,

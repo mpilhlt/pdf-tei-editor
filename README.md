@@ -25,27 +25,26 @@ uv sync
 npm install
 ```
 
-On Windows, use
-
-```powershell
-uv sync
-npm --ignore-scripts install
-uv run python bin\download-pdfjs
-```
-
 ## Start the development server
 
 ```bash
-./bin/server
-```
-
-On Windows, use
-
-```powershell
-uv run python bin\server
+npm run start
 ```
 
 Then open <http://localhost:3001>
+
+## Build the application
+
+```bash
+npm run build
+```
+
+## Other available commands
+
+- **Update import map**: `npm run update-importmap`
+- **User management**: `npm run manage <command>`
+- **Run tests**: `npm test`
+- **Run sync algorithm tests**: `npm run test:sync`
 
 ## Using the LLamore extraction engine
 
@@ -95,28 +94,26 @@ mkdir -p ~/.config/husky/ && echo "source .venv/bin/activate" > ~/.config/husky/
 
 ## Authentication and User Management
 
-The application uses a simple, file-based authentication system. User data is stored in `db/users.json`. You can manage users with the `bin/manage.py` script.
+The application uses a simple, file-based authentication system. User data is stored in `db/users.json`. You can manage users with the `npm run manage` command.
 
 ### User management commands
 
-- **List users:** `bin/manage.py user list`
-- **Add a user:** `bin/manage.py user add <username> --password <password> --fullname "<Full Name>"`
-- **Remove a user:** `bin/manage.py user remove <username>`
-- **Update a user's password:** `bin/manage.py user update-password <username> --password <new_password>`
-- **Add a role to a user:** `bin/manage.py user add-role <username> <rolename>`
-- **Remove a role from a user:** `bin/manage.py user remove-role <username> <rolename>`
-- **Set a user's property:** `bin/manage.py user set <username> <property> <value>`
+- **List users:** `npm run manage user list`
+- **Add a user:** `npm run manage user add <username> --password <password> --fullname "<Full Name>" --email "<email>"`
+- **Remove a user:** `npm run manage user remove <username>`
+- **Update a user's password:** `npm run manage user update-password <username> --password <new_password>`
+- **Add a role to a user:** `npm run manage user add-role <username> <rolename>`
+- **Remove a role from a user:** `npm run manage user remove-role <username> <rolename>`
+- **Set a user's property:** `npm run manage user set <username> <property> <value>` (properties: fullname, username, email)
 
-For more information, run `bin/manage.py help` or `bin/manage.py help user`.
+For more information, run `npm run manage help` or `npm run manage help user`.
 
 The default user is "admin" with a password of "admin". Please remove that user immediately and add your own instead:
 
 ```bash
-./bin/manage.py user remove admin
-./bin/manage.py user add myusername --password myuserpass
-./bin/manage.py user set myusername fullname "Full Name"
-./bin/manage.py user add-role myusername admin
-
+npm run manage user remove admin
+npm run manage user add myusername --password myuserpass --fullname "Full Name" --email "user@example.com"
+npm run manage user add-role myusername admin
 ```
 
 The roles ("user", "admin") are currently not used, but will be in future releases. 

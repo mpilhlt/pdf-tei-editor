@@ -142,10 +142,12 @@ print(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
 
 @app.before_request
 def log_session_id():
+    current_app.logger.info(f"===========================================")
+    current_app.logger.info(f"Request: {request.endpoint} ")
     if 'X-Session-ID' in request.headers:
         session_id = request.headers.get('X-Session-ID')
-        current_app.logger.info(f"===== Request for {request.endpoint} from session {session_id}")
-
+        current_app.logger.info(f"Session {session_id}")
+    current_app.logger.info(f"===========================================")
 
 # Serve from node_modules during development
 @app.route('/node_modules/<path:path>')

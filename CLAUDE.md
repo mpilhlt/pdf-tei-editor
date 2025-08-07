@@ -108,3 +108,8 @@ npm run test:sync
 - Server startup: `bin/server` 
 - Build script: `bin/build`
 - User management: `bin/manage.py`
+
+## Best Practices and Code Conventions
+
+### Python Development
+- Always prefer pathlib Path().as_posix() over manually concatenating path strings or os.path.join()

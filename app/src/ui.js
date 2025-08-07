@@ -59,6 +59,7 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
  * The main toolbar with controls added by the plugins
  * @typedef {object} toolbarComponent
  * @property {HTMLDivElement} self
+ * @property {SlSelect} variant - The selectbox for the variant filter
  * @property {SlSelect} pdf - The selectbox for the pdf document
  * @property {SlSelect} xml - The selectbox for the xml document
  * @property {SlSelect} diff - The selectbox for the xml-diff document

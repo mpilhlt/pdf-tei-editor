@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(rm:*)",
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:localhost)"
+    ],
+    "deny": []
+  }
+}
