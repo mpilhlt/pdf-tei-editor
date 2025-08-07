@@ -477,7 +477,7 @@ async function set(key, value) {
  */
 
 // this needs to be made configurable
-const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'sessionId'];
+const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'sessionId', 'variant'];
 
 const api$b = {
   updateUrlHashfromState,
@@ -5460,6 +5460,8 @@ __decorateClass([
   watch("value", { waitUntilFirstUpdate: true })
 ], SlInput.prototype, "handleValueChange", 1);
 
+// src/components/input/input.ts
+var input_default = SlInput;
 SlInput.define("sl-input");
 
 // src/components/tag/tag.styles.ts
@@ -8904,6 +8906,8 @@ setDefaultAnimation("select.hide", {
   options: { duration: 100, easing: "ease" }
 });
 
+// src/components/select/select.ts
+var select_default = SlSelect;
 SlSelect.define("sl-select");
 
 // src/components/option/option.styles.ts
@@ -10922,6 +10926,7 @@ SlDivider.define("sl-divider");
  * The main toolbar with controls added by the plugins
  * @typedef {object} toolbarComponent
  * @property {HTMLDivElement} self
+ * @property {SlSelect} variant - The selectbox for the variant filter
  * @property {SlSelect} pdf - The selectbox for the pdf document
  * @property {SlSelect} xml - The selectbox for the xml document
  * @property {SlSelect} diff - The selectbox for the xml-diff document
@@ -43152,11 +43157,15 @@ async function status() {
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
  *
+ * @param {string|null} variant - Optional variant filter to apply
  * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
  *  objects with keys "id", "pdf", and "tei".
  */
-async function getFileList() {
-  return await callApi('/files/list', 'GET');
+async function getFileList(variant = null) {
+  const params = variant !== null ? { variant } : {};
+  const queryString = new URLSearchParams(params).toString();
+  const url = '/files/list' + (queryString ? '?' + queryString : '');
+  return await callApi(url, 'GET');
 }
 
 /**
@@ -43538,6 +43547,7 @@ async function install$9(state) {
   
   /**  @type {[SlSelect,function][]} */
   const handlers = [
+    [ui$1.toolbar.variant, onChangeVariantSelection],
     [ui$1.toolbar.pdf, onChangePdfSelection],
     [ui$1.toolbar.xml, onChangeXmlSelection],
     [ui$1.toolbar.diff, onChangeDiffSelection]
@@ -43588,6 +43598,7 @@ async function reload(state) {
  */
 async function reloadFileData(state) {
   api$d.debug("Reloading file data");
+  // Always get all files, don't filter on server side
   let data = await api$7.getFileList();
   if (!data || data.length === 0) {
     api$9.error("No files found");
@@ -43602,14 +43613,72 @@ async function reloadFileData(state) {
 let stateCache;
 
 /**
+ * Populates the variant selectbox with unique variants from fileData
+ * @param {ApplicationState} state
+ */
+async function populateVariantSelectbox(state) {
+  // Clear existing options
+  ui$1.toolbar.variant.innerHTML = "";
+
+  // Get unique variants from fileData
+  const variants = new Set();
+  fileData.forEach(file => {
+    // Add top-level variant_id
+    if (file.variant_id) {
+      variants.add(file.variant_id);
+    }
+    
+    // Add variant_id from versions
+    if (file.versions) {
+      file.versions.forEach(version => {
+        if (version.variant_id) {
+          variants.add(version.variant_id);
+        }
+      });
+    }
+  });
+
+  console.log("Found variants:", [...variants]); // Debug log
+
+  // Add "All" option
+  const allOption = new option_default();
+  allOption.value = "";
+  allOption.textContent = "All";
+  // @ts-ignore
+  allOption.size = "small";
+  ui$1.toolbar.variant.appendChild(allOption);
+
+  // Add "None" option for files without variants
+  const noneOption = new option_default();
+  noneOption.value = "none";
+  noneOption.textContent = "None";
+  // @ts-ignore
+  noneOption.size = "small";
+  ui$1.toolbar.variant.appendChild(noneOption);
+
+  // Add variant options
+  [...variants].sort().forEach(variant => {
+    const option = new option_default();
+    option.value = variant;
+    option.textContent = variant;
+    // @ts-ignore
+    option.size = "small";
+    ui$1.toolbar.variant.appendChild(option);
+  });
+
+  // Set current selection
+  ui$1.toolbar.variant.value = state.variant || "";
+}
+
+/**
  * Populates the selectboxes for file name and version
  * @param {ApplicationState} state
  */
 async function populateSelectboxes(state) {
 
   // check if state has changed
-  const { xmlPath, pdfPath, diffXmlPath } = state;
-  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath });
+  const { xmlPath, pdfPath, diffXmlPath, variant } = state;
+  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath, variant });
   if (jsonState === stateCache) {
     //logger.debug("Not repopulating selectboxes as state hasn't changed")
     return
@@ -43618,19 +43687,43 @@ async function populateSelectboxes(state) {
 
   api$d.debug("Populating selectboxes");
 
-  if (fileData === null) {
+  // Only reload if fileData is completely empty (initial load)
+  if (fileData.length === 0) {
     await reloadFileData();
   }
+
+  // Populate variant selectbox first
+  await populateVariantSelectbox(state);
 
   // Clear existing options
   for (const name of ["pdf", "xml", "diff"]) {
     ui$1.toolbar[name].innerHTML = "";
   }
 
+  // Filter files by variant selection
+  let filteredFileData = fileData;
+  
+  if (variant === "none") {
+    // Show only files without variant_id at top level and no versions with variant_id
+    filteredFileData = fileData.filter(file => {
+      const hasTopLevelVariant = !!file.variant_id;
+      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
+      return !hasTopLevelVariant && !hasVersionVariant;
+    });
+  } else if (variant && variant !== "") {
+    // Show only files with the selected variant_id (either at top level or in versions)
+    filteredFileData = fileData.filter(file => {
+      const matchesTopLevel = file.variant_id === variant;
+      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
+      return matchesTopLevel || matchesVersion;
+    });
+  }
+  // If variant is "" (All), show all files
+
   // sort into groups by directory
   const dirname = (path) => path.split('/').slice(0, -1).join('/');
   const basename = (path) => path.split('/').pop();
-  const grouped_files = fileData.reduce((groups, file) => {
+  const grouped_files = filteredFileData.reduce((groups, file) => {
     const collection_name = basename(dirname(file.pdf));
     (groups[collection_name] = groups[collection_name] || []).push(file);
     return groups
@@ -43667,7 +43760,18 @@ async function populateSelectboxes(state) {
       if (file.pdf === state.pdfPath) {
         // populate the version and diff selectboxes depending on the selected file
         if (file.versions) {
-          file.versions.forEach((version) => {
+          // Filter versions based on variant selection
+          let versionsToShow = file.versions;
+          if (variant === "none") {
+            // Show only versions without variant_id
+            versionsToShow = file.versions.filter(version => !version.variant_id);
+          } else if (variant && variant !== "") {
+            // Show only versions with the selected variant_id
+            versionsToShow = file.versions.filter(version => version.variant_id === variant);
+          }
+          // If variant is "" (All), show all versions
+
+          versionsToShow.forEach((version) => {
             // xml
             let option = new option_default();
             // @ts-ignore
@@ -43766,6 +43870,15 @@ async function onChangeDiffSelection(state) {
 }
 
 /**
+ * Called when the selection in the variant selectbox changes
+ * @param {ApplicationState} state
+ */
+async function onChangeVariantSelection(state) {
+  const variant = ui$1.toolbar.variant.value;
+  updateState(state, { variant });
+}
+
+/**
  * This implements the UI and the services for extracting references from the current or a new PDF
  */
 
@@ -43813,7 +43926,8 @@ const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))
  * @property {SlInput} doi 
  * @property {SlSelect} collectionName
  * @property {SlSelect} modelIndex 
- * @property {SlSelect} instructionIndex
+ * @property {SlButton} cancel
+ * @property {SlButton} submit
  */
 /** @type {extractionOptionsDialog & SlDialog} */
 // @ts-ignore
@@ -43933,7 +44047,7 @@ async function extractFromPDF(state, defaultOptions={}) {
 /**
  * 
  * @param {ExtractionOptions} options Optional default option object
- * @returns {Promise<ExtractionOptions>}
+ * @returns {Promise<ExtractionOptions|null>}
  */
 async function promptForExtractionOptions(options={}) {
 
@@ -43970,14 +44084,17 @@ async function promptForExtractionOptions(options={}) {
   /** @type {SlSelect|null} */
   const modelSelectBox = optionsDialog.modelIndex;
   modelSelectBox.innerHTML = "";
+  
+  // Get extractors and store for dynamic options
+  let availableExtractors = [];
   try {
     const extractors = await api$7.getExtractorList();
     // Filter extractors that support PDF input and TEI document output
-    const pdfToTeiExtractors = extractors.filter(extractor => 
+    availableExtractors = extractors.filter(extractor => 
       extractor.input.includes("pdf") && extractor.output.includes("tei-document")
     );
     
-    for (const extractor of pdfToTeiExtractors) {
+    for (const extractor of availableExtractors) {
       const option = Object.assign(new option_default, {
         value: extractor.id,
         textContent: extractor.name
@@ -43985,65 +44102,130 @@ async function promptForExtractionOptions(options={}) {
       modelSelectBox.appendChild(option);
     }
     
-    // Default to llamore-gemini if available
-    if (pdfToTeiExtractors.find(e => e.id === "llamore-gemini")) {
-      modelSelectBox.value = "llamore-gemini";
-    } else if (pdfToTeiExtractors.length > 0) {
-      modelSelectBox.value = pdfToTeiExtractors[0].id;
+    // Default to first available extractor
+    if (availableExtractors.length > 0) {
+      modelSelectBox.value = availableExtractors[0].id;
     }
   } catch (error) {
-    api$d.warn("Could not load extractor list:", error);
-    // Fallback to hardcoded option
-    const option = Object.assign(new option_default, {
-      value: "llamore-gemini",
-      textContent: "LLamore + Gemini"
-    });
-    modelSelectBox.appendChild(option);
-    modelSelectBox.value = "llamore-gemini";
+    // No fallback - if we can't load extractors, we can't extract
+    api$9.error("Could not load extraction engines");
+    throw error
   }
   
-  // Add event listener to update instructions when model changes
-  const updateInstructions = () => {
-    const selectedExtractor = modelSelectBox.value || "llamore-gemini";
-    instructionsSelectBox.innerHTML = "";
+  // Add event listener to update dynamic options when model changes
+  const updateDynamicOptions = () => {
+    const selectedExtractorId = modelSelectBox.value;
+    if (!selectedExtractorId) return
     
-    let instructionIndex = 0;
-    for (const [originalIdx, instructionData] of instructionsData.entries()) {
-      const { label, text, extractor = ["llamore-gemini"] } = instructionData;
+    const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId);
+    
+    // Clear existing dynamic options
+    const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]');
+    if (dynamicOptionsContainer) {
+      dynamicOptionsContainer.innerHTML = "";
+    }
+    if (!selectedExtractor || !selectedExtractor.options) return
+    
+    // Generate UI elements for each extractor option (except doi which is handled separately)
+    for (const [optionKey, optionConfig] of Object.entries(selectedExtractor.options)) {
+      if (optionKey === 'doi') continue // DOI is handled separately
       
-      // Check if this instruction supports the selected extractor
-      if (extractor.includes(selectedExtractor)) {
-        const option = Object.assign(new option_default, {
-          value: String(instructionIndex),
-          textContent: label
-        });
-        instructions[instructionIndex] = text.join("\n");
-        instructionsSelectBox.appendChild(option);
-        instructionIndex++;
+      const element = createOptionElement(optionKey, optionConfig, selectedExtractorId);
+      if (element && dynamicOptionsContainer) {
+        dynamicOptionsContainer.appendChild(element);
       }
     }
-    
-    // If no instructions found for this extractor, show a default option
-    if (instructionIndex === 0) {
-      const option = Object.assign(new option_default, {
-        value: "0",
-        textContent: "No custom instructions"
-      });
-      instructions[0] = "";
-      instructionsSelectBox.appendChild(option);
-    }
-    
-    instructionsSelectBox.value = "0";
   };
   
-  modelSelectBox.addEventListener('sl-change', updateInstructions);
+  // Helper function to create form elements for extractor options
+  function createOptionElement(optionKey, optionConfig, extractorId) {
+    if (optionConfig.type === 'string' && optionConfig.options) {
+      // Create select dropdown for predefined options
+      const select = Object.assign(new select_default, {
+        name: optionKey,
+        label: optionConfig.description || optionKey,
+        size: "small"
+      });
+      
+      if (optionConfig.description) {
+        select.setAttribute("help-text", optionConfig.description);
+      }
+      
+      // Add options
+      for (const optionValue of optionConfig.options) {
+        const option = Object.assign(new option_default, {
+          value: optionValue,
+          textContent: optionValue
+        });
+        select.appendChild(option);
+      }
+      
+      // Set default to first option
+      if (optionConfig.options.length > 0) {
+        select.value = optionConfig.options[0];
+      }
+      
+      return select
+    } else if (optionKey === 'instructions' && extractorId && instructionsData) {
+      // Special handling for instructions - use existing instructions data
+      const select = Object.assign(new select_default, {
+        name: "instructions",
+        label: "Instructions",
+        size: "small"
+      });
+      select.setAttribute("help-text", "Choose the instruction set that is added to the prompt");
+      
+      let instructionIndex = 0;
+      for (const [originalIdx, instructionData] of instructionsData.entries()) {
+        const { label, text, extractor = [] } = instructionData;
+        
+        // Check if this instruction supports the selected extractor
+        if (extractor.includes(extractorId)) {
+          const option = Object.assign(new option_default, {
+            value: String(instructionIndex),
+            textContent: label
+          });
+          instructions[instructionIndex] = text.join("\n");
+          select.appendChild(option);
+          instructionIndex++;
+        }
+      }
+      
+      // If no instructions found, show a default option
+      if (instructionIndex === 0) {
+        const option = Object.assign(new option_default, {
+          value: "0",
+          textContent: "No custom instructions"
+        });
+        instructions[0] = "";
+        select.appendChild(option);
+      }
+      
+      select.value = "0";
+      return select
+    } else if (optionConfig.type === 'string') {
+      // Create text input for free-form string fields
+      const input = Object.assign(new input_default, {
+        name: optionKey,
+        label: optionConfig.description || optionKey,
+        size: "small",
+        type: "text"
+      });
+      
+      if (optionConfig.description) {
+        input.setAttribute("help-text", optionConfig.description);
+      }
+      
+      return input
+    }
+    
+    return null
+  }
   
-  // configure instructions selectbox - filter by selected extractor
-  /** @type {SlSelect|null} */
-  const instructionsSelectBox = optionsDialog.instructionIndex;
+  modelSelectBox.addEventListener('sl-change', updateDynamicOptions);
   
-  // Initial population of instructions
-  updateInstructions();
+  // Initial population of dynamic options
+  updateDynamicOptions();
 
   // display the dialog and await the user's response
   const result = await new Promise(resolve => {
@@ -44070,16 +44252,39 @@ async function promptForExtractionOptions(options={}) {
     return null
   }
 
+  // Collect form data from static and dynamic fields
   const formData = {
     'doi': optionsDialog.doi.value,
-    'instructions': instructions[parseInt(String(optionsDialog.instructionIndex.value))],
     'collection': optionsDialog.collectionName.value,
     'extractor': optionsDialog.modelIndex.value
   };
   
-  if (formData.doi == "" || !isDoi(formData.doi)) {
+  // Collect values from dynamic options
+  const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]');
+  // @ts-ignore
+  const dynamicInputs = dynamicOptionsContainer.querySelectorAll('sl-select, sl-input');
+  
+  for (const input of dynamicInputs) {
+    const name = input.name;
+    let value = input.value;
+    
+    // Special handling for instructions - convert to actual instruction text
+    if (name === 'instructions' && instructions[parseInt(value)]) {
+      value = instructions[parseInt(value)];
+    }
+    
+    formData[name] = value;
+  }
+  
+  // Validate DOI only if one is provided
+  if (formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
     api$9.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
-    return
+    return null
+  }
+  
+  // If DOI is empty, set it to null for the request
+  if (!formData.doi || formData.doi === "") {
+    formData.doi = null;
   }
 
   return Object.assign(formData, options)
@@ -55482,6 +55687,7 @@ async function _hashPassword(password) {
  * @property {string|null} xmlPath - The path to the XML file in the editor
  * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
  * @property {string|null} xpath - The current xpath used to select a node in the editor
+ * @property {string|null} variant - The variant filter to show only files with matching variant-id
  * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
  * @property {boolean} offline  - Whether the application is in offline mode
@@ -55495,6 +55701,7 @@ let state = {
   xmlPath: null,
   diffXmlPath: null,
   xpath: null,
+  variant: null,
   webdavEnabled: false,
   editorReadOnly: false,
   offline: false,
