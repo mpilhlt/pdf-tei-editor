@@ -98,8 +98,17 @@ def file_list():
             # Empty string means show files with no variant (gold files)
             filtered_data = [f for f in files_data if f.get('variant_id') is None]
         else:
-            # Show files with matching variant_id
-            filtered_data = [f for f in files_data if f.get('variant_id') == variant_filter]
+            # Show files with matching variant_id (check both main file and versions)
+            filtered_data = []
+            for f in files_data:
+                # Check main file variant
+                if f.get('variant_id') == variant_filter:
+                    filtered_data.append(f)
+                # Also check if any version has this variant
+                elif 'versions' in f:
+                    has_variant_in_versions = any(v.get('variant_id') == variant_filter for v in f['versions'])
+                    if has_variant_in_versions:
+                        filtered_data.append(f)
         files_data = filtered_data
         
         # Also filter versions array to only show relevant versions
@@ -467,12 +476,11 @@ def _move_file(file_path_str, file_type, destination_collection):
 
 def create_file_data(data_root):
     """
-    Creates a JSON file with a list of files in the data directory which have "pdf" and "tei.xml"
-    extensions. Each file is identified by its ID, which is the filename without the suffix.
+    Creates a list of files in the data directory which have "pdf" and "tei.xml"
+    extensions. Each file is identified by its ID, which is in the TEI header of derived
+    from the filename without the suffix.
     Files in the "data/versions" directory are treated as  (temporary) versions created with 
     prompt modifications or different models 
-    The JSON file contains the file ID and the corresponding PDF and XML files.
-    NB: This has become quite convoluted and needs a rewrite
     """
     from flask import current_app
     file_id_data = {}
@@ -503,11 +511,6 @@ def create_file_data(data_root):
                     file_id, is_new_format = extract_file_id_from_version_filename(
                         filename_without_suffix, is_in_versions_dir
                     )
-                    # Debug only if it's our target file
-                    if 'grobid.training.segmentation' in path.as_posix():
-                        if debug_log_path:
-                            with open(debug_log_path, "a", encoding="utf-8") as debug_log:
-                                debug_log.write(f"FALLBACK: {path} -> file_id='{file_id}'\n")
                 
                 break
         if file_type is None:
@@ -542,35 +545,100 @@ def create_file_data(data_root):
                     
                     # Extract version label using common utility function
                     fallback_label = extract_version_label_from_path(path, file_id, is_old_version)
-                    label = get_version_name(get_data_file_path(path_from_root)) or fallback_label
+                    base_label = get_version_name(get_data_file_path(path_from_root)) or fallback_label
                     
-                    # Extract variant_id from version file if available
-                    version_variant_id = None
-                    try:
-                        version_metadata = get_tei_metadata(get_data_file_path(path_from_root))
-                        if version_metadata and version_metadata.get('variant_id'):
-                            version_variant_id = version_metadata.get('variant_id')
-                    except:
-                        pass
-                    
+                    # Extract metadata from version file if available
                     version_entry = {
-                        'label': label,
+                        'label': base_label,  # Will be updated below if timestamp is available
                         'path': path_from_root
                     }
-                    if version_variant_id:
-                        version_entry['variant_id'] = version_variant_id
+                    
+                    try:
+                        version_metadata = get_tei_metadata(get_data_file_path(path_from_root))
+                        if version_metadata:
+                            # Add all available change attributes and variant_id if present
+                            for attr_name in ['variant_id', 'last_update', 'last_updated_by', 'last_status']:
+                                if version_metadata.get(attr_name):
+                                    version_entry[attr_name] = version_metadata.get(attr_name)
+                            
+                            # Format timestamp and add to label if available
+                            if version_metadata.get('last_update'):
+                                from datetime import datetime
+                                try:
+                                    # Parse ISO timestamp (handles both full ISO and date-only formats)
+                                    timestamp_str = version_metadata['last_update']
+                                    if 'T' in timestamp_str:
+                                        # Full ISO timestamp: 2025-08-07T16:22:51.845219Z
+                                        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                                    else:
+                                        # Date only: 2025-07-12
+                                        dt = datetime.fromisoformat(timestamp_str)
+                                    
+                                    # Format timestamp, omit time if it's 00:00:00
+                                    if dt.time() == dt.time().replace(hour=0, minute=0, second=0, microsecond=0):
+                                        formatted_timestamp = dt.strftime('%Y-%m-%d')
+                                    else:
+                                        formatted_timestamp = dt.strftime('%Y-%m-%d %H:%M:%S')
+                                    version_entry['label'] = f"{base_label} ({formatted_timestamp})"
+                                except (ValueError, TypeError):
+                                    # Keep original label if timestamp parsing fails
+                                    pass
+                    except:
+                        pass
                     
                     file_dict['versions'].append(version_entry)
                 else:     
                     file_dict[file_type] = path_from_root
 
-        file_dict['versions'] = sorted(file_dict['versions'], key= lambda file: file.get('version', ''), reverse=True)
+        # Sort versions by last_update (older ones first), handle None values
+        file_dict['versions'] = sorted(file_dict['versions'], key=lambda v: v.get('last_update') or '')
+        
         # add original as first version if it exists
         if 'xml' in file_dict:
-            file_dict['versions'].insert(0, {
+            gold_entry = {
                 'path': file_dict['xml'],
                 'label': "Gold"
-            })
+            }
+            # Extract change attributes from the gold XML file
+            try:
+                gold_metadata = get_tei_metadata(get_data_file_path(file_dict['xml']))
+                if gold_metadata:
+                    # Add all available change attributes
+                    for attr_name in ['last_update', 'last_updated_by', 'last_status']:
+                        if gold_metadata.get(attr_name):
+                            gold_entry[attr_name] = gold_metadata.get(attr_name)
+                    
+                    # Format timestamp and add to Gold label if available
+                    if gold_metadata.get('last_update'):
+                        from datetime import datetime
+                        try:
+                            # Parse ISO timestamp (handles both full ISO and date-only formats)
+                            timestamp_str = gold_metadata['last_update']
+                            if 'T' in timestamp_str:
+                                # Full ISO timestamp: 2025-08-07T16:22:51.845219Z
+                                dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                            else:
+                                # Date only: 2025-07-12
+                                dt = datetime.fromisoformat(timestamp_str)
+                            
+                            # Format timestamp, omit time if it's 00:00:00
+                            if dt.time() == dt.time().replace(hour=0, minute=0, second=0, microsecond=0):
+                                formatted_timestamp = dt.strftime('%Y-%m-%d')
+                            else:
+                                formatted_timestamp = dt.strftime('%Y-%m-%d %H:%M:%S')
+                            gold_entry['label'] = f"Gold ({formatted_timestamp})"
+                        except (ValueError, TypeError):
+                            # Keep original label if timestamp parsing fails
+                            pass
+            except:
+                pass
+            
+            # Remove any version with the same path as Gold to avoid duplication
+            gold_path = file_dict['xml']
+            file_dict['versions'] = [v for v in file_dict['versions'] if v.get('path') != gold_path]
+            
+            # Insert Gold as first version
+            file_dict['versions'].insert(0, gold_entry)
         
         # only add if we have both pdf and xml
         if 'pdf' in file_dict and 'xml' in file_dict:
@@ -594,7 +662,7 @@ def get_tei_metadata(file_path):
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
     author = root.find("./tei:teiHeader//tei:author//tei:surname", ns)
     title = root.find("./tei:teiHeader//tei:title", ns)
-    date = root.find("./tei:teiHeader//tei:date", ns)
+    date = root.find('./tei:teiHeader//tei:date[@type="publication"]', ns)
     
     # Extract specific idno types
     doi = root.find('./tei:teiHeader//tei:idno[@type="DOI"]', ns)
@@ -609,13 +677,33 @@ def get_tei_metadata(file_path):
             variant_id = variant_label.text
             break  # Use the first variant-id found
     
+    # Extract change attributes from revisionDesc/change elements
+    change_attributes = {
+        'last_update': None,
+        'last_updated_by': None,
+        'last_status': None
+    }
+    change_attr_mapping = {
+        'last_update': 'when',
+        'last_updated_by': 'who',
+        'last_status': 'status'
+    }
+    
+    change_elements = root.xpath('.//tei:revisionDesc/tei:change[@when]', namespaces=ns)
+    if change_elements:
+        # Get the most recent change (last in document order)
+        last_change = change_elements[-1]
+        for result_key, attr_name in change_attr_mapping.items():
+            change_attributes[result_key] = last_change.get(attr_name)
+    
     return {
         "author": author.text if author is not None else "",
         "title": title.text if title is not None else "",
         "date": date.text if date is not None else "",
         "doi": doi.text if doi is not None else "",
         "fileref": fileref.text if fileref is not None else "",
-        "variant_id": variant_id  # Backward compatible - None if not found
+        "variant_id": variant_id,  # Backward compatible - None if not found
+        **change_attributes  # Include all change attributes
     }
 
 
