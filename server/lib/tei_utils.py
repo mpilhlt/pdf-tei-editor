@@ -135,7 +135,7 @@ def create_edition_stmt(date: str, title: str) -> etree.Element:
     return editionStmt
 
 
-def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, timestamp: str) -> etree.Element:
+def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, timestamp: str, variant_id: str = "grobid-segmentation") -> etree.Element:
     """
     Create an encodingDesc element with GROBID application info.
     
@@ -143,6 +143,7 @@ def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, 
         grobid_version: GROBID version string
         grobid_revision: GROBID revision hash
         timestamp: ISO timestamp string
+        variant_id: Variant identifier for this GROBID configuration
         
     Returns:
         encodingDesc element
@@ -150,20 +151,32 @@ def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, 
     encodingDesc = etree.Element("encodingDesc")
     appInfo = etree.SubElement(encodingDesc, "appInfo")
     
-    application = etree.SubElement(appInfo, "application", 
+    # PDF-TEI-Editor application
+    pdf_tei_app = etree.SubElement(appInfo, "application", 
+                                  version="1.0", 
+                                  ident="pdf-tei-editor",
+                                  type="editor")
+    etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
+    
+    # GROBID extractor application
+    grobid_app = etree.SubElement(appInfo, "application", 
                                  version=grobid_version, 
                                  ident="GROBID", 
-                                 when=timestamp)
-    desc = etree.SubElement(application, "desc")
+                                 when=timestamp,
+                                 type="extractor")
+    desc = etree.SubElement(grobid_app, "desc")
     desc.text = "GROBID - A machine learning software for extracting information from scholarly documents"
     
-    revision_label = etree.SubElement(application, "label", type="revision")
+    revision_label = etree.SubElement(grobid_app, "label", type="revision")
     revision_label.text = grobid_revision
     
-    params_label = etree.SubElement(application, "label", type="parameters")
-    params_label.text = "flavor=article/dh-law-footnotes"
+    flavor_label = etree.SubElement(grobid_app, "label", type="flavor")
+    flavor_label.text = "article/dh-law-footnotes"
     
-    ref = etree.SubElement(application, "ref", target="https://github.com/kermitt2/grobid")
+    variant_label = etree.SubElement(grobid_app, "label", type="variant-id")
+    variant_label.text = variant_id
+    
+    ref = etree.SubElement(grobid_app, "ref", target="https://github.com/kermitt2/grobid")
     
     return encodingDesc
 
@@ -235,3 +248,56 @@ def remove_whitespace(element):
         element.tail = element.tail.strip()
     for child in element:
         remove_whitespace(child)
+
+
+def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
+    """
+    Serialize TEI document with selective formatting:
+    - Pretty-print the teiHeader for readability
+    - Preserve exact formatting of all other elements (text, facsimile, etc.)
+    """
+    import xml.dom.minidom
+    
+    # Extract and temporarily remove all non-header elements to preserve their formatting
+    non_header_elements = []
+    elements_to_remove = []
+    
+    for child in tei_doc:
+        if child.tag != "{http://www.tei-c.org/ns/1.0}teiHeader":
+            # Serialize each non-header element separately without formatting changes
+            element_xml = etree.tostring(child, encoding='unicode', method='xml')
+            non_header_elements.append(element_xml)
+            elements_to_remove.append(child)
+    
+    # Remove non-header elements temporarily
+    for element in elements_to_remove:
+        tei_doc.remove(element)
+    
+    # Pretty-print the remaining document (mainly the teiHeader)
+    header_xml = etree.tostring(tei_doc, encoding='unicode', method='xml')
+    pretty_header = xml.dom.minidom.parseString(header_xml).toprettyxml(indent="  ")
+    
+    # Clean up the pretty-printed header (remove xml declaration and empty lines)
+    header_lines = [line for line in pretty_header.split('\n') if line.strip() and not line.startswith('<?xml')]
+    
+    # If we have non-header elements, insert them back
+    if non_header_elements:
+        # Find the closing TEI tag and insert the elements before it
+        closing_tei_idx = None
+        for i, line in enumerate(header_lines):
+            if '</TEI>' in line:
+                closing_tei_idx = i
+                break
+        
+        if closing_tei_idx is not None:
+            # Insert each non-header element before the closing TEI tag
+            for element_xml in non_header_elements:
+                header_lines.insert(closing_tei_idx, f"  {element_xml}")
+                closing_tei_idx += 1  # Update index for next insertion
+        else:
+            # If no closing tag found, append elements and closing tag
+            for element_xml in non_header_elements:
+                header_lines.append(f"  {element_xml}")
+            header_lines.append("</TEI>")
+    
+    return '\n'.join(header_lines)

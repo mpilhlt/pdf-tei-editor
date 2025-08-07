@@ -118,7 +118,7 @@ async function reload(state) {
  */
 async function reloadFileData(state) {
   logger.debug("Reloading file data")
-  let data = await client.getFileList();
+  let data = await client.getFileList(state.variant);
   if (!data || data.length === 0) {
     dialog.error("No files found")
   }
@@ -138,8 +138,8 @@ let stateCache
 async function populateSelectboxes(state) {
 
   // check if state has changed
-  const { xmlPath, pdfPath, diffXmlPath } = state
-  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath })
+  const { xmlPath, pdfPath, diffXmlPath, variant } = state
+  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath, variant })
   if (jsonState === stateCache) {
     //logger.debug("Not repopulating selectboxes as state hasn't changed")
     return

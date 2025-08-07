@@ -302,3 +302,21 @@ def migrate_old_version_files(file_id, data_root, logger, webdav_enabled=False):
         logger.info(f"Successfully migrated {migrated_count} version files for file_id '{file_id}'")
     
     return migrated_count
+
+
+def construct_variant_filename(file_id, variant=None, extension=".tei.xml"):
+    """
+    Construct a filename with optional variant suffix.
+    
+    Args:
+        file_id (str): The base file identifier
+        variant (str, optional): The variant identifier
+        extension (str): File extension
+        
+    Returns:
+        str: Constructed filename (file-id.variant-id.tei.xml or file-id.tei.xml)
+    """
+    if variant:
+        return f"{file_id}.{variant}{extension}"
+    else:
+        return f"{file_id}{extension}"

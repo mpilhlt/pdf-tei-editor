@@ -8,7 +8,9 @@
     <sl-select name="modelIndex" label="Model" size="small" help-text="Choose the model configuration used for the extraction" value="llamore">
       <sl-option value="llamore">Llamore</sl-option>
     </sl-select>
-    <sl-select name="instructionIndex" label="Instructions" size="small" help-text="Choose the instruction set that is added to the prompt"></sl-select>
+    <div name="dynamicOptions">
+      <!-- Dynamic extractor-specific options will be inserted here -->
+    </div>
   </div>
   <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
   <sl-button slot="footer" name="submit" variant="primary">Extract</sl-button>  

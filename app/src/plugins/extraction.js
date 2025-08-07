@@ -4,10 +4,10 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlButton, SlButtonGroup, SlDialog, SlInput } from '../ui.js'
+ * @import { SlButton, SlButtonGroup, SlDialog } from '../ui.js'
  */
 import { client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
-import { SlSelect, SlOption, createHtmlElements, updateUi } from '../ui.js'
+import { SlSelect, SlOption, SlInput, createHtmlElements, updateUi } from '../ui.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
 
@@ -57,7 +57,8 @@ const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))
  * @property {SlInput} doi 
  * @property {SlSelect} collectionName
  * @property {SlSelect} modelIndex 
- * @property {SlSelect} instructionIndex
+ * @property {SlButton} cancel
+ * @property {SlButton} submit
  */
 /** @type {extractionOptionsDialog & SlDialog} */
 // @ts-ignore
@@ -214,14 +215,17 @@ async function promptForExtractionOptions(options={}) {
   /** @type {SlSelect|null} */
   const modelSelectBox = optionsDialog.modelIndex
   modelSelectBox.innerHTML = ""
+  
+  // Get extractors and store for dynamic options
+  let availableExtractors = []
   try {
     const extractors = await client.getExtractorList()
     // Filter extractors that support PDF input and TEI document output
-    const pdfToTeiExtractors = extractors.filter(extractor => 
+    availableExtractors = extractors.filter(extractor => 
       extractor.input.includes("pdf") && extractor.output.includes("tei-document")
     )
     
-    for (const extractor of pdfToTeiExtractors) {
+    for (const extractor of availableExtractors) {
       const option = Object.assign(new SlOption, {
         value: extractor.id,
         textContent: extractor.name
@@ -229,65 +233,130 @@ async function promptForExtractionOptions(options={}) {
       modelSelectBox.appendChild(option)
     }
     
-    // Default to llamore-gemini if available
-    if (pdfToTeiExtractors.find(e => e.id === "llamore-gemini")) {
-      modelSelectBox.value = "llamore-gemini"
-    } else if (pdfToTeiExtractors.length > 0) {
-      modelSelectBox.value = pdfToTeiExtractors[0].id
+    // Default to first available extractor
+    if (availableExtractors.length > 0) {
+      modelSelectBox.value = availableExtractors[0].id
     }
   } catch (error) {
-    logger.warn("Could not load extractor list:", error)
-    // Fallback to hardcoded option
-    const option = Object.assign(new SlOption, {
-      value: "llamore-gemini",
-      textContent: "LLamore + Gemini"
-    })
-    modelSelectBox.appendChild(option)
-    modelSelectBox.value = "llamore-gemini"
+    // No fallback - if we can't load extractors, we can't extract
+    dialog.error("Could not load extraction engines")
+    throw error
   }
   
-  // Add event listener to update instructions when model changes
-  const updateInstructions = () => {
-    const selectedExtractor = modelSelectBox.value || "llamore-gemini"
-    instructionsSelectBox.innerHTML = ""
+  // Add event listener to update dynamic options when model changes
+  const updateDynamicOptions = () => {
+    const selectedExtractorId = modelSelectBox.value
+    if (!selectedExtractorId) return
     
-    let instructionIndex = 0
-    for (const [originalIdx, instructionData] of instructionsData.entries()) {
-      const { label, text, extractor = ["llamore-gemini"] } = instructionData
+    const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId)
+    
+    // Clear existing dynamic options
+    const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]')
+    if (dynamicOptionsContainer) {
+      dynamicOptionsContainer.innerHTML = ""
+    }
+    if (!selectedExtractor || !selectedExtractor.options) return
+    
+    // Generate UI elements for each extractor option (except doi which is handled separately)
+    for (const [optionKey, optionConfig] of Object.entries(selectedExtractor.options)) {
+      if (optionKey === 'doi') continue // DOI is handled separately
       
-      // Check if this instruction supports the selected extractor
-      if (extractor.includes(selectedExtractor)) {
-        const option = Object.assign(new SlOption, {
-          value: String(instructionIndex),
-          textContent: label
-        })
-        instructions[instructionIndex] = text.join("\n")
-        instructionsSelectBox.appendChild(option)
-        instructionIndex++
+      const element = createOptionElement(optionKey, optionConfig, selectedExtractorId)
+      if (element && dynamicOptionsContainer) {
+        dynamicOptionsContainer.appendChild(element)
       }
     }
-    
-    // If no instructions found for this extractor, show a default option
-    if (instructionIndex === 0) {
-      const option = Object.assign(new SlOption, {
-        value: "0",
-        textContent: "No custom instructions"
-      })
-      instructions[0] = ""
-      instructionsSelectBox.appendChild(option)
-    }
-    
-    instructionsSelectBox.value = "0"
   }
   
-  modelSelectBox.addEventListener('sl-change', updateInstructions)
+  // Helper function to create form elements for extractor options
+  function createOptionElement(optionKey, optionConfig, extractorId) {
+    if (optionConfig.type === 'string' && optionConfig.options) {
+      // Create select dropdown for predefined options
+      const select = Object.assign(new SlSelect, {
+        name: optionKey,
+        label: optionConfig.description || optionKey,
+        size: "small"
+      })
+      
+      if (optionConfig.description) {
+        select.setAttribute("help-text", optionConfig.description)
+      }
+      
+      // Add options
+      for (const optionValue of optionConfig.options) {
+        const option = Object.assign(new SlOption, {
+          value: optionValue,
+          textContent: optionValue
+        })
+        select.appendChild(option)
+      }
+      
+      // Set default to first option
+      if (optionConfig.options.length > 0) {
+        select.value = optionConfig.options[0]
+      }
+      
+      return select
+    } else if (optionKey === 'instructions' && extractorId && instructionsData) {
+      // Special handling for instructions - use existing instructions data
+      const select = Object.assign(new SlSelect, {
+        name: "instructions",
+        label: "Instructions",
+        size: "small"
+      })
+      select.setAttribute("help-text", "Choose the instruction set that is added to the prompt")
+      
+      let instructionIndex = 0
+      for (const [originalIdx, instructionData] of instructionsData.entries()) {
+        const { label, text, extractor = [] } = instructionData
+        
+        // Check if this instruction supports the selected extractor
+        if (extractor.includes(extractorId)) {
+          const option = Object.assign(new SlOption, {
+            value: String(instructionIndex),
+            textContent: label
+          })
+          instructions[instructionIndex] = text.join("\n")
+          select.appendChild(option)
+          instructionIndex++
+        }
+      }
+      
+      // If no instructions found, show a default option
+      if (instructionIndex === 0) {
+        const option = Object.assign(new SlOption, {
+          value: "0",
+          textContent: "No custom instructions"
+        })
+        instructions[0] = ""
+        select.appendChild(option)
+      }
+      
+      select.value = "0"
+      return select
+    } else if (optionConfig.type === 'string') {
+      // Create text input for free-form string fields
+      const input = Object.assign(new SlInput, {
+        name: optionKey,
+        label: optionConfig.description || optionKey,
+        size: "small",
+        type: "text"
+      })
+      
+      if (optionConfig.description) {
+        input.setAttribute("help-text", optionConfig.description)
+      }
+      
+      return input
+    }
+    
+    return null
+  }
   
-  // configure instructions selectbox - filter by selected extractor
-  /** @type {SlSelect|null} */
-  const instructionsSelectBox = optionsDialog.instructionIndex
+  modelSelectBox.addEventListener('sl-change', updateDynamicOptions)
   
-  // Initial population of instructions
-  updateInstructions()
+  // Initial population of dynamic options
+  updateDynamicOptions()
 
   // display the dialog and await the user's response
   const result = await new Promise(resolve => {
@@ -314,16 +383,33 @@ async function promptForExtractionOptions(options={}) {
     return null
   }
 
+  // Collect form data from static and dynamic fields
   const formData = {
     'doi': optionsDialog.doi.value,
-    'instructions': instructions[parseInt(String(optionsDialog.instructionIndex.value))],
     'collection': optionsDialog.collectionName.value,
     'extractor': optionsDialog.modelIndex.value
   }
   
+  // Collect values from dynamic options
+  const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]')
+  // @ts-ignore
+  const dynamicInputs = dynamicOptionsContainer.querySelectorAll('sl-select, sl-input')
+  
+  for (const input of dynamicInputs) {
+    const name = input.name
+    let value = input.value
+    
+    // Special handling for instructions - convert to actual instruction text
+    if (name === 'instructions' && instructions[parseInt(value)]) {
+      value = instructions[parseInt(value)]
+    }
+    
+    formData[name] = value
+  }
+  
   if (formData.doi == "" || !isDoi(formData.doi)) {
     dialog.error(`"${formData.doi}" does not seem to be a DOI, please try again.`)
-    return
+    return null
   }
 
   return Object.assign(formData, options)

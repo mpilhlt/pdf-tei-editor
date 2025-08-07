@@ -11,12 +11,13 @@ from server.lib.server_utils import (
     safe_file_path, remove_obsolete_marker_if_exists, get_session_id,
     get_version_path, 
     extract_file_id_from_version_filename, extract_version_label_from_path,
-    migrate_old_version_files
+    migrate_old_version_files, construct_variant_filename
 )
 from server.lib.locking import (
     acquire_lock, release_lock, get_all_active_locks, check_lock
 )
 from server.lib.xml_utils import encode_xml_entities
+from server.lib.tei_utils import serialize_tei_with_formatted_header
 from server.api.config import read_config
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
@@ -31,6 +32,9 @@ def file_list():
     active_locks = get_all_active_locks()
     webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
     session_id = get_session_id(request)
+    
+    # Get variant filter from query parameters
+    variant_filter = request.args.get('variant', None)
 
     files_data = create_file_data(data_root)
     current_app.logger.debug(active_locks)
@@ -52,17 +56,36 @@ def file_list():
             author = metadata.get('author', '')
             title = metadata.get('title', '')
             date = metadata.get('date', '')
-            idno = metadata.get('idno', '')
+            doi = metadata.get('doi', '')
+            fileref = metadata.get('fileref', '')
+            variant_id = metadata.get('variant_id', None)
+            
             if author and title and date:
                 label = f"{metadata.get('author', '')}, {metadata.get('title', '')[:25]}... ({metadata.get('date','')})"
-            elif idno:
-                label = idno
+            elif doi:
+                label = doi
+            elif fileref:
+                label = fileref
             else:
                 label = data['id']
                 
             metadata['label'] = label
             if metadata:
                 files_data[idx].update(metadata)
+            
+            # Add variant information to file data for filtering
+            if variant_id:
+                files_data[idx]['variant_id'] = variant_id
+
+    # Apply variant filtering if specified
+    if variant_filter is not None:
+        if variant_filter == "":
+            # Empty string means show files with no variant (gold files)
+            filtered_data = [f for f in files_data if f.get('variant_id') is None]
+        else:
+            # Show files with matching variant_id
+            filtered_data = [f for f in files_data if f.get('variant_id') == variant_filter]
+        files_data = filtered_data
 
     return jsonify(files_data)
 
@@ -88,13 +111,73 @@ def save():
         current_app.logger.debug("Encoding XML entities")
         xml_string = encode_xml_entities(xml_string)
     
-    # Extract file_id for both new versions and regular saves (needed for migration)
-    file_path_safe = safe_file_path(file_path_rel)
-    file_id = Path(file_path_safe).stem
-    
-    # Handle .tei.xml files where Path.stem only removes .xml but leaves .tei
-    if file_id.endswith('.tei'):
-        file_id = file_id[:-4]  # Remove .tei suffix
+    # Extract file_id and variant from XML content and ensure file_id is stored
+    try:
+        # Parse XML to extract file_id and variant
+        xml_root = etree.fromstring(xml_string)
+        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+        
+        # Try to get existing file_id from <idno type="fileref">
+        fileref_elem = xml_root.find('.//tei:idno[@type="fileref"]', ns)
+        
+        # Extract variant from extractor application metadata
+        variant = None
+        extractor_apps = xml_root.xpath('.//tei:application[@type="extractor"]', namespaces=ns)
+        for app in extractor_apps:
+            variant_label = app.find('./tei:label[@type="variant-id"]', ns)
+            if variant_label is not None and variant_label.text:
+                variant = variant_label.text
+                break  # Use the first variant-id found
+        
+        if fileref_elem is not None and fileref_elem.text:
+            file_id = fileref_elem.text
+            current_app.logger.debug(f"Found existing file_id in XML: {file_id}, variant: {variant}")
+        else:
+            # No fileref found - derive file_id from filename and add it to XML
+            file_path_safe = safe_file_path(file_path_rel)
+            fallback_file_id = Path(file_path_safe).stem
+            
+            # Handle .tei.xml files where Path.stem only removes .xml but leaves .tei
+            if fallback_file_id.endswith('.tei'):
+                fallback_file_id = fallback_file_id[:-4]  # Remove .tei suffix
+            
+            # If variant exists in XML, try to strip .variant_id suffix from filename
+            if variant and fallback_file_id.endswith(f'.{variant}'):
+                file_id = fallback_file_id[:-len(f'.{variant}')]
+            else:
+                file_id = fallback_file_id
+            
+            # Add fileref to XML - find or create editionStmt
+            edition_stmt = xml_root.find('.//tei:editionStmt', ns)
+            if edition_stmt is None:
+                # Create editionStmt in teiHeader/fileDesc
+                file_desc = xml_root.find('.//tei:fileDesc', ns)
+                if file_desc is not None:
+                    edition_stmt = etree.SubElement(file_desc, "{http://www.tei-c.org/ns/1.0}editionStmt")
+            
+            if edition_stmt is not None:
+                # Find or create edition element
+                edition = edition_stmt.find('./tei:edition', ns)
+                if edition is None:
+                    edition = etree.SubElement(edition_stmt, "{http://www.tei-c.org/ns/1.0}edition")
+                
+                # Add idno with fileref
+                fileref_elem = etree.SubElement(edition, "{http://www.tei-c.org/ns/1.0}idno")
+                fileref_elem.set("type", "fileref")
+                fileref_elem.text = file_id
+                
+                # Update xml_string with the modified XML (formatted header only)
+                xml_string = serialize_tei_with_formatted_header(xml_root)
+                current_app.logger.debug(f"Added file_id to XML: {file_id}")
+        
+    except Exception as e:
+        current_app.logger.warning(f"Could not extract metadata from XML: {e}")
+        # Fallback to filename-based extraction
+        file_path_safe = safe_file_path(file_path_rel)
+        file_id = Path(file_path_safe).stem
+        if file_id.endswith('.tei'):
+            file_id = file_id[:-4]
+        variant = None
     
     # Determine the final save path
     if save_as_new_version:
@@ -102,7 +185,20 @@ def save():
         final_file_rel = get_version_path(file_id, timestamp, ".xml")
         status = "new"
     else:
-        final_file_rel = safe_file_path(file_path_rel)
+        # For regular saves, construct path based on variant
+        if variant:
+            # Construct variant filename: file-id.variant-id.tei.xml
+            variant_filename = construct_variant_filename(file_id, variant)
+            # Keep the directory structure from original path
+            file_path_safe = safe_file_path(file_path_rel)
+            original_dir = Path(file_path_safe).parent
+            final_file_rel = (original_dir / variant_filename).as_posix()
+        else:
+            # No variant - use original path or construct gold path
+            file_path_safe = safe_file_path(file_path_rel)
+            original_dir = Path(file_path_safe).parent
+            gold_filename = construct_variant_filename(file_id, None)  # file-id.tei.xml
+            final_file_rel = (original_dir / gold_filename).as_posix()
         status = "saved"
 
     # Get a file lock for this path
@@ -369,12 +465,27 @@ def get_tei_metadata(file_path):
     author = root.find("./tei:teiHeader//tei:author//tei:surname", ns)
     title = root.find("./tei:teiHeader//tei:title", ns)
     date = root.find("./tei:teiHeader//tei:date", ns)
-    idno = root.find("./tei:teiHeader//tei:idno", ns)
+    
+    # Extract specific idno types
+    doi = root.find('./tei:teiHeader//tei:idno[@type="DOI"]', ns)
+    fileref = root.find('./tei:teiHeader//tei:idno[@type="fileref"]', ns)
+    
+    # Extract variant-id from extractor application metadata
+    variant_id = None
+    extractor_apps = root.xpath('.//tei:application[@type="extractor"]', namespaces=ns)
+    for app in extractor_apps:
+        variant_label = app.find('./tei:label[@type="variant-id"]', ns)
+        if variant_label is not None:
+            variant_id = variant_label.text
+            break  # Use the first variant-id found
+    
     return {
         "author": author.text if author is not None else "",
         "title": title.text if title is not None else "",
         "date": date.text if date is not None else "",
-        "idno": idno.text if idno is not None else ""
+        "doi": doi.text if doi is not None else "",
+        "fileref": fileref.text if fileref is not None else "",
+        "variant_id": variant_id  # Backward compatible - None if not found
     }
 
 

@@ -8,7 +8,8 @@ from lxml import etree
 
 from . import BaseExtractor
 from server.lib.doi_utils import fetch_doi_metadata
-from server.lib.tei_utils import create_tei_document, create_tei_header, serialize_tei_xml
+from server.lib.tei_utils import create_tei_document, create_tei_header, serialize_tei_with_formatted_header
+import datetime
 
 # Try to import LLamore dependencies
 try:
@@ -46,6 +47,14 @@ class LLamoreExtractor(BaseExtractor):
                     "type": "string", 
                     "description": "Additional instructions for the extraction process",
                     "required": False
+                },
+                "variant_id": {
+                    "type": "string",
+                    "description": "Variant identifier for the LLamore extraction",
+                    "required": False,
+                    "options": [
+                        "llamore-default"
+                    ]
                 }
             }
         }
@@ -93,13 +102,62 @@ class LLamoreExtractor(BaseExtractor):
             except Exception as e:
                 print(f"Warning: Could not fetch metadata for DOI {doi}: {e}")
         
-        applications = [
-            {"ident": "llamore", "version": "1.0", "label": "https://github.com/mpilhlt/llamore"},
-            {"ident": "pdf-tei-editor", "version": "1.0", "label": "https://github.com/mpilhlt/pdf-tei-editor"},
-            {"ident": "model", "version": "1.0", "label": "Gemini 2.0/LineByLinePrompter"}
-        ]
+        # Create basic TEI header
+        tei_header = create_tei_header(doi, metadata)
         
-        tei_header = create_tei_header(doi, metadata, applications)
+        # Add editionStmt with fileref
+        timestamp = datetime.datetime.now().isoformat() + "Z"
+        pdf_name = os.path.basename(pdf_path)
+        file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
+        
+        fileDesc = tei_header.find("fileDesc")
+        titleStmt = fileDesc.find("titleStmt")
+        
+        # Create editionStmt
+        editionStmt = etree.Element("editionStmt")
+        edition = etree.SubElement(editionStmt, "edition")
+        date_elem = etree.SubElement(edition, "date", when=timestamp)
+        date_elem.text = datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M:%S")
+        title_elem = etree.SubElement(edition, "title")
+        title_elem.text = "LLamore reference extraction"
+        fileref_elem = etree.SubElement(edition, "idno", type="fileref")
+        fileref_elem.text = file_id
+        
+        titleStmt.addnext(editionStmt)
+        
+        # Create encodingDesc with applications
+        existing_encodingDesc = tei_header.find("encodingDesc")
+        if existing_encodingDesc is not None:
+            tei_header.remove(existing_encodingDesc)
+            
+        encodingDesc = etree.Element("encodingDesc")
+        appInfo = etree.SubElement(encodingDesc, "appInfo")
+        
+        # PDF-TEI-Editor application
+        pdf_tei_app = etree.SubElement(appInfo, "application", 
+                                      version="1.0", 
+                                      ident="pdf-tei-editor",
+                                      type="editor")
+        etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
+        
+        # LLamore extractor application
+        llamore_app = etree.SubElement(appInfo, "application", 
+                                     version="1.0", 
+                                     ident="llamore", 
+                                     when=timestamp,
+                                     type="extractor")
+        # Get variant_id from options using first value as default
+        info = self.get_info()
+        default_variant_id = info["options"]["variant_id"]["options"][0]  # "llamore-default"
+        variant_id = options.get("variant_id", default_variant_id)
+        
+        variant_label = etree.SubElement(llamore_app, "label", type="variant-id")
+        variant_label.text = variant_id
+        prompter_label = etree.SubElement(llamore_app, "label", type="prompter")
+        prompter_label.text = "LineByLinePrompter"
+        etree.SubElement(llamore_app, "ref", target="https://github.com/mpilhlt/llamore")
+        
+        tei_header.append(encodingDesc)
         tei_doc.append(tei_header)
         
         # Extract references
@@ -107,8 +165,8 @@ class LLamoreExtractor(BaseExtractor):
         standOff = etree.SubElement(tei_doc, "standOff")
         standOff.append(listBibl.getchildren()[0])
         
-        # Serialize to XML
-        return serialize_tei_xml(tei_doc)
+        # Serialize to XML with formatted header
+        return serialize_tei_with_formatted_header(tei_doc)
     
     def _extract_refs_from_pdf(self, pdf_path: str, options: Dict[str, Any]) -> etree.Element:
         """Extract references from PDF using LLamore."""

@@ -276,11 +276,15 @@ async function status() {
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
  *
+ * @param {string|null} variant - Optional variant filter to apply
  * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
  *  objects with keys "id", "pdf", and "tei".
  */
-async function getFileList() {
-  return await callApi('/files/list', 'GET');
+async function getFileList(variant = null) {
+  const params = variant !== null ? { variant } : {};
+  const queryString = new URLSearchParams(params).toString();
+  const url = '/files/list' + (queryString ? '?' + queryString : '');
+  return await callApi(url, 'GET');
 }
 
 /**

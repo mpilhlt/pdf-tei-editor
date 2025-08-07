@@ -10,7 +10,7 @@ import { logger } from '../app.js'
  */
 
 // this needs to be made configurable
-const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'sessionId']
+const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'sessionId', 'variant']
 
 const api = {
   updateUrlHashfromState,
