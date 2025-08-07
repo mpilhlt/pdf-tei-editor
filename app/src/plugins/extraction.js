@@ -178,7 +178,7 @@ async function extractFromPDF(state, defaultOptions={}) {
 /**
  * 
  * @param {ExtractionOptions} options Optional default option object
- * @returns {Promise<ExtractionOptions>}
+ * @returns {Promise<ExtractionOptions|null>}
  */
 async function promptForExtractionOptions(options={}) {
 
@@ -407,9 +407,15 @@ async function promptForExtractionOptions(options={}) {
     formData[name] = value
   }
   
-  if (formData.doi == "" || !isDoi(formData.doi)) {
+  // Validate DOI only if one is provided
+  if (formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
     dialog.error(`"${formData.doi}" does not seem to be a DOI, please try again.`)
     return null
+  }
+  
+  // If DOI is empty, set it to null for the request
+  if (!formData.doi || formData.doi === "") {
+    formData.doi = null
   }
 
   return Object.assign(formData, options)

@@ -16,7 +16,14 @@ if __name__ == '__main__':
     host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 3001
     # start the server
-    reload_extra_files = [file for _dir in ['api', 'lib'] for file in glob(str(project_root / 'server' / _dir / '*'))]
+    # Only watch Python files in server/api and server/lib directories
+    reload_extra_files = []
+    for _dir in ['api', 'lib']:
+        for py_file in (project_root / 'server' / _dir).rglob('*.py'):
+            reload_extra_files.append(str(py_file))
+    
+    # Also need to watch the main flask_app.py file
+    reload_extra_files.append(str(project_root / 'server' / 'flask_app.py'))
     print()
     print("====================================================================================")
     print(f"Starting development server, load http://{host}:{port}/index.html?dev to start in source mode")

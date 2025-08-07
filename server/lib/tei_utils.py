@@ -257,13 +257,16 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
     - Preserve exact formatting of all other elements (text, facsimile, etc.)
     """
     import xml.dom.minidom
+    import re
     
     # Extract and temporarily remove all non-header elements to preserve their formatting
     non_header_elements = []
     elements_to_remove = []
     
     for child in tei_doc:
-        if child.tag != "{http://www.tei-c.org/ns/1.0}teiHeader":
+        # Handle both namespaced and non-namespaced teiHeader elements
+        is_tei_header = (child.tag == "teiHeader" or child.tag == "{http://www.tei-c.org/ns/1.0}teiHeader")
+        if not is_tei_header:
             # Serialize each non-header element separately without formatting changes
             element_xml = etree.tostring(child, encoding='unicode', method='xml')
             non_header_elements.append(element_xml)
@@ -273,14 +276,28 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
     for element in elements_to_remove:
         tei_doc.remove(element)
     
-    # Pretty-print the remaining document (mainly the teiHeader)
-    header_xml = etree.tostring(tei_doc, encoding='unicode', method='xml')
-    pretty_header = xml.dom.minidom.parseString(header_xml).toprettyxml(indent="  ")
+    # Serialize with pretty-print to get formatted XML for minidom to work with
+    header_xml = etree.tostring(tei_doc, encoding='unicode', method='xml', pretty_print=True)
+    
+    # Force conversion of self-closing TEI tags to open/close tags BEFORE minidom parsing
+    # Add temporary content to prevent minidom from making it self-closing again
+    header_xml = re.sub(
+        r'<TEI([^>]*?)\s*/>', 
+        r'<TEI\1><!-- TEMPORARY_CONTENT_TO_PREVENT_SELF_CLOSING --></TEI>', 
+        header_xml
+    )
+    
+    # Parse and pretty-print with minidom
+    dom = xml.dom.minidom.parseString(header_xml)
+    pretty_header = dom.toprettyxml(indent="  ")
+    
+    # Remove the temporary content
+    pretty_header = pretty_header.replace('<!-- TEMPORARY_CONTENT_TO_PREVENT_SELF_CLOSING -->', '')
     
     # Clean up the pretty-printed header (remove xml declaration and empty lines)
     header_lines = [line for line in pretty_header.split('\n') if line.strip() and not line.startswith('<?xml')]
     
-    # If we have non-header elements, insert them back
+    # Handle TEI closing tag properly
     if non_header_elements:
         # Find the closing TEI tag and insert the elements before it
         closing_tei_idx = None
@@ -294,10 +311,5 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
             for element_xml in non_header_elements:
                 header_lines.insert(closing_tei_idx, f"  {element_xml}")
                 closing_tei_idx += 1  # Update index for next insertion
-        else:
-            # If no closing tag found, append elements and closing tag
-            for element_xml in non_header_elements:
-                header_lines.append(f"  {element_xml}")
-            header_lines.append("</TEI>")
     
     return '\n'.join(header_lines)

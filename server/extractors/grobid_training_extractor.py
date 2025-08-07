@@ -19,6 +19,7 @@ from server.lib.tei_utils import (
     create_revision_desc_with_status,
     serialize_tei_with_formatted_header
 )
+from server.lib.debug_utils import log_extraction_response, log_xml_parsing_error
 
 
 class GrobidTrainingExtractor(BaseExtractor):
@@ -101,16 +102,29 @@ class GrobidTrainingExtractor(BaseExtractor):
         
         # Get GROBID server info
         grobid_server_url = os.environ.get("GROBID_SERVER_URL")
+        if grobid_server_url is None:
+            raise ValueError("No Grobid server URL")
         grobid_version, grobid_revision = self._get_grobid_version(grobid_server_url)
         
         # Create training data via GROBID API
-        training_tei_content = self._create_training_data(pdf_path, grobid_server_url, flavor)
+        training_tei_content = self._create_training_data(pdf_path, grobid_server_url, variant_id, flavor)
+        
+        # Log raw GROBID response for debugging
+        log_extraction_response("grobid", pdf_path, training_tei_content, ".raw.xml")
         
         # Clean invalid XML attributes before parsing
         training_tei_content = self._clean_invalid_xml_attributes(training_tei_content)
         
+        # Log cleaned content for debugging
+        log_extraction_response("grobid", pdf_path, training_tei_content, ".cleaned.xml")
+        
         # Parse the GROBID output
-        grobid_doc = etree.fromstring(training_tei_content.encode('utf-8'))
+        try:
+            grobid_doc = etree.fromstring(training_tei_content.encode('utf-8'))
+        except etree.XMLSyntaxError as e:
+            # Log the XML that failed to parse
+            log_xml_parsing_error("grobid", pdf_path, training_tei_content, str(e))
+            raise RuntimeError(f"XML parsing failed: {e}") from e
         
         # Create new TEI document with proper namespace (no schema validation)
         tei_doc = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})
@@ -133,7 +147,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         # Add editionStmt after titleStmt with fileref
         fileDesc = tei_header.find("fileDesc")
         titleStmt = fileDesc.find("titleStmt")
-        edition_stmt = create_edition_stmt(timestamp, "Grobid document segmentation")
+        edition_stmt = create_edition_stmt(timestamp, f"{variant_id} [{flavor}]")
         
         # Add fileref to edition - extract from PDF path
         pdf_name = os.path.basename(pdf_path)
@@ -227,7 +241,7 @@ class GrobidTrainingExtractor(BaseExtractor):
             print(f"Warning: Could not fetch GROBID version: {e}")
             return "unknown", "unknown"
     
-    def _create_training_data(self, pdf_path: str, grobid_server_url: str, flavor: str) -> str:
+    def _create_training_data(self, pdf_path: str, grobid_server_url: str, variant_id: str, flavor: str) -> str:
         """Create training data using GROBID createTraining API."""
         print(f"Creating training data from {pdf_path} via GROBID")
         
@@ -253,15 +267,16 @@ class GrobidTrainingExtractor(BaseExtractor):
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(temp_dir)
             
-            # Find the training segmentation file
+            # Find the file that corresponds to the variant
             training_file = None
+            suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml' 
             for filename in os.listdir(temp_dir):
-                if filename.endswith('.training.segmentation.tei.xml'):
+                if filename.endswith(suffix):
                     training_file = os.path.join(temp_dir, filename)
                     break
             
             if not training_file:
-                raise RuntimeError("Could not find .training.segmentation.tei.xml file in GROBID output")
+                raise RuntimeError(f"Could not find '*{suffix}' file in GROBID output")
             
             # Read the training file content
             with open(training_file, 'r', encoding='utf-8') as f:

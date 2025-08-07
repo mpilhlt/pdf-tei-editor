@@ -53,7 +53,7 @@ def safe_file_path(file_path):
             # Also replace other problematic characters
             sanitized_part = ''
             for char in part:
-                if char in '<>:"|?*\\' or ord(char) < 32:
+                if char in '%<>:"|?*\\' or ord(char) < 32:
                     sanitized_part += '_'
                 else:
                     sanitized_part += char
