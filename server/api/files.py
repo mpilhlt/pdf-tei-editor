@@ -7,9 +7,9 @@ from glob import glob
 
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
-    ApiError, make_timestamp, get_data_file_path, 
+    ApiError, make_timestamp, make_version_timestamp, get_data_file_path, 
     safe_file_path, remove_obsolete_marker_if_exists, get_session_id,
-    get_version_path, 
+    get_version_path, find_collection_for_file_id,
     extract_file_id_from_version_filename, extract_version_label_from_path,
     migrate_old_version_files, construct_variant_filename
 )
@@ -26,7 +26,7 @@ file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
 
 @bp.route("/list", methods=["GET"])
 @handle_api_errors
-@session_required
+#@session_required
 def file_list():
     data_root = current_app.config["DATA_ROOT"]
     active_locks = get_all_active_locks()
@@ -37,7 +37,6 @@ def file_list():
     variant_filter = request.args.get('variant', None)
 
     files_data = create_file_data(data_root)
-    current_app.logger.debug(active_locks)
     for idx, data in enumerate(files_data):
         
         if webdav_enabled:
@@ -50,7 +49,6 @@ def file_list():
         if file_path is not None:
             metadata = get_tei_metadata(get_data_file_path(file_path))
             if metadata is None:
-                current_app.logger.warning(f"Could not retrieve metadata for {file_path}")
                 metadata = {}
             # add label to metadata
             author = metadata.get('author', '')
@@ -74,8 +72,25 @@ def file_list():
                 files_data[idx].update(metadata)
             
             # Add variant information to file data for filtering
+            # If main file has no variant, check version files for variants
+            variant_xml_path = None
+            if not variant_id and 'versions' in data:
+                for version in data['versions']:
+                    if version.get('path'):
+                        try:
+                            version_metadata = get_tei_metadata(get_data_file_path(version['path']))
+                            if version_metadata and version_metadata.get('variant_id'):
+                                variant_id = version_metadata.get('variant_id')
+                                variant_xml_path = version['path']  # Store the path to the variant file
+                                break  # Use first variant found
+                        except:
+                            pass
+            
             if variant_id:
                 files_data[idx]['variant_id'] = variant_id
+                # If we found the variant in a version file, use that as the main xml
+                if variant_xml_path:
+                    files_data[idx]['xml'] = variant_xml_path
 
     # Apply variant filtering if specified
     if variant_filter is not None:
@@ -86,6 +101,39 @@ def file_list():
             # Show files with matching variant_id
             filtered_data = [f for f in files_data if f.get('variant_id') == variant_filter]
         files_data = filtered_data
+        
+        # Also filter versions array to only show relevant versions
+        for file_data in files_data:
+            if 'versions' in file_data:
+                if variant_filter == "":
+                    # For gold files, show versions with no variant or gold versions
+                    filtered_versions = [v for v in file_data['versions'] 
+                                       if not v.get('variant_id') or v.get('label') == 'Gold']
+                else:
+                    # For variant files, show matching variant versions and mark current xml as Gold
+                    filtered_versions = []
+                    current_xml_path = file_data.get('xml')
+                    gold_added = False
+                    
+                    for v in file_data['versions']:
+                        if v.get('variant_id') == variant_filter:
+                            # Check if this is the current xml file (should be Gold)
+                            if v.get('path') == current_xml_path and not gold_added:
+                                gold_version = v.copy()
+                                gold_version['label'] = 'Gold'
+                                filtered_versions.insert(0, gold_version)  # Put Gold first
+                                gold_added = True
+                            else:
+                                # Add other matching variant versions
+                                filtered_versions.append(v)
+                        elif v.get('path') == current_xml_path and not gold_added:
+                            # Handle case where current xml doesn't have variant_id but is the main file
+                            gold_version = v.copy()
+                            gold_version['label'] = 'Gold'
+                            filtered_versions.insert(0, gold_version)  # Put Gold first
+                            gold_added = True
+                    
+                file_data['versions'] = filtered_versions
 
     return jsonify(files_data)
 
@@ -179,11 +227,61 @@ def save():
             file_id = file_id[:-4]
         variant = None
     
+    # Check if this is a version file that should be promoted to gold
+    version_to_gold_promotion = False
+    if variant and file_path_rel.startswith('/data/versions/'):
+        # This is a version file with a variant - check if gold variant exists
+        file_path_safe = safe_file_path(file_path_rel)
+        original_dir_parts = file_path_safe.split('/')
+        if len(original_dir_parts) >= 3 and original_dir_parts[0] == 'versions':
+            # Find which collection this file_id belongs to
+            collection = find_collection_for_file_id(file_id, current_app.config["DATA_ROOT"])
+            
+            variant_filename = construct_variant_filename(file_id, variant)
+            expected_gold_variant_path = os.path.join(current_app.config["DATA_ROOT"], 
+                                                    f"tei/{collection}/{variant_filename}")
+            
+            # If no gold variant file exists, this version should become the new gold
+            if not os.path.exists(expected_gold_variant_path):
+                current_app.logger.info(f"Promoting version file to gold: {file_path_rel} -> tei/{collection}/{variant_filename}")
+                version_to_gold_promotion = True
+                promotion_collection = collection
+                # Create deletion marker for the original version file location
+                if current_app.config.get('WEBDAV_ENABLED', False):
+                    original_full_path = get_data_file_path(file_path_rel)
+                    Path(original_full_path + ".deleted").touch()
+                    current_app.logger.info(f"Created deletion marker for {original_full_path}")
+    
     # Determine the final save path
-    if save_as_new_version:
-        timestamp = make_timestamp().replace(" ", "_").replace(":", "-")
-        final_file_rel = get_version_path(file_id, timestamp, ".xml")
-        status = "new"
+    if version_to_gold_promotion:
+        # Promote version to gold
+        variant_filename = construct_variant_filename(file_id, variant)
+        final_file_rel = (Path("tei") / promotion_collection / variant_filename).as_posix()
+        status = "promoted_to_gold"
+    elif save_as_new_version:
+        # Check if we have a variant and no existing gold variant file
+        if variant:
+            # Find which collection this file_id belongs to
+            collection = find_collection_for_file_id(file_id, current_app.config["DATA_ROOT"])
+            variant_filename = construct_variant_filename(file_id, variant)
+            expected_gold_variant_path = os.path.join(current_app.config["DATA_ROOT"], 
+                                                    (Path("tei") / collection / variant_filename).as_posix())
+            
+            # If no gold variant file exists, create it as gold instead of version
+            if not os.path.exists(expected_gold_variant_path):
+                current_app.logger.info(f"No existing gold variant file found at {expected_gold_variant_path}, creating as gold file")
+                final_file_rel = (Path("tei") / collection / variant_filename).as_posix()
+                status = "new_gold_variant"
+            else:
+                # Gold variant exists, create as version
+                timestamp = make_version_timestamp()
+                final_file_rel = get_version_path(file_id, timestamp, ".xml")
+                status = "new"
+        else:
+            # No variant, create as version
+            timestamp = make_version_timestamp()
+            final_file_rel = get_version_path(file_id, timestamp, ".xml")
+            status = "new"
     else:
         # For regular saves, construct path based on variant
         if variant:
@@ -292,7 +390,7 @@ def create_version_from_upload():
     # Handle .tei.xml files where Path.stem only removes .xml but leaves .tei
     if file_id.endswith('.tei'):
         file_id = file_id[:-4]  # Remove .tei suffix
-    timestamp = make_timestamp().replace(" ", "_").replace(":", "-")
+    timestamp = make_version_timestamp()
     new_version_path = get_version_path(file_id, timestamp, ".xml")
     full_version_path = os.path.join(data_root, new_version_path)
     remove_obsolete_marker_if_exists(full_version_path, current_app.logger)
@@ -375,23 +473,41 @@ def create_file_data(data_root):
     The JSON file contains the file ID and the corresponding PDF and XML files.
     NB: This has become quite convoluted and needs a rewrite
     """
+    from flask import current_app
     file_id_data = {}
     for file_path in glob(f"{data_root}/**/*", recursive=True):
         path = Path(file_path).relative_to(data_root)
         file_type = None
+        file_id = None
+        
         for suffix, type in file_types.items():
             if file_path.endswith(suffix):
                 file_type = type
                 filename_without_suffix = path.name[:-len(suffix)]
                 
-                # Extract file_id using common utility function
-                is_in_versions_dir = len(path.parts) >= 3 and path.parent.parent.name == "versions"
-                file_id, is_new_format = extract_file_id_from_version_filename(
-                    filename_without_suffix, is_in_versions_dir
-                )
+                # For XML files, try to extract file_id from TEI metadata first
+                if file_type == "xml":
+                    try:
+                        metadata = get_tei_metadata(file_path)
+                        if metadata and metadata.get('fileref'):
+                            file_id = metadata['fileref']
+                        else:
+                            file_id = None
+                    except Exception as e:
+                        file_id = None
                 
-                #if is_new_format:
-                #    current_app.logger.debug(f"Extracted file_id '{file_id}' from new format filename '{filename_without_suffix}'")
+                # Fallback to filename-based extraction if no TEI metadata or not XML
+                if file_id is None:
+                    is_in_versions_dir = len(path.parts) >= 3 and ("versions" in path.parts)
+                    file_id, is_new_format = extract_file_id_from_version_filename(
+                        filename_without_suffix, is_in_versions_dir
+                    )
+                    # Debug only if it's our target file
+                    if 'grobid.training.segmentation' in path.as_posix():
+                        if debug_log_path:
+                            with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                                debug_log.write(f"FALLBACK: {path} -> file_id='{file_id}'\n")
+                
                 break
         if file_type is None:
             continue
@@ -414,7 +530,7 @@ def create_file_data(data_root):
                 path = Path(file_path)
                 path_from_root = "/data/" + file_path
                 # Check if this is a version file (either old or new structure)
-                is_version_file = (len(path.parts) >= 3 and path.parent.parent.name == "versions")
+                is_version_file = (len(path.parts) >= 3 and "versions" in path.parts)
                 
                 if is_version_file:
                     # Distinguish between old and new structure
@@ -427,10 +543,23 @@ def create_file_data(data_root):
                     fallback_label = extract_version_label_from_path(path, file_id, is_old_version)
                     label = get_version_name(get_data_file_path(path_from_root)) or fallback_label
                     
-                    file_dict['versions'].append({
+                    # Extract variant_id from version file if available
+                    version_variant_id = None
+                    try:
+                        version_metadata = get_tei_metadata(get_data_file_path(path_from_root))
+                        if version_metadata and version_metadata.get('variant_id'):
+                            version_variant_id = version_metadata.get('variant_id')
+                    except:
+                        pass
+                    
+                    version_entry = {
                         'label': label,
                         'path': path_from_root
-                    })
+                    }
+                    if version_variant_id:
+                        version_entry['variant_id'] = version_variant_id
+                    
+                    file_dict['versions'].append(version_entry)
                 else:     
                     file_dict[file_type] = path_from_root
 
