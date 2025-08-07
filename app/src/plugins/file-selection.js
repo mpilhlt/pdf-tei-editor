@@ -68,6 +68,7 @@ async function install(state) {
   
   /**  @type {[SlSelect,function][]} */
   const handlers = [
+    [ui.toolbar.variant, onChangeVariantSelection],
     [ui.toolbar.pdf, onChangePdfSelection],
     [ui.toolbar.xml, onChangeXmlSelection],
     [ui.toolbar.diff, onChangeDiffSelection]
@@ -118,7 +119,8 @@ async function reload(state) {
  */
 async function reloadFileData(state) {
   logger.debug("Reloading file data")
-  let data = await client.getFileList(state.variant);
+  // Always get all files, don't filter on server side
+  let data = await client.getFileList();
   if (!data || data.length === 0) {
     dialog.error("No files found")
   }
@@ -130,6 +132,64 @@ async function reloadFileData(state) {
 }
 
 let stateCache
+
+/**
+ * Populates the variant selectbox with unique variants from fileData
+ * @param {ApplicationState} state
+ */
+async function populateVariantSelectbox(state) {
+  // Clear existing options
+  ui.toolbar.variant.innerHTML = "";
+
+  // Get unique variants from fileData
+  const variants = new Set();
+  fileData.forEach(file => {
+    // Add top-level variant_id
+    if (file.variant_id) {
+      variants.add(file.variant_id);
+    }
+    
+    // Add variant_id from versions
+    if (file.versions) {
+      file.versions.forEach(version => {
+        if (version.variant_id) {
+          variants.add(version.variant_id);
+        }
+      });
+    }
+  });
+
+  console.log("Found variants:", [...variants]); // Debug log
+
+  // Add "All" option
+  const allOption = new SlOption();
+  allOption.value = "";
+  allOption.textContent = "All";
+  // @ts-ignore
+  allOption.size = "small";
+  ui.toolbar.variant.appendChild(allOption);
+
+  // Add "None" option for files without variants
+  const noneOption = new SlOption();
+  noneOption.value = "none";
+  noneOption.textContent = "None";
+  // @ts-ignore
+  noneOption.size = "small";
+  ui.toolbar.variant.appendChild(noneOption);
+
+  // Add variant options
+  [...variants].sort().forEach(variant => {
+    const option = new SlOption();
+    option.value = variant;
+    option.textContent = variant;
+    // @ts-ignore
+    option.size = "small";
+    ui.toolbar.variant.appendChild(option);
+  });
+
+  // Set current selection
+  ui.toolbar.variant.value = state.variant || "";
+}
 
 /**
  * Populates the selectboxes for file name and version
@@ -148,19 +208,43 @@ async function populateSelectboxes(state) {
 
   logger.debug("Populating selectboxes")
 
-  if (fileData === null) {
+  // Only reload if fileData is completely empty (initial load)
+  if (fileData.length === 0) {
     await reloadFileData(state)
   }
+
+  // Populate variant selectbox first
+  await populateVariantSelectbox(state);
 
   // Clear existing options
   for (const name of ["pdf", "xml", "diff"]) {
     ui.toolbar[name].innerHTML = ""
   }
 
+  // Filter files by variant selection
+  let filteredFileData = fileData;
+  
+  if (variant === "none") {
+    // Show only files without variant_id at top level and no versions with variant_id
+    filteredFileData = fileData.filter(file => {
+      const hasTopLevelVariant = !!file.variant_id;
+      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
+      return !hasTopLevelVariant && !hasVersionVariant;
+    });
+  } else if (variant && variant !== "") {
+    // Show only files with the selected variant_id (either at top level or in versions)
+    filteredFileData = fileData.filter(file => {
+      const matchesTopLevel = file.variant_id === variant;
+      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
+      return matchesTopLevel || matchesVersion;
+    });
+  }
+  // If variant is "" (All), show all files
+
   // sort into groups by directory
   const dirname = (path) => path.split('/').slice(0, -1).join('/')
   const basename = (path) => path.split('/').pop()
-  const grouped_files = fileData.reduce((groups, file) => {
+  const grouped_files = filteredFileData.reduce((groups, file) => {
     const collection_name = basename(dirname(file.pdf));
     (groups[collection_name] = groups[collection_name] || []).push(file)
     return groups
@@ -197,7 +281,18 @@ async function populateSelectboxes(state) {
       if (file.pdf === state.pdfPath) {
         // populate the version and diff selectboxes depending on the selected file
         if (file.versions) {
-          file.versions.forEach((version) => {
+          // Filter versions based on variant selection
+          let versionsToShow = file.versions;
+          if (variant === "none") {
+            // Show only versions without variant_id
+            versionsToShow = file.versions.filter(version => !version.variant_id);
+          } else if (variant && variant !== "") {
+            // Show only versions with the selected variant_id
+            versionsToShow = file.versions.filter(version => version.variant_id === variant);
+          }
+          // If variant is "" (All), show all versions
+
+          versionsToShow.forEach((version) => {
             // xml
             let option = new SlOption()
             // @ts-ignore
@@ -293,4 +388,13 @@ async function onChangeDiffSelection(state) {
     services.removeMergeView(state)
   }
   updateState(state, { diffXmlPath: diff })
+}
+
+/**
+ * Called when the selection in the variant selectbox changes
+ * @param {ApplicationState} state
+ */
+async function onChangeVariantSelection(state) {
+  const variant = ui.toolbar.variant.value
+  updateState(state, { variant })
 }

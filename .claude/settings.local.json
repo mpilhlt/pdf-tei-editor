@@ -4,7 +4,8 @@
       "Bash(uv run:*)",
       "Bash(rm:*)",
       "Bash(node:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "WebFetch(domain:localhost)"
     ],
     "deny": []
   }
