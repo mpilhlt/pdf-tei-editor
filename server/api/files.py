@@ -256,21 +256,22 @@ def save():
     if version_to_gold_promotion:
         # Promote version to gold
         variant_filename = construct_variant_filename(file_id, variant)
-        final_file_rel = (Path("tei") / promotion_collection / variant_filename).as_posix()
+        final_file_rel = f"tei/{promotion_collection}/{variant_filename}"
         status = "promoted_to_gold"
     elif save_as_new_version:
         # Check if we have a variant and no existing gold variant file
         if variant:
-            # Find which collection this file_id belongs to
-            collection = find_collection_for_file_id(file_id, current_app.config["DATA_ROOT"])
+            # Construct expected gold variant path
+            file_path_safe = safe_file_path(file_path_rel)
+            original_dir = Path(file_path_safe).parent
             variant_filename = construct_variant_filename(file_id, variant)
             expected_gold_variant_path = os.path.join(current_app.config["DATA_ROOT"], 
-                                                    (Path("tei") / collection / variant_filename).as_posix())
+                                                    (original_dir / variant_filename).as_posix())
             
             # If no gold variant file exists, create it as gold instead of version
             if not os.path.exists(expected_gold_variant_path):
                 current_app.logger.info(f"No existing gold variant file found at {expected_gold_variant_path}, creating as gold file")
-                final_file_rel = (Path("tei") / collection / variant_filename).as_posix()
+                final_file_rel = (original_dir / variant_filename).as_posix()
                 status = "new_gold_variant"
             else:
                 # Gold variant exists, create as version

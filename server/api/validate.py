@@ -104,7 +104,7 @@ def validate_with_timeout(schema_file, validation_xml_bytes, namespace_type, tim
     try:
         # Run validation in subprocess with timeout
         result = subprocess.run([
-            'python3', script_path, schema_file, xml_path, namespace_type
+            'uv', 'run', 'python', script_path, schema_file, xml_path, namespace_type
         ], 
         capture_output=True, 
         text=True, 
