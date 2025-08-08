@@ -73,7 +73,7 @@ async function _get(key, defaultValue){
  * Retrieves a configuration value for a given key.
  * @async
  * @param {string} key The key of the configuration value to retrieve.
- * @param {string} [defaultValue] The value to return if the key does not exist
+ * @param {any} [defaultValue] The value to return if the key does not exist
  * @param {boolean} [updateFirst=false] - If true, forces an update from the server before getting the value.
  * @returns {Promise<any>} A promise that resolves with the configuration value.
  * @throws {TypeError} If the key does not exist.

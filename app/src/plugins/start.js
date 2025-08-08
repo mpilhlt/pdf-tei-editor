@@ -252,13 +252,19 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
       try {
 
+        let heartbeatResponse = null;
         if (!state.editorReadOnly) {
           logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-          await client.sendHeartbeat(filePath);
+          heartbeatResponse = await client.sendHeartbeat(filePath);
         }
 
-        // reload file list to see updates
-        await fileselection.reload(state)
+        // Check if file data cache is dirty and only reload if necessary
+        // For read-only editors, check cache status separately since no heartbeat was sent
+        const cacheStatus = heartbeatResponse?.cache_status || await client.getCacheStatus();
+        if (cacheStatus.dirty) {
+          logger.debug("File data cache is dirty, reloading file list with refresh=true");
+          await fileselection.reload(state, { refresh: true });
+        }
 
         // If we are here, the request was successful. Check if we were offline before.
         if (state.offline) {

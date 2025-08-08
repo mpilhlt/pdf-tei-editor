@@ -26,38 +26,6 @@ def make_version_timestamp():
     """Create a timestamp formatted for version filenames (safe for filesystem)"""
     return make_timestamp().replace(" ", "_").replace(":", "-")
 
-def find_collection_for_file_id(file_id, data_root):
-    """
-    Find which collection a file_id belongs to by scanning for existing files.
-    
-    Args:
-        file_id (str): The file ID to search for
-        data_root (str): The data root directory
-    
-    Returns:
-        str: Collection name if found, 'grobid' as default
-    """
-    from glob import glob
-    from pathlib import Path
-    
-    # Look for PDF files first (most reliable)
-    pdf_pattern = os.path.join(data_root, f"pdf/*/{file_id}.pdf")
-    pdf_matches = glob(pdf_pattern)
-    if pdf_matches:
-        # Extract collection from path: data/pdf/collection/file.pdf
-        collection = Path(pdf_matches[0]).parent.name
-        return collection
-    
-    # Fallback: look for existing TEI files  
-    tei_pattern = os.path.join(data_root, f"tei/*/{file_id}.tei.xml")
-    tei_matches = glob(tei_pattern)
-    if tei_matches:
-        # Extract collection from path: data/tei/collection/file.tei.xml
-        collection = Path(tei_matches[0]).parent.name
-        return collection
-    
-    # Default fallback
-    return 'grobid'
 
 def get_data_file_path(path):
     data_root = current_app.config["DATA_ROOT"]
@@ -189,69 +157,8 @@ def get_old_version_full_path(file_id, data_root, timestamp, file_extension=".xm
     return os.path.join(data_root, rel_path)
 
 
-def extract_file_id_from_version_filename(filename_without_suffix, is_in_versions_dir=False):
-    """
-    Extracts the file_id from a version filename.
-    
-    For new version structure files in the versions directory, attempts to extract
-    the file_id from timestamp-file_id format. For other files, returns the
-    filename as the file_id.
-    
-    Args:
-        filename_without_suffix (str): Filename without the file extension
-        is_in_versions_dir (bool): Whether this file is in a versions directory
-    
-    Returns:
-        tuple: (file_id, is_new_version_format)
-    """
-    if is_in_versions_dir:
-        # Try to match timestamp pattern: YYYY-MM-DD_HH-MM-SS-file-id
-        import re
-        timestamp_pattern = r'^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(.+)$'
-        match = re.match(timestamp_pattern, filename_without_suffix)
-        if match:
-            # Extract file_id from new format
-            file_id = match.group(2)
-            return file_id, True
-        else:
-            # Old format or non-timestamp filename
-            return filename_without_suffix, False
-    else:
-        # Standard case: filename is the file_id
-        return filename_without_suffix, False
 
 
-def extract_version_label_from_path(path, file_id, is_old_version):
-    """
-    Extracts a display label for a version file.
-    
-    Args:
-        path (pathlib.Path): Path object for the version file
-        file_id (str): The file identifier
-        is_old_version (bool): Whether this is old version structure
-    
-    Returns:
-        str: Display label for the version
-    """
-    if is_old_version:
-        # Old structure: versions/timestamp/file-id.xml
-        return path.parent.name.replace("_", " ")
-    else:
-        # New structure: versions/file-id/timestamp-file-id.xml
-        # Extract timestamp from filename: remove file_id and any extension suffix
-        filename_no_ext = path.stem
-        
-        # Handle .tei.xml files where path.stem only removes .xml but leaves .tei
-        if filename_no_ext.endswith('.tei'):
-            filename_no_ext = filename_no_ext[:-4]  # Remove .tei suffix
-        
-        expected_suffix = f"-{file_id}"
-        if filename_no_ext.endswith(expected_suffix):
-            timestamp_part = filename_no_ext[:-len(expected_suffix)]
-        else:
-            # Fallback: just use the filename without extension
-            timestamp_part = filename_no_ext
-        return timestamp_part.replace("_", " ")
 
 
 def migrate_old_version_files(file_id, data_root, logger, webdav_enabled=False):
@@ -344,19 +251,3 @@ def migrate_old_version_files(file_id, data_root, logger, webdav_enabled=False):
     return migrated_count
 
 
-def construct_variant_filename(file_id, variant=None, extension=".tei.xml"):
-    """
-    Construct a filename with optional variant suffix.
-    
-    Args:
-        file_id (str): The base file identifier
-        variant (str, optional): The variant identifier
-        extension (str): File extension
-        
-    Returns:
-        str: Constructed filename (file-id.variant-id.tei.xml or file-id.tei.xml)
-    """
-    if variant:
-        return f"{file_id}.{variant}{extension}"
-    else:
-        return f"{file_id}{extension}"

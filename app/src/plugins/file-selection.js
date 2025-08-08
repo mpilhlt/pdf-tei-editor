@@ -107,20 +107,24 @@ async function update(state) {
 /**
  * Reloads data and then updates based on the application state
  * @param {ApplicationState} state
+ * @param {Object} options - Options for reloading
+ * @param {boolean} [options.refresh] - Whether to force refresh of server cache
  */
-async function reload(state) {
-  await reloadFileData(state);
+async function reload(state, options = {}) {
+  await reloadFileData(state, options);
   await populateSelectboxes(state);
 }
 
 /**
  * Reloads the file data from the server
  * @param {ApplicationState} state
+ * @param {Object} options - Options for reloading
+ * @param {boolean} [options.refresh] - Whether to force refresh of server cache
  */
-async function reloadFileData(state) {
-  logger.debug("Reloading file data")
+async function reloadFileData(state, options = {}) {
+  logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""))
   // Always get all files, don't filter on server side
-  let data = await client.getFileList();
+  let data = await client.getFileList(null, options.refresh);
   if (!data || data.length === 0) {
     dialog.error("No files found")
   }
@@ -132,6 +136,8 @@ async function reloadFileData(state) {
 }
 
 let stateCache
+let variants
+let collections
 
 /**
  * Populates the variant selectbox with unique variants from fileData
@@ -141,9 +147,17 @@ async function populateVariantSelectbox(state) {
   // Clear existing options
   ui.toolbar.variant.innerHTML = "";
 
-  // Get unique variants from fileData
-  const variants = new Set();
+  // Get unique variants from fileData and store in closure variable
+  variants = new Set();
   fileData.forEach(file => {
+    // Add variant_id from gold entries
+    if (file.gold) {
+      file.gold.forEach(gold => {
+        if (gold.variant_id) {
+          variants.add(gold.variant_id);
+        }
+      });
+    }
     // Add variant_id from versions
     if (file.versions) {
       file.versions.forEach(version => {
@@ -218,33 +232,31 @@ async function populateSelectboxes(state) {
   let filteredFileData = fileData;
   
   if (variant === "none") {
-    // Show only files without variant_id at top level and no versions with variant_id
+    // Show only files without variant_id in gold or versions
     filteredFileData = fileData.filter(file => {
-      const hasTopLevelVariant = !!file.variant_id;
+      const hasGoldVariant = file.gold && file.gold.some(g => !!g.variant_id);
       const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
-      return !hasTopLevelVariant && !hasVersionVariant;
+      return !hasGoldVariant && !hasVersionVariant;
     });
   } else if (variant && variant !== "") {
-    // Show only files with the selected variant_id (either at top level or in versions)
+    // Show only files with the selected variant_id (in gold or versions)
     filteredFileData = fileData.filter(file => {
-      const matchesTopLevel = file.variant_id === variant;
+      const matchesGold = file.gold && file.gold.some(g => g.variant_id === variant);
       const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
-      return matchesTopLevel || matchesVersion;
+      return matchesGold || matchesVersion;
     });
   }
   // If variant is "" (All), show all files
 
-  // sort into groups by directory
-  const dirname = (path) => path.split('/').slice(0, -1).join('/')
-  const basename = (path) => path.split('/').pop()
+  // sort into groups by collection (now directly from server data)
   const grouped_files = filteredFileData.reduce((groups, file) => {
-    const collection_name = basename(dirname(file.pdf));
+    const collection_name = file.collection;
     (groups[collection_name] = groups[collection_name] || []).push(file)
     return groups
   }, {})
 
-  // save the collections, this tight coupling is not ideal
-  const collections = Object.keys(grouped_files).sort()
+  // save the collections in closure variable
+  collections = Object.keys(grouped_files).sort()
   ui.toolbar.pdf.dataset.collections = JSON.stringify(collections)
 
   // get items to be selected from app state or use first element
@@ -284,25 +296,74 @@ async function populateSelectboxes(state) {
             versionsToShow = file.versions.filter(version => version.variant_id === variant);
           }
           // If variant is "" (All), show all versions
+          
+          // Also add gold entries if they match the variant filter
+          let goldToShow = [];
+          if (file.gold) {
+            if (variant === "none") {
+              goldToShow = file.gold.filter(gold => !gold.variant_id);
+            } else if (variant && variant !== "") {
+              goldToShow = file.gold.filter(gold => gold.variant_id === variant);
+            } else {
+              goldToShow = file.gold;
+            }
+          }
 
-          versionsToShow.forEach((version) => {
-            // xml
-            let option = new SlOption()
-            // @ts-ignore
-            option.size = "small"
-            option.value = version.path;
-            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-            //option.disabled = version.is_locked;
-            ui.toolbar.xml.appendChild(option);
-            // diff 
-            option = new SlOption()
-            // @ts-ignore
-            option.size = "small"
-            option.value = version.path;
-            option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-            option.disabled = version.is_locked;
-            ui.toolbar.diff.appendChild(option)
-          })
+          // Add gold entries with visual grouping
+          if (goldToShow.length > 0) {
+            // Add "Gold" group headers for both selectboxes
+            await createHtmlElements(`<small>Gold</small>`, ui.toolbar.xml);
+            await createHtmlElements(`<small>Gold</small>`, ui.toolbar.diff);
+            
+            goldToShow.forEach((gold) => {
+              // xml
+              let option = new SlOption()
+              // @ts-ignore
+              option.size = "small"
+              option.value = gold.path;
+              option.textContent = gold.label;
+              ui.toolbar.xml.appendChild(option);
+              // diff 
+              option = new SlOption()
+              // @ts-ignore
+              option.size = "small"
+              option.value = gold.path;
+              option.textContent = gold.label;
+              ui.toolbar.diff.appendChild(option)
+            });
+            
+            // Add dividers after gold entries if there are versions to show
+            if (versionsToShow.length > 0) {
+              ui.toolbar.xml.appendChild(new SlDivider());
+              ui.toolbar.diff.appendChild(new SlDivider());
+            }
+          }
+
+          // Add versions with visual grouping
+          if (versionsToShow.length > 0) {
+            // Add "Versions" group headers for both selectboxes
+            await createHtmlElements(`<small>Versions</small>`, ui.toolbar.xml);
+            await createHtmlElements(`<small>Versions</small>`, ui.toolbar.diff);
+            
+            versionsToShow.forEach((version) => {
+              // xml
+              let option = new SlOption()
+              // @ts-ignore
+              option.size = "small"
+              option.value = version.path;
+              option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+              //option.disabled = version.is_locked;
+              ui.toolbar.xml.appendChild(option);
+              // diff 
+              option = new SlOption()
+              // @ts-ignore
+              option.size = "small"
+              option.value = version.path;
+              option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+              option.disabled = version.is_locked;
+              ui.toolbar.diff.appendChild(option)
+            });
+          }
         }
       }
     }

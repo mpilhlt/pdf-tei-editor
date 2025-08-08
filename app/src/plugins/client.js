@@ -117,6 +117,7 @@ const api = {
   acquireLock,
   releaseLock,
   getAllLocks,
+  getCacheStatus,
   login,
   logout,
   status
@@ -277,11 +278,14 @@ async function status() {
  * Gets a list of pdf/tei files from the server, including their relative paths
  *
  * @param {string|null} variant - Optional variant filter to apply
+ * @param {boolean} refresh - Whether to force refresh of server cache
  * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
  *  objects with keys "id", "pdf", and "tei".
  */
-async function getFileList(variant = null) {
-  const params = variant !== null ? { variant } : {};
+async function getFileList(variant = null, refresh = false) {
+  const params = {};
+  if (variant !== null) params.variant = variant;
+  if (refresh) params.refresh = 'true';
   const queryString = new URLSearchParams(params).toString();
   const url = '/files/list' + (queryString ? '?' + queryString : '');
   return await callApi(url, 'GET');
@@ -450,7 +454,7 @@ async function setConfigValue(key, value) {
 /**
  * Sends a heartbeat to the server to keep the file lock alive.
  * @param {string} filePath The file path to send the heartbeat for
- * @returns {Promise<{status:string}>} The response from the server 
+ * @returns {Promise<{status:string, cache_status:{dirty:boolean, last_modified:number|null, last_checked:number|null}}>} The response from the server 
  * @throws {Error} If the file path is not provided or if the heartbeat fails
  */
 async function sendHeartbeat(filePath) {
@@ -495,6 +499,14 @@ async function releaseLock(filePath) {
  */
 async function getAllLocks() {
   return await callApi('/files/locks', 'GET');
+}
+
+/**
+ * Gets the current file data cache status from the server.
+ * @returns {Promise<{dirty: boolean, last_modified: number|null, last_checked: number|null}>} Cache status object
+ */
+async function getCacheStatus() {
+  return await callApi('/files/cache_status', 'GET');
 }
 
 /**

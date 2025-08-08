@@ -3,16 +3,19 @@ import os
 import re
 from lxml import etree
 from pathlib import Path
-from glob import glob
 
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
     ApiError, make_timestamp, make_version_timestamp, get_data_file_path, 
     safe_file_path, remove_obsolete_marker_if_exists, get_session_id,
-    get_version_path, find_collection_for_file_id,
-    extract_file_id_from_version_filename, extract_version_label_from_path,
-    migrate_old_version_files, construct_variant_filename
+    get_version_path, migrate_old_version_files
 )
+from server.lib.file_data import (
+    get_file_data, apply_variant_filtering,
+    find_collection_for_file_id, extract_file_id_from_version_filename,
+    extract_version_label_from_path, construct_variant_filename
+)
+from server.lib.cache_manager import get_cache_status, mark_cache_dirty
 from server.lib.locking import (
     acquire_lock, release_lock, get_all_active_locks, check_lock
 )
@@ -22,129 +25,40 @@ from server.api.config import read_config
 
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
-file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
-
 @bp.route("/list", methods=["GET"])
 @handle_api_errors
 #@session_required
 def file_list():
-    data_root = current_app.config["DATA_ROOT"]
-    active_locks = get_all_active_locks()
-    webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
-    session_id = get_session_id(request)
-    
-    # Get variant filter from query parameters
+    # Get query parameters
     variant_filter = request.args.get('variant', None)
-
-    files_data = create_file_data(data_root)
-    for idx, data in enumerate(files_data):
+    force_refresh = request.args.get('refresh') == 'true'
+    
+    # Get file data with metadata already populated
+    files_data = get_file_data(force_refresh=force_refresh)
+    
+    # Add lock information if WebDAV is enabled
+    webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
+    if webdav_enabled:
+        active_locks = get_all_active_locks()
+        session_id = get_session_id(request)
         
-        if webdav_enabled:
-            # Add lock information to each file version
+        for data in files_data:
             if "versions" in data:
                 for version in data["versions"]:
                     version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != session_id
-
-        file_path = data.get("xml", None)
-        if file_path is not None:
-            metadata = get_tei_metadata(get_data_file_path(file_path))
-            if metadata is None:
-                metadata = {}
-            # add label to metadata
-            author = metadata.get('author', '')
-            title = metadata.get('title', '')
-            date = metadata.get('date', '')
-            doi = metadata.get('doi', '')
-            fileref = metadata.get('fileref', '')
-            variant_id = metadata.get('variant_id', None)
-            
-            if author and title and date:
-                label = f"{metadata.get('author', '')}, {metadata.get('title', '')[:25]}... ({metadata.get('date','')})"
-            elif doi:
-                label = doi
-            elif fileref:
-                label = fileref
-            else:
-                label = data['id']
-                
-            metadata['label'] = label
-            if metadata:
-                files_data[idx].update(metadata)
-            
-            # Add variant information to file data for filtering
-            # If main file has no variant, check version files for variants
-            variant_xml_path = None
-            if not variant_id and 'versions' in data:
-                for version in data['versions']:
-                    if version.get('path'):
-                        try:
-                            version_metadata = get_tei_metadata(get_data_file_path(version['path']))
-                            if version_metadata and version_metadata.get('variant_id'):
-                                variant_id = version_metadata.get('variant_id')
-                                variant_xml_path = version['path']  # Store the path to the variant file
-                                break  # Use first variant found
-                        except:
-                            pass
-            
-            if variant_id:
-                files_data[idx]['variant_id'] = variant_id
-                # If we found the variant in a version file, use that as the main xml
-                if variant_xml_path:
-                    files_data[idx]['xml'] = variant_xml_path
-
+    
     # Apply variant filtering if specified
     if variant_filter is not None:
-        if variant_filter == "":
-            # Empty string means show files with no variant (gold files)
-            filtered_data = [f for f in files_data if f.get('variant_id') is None]
-        else:
-            # Show files with matching variant_id (check both main file and versions)
-            filtered_data = []
-            for f in files_data:
-                # Check main file variant
-                if f.get('variant_id') == variant_filter:
-                    filtered_data.append(f)
-                # Also check if any version has this variant
-                elif 'versions' in f:
-                    has_variant_in_versions = any(v.get('variant_id') == variant_filter for v in f['versions'])
-                    if has_variant_in_versions:
-                        filtered_data.append(f)
-        files_data = filtered_data
-        
-        # Also filter versions array to only show relevant versions
-        for file_data in files_data:
-            if 'versions' in file_data:
-                if variant_filter == "":
-                    # For gold files, show versions with no variant or gold versions
-                    filtered_versions = [v for v in file_data['versions'] 
-                                       if not v.get('variant_id') or v.get('label') == 'Gold']
-                else:
-                    # For variant files, show matching variant versions and mark current xml as Gold
-                    filtered_versions = []
-                    current_xml_path = file_data.get('xml')
-                    gold_added = False
-                    
-                    for v in file_data['versions']:
-                        if v.get('variant_id') == variant_filter:
-                            # Check if this is the current xml file (should be Gold)
-                            if v.get('path') == current_xml_path and not gold_added:
-                                gold_version = v.copy()
-                                gold_version['label'] = 'Gold'
-                                filtered_versions.insert(0, gold_version)  # Put Gold first
-                                gold_added = True
-                            else:
-                                # Add other matching variant versions
-                                filtered_versions.append(v)
-                        elif v.get('path') == current_xml_path and not gold_added:
-                            # Handle case where current xml doesn't have variant_id but is the main file
-                            gold_version = v.copy()
-                            gold_version['label'] = 'Gold'
-                            filtered_versions.insert(0, gold_version)  # Put Gold first
-                            gold_added = True
-                    
-                file_data['versions'] = filtered_versions
+        files_data = apply_variant_filtering(files_data, variant_filter)
 
     return jsonify(files_data)
+
+
+@bp.route("/cache_status", methods=["GET"])
+@handle_api_errors
+def cache_status():
+    """Get the current file data cache status."""
+    return jsonify(get_cache_status())
 
 
 @bp.route("/save", methods=["POST"])
@@ -327,6 +241,9 @@ def save():
     with open(full_save_path, "w", encoding="utf-8") as f:
         f.write(xml_string)
     current_app.logger.info(f"Saved file to {full_save_path}")
+    
+    # Mark cache as dirty since we modified the filesystem
+    mark_cache_dirty()
 
     # Migration: For regular saves, migrate any existing old version files for this file_id
     if not save_as_new_version:
@@ -369,6 +286,9 @@ def delete():
                 Path(file_path + ".deleted").touch()
         else:
             raise ApiError(f"File {file_path} does not exist")
+    
+    # Mark cache as dirty since we deleted files
+    mark_cache_dirty()
     return jsonify({"result": "ok"})
 
 
@@ -415,6 +335,9 @@ def create_version_from_upload():
         f_out.write(xml_content)
 
     os.remove(temp_filepath)
+    
+    # Mark cache as dirty since we created a new version file
+    mark_cache_dirty()
 
     # No migration needed for new versions - we're creating a new file
     return jsonify({"path": "/data/" + new_version_path})
@@ -436,6 +359,9 @@ def move_files():
 
     new_pdf_path = _move_file(pdf_path_str, "pdf", destination_collection)
     new_xml_path = _move_file(xml_path_str, "tei", destination_collection)
+
+    # Mark cache as dirty since we moved files
+    mark_cache_dirty()
 
     return jsonify({
         "new_pdf_path": new_pdf_path,
@@ -472,261 +398,7 @@ def _move_file(file_path_str, file_type, destination_collection):
 
     return f"/data/{file_type}/{destination_collection}/{original_path.name}"
 
-# helper functions
-
-def create_file_data(data_root):
-    """
-    Creates a list of files in the data directory which have "pdf" and "tei.xml"
-    extensions. Each file is identified by its ID, which is in the TEI header of derived
-    from the filename without the suffix.
-    Files in the "data/versions" directory are treated as  (temporary) versions created with 
-    prompt modifications or different models 
-    """
-    from flask import current_app
-    file_id_data = {}
-    for file_path in glob(f"{data_root}/**/*", recursive=True):
-        path = Path(file_path).relative_to(data_root)
-        file_type = None
-        file_id = None
-        
-        for suffix, type in file_types.items():
-            if file_path.endswith(suffix):
-                file_type = type
-                filename_without_suffix = path.name[:-len(suffix)]
-                
-                # For XML files, try to extract file_id from TEI metadata first
-                if file_type == "xml":
-                    try:
-                        metadata = get_tei_metadata(file_path)
-                        if metadata and metadata.get('fileref'):
-                            file_id = metadata['fileref']
-                        else:
-                            file_id = None
-                    except Exception as e:
-                        file_id = None
-                
-                # Fallback to filename-based extraction if no TEI metadata or not XML
-                if file_id is None:
-                    is_in_versions_dir = len(path.parts) >= 3 and ("versions" in path.parts)
-                    file_id, is_new_format = extract_file_id_from_version_filename(
-                        filename_without_suffix, is_in_versions_dir
-                    )
-                
-                break
-        if file_type is None:
-            continue
-        
-        # create entry in id-type-data map
-        if file_id not in file_id_data:
-            file_id_data[file_id] = {}
-        if file_type not in file_id_data[file_id]:
-            file_id_data[file_id][file_type] = []
-        file_id_data[file_id][file_type].append(path.as_posix())
-
-    # create the files list
-    file_list = []
-    # iterate over file ids
-    for file_id, file_type_data in file_id_data.items():
-        file_dict = {"id": file_id, "versions":[]}
-        # iterate over file types
-        for file_type, files in file_type_data.items():
-            for file_path in files:
-                path = Path(file_path)
-                path_from_root = "/data/" + file_path
-                # Check if this is a version file (either old or new structure)
-                is_version_file = (len(path.parts) >= 3 and "versions" in path.parts)
-                
-                if is_version_file:
-                    # Distinguish between old and new structure
-                    is_new_version = path.parent.name == file_id  # New: versions/file-id/timestamp-file-id.xml
-                    is_old_version = not is_new_version            # Old: versions/timestamp/file-id.xml
-                    
-                    #current_app.logger.debug(f"Processing version file: {file_path}, file_id={file_id}, parent={path.parent.name}, is_new={is_new_version}")
-                    
-                    # Extract version label using common utility function
-                    fallback_label = extract_version_label_from_path(path, file_id, is_old_version)
-                    base_label = get_version_name(get_data_file_path(path_from_root)) or fallback_label
-                    
-                    # Extract metadata from version file if available
-                    version_entry = {
-                        'label': base_label,  # Will be updated below if timestamp is available
-                        'path': path_from_root
-                    }
-                    
-                    try:
-                        version_metadata = get_tei_metadata(get_data_file_path(path_from_root))
-                        if version_metadata:
-                            # Add all available change attributes and variant_id if present
-                            for attr_name in ['variant_id', 'last_update', 'last_updated_by', 'last_status']:
-                                if version_metadata.get(attr_name):
-                                    version_entry[attr_name] = version_metadata.get(attr_name)
-                            
-                            # Format timestamp and add to label if available
-                            if version_metadata.get('last_update'):
-                                from datetime import datetime
-                                try:
-                                    # Parse ISO timestamp (handles both full ISO and date-only formats)
-                                    timestamp_str = version_metadata['last_update']
-                                    if 'T' in timestamp_str:
-                                        # Full ISO timestamp: 2025-08-07T16:22:51.845219Z
-                                        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                                    else:
-                                        # Date only: 2025-07-12
-                                        dt = datetime.fromisoformat(timestamp_str)
-                                    
-                                    # Format timestamp, omit time if it's 00:00:00
-                                    if dt.time() == dt.time().replace(hour=0, minute=0, second=0, microsecond=0):
-                                        formatted_timestamp = dt.strftime('%Y-%m-%d')
-                                    else:
-                                        formatted_timestamp = dt.strftime('%Y-%m-%d %H:%M:%S')
-                                    version_entry['label'] = f"{base_label} ({formatted_timestamp})"
-                                except (ValueError, TypeError):
-                                    # Keep original label if timestamp parsing fails
-                                    pass
-                    except:
-                        pass
-                    
-                    file_dict['versions'].append(version_entry)
-                else:     
-                    file_dict[file_type] = path_from_root
-
-        # Sort versions by last_update (older ones first), handle None values
-        file_dict['versions'] = sorted(file_dict['versions'], key=lambda v: v.get('last_update') or '')
-        
-        # add original as first version if it exists
-        if 'xml' in file_dict:
-            gold_entry = {
-                'path': file_dict['xml'],
-                'label': "Gold"
-            }
-            # Extract change attributes from the gold XML file
-            try:
-                gold_metadata = get_tei_metadata(get_data_file_path(file_dict['xml']))
-                if gold_metadata:
-                    # Add all available change attributes
-                    for attr_name in ['last_update', 'last_updated_by', 'last_status']:
-                        if gold_metadata.get(attr_name):
-                            gold_entry[attr_name] = gold_metadata.get(attr_name)
-                    
-                    # Format timestamp and add to Gold label if available
-                    if gold_metadata.get('last_update'):
-                        from datetime import datetime
-                        try:
-                            # Parse ISO timestamp (handles both full ISO and date-only formats)
-                            timestamp_str = gold_metadata['last_update']
-                            if 'T' in timestamp_str:
-                                # Full ISO timestamp: 2025-08-07T16:22:51.845219Z
-                                dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            else:
-                                # Date only: 2025-07-12
-                                dt = datetime.fromisoformat(timestamp_str)
-                            
-                            # Format timestamp, omit time if it's 00:00:00
-                            if dt.time() == dt.time().replace(hour=0, minute=0, second=0, microsecond=0):
-                                formatted_timestamp = dt.strftime('%Y-%m-%d')
-                            else:
-                                formatted_timestamp = dt.strftime('%Y-%m-%d %H:%M:%S')
-                            gold_entry['label'] = f"Gold ({formatted_timestamp})"
-                        except (ValueError, TypeError):
-                            # Keep original label if timestamp parsing fails
-                            pass
-            except:
-                pass
-            
-            # Remove any version with the same path as Gold to avoid duplication
-            gold_path = file_dict['xml']
-            file_dict['versions'] = [v for v in file_dict['versions'] if v.get('path') != gold_path]
-            
-            # Insert Gold as first version
-            file_dict['versions'].insert(0, gold_entry)
-        
-        # only add if we have both pdf and xml
-        if 'pdf' in file_dict and 'xml' in file_dict:
-            file_list.append(file_dict)
-
-    # sort by id
-    file_list = sorted(file_list, key=lambda file_dict: file_dict.get("id"))
-    return file_list
-
-
-def get_tei_metadata(file_path):
-    """
-    Retrieves TEI metadata from the specified file.
-    """
-    try:
-        tree = etree.parse(file_path)
-    except etree.XMLSyntaxError as e:
-        current_app.logger.error(f"XML Syntax Error in {file_path}: {e}")
-        return None
-    root = tree.getroot()
-    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-    author = root.find("./tei:teiHeader//tei:author//tei:surname", ns)
-    title = root.find("./tei:teiHeader//tei:title", ns)
-    date = root.find('./tei:teiHeader//tei:date[@type="publication"]', ns)
-    
-    # Extract specific idno types
-    doi = root.find('./tei:teiHeader//tei:idno[@type="DOI"]', ns)
-    fileref = root.find('./tei:teiHeader//tei:idno[@type="fileref"]', ns)
-    
-    # Extract variant-id from extractor application metadata
-    variant_id = None
-    extractor_apps = root.xpath('.//tei:application[@type="extractor"]', namespaces=ns)
-    for app in extractor_apps:
-        variant_label = app.find('./tei:label[@type="variant-id"]', ns)
-        if variant_label is not None:
-            variant_id = variant_label.text
-            break  # Use the first variant-id found
-    
-    # Extract change attributes from revisionDesc/change elements
-    change_attributes = {
-        'last_update': None,
-        'last_updated_by': None,
-        'last_status': None
-    }
-    change_attr_mapping = {
-        'last_update': 'when',
-        'last_updated_by': 'who',
-        'last_status': 'status'
-    }
-    
-    change_elements = root.xpath('.//tei:revisionDesc/tei:change[@when]', namespaces=ns)
-    if change_elements:
-        # Get the most recent change (last in document order)
-        last_change = change_elements[-1]
-        for result_key, attr_name in change_attr_mapping.items():
-            change_attributes[result_key] = last_change.get(attr_name)
-    
-    return {
-        "author": author.text if author is not None else "",
-        "title": title.text if title is not None else "",
-        "date": date.text if date is not None else "",
-        "doi": doi.text if doi is not None else "",
-        "fileref": fileref.text if fileref is not None else "",
-        "variant_id": variant_id,  # Backward compatible - None if not found
-        **change_attributes  # Include all change attributes
-    }
-
-
-def get_version_name(file_path):
-    """
-    Retrieves version title from the specified file, encoded in teiHeader/fileDesc/editionStmt/edition/title
-    """
-    try:
-        tree = etree.parse(file_path)
-    except etree.XMLSyntaxError as e:
-        current_app.logger.warning(f"XML Syntax Error in {file_path}: {str(e)}")
-        return ""
-        
-    root = tree.getroot()
-    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-    
-    edition_stmts = root.xpath("//tei:editionStmt", namespaces=ns)
-    if edition_stmts:
-        version_title_element = edition_stmts[-1].xpath("./tei:edition/tei:title", namespaces=ns)
-        if version_title_element:
-            return version_title_element[0].text
-   
-    return None
+# helper functions - moved to server.lib.file_data
 
 
 @bp.route("/check_lock", methods=["POST"])
@@ -781,6 +453,7 @@ def heartbeat():
     """
     Refreshes the lock for a given file path.
     This acts as a heartbeat to prevent a lock from becoming stale.
+    Also returns the current cache status to enable efficient file data refresh.
     """
     data = request.get_json()
     file_path = data.get("file_path")
@@ -790,7 +463,12 @@ def heartbeat():
     # The existing acquire_lock function already handles refreshing
     # a lock if it's owned by the same session.
     if acquire_lock(file_path, session_id):
-        return jsonify({"status": "lock_refreshed"})
+        # Include cache status in heartbeat response
+        cache_status = get_cache_status()
+        return jsonify({
+            "status": "lock_refreshed",
+            "cache_status": cache_status
+        })
     else:
         # This would happen if the lock was lost or taken by another user.
         raise ApiError("Failed to refresh lock. It may have been acquired by another session.", status_code=409)

@@ -8,6 +8,7 @@ from server.lib.server_utils import (
     ApiError, make_timestamp, remove_obsolete_marker_if_exists,
     get_version_full_path
 )
+from server.lib.cache_manager import mark_cache_dirty
 from server.extractors.discovery import list_extractors, create_extractor
 from server.lib.debug_utils import log_extraction_response
 
@@ -123,6 +124,8 @@ def _process_pdf_file(pdf_filename: str, options: dict) -> str:
     if upload_pdf_path.exists():
         # rename and move PDF
         move(upload_pdf_path, target_pdf_path)
+        # Mark cache as dirty since we added a new PDF file
+        mark_cache_dirty()
     elif not target_pdf_path.exists():
         raise ApiError(f"File {pdf_filename} has not been uploaded.")
     
@@ -157,6 +160,9 @@ def _save_extraction_result(pdf_filename: str, tei_xml: str, options: dict) -> d
     
     with open(final_tei_path, "w", encoding="utf-8") as f:
         f.write(tei_xml)
+    
+    # Mark cache as dirty since we created/modified files
+    mark_cache_dirty()
     
     # No migration needed - extraction creates new files or versions
     
