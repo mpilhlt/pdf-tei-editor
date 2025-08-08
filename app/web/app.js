@@ -477,7 +477,7 @@ async function set(key, value) {
  */
 
 // this needs to be made configurable
-const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'sessionId', 'variant'];
+const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'variant'];
 
 const api$b = {
   updateUrlHashfromState,
@@ -43623,11 +43623,6 @@ async function populateVariantSelectbox(state) {
   // Get unique variants from fileData
   const variants = new Set();
   fileData.forEach(file => {
-    // Add top-level variant_id
-    if (file.variant_id) {
-      variants.add(file.variant_id);
-    }
-    
     // Add variant_id from versions
     if (file.versions) {
       file.versions.forEach(version => {
@@ -43637,8 +43632,6 @@ async function populateVariantSelectbox(state) {
       });
     }
   });
-
-  console.log("Found variants:", [...variants]); // Debug log
 
   // Add "All" option
   const allOption = new option_default();
@@ -55179,6 +55172,9 @@ async function start(state) {
   // async operations
   try {
 
+    // First, try to restore session from URL hash if present
+    await api.restoreSessionFromUrl(state);
+
     // Authenticate user, otherwise we don't proceed further
     const userData = await api.ensureAuthenticated();
     api$d.info(`${userData.fullname} has logged in.`);
@@ -55434,62 +55430,6 @@ async function searchNodeContents() {
   }
 }
 
-const byteToHex = [];
-for (let i = 0; i < 256; ++i) {
-    byteToHex.push((i + 0x100).toString(16).slice(1));
-}
-function unsafeStringify(arr, offset = 0) {
-    return (byteToHex[arr[offset + 0]] +
-        byteToHex[arr[offset + 1]] +
-        byteToHex[arr[offset + 2]] +
-        byteToHex[arr[offset + 3]] +
-        '-' +
-        byteToHex[arr[offset + 4]] +
-        byteToHex[arr[offset + 5]] +
-        '-' +
-        byteToHex[arr[offset + 6]] +
-        byteToHex[arr[offset + 7]] +
-        '-' +
-        byteToHex[arr[offset + 8]] +
-        byteToHex[arr[offset + 9]] +
-        '-' +
-        byteToHex[arr[offset + 10]] +
-        byteToHex[arr[offset + 11]] +
-        byteToHex[arr[offset + 12]] +
-        byteToHex[arr[offset + 13]] +
-        byteToHex[arr[offset + 14]] +
-        byteToHex[arr[offset + 15]]).toLowerCase();
-}
-
-let getRandomValues;
-const rnds8 = new Uint8Array(16);
-function rng() {
-    if (!getRandomValues) {
-        if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
-            throw new Error('crypto.getRandomValues() not supported. See https://github.com/uuidjs/uuid#getrandomvalues-not-supported');
-        }
-        getRandomValues = crypto.getRandomValues.bind(crypto);
-    }
-    return getRandomValues(rnds8);
-}
-
-const randomUUID = typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID.bind(crypto);
-var native = { randomUUID };
-
-function v4(options, buf, offset) {
-    if (native.randomUUID && true && !options) {
-        return native.randomUUID();
-    }
-    options = options || {};
-    const rnds = options.random ?? options.rng?.() ?? rng();
-    if (rnds.length < 16) {
-        throw new Error('Random bytes length must be >= 16');
-    }
-    rnds[6] = (rnds[6] & 0x0f) | 0x40;
-    rnds[8] = (rnds[8] & 0x3f) | 0x80;
-    return unsafeStringify(rnds);
-}
-
 /**
  * Plugin that takes care of user authentication
  */
@@ -55516,7 +55456,7 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0];
  * Public API for the authentication plugin
  */
 const api = {
-  updateStateSessionId,
+  restoreSessionFromUrl,
   ensureAuthenticated,
   getUser,
   logout
@@ -55562,6 +55502,13 @@ async function install(state) {
   ui$1.toolbar.logoutButton.addEventListener("click", logout);
   // prevent dialog from closing
   ui$1.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
+  
+  // Add beforeunload handler to save session to URL hash
+  window.addEventListener('beforeunload', () => {
+    if (state.sessionId) {
+      UrlHash.set('sessionId', state.sessionId);
+    }
+  });
 }
 
 /**
@@ -55576,15 +55523,18 @@ async function update(state) {
 }
 
 /**
- * Ensures that a session id exists in the state and generates a random one if not. 
+ * Restores session ID from URL hash if present, then clears it from URL.
  * @param {ApplicationState} state 
- * @returns {Promise<string>} the session id 
+ * @returns {Promise<void>}
  */
-async function updateStateSessionId(state) {
-  const sessionId = state.sessionId || v4();
-  api$d.info(`Session id is ${sessionId}`);
-  await updateState(state, {sessionId});
-  return sessionId
+async function restoreSessionFromUrl(state) {
+  const sessionId = UrlHash.get('sessionId');
+  if (sessionId) {
+    api$d.info(`Restoring session from URL: ${sessionId}`);
+    await updateState(state, {sessionId});
+    // Immediately remove from URL for security
+    UrlHash.remove('sessionId');
+  }
 }
 
 /**
@@ -55625,8 +55575,10 @@ function _showLoginDialog() {
       dialog.message.textContent = '';
       const passwd_hash = await _hashPassword(password);
       try {
-        const userData = await api$7.login(username, passwd_hash);
-        await updateState(state, { user: userData });
+        const response = await api$7.login(username, passwd_hash);
+        // Server now returns sessionId in response
+        const { sessionId, ...userData } = response;
+        await updateState(state, { user: userData, sessionId });
         dialog.hide();
         dialog.username.value = "";
         dialog.password.value = "";
@@ -55648,7 +55600,8 @@ async function logout() {
   try {
     await api$7.logout();
     await updateState(state, { user: null, sessionId: null });
-    await updateStateSessionId(state);
+    // Remove session from URL hash if present
+    UrlHash.remove('sessionId');
     await _showLoginDialog();
   } catch (error) {
     api$d.error('Logout failed:', error);
@@ -55775,8 +55728,8 @@ Object.assign(state, server_state);
 api$d.info("Configuring application state from URL");
 api$b.updateStateFromUrlHash(state);
 
-// if we don't have a session id, create one
-api.updateStateSessionId(state);
+// restore session id from URL hash if present (for page reloads)
+await api.restoreSessionFromUrl(state);
 
 // start the application 
 await invoke(endpoints.start, state);

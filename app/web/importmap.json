@@ -11,8 +11,7 @@
     "@codemirror/view": "../../node_modules/@codemirror/view/dist/index.js",
     "markdown-it": "../../node_modules/markdown-it/index.mjs",
     "codemirror": "../../node_modules/codemirror/dist/index.js",
-    "entities": "../../node_modules/entities/dist/esm/index.js",
-    "uuid": "../../node_modules/uuid/dist/esm-browser/index.js"
+    "entities": "../../node_modules/entities/dist/esm/index.js"
   },
   "scopes": {
     "../../node_modules/@shoelace-style/shoelace/": {
