@@ -29,5 +29,6 @@
   ],
   "xml.encode-entities.server": true,
   "xml.encode-entities.client": false,
-  "heartbeat.interval": 30
+  "heartbeat.interval": 30,
+  "session.timeout": 86400
 }

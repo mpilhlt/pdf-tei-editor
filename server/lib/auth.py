@@ -1,6 +1,7 @@
 import json
 import threading
 from flask import current_app
+from server.lib import sessions
 
 USERS_FILE = None
 auth_lock = threading.Lock()
@@ -35,10 +36,34 @@ def get_user_by_session_id(session_id):
     """Finds a user by their session ID."""
     if not session_id:
         return None
-    users = _read_users()
-    for user in users:
-        if user.get('session_id') == session_id:
-            return user
+    
+    # Get session timeout from config  
+    try:
+        import json
+        config_file = current_app.config["DB_DIR"] / 'config.json'
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        timeout_seconds = config.get('session.timeout', 86400)
+    except:
+        timeout_seconds = 86400  # fallback
+    
+    # Check if session is valid
+    if not sessions.is_session_valid(session_id, timeout_seconds):
+        return None
+    
+    # Get username from session
+    username = sessions.get_username_by_session_id(session_id)
+    if not username:
+        return None
+    
+    # Get user data
+    user = get_user_by_username(username)
+    if user:
+        # Remove session_id field if it exists (legacy data)
+        user_copy = user.copy()
+        user_copy.pop('session_id', None)
+        return user_copy
+    
     return None
 
 def get_user_by_username(username):
@@ -49,15 +74,34 @@ def get_user_by_username(username):
             return user
     return None
 
-def update_user_session(username, session_id):
-    """Updates the session ID for a user."""
-    users = _read_users()
-    for user in users:
-        if user.get('username') == username:
-            user['session_id'] = session_id
-            _write_users(users)
-            return True
+def create_user_session(username, session_id):
+    """Creates a new session for a user."""
+    user = get_user_by_username(username)
+    if user:
+        sessions.create_session(session_id, username)
+        return True
     return False
+
+def update_session_access_time(session_id):
+    """Updates the last access time for a session."""
+    return sessions.update_session_access_time(session_id)
+
+def delete_user_session(session_id):
+    """Deletes a specific session."""
+    return sessions.delete_session(session_id)
+
+def cleanup_expired_sessions():
+    """Cleans up expired sessions."""
+    try:
+        import json
+        config_file = current_app.config["DB_DIR"] / 'config.json'
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        timeout_seconds = config.get('session.timeout', 86400)
+    except:
+        timeout_seconds = 86400
+    
+    return sessions.cleanup_expired_sessions(timeout_seconds)
 
 def verify_password(username, passwd_hash):
     """Verifies the user's password hash."""

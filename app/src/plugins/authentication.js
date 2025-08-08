@@ -9,7 +9,7 @@
 
 import ui, { createHtmlElements, SlDialog, updateUi } from '../ui.js';
 import { updateState, logger, client, state } from '../app.js';
-import { v4 as uuidv4 } from 'uuid';
+import { UrlHash } from '../modules/browser-utils.js';
 
 // 
 // UI
@@ -32,7 +32,7 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0]
  * Public API for the authentication plugin
  */
 const api = {
-  updateStateSessionId,
+  restoreSessionFromUrl,
   ensureAuthenticated,
   getUser,
   logout
@@ -80,6 +80,13 @@ async function install(state) {
   ui.toolbar.logoutButton.addEventListener("click", logout)
   // prevent dialog from closing
   ui.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault())
+  
+  // Add beforeunload handler to save session to URL hash
+  window.addEventListener('beforeunload', () => {
+    if (state.sessionId) {
+      UrlHash.set('sessionId', state.sessionId)
+    }
+  })
 }
 
 /**
@@ -94,15 +101,18 @@ async function update(state) {
 }
 
 /**
- * Ensures that a session id exists in the state and generates a random one if not. 
+ * Restores session ID from URL hash if present, then clears it from URL.
  * @param {ApplicationState} state 
- * @returns {Promise<string>} the session id 
+ * @returns {Promise<void>}
  */
-async function updateStateSessionId(state) {
-  const sessionId = state.sessionId || uuidv4()
-  logger.info(`Session id is ${sessionId}`)
-  await updateState(state, {sessionId})
-  return sessionId
+async function restoreSessionFromUrl(state) {
+  const sessionId = UrlHash.get('sessionId')
+  if (sessionId) {
+    logger.info(`Restoring session from URL: ${sessionId}`)
+    await updateState(state, {sessionId})
+    // Immediately remove from URL for security
+    UrlHash.remove('sessionId')
+  }
 }
 
 /**
@@ -143,8 +153,10 @@ function _showLoginDialog() {
       dialog.message.textContent = '';
       const passwd_hash = await _hashPassword(password);
       try {
-        const userData = await client.login(username, passwd_hash);
-        await updateState(state, { user: userData });
+        const response = await client.login(username, passwd_hash);
+        // Server now returns sessionId in response
+        const { sessionId, ...userData } = response;
+        await updateState(state, { user: userData, sessionId });
         dialog.hide();
         dialog.username.value = ""
         dialog.password.value = ""
@@ -166,7 +178,8 @@ async function logout() {
   try {
     await client.logout();
     await updateState(state, { user: null, sessionId: null });
-    await updateStateSessionId(state)
+    // Remove session from URL hash if present
+    UrlHash.remove('sessionId')
     await _showLoginDialog();
   } catch (error) {
     logger.error('Logout failed:', error);

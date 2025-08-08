@@ -144,11 +144,6 @@ async function populateVariantSelectbox(state) {
   // Get unique variants from fileData
   const variants = new Set();
   fileData.forEach(file => {
-    // Add top-level variant_id
-    if (file.variant_id) {
-      variants.add(file.variant_id);
-    }
-    
     // Add variant_id from versions
     if (file.versions) {
       file.versions.forEach(version => {
@@ -158,8 +153,6 @@ async function populateVariantSelectbox(state) {
       });
     }
   });
-
-  console.log("Found variants:", [...variants]); // Debug log
 
   // Add "All" option
   const allOption = new SlOption();

@@ -127,8 +127,8 @@ Object.assign(state, server_state)
 logger.info("Configuring application state from URL")
 urlHash.updateStateFromUrlHash(state)
 
-// if we don't have a session id, create one
-authentication.updateStateSessionId(state)
+// restore session id from URL hash if present (for page reloads)
+await authentication.restoreSessionFromUrl(state)
 
 // start the application 
 await invoke(ep.start, state)

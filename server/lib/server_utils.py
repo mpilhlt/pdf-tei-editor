@@ -100,10 +100,15 @@ def safe_file_path(file_path):
 
 def get_session_id(request):
     """
-    Retrieves the session ID from the request header.
+    Retrieves the session ID from request cookies, falling back to headers for backward compatibility.
     """
-    session_id = request.headers.get('X-Session-ID', None)
-    return session_id
+    # Try cookies first (new method)
+    session_id = request.cookies.get('sessionId')
+    if session_id:
+        return session_id
+    
+    # Fall back to headers (legacy method)
+    return request.headers.get('X-Session-ID', None)
 
 
 def remove_obsolete_marker_if_exists(file_path, logger):

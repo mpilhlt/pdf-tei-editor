@@ -64,6 +64,9 @@ async function start(state) {
   // async operations
   try {
 
+    // First, try to restore session from URL hash if present
+    await authentication.restoreSessionFromUrl(state)
+
     // Authenticate user, otherwise we don't proceed further
     const userData = await authentication.ensureAuthenticated()
     logger.info(`${userData.fullname} has logged in.`)
