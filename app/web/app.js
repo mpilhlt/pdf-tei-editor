@@ -467,93 +467,6 @@ async function set(key, value) {
 }
 
 /**
- * This component sets all string properties of the application state as hash parameters of the URL
- * This might have to be changed later in case we do not want to show all string properties in the app state
- */
-
-
-/** 
- * @import { ApplicationState } from '../app.js' 
- */
-
-// this needs to be made configurable
-const allowedUrlHashParams = ['pdfPath','xmlPath', 'diffXmlPath', 'xpath', 'variant'];
-
-const api$b = {
-  updateUrlHashfromState,
-  updateStateFromUrlHash
-};
-
-/**
- * component plugin
- */
-const plugin$g = {
-  name: "url-hash-state",
-  install: install$f,
-  state: {
-    update: update$b
-  }
-};
-
-//
-// implementation
-//
-
-/** 
- * @param {ApplicationState} state 
- */
-async function install$f(state){
-  api$d.debug(`Installing plugin "${plugin$g.name}"`);
-}
-
-/** 
- * @param {ApplicationState} state 
- */
-async function update$b(state) {
-  updateUrlHashfromState(state);
-  //console.warn(plugin.name,"done")
-  //console.warn(plugin.name,"done")
-}
-
-/**
- * @param {ApplicationState} state 
- */
-function updateUrlHashfromState(state) {
-  const url = new URL(window.location.href);
-  const urlHashParams = new URLSearchParams(window.location.hash.slice(1));
-  Object.entries(state)
-    .filter(([key]) => allowedUrlHashParams.includes(key))
-    .forEach(([key, value]) => {
-      if (value) {
-        urlHashParams.set(key, String(value));
-      } else {
-        urlHashParams.delete(key);
-      }
-    });
-  let hash = `#${urlHashParams.toString()}`;
-  if (hash !== url.hash) {
-    //logger.debug(`url hash changed to ${hash}`)
-    url.hash = hash;
-    //window.history.replaceState({}, '', url);
-    window.history.pushState({}, '', url);
-  }
-}
-
-
-/**
- * Updates the state from the URL hash.
- * @param {ApplicationState} state
- */
-function updateStateFromUrlHash(state) {
-  const urlParams = new URLSearchParams(window.location.hash.slice(1));
-  for (const [key, value] of urlParams.entries()) {
-    if (key in state && allowedUrlHashParams.includes(key)) {
-      state[key] = value;
-    }
-  }
-}
-
-/**
  * Given a selector, return all matching DOM nodes in an array
  * @param {string} selector The DOM selector
  * @returns {Array}
@@ -567,16 +480,25 @@ class UrlHash {
 
   /**
    * Sets or updates a hash parameter in the URL without reloading the page and ensures browser history is updated.
-   * @param {string} key - The key of the hash parameter to set.
-   * @param {string} value - The value of the hash parameter to set.
+   * @param {string|Object} keyOrObj - The key of the hash parameter to set, or an object with several key-value pairs
+   * @param {string?} value - The value of the hash parameter to set. Not used if first parameter is an object
+   * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
    */
-  static set(key, value) {
+  static set(keyOrObj, value, dispatchEvent = true) {
     const hash = new URLSearchParams(window.location.hash.slice(1));
-    hash.set(key, value);
-
-    // Use history.pushState to store the previous state in the browser's history
-    history.pushState(null, '', '#' + hash.toString());
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    if (typeof keyOrObj === "string" && typeof value === "string" ) {
+      hash.set(keyOrObj, value);
+    } else if (keyOrObj && typeof keyOrObj === "object") {
+      Object.entries(keyOrObj).forEach(([key, value]) => hash.set(key, value));
+    } else {
+      throw new TypeError(`Invalid parameters: ${keyOrObj}, ${value}`)
+    }
+    
+    // Use history.replaceState to update the current history entry
+    history.replaceState(null, '', '#' + hash.toString());
+    if (dispatchEvent) {
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
   }
 
   /**
@@ -601,14 +523,18 @@ class UrlHash {
   /**
    * Removes a hash parameter from the URL without reloading the page.
    * @param {string} key - The key of the hash parameter to remove.
+   * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
    */
-  static remove(key) {
+  static remove(key, dispatchEvent=true) {
     if (!UrlHash.has(key)) return; // Do nothing if the key does not exist
     const hash = new URLSearchParams(window.location.hash.slice(1));
     hash.delete(key); // Remove the specified key
     const updatedHash = hash.toString();
-    window.location.hash = updatedHash ? updatedHash : ''; // Update the hash or clear it
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    // Use history.replaceState to update the current history entry
+    history.replaceState(null, '', '#' + updatedHash);
+    if (dispatchEvent) {
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
   }
 }
 
@@ -722,6 +648,99 @@ function isValidXPath(xpathExpression, xmlDom, namespaceResolver = null) {
     console.error("Invalid XPath:", error.message); // Optionally log the error
     return false;
   }
+}
+
+/**
+ * This component sets all string properties of the application state as hash parameters of the URL
+ * This might have to be changed later in case we do not want to show all string properties in the app state
+ */
+
+
+/** 
+ * @import { ApplicationState } from '../app.js' 
+ */
+
+// module closure vars
+let showInUrl;
+let allowSetFromUrl;
+
+const api$b = {
+  updateUrlHashfromState,
+  updateStateFromUrlHash
+};
+
+/**
+ * component plugin
+ */
+const plugin$g = {
+  name: "url-hash-state",
+  deps: ['config'],
+  install: install$f,
+  state: {
+    update: update$b
+  }
+};
+
+//
+// implementation
+//
+
+/** 
+ * @param {ApplicationState} state 
+ */
+async function install$f(state) {
+  api$d.debug(`Installing plugin "${plugin$g.name}"`);
+  showInUrl = await api$c.get("state.showInUrl") || [];
+  allowSetFromUrl = await api$c.get("state.allowSetFromUrl") || [];
+}
+
+/** 
+ * @param {ApplicationState} state 
+ */
+async function update$b(state) {
+  updateUrlHashfromState(state);
+}
+
+/**
+ * @param {ApplicationState} state 
+ */
+function updateUrlHashfromState(state) {
+  const url = new URL(window.location.href);
+  const urlHashParams = new URLSearchParams(window.location.hash.slice(1));
+  Object.entries(state)
+    .filter(([key]) => showInUrl.includes(key))
+    .forEach(([key, value]) => {
+      if (value) {
+        urlHashParams.set(key, String(value));
+      } else {
+        urlHashParams.delete(key);
+      }
+    });
+  let hash = `#${urlHashParams.toString()}`;
+  if (hash !== url.hash) {
+    url.hash = hash;
+    window.history.replaceState({}, '', url);
+  }
+}
+
+/**
+ * Updates the state from the URL hash, removing all state properties that should not be shown in the URL from the hash
+ * @param {ApplicationState} state
+ * @returns {Promise<Array>} Returns the result of updateState
+ */
+async function updateStateFromUrlHash(state) {
+  const tmpState = {};
+  const urlParams = new URLSearchParams(window.location.hash.slice(1));
+  for (const [key, value] of urlParams.entries()) {
+    if (key in state && allowSetFromUrl.includes(key)) {
+      tmpState[key] = value;
+    }
+    if (!showInUrl.includes(key)) {
+      UrlHash.remove(key, false);
+    }
+  }
+  api$d.info("Setting state properties from URL hash:" + Object.keys(tmpState).join(", "));
+  return await updateState(state, tmpState)
 }
 
 /**
@@ -55245,9 +55264,6 @@ async function start(state) {
   // async operations
   try {
 
-    // First, try to restore session from URL hash if present
-    await api.restoreSessionFromUrl(state);
-
     // Authenticate user, otherwise we don't proceed further
     const userData = await api.ensureAuthenticated();
     api$d.info(`${userData.fullname} has logged in.`);
@@ -55402,6 +55418,9 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
   let heartbeatInterval = null;
   const heartbeatFrequency = lockTimeoutSeconds * 1000;
 
+  /**
+   * stops the heartbeat mechanism 
+   */
   const stopHeartbeat = () => {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
@@ -55409,15 +55428,20 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
       api$d.debug("Heartbeat stopped.");
     }
     const filePath = ui$1.toolbar.xml.value;
-    api$7.releaseLock(filePath);
+    if (filePath) {
+      api$7.releaseLock(filePath);
+    }
   };
+  window.addEventListener('beforeunload', stopHeartbeat);
 
+  /**
+   * starts the heartbeat mechanism
+   */
   const startHeartbeat = () => {
 
     let editorReadOnlyState;
 
     heartbeatInterval = setInterval(async () => {
-
       const filePath = String(ui$1.toolbar.xml.value);
       const reasonsToSkip = {
         "No user is logged in": state.user === null,
@@ -55443,7 +55467,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
         // For read-only editors, check cache status separately since no heartbeat was sent
         const cacheStatus = heartbeatResponse?.cache_status || await api$7.getCacheStatus();
         if (cacheStatus.dirty) {
-          api$d.debug("File data cache is dirty, reloading file list with refresh=true");
+          api$d.debug("File data cache is dirty, reloading file list");
           await api$6.reload(state, { refresh: true });
         }
 
@@ -55492,7 +55516,6 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
     api$d.info("Heartbeat started.");
   };
   startHeartbeat();
-  window.addEventListener('beforeunload', stopHeartbeat);
 }
 
 let lastNode = null;
@@ -55535,7 +55558,6 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0];
  * Public API for the authentication plugin
  */
 const api = {
-  restoreSessionFromUrl,
   ensureAuthenticated,
   getUser,
   logout
@@ -55585,7 +55607,7 @@ async function install(state) {
   // Add beforeunload handler to save session to URL hash
   window.addEventListener('beforeunload', () => {
     if (state.sessionId) {
-      UrlHash.set('sessionId', state.sessionId);
+      UrlHash.set('sessionId', state.sessionId, false);
     }
   });
 }
@@ -55601,20 +55623,7 @@ async function update(state) {
   }
 }
 
-/**
- * Restores session ID from URL hash if present, then clears it from URL.
- * @param {ApplicationState} state 
- * @returns {Promise<void>}
- */
-async function restoreSessionFromUrl(state) {
-  const sessionId = UrlHash.get('sessionId');
-  if (sessionId) {
-    api$d.info(`Restoring session from URL: ${sessionId}`);
-    await updateState(state, {sessionId});
-    // Immediately remove from URL for security
-    UrlHash.remove('sessionId');
-  }
-}
+
 
 /**
  * Checks if the user is authenticated. If not, it shows a login dialog
@@ -55800,15 +55809,28 @@ await invoke(endpoints.log.setLogLevel, {level: logLevel.DEBUG});
 // let the plugins install their components
 await invoke(endpoints.install, state);
 
-// get the server-side state 
-const server_state = await api$7.state();
-Object.assign(state, server_state);
+// persist the state across reloads in sessionStorage
+const SESSION_STORAGE_ID = 'pdf-tei-editor.state';
+const persistedStateVars = (await api$c.get("state.persist") || []);
+persistedStateVars.push('sessionId'); // the session id is always persisted
+const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID';
+let tmpState;
+try {
+  tmpState = JSON.parse(stateInSessionStorage);
+  api$d.info("Loaded state from sessionStorage");
+} catch(e) {
+  api$d.info("Loading initial state from server");
+  tmpState = await api$7.state();
+}
+updateState(state, tmpState);
+console.warn(state);
+window.addEventListener('beforeunload', evt => {
+  api$d.debug("Saving state in sessionStorage");
+  sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state));
+});
 
-api$d.info("Configuring application state from URL");
-api$b.updateStateFromUrlHash(state);
-
-// restore session id from URL hash if present (for page reloads)
-await api.restoreSessionFromUrl(state);
+// URL hash params override properties
+await api$b.updateStateFromUrlHash(state);
 
 // start the application 
 await invoke(endpoints.start, state);
