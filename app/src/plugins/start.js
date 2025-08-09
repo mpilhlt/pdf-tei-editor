@@ -64,9 +64,6 @@ async function start(state) {
   // async operations
   try {
 
-    // First, try to restore session from URL hash if present
-    await authentication.restoreSessionFromUrl(state)
-
     // Authenticate user, otherwise we don't proceed further
     const userData = await authentication.ensureAuthenticated()
     logger.info(`${userData.fullname} has logged in.`)
@@ -221,6 +218,9 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
   let heartbeatInterval = null;
   const heartbeatFrequency = lockTimeoutSeconds * 1000;
 
+  /**
+   * stops the heartbeat mechanism 
+   */
   const stopHeartbeat = () => {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
@@ -228,15 +228,20 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
       logger.debug("Heartbeat stopped.");
     }
     const filePath = ui.toolbar.xml.value;
-    client.releaseLock(filePath);
+    if (filePath) {
+      client.releaseLock(filePath);
+    }
   }
+  window.addEventListener('beforeunload', stopHeartbeat);
 
+  /**
+   * starts the heartbeat mechanism
+   */
   const startHeartbeat = () => {
 
     let editorReadOnlyState;
 
     heartbeatInterval = setInterval(async () => {
-
       const filePath = String(ui.toolbar.xml.value);
       const reasonsToSkip = {
         "No user is logged in": state.user === null,
@@ -262,7 +267,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
         // For read-only editors, check cache status separately since no heartbeat was sent
         const cacheStatus = heartbeatResponse?.cache_status || await client.getCacheStatus();
         if (cacheStatus.dirty) {
-          logger.debug("File data cache is dirty, reloading file list with refresh=true");
+          logger.debug("File data cache is dirty, reloading file list");
           await fileselection.reload(state, { refresh: true });
         }
 
@@ -311,7 +316,6 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
     logger.info("Heartbeat started.");
   };
   startHeartbeat();
-  window.addEventListener('beforeunload', stopHeartbeat);
 }
 
 let lastNode = null;

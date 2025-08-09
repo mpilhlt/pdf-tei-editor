@@ -120,15 +120,28 @@ await invoke(ep.log.setLogLevel, {level: logLevel.DEBUG})
 // let the plugins install their components
 await invoke(ep.install, state)
 
-// get the server-side state 
-const server_state = await client.state()
-Object.assign(state, server_state)
+// persist the state across reloads in sessionStorage
+const SESSION_STORAGE_ID = 'pdf-tei-editor.state'
+const persistedStateVars = (await config.get("state.persist") || [])
+persistedStateVars.push('sessionId') // the session id is always persisted
+const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID'
+let tmpState
+try {
+  tmpState = JSON.parse(stateInSessionStorage)
+  logger.info("Loaded state from sessionStorage")
+} catch(e) {
+  logger.info("Loading initial state from server")
+  tmpState = await client.state()
+}
+updateState(state, tmpState)
+console.warn(state)
+window.addEventListener('beforeunload', evt => {
+  logger.debug("Saving state in sessionStorage")
+  sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state))
+})
 
-logger.info("Configuring application state from URL")
-urlHash.updateStateFromUrlHash(state)
-
-// restore session id from URL hash if present (for page reloads)
-await authentication.restoreSessionFromUrl(state)
+// URL hash params override properties
+await urlHash.updateStateFromUrlHash(state)
 
 // start the application 
 await invoke(ep.start, state)

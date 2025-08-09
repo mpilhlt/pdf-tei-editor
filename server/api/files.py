@@ -12,10 +12,10 @@ from server.lib.server_utils import (
 )
 from server.lib.file_data import (
     get_file_data, apply_variant_filtering,
-    find_collection_for_file_id, extract_file_id_from_version_filename,
-    extract_version_label_from_path, construct_variant_filename
+    find_collection_for_file_id,
+    construct_variant_filename
 )
-from server.lib.cache_manager import get_cache_status, mark_cache_dirty
+from server.lib.cache_manager import get_cache_status, mark_cache_dirty, is_cache_dirty
 from server.lib.locking import (
     acquire_lock, release_lock, get_all_active_locks, check_lock
 )
@@ -34,7 +34,7 @@ def file_list():
     force_refresh = request.args.get('refresh') == 'true'
     
     # Get file data with metadata already populated
-    files_data = get_file_data(force_refresh=force_refresh)
+    files_data = get_file_data(force_refresh=force_refresh or is_cache_dirty())
     
     # Add lock information if WebDAV is enabled
     webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)

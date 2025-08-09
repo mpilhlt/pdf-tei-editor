@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 from flask import current_app
+import logging
 
 class ApiError(RuntimeError):
     """
@@ -251,3 +252,27 @@ def migrate_old_version_files(file_id, data_root, logger, webdav_enabled=False):
     return migrated_count
 
 
+# Colorized logging formatter for better visibility
+class ColoredFormatter(logging.Formatter):
+    """Add colors to log levels for better terminal visibility"""
+    
+    # ANSI color codes
+    COLORS = {
+        'DEBUG': '\033[36m',      # Cyan
+        'INFO': '\033[32m',       # Green  
+        'WARNING': '\033[33m',    # Yellow/Orange
+        'ERROR': '\033[31m',      # Red
+        'CRITICAL': '\033[91m',   # Bright Red
+    }
+    RESET = '\033[0m'  # Reset to default color
+    
+    def format(self, record):
+        # Get the original formatted message
+        original = super().format(record)
+        
+        # Add color based on log level
+        level_name = record.levelname
+        if level_name in self.COLORS:
+            # Color the entire log message
+            return f"{self.COLORS[level_name]}{original}{self.RESET}"
+        return original

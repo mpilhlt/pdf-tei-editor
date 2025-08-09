@@ -104,16 +104,25 @@ export class UrlHash {
 
   /**
    * Sets or updates a hash parameter in the URL without reloading the page and ensures browser history is updated.
-   * @param {string} key - The key of the hash parameter to set.
-   * @param {string} value - The value of the hash parameter to set.
+   * @param {string|Object} keyOrObj - The key of the hash parameter to set, or an object with several key-value pairs
+   * @param {string?} value - The value of the hash parameter to set. Not used if first parameter is an object
+   * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
    */
-  static set(key, value) {
+  static set(keyOrObj, value, dispatchEvent = true) {
     const hash = new URLSearchParams(window.location.hash.slice(1));
-    hash.set(key, value);
-
-    // Use history.pushState to store the previous state in the browser's history
-    history.pushState(null, '', '#' + hash.toString());
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    if (typeof keyOrObj === "string" && typeof value === "string" ) {
+      hash.set(keyOrObj, value)
+    } else if (keyOrObj && typeof keyOrObj === "object") {
+      Object.entries(keyOrObj).forEach(([key, value]) => hash.set(key, value))
+    } else {
+      throw new TypeError(`Invalid parameters: ${keyOrObj}, ${value}`)
+    }
+    
+    // Use history.replaceState to update the current history entry
+    history.replaceState(null, '', '#' + hash.toString());
+    if (dispatchEvent) {
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
   }
 
   /**
@@ -138,14 +147,18 @@ export class UrlHash {
   /**
    * Removes a hash parameter from the URL without reloading the page.
    * @param {string} key - The key of the hash parameter to remove.
+   * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
    */
-  static remove(key) {
+  static remove(key, dispatchEvent=true) {
     if (!UrlHash.has(key)) return; // Do nothing if the key does not exist
     const hash = new URLSearchParams(window.location.hash.slice(1));
     hash.delete(key); // Remove the specified key
     const updatedHash = hash.toString();
-    window.location.hash = updatedHash ? updatedHash : ''; // Update the hash or clear it
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    // Use history.replaceState to update the current history entry
+    history.replaceState(null, '', '#' + updatedHash);
+    if (dispatchEvent) {
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
   }
 }
 

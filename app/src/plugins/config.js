@@ -9,7 +9,7 @@
  * @import { ApplicationState, Plugin } from '../app.js' 
  */
 
-import { client, logger } from '../app.js';
+import { logger, client } from '../app.js';
 
 /**
  * The public API of the config plugin.

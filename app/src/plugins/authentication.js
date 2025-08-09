@@ -32,7 +32,6 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0]
  * Public API for the authentication plugin
  */
 const api = {
-  restoreSessionFromUrl,
   ensureAuthenticated,
   getUser,
   logout
@@ -84,7 +83,7 @@ async function install(state) {
   // Add beforeunload handler to save session to URL hash
   window.addEventListener('beforeunload', () => {
     if (state.sessionId) {
-      UrlHash.set('sessionId', state.sessionId)
+      UrlHash.set('sessionId', state.sessionId, false)
     }
   })
 }
@@ -100,20 +99,7 @@ async function update(state) {
   }
 }
 
-/**
- * Restores session ID from URL hash if present, then clears it from URL.
- * @param {ApplicationState} state 
- * @returns {Promise<void>}
- */
-async function restoreSessionFromUrl(state) {
-  const sessionId = UrlHash.get('sessionId')
-  if (sessionId) {
-    logger.info(`Restoring session from URL: ${sessionId}`)
-    await updateState(state, {sessionId})
-    // Immediately remove from URL for security
-    UrlHash.remove('sessionId')
-  }
-}
+
 
 /**
  * Checks if the user is authenticated. If not, it shows a login dialog

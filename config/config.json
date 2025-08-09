@@ -30,5 +30,7 @@
   "xml.encode-entities.server": true,
   "xml.encode-entities.client": false,
   "heartbeat.interval": 30,
-  "session.timeout": 86400
+  "session.timeout": 86400,
+  "state.showInUrl": ["pdfPath", "xmlPath", "diffXmlPath"],
+  "state.allowSetFromUrl": ["variant", "xpath"]
 }

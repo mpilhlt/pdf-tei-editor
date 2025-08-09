@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 import tempfile
 from pathlib import Path
 import shutil
+from server.lib.server_utils import ColoredFormatter
+import json
 
 load_dotenv()
 
@@ -42,31 +44,6 @@ node_modules_root = project_root / 'node_modules'
 src_root = project_root / 'app' / 'src'
 data_root = project_root / 'data' if local_webdav_root is None else local_webdav_root
 config_dir = project_root / 'config'
-
-# Colorized logging formatter for better visibility
-class ColoredFormatter(logging.Formatter):
-    """Add colors to log levels for better terminal visibility"""
-    
-    # ANSI color codes
-    COLORS = {
-        'DEBUG': '\033[36m',      # Cyan
-        'INFO': '\033[32m',       # Green  
-        'WARNING': '\033[33m',    # Yellow/Orange
-        'ERROR': '\033[31m',      # Red
-        'CRITICAL': '\033[91m',   # Bright Red
-    }
-    RESET = '\033[0m'  # Reset to default color
-    
-    def format(self, record):
-        # Get the original formatted message
-        original = super().format(record)
-        
-        # Add color based on log level
-        level_name = record.levelname
-        if level_name in self.COLORS:
-            # Color the entire log message
-            return f"{self.COLORS[level_name]}{original}{self.RESET}"
-        return original
 
 # Flask app
 app = Flask(__name__, static_folder=str(project_root))
@@ -98,6 +75,17 @@ for file in os.listdir(config_dir):
         if not config_db_file.exists():
             shutil.copy(config_dir / file, config_db_file)
             print(f"Copied {file} to {app_db_dir}")
+
+# add missing config values
+with open(config_dir / 'config.json') as f1, open(app_db_dir / 'config.json') as f:
+    config_template: dict = json.load(f1)
+    config_db: dict = json.load(f)
+for key, value in config_template.items():
+    if config_db.get(key, None) is None:
+        print(f"Adding missing default config value for {key}")
+        config_db.setdefault(key, value)
+with open(app_db_dir / 'config.json', "w") as f:
+    json.dump(config_db, f, indent=2)
 
 # Dynamically register blueprints from the 'api' folder
 api_folder = os.path.join(server_root, 'api')
