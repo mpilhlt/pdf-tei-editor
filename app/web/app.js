@@ -11615,9 +11615,9 @@ async function install$c(state) {
  * @returns {Promise<void>}
  */
 async function update$9(state) {
-  if (state.pdfPath !== currentFile) {
-    currentFile = state.pdfPath;
-    //if (state.pdfPath === null && state.user === null) {
+  if (state.pdf !== currentFile) {
+    currentFile = state.pdf;
+    //if (state.pdf === null && state.user === null) {
     //  pdfViewer.load('empty.pdf')
     //}
   }
@@ -42131,7 +42131,7 @@ async function install$b(state) {
 async function update$8(state) {
   //console.warn("update", plugin.name, state)
 
-  if (state.xmlPath === null) {
+  if (state.xml === null) {
     xmlEditor.clear();
     return 
   }
@@ -42150,7 +42150,7 @@ async function update$8(state) {
   }
 
   // xpath state => selection
-  if (xmlEditor.isReady() && state.xpath && state.xmlPath) {
+  if (xmlEditor.isReady() && state.xpath && state.xml) {
     const { index, pathBeforePredicates } = parseXPath(state.xpath);
     // select the node by index
     try {
@@ -43312,15 +43312,15 @@ async function syncFiles$1() {
 
 /**
  * Moves the given files to a new collection
- * @param {string} pdfPath
- * @param {string} xmlPath
+ * @param {string} pdf
+ * @param {string} xml
  * @param {string} destinationCollection
  * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
  */
-async function moveFiles(pdfPath, xmlPath, destinationCollection) {
+async function moveFiles(pdf, xml, destinationCollection) {
   return await callApi('/files/move', 'POST', {
-    pdf_path: pdfPath,
-    xml_path: xmlPath,
+    pdf_path: pdf,
+    xml_path: xml,
     destination_collection: destinationCollection
   });
 }
@@ -43607,9 +43607,9 @@ async function install$9(state) {
 async function update$5(state) {
   //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
-  ui$1.toolbar.pdf.value = state.pdfPath || "";
-  ui$1.toolbar.xml.value = state.xmlPath || "";
-  ui$1.toolbar.diff.value = state.diffXmlPath || "";
+  ui$1.toolbar.pdf.value = state.pdf || "";
+  ui$1.toolbar.xml.value = state.xml || "";
+  ui$1.toolbar.diff.value = state.diff || "";
   //console.warn(plugin.name,"done")
 }
 
@@ -43715,8 +43715,8 @@ async function populateVariantSelectbox(state) {
 async function populateSelectboxes(state) {
 
   // check if state has changed
-  const { xmlPath, pdfPath, diffXmlPath, variant } = state;
-  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath, variant });
+  const { xml, pdf, diff, variant } = state;
+  const jsonState = JSON.stringify({ xml, pdf, diff, variant });
   if (jsonState === stateCache) {
     //logger.debug("Not repopulating selectboxes as state hasn't changed")
     return
@@ -43781,7 +43781,7 @@ async function populateSelectboxes(state) {
     for (const file of files) {
       // populate pdf select box 
       const option = Object.assign(new option_default, {
-        value: file.pdf,
+        value: file.pdf.hash,  // Use document identifier
         textContent: file.label,
         size: "small",
       });
@@ -43793,7 +43793,7 @@ async function populateSelectboxes(state) {
       ui$1.toolbar.pdf.hoist = true;
       ui$1.toolbar.pdf.appendChild(option);
 
-      if (file.pdf === state.pdfPath) {
+      if (file.pdf.hash === state.pdf) {
         // populate the version and diff selectboxes depending on the selected file
         if (file.versions) {
           // Filter versions based on variant selection
@@ -43830,14 +43830,14 @@ async function populateSelectboxes(state) {
               let option = new option_default();
               // @ts-ignore
               option.size = "small";
-              option.value = gold.path;
+              option.value = gold.hash;  // Use document identifier
               option.textContent = gold.label;
               ui$1.toolbar.xml.appendChild(option);
               // diff 
               option = new option_default();
               // @ts-ignore
               option.size = "small";
-              option.value = gold.path;
+              option.value = gold.hash;  // Use document identifier
               option.textContent = gold.label;
               ui$1.toolbar.diff.appendChild(option);
             });
@@ -43860,7 +43860,7 @@ async function populateSelectboxes(state) {
               let option = new option_default();
               // @ts-ignore
               option.size = "small";
-              option.value = version.path;
+              option.value = version.hash;  // Use document identifier
               option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
               //option.disabled = version.is_locked;
               ui$1.toolbar.xml.appendChild(option);
@@ -43868,7 +43868,7 @@ async function populateSelectboxes(state) {
               option = new option_default();
               // @ts-ignore
               option.size = "small";
-              option.value = version.path;
+              option.value = version.hash;  // Use document identifier
               option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
               option.disabled = version.is_locked;
               ui$1.toolbar.diff.appendChild(option);
@@ -43882,9 +43882,9 @@ async function populateSelectboxes(state) {
 
 
   // update selection
-  ui$1.toolbar.pdf.value = state.pdfPath || '';
-  ui$1.toolbar.xml.value = state.xmlPath || '';
-  ui$1.toolbar.diff.value = state.diffXmlPath || '';
+  ui$1.toolbar.pdf.value = state.pdf || '';
+  ui$1.toolbar.xml.value = state.xml || '';
+  ui$1.toolbar.diff.value = state.diff || '';
 
 }
 
@@ -43895,15 +43895,15 @@ async function populateSelectboxes(state) {
  * @param {ApplicationState} state
  */
 async function onChangePdfSelection(state) {
-  const selectedFile = fileData.find(file => file.pdf === ui$1.toolbar.pdf.value);
-  const pdf = selectedFile.pdf;
-  const xml = selectedFile.xml;
+  const selectedFile = fileData.find(file => file.pdf.hash === ui$1.toolbar.pdf.value);
+  const pdf = selectedFile.pdf.hash;  // Use document identifier
+  const xml = selectedFile.gold?.[0]?.hash;  // Use first gold entry identifier
   const filesToLoad = {};
 
-  if (pdf && pdf !== state.pdfPath) {
+  if (pdf && pdf !== state.pdf) {
     filesToLoad.pdf = pdf;
   }
-  if (xml && xml !== state.xmlPath) {
+  if (xml && xml !== state.xml) {
     filesToLoad.xml = xml;
   }
 
@@ -43926,7 +43926,7 @@ async function onChangePdfSelection(state) {
  */
 async function onChangeXmlSelection(state) {
   const xml = ui$1.toolbar.xml.value;
-  if (xml && typeof xml == "string" && xml !== state.xmlPath) {
+  if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
       api$4.removeMergeView(state);
       await api$4.load(state, { xml });
@@ -43951,7 +43951,7 @@ async function onChangeDiffSelection(state) {
   } else {
     api$4.removeMergeView(state);
   }
-  updateState(state, { diffXmlPath: diff });
+  updateState(state, { diff: diff });
 }
 
 /**
@@ -44051,7 +44051,7 @@ async function install$8(state) {
 async function update$4(state) {
   // @ts-ignore
   extractionBtnGroup.self.childNodes.forEach(child => child.disabled = state.offline); 
-  extractionBtnGroup.extractCurrent.disabled = !state.pdfPath;
+  extractionBtnGroup.extractCurrent.disabled = !state.pdf;
   //console.warn(plugin.name,"done")
 }
 
@@ -44067,9 +44067,9 @@ async function extractFromCurrentPDF(state) {
     console.warn("Cannot get DOI from document:", error.message);
   }
   try {
-    doi = doi || getDoiFromFilename(state.pdfPath);
-    if (state.pdfPath) {
-      const collection = state.pdfPath.split("/").at(-2);
+    doi = doi || getDoiFromFilename(state.pdf);
+    if (state.pdf) {
+      const collection = state.pdf.split("/").at(-2);
       let { xml } = await extractFromPDF(state, { doi, collection });
       await api$4.showMergeView(state, xml);
     }
@@ -44109,7 +44109,7 @@ async function extractFromNewPdf(state) {
  * @throws {Error} If the DOI is not valid or the user aborts the dialog
  */
 async function extractFromPDF(state, defaultOptions={}) {
-  if(!state.pdfPath) throw new Error("Missing PDF path")
+  if(!state.pdf) throw new Error("Missing PDF path")
 
   // get DOI and instructions from user
   const options = await promptForExtractionOptions(defaultOptions);
@@ -44118,7 +44118,7 @@ async function extractFromPDF(state, defaultOptions={}) {
   ui$1.spinner.show('Extracting references, please wait');
   let result;
   try {
-    const filename = options.filename || state.pdfPath;
+    const filename = options.filename || state.pdf;
     result = await api$7.extractReferences(filename, options);
     await api$6.reload(state);  // todo uncouple
     return result
@@ -45191,10 +45191,10 @@ async function update$3(state) {
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled;
 
   // Allow duplicate only if we have an xml path
-  da.createNewVersion.disabled = !Boolean(state.xmlPath);
+  da.createNewVersion.disabled = !Boolean(state.xml);
 
   // Allow download only if we have an xml path
-  da.download.disabled = !Boolean(state.xmlPath);
+  da.download.disabled = !Boolean(state.xml);
 
   // disable sync and upload if webdav is not enabled
   da.sync.disabled = !state.webdavEnabled;
@@ -45228,20 +45228,22 @@ async function load$1(state, { xml, pdf }) {
 
   // PDF 
   if (pdf) {
-    await updateState(state, { pdfPath: null, xmlPath: null, diffXmlPath: null });
+    await updateState(state, { pdf: null, xml: null, diff: null });
     api$d.info("Loading PDF: " + pdf);
-    promises.push(pdfViewer.load(pdf));
+    // Convert document identifier to static file URL
+    const pdfUrl = `/api/files/${pdf}`;
+    promises.push(pdfViewer.load(pdfUrl));
   }
 
   // XML
   if (xml) {
     // Check for lock before loading
 
-    if (state.xmlPath !== xml) {
+    if (state.xml !== xml) {
       try {
         ui$1.spinner.show('Loading file, please wait...');
-        if (state.xmlPath && !state.editorReadOnly) {
-          await api$7.releaseLock(state.xmlPath);
+        if (state.xml && !state.editorReadOnly) {
+          await api$7.releaseLock(state.xml);
         }
         try {
           await api$7.acquireLock(xml);
@@ -45262,9 +45264,11 @@ async function load$1(state, { xml, pdf }) {
     }
 
     removeMergeView(state);
-    await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked });
+    await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked });
     api$d.info("Loading XML: " + xml);
-    promises.push(xmlEditor.loadXml(xml));
+    // Convert document identifier to static file URL
+    const xmlUrl = `/api/files/${xml}`;
+    promises.push(xmlEditor.loadXml(xmlUrl));
   }
 
   // await promises in parallel
@@ -45280,12 +45284,12 @@ async function load$1(state, { xml, pdf }) {
   }
 
   if (pdf) {
-    state.pdfPath = pdf;
+    state.pdf = pdf;
     // update selectboxes in the toolbar
     await api$6.update(state);
   }
   if (xml) {
-    state.xmlPath = xml;
+    state.xml = xml;
     startAutocomplete();
   }
 
@@ -45360,8 +45364,10 @@ async function showMergeView(state, diff) {
   api$d.info("Loading diff XML: " + diff);
   ui$1.spinner.show('Computing file differences, please wait...');
   try {
-    await xmlEditor.showMergeView(diff);
-    updateState(state, { diffXmlPath: diff });
+    // Convert document identifier to static file URL
+    const diffUrl = `/api/files/${diff}`;
+    await xmlEditor.showMergeView(diffUrl);
+    updateState(state, { diff: diff });
     // turn validation off as it creates too much visual noise
     api$8.configure({ mode: "off" });
   } finally {
@@ -45377,7 +45383,7 @@ function removeMergeView(state) {
   // re-enable validation
   api$8.configure({ mode: "auto" });
   UrlHash.remove("diff");
-  updateState(state, { diffXmlPath: null });
+  updateState(state, { diff: null });
 }
 
 /**
@@ -45487,8 +45493,8 @@ async function deleteAll(state) {
     await api$6.reload(state);
     // load the first PDF and XML file 
     await load$1(state, {
-      pdf: api$6.fileData[0].pdf,
-      xml: api$6.fileData[0].xml
+      pdf: api$6.fileData[0].pdf.hash,
+      xml: api$6.fileData[0].gold?.[0]?.hash || api$6.fileData[0].versions?.[0]?.hash
     });
   }
 }
@@ -45512,7 +45518,7 @@ async function syncFiles(state) {
  * @param {ApplicationState} state
  */
 async function downloadXml(state) {
-  if (!state.xmlPath) {
+  if (!state.xml) {
     throw new TypeError("State does not contain an xml path")
   }
   let xml = xmlEditor.getXML();
@@ -45523,7 +45529,7 @@ async function downloadXml(state) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = state.xmlPath.split('/').pop() || 'document.xml';
+  a.download = state.xml.split('/').pop() || 'document.xml';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -45536,7 +45542,7 @@ async function downloadXml(state) {
 async function uploadXml(state) {
   const { filename: tempFilename } = await api$7.uploadFile(undefined, { accept: '.xml' });
   // @ts-ignore
-  const { path } = await api$7.createVersionFromUpload(tempFilename, state.xmlPath);
+  const { path } = await api$7.createVersionFromUpload(tempFilename, state.xml);
   await api$6.reload(state);
   await load$1(state, { xml: path });
   notify("Document was uploaded. You are now editing the new version.");
@@ -45653,12 +45659,12 @@ async function saveRevision(state) {
   ui$1.toolbar.documentActions.saveRevision.disabled = true;
   try {
     await addTeiHeaderInfo(respStmt, null, revisionChange);
-    const result = await saveXml(state.xmlPath);
+    const result = await saveXml(state.xml);
     
     // If migration occurred, first reload file data, then update state
     if (result.status === "saved_with_migration") {
       await api$6.reload(state);
-      state.xmlPath = result.path;
+      state.xml = result.path;
       await updateState(state);
     }
     
@@ -45720,11 +45726,11 @@ async function createNewVersion(state) {
   ui$1.toolbar.documentActions.saveRevision.disabled = true;
   try {
     // save new version first
-    let { path } = await saveXml(state.xmlPath, true);
+    let { path } = await saveXml(state.xml, true);
 
     // update the state to load the new document
-    state.xmlPath = path;
-    state.diffXmlPath = path;
+    state.xml = path;
+    state.diff = path;
     await updateState(state);
 
     // now modify the header
@@ -46019,7 +46025,7 @@ async function update$2(state) {
 
   // configure diff navigation buttons
   ui$1.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
-    node.disabled = !state.diffXmlPath || state.diffXmlPath === state.xmlPath;
+    node.disabled = !state.diff || state.diff === state.xml;
   });
   //console.warn(plugin.name,"done")
 }
@@ -55163,13 +55169,13 @@ async function install$2(state) {
  * @param {ApplicationState} state
  */
 async function showMoveFilesDialog(state) {
-  const { xmlPath, pdfPath } = state;
-  if (!xmlPath || !pdfPath) {
+  const { xml, pdf } = state;
+  if (!xml || !pdf) {
     api$9.error("Cannot move files, PDF or XML path is missing.");
     return;
   }
 
-  const currentCollection = pdfPath.split('/')[3];
+  const currentCollection = pdf.split('/')[3];
 
   const collectionSelectBox = moveFilesDialog.collectionName;
   collectionSelectBox.innerHTML = "";
@@ -55204,7 +55210,7 @@ async function showMoveFilesDialog(state) {
 
   ui$1.spinner.show('Moving files, please wait...');
   try {
-    const { new_pdf_path, new_xml_path } = await api$7.moveFiles(pdfPath, xmlPath, destinationCollection);
+    const { new_pdf_path, new_xml_path } = await api$7.moveFiles(pdf, xml, destinationCollection);
     await api$6.reload(state);
     await api$4.load(state, { pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);
@@ -55282,9 +55288,9 @@ async function start(state) {
 
     // get document paths from URL hash 
     // @ts-ignore
-    const pdf = state.pdfPath || null;
-    const xml = state.xmlPath || null;
-    const diff = state.diffXmlPath;
+    const pdf = state.pdf || null;
+    const xml = state.xml || null;
+    const diff = state.diff;
 
     if (pdf !== null) {
       // lod the documents
@@ -55724,9 +55730,9 @@ async function _hashPassword(password) {
  * 
  * @typedef {object} ApplicationState
  * @property {string|null} sessionId - The session id of the particular app instance in a browser tab/window
- * @property {string|null} pdfPath - The path to the PDF file in the viewer
- * @property {string|null} xmlPath - The path to the XML file in the editor
- * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
+ * @property {string|null} pdf - The document identifier for the PDF file in the viewer
+ * @property {string|null} xml - The document identifier for the XML file in the editor
+ * @property {string|null} diff - The document identifier for an XML file which is used to create a diff, if any
  * @property {string|null} xpath - The current xpath used to select a node in the editor
  * @property {string|null} variant - The variant filter to show only files with matching variant-id
  * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
@@ -55738,9 +55744,9 @@ async function _hashPassword(password) {
  * @type{ApplicationState}
  */
 let state = {
-  pdfPath: null,
-  xmlPath: null,
-  diffXmlPath: null,
+  pdf: null,
+  xml: null,
+  diff: null,
   xpath: null,
   variant: null,
   webdavEnabled: false,
