@@ -97,9 +97,9 @@ async function install(state) {
 async function update(state) {
   //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
-  ui.toolbar.pdf.value = state.pdfPath || ""
-  ui.toolbar.xml.value = state.xmlPath || ""
-  ui.toolbar.diff.value = state.diffXmlPath || ""
+  ui.toolbar.pdf.value = state.pdf || ""
+  ui.toolbar.xml.value = state.xml || ""
+  ui.toolbar.diff.value = state.diff || ""
   //console.warn(plugin.name,"done")
 }
 
@@ -205,8 +205,8 @@ async function populateVariantSelectbox(state) {
 async function populateSelectboxes(state) {
 
   // check if state has changed
-  const { xmlPath, pdfPath, diffXmlPath, variant } = state
-  const jsonState = JSON.stringify({ xmlPath, pdfPath, diffXmlPath, variant })
+  const { xml, pdf, diff, variant } = state
+  const jsonState = JSON.stringify({ xml, pdf, diff, variant })
   if (jsonState === stateCache) {
     //logger.debug("Not repopulating selectboxes as state hasn't changed")
     return
@@ -271,7 +271,7 @@ async function populateSelectboxes(state) {
     for (const file of files) {
       // populate pdf select box 
       const option = Object.assign(new SlOption, {
-        value: file.pdf,
+        value: file.pdf.hash,  // Use document identifier
         textContent: file.label,
         size: "small",
       })
@@ -283,7 +283,7 @@ async function populateSelectboxes(state) {
       ui.toolbar.pdf.hoist = true
       ui.toolbar.pdf.appendChild(option);
 
-      if (file.pdf === state.pdfPath) {
+      if (file.pdf.hash === state.pdf) {
         // populate the version and diff selectboxes depending on the selected file
         if (file.versions) {
           // Filter versions based on variant selection
@@ -320,14 +320,14 @@ async function populateSelectboxes(state) {
               let option = new SlOption()
               // @ts-ignore
               option.size = "small"
-              option.value = gold.path;
+              option.value = gold.hash;  // Use document identifier
               option.textContent = gold.label;
               ui.toolbar.xml.appendChild(option);
               // diff 
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
-              option.value = gold.path;
+              option.value = gold.hash;  // Use document identifier
               option.textContent = gold.label;
               ui.toolbar.diff.appendChild(option)
             });
@@ -350,7 +350,7 @@ async function populateSelectboxes(state) {
               let option = new SlOption()
               // @ts-ignore
               option.size = "small"
-              option.value = version.path;
+              option.value = version.hash;  // Use document identifier
               option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
               //option.disabled = version.is_locked;
               ui.toolbar.xml.appendChild(option);
@@ -358,7 +358,7 @@ async function populateSelectboxes(state) {
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
-              option.value = version.path;
+              option.value = version.hash;  // Use document identifier
               option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
               option.disabled = version.is_locked;
               ui.toolbar.diff.appendChild(option)
@@ -372,9 +372,9 @@ async function populateSelectboxes(state) {
 
 
   // update selection
-  ui.toolbar.pdf.value = state.pdfPath || ''
-  ui.toolbar.xml.value = state.xmlPath || ''
-  ui.toolbar.diff.value = state.diffXmlPath || ''
+  ui.toolbar.pdf.value = state.pdf || ''
+  ui.toolbar.xml.value = state.xml || ''
+  ui.toolbar.diff.value = state.diff || ''
 
 }
 
@@ -385,15 +385,15 @@ async function populateSelectboxes(state) {
  * @param {ApplicationState} state
  */
 async function onChangePdfSelection(state) {
-  const selectedFile = fileData.find(file => file.pdf === ui.toolbar.pdf.value);
-  const pdf = selectedFile.pdf
-  const xml = selectedFile.xml
+  const selectedFile = fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
+  const pdf = selectedFile.pdf.hash  // Use document identifier
+  const xml = selectedFile.gold?.[0]?.hash  // Use first gold entry identifier
   const filesToLoad = {}
 
-  if (pdf && pdf !== state.pdfPath) {
+  if (pdf && pdf !== state.pdf) {
     filesToLoad.pdf = pdf
   }
-  if (xml && xml !== state.xmlPath) {
+  if (xml && xml !== state.xml) {
     filesToLoad.xml = xml
   }
 
@@ -416,7 +416,7 @@ async function onChangePdfSelection(state) {
  */
 async function onChangeXmlSelection(state) {
   const xml = ui.toolbar.xml.value
-  if (xml && typeof xml == "string" && xml !== state.xmlPath) {
+  if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
       services.removeMergeView(state)
       await services.load(state, { xml })
@@ -441,7 +441,7 @@ async function onChangeDiffSelection(state) {
   } else {
     services.removeMergeView(state)
   }
-  updateState(state, { diffXmlPath: diff })
+  updateState(state, { diff: diff })
 }
 
 /**

@@ -178,7 +178,7 @@ async function update(state) {
 
   // configure diff navigation buttons
   ui.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
-    node.disabled = !state.diffXmlPath || state.diffXmlPath === state.xmlPath
+    node.disabled = !state.diff || state.diff === state.xml
   })
   //console.warn(plugin.name,"done")
 }

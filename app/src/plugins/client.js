@@ -412,15 +412,15 @@ async function syncFiles() {
 
 /**
  * Moves the given files to a new collection
- * @param {string} pdfPath
- * @param {string} xmlPath
+ * @param {string} pdf
+ * @param {string} xml
  * @param {string} destinationCollection
  * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
  */
-async function moveFiles(pdfPath, xmlPath, destinationCollection) {
+async function moveFiles(pdf, xml, destinationCollection) {
   return await callApi('/files/move', 'POST', {
-    pdf_path: pdfPath,
-    xml_path: xmlPath,
+    pdf_path: pdf,
+    xml_path: xml,
     destination_collection: destinationCollection
   });
 }

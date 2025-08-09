@@ -31,6 +31,6 @@
   "xml.encode-entities.client": false,
   "heartbeat.interval": 30,
   "session.timeout": 86400,
-  "state.showInUrl": ["pdfPath", "xmlPath", "diffXmlPath"],
+  "state.showInUrl": ["pdf", "xml", "diff"],
   "state.allowSetFromUrl": ["variant", "xpath"]
 }

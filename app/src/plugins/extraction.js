@@ -97,7 +97,7 @@ async function install(state) {
 async function update(state) {
   // @ts-ignore
   extractionBtnGroup.self.childNodes.forEach(child => child.disabled = state.offline) 
-  extractionBtnGroup.extractCurrent.disabled = !state.pdfPath
+  extractionBtnGroup.extractCurrent.disabled = !state.pdf
   //console.warn(plugin.name,"done")
 }
 
@@ -113,9 +113,9 @@ async function extractFromCurrentPDF(state) {
     console.warn("Cannot get DOI from document:", error.message)
   }
   try {
-    doi = doi || getDoiFromFilename(state.pdfPath)
-    if (state.pdfPath) {
-      const collection = state.pdfPath.split("/").at(-2)
+    doi = doi || getDoiFromFilename(state.pdf)
+    if (state.pdf) {
+      const collection = state.pdf.split("/").at(-2)
       let { xml } = await extractFromPDF(state, { doi, collection })
       await services.showMergeView(state, xml)
     }
@@ -155,7 +155,7 @@ async function extractFromNewPdf(state) {
  * @throws {Error} If the DOI is not valid or the user aborts the dialog
  */
 async function extractFromPDF(state, defaultOptions={}) {
-  if(!state.pdfPath) throw new Error("Missing PDF path")
+  if(!state.pdf) throw new Error("Missing PDF path")
 
   // get DOI and instructions from user
   const options = await promptForExtractionOptions(defaultOptions)
@@ -164,7 +164,7 @@ async function extractFromPDF(state, defaultOptions={}) {
   ui.spinner.show('Extracting references, please wait')
   let result
   try {
-    const filename = options.filename || state.pdfPath
+    const filename = options.filename || state.pdf
     result = await client.extractReferences(filename, options)
     await fileselection.reload(state)  // todo uncouple
     return result

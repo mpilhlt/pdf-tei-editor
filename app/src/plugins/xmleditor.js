@@ -72,7 +72,7 @@ async function install(state) {
 async function update(state) {
   //console.warn("update", plugin.name, state)
 
-  if (state.xmlPath === null) {
+  if (state.xml === null) {
     xmlEditor.clear()
     return 
   }
@@ -91,7 +91,7 @@ async function update(state) {
   }
 
   // xpath state => selection
-  if (xmlEditor.isReady() && state.xpath && state.xmlPath) {
+  if (xmlEditor.isReady() && state.xpath && state.xml) {
     const { index, pathBeforePredicates } = parseXPath(state.xpath)
     // select the node by index
     try {

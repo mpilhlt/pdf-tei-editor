@@ -82,9 +82,9 @@ async function start(state) {
 
     // get document paths from URL hash 
     // @ts-ignore
-    const pdf = state.pdfPath || null
-    const xml = state.xmlPath || null
-    const diff = state.diffXmlPath
+    const pdf = state.pdf || null
+    const xml = state.xml || null
+    const diff = state.diff
 
     if (pdf !== null) {
       // lod the documents

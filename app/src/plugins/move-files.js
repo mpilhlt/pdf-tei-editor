@@ -83,13 +83,13 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function showMoveFilesDialog(state) {
-  const { xmlPath, pdfPath } = state;
-  if (!xmlPath || !pdfPath) {
+  const { xml, pdf } = state;
+  if (!xml || !pdf) {
     dialog.error("Cannot move files, PDF or XML path is missing.");
     return;
   }
 
-  const currentCollection = pdfPath.split('/')[3];
+  const currentCollection = pdf.split('/')[3];
 
   const collectionSelectBox = moveFilesDialog.collectionName;
   collectionSelectBox.innerHTML = "";
@@ -124,7 +124,7 @@ async function showMoveFilesDialog(state) {
 
   ui.spinner.show('Moving files, please wait...');
   try {
-    const { new_pdf_path, new_xml_path } = await client.moveFiles(pdfPath, xmlPath, destinationCollection);
+    const { new_pdf_path, new_xml_path } = await client.moveFiles(pdf, xml, destinationCollection);
     await fileselection.reload(state);
     await services.load(state, { pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);

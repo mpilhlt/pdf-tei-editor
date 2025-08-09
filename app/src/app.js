@@ -35,9 +35,9 @@ import { plugin as authenticationPlugin, api as authentication } from './plugins
  * 
  * @typedef {object} ApplicationState
  * @property {string|null} sessionId - The session id of the particular app instance in a browser tab/window
- * @property {string|null} pdfPath - The path to the PDF file in the viewer
- * @property {string|null} xmlPath - The path to the XML file in the editor
- * @property {string|null} diffXmlPath - The path to an XML file which is used to create a diff, if any
+ * @property {string|null} pdf - The document identifier for the PDF file in the viewer
+ * @property {string|null} xml - The document identifier for the XML file in the editor
+ * @property {string|null} diff - The document identifier for an XML file which is used to create a diff, if any
  * @property {string|null} xpath - The current xpath used to select a node in the editor
  * @property {string|null} variant - The variant filter to show only files with matching variant-id
  * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
@@ -49,9 +49,9 @@ import { plugin as authenticationPlugin, api as authentication } from './plugins
  * @type{ApplicationState}
  */
 let state = {
-  pdfPath: null,
-  xmlPath: null,
-  diffXmlPath: null,
+  pdf: null,
+  xml: null,
+  diff: null,
   xpath: null,
   variant: null,
   webdavEnabled: false,

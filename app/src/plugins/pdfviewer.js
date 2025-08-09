@@ -49,9 +49,9 @@ async function install(state) {
  * @returns {Promise<void>}
  */
 async function update(state) {
-  if (state.pdfPath !== currentFile) {
-    currentFile = state.pdfPath;
-    //if (state.pdfPath === null && state.user === null) {
+  if (state.pdf !== currentFile) {
+    currentFile = state.pdf;
+    //if (state.pdf === null && state.user === null) {
     //  pdfViewer.load('empty.pdf')
     //}
   }

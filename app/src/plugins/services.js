@@ -186,10 +186,10 @@ async function update(state) {
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
   // Allow duplicate only if we have an xml path
-  da.createNewVersion.disabled = !Boolean(state.xmlPath)
+  da.createNewVersion.disabled = !Boolean(state.xml)
 
   // Allow download only if we have an xml path
-  da.download.disabled = !Boolean(state.xmlPath)
+  da.download.disabled = !Boolean(state.xml)
 
   // disable sync and upload if webdav is not enabled
   da.sync.disabled = !state.webdavEnabled
@@ -223,20 +223,22 @@ async function load(state, { xml, pdf }) {
 
   // PDF 
   if (pdf) {
-    await updateState(state, { pdfPath: null, xmlPath: null, diffXmlPath: null })
+    await updateState(state, { pdf: null, xml: null, diff: null })
     logger.info("Loading PDF: " + pdf)
-    promises.push(pdfViewer.load(pdf))
+    // Convert document identifier to static file URL
+    const pdfUrl = `/api/files/${pdf}`
+    promises.push(pdfViewer.load(pdfUrl))
   }
 
   // XML
   if (xml) {
     // Check for lock before loading
 
-    if (state.xmlPath !== xml) {
+    if (state.xml !== xml) {
       try {
         ui.spinner.show('Loading file, please wait...')
-        if (state.xmlPath && !state.editorReadOnly) {
-          await client.releaseLock(state.xmlPath)
+        if (state.xml && !state.editorReadOnly) {
+          await client.releaseLock(state.xml)
         }
         try {
           await client.acquireLock(xml);
@@ -257,9 +259,11 @@ async function load(state, { xml, pdf }) {
     }
 
     removeMergeView(state)
-    await updateState(state, { xmlPath: null, diffXmlPath: null, editorReadOnly: file_is_locked })
+    await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked })
     logger.info("Loading XML: " + xml)
-    promises.push(xmlEditor.loadXml(xml))
+    // Convert document identifier to static file URL
+    const xmlUrl = `/api/files/${xml}`
+    promises.push(xmlEditor.loadXml(xmlUrl))
   }
 
   // await promises in parallel
@@ -275,12 +279,12 @@ async function load(state, { xml, pdf }) {
   }
 
   if (pdf) {
-    state.pdfPath = pdf
+    state.pdf = pdf
     // update selectboxes in the toolbar
     await fileselection.update(state)
   }
   if (xml) {
-    state.xmlPath = xml
+    state.xml = xml
     startAutocomplete()
   }
 
@@ -355,8 +359,10 @@ async function showMergeView(state, diff) {
   logger.info("Loading diff XML: " + diff)
   ui.spinner.show('Computing file differences, please wait...')
   try {
-    await xmlEditor.showMergeView(diff)
-    updateState(state, { diffXmlPath: diff })
+    // Convert document identifier to static file URL
+    const diffUrl = `/api/files/${diff}`
+    await xmlEditor.showMergeView(diffUrl)
+    updateState(state, { diff: diff })
     // turn validation off as it creates too much visual noise
     validation.configure({ mode: "off" })
   } finally {
@@ -372,7 +378,7 @@ function removeMergeView(state) {
   // re-enable validation
   validation.configure({ mode: "auto" })
   UrlHash.remove("diff")
-  updateState(state, { diffXmlPath: null })
+  updateState(state, { diff: null })
 }
 
 /**
@@ -482,8 +488,8 @@ async function deleteAll(state) {
     await fileselection.reload(state)
     // load the first PDF and XML file 
     await load(state, {
-      pdf: fileselection.fileData[0].pdf,
-      xml: fileselection.fileData[0].xml
+      pdf: fileselection.fileData[0].pdf.hash,
+      xml: fileselection.fileData[0].gold?.[0]?.hash || fileselection.fileData[0].versions?.[0]?.hash
     })
   }
 }
@@ -507,7 +513,7 @@ async function syncFiles(state) {
  * @param {ApplicationState} state
  */
 async function downloadXml(state) {
-  if (!state.xmlPath) {
+  if (!state.xml) {
     throw new TypeError("State does not contain an xml path")
   }
   let xml = xmlEditor.getXML()
@@ -518,7 +524,7 @@ async function downloadXml(state) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = state.xmlPath.split('/').pop() || 'document.xml'
+  a.download = state.xml.split('/').pop() || 'document.xml'
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -531,7 +537,7 @@ async function downloadXml(state) {
 async function uploadXml(state) {
   const { filename: tempFilename } = await client.uploadFile(undefined, { accept: '.xml' })
   // @ts-ignore
-  const { path } = await client.createVersionFromUpload(tempFilename, state.xmlPath)
+  const { path } = await client.createVersionFromUpload(tempFilename, state.xml)
   await fileselection.reload(state)
   await load(state, { xml: path })
   notify("Document was uploaded. You are now editing the new version.")
@@ -648,12 +654,12 @@ async function saveRevision(state) {
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     await addTeiHeaderInfo(respStmt, null, revisionChange)
-    const result = await saveXml(state.xmlPath)
+    const result = await saveXml(state.xml)
     
     // If migration occurred, first reload file data, then update state
     if (result.status === "saved_with_migration") {
       await fileselection.reload(state)
-      state.xmlPath = result.path
+      state.xml = result.path
       await updateState(state)
     }
     
@@ -715,11 +721,11 @@ async function createNewVersion(state) {
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     // save new version first
-    let { path } = await saveXml(state.xmlPath, true)
+    let { path } = await saveXml(state.xml, true)
 
     // update the state to load the new document
-    state.xmlPath = path
-    state.diffXmlPath = path
+    state.xml = path
+    state.diff = path
     await updateState(state)
 
     // now modify the header

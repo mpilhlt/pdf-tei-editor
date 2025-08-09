@@ -6,7 +6,7 @@ from shutil import move
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
     ApiError, make_timestamp, remove_obsolete_marker_if_exists,
-    get_version_full_path
+    get_version_full_path, resolve_document_identifier
 )
 from server.lib.cache_manager import mark_cache_dirty
 from server.extractors.discovery import list_extractors, create_extractor

@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, send_file
 import os
 import re
 from lxml import etree
@@ -8,7 +8,7 @@ from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
     ApiError, make_timestamp, make_version_timestamp, get_data_file_path, 
     safe_file_path, remove_obsolete_marker_if_exists, get_session_id,
-    get_version_path, migrate_old_version_files
+    get_version_path, migrate_old_version_files, resolve_document_identifier
 )
 from server.lib.file_data import (
     get_file_data, apply_variant_filtering,
@@ -70,12 +70,15 @@ def save():
     """
     data = request.get_json()
     xml_string = data.get("xml_string")
-    file_path_rel = data.get("file_path") 
+    file_path_or_hash = data.get("file_path") 
     save_as_new_version = data.get("new_version", False)
     session_id = get_session_id(request)
 
-    if not xml_string or not file_path_rel:
+    if not xml_string or not file_path_or_hash:
         raise ApiError("XML content and file path are required.")
+    
+    # Resolve hash to path if needed
+    file_path_rel = resolve_document_identifier(file_path_or_hash)
     
     # encode xml entities as per configuration
     if read_config().get("xml.encode-entities.server", False) == True:
@@ -273,8 +276,9 @@ def delete():
         raise ApiError("Files must be a list of paths")
     
     for file in files: 
-        # get real file path
-        file_path = os.path.join(data_root, safe_file_path(file))
+        # Resolve hash to path if needed, then get real file path
+        resolved_path = resolve_document_identifier(file)
+        file_path = os.path.join(data_root, safe_file_path(resolved_path))
         # delete the file 
         current_app.logger.info(f"Deleting file {file_path}")
         if os.path.exists(file_path):
@@ -305,7 +309,8 @@ def create_version_from_upload():
     
     data = request.get_json()
     temp_filename = data.get("temp_filename")
-    file_path = os.path.join(data_root, safe_file_path(data.get("file_path")))
+    resolved_path = resolve_document_identifier(data.get("file_path"))
+    file_path = os.path.join(data_root, safe_file_path(resolved_path))
 
     if not temp_filename or not file_path:
         raise ApiError("Missing temp_filename or file_path")
@@ -350,12 +355,16 @@ def move_files():
     Moves a pair of PDF and XML files to a different collection.
     """
     data = request.get_json()
-    pdf_path_str = data.get("pdf_path")
-    xml_path_str = data.get("xml_path")
+    pdf_path_or_hash = data.get("pdf_path")
+    xml_path_or_hash = data.get("xml_path")
     destination_collection = data.get("destination_collection")
 
-    if not all([pdf_path_str, xml_path_str, destination_collection]):
+    if not all([pdf_path_or_hash, xml_path_or_hash, destination_collection]):
         raise ApiError("Missing parameters")
+
+    # Resolve hashes to paths if needed
+    pdf_path_str = resolve_document_identifier(pdf_path_or_hash)
+    xml_path_str = resolve_document_identifier(xml_path_or_hash)
 
     new_pdf_path = _move_file(pdf_path_str, "pdf", destination_collection)
     new_xml_path = _move_file(xml_path_str, "tei", destination_collection)
@@ -407,9 +416,10 @@ def _move_file(file_path_str, file_type, destination_collection):
 def check_lock_route():
     """Checks if a single file is locked."""
     data = request.get_json()
-    file_path = data.get("file_path")
-    if not file_path:
+    file_path_or_hash = data.get("file_path")
+    if not file_path_or_hash:
         raise ApiError("File path is required.")
+    file_path = resolve_document_identifier(file_path_or_hash)
     session_id = get_session_id(request)
     return jsonify(check_lock(file_path, session_id))
 
@@ -420,9 +430,10 @@ def check_lock_route():
 def acquire_lock_route():
     """Acquire a lock for this file."""
     data = request.get_json()
-    file_path = data.get("file_path")
-    if not file_path:
+    file_path_or_hash = data.get("file_path")
+    if not file_path_or_hash:
         raise ApiError("File path is required.")
+    file_path = resolve_document_identifier(file_path_or_hash)
     session_id = get_session_id(request)
     if acquire_lock(file_path, session_id):
         return jsonify("OK")
@@ -436,9 +447,10 @@ def acquire_lock_route():
 def release_lock_route():
     """Releases the lock for a given file path."""
     data = request.get_json()
-    file_path = data.get("file_path")
-    if not file_path:
+    file_path_or_hash = data.get("file_path")
+    if not file_path_or_hash:
         raise ApiError("File path is required.")
+    file_path = resolve_document_identifier(file_path_or_hash)
     session_id = get_session_id(request)
     if release_lock(file_path, session_id):
         return jsonify({"status": "lock_released"})
@@ -456,9 +468,10 @@ def heartbeat():
     Also returns the current cache status to enable efficient file data refresh.
     """
     data = request.get_json()
-    file_path = data.get("file_path")
-    if not file_path:
+    file_path_or_hash = data.get("file_path")
+    if not file_path_or_hash:
         raise ApiError("File path is required for heartbeat.")
+    file_path = resolve_document_identifier(file_path_or_hash)
     session_id = get_session_id(request)
     # The existing acquire_lock function already handles refreshing
     # a lock if it's owned by the same session.
@@ -480,5 +493,36 @@ def get_all_locks_route():
     """Fetches all active locks."""
     active_locks = get_all_active_locks()
     return jsonify(active_locks)
+
+
+@bp.route("/<document_id>", methods=["GET"])
+@handle_api_errors
+def serve_file_by_id(document_id):
+    """
+    Serve file content by document identifier (hash or path).
+    This allows URLs like /files/abc123 to serve the actual file content.
+    """
+    try:
+        # Resolve the document identifier to a full path
+        file_path = resolve_document_identifier(document_id)
+        
+        # Convert to absolute system path
+        data_root = current_app.config["DATA_ROOT"]
+        safe_path = safe_file_path(file_path)
+        absolute_path = os.path.join(data_root, safe_path)
+        
+        # Check if file exists
+        if not os.path.exists(absolute_path):
+            raise ApiError(f"File not found for identifier: {document_id}", status_code=404)
+        
+        # Serve the file
+        return send_file(absolute_path)
+        
+    except ApiError:
+        # Re-raise API errors as-is
+        raise
+    except Exception as e:
+        current_app.logger.error(f"Error serving file {document_id}: {e}")
+        raise ApiError("Failed to serve file", status_code=500)
 
 

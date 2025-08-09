@@ -374,7 +374,6 @@ def _build_file_list(file_id_data):
     for file_id, file_type_data in file_id_data.items():
         file_dict = {
             "id": file_id, 
-            "hash": _generate_file_hash(file_id),  # ID-based hash for the document
             "versions": []
         }
         
@@ -397,26 +396,17 @@ def _build_file_list(file_id_data):
                 else:
                     # Handle main files (PDF and gold TEI)
                     if file_type == 'pdf':
-                        file_dict['path'] = path_from_root  # Primary key
-                    else:
-                        file_dict[file_type] = path_from_root
+                        file_dict['pdf'] = {
+                            'path': path_from_root,  # Keep for backward compatibility during transition
+                            'hash': file_info['hash']
+                        }
         
         # Build gold variants array and handle backward compatibility
         gold_variants = _build_gold_variants_array(file_id, file_type_data)
         if gold_variants:
             file_dict['gold'] = gold_variants
             
-        # Backward compatibility: keep 'xml' key pointing to default variant
-        if 'xml' in file_dict:
-            # xml key already set from main files processing above
-            pass
-        elif gold_variants:
-            # Use first gold variant as fallback for xml key
-            file_dict['xml'] = gold_variants[0]['path']
             
-        # Backward compatibility: copy path to pdf
-        if 'path' in file_dict:
-            file_dict['pdf'] = file_dict['path']
         
         # Add top-level metadata from main XML file
         _add_top_level_metadata(file_dict)
@@ -424,8 +414,12 @@ def _build_file_list(file_id_data):
         # Sort versions and add Gold entry if main XML exists
         _finalize_versions(file_dict)
         
-        # Only include files that have both PDF and XML
-        if 'path' in file_dict and 'xml' in file_dict:
+        # Only include files that have PDF and at least one XML (gold or version)
+        has_pdf = 'pdf' in file_dict
+        has_xml = ((file_dict.get('gold') and len(file_dict['gold']) > 0) or 
+                  (file_dict.get('versions') and len(file_dict['versions']) > 0))
+        
+        if has_pdf and has_xml:
             file_list.append(file_dict)
     
     # Sort by ID
@@ -449,7 +443,7 @@ def _build_entry_with_metadata(file_info, path_from_root, file_id=None, format_l
     
     entry = {
         'label': fallback_label,
-        'path': path_from_root,
+        'path': path_from_root,  # Will be converted to hash later
         'hash': file_info['hash'],
         'collection': file_info['collection']
     }
@@ -514,7 +508,11 @@ def _build_gold_variants_array(file_id, file_type_data):
 
 def _add_top_level_metadata(file_dict):
     """Add top-level metadata (author, title, date, label) from main XML file."""
-    xml_path = file_dict.get('xml')
+    # Try to get XML path from first gold variant
+    xml_path = None
+    if file_dict.get('gold') and len(file_dict['gold']) > 0:
+        xml_path = file_dict['gold'][0].get('path')
+    
     if not xml_path:
         return
     
@@ -584,7 +582,7 @@ def _get_latest_variant_fallback(file_id, file_type_data):
     for file_info in file_type_data['xml']:
         rel_path = Path(file_info['path'])
         if len(rel_path.parts) >= 3 and "versions" in rel_path.parts:
-            version_files.append("/data/" + file_info['path'])
+            version_files.append("/data/" + file_info['path'])  # Will be converted to hash later
     
     # Return oldest for backward compatibility (TODO: change to latest)
     return version_files[0] if version_files else None
@@ -675,12 +673,11 @@ def _generate_lookup_table(file_data):
     lookup = {}
     
     for file_entry in file_data:
-        # Add main files
-        for key in ['path', 'xml']:  # 'path' is PDF, 'xml' is XML
-            if key in file_entry:
-                path = file_entry[key].replace('/data/', '')
-                file_hash = _generate_file_hash(path)
-                lookup[file_hash] = path
+        # Add PDF file
+        if 'pdf' in file_entry and 'path' in file_entry['pdf']:
+            path = file_entry['pdf']['path'].replace('/data/', '')
+            file_hash = _generate_file_hash(path)
+            lookup[file_hash] = path
         
         # Add version files
         for version in file_entry.get('versions', []):
@@ -714,8 +711,9 @@ def _shorten_hashes(file_data, lookup_table):
     
     # Collect hashes from file entries
     for file_entry in file_data:
-        if 'hash' in file_entry:
-            all_hashes.add(file_entry['hash'])
+        # Collect hash from pdf object
+        if 'pdf' in file_entry and 'hash' in file_entry['pdf']:
+            all_hashes.add(file_entry['pdf']['hash'])
         
         # Collect hashes from versions
         for version in file_entry.get('versions', []):
@@ -747,8 +745,11 @@ def _shorten_hashes(file_data, lookup_table):
     
     # Apply hash shortening to file data
     for file_entry in file_data:
-        if 'hash' in file_entry:
-            file_entry['hash'] = hash_mapping[file_entry['hash']]
+        # Update PDF hash
+        if 'pdf' in file_entry and 'hash' in file_entry['pdf']:
+            old_hash = file_entry['pdf']['hash']
+            if old_hash in hash_mapping:
+                file_entry['pdf']['hash'] = hash_mapping[old_hash]
         
         # Update version hashes
         for version in file_entry.get('versions', []):
