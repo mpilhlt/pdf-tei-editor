@@ -24,10 +24,13 @@ const api = {
 const plugin = {
   name: "statusbar",
   install,
-  //state: {
-  //  update
-  //}
+  state: {
+    update
+  }
 }
+
+let eventSource = null;
+let cachedSessionId = null;
 
 export { api, plugin }
 export default plugin
@@ -42,7 +45,43 @@ async function install(state){
 /**
  * @param {ApplicationState} state 
  */
-//async function update(state) {}
+async function update(state) {
+  const { user, sessionId } = state;
+
+  // Close existing connection if the session ID has changed or user logged out
+  if (eventSource && (sessionId !== cachedSessionId || !user)) {
+    logger.debug('Closing SSE connection due to session change or logout.');
+    eventSource.close();
+    eventSource = null;
+    cachedSessionId = null;
+    removeMessage('xml', 'sse-status');
+  }
+
+  // Open a new connection if user is logged in and there's no active connection
+  if (user && sessionId && !eventSource) {
+    logger.debug(`User is logged in, subscribing to SSE with session ID ${sessionId}.`);
+    const url = `/sse/subscribe?session_id=${sessionId}`;
+    eventSource = new EventSource(url);
+    cachedSessionId = sessionId;
+    let messageTimeout = null
+    eventSource.addEventListener('updateStatus', (event) => {
+      addMessage(event.data, 'xml', 'sse-status')
+      if (messageTimeout) {
+        clearTimeout(messageTimeout)
+      }
+      messageTimeout = setTimeout(() => removeMessage('xml','sse-status'), 5000)
+    });
+
+    eventSource.onerror = (err) => {
+      logger.error("EventSource failed:", err);
+      if (eventSource) {
+        eventSource.close();
+      }
+      eventSource = null;
+      cachedSessionId = null;
+    };
+  }
+}
 
 /**
  * Returns the status bar DIV of either the PDF viewer or the XML editor

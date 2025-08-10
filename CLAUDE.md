@@ -113,3 +113,4 @@ npm run test:sync
 
 ### Python Development
 - Always prefer pathlib Path().as_posix() over manually concatenating path strings or os.path.join()
+- You never need to restart the Flask server since it watches for changes in the filesystem. You can also not access the server logs of the running server. If you need the output, ask the user to supply it to you.
