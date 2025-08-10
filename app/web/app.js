@@ -677,7 +677,7 @@ const plugin$g = {
   deps: ['config'],
   install: install$f,
   state: {
-    update: update$b
+    update: update$c
   }
 };
 
@@ -697,7 +697,7 @@ async function install$f(state) {
 /** 
  * @param {ApplicationState} state 
  */
-async function update$b(state) {
+async function update$c(state) {
   updateUrlHashfromState(state);
 }
 
@@ -2457,7 +2457,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$a);
+    const documentElementObserver = new MutationObserver(update$b);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2478,9 +2478,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$a();
+    update$b();
 }
-function update$a() {
+function update$b() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -11036,10 +11036,13 @@ const api$a = {
 const plugin$f = {
   name: "statusbar",
   install: install$e,
-  //state: {
-  //  update
-  //}
+  state: {
+    update: update$a
+  }
 };
+
+let eventSource = null;
+let cachedSessionId = null;
 
 /** 
  * @param {ApplicationState} state 
@@ -11051,7 +11054,43 @@ async function install$e(state){
 /**
  * @param {ApplicationState} state 
  */
-//async function update(state) {}
+async function update$a(state) {
+  const { user, sessionId } = state;
+
+  // Close existing connection if the session ID has changed or user logged out
+  if (eventSource && (sessionId !== cachedSessionId || !user)) {
+    api$d.debug('Closing SSE connection due to session change or logout.');
+    eventSource.close();
+    eventSource = null;
+    cachedSessionId = null;
+    removeMessage('xml', 'sse-status');
+  }
+
+  // Open a new connection if user is logged in and there's no active connection
+  if (user && sessionId && !eventSource) {
+    api$d.debug(`User is logged in, subscribing to SSE with session ID ${sessionId}.`);
+    const url = `/sse/subscribe?session_id=${sessionId}`;
+    eventSource = new EventSource(url);
+    cachedSessionId = sessionId;
+    let messageTimeout = null;
+    eventSource.addEventListener('updateStatus', (event) => {
+      addMessage(event.data, 'xml', 'sse-status');
+      if (messageTimeout) {
+        clearTimeout(messageTimeout);
+      }
+      messageTimeout = setTimeout(() => removeMessage('xml','sse-status'), 5000);
+    });
+
+    eventSource.onerror = (err) => {
+      api$d.error("EventSource failed:", err);
+      if (eventSource) {
+        eventSource.close();
+      }
+      eventSource = null;
+      cachedSessionId = null;
+    };
+  }
+}
 
 /**
  * Returns the status bar DIV of either the PDF viewer or the XML editor
