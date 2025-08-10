@@ -23,8 +23,8 @@ class StatusDropdown extends HTMLElement {
       customElements.whenDefined('sl-menu-item')
     ]);
     
-    this.render();
     this.parseItems();
+    this.render();
     this.setupEventListeners();
   }
 
@@ -50,14 +50,6 @@ class StatusDropdown extends HTMLElement {
     if (dropdown) {
       dropdown.addEventListener('sl-select', (e) => {
         this.selectItem(e.detail.item.value);
-      });
-      
-      dropdown.addEventListener('sl-show', () => {
-        console.log('Dropdown opened');
-      });
-      
-      dropdown.addEventListener('sl-hide', () => {
-        console.log('Dropdown closed');
       });
     }
   }

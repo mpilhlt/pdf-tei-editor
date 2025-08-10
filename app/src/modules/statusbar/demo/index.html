@@ -187,6 +187,33 @@
       color: #24292f;
     }
 
+    /* Global styles for hoisted status dropdown popups */
+    sl-dropdown[data-current-placement]::part(panel) {
+      font-size: var(--sl-font-size-x-small) !important;
+      min-width: 120px !important;
+      z-index: 10000 !important;
+      background: white !important;
+      border: 1px solid var(--sl-color-neutral-200) !important;
+      border-radius: var(--sl-border-radius-medium) !important;
+      box-shadow: var(--sl-shadow-large) !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu::part(base) {
+      font-size: var(--sl-font-size-x-small) !important;
+      padding: 4px 0 !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu-item::part(base) {
+      font-size: var(--sl-font-size-x-small) !important;
+      padding: 4px 12px !important;
+      min-height: auto !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu-item::part(label) {
+      font-size: var(--sl-font-size-x-small) !important;
+      line-height: 1.2 !important;
+    }
+
     @media (max-width: 768px) {
       body {
         padding: 10px;
