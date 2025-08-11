@@ -44507,6 +44507,7 @@ const xmlEditor = new NavXmlEditor('codemirror-container');
 
 // Status widgets for XML editor statusbar
 let readOnlyStatusWidget = null;
+let cursorPositionWidget = null;
 
 /**
  * component plugin
@@ -44542,17 +44543,28 @@ async function install$b(state) {
     variant: 'info'
   });
 
+  /** @type {StatusText} */
+  cursorPositionWidget =  StatusBarUtils.createText({
+    text: 'Ln 1, Col 1',
+    variant: 'neutral'
+  });
+  
+  // Add cursor position widget to right side of statusbar
+  // @ts-ignore
+  ui$1.xmlEditor.statusbar.addWidget(cursorPositionWidget, 'right', 1);
+
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
     xmlEditor.whenReady().then(() => onSelectionChange(state));
+    updateCursorPosition();
   });
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+    const customEvent = /** @type CustomEvent */ (evt);
     if (api$8.isDisabled()) {
       let view = xmlEditor.getView();
-      // @ts-ignore
-      let diagnostic = evt.detail;
+      let diagnostic = customEvent.detail;
       try {
         view.dispatch(setDiagnostics(view.state, [diagnostic]));
       } catch (error) {
@@ -44560,6 +44572,12 @@ async function install$b(state) {
       }
     }
   });
+  
+  // Update cursor position when editor is ready
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_READY, updateCursorPosition);
+  
+  // Update cursor position on editor updates (typing, etc.)
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition);
 }
 
 /**
@@ -44629,6 +44647,21 @@ async function onSelectionChange(state) {
 
   // todo: use isXPathsubset()
   if (index !== null && cursorParts.tagName === stateParts.tagName && index !== xmlEditor.currentIndex + 1) ;
+}
+
+/**
+ * Updates the cursor position widget with current line and column
+ */
+function updateCursorPosition() {
+  if (!xmlEditor.isReady() || !cursorPositionWidget) return
+  
+  const view = xmlEditor.getView();
+  const selection = view.state.selection.main;
+  const line = view.state.doc.lineAt(selection.head);
+  const lineNumber = line.number;
+  const columnNumber = selection.head - line.from + 1;
+  
+  cursorPositionWidget.text = `Ln ${lineNumber}, Col ${columnNumber}`;
 }
 
 /**
@@ -47795,7 +47828,6 @@ async function saveXml(filePath, saveAsNewVersion = false) {
   try {
     // Show saving status
     if (savingStatusWidget && !savingStatusWidget.isConnected) {
-      console.log('XML Editor statusbar exists?', ui$1.xmlEditor.statusbar);
       if (ui$1.xmlEditor.statusbar) {
         ui$1.xmlEditor.statusbar.addWidget(savingStatusWidget, 'left', 10);
       }
@@ -47809,7 +47841,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     // clear status message after 1 second 
     setTimeout(() => {
       if (savingStatusWidget && savingStatusWidget.isConnected) {
-        ui$1.xmlEditor.statusbar.removeWidget(savingStatusWidget);
+        ui$1.xmlEditor.statusbar.removeWidget(savingStatusWidget.id);
       }
     }, 1000);
   }
@@ -57865,7 +57897,7 @@ function configureXmlEditor() {
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
-      ui$1.xmlEditor.statusbar.removeWidget(validationStatusWidget);
+      ui$1.xmlEditor.statusbar.removeWidget(validationStatusWidget.id);
     }
   });
 }
