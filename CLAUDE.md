@@ -115,3 +115,5 @@ npm run test:sync
 - Always prefer pathlib Path().as_posix() over manually concatenating path strings or os.path.join()
 - You never need to restart the Flask server since it watches for changes in the filesystem. You can also not access the server logs of the running server. If you need the output, ask the user to supply it to you.
 - The UI name resolution system allows to lookup dom elements by a chain of nested "name" attribute. In the runtime, it is updated by calling updateUi() from ui.js. Then, elements can be referred to by ui.<top-level-name>.<next-level-name>.... etc. Each time a new element with a name is added to the DOM, `updateUi()` has to be called again. In code, this hierarchy has to be manually added by JSDoc/Typescript `@typedef` definitions in order to get autocompletion. TypeScript errors can indicate that such definitions haven't been added. If so, add them.
+- For the moment, do not add API methods to the `@typedef` definitions used for documenting the named html elements hierarchy.
+- never propose to restart the server - the user handles that manually

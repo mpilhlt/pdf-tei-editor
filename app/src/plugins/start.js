@@ -214,7 +214,7 @@ function configureXmlEditor() {
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
-      ui.xmlEditor.statusbar.removeWidget(validationStatusWidget)
+      ui.xmlEditor.statusbar.removeWidget(validationStatusWidget.id)
     }
   })
 }

@@ -350,7 +350,6 @@ async function saveXml(filePath, saveAsNewVersion = false) {
   try {
     // Show saving status
     if (savingStatusWidget && !savingStatusWidget.isConnected) {
-      console.log('XML Editor statusbar exists?', ui.xmlEditor.statusbar)
       if (ui.xmlEditor.statusbar) {
         ui.xmlEditor.statusbar.addWidget(savingStatusWidget, 'left', 10)
       }
@@ -364,7 +363,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     // clear status message after 1 second 
     setTimeout(() => {
       if (savingStatusWidget && savingStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.removeWidget(savingStatusWidget)
+        ui.xmlEditor.statusbar.removeWidget(savingStatusWidget.id)
       }
     }, 1000)
   }
