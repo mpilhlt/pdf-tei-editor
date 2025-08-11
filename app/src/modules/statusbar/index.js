@@ -50,7 +50,9 @@ function createWidget(tagName, options = {}) {
                           key === 'hiddenWhenZero' ? 'hidden-when-zero' : key;
           widget.setAttribute(attrName, '');
         } else if (typeof value !== 'boolean') {
-          widget.setAttribute(key, value.toString());
+          // Handle special attribute name mappings
+          const attrName = key === 'helpText' ? 'help-text' : key;
+          widget.setAttribute(attrName, value.toString());
         }
       } catch (e) {
         // Ignore setAttribute errors for unsupported operations
@@ -171,18 +173,11 @@ const StatusBarUtils = {
    * @param {boolean} [options.checked] - Whether switch is checked
    * @param {boolean} [options.disabled] - Whether switch is disabled
    * @param {string} [options.size] - Switch size (small, medium, large)
+   * @param {string} [options.name] - Name attribute for UI element lookup
    * @returns {StatusSwitch}
    */
   createSwitch(options = {}) {
-    const { helpText, ...attrs } = options;
-    const widget = createWidget('status-switch', attrs);
-    
-    // Handle help-text attribute specially (kebab-case)
-    if (helpText) {
-      widget.setAttribute('help-text', helpText);
-    }
-    
-    return widget;
+    return createWidget('status-switch', options);
   }
 };
 

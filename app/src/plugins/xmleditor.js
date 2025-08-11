@@ -7,8 +7,9 @@
  * @import { Diagnostic } from '@codemirror/lint'
  */
 
-import ui from '../ui.js'
-import { validation, services, statusbar } from '../app.js'
+import ui, { updateUi } from '../ui.js'
+import { validation, services } from '../app.js'
+import { StatusBarUtils } from '../modules/statusbar/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { api as logger } from './logger.js'
@@ -22,6 +23,11 @@ import { setDiagnostics } from '@codemirror/lint'
  * @type {NavXmlEditor}
  */
 const xmlEditor = new NavXmlEditor('codemirror-container')
+
+// Status widgets for XML editor statusbar
+let readOnlyStatusWidget = null
+let validationStatusWidget = null
+let savingStatusWidget = null
 
 /**
  * component plugin
@@ -45,6 +51,20 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
   // Note: Autocomplete data is now loaded dynamically per document in services.js
   // The static tagData loading has been removed in favor of schema-specific autocomplete data
+
+  // Create status widgets for XML editor statusbar
+  readOnlyStatusWidget = StatusBarUtils.createText({
+    text: '🔒 File is read-only',
+    variant: 'warning'
+  })
+  validationStatusWidget = StatusBarUtils.createText({
+    text: 'Invalid XML',
+    variant: 'error'
+  })
+  savingStatusWidget = StatusBarUtils.createText({
+    text: 'Saving XML...',
+    variant: 'info'
+  })
 
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
@@ -83,10 +103,14 @@ async function update(state) {
     logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`)
     if (state.editorReadOnly) {
       ui.xmlEditor.classList.add("editor-readonly")
-      statusbar.addMessage("🔒 File is read-only", "xml", "readonly-state")
+      if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
+        ui.xmlEditor.statusbar.addWidget(readOnlyStatusWidget, 'left', 5)
+      }
     } else {
       ui.xmlEditor.classList.remove("editor-readonly")
-      statusbar.removeMessage("xml", "readonly-state")
+      if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
+        ui.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget)
+      }
     }
   }
 

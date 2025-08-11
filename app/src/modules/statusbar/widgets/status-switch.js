@@ -111,6 +111,9 @@ class StatusSwitch extends HTMLElement {
         ${helpText ? `<span class="help-text">${helpText}</span>` : ''}
       </div>
     `;
+    
+    // Re-establish event listeners after render since innerHTML wipes them out
+    this.setupEventListeners();
   }
 
   updateHostProperties() {
