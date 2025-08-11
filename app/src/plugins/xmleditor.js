@@ -27,7 +27,6 @@ const xmlEditor = new NavXmlEditor('codemirror-container')
 
 // Status widgets for XML editor statusbar
 let readOnlyStatusWidget = null
-let validationStatusWidget = null
 let savingStatusWidget = null
 let cursorPositionWidget = null
 
@@ -55,14 +54,14 @@ async function install(state) {
   // The static tagData loading has been removed in favor of schema-specific autocomplete data
 
   // Create status widgets for XML editor statusbar
+
+  /** @type {StatusText} */
   readOnlyStatusWidget = StatusBarUtils.createText({
     text: '🔒 File is read-only',
     variant: 'warning'
   })
-  validationStatusWidget = StatusBarUtils.createText({
-    text: 'Invalid XML',
-    variant: 'error'
-  })
+
+  /** @type {StatusText} */
   savingStatusWidget = StatusBarUtils.createText({
     text: 'Saving XML...',
     variant: 'info'
