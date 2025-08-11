@@ -44530,14 +44530,14 @@ async function install$b(state) {
   // The static tagData loading has been removed in favor of schema-specific autocomplete data
 
   // Create status widgets for XML editor statusbar
+
+  /** @type {StatusText} */
   readOnlyStatusWidget = StatusBarUtils.createText({
     text: '🔒 File is read-only',
     variant: 'warning'
   });
-  StatusBarUtils.createText({
-    text: 'Invalid XML',
-    variant: 'error'
-  });
+
+  /** @type {StatusText} */
   StatusBarUtils.createText({
     text: 'Saving XML...',
     variant: 'info'
