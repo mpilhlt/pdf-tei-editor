@@ -10,9 +10,10 @@
  */
 import ui, { updateUi } from '../ui.js'
 import {
-  updateState, client, logger, dialog, statusbar, config,
+  updateState, client, logger, dialog, config,
   fileselection, xmlEditor, pdfViewer, services, validation, authentication
 } from '../app.js'
+import { StatusBarUtils } from '../modules/statusbar/index.js'
 import { createHtmlElements } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -53,6 +54,9 @@ const plugin = {
 
 export { plugin, api }
 export default plugin
+
+// Status widget for saving progress
+let savingStatusWidget = null
 
 //
 // UI
@@ -126,6 +130,12 @@ async function install(state) {
   document.body.append(newVersionDialog)
   document.body.append(saveRevisionDialog)
   updateUi()
+  
+  // Create saving status widget
+  savingStatusWidget = StatusBarUtils.createText({
+    text: 'Saving XML...',
+    variant: 'info'
+  })
 
   const tb = ui.toolbar.self
 
@@ -338,7 +348,12 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    statusbar.addMessage("Saving XML...", "xml", "saving")
+    // Show saving status
+    if (savingStatusWidget && !savingStatusWidget.isConnected) {
+      if (ui.xmlEditor.statusbar) {
+        ui.xmlEditor.statusbar.addWidget(savingStatusWidget, 'left', 10)
+      }
+    }
     return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message)
@@ -346,7 +361,11 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error(`Could not save XML: ${e.message}`)
   } finally {
     // clear status message after 1 second 
-    setTimeout(() => { statusbar.removeMessage("xml", "saving") }, 1000)
+    setTimeout(() => {
+      if (savingStatusWidget && savingStatusWidget.isConnected) {
+        ui.xmlEditor.statusbar.removeWidget(savingStatusWidget.id)
+      }
+    }, 1000)
   }
 }
 

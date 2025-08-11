@@ -5,10 +5,12 @@
 /** 
  * @import { ApplicationState } from '../app.js' 
  * @import { Diagnostic } from '@codemirror/lint'
+ * @import { StatusText } from '../modules/statusbar/widgets/status-text.js'
  */
 
-import ui from '../ui.js'
-import { validation, services, statusbar } from '../app.js'
+import ui, { updateUi } from '../ui.js'
+import { validation, services } from '../app.js'
+import { StatusBarUtils } from '../modules/statusbar/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { api as logger } from './logger.js'
@@ -22,6 +24,11 @@ import { setDiagnostics } from '@codemirror/lint'
  * @type {NavXmlEditor}
  */
 const xmlEditor = new NavXmlEditor('codemirror-container')
+
+// Status widgets for XML editor statusbar
+let readOnlyStatusWidget = null
+let savingStatusWidget = null
+let cursorPositionWidget = null
 
 /**
  * component plugin
@@ -46,17 +53,42 @@ async function install(state) {
   // Note: Autocomplete data is now loaded dynamically per document in services.js
   // The static tagData loading has been removed in favor of schema-specific autocomplete data
 
+  // Create status widgets for XML editor statusbar
+
+  /** @type {StatusText} */
+  readOnlyStatusWidget = StatusBarUtils.createText({
+    text: '🔒 File is read-only',
+    variant: 'warning'
+  })
+
+  /** @type {StatusText} */
+  savingStatusWidget = StatusBarUtils.createText({
+    text: 'Saving XML...',
+    variant: 'info'
+  })
+
+  /** @type {StatusText} */
+  cursorPositionWidget =  StatusBarUtils.createText({
+    text: 'Ln 1, Col 1',
+    variant: 'neutral'
+  })
+  
+  // Add cursor position widget to right side of statusbar
+  // @ts-ignore
+  ui.xmlEditor.statusbar.addWidget(cursorPositionWidget, 'right', 1)
+
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
     xmlEditor.whenReady().then(() => onSelectionChange(state))
+    updateCursorPosition()
   });
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
+    const customEvent = /** @type CustomEvent */ (evt)
     if (validation.isDisabled()) {
       let view = xmlEditor.getView()
-      // @ts-ignore
-      let diagnostic = evt.detail
+      let diagnostic = customEvent.detail
       try {
         view.dispatch(setDiagnostics(view.state, [diagnostic]))
       } catch (error) {
@@ -64,6 +96,12 @@ async function install(state) {
       }
     }
   })
+  
+  // Update cursor position when editor is ready
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_READY, updateCursorPosition)
+  
+  // Update cursor position on editor updates (typing, etc.)
+  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition)
 }
 
 /**
@@ -83,10 +121,14 @@ async function update(state) {
     logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`)
     if (state.editorReadOnly) {
       ui.xmlEditor.classList.add("editor-readonly")
-      statusbar.addMessage("🔒 File is read-only", "xml", "readonly-state")
+      if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
+        ui.xmlEditor.statusbar.addWidget(readOnlyStatusWidget, 'left', 5)
+      }
     } else {
       ui.xmlEditor.classList.remove("editor-readonly")
-      statusbar.removeMessage("xml", "readonly-state")
+      if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
+        ui.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget)
+      }
     }
   }
 
@@ -149,5 +191,20 @@ async function saveIfDirty() {
       logger.debug(`Saved file to ${result.path}`)
     }
   }
+}
+
+/**
+ * Updates the cursor position widget with current line and column
+ */
+function updateCursorPosition() {
+  if (!xmlEditor.isReady() || !cursorPositionWidget) return
+  
+  const view = xmlEditor.getView()
+  const selection = view.state.selection.main
+  const line = view.state.doc.lineAt(selection.head)
+  const lineNumber = line.number
+  const columnNumber = selection.head - line.from + 1
+  
+  cursorPositionWidget.text = `Ln ${lineNumber}, Col ${columnNumber}`
 }
 

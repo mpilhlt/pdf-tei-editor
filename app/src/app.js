@@ -12,7 +12,7 @@ import ep from './endpoints.js'
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
 import { plugin as configPlugin, api as config } from './plugins/config.js'
 import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
-import { plugin as statusbarPlugin, api as statusbar} from './plugins/statusbar.js'
+import { plugin as ssePlugin, api as sse} from './plugins/sse.js'
 import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
 import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
 import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
@@ -73,7 +73,7 @@ let state = {
 const plugins = [loggerPlugin, urlHashStatePlugin, clientPlugin, configPlugin, 
   dialogPlugin, pdfViewerPlugin, xmlEditorPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
-  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, statusbarPlugin,
+  teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, ssePlugin,
   authenticationPlugin,
   /* must be the last plugin */ startPlugin]
 
@@ -134,7 +134,6 @@ try {
   tmpState = await client.state()
 }
 updateState(state, tmpState)
-console.warn(state)
 window.addEventListener('beforeunload', evt => {
   logger.debug("Saving state in sessionStorage")
   sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state))
@@ -151,4 +150,4 @@ await invoke(ep.start, state)
 // 
 export { state, ep as endpoints, invoke, updateState, pluginManager, plugins }
 export { logger, dialog, pdfViewer, xmlEditor, client, config, validation, fileselection, extraction,
-  services, floatingPanel, promptEditor, urlHash, appInfo, statusbar, authentication }
+  services, floatingPanel, promptEditor, urlHash, appInfo, sse, authentication }

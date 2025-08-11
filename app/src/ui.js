@@ -10,7 +10,6 @@
 import { accessNamedDescendentsAsProperties } from './modules/browser-utils.js';
 
 import { Spinner } from './modules/spinner.js'
-import { Switch } from './modules/switch.js';
 import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
 import SlButton from '@shoelace-style/shoelace/dist/components/button/button.js'
 import SlButtonGroup from '@shoelace-style/shoelace/dist/components/button-group/button-group.js'
@@ -26,6 +25,10 @@ import SlMenu from '@shoelace-style/shoelace/dist/components/menu/menu.js'
 import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-item.js'
 import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
 import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.js';
+import SlSwitch from '@shoelace-style/shoelace/dist/components/switch/switch.js';
+
+// Import statusbar components early so web components are defined
+import './modules/statusbar/index.js';
 
 /**
  * Import type definitions from plugins
@@ -44,15 +47,40 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
  * @typedef {object} namedElementsTree
  * @property {toolbarComponent} toolbar - The main toolbar
  * @property {floatingPanelComponent} floatingPanel - The floating panel with navigation buttons
- * @property {HTMLDivElement} pdfViewer - The PDFJS-based PDF viewer contained in an iFrame child node
- * @property {HTMLDivElement} xmlEditor - The codemirror-based xml editor
+ * @property {pdfViewerComponent} pdfViewer - The PDFJS-based PDF viewer with statusbar
+ * @property {xmlEditorComponent} xmlEditor - The codemirror-based xml editor with statusbar
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes and block the application while they are ongoing
  * @property {dialogComponent} dialog - A dialog to display messages or errors
  * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
  * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
  * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
- * @property {statusBarComponent} statusBar - A status bar to display messages about the current state of the application
  * @property {loginDialog} loginDialog - A dialog for login
+ */
+
+/**
+ * PDF viewer component with statusbar
+ * @typedef {object} pdfViewerComponent
+ * @property {HTMLDivElement} self - The PDF viewer container
+ * @property {pdfViewerStatusBar} statusbar - The PDF viewer statusbar
+ */
+
+/**
+ * XML editor component with statusbar
+ * @typedef {object} xmlEditorComponent 
+ * @property {HTMLDivElement} self - The XML editor container
+ * @property {xmlEditorStatusBar} statusbar - The XML editor statusbar
+ */
+
+/**
+ * PDF viewer statusbar with specific widgets
+ * @typedef {object} pdfViewerStatusBar
+ * @property {HTMLElement} searchSwitch - The autosearch toggle switch
+ */
+
+/**
+ * XML editor statusbar with specific widgets
+ * @typedef {object} xmlEditorStatusBar
+ * @property {HTMLElement} self - The statusbar element
  */
 
 /**
@@ -69,13 +97,6 @@ import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.
  * @property {SlButton} logoutButton
  */
 
-/**
- * The status bar with messages about the current state of the application
- * @typedef {object} statusBarComponent
- * @property {HTMLDivElement} self - The status bar element
- * @property {HTMLDivElement} statusMessagePdf - The status message for the PDF viewer
- * @property {HTMLDivElement} statusMessageXml - The status message for the XML editor 
- */
 
 /**
  * This variable represents the document node, which has the next-level named elements as virtual properties
@@ -133,6 +154,6 @@ updateUi()
 export {
   updateUi, createHtmlElements,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
-  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, Switch, SlDivider
+  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch
 }
 export default ui;

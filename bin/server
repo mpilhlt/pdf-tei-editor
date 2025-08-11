@@ -34,5 +34,6 @@ if __name__ == '__main__':
             port=port, 
             debug=True, 
             load_dotenv=True, 
+            threaded=True,
             extra_files=reload_extra_files)
    

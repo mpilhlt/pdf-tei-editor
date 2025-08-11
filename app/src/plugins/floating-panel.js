@@ -44,7 +44,6 @@ export default plugin
  * @property {HTMLSpanElement} selectionIndex
  * @property {HTMLButtonElement} nextNode
  * @property {HTMLDivElement} markNodeButtons - children have class="node-status" and 'data-status' attribute
- * @property {Switch} switchAutoSearch
  * @property {diffNavigationComponent} diffNavigation
  * 
  */
@@ -128,8 +127,6 @@ async function install(state) {
     services.removeMergeView(state)
   })
 
-  // @ts-ignore
-  fp.switchAutoSearch.addEventListener('change', onAutoSearchSwitchChange) // toggle search of node in the PDF
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex) // allow to input node index
 
   // configure "status" buttons
@@ -223,17 +220,6 @@ async function changeNodeIndex(state, delta) {
 // Event handlers
 //
 
-/**
- * Called when the switch for auto-search is toggled
- * @param {CustomEvent} evt 
- */
-async function onAutoSearchSwitchChange(evt) {
-  const checked = evt.detail.checked
-  logger.info(`Auto search is: ${checked}`)
-  if (checked && xmlEditor.selectedNode) {
-    await services.searchNodeContentsInPdf(xmlEditor.selectedNode)
-  }
-}
 
 /**
  * Called when the user clicks on the counter to enter the node index

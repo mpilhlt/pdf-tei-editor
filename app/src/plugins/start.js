@@ -12,8 +12,9 @@
 import ui from '../ui.js'
 import {
   updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
-  config, statusbar, authentication, state
+  config, authentication, state
 } from '../app.js'
+import { StatusBarUtils } from '../modules/statusbar/index.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -40,6 +41,7 @@ export default plugin
 //
 
 let spinner
+let validationStatusWidget = null
 
 /**
  * Invoked for plugin installation
@@ -53,6 +55,12 @@ async function install(state) {
   spinner.setAttribute('name', "spinner")
   document.body.appendChild(spinner)
   updateUi()
+  
+  // Create validation status widget
+  validationStatusWidget = StatusBarUtils.createText({
+    text: 'Invalid XML',
+    variant: 'error'
+  })
 }
 
 /**
@@ -193,7 +201,10 @@ function configureXmlEditor() {
     const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
     console.warn("XML is not well-formed", diagnostics)
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
-    statusbar.addMessage("Invalid XML", "xml", "xml-status")
+    // Show validation error in statusbar
+    if (validationStatusWidget && !validationStatusWidget.isConnected) {
+      ui.xmlEditor.statusbar.addWidget(validationStatusWidget, 'left', 5)
+    }
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
   })
@@ -201,7 +212,10 @@ function configureXmlEditor() {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
-    statusbar.removeMessage("xml", "xml-status")
+    // Remove validation error from statusbar
+    if (validationStatusWidget && validationStatusWidget.isConnected) {
+      ui.xmlEditor.statusbar.removeWidget(validationStatusWidget.id)
+    }
   })
 }
 
@@ -323,10 +337,10 @@ async function searchNodeContents() {
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
   // trigger auto-search if enabled and if a new node has been selected
-  const autoSearchSwitch = ui.floatingPanel.switchAutoSearch
+  const autoSearchSwitch = /** @type {any} */ (ui.pdfViewer.statusbar.searchSwitch)
   const node = xmlEditor.selectedNode
 
-  if (autoSearchSwitch.checked && node && node !== lastNode) {
+  if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
     await services.searchNodeContentsInPdf(node)
     lastNode = node
   }

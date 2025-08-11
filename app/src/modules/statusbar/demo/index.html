@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Status Bar Demo</title>
+  
+  <!-- Shoelace CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/light.css" />
+  
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+      line-height: 1.6;
+    }
+
+    .demo-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      overflow: visible;
+    }
+
+    .demo-container.resizable {
+      resize: horizontal;
+      overflow: auto;
+      min-width: 300px;
+      width: 800px;
+    }
+    
+    /* Make responsive demo show resize handle hint */
+    .resizable-hint {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+      font-style: italic;
+    }
+
+    .demo-header {
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .demo-header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 300;
+    }
+
+    .demo-header p {
+      margin: 5px 0 0 0;
+      opacity: 0.9;
+      font-size: 14px;
+    }
+
+    .demo-content {
+      padding: 20px;
+    }
+
+    .demo-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      background: #fafafa;
+    }
+
+    .demo-section h2 {
+      margin: 0 0 15px 0;
+      font-size: 18px;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .demo-section p {
+      margin: 0 0 15px 0;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .status-bar-container {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    .mock-editor {
+      height: 200px;
+      background: #f8f9fa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      font-size: 14px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin: 15px 0;
+      flex-wrap: wrap;
+    }
+
+    .controls button {
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .controls button:hover {
+      background: #f0f0f0;
+    }
+
+    .event-log {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 10px;
+      margin: 15px 0;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .event-log .log-entry {
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    .event-log .log-entry.action {
+      color: #0066cc;
+    }
+
+    .event-log .log-entry.change {
+      color: #008000;
+    }
+
+    code {
+      background: #f1f3f4;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+
+    .code-example {
+      margin-top: 20px;
+      border: 1px solid #e1e5e9;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .code-example h4 {
+      margin: 0;
+      padding: 12px 16px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #e1e5e9;
+      font-size: 14px;
+      font-weight: 600;
+      color: #24292f;
+    }
+
+    .code-example pre {
+      margin: 0;
+      padding: 16px;
+      background: #ffffff;
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .code-example code {
+      background: none;
+      padding: 0;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+      color: #24292f;
+    }
+
+    /* Global styles for hoisted status dropdown popups */
+    sl-dropdown[data-current-placement]::part(panel) {
+      font-size: var(--sl-font-size-x-small) !important;
+      min-width: 120px !important;
+      z-index: 10000 !important;
+      background: white !important;
+      border: 1px solid var(--sl-color-neutral-200) !important;
+      border-radius: var(--sl-border-radius-medium) !important;
+      box-shadow: var(--sl-shadow-large) !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu::part(base) {
+      font-size: var(--sl-font-size-x-small) !important;
+      padding: 4px 0 !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu-item::part(base) {
+      font-size: var(--sl-font-size-x-small) !important;
+      padding: 4px 12px !important;
+      min-height: auto !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu-item::part(label) {
+      font-size: var(--sl-font-size-x-small) !important;
+      line-height: 1.2 !important;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+      }
+      
+      .demo-content {
+        padding: 15px;
+      }
+      
+      .demo-section {
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <div class="demo-header">
+      <h1>Modern Status Bar Demo</h1>
+      <p>VS Code-inspired status bar with web components</p>
+    </div>
+
+    <div class="demo-content">
+      <!-- Basic Example -->
+      <div class="demo-section">
+        <h2>Basic Status Bar</h2>
+        <p>Simple status bar with text and button widgets in different positions.</p>
+        
+        <div class="status-bar-container">
+          <div class="mock-editor">Mock Editor Content</div>
+          <status-bar id="basic-statusbar"></status-bar>
+        </div>
+
+        <div class="controls">
+          <button onclick="addBasicWidgets()">Load Example</button>
+          <button onclick="clearStatusBar('basic-statusbar')">Clear</button>
+        </div>
+      </div>
+
+      <!-- Interactive Example -->
+      <div class="demo-section">
+        <h2>Interactive Widgets</h2>
+        <p>Status bar with various interactive widgets including progress, badges, and dropdowns.</p>
+        
+        <div class="status-bar-container">
+          <div class="mock-editor">Interactive Demo Area</div>
+          <status-bar id="interactive-statusbar"></status-bar>
+        </div>
+
+        <div class="controls">
+          <button onclick="setupInteractiveDemo()">Setup Demo</button>
+          <button onclick="simulateProgress()">Simulate Progress</button>
+          <button onclick="incrementBadge()">Increment Badge</button>
+          <button onclick="togglePulse()">Toggle Pulse</button>
+          <button onclick="clearStatusBar('interactive-statusbar')">Clear</button>
+        </div>
+
+        <div id="event-log" class="event-log">
+          <div class="log-entry">Event log will appear here...</div>
+        </div>
+      </div>
+
+      <!-- Responsive Example -->
+      <div class="demo-section">
+        <h2>Responsive Design</h2>
+        <p>Resize your browser window to see how the status bar adapts to different screen sizes.</p>
+        
+        <div class="status-bar-container">
+          <div class="mock-editor">Responsive Layout Test</div>
+          <status-bar id="responsive-statusbar"></status-bar>
+        </div>
+
+        <div class="controls">
+          <button onclick="setupResponsiveDemo()">Setup Responsive Demo</button>
+          <button onclick="clearStatusBar('responsive-statusbar')">Clear</button>
+        </div>
+      </div>
+
+      <!-- Widget Showcase -->
+      <div class="demo-section">
+        <h2>Widget Showcase</h2>
+        <p>All available widget types with different configurations.</p>
+        
+        <div class="status-bar-container">
+          <div class="mock-editor">Widget Showcase</div>
+          <status-bar id="showcase-statusbar"></status-bar>
+        </div>
+
+        <div class="controls">
+          <button onclick="setupWidgetShowcase()">Show All Widgets</button>
+          <button onclick="clearStatusBar('showcase-statusbar')">Clear</button>
+        </div>
+      </div>
+
+      <!-- HTML-Only Components -->
+      <div class="demo-section">
+        <h2>HTML-Only Components</h2>
+        <p>Direct usage of web components in HTML without JavaScript - copy and paste ready!</p>
+        
+        <div class="status-bar-container">
+          <div class="mock-editor">Pure HTML Example</div>
+          <status-bar id="html-showcase">
+            <!-- Left section widgets -->
+            <status-text text="index.html" icon="file-earmark-code" slot="left" data-priority="10"></status-text>
+            <status-separator variant="vertical" slot="left" data-priority="9"></status-separator>
+            <status-text text="Modified" variant="warning" slot="left" data-priority="8"></status-text>
+            <status-badge count="3" variant="danger" icon="exclamation-triangle-fill" clickable slot="left" data-priority="9">
+              <div slot="popup">
+                <strong>Issues Found:</strong><br>
+                • Missing semicolon on line 42<br>
+                • Unused variable 'temp'<br>
+                • Deprecated method call
+              </div>
+            </status-badge>
+            
+            <!-- Center section widgets -->
+            <status-progress value="65" text="Building..." variant="primary" slot="center" data-priority="5"></status-progress>
+            
+            <!-- Right section widgets -->
+            <status-button text="Format" icon="magic" action="format" slot="right" data-priority="3"></status-button>
+            <status-separator variant="dotted" slot="right" data-priority="4"></status-separator>
+            <status-switch text="Auto Save" help-text="(5s)" checked slot="right" data-priority="6"></status-switch>
+            <status-separator slot="right" data-priority="7"></status-separator>
+            <status-dropdown selected="js" placeholder="Language" slot="right" data-priority="8">
+              <option value="js">JavaScript</option>
+              <option value="ts">TypeScript</option>
+              <option value="py">Python</option>
+              <option value="html">HTML</option>
+            </status-dropdown>
+            <status-separator slot="right" data-priority="9"></status-separator>
+            <status-text text="Ln 42, Col 15" tooltip="Line 42, Column 15" slot="right" data-priority="10"></status-text>
+          </status-bar>
+        </div>
+
+        <div class="code-example">
+          <h4>HTML Source:</h4>
+          <pre><code>&lt;status-bar&gt;
+  &lt;!-- Left section widgets --&gt;
+  &lt;status-text text="index.html" icon="file-earmark-code" slot="left" data-priority="10"&gt;&lt;/status-text&gt;
+  &lt;status-separator variant="vertical" slot="left" data-priority="9"&gt;&lt;/status-separator&gt;
+  &lt;status-text text="Modified" variant="warning" slot="left" data-priority="8"&gt;&lt;/status-text&gt;
+  &lt;status-badge count="3" variant="danger" icon="exclamation-triangle-fill" clickable slot="left" data-priority="9"&gt;
+    &lt;div slot="popup"&gt;
+      &lt;strong&gt;Issues Found:&lt;/strong&gt;&lt;br&gt;
+      • Missing semicolon on line 42&lt;br&gt;
+      • Unused variable 'temp'&lt;br&gt;
+      • Deprecated method call
+    &lt;/div&gt;
+  &lt;/status-badge&gt;
+  
+  &lt;!-- Center section widgets --&gt;
+  &lt;status-progress value="65" text="Building..." variant="primary" slot="center" data-priority="5"&gt;&lt;/status-progress&gt;
+  
+  &lt;!-- Right section widgets --&gt;
+  &lt;status-button text="Format" icon="magic" action="format" slot="right" data-priority="3"&gt;&lt;/status-button&gt;
+  &lt;status-separator variant="dotted" slot="right" data-priority="4"&gt;&lt;/status-separator&gt;
+  &lt;status-switch text="Auto Save" help-text="(5s)" checked slot="right" data-priority="6"&gt;&lt;/status-switch&gt;
+  &lt;status-separator slot="right" data-priority="7"&gt;&lt;/status-separator&gt;
+  &lt;status-dropdown selected="js" placeholder="Language" slot="right" data-priority="8"&gt;
+    &lt;option value="js"&gt;JavaScript&lt;/option&gt;
+    &lt;option value="ts"&gt;TypeScript&lt;/option&gt;
+    &lt;option value="py"&gt;Python&lt;/option&gt;
+    &lt;option value="html"&gt;HTML&lt;/option&gt;
+  &lt;/status-dropdown&gt;
+  &lt;status-separator slot="right" data-priority="9"&gt;&lt;/status-separator&gt;
+  &lt;status-text text="Ln 42, Col 15" tooltip="Line 42, Column 15" slot="right" data-priority="10"&gt;&lt;/status-text&gt;
+&lt;/status-bar&gt;</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shoelace JS -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace-autoloader.js"></script>
+  
+  <!-- Preload Shoelace components we need -->
+  <script type="module">
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/dropdown/dropdown.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/menu/menu.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/menu-item/menu-item.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/icon/icon.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/popup/popup.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/switch/switch.js';
+  </script>
+  
+  <!-- Status Bar Module -->
+  <script type="module">
+    // Import the status bar module
+    import StatusBarModule from '../index.js';
+    
+    const { 
+      StatusBar, StatusText, StatusButton, StatusProgress, 
+      StatusBadge, StatusDropdown, StatusSeparator, StatusBarUtils 
+    } = StatusBarModule;
+
+    // Make components available globally for demo functions
+    window.StatusBarModule = StatusBarModule;
+    window.StatusBarUtils = StatusBarUtils;
+
+    // Global variables for demo
+    let progressValue = 0;
+    let badgeCount = 0;
+    let pulseActive = false;
+
+    // Wait for all custom elements to be defined
+    async function initializeDemo() {
+      console.log('Waiting for custom elements to be defined...');
+      
+      try {
+        await Promise.all([
+          customElements.whenDefined('status-bar'),
+          customElements.whenDefined('status-text'),
+          customElements.whenDefined('status-button'),
+          customElements.whenDefined('status-progress'),
+          customElements.whenDefined('status-badge'),
+          customElements.whenDefined('status-dropdown'),
+          customElements.whenDefined('status-separator')
+        ]);
+        
+        console.log('All custom elements are now defined!');
+        
+        // Load initial demo
+        addBasicWidgets();
+        logEvent('Status Bar Demo initialized');
+        
+      } catch (error) {
+        console.error('Error initializing demo:', error);
+        logEvent('Failed to initialize demo: ' + error.message);
+      }
+    }
+
+    // Event logging
+    function logEvent(message, type = 'info') {
+      const eventLog = document.getElementById('event-log');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      eventLog.appendChild(entry);
+      eventLog.scrollTop = eventLog.scrollHeight;
+    }
+
+    // Setup event listeners for all status bars
+    document.addEventListener('status-action', (event) => {
+      logEvent(`Action: ${event.detail.action} from widget`, 'action');
+    });
+
+    document.addEventListener('status-change', (event) => {
+      logEvent(`Change: ${event.detail.value} from widget`, 'change');
+    });
+
+    // Basic example
+    window.addBasicWidgets = function() {
+      const statusBar = document.getElementById('basic-statusbar');
+      statusBar.clearWidgets();
+
+      const readyText = StatusBarUtils.createText({
+        text: 'Ready',
+        icon: 'check-circle-fill',
+        variant: 'success'
+      });
+
+      const saveButton = StatusBarUtils.createButton({
+        text: 'Save',
+        icon: 'floppy',
+        action: 'save',
+        tooltip: 'Save current file'
+      });
+
+      const lineInfo = StatusBarUtils.createText({
+        text: 'Ln 42, Col 15',
+        tooltip: 'Line 42, Column 15'
+      });
+
+      statusBar.addWidget(readyText, 'left', 10);
+      statusBar.addWidget(saveButton, 'right', 8);
+      statusBar.addWidget(lineInfo, 'right', 5);
+    };
+
+    // Interactive demo
+    window.setupInteractiveDemo = function() {
+      const statusBar = document.getElementById('interactive-statusbar');
+      statusBar.clearWidgets();
+
+      const progressWidget = StatusBarUtils.createProgress({
+        value: 0,
+        max: 100,
+        text: 'Building...',
+        variant: 'primary'
+      });
+      progressWidget.id = 'demo-progress';
+
+      const badgeWidget = StatusBarUtils.createBadge({
+        count: 0,
+        variant: 'danger',
+        icon: 'exclamation-triangle-fill',
+        tooltip: 'Error count',
+        clickable: true
+      });
+      badgeWidget.id = 'demo-badge';
+
+      const dropdown = StatusBarUtils.createDropdown({
+        placeholder: 'Select Language',
+        items: [
+          { value: 'js', text: 'JavaScript' },
+          { value: 'ts', text: 'TypeScript' },
+          { value: 'py', text: 'Python' },
+          { value: 'html', text: 'HTML' }
+        ]
+      });
+
+      const sep1 = StatusBarUtils.createSeparator();
+      const sep2 = StatusBarUtils.createSeparator();
+
+      statusBar.addWidget(progressWidget, 'left', 10);
+      statusBar.addWidget(sep1, 'left', 9);
+      statusBar.addWidget(badgeWidget, 'left', 8);
+      statusBar.addWidget(sep2, 'center', 5);
+      statusBar.addWidget(dropdown, 'right', 7);
+
+      // Reset counters
+      progressValue = 0;
+      badgeCount = 0;
+    };
+
+    // Progress simulation
+    window.simulateProgress = function() {
+      const progressWidget = document.getElementById('demo-progress');
+      if (!progressWidget) return;
+
+      progressValue = 0;
+      const interval = setInterval(() => {
+        progressValue += Math.random() * 15;
+        if (progressValue >= 100) {
+          progressValue = 100;
+          progressWidget.updateProgress(100);
+          progressWidget.text = 'Complete!';
+          progressWidget.variant = 'success';
+          clearInterval(interval);
+          
+          setTimeout(() => {
+            progressWidget.text = 'Building...';
+            progressWidget.variant = 'primary';
+            progressWidget.reset();
+          }, 2000);
+        } else {
+          progressWidget.updateProgress(progressValue);
+        }
+      }, 200);
+    };
+
+    // Badge increment
+    window.incrementBadge = function() {
+      const badgeWidget = document.getElementById('demo-badge');
+      if (!badgeWidget) return;
+
+      badgeCount++;
+      badgeWidget.count = badgeCount;
+    };
+
+    // Toggle pulse
+    window.togglePulse = function() {
+      const badgeWidget = document.getElementById('demo-badge');
+      if (!badgeWidget) return;
+
+      pulseActive = !pulseActive;
+      badgeWidget.pulse = pulseActive;
+    };
+
+    // Responsive demo
+    window.setupResponsiveDemo = function() {
+      const statusBar = document.getElementById('responsive-statusbar');
+      statusBar.clearWidgets();
+
+      // Left section - File info and editor state
+      const fileText = StatusBarUtils.createText({
+        text: 'src/components/StatusBar.jsx',
+        icon: 'file-earmark-code'
+      });
+
+      const gitBranchText = StatusBarUtils.createText({
+        text: 'feature/status-bar',
+        icon: 'git',
+        tooltip: 'Current Git branch'
+      });
+
+      const unsavedBadge = StatusBarUtils.createBadge({
+        count: 3,
+        variant: 'warning',
+        icon: 'exclamation-triangle-fill',
+        tooltip: 'Unsaved changes'
+      });
+
+      const modeText = StatusBarUtils.createText({
+        text: 'Insert Mode',
+        variant: 'success'
+      });
+
+      // Center section - Build and sync status
+      const buildProgress = StatusBarUtils.createProgress({
+        value: 75,
+        text: 'Building...',
+        variant: 'primary'
+      });
+
+      const syncButton = StatusBarUtils.createButton({
+        text: 'Sync',
+        icon: 'arrow-repeat',
+        action: 'sync',
+        tooltip: 'Sync changes'
+      });
+
+      // Right section - Tools and settings
+      const formatButton = StatusBarUtils.createButton({
+        text: 'Format',
+        icon: 'magic',
+        action: 'format'
+      });
+
+      const autoSaveSwitch = StatusBarUtils.createSwitch({
+        text: 'Auto Save',
+        helpText: '(5s)',
+        checked: true
+      });
+
+      const languageDropdown = StatusBarUtils.createDropdown({
+        selected: 'javascript',
+        items: [
+          { value: 'javascript', text: 'JavaScript' },
+          { value: 'typescript', text: 'TypeScript' },
+          { value: 'python', text: 'Python' },
+          { value: 'html', text: 'HTML' },
+          { value: 'css', text: 'CSS' }
+        ]
+      });
+
+      const encodingDropdown = StatusBarUtils.createDropdown({
+        selected: 'utf8',
+        items: [
+          { value: 'utf8', text: 'UTF-8' },
+          { value: 'ascii', text: 'ASCII' },
+          { value: 'latin1', text: 'Latin-1' },
+          { value: 'utf16', text: 'UTF-16' }
+        ]
+      });
+
+      const eolDropdown = StatusBarUtils.createDropdown({
+        selected: 'lf',
+        items: [
+          { value: 'lf', text: 'LF' },
+          { value: 'crlf', text: 'CRLF' },
+          { value: 'cr', text: 'CR' }
+        ]
+      });
+
+      const positionText = StatusBarUtils.createText({
+        text: 'Ln 42, Col 15',
+        tooltip: 'Line 42, Column 15'
+      });
+
+      const selectionText = StatusBarUtils.createText({
+        text: '(15 selected)',
+        tooltip: '15 characters selected'
+      });
+
+      // Separators
+      const sep1 = StatusBarUtils.createSeparator();
+      const sep2 = StatusBarUtils.createSeparator();
+      const sep3 = StatusBarUtils.createSeparator();
+      const sep4 = StatusBarUtils.createSeparator();
+      const sep5 = StatusBarUtils.createSeparator();
+      const sep6 = StatusBarUtils.createSeparator();
+      const sep7 = StatusBarUtils.createSeparator();
+      const sep8 = StatusBarUtils.createSeparator();
+
+      // Add widgets with priorities (higher = more important, stays visible longer)
+      statusBar.addWidget(fileText, 'left', 10);           // Most important - file name
+      statusBar.addWidget(sep1, 'left', 9);
+      statusBar.addWidget(unsavedBadge, 'left', 9);        // Important - unsaved changes
+      statusBar.addWidget(sep2, 'left', 8);
+      statusBar.addWidget(gitBranchText, 'left', 7);       // Git info
+      statusBar.addWidget(sep3, 'left', 6);
+      statusBar.addWidget(modeText, 'left', 5);            // Editor mode
+
+      statusBar.addWidget(buildProgress, 'center', 6);     // Build status
+      statusBar.addWidget(sep4, 'center', 5);
+      statusBar.addWidget(syncButton, 'center', 4);        // Sync button
+
+      statusBar.addWidget(positionText, 'right', 10);      // Most important - cursor position
+      statusBar.addWidget(sep5, 'right', 9);
+      statusBar.addWidget(selectionText, 'right', 8);      // Selection info
+      statusBar.addWidget(sep6, 'right', 7);
+      statusBar.addWidget(languageDropdown, 'right', 6);   // Language selector
+      statusBar.addWidget(sep7, 'right', 5);
+      statusBar.addWidget(encodingDropdown, 'right', 4);   // Encoding
+      statusBar.addWidget(sep8, 'right', 3);
+      statusBar.addWidget(eolDropdown, 'right', 2);        // Line endings
+      statusBar.addWidget(autoSaveSwitch, 'right', 1);     // Auto save setting
+      statusBar.addWidget(formatButton, 'right', 0);       // Least important - format button
+    };
+
+    // Widget showcase
+    window.setupWidgetShowcase = function() {
+      const statusBar = document.getElementById('showcase-statusbar');
+      statusBar.clearWidgets();
+
+      // Text variants
+      const infoText = StatusBarUtils.createText({
+        text: 'Info Text',
+        icon: 'info-circle-fill',
+        variant: 'info'
+      });
+
+      const errorText = StatusBarUtils.createText({
+        text: 'Error Text',
+        icon: 'x-circle-fill',
+        variant: 'error'
+      });
+
+      // Button variants
+      const primaryBtn = StatusBarUtils.createButton({
+        text: 'Primary',
+        variant: 'primary',
+        action: 'primary'
+      });
+
+      const dangerBtn = StatusBarUtils.createButton({
+        icon: 'trash3',
+        variant: 'danger',
+        action: 'delete',
+        tooltip: 'Delete item'
+      });
+
+      // Progress variants
+      const successProgress = StatusBarUtils.createProgress({
+        value: 75,
+        text: 'Upload',
+        variant: 'success'
+      });
+
+      const indeterminateProgress = StatusBarUtils.createProgress({
+        indeterminate: true,
+        text: 'Processing'
+      });
+
+      // Badge variants
+      const infoBadge = StatusBarUtils.createBadge({
+        count: 5,
+        variant: 'info',
+        icon: 'bell'
+      });
+
+      const dotBadge = StatusBarUtils.createBadge({
+        dot: true,
+        variant: 'success',
+        pulse: true
+      });
+
+      // Separators
+      const vertSep = StatusBarUtils.createSeparator({ variant: 'vertical' });
+      const dottedSep = StatusBarUtils.createSeparator({ variant: 'dotted' });
+      const spaceSep = StatusBarUtils.createSeparator({ variant: 'space' });
+
+      // Add widgets
+      statusBar.addWidget(infoText, 'left', 15);
+      statusBar.addWidget(vertSep, 'left', 14);
+      statusBar.addWidget(errorText, 'left', 13);
+      statusBar.addWidget(dottedSep, 'left', 12);
+      statusBar.addWidget(infoBadge, 'left', 11);
+      statusBar.addWidget(dotBadge, 'left', 10);
+
+      statusBar.addWidget(successProgress, 'center', 8);
+      statusBar.addWidget(spaceSep, 'center', 7);
+      statusBar.addWidget(indeterminateProgress, 'center', 6);
+
+      statusBar.addWidget(primaryBtn, 'right', 10);
+      statusBar.addWidget(dangerBtn, 'right', 9);
+    };
+
+    // Clear function
+    window.clearStatusBar = function(id) {
+      const statusBar = document.getElementById(id);
+      if (statusBar) {
+        statusBar.clearWidgets();
+      }
+    };
+
+    // Initialize demos
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM loaded, starting initialization...');
+      initializeDemo();
+    });
+  </script>
+</body>
+</html>
