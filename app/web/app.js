@@ -744,6 +744,101 @@ async function updateStateFromUrlHash(state) {
 }
 
 /**
+ * This implements Server-Sent Events (SSE) connection management
+ */
+
+
+/**
+ * plugin API
+ */
+const api$a = {
+  addEventListener: (type, listener) => {
+    if (eventSource) {
+      eventSource.addEventListener(type, listener);
+    } else {
+      // Queue listeners for when connection is established
+      if (!queuedListeners[type]) {
+        queuedListeners[type] = [];
+      }
+      queuedListeners[type].push(listener);
+    }
+  },
+  removeEventListener: (type, listener) => {
+    if (eventSource) {
+      eventSource.removeEventListener(type, listener);
+    }
+  },
+  get readyState() {
+    return eventSource ? eventSource.readyState : EventSource.CLOSED
+  },
+  get url() {
+    return eventSource ? eventSource.url : null
+  }
+};
+
+/**
+ * component plugin
+ */
+const plugin$f = {
+  name: "sse",
+  install: install$e,
+  state: {
+    update: update$b
+  }
+};
+
+let eventSource = null;
+let cachedSessionId = null;
+let queuedListeners = {};
+
+/** 
+ * @param {ApplicationState} state 
+ */
+async function install$e(state){
+  api$d.debug(`Installing plugin "${plugin$f.name}"`);
+}
+
+/**
+ * @param {ApplicationState} state 
+ */
+async function update$b(state) {
+  const { user, sessionId } = state;
+
+  // Close existing connection if the session ID has changed or user logged out
+  if (eventSource && (sessionId !== cachedSessionId || !user)) {
+    api$d.debug('Closing SSE connection due to session change or logout.');
+    eventSource.close();
+    eventSource = null;
+    cachedSessionId = null;
+  }
+
+  // Open a new connection if user is logged in and there's no active connection
+  if (user && sessionId && !eventSource) {
+    api$d.debug(`User is logged in, subscribing to SSE with session ID ${sessionId}.`);
+    const url = `/sse/subscribe?session_id=${sessionId}`;
+    eventSource = new EventSource(url);
+    cachedSessionId = sessionId;
+
+    // Add any queued listeners
+    Object.keys(queuedListeners).forEach(type => {
+      queuedListeners[type].forEach(listener => {
+        eventSource.addEventListener(type, listener);
+      });
+    });
+    queuedListeners = {};
+
+    eventSource.onerror = (err) => {
+      api$d.error("EventSource failed:", err);
+      if (eventSource) {
+        eventSource.close();
+      }
+      eventSource = null;
+      cachedSessionId = null;
+    };
+  }
+}
+
+/**
  * A spinner/blocker for long-running tasks
  * Adapted from https://codeburst.io/how-to-create-a-simple-css-loading-spinner-make-it-accessible-e5c83c2e464c
  */
@@ -851,242 +946,6 @@ class Spinner extends HTMLElement {
 }
 
 customElements.define('custom-spinner', Spinner);
-
-/**
- * A on/off switch
- * Adapted from https://uiverse.io/Bodyhc/red-lionfish-43
- * Written by Abdullah M Soliman
- */
-
-const css = `
-    /* From Uiverse.io by Bodyhc */ 
-  .checkbox-wrapper-35 .switch {
-    display: none;
-  }
-
-  .checkbox-wrapper-35 .switch + label {
-    -webkit-box-align: center;
-    -webkit-align-items: center;
-    -ms-flex-align: center;
-    align-items: center;
-    color: #78768d;
-    cursor: pointer;
-    display: -webkit-box;
-    display: -webkit-flex;
-    display: -ms-flexbox;
-    display: flex;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 12px;
-    line-height: 15px;
-    position: relative;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-  }
-
-  .checkbox-wrapper-35 .switch + label::before,
-    .checkbox-wrapper-35 .switch + label::after {
-    content: '';
-    display: block;
-  }
-
-  .checkbox-wrapper-35 .switch + label::before {
-    background-color: #05012c;
-    border-radius: 500px;
-    height: 15px;
-    margin-right: 8px;
-    -webkit-transition: background-color 0.125s ease-out;
-    transition: background-color 0.125s ease-out;
-    width: 25px;
-  }
-
-  .checkbox-wrapper-35 .switch + label::after {
-    background-color: #fff;
-    border-radius: 13px;
-    box-shadow: 0 3px 1px 0 rgba(37, 34, 71, 0.05), 0 2px 2px 0 rgba(37, 34, 71, 0.1), 0 3px 3px 0 rgba(37, 34, 71, 0.05);
-    height: 13px;
-    left: 1px;
-    position: absolute;
-    top: 1px;
-    -webkit-transition: -webkit-transform 0.125s ease-out;
-    transition: -webkit-transform 0.125s ease-out;
-    transition: transform 0.125s ease-out;
-    transition: transform 0.125s ease-out, -webkit-transform 0.125s ease-out;
-    width: 13px;
-  }
-
-  .checkbox-wrapper-35 .switch + label .switch-x-text {
-    display: block;
-    margin-right: .3em;
-  }
-
-  .checkbox-wrapper-35 .switch + label .switch-x-toggletext {
-    display: block;
-    font-weight: bold;
-    height: 15px;
-    overflow: hidden;
-    position: relative;
-    width: 25px;
-  }
-
-  .checkbox-wrapper-35 .switch + label .switch-x-unchecked,
-    .checkbox-wrapper-35 .switch + label .switch-x-checked {
-    left: 0;
-    position: absolute;
-    top: 0;
-    -webkit-transition: opacity 0.125s ease-out, -webkit-transform 0.125s ease-out;
-    transition: opacity 0.125s ease-out, -webkit-transform 0.125s ease-out;
-    transition: transform 0.125s ease-out, opacity 0.125s ease-out;
-    transition: transform 0.125s ease-out, opacity 0.125s ease-out, -webkit-transform 0.125s ease-out;
-  }
-
-  .checkbox-wrapper-35 .switch + label .switch-x-unchecked {
-    opacity: 1;
-    -webkit-transform: none;
-    transform: none;
-  }
-
-  .checkbox-wrapper-35 .switch + label .switch-x-checked {
-    opacity: 0;
-    -webkit-transform: translate3d(0, 100%, 0);
-    transform: translate3d(0, 100%, 0);
-  }
-
-  .checkbox-wrapper-35 .switch + label .switch-x-hiddenlabel {
-    position: absolute;
-    visibility: hidden;
-  }
-
-  .checkbox-wrapper-35 .switch:checked + label::before {
-    background-color: #ffb500;
-  }
-
-  .checkbox-wrapper-35 .switch:checked + label::after {
-    -webkit-transform: translate3d(10px, 0, 0);
-    transform: translate3d(10px, 0, 0);
-  }
-
-  .checkbox-wrapper-35 .switch:checked + label .switch-x-unchecked {
-    opacity: 0;
-    -webkit-transform: translate3d(0, -100%, 0);
-    transform: translate3d(0, -100%, 0);
-  }
-
-  .checkbox-wrapper-35 .switch:checked + label .switch-x-checked {
-    opacity: 1;
-    -webkit-transform: none;
-    transform: none;
-  }
-
-`;
-
-const html = `
-<div class="checkbox-wrapper-35">
-  <input value="private" name="switch" id="switch" type="checkbox" class="switch">
-  <label for="switch">
-    <span class="switch-x-text"></span>
-    <span class="switch-x-toggletext">
-      <span class="switch-x-unchecked"></span>
-      <span class="switch-x-checked"></span>
-    </span>
-  </label>
-</div>
-`;
-/**
- * A Switch
- * @event {CustomEvent}
- */
-class Switch extends HTMLElement {
-  constructor() {
-    super();
-    this.shadow = this.attachShadow({ mode: 'open' });
-
-    // Create CSS style element
-    const style = document.createElement('style');
-    style.textContent = css;
-    this.shadow.appendChild(style);
-
-    const elem = document.createElement('div');
-    elem.innerHTML=html;
-    this.elem = elem;
-    this.shadow.appendChild(elem);
-
-    /** @type {HTMLInputElement} */
-    // @ts-ignore
-    this.checkbox = this.shadow.querySelector('input[type="checkbox"]'); 
-    // Observe changes to the "checked" attribute
-    this.observer = new MutationObserver((mutations) => {
-        mutations.forEach(mutation => {
-            if (mutation.attributeName === 'checked') {
-              this.checked = this.checkbox.checked || false;
-            }
-        });
-    });
-    this.observer.observe(this.checkbox, { attributes: true });  // Observe the checkbox 
-    this.checkbox.addEventListener('change', () => { 
-      this.checked = this.checkbox.checked;
-    });    
-  }
-
-  #oldChecked = false;
-
-  get checked() {
-    const value = this.checkbox?.checked || false;
-    return value
-  }
-
-  set checked(value) {
-    if (value !== this.#oldChecked) {
-      this.checkbox.checked = value;
-      this.elem.setAttribute('checked', value ? "checked": '');
-      this.dispatchEvent(new CustomEvent('change', {
-        detail: { checked: value }
-      }));
-      this.#oldChecked = value;
-    }
-  }
-
-  connectedCallback() { }
-
-  disconnectedCallback() {
-    this.observer.disconnect();
-  }
-
-  attributeChangedCallback(name, oldValue, newValue) {
-    if (name === "checked") {
-      this.checked === Boolean(newValue);
-    } else {
-      this.updateLabels();
-    }
-  }
-
-  updateLabels() {
-    if (!this.elem) {
-      return;
-    }
-
-    const text = this.shadow.querySelector(".switch-x-text");
-    const checked = this.shadow.querySelector(".switch-x-checked");
-    const unchecked = this.shadow.querySelector(".switch-x-unchecked");
-
-    if (text) {
-      text.textContent = this.getAttribute("label") || "";
-    }
-    if (checked) {
-      checked.textContent = this.getAttribute("label-on") || "";
-    }
-    if (unchecked) {
-      unchecked.textContent = this.getAttribute("label-off") || "";
-    }
-  }
-
-  static get observedAttributes() {
-    return ['label', 'label-on', 'label-off', 'value', 'checked'];
-  }
-}
-
-customElements.define('custom-switch', Switch);
 
 var __defProp = Object.defineProperty;
 var __defProps = Object.defineProperties;
@@ -2457,7 +2316,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$b);
+    const documentElementObserver = new MutationObserver(update$a);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2478,9 +2337,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$b();
+    update$a();
 }
-function update$b() {
+function update$a() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -10903,6 +10762,2591 @@ __decorateClass([
 var divider_default = SlDivider;
 SlDivider.define("sl-divider");
 
+// src/components/switch/switch.styles.ts
+var switch_styles_default = i$6`
+  :host {
+    display: inline-block;
+  }
+
+  :host([size='small']) {
+    --height: var(--sl-toggle-size-small);
+    --thumb-size: calc(var(--sl-toggle-size-small) + 4px);
+    --width: calc(var(--height) * 2);
+
+    font-size: var(--sl-input-font-size-small);
+  }
+
+  :host([size='medium']) {
+    --height: var(--sl-toggle-size-medium);
+    --thumb-size: calc(var(--sl-toggle-size-medium) + 4px);
+    --width: calc(var(--height) * 2);
+
+    font-size: var(--sl-input-font-size-medium);
+  }
+
+  :host([size='large']) {
+    --height: var(--sl-toggle-size-large);
+    --thumb-size: calc(var(--sl-toggle-size-large) + 4px);
+    --width: calc(var(--height) * 2);
+
+    font-size: var(--sl-input-font-size-large);
+  }
+
+  .switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--sl-input-font-family);
+    font-size: inherit;
+    font-weight: var(--sl-input-font-weight);
+    color: var(--sl-input-label-color);
+    vertical-align: middle;
+    cursor: pointer;
+  }
+
+  .switch__control {
+    flex: 0 0 auto;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--width);
+    height: var(--height);
+    background-color: var(--sl-color-neutral-400);
+    border: solid var(--sl-input-border-width) var(--sl-color-neutral-400);
+    border-radius: var(--height);
+    transition:
+      var(--sl-transition-fast) border-color,
+      var(--sl-transition-fast) background-color;
+  }
+
+  .switch__control .switch__thumb {
+    width: var(--thumb-size);
+    height: var(--thumb-size);
+    background-color: var(--sl-color-neutral-0);
+    border-radius: 50%;
+    border: solid var(--sl-input-border-width) var(--sl-color-neutral-400);
+    translate: calc((var(--width) - var(--height)) / -2);
+    transition:
+      var(--sl-transition-fast) translate ease,
+      var(--sl-transition-fast) background-color,
+      var(--sl-transition-fast) border-color,
+      var(--sl-transition-fast) box-shadow;
+  }
+
+  .switch__input {
+    position: absolute;
+    opacity: 0;
+    padding: 0;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  /* Hover */
+  .switch:not(.switch--checked):not(.switch--disabled) .switch__control:hover {
+    background-color: var(--sl-color-neutral-400);
+    border-color: var(--sl-color-neutral-400);
+  }
+
+  .switch:not(.switch--checked):not(.switch--disabled) .switch__control:hover .switch__thumb {
+    background-color: var(--sl-color-neutral-0);
+    border-color: var(--sl-color-neutral-400);
+  }
+
+  /* Focus */
+  .switch:not(.switch--checked):not(.switch--disabled) .switch__input:focus-visible ~ .switch__control {
+    background-color: var(--sl-color-neutral-400);
+    border-color: var(--sl-color-neutral-400);
+  }
+
+  .switch:not(.switch--checked):not(.switch--disabled) .switch__input:focus-visible ~ .switch__control .switch__thumb {
+    background-color: var(--sl-color-neutral-0);
+    border-color: var(--sl-color-primary-600);
+    outline: var(--sl-focus-ring);
+    outline-offset: var(--sl-focus-ring-offset);
+  }
+
+  /* Checked */
+  .switch--checked .switch__control {
+    background-color: var(--sl-color-primary-600);
+    border-color: var(--sl-color-primary-600);
+  }
+
+  .switch--checked .switch__control .switch__thumb {
+    background-color: var(--sl-color-neutral-0);
+    border-color: var(--sl-color-primary-600);
+    translate: calc((var(--width) - var(--height)) / 2);
+  }
+
+  /* Checked + hover */
+  .switch.switch--checked:not(.switch--disabled) .switch__control:hover {
+    background-color: var(--sl-color-primary-600);
+    border-color: var(--sl-color-primary-600);
+  }
+
+  .switch.switch--checked:not(.switch--disabled) .switch__control:hover .switch__thumb {
+    background-color: var(--sl-color-neutral-0);
+    border-color: var(--sl-color-primary-600);
+  }
+
+  /* Checked + focus */
+  .switch.switch--checked:not(.switch--disabled) .switch__input:focus-visible ~ .switch__control {
+    background-color: var(--sl-color-primary-600);
+    border-color: var(--sl-color-primary-600);
+  }
+
+  .switch.switch--checked:not(.switch--disabled) .switch__input:focus-visible ~ .switch__control .switch__thumb {
+    background-color: var(--sl-color-neutral-0);
+    border-color: var(--sl-color-primary-600);
+    outline: var(--sl-focus-ring);
+    outline-offset: var(--sl-focus-ring-offset);
+  }
+
+  /* Disabled */
+  .switch--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .switch__label {
+    display: inline-block;
+    line-height: var(--height);
+    margin-inline-start: 0.5em;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  :host([required]) .switch__label::after {
+    content: var(--sl-input-required-content);
+    color: var(--sl-input-required-content-color);
+    margin-inline-start: var(--sl-input-required-content-offset);
+  }
+
+  @media (forced-colors: active) {
+    .switch.switch--checked:not(.switch--disabled) .switch__control:hover .switch__thumb,
+    .switch--checked .switch__control .switch__thumb {
+      background-color: ButtonText;
+    }
+  }
+`;
+
+var SlSwitch = class extends ShoelaceElement {
+  constructor() {
+    super(...arguments);
+    this.formControlController = new FormControlController(this, {
+      value: (control) => control.checked ? control.value || "on" : void 0,
+      defaultValue: (control) => control.defaultChecked,
+      setValue: (control, checked) => control.checked = checked
+    });
+    this.hasSlotController = new HasSlotController(this, "help-text");
+    this.hasFocus = false;
+    this.title = "";
+    this.name = "";
+    this.size = "medium";
+    this.disabled = false;
+    this.checked = false;
+    this.defaultChecked = false;
+    this.form = "";
+    this.required = false;
+    this.helpText = "";
+  }
+  /** Gets the validity state object */
+  get validity() {
+    return this.input.validity;
+  }
+  /** Gets the validation message */
+  get validationMessage() {
+    return this.input.validationMessage;
+  }
+  firstUpdated() {
+    this.formControlController.updateValidity();
+  }
+  handleBlur() {
+    this.hasFocus = false;
+    this.emit("sl-blur");
+  }
+  handleInput() {
+    this.emit("sl-input");
+  }
+  handleInvalid(event) {
+    this.formControlController.setValidity(false);
+    this.formControlController.emitInvalidEvent(event);
+  }
+  handleClick() {
+    this.checked = !this.checked;
+    this.emit("sl-change");
+  }
+  handleFocus() {
+    this.hasFocus = true;
+    this.emit("sl-focus");
+  }
+  handleKeyDown(event) {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      this.checked = false;
+      this.emit("sl-change");
+      this.emit("sl-input");
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      this.checked = true;
+      this.emit("sl-change");
+      this.emit("sl-input");
+    }
+  }
+  handleCheckedChange() {
+    this.input.checked = this.checked;
+    this.formControlController.updateValidity();
+  }
+  handleDisabledChange() {
+    this.formControlController.setValidity(true);
+  }
+  /** Simulates a click on the switch. */
+  click() {
+    this.input.click();
+  }
+  /** Sets focus on the switch. */
+  focus(options) {
+    this.input.focus(options);
+  }
+  /** Removes focus from the switch. */
+  blur() {
+    this.input.blur();
+  }
+  /** Checks for validity but does not show a validation message. Returns `true` when valid and `false` when invalid. */
+  checkValidity() {
+    return this.input.checkValidity();
+  }
+  /** Gets the associated form, if one exists. */
+  getForm() {
+    return this.formControlController.getForm();
+  }
+  /** Checks for validity and shows the browser's validation message if the control is invalid. */
+  reportValidity() {
+    return this.input.reportValidity();
+  }
+  /** Sets a custom validation message. Pass an empty string to restore validity. */
+  setCustomValidity(message) {
+    this.input.setCustomValidity(message);
+    this.formControlController.updateValidity();
+  }
+  render() {
+    const hasHelpTextSlot = this.hasSlotController.test("help-text");
+    const hasHelpText = this.helpText ? true : !!hasHelpTextSlot;
+    return x`
+      <div
+        class=${e$2({
+      "form-control": true,
+      "form-control--small": this.size === "small",
+      "form-control--medium": this.size === "medium",
+      "form-control--large": this.size === "large",
+      "form-control--has-help-text": hasHelpText
+    })}
+      >
+        <label
+          part="base"
+          class=${e$2({
+      switch: true,
+      "switch--checked": this.checked,
+      "switch--disabled": this.disabled,
+      "switch--focused": this.hasFocus,
+      "switch--small": this.size === "small",
+      "switch--medium": this.size === "medium",
+      "switch--large": this.size === "large"
+    })}
+        >
+          <input
+            class="switch__input"
+            type="checkbox"
+            title=${this.title}
+            name=${this.name}
+            value=${o$3(this.value)}
+            .checked=${l(this.checked)}
+            .disabled=${this.disabled}
+            .required=${this.required}
+            role="switch"
+            aria-checked=${this.checked ? "true" : "false"}
+            aria-describedby="help-text"
+            @click=${this.handleClick}
+            @input=${this.handleInput}
+            @invalid=${this.handleInvalid}
+            @blur=${this.handleBlur}
+            @focus=${this.handleFocus}
+            @keydown=${this.handleKeyDown}
+          />
+
+          <span part="control" class="switch__control">
+            <span part="thumb" class="switch__thumb"></span>
+          </span>
+
+          <div part="label" class="switch__label">
+            <slot></slot>
+          </div>
+        </label>
+
+        <div
+          aria-hidden=${hasHelpText ? "false" : "true"}
+          class="form-control__help-text"
+          id="help-text"
+          part="form-control-help-text"
+        >
+          <slot name="help-text">${this.helpText}</slot>
+        </div>
+      </div>
+    `;
+  }
+};
+SlSwitch.styles = [component_styles_default, form_control_styles_default, switch_styles_default];
+__decorateClass([
+  e$5('input[type="checkbox"]')
+], SlSwitch.prototype, "input", 2);
+__decorateClass([
+  r$1()
+], SlSwitch.prototype, "hasFocus", 2);
+__decorateClass([
+  n$3()
+], SlSwitch.prototype, "title", 2);
+__decorateClass([
+  n$3()
+], SlSwitch.prototype, "name", 2);
+__decorateClass([
+  n$3()
+], SlSwitch.prototype, "value", 2);
+__decorateClass([
+  n$3({ reflect: true })
+], SlSwitch.prototype, "size", 2);
+__decorateClass([
+  n$3({ type: Boolean, reflect: true })
+], SlSwitch.prototype, "disabled", 2);
+__decorateClass([
+  n$3({ type: Boolean, reflect: true })
+], SlSwitch.prototype, "checked", 2);
+__decorateClass([
+  defaultValue("checked")
+], SlSwitch.prototype, "defaultChecked", 2);
+__decorateClass([
+  n$3({ reflect: true })
+], SlSwitch.prototype, "form", 2);
+__decorateClass([
+  n$3({ type: Boolean, reflect: true })
+], SlSwitch.prototype, "required", 2);
+__decorateClass([
+  n$3({ attribute: "help-text" })
+], SlSwitch.prototype, "helpText", 2);
+__decorateClass([
+  watch("checked", { waitUntilFirstUpdate: true })
+], SlSwitch.prototype, "handleCheckedChange", 1);
+__decorateClass([
+  watch("disabled", { waitUntilFirstUpdate: true })
+], SlSwitch.prototype, "handleDisabledChange", 1);
+
+SlSwitch.define("sl-switch");
+
+/**
+ * Modern status bar container component inspired by VS Code
+ * Manages layout and responsive behavior for status bar widgets
+ */
+
+class StatusBar extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.widgets = new Map();
+    this.positions = {
+      left: [],
+      center: [],
+      right: []
+    };
+    this.hiddenWidgets = new Set();
+    this.resizeObserver = null;
+    this.measurementCache = new Map();
+    
+    this.render();
+    this.setupEventListeners();
+    this.setupOverflowDetection();
+  }
+
+  render() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: flex;
+          align-items: center;
+          height: 22px;
+          padding: 0 8px;
+          background-color: var(--sl-color-neutral-50);
+          border-top: 1px solid var(--sl-color-neutral-200);
+          font-size: var(--sl-font-size-x-small);
+          color: var(--sl-color-neutral-600);
+          gap: 8px;
+          overflow: hidden;
+        }
+
+        .section {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+        }
+
+        .section.left {
+          justify-content: flex-start;
+          flex: 0 1 auto;
+        }
+
+        .section.center {
+          justify-content: center;
+          flex: 1;
+        }
+
+        .section.right {
+          justify-content: flex-end;
+          flex: 0 1 auto;
+          margin-left: auto;
+        }
+
+        ::slotted(*) {
+          white-space: nowrap;
+        }
+
+        /* Dynamic overflow hiding - applied via JavaScript */
+        ::slotted([data-overflow-hidden]) {
+          display: none !important;
+        }
+
+        /* Smooth transitions for hiding/showing */
+        ::slotted(*) {
+          transition: opacity 0.1s ease;
+        }
+      </style>
+      
+      <div class="section left">
+        <slot name="left"></slot>
+      </div>
+      <div class="section center">
+        <slot name="center"></slot>
+      </div>
+      <div class="section right">
+        <slot name="right"></slot>
+      </div>
+    `;
+  }
+
+  setupEventListeners() {
+    this.addEventListener('widget-click', this.handleWidgetClick.bind(this));
+    this.addEventListener('widget-change', this.handleWidgetChange.bind(this));
+  }
+
+  setupOverflowDetection() {
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          this.checkAndResolveOverflow();
+        }
+      });
+    }
+
+    // Also check overflow when widgets are added or modified
+    this.addEventListener('slotchange', () => {
+      setTimeout(() => this.checkAndResolveOverflow(), 0);
+    });
+  }
+
+  connectedCallback() {
+    if (this.resizeObserver) {
+      this.resizeObserver.observe(this);
+    }
+    // Initial overflow check after everything is rendered
+    setTimeout(() => this.checkAndResolveOverflow(), 100);
+  }
+
+  disconnectedCallback() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+  }
+
+  checkAndResolveOverflow() {
+    const containerRect = this.getBoundingClientRect();
+    const availableWidth = containerRect.width;
+    
+    if (availableWidth === 0) return; // Not rendered yet
+
+    // Get all widgets with their measurements
+    const allWidgets = this.getAllWidgetsWithPriority();
+    const totalWidth = this.calculateTotalWidth(allWidgets);
+    
+    // Add a small safety margin to prevent edge cases
+    const safetyMargin = 5;
+    const effectiveAvailableWidth = availableWidth - safetyMargin;
+    
+    if (totalWidth > effectiveAvailableWidth) {
+      this.hideWidgetsToFit(allWidgets, effectiveAvailableWidth);
+    } else {
+      this.showWidgetsIfSpace(allWidgets, effectiveAvailableWidth);
+    }
+  }
+
+  getAllWidgetsWithPriority() {
+    const widgets = [];
+    
+    // Get all slotted elements
+    const leftSlot = this.shadowRoot.querySelector('slot[name="left"]');
+    const centerSlot = this.shadowRoot.querySelector('slot[name="center"]');
+    const rightSlot = this.shadowRoot.querySelector('slot[name="right"]');
+    
+    [leftSlot, centerSlot, rightSlot].forEach(slot => {
+      if (slot) {
+        const slottedElements = slot.assignedElements();
+        slottedElements.forEach(widget => {
+          const priority = parseInt(widget.dataset.priority) || 0;
+          widgets.push({ element: widget, priority, slot: slot.name });
+        });
+      }
+    });
+    
+    return widgets;
+  }
+
+  calculateTotalWidth(widgets) {
+    let totalWidth = 0;
+    const containerStyle = getComputedStyle(this);
+    const paddingLeft = parseInt(containerStyle.paddingLeft) || 8;
+    const paddingRight = parseInt(containerStyle.paddingRight) || 8;
+    
+    totalWidth += paddingLeft + paddingRight;
+    
+    // Group widgets by section
+    const sections = { left: [], center: [], right: [] };
+    widgets.forEach(widget => {
+      if (!widget.element.hasAttribute('data-overflow-hidden')) {
+        sections[widget.slot].push(widget);
+      }
+    });
+    
+    // Calculate minimum width needed for each section's content
+    let leftWidth = 0, centerWidth = 0, rightWidth = 0;
+    
+    sections.left.forEach((widget, index) => {
+      const rect = widget.element.getBoundingClientRect();
+      leftWidth += rect.width;
+      if (index < sections.left.length - 1) leftWidth += 4; // Gap between widgets
+    });
+    
+    sections.center.forEach((widget, index) => {
+      const rect = widget.element.getBoundingClientRect();
+      centerWidth += rect.width;
+      if (index < sections.center.length - 1) centerWidth += 4; // Gap between widgets
+    });
+    
+    sections.right.forEach((widget, index) => {
+      const rect = widget.element.getBoundingClientRect();
+      rightWidth += rect.width;
+      if (index < sections.right.length - 1) rightWidth += 4; // Gap between widgets
+    });
+    
+    // Add the content widths
+    totalWidth += leftWidth + centerWidth + rightWidth;
+    
+    // Add gaps between sections (8px each)
+    const activeSections = [leftWidth, centerWidth, rightWidth].filter(w => w > 0);
+    if (activeSections.length > 1) {
+      totalWidth += (activeSections.length - 1) * 8; // 8px gap between sections
+    }
+    
+    return totalWidth;
+  }
+
+  hideWidgetsToFit(allWidgets, availableWidth) {
+    // Sort by priority (lowest first) for hiding
+    const sortedWidgets = allWidgets
+      .filter(w => !w.element.hasAttribute('data-overflow-hidden'))
+      .sort((a, b) => a.priority - b.priority);
+    
+    let currentWidth = this.calculateTotalWidth(allWidgets);
+    
+    for (const widget of sortedWidgets) {
+      if (currentWidth <= availableWidth) break;
+      
+      // Hide this widget
+      widget.element.setAttribute('data-overflow-hidden', '');
+      this.hiddenWidgets.add(widget.element);
+      
+      // Recalculate width
+      currentWidth = this.calculateTotalWidth(allWidgets);
+    }
+  }
+
+  showWidgetsIfSpace(allWidgets, availableWidth) {
+    // Sort hidden widgets by priority (highest first) for showing
+    const hiddenWidgets = Array.from(this.hiddenWidgets)
+      .map(element => {
+        const priority = parseInt(element.dataset.priority) || 0;
+        return { element, priority };
+      })
+      .sort((a, b) => b.priority - a.priority);
+    
+    for (const widget of hiddenWidgets) {
+      // Temporarily show the widget to measure
+      widget.element.removeAttribute('data-overflow-hidden');
+      const testWidth = this.calculateTotalWidth(allWidgets);
+      
+      if (testWidth <= availableWidth) {
+        // Keep it shown
+        this.hiddenWidgets.delete(widget.element);
+      } else {
+        // Hide it again
+        widget.element.setAttribute('data-overflow-hidden', '');
+        break;
+      }
+    }
+  }
+
+  handleWidgetClick(event) {
+    // Bubble up widget click events for external handling
+    this.dispatchEvent(new CustomEvent('status-action', {
+      bubbles: true,
+      detail: {
+        action: event.detail.action,
+        widget: event.detail.widget
+      }
+    }));
+  }
+
+  handleWidgetChange(event) {
+    // Bubble up widget change events for external handling
+    this.dispatchEvent(new CustomEvent('status-change', {
+      bubbles: true,
+      detail: {
+        value: event.detail.value,
+        widget: event.detail.widget
+      }
+    }));
+  }
+
+  /**
+   * Add a widget to the status bar
+   * @param {HTMLElement} widget - The widget element
+   * @param {string} position - 'left', 'center', or 'right'
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   */
+  addWidget(widget, position = 'left', priority = 0) {
+    if (!['left', 'center', 'right'].includes(position)) {
+      throw new Error('Position must be "left", "center", or "right"');
+    }
+
+    const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    widget.id = widgetId;
+    widget.slot = position;
+    widget.dataset.priority = priority;
+
+    this.widgets.set(widgetId, { element: widget, position, priority });
+    this.positions[position].push({ id: widgetId, priority });
+    
+    // Sort by priority (higher first)
+    this.positions[position].sort((a, b) => b.priority - a.priority);
+    
+    this.appendChild(widget);
+    
+    // Check for overflow after adding
+    setTimeout(() => this.checkAndResolveOverflow(), 0);
+    
+    return widgetId;
+  }
+
+  /**
+   * Remove a widget from the status bar
+   * @param {string} widgetId - The ID of the widget to remove
+   */
+  removeWidget(widgetId) {
+    const widget = this.widgets.get(widgetId);
+    if (!widget) return false;
+
+    const { position, element } = widget;
+    this.positions[position] = this.positions[position].filter(w => w.id !== widgetId);
+    
+    // Remove from hidden widgets set
+    this.hiddenWidgets.delete(element);
+    
+    if (element.parentNode === this) {
+      this.removeChild(element);
+    }
+    
+    this.widgets.delete(widgetId);
+    
+    // Check if we can show more widgets after removal
+    setTimeout(() => this.checkAndResolveOverflow(), 0);
+    
+    return true;
+  }
+
+  /**
+   * Clear all widgets from the status bar
+   */
+  clearWidgets() {
+    this.widgets.forEach((widget) => {
+      if (widget.element.parentNode === this) {
+        this.removeChild(widget.element);
+      }
+    });
+    
+    this.widgets.clear();
+    this.positions = { left: [], center: [], right: [] };
+    this.hiddenWidgets.clear();
+  }
+
+  /**
+   * Get all widgets in a specific position
+   * @param {string} position - 'left', 'center', or 'right'
+   */
+  getWidgets(position) {
+    if (position) {
+      return this.positions[position].map(w => this.widgets.get(w.id));
+    }
+    return Array.from(this.widgets.values());
+  }
+
+  /**
+   * Update widget priority
+   * @param {string} widgetId - The widget ID
+   * @param {number} priority - New priority value
+   */
+  updatePriority(widgetId, priority) {
+    const widget = this.widgets.get(widgetId);
+    if (!widget) return false;
+
+    widget.priority = priority;
+    widget.element.dataset.priority = priority;
+
+    const { position } = widget;
+    const positionWidget = this.positions[position].find(w => w.id === widgetId);
+    if (positionWidget) {
+      positionWidget.priority = priority;
+      this.positions[position].sort((a, b) => b.priority - a.priority);
+    }
+
+    return true;
+  }
+}
+
+customElements.define('status-bar', StatusBar);
+
+/**
+ * Simple text widget for the status bar
+ * Displays text with optional icon and tooltip
+ */
+
+class StatusText extends HTMLElement {
+  static get observedAttributes() {
+    return ['text', 'icon', 'tooltip'];
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.render();
+  }
+
+  connectedCallback() {
+    this.render();
+    this.updateHostProperties();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+    if (this.isConnected) {
+      this.updateHostProperties();
+    }
+  }
+
+  render() {
+    const text = this.getAttribute('text') || '';
+    const icon = this.getAttribute('icon') || '';
+    this.getAttribute('tooltip') || '';
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 0 4px;
+          cursor: default;
+          user-select: none;
+        }
+
+        .icon {
+          display: inline-flex;
+          align-items: center;
+          font-size: 12px;
+        }
+
+        .text {
+          font-size: var(--sl-font-size-x-small);
+          color: var(--sl-color-neutral-600);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 200px;
+        }
+
+        :host([clickable]) {
+          cursor: pointer;
+          border-radius: var(--sl-border-radius-small);
+          transition: background-color 0.1s ease;
+        }
+
+        :host([clickable]:hover) {
+          background-color: var(--sl-color-neutral-100);
+        }
+
+        :host([variant="error"]) .text {
+          color: var(--sl-color-danger-600);
+        }
+
+        :host([variant="warning"]) .text {
+          color: var(--sl-color-warning-600);
+        }
+
+        :host([variant="success"]) .text {
+          color: var(--sl-color-success-600);
+        }
+      </style>
+      
+      ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
+      <span class="text">${text}</span>
+    `;
+  }
+
+  updateHostProperties() {
+    const tooltip = this.getAttribute('tooltip') || '';
+    if (tooltip) {
+      this.title = tooltip;
+    }
+  }
+
+  get text() {
+    return this.getAttribute('text') || '';
+  }
+
+  set text(value) {
+    this.setAttribute('text', value);
+  }
+
+  get icon() {
+    return this.getAttribute('icon') || '';
+  }
+
+  set icon(value) {
+    if (value) {
+      this.setAttribute('icon', value);
+    } else {
+      this.removeAttribute('icon');
+    }
+  }
+
+  get tooltip() {
+    return this.getAttribute('tooltip') || '';
+  }
+
+  set tooltip(value) {
+    if (value) {
+      this.setAttribute('tooltip', value);
+    } else {
+      this.removeAttribute('tooltip');
+    }
+  }
+
+  get variant() {
+    return this.getAttribute('variant') || 'default';
+  }
+
+  set variant(value) {
+    if (value && value !== 'default') {
+      this.setAttribute('variant', value);
+    } else {
+      this.removeAttribute('variant');
+    }
+  }
+
+  get clickable() {
+    return this.hasAttribute('clickable');
+  }
+
+  set clickable(value) {
+    if (value) {
+      this.setAttribute('clickable', '');
+      this.addEventListener('click', this.handleClick.bind(this));
+    } else {
+      this.removeAttribute('clickable');
+      this.removeEventListener('click', this.handleClick);
+    }
+  }
+
+  handleClick(event) {
+    this.dispatchEvent(new CustomEvent('widget-click', {
+      bubbles: true,
+      detail: {
+        action: 'click',
+        widget: this,
+        text: this.text
+      }
+    }));
+  }
+}
+
+customElements.define('status-text', StatusText);
+
+/**
+ * Button widget for the status bar
+ * Clickable button with icon and/or text
+ */
+
+class StatusButton extends HTMLElement {
+  static get observedAttributes() {
+    return ['text', 'icon', 'tooltip', 'action', 'variant', 'disabled'];
+  }
+
+  constructor() {
+    super();
+    try {
+      this.attachShadow({ mode: 'open' });
+      this.render();
+    } catch (error) {
+      console.error('StatusButton constructor failed:', error);
+      // Fallback: create without shadow DOM
+      this.innerHTML = '<span>Button (fallback)</span>';
+    }
+  }
+
+  connectedCallback() {
+    this.render();
+    this.updateHostProperties();
+    this.setupEventListeners();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+    if (this.isConnected) {
+      this.updateHostProperties();
+    }
+  }
+
+  setupEventListeners() {
+    this.addEventListener('click', this.handleClick.bind(this));
+    this.addEventListener('keydown', this.handleKeydown.bind(this));
+  }
+
+  render() {
+    if (!this.shadowRoot) {
+      console.warn('StatusButton: No shadow root available, skipping render');
+      return;
+    }
+    
+    const text = this.getAttribute('text') || '';
+    const icon = this.getAttribute('icon') || '';
+    this.getAttribute('tooltip') || '';
+    const disabled = this.hasAttribute('disabled');
+    this.getAttribute('variant') || 'default';
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 6px;
+          cursor: pointer;
+          user-select: none;
+          border-radius: 3px;
+          transition: background-color 0.1s ease;
+          outline: none;
+          border: none;
+          background-color: transparent;
+          color: var(--sl-color-neutral-600);
+          font-size: var(--sl-font-size-x-small);
+          min-height: 18px;
+          box-sizing: border-box;
+        }
+
+        :host(:hover) {
+          background-color: var(--sl-color-neutral-100);
+        }
+
+        :host(:active) {
+          background-color: var(--sl-color-neutral-200);
+        }
+
+        :host(:focus-visible) {
+          outline: 1px solid var(--sl-color-primary-500);
+          outline-offset: 1px;
+        }
+
+        :host([disabled]) {
+          cursor: not-allowed;
+          opacity: 0.5;
+          pointer-events: none;
+        }
+
+        :host([variant="primary"]) {
+          background-color: var(--sl-color-primary-600);
+          color: var(--sl-color-neutral-0);
+        }
+
+        :host([variant="primary"]:hover) {
+          background-color: var(--sl-color-primary-700);
+        }
+
+        :host([variant="success"]) {
+          color: var(--sl-color-success-600);
+        }
+
+        :host([variant="success"]:hover) {
+          background-color: var(--sl-color-success-50);
+        }
+
+        :host([variant="warning"]) {
+          color: var(--sl-color-warning-600);
+        }
+
+        :host([variant="warning"]:hover) {
+          background-color: var(--sl-color-warning-50);
+        }
+
+        :host([variant="danger"]) {
+          color: var(--sl-color-danger-600);
+        }
+
+        :host([variant="danger"]:hover) {
+          background-color: var(--sl-color-danger-50);
+        }
+
+        .icon {
+          display: inline-flex;
+          align-items: center;
+          font-size: 12px;
+        }
+
+        button {
+          border: none;
+          background: none;
+          padding: 0;
+          margin: 0;
+          font: inherit;
+          color: inherit;
+          cursor: inherit;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          outline: none;
+        }
+
+        .text {
+          white-space: nowrap;
+        }
+
+        :host([icon-only]) .text {
+          display: none;
+        }
+
+        :host([text-only]) .icon {
+          display: none;
+        }
+      </style>
+      
+      <button tabindex="-1" ${disabled ? 'disabled' : ''}>
+        ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
+        ${text ? `<span class="text">${text}</span>` : ''}
+      </button>
+    `;
+  }
+
+  updateHostProperties() {
+    const tooltip = this.getAttribute('tooltip') || '';
+    const disabled = this.hasAttribute('disabled');
+
+    if (tooltip) {
+      this.title = tooltip;
+    }
+
+    // Make the host element focusable
+    try {
+      this.tabIndex = disabled ? -1 : 0;
+    } catch (e) {
+      // Some browsers/situations don't allow setting tabIndex
+      console.warn('Could not set tabIndex on status-button:', e.message);
+    }
+  }
+
+  handleClick(event) {
+    event.preventDefault();
+    if (this.disabled) return;
+
+    const action = this.getAttribute('action') || 'click';
+    
+    this.dispatchEvent(new CustomEvent('widget-click', {
+      bubbles: true,
+      detail: {
+        action: action,
+        widget: this,
+        text: this.text,
+        icon: this.icon
+      }
+    }));
+  }
+
+  handleKeydown(event) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.handleClick(event);
+    }
+  }
+
+  get text() {
+    return this.getAttribute('text') || '';
+  }
+
+  set text(value) {
+    if (value) {
+      this.setAttribute('text', value);
+    } else {
+      this.removeAttribute('text');
+    }
+  }
+
+  get icon() {
+    return this.getAttribute('icon') || '';
+  }
+
+  set icon(value) {
+    if (value) {
+      this.setAttribute('icon', value);
+    } else {
+      this.removeAttribute('icon');
+    }
+  }
+
+  get tooltip() {
+    return this.getAttribute('tooltip') || '';
+  }
+
+  set tooltip(value) {
+    if (value) {
+      this.setAttribute('tooltip', value);
+    } else {
+      this.removeAttribute('tooltip');
+    }
+  }
+
+  get action() {
+    return this.getAttribute('action') || 'click';
+  }
+
+  set action(value) {
+    this.setAttribute('action', value);
+  }
+
+  get variant() {
+    return this.getAttribute('variant') || 'default';
+  }
+
+  set variant(value) {
+    if (value && value !== 'default') {
+      this.setAttribute('variant', value);
+    } else {
+      this.removeAttribute('variant');
+    }
+  }
+
+  get disabled() {
+    return this.hasAttribute('disabled');
+  }
+
+  set disabled(value) {
+    if (value) {
+      this.setAttribute('disabled', '');
+    } else {
+      this.removeAttribute('disabled');
+    }
+  }
+}
+
+customElements.define('status-button', StatusButton);
+
+/**
+ * Progress widget for the status bar
+ * Shows progress bar with optional text
+ */
+
+class StatusProgress extends HTMLElement {
+  static get observedAttributes() {
+    return ['value', 'max', 'text', 'indeterminate', 'variant'];
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.render();
+  }
+
+  connectedCallback() {
+    this.render();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+  }
+
+  render() {
+    const value = parseFloat(this.getAttribute('value')) || 0;
+    const max = parseFloat(this.getAttribute('max')) || 100;
+    const text = this.getAttribute('text') || '';
+    const indeterminate = this.hasAttribute('indeterminate');
+    this.getAttribute('variant') || 'default';
+    
+    const percentage = indeterminate ? 0 : Math.min(100, Math.max(0, (value / max) * 100));
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 0 4px;
+          min-width: 80px;
+          max-width: 150px;
+        }
+
+        .progress-container {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex: 1;
+        }
+
+        .progress-bar {
+          flex: 1;
+          height: 4px;
+          background-color: var(--sl-color-neutral-200);
+          border-radius: 2px;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background-color: var(--sl-color-primary-500);
+          border-radius: 2px;
+          transition: width 0.3s ease;
+          width: ${percentage}%;
+        }
+
+        :host([variant="success"]) .progress-fill {
+          background-color: var(--sl-color-success-500);
+        }
+
+        :host([variant="warning"]) .progress-fill {
+          background-color: var(--sl-color-warning-500);
+        }
+
+        :host([variant="danger"]) .progress-fill {
+          background-color: var(--sl-color-danger-500);
+        }
+
+        :host([indeterminate]) .progress-fill {
+          width: 30%;
+          animation: indeterminate 2s infinite linear;
+        }
+
+        @keyframes indeterminate {
+          0% {
+            transform: translateX(-100%);
+          }
+          100% {
+            transform: translateX(333%);
+          }
+        }
+
+        .text {
+          font-size: var(--sl-font-size-x-small);
+          color: var(--sl-color-neutral-600);
+          white-space: nowrap;
+          min-width: 0;
+          flex-shrink: 0;
+        }
+
+        .percentage {
+          font-size: var(--sl-font-size-x-small);
+          color: var(--sl-color-neutral-500);
+          min-width: 30px;
+          text-align: right;
+        }
+
+        :host([hide-percentage]) .percentage {
+          display: none;
+        }
+
+        :host([indeterminate]) .percentage {
+          display: none;
+        }
+      </style>
+      
+      <div class="progress-container">
+        ${text ? `<span class="text">${text}</span>` : ''}
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+        <span class="percentage">${Math.round(percentage)}%</span>
+      </div>
+    `;
+  }
+
+  get value() {
+    return parseFloat(this.getAttribute('value')) || 0;
+  }
+
+  set value(val) {
+    this.setAttribute('value', val.toString());
+  }
+
+  get max() {
+    return parseFloat(this.getAttribute('max')) || 100;
+  }
+
+  set max(val) {
+    this.setAttribute('max', val.toString());
+  }
+
+  get text() {
+    return this.getAttribute('text') || '';
+  }
+
+  set text(value) {
+    if (value) {
+      this.setAttribute('text', value);
+    } else {
+      this.removeAttribute('text');
+    }
+  }
+
+  get indeterminate() {
+    return this.hasAttribute('indeterminate');
+  }
+
+  set indeterminate(value) {
+    if (value) {
+      this.setAttribute('indeterminate', '');
+    } else {
+      this.removeAttribute('indeterminate');
+    }
+  }
+
+  get variant() {
+    return this.getAttribute('variant') || 'default';
+  }
+
+  set variant(value) {
+    if (value && value !== 'default') {
+      this.setAttribute('variant', value);
+    } else {
+      this.removeAttribute('variant');
+    }
+  }
+
+  get hidePercentage() {
+    return this.hasAttribute('hide-percentage');
+  }
+
+  set hidePercentage(value) {
+    if (value) {
+      this.setAttribute('hide-percentage', '');
+    } else {
+      this.removeAttribute('hide-percentage');
+    }
+  }
+
+  /**
+   * Update progress value with optional animation
+   * @param {number} value - New value
+   * @param {boolean} animate - Whether to animate the change
+   */
+  updateProgress(value, animate = true) {
+    if (!animate) {
+      this.style.setProperty('--transition-duration', '0s');
+    }
+    this.value = value;
+    if (!animate) {
+      // Reset transition after a frame
+      requestAnimationFrame(() => {
+        this.style.removeProperty('--transition-duration');
+      });
+    }
+  }
+
+  /**
+   * Reset progress to 0
+   */
+  reset() {
+    this.value = 0;
+    this.indeterminate = false;
+  }
+
+  /**
+   * Complete progress (set to max value)
+   */
+  complete() {
+    this.indeterminate = false;
+    this.value = this.max;
+  }
+}
+
+customElements.define('status-progress', StatusProgress);
+
+/**
+ * Badge widget for the status bar
+ * Shows notification badge with count and variant styling
+ */
+
+class StatusBadge extends HTMLElement {
+  static get observedAttributes() {
+    return ['count', 'text', 'variant', 'icon', 'max', 'tooltip', 'dot', 'pulse', 'clickable', 'hidden-when-zero'];
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.render();
+  }
+
+  connectedCallback() {
+    this.render();
+    this.updateHostProperties();
+    this.setupEventListeners();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+    if (this.isConnected) {
+      this.updateHostProperties();
+    }
+  }
+
+  setupEventListeners() {
+    this.addEventListener('click', this.handleClick.bind(this));
+    
+    // Setup popup toggle if popup content exists
+    const hasPopupContent = this.querySelector('[slot="popup"]') !== null;
+    if (hasPopupContent) {
+      const popup = this.shadowRoot?.querySelector('sl-popup');
+      if (popup) {
+        const anchor = popup.querySelector('[slot="anchor"]');
+        if (anchor) {
+          anchor.addEventListener('click', (e) => {
+            e.stopPropagation();
+            popup.active = !popup.active;
+          });
+        }
+      }
+    }
+  }
+
+  render() {
+    const count = parseInt(this.getAttribute('count')) || 0;
+    const text = this.getAttribute('text') || '';
+    this.getAttribute('variant') || 'default';
+    const icon = this.getAttribute('icon') || '';
+    const max = parseInt(this.getAttribute('max')) || 99;
+    this.getAttribute('tooltip') || '';
+
+    const displayCount = count > max ? `${max}+` : count.toString();
+    const showBadge = count > 0 || text;
+    const hasPopupContent = this.querySelector('[slot="popup"]') !== null;
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 0 4px;
+          cursor: ${this.hasAttribute('clickable') || hasPopupContent ? 'pointer' : 'default'};
+          user-select: none;
+          border-radius: var(--sl-border-radius-small);
+          transition: background-color 0.1s ease;
+        }
+
+        :host([clickable]:hover) {
+          background-color: var(--sl-color-neutral-100);
+        }
+
+        .container {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          position: relative;
+        }
+
+        .icon {
+          display: inline-flex;
+          align-items: center;
+          font-size: 12px;
+          color: var(--sl-color-neutral-600);
+        }
+
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 16px;
+          height: 14px;
+          padding: 0 4px;
+          border-radius: 7px;
+          font-size: 10px;
+          font-weight: 600;
+          line-height: 1;
+          color: var(--sl-color-neutral-0);
+          background-color: var(--sl-color-neutral-500);
+          white-space: nowrap;
+        }
+
+        :host([variant="primary"]) .badge {
+          background-color: var(--sl-color-primary-600);
+        }
+
+        :host([variant="success"]) .badge {
+          background-color: var(--sl-color-success-600);
+        }
+
+        :host([variant="warning"]) .badge {
+          background-color: var(--sl-color-warning-600);
+        }
+
+        :host([variant="danger"]) .badge {
+          background-color: var(--sl-color-danger-600);
+        }
+
+        :host([variant="info"]) .badge {
+          background-color: var(--sl-color-sky-600);
+        }
+
+        .badge.dot {
+          min-width: 8px;
+          width: 8px;
+          height: 8px;
+          padding: 0;
+          border-radius: 50%;
+        }
+
+        .badge.pulse {
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0% {
+            box-shadow: 0 0 0 0 currentColor;
+            opacity: 1;
+          }
+          70% {
+            box-shadow: 0 0 0 4px transparent;
+            opacity: 0.7;
+          }
+          100% {
+            box-shadow: 0 0 0 0 transparent;
+            opacity: 1;
+          }
+        }
+
+        :host([hidden-when-zero]) {
+          display: ${count === 0 && !text ? 'none' : 'inline-flex'};
+        }
+
+        sl-popup::part(popup) {
+          z-index: 10000;
+          background: white;
+          border: 1px solid var(--sl-color-neutral-200);
+          border-radius: var(--sl-border-radius-medium);
+          box-shadow: var(--sl-shadow-large);
+          padding: 0;
+        }
+
+        .popup-content {
+          padding: 12px;
+          font-size: var(--sl-font-size-small);
+          min-width: 180px;
+          max-width: 300px;
+          line-height: 1.4;
+          color: var(--sl-color-neutral-700);
+        }
+      </style>
+      
+      ${hasPopupContent ? `
+        <sl-popup placement="top" distance="8" hoist>
+          <div slot="anchor" class="container">
+            ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
+            ${showBadge ? `
+              <span class="badge ${this.hasAttribute('dot') ? 'dot' : ''} ${this.hasAttribute('pulse') ? 'pulse' : ''}">
+                ${this.hasAttribute('dot') ? '' : (text || displayCount)}
+              </span>
+            ` : ''}
+          </div>
+          <div class="popup-content">
+            <slot name="popup"></slot>
+          </div>
+        </sl-popup>
+      ` : `
+        <div class="container">
+          ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
+          ${showBadge ? `
+            <span class="badge ${this.hasAttribute('dot') ? 'dot' : ''} ${this.hasAttribute('pulse') ? 'pulse' : ''}">
+              ${this.hasAttribute('dot') ? '' : (text || displayCount)}
+            </span>
+          ` : ''}
+        </div>
+      `}
+    `;
+  }
+
+  updateHostProperties() {
+    const tooltip = this.getAttribute('tooltip') || '';
+    if (tooltip) {
+      this.title = tooltip;
+    }
+  }
+
+  handleClick(event) {
+    if (!this.hasAttribute('clickable')) return;
+
+    this.dispatchEvent(new CustomEvent('widget-click', {
+      bubbles: true,
+      detail: {
+        action: 'click',
+        widget: this,
+        count: this.count,
+        text: this.text
+      }
+    }));
+  }
+
+  get count() {
+    return parseInt(this.getAttribute('count')) || 0;
+  }
+
+  set count(value) {
+    this.setAttribute('count', Math.max(0, parseInt(value) || 0).toString());
+  }
+
+  get text() {
+    return this.getAttribute('text') || '';
+  }
+
+  set text(value) {
+    if (value) {
+      this.setAttribute('text', value);
+    } else {
+      this.removeAttribute('text');
+    }
+  }
+
+  get variant() {
+    return this.getAttribute('variant') || 'default';
+  }
+
+  set variant(value) {
+    if (value && value !== 'default') {
+      this.setAttribute('variant', value);
+    } else {
+      this.removeAttribute('variant');
+    }
+  }
+
+  get icon() {
+    return this.getAttribute('icon') || '';
+  }
+
+  set icon(value) {
+    if (value) {
+      this.setAttribute('icon', value);
+    } else {
+      this.removeAttribute('icon');
+    }
+  }
+
+  get max() {
+    return parseInt(this.getAttribute('max')) || 99;
+  }
+
+  set max(value) {
+    this.setAttribute('max', Math.max(0, parseInt(value) || 99).toString());
+  }
+
+  get tooltip() {
+    return this.getAttribute('tooltip') || '';
+  }
+
+  set tooltip(value) {
+    if (value) {
+      this.setAttribute('tooltip', value);
+    } else {
+      this.removeAttribute('tooltip');
+    }
+  }
+
+  get clickable() {
+    return this.hasAttribute('clickable');
+  }
+
+  set clickable(value) {
+    if (value) {
+      this.setAttribute('clickable', '');
+    } else {
+      this.removeAttribute('clickable');
+    }
+  }
+
+  get dot() {
+    return this.hasAttribute('dot');
+  }
+
+  set dot(value) {
+    if (value) {
+      this.setAttribute('dot', '');
+    } else {
+      this.removeAttribute('dot');
+    }
+  }
+
+  get pulse() {
+    return this.hasAttribute('pulse');
+  }
+
+  set pulse(value) {
+    if (value) {
+      this.setAttribute('pulse', '');
+    } else {
+      this.removeAttribute('pulse');
+    }
+  }
+
+  get hiddenWhenZero() {
+    return this.hasAttribute('hidden-when-zero');
+  }
+
+  set hiddenWhenZero(value) {
+    if (value) {
+      this.setAttribute('hidden-when-zero', '');
+    } else {
+      this.removeAttribute('hidden-when-zero');
+    }
+  }
+
+  /**
+   * Increment the badge count
+   * @param {number} amount - Amount to increment by (default: 1)
+   */
+  increment(amount = 1) {
+    this.count += amount;
+  }
+
+  /**
+   * Decrement the badge count
+   * @param {number} amount - Amount to decrement by (default: 1)
+   */
+  decrement(amount = 1) {
+    this.count = Math.max(0, this.count - amount);
+  }
+
+  /**
+   * Reset the badge count to 0
+   */
+  reset() {
+    this.count = 0;
+  }
+}
+
+customElements.define('status-badge', StatusBadge);
+
+/**
+ * Dropdown widget for the status bar
+ * Compact dropdown menu with customizable options using Shoelace components
+ */
+
+class StatusDropdown extends HTMLElement {
+  static get observedAttributes() {
+    return ['text', 'selected', 'placeholder', 'disabled', 'variant'];
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.items = [];
+    this.render();
+  }
+
+  async connectedCallback() {
+    // Ensure Shoelace components are defined before rendering
+    await Promise.all([
+      customElements.whenDefined('sl-dropdown'),
+      customElements.whenDefined('sl-menu'),
+      customElements.whenDefined('sl-menu-item')
+    ]);
+    
+    this.parseItems();
+    this.render();
+    this.setupEventListeners();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+  }
+
+  parseItems() {
+    // Parse items from child option elements
+    const optionElements = this.querySelectorAll('option');
+    if (optionElements.length > 0) {
+      this.items = Array.from(optionElements).map(option => ({
+        value: option.value || option.textContent,
+        text: option.textContent,
+        disabled: option.hasAttribute('disabled'),
+        selected: option.hasAttribute('selected')
+      }));
+    }
+  }
+
+  setupEventListeners() {
+    const dropdown = this.shadowRoot?.querySelector('sl-dropdown');
+    if (dropdown) {
+      dropdown.addEventListener('sl-select', (e) => {
+        this.selectItem(e.detail.item.value);
+      });
+    }
+  }
+
+  disconnectedCallback() {
+    // Cleanup handled automatically
+  }
+
+  render() {
+    const text = this.getAttribute('text') || '';
+    const selected = this.getAttribute('selected') || '';
+    const placeholder = this.getAttribute('placeholder') || 'Select...';
+    const disabled = this.hasAttribute('disabled');
+
+    const selectedItem = this.items.find(item => item.value === selected);
+    const displayText = selectedItem ? selectedItem.text : (text || placeholder);
+
+    // Create menu items HTML
+    const menuItems = this.items.map(item => `
+      <sl-menu-item value="${item.value}" ${item.disabled ? 'disabled' : ''}>
+        ${item.text}
+      </sl-menu-item>
+    `).join('');
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: inline-flex;
+          font-size: var(--sl-font-size-x-small);
+        }
+
+        sl-dropdown::part(trigger) {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 6px;
+          cursor: pointer;
+          user-select: none;
+          border-radius: 3px;
+          transition: background-color 0.1s ease;
+          outline: none;
+          background-color: transparent;
+          color: var(--sl-color-neutral-600);
+          border: none;
+          min-height: 18px;
+          box-sizing: border-box;
+          font-size: var(--sl-font-size-x-small);
+        }
+
+        sl-dropdown::part(trigger):hover {
+          background-color: var(--sl-color-neutral-100);
+        }
+
+        :host([disabled]) sl-dropdown::part(trigger) {
+          cursor: not-allowed;
+          opacity: 0.5;
+          pointer-events: none;
+        }
+
+        .trigger-content {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .text {
+          white-space: nowrap;
+          max-width: 100px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .icon {
+          font-size: 8px;
+          transition: transform 0.1s ease;
+          user-select: none;
+          line-height: 1;
+        }
+
+        sl-dropdown[open] .icon {
+          transform: rotate(180deg);
+        }
+
+        sl-dropdown::part(panel) {
+          font-size: var(--sl-font-size-x-small);
+          min-width: 120px;
+          z-index: 9999;
+        }
+
+        sl-menu::part(base) {
+          font-size: var(--sl-font-size-x-small);
+          padding: 4px 0;
+        }
+
+        sl-menu-item::part(base) {
+          font-size: var(--sl-font-size-x-small);
+          padding: 4px 12px;
+          min-height: auto;
+        }
+
+        sl-menu-item::part(label) {
+          font-size: var(--sl-font-size-x-small);
+          line-height: 1.2;
+        }
+      </style>
+      
+      <sl-dropdown ${disabled ? 'disabled' : ''} hoist distance="4" skidding="0">
+        <div slot="trigger" class="trigger-content">
+          <span class="text">${displayText}</span>
+          <span class="icon">▼</span>
+        </div>
+        <sl-menu>
+          ${menuItems}
+        </sl-menu>
+      </sl-dropdown>
+    `;
+  }
+
+  selectItem(value) {
+    const item = this.items.find(i => i.value === value);
+    if (!item || item.disabled) return;
+
+    this.selected = value;
+
+    this.dispatchEvent(new CustomEvent('widget-change', {
+      bubbles: true,
+      detail: {
+        value: value,
+        text: item.text,
+        widget: this
+      }
+    }));
+  }
+
+  get text() {
+    return this.getAttribute('text') || '';
+  }
+
+  set text(value) {
+    if (value) {
+      this.setAttribute('text', value);
+    } else {
+      this.removeAttribute('text');
+    }
+  }
+
+  get selected() {
+    return this.getAttribute('selected') || '';
+  }
+
+  set selected(value) {
+    if (value) {
+      this.setAttribute('selected', value);
+    } else {
+      this.removeAttribute('selected');
+    }
+  }
+
+  get placeholder() {
+    return this.getAttribute('placeholder') || 'Select...';
+  }
+
+  set placeholder(value) {
+    this.setAttribute('placeholder', value);
+  }
+
+  get disabled() {
+    return this.hasAttribute('disabled');
+  }
+
+  set disabled(value) {
+    if (value) {
+      this.setAttribute('disabled', '');
+    } else {
+      this.removeAttribute('disabled');
+    }
+  }
+
+  /**
+   * Set dropdown items programmatically
+   * @param {Array} items - Array of {value, text, disabled?, selected?} objects
+   */
+  setItems(items) {
+    this.items = items || [];
+    this.render();
+  }
+
+  /**
+   * Add a new item to the dropdown
+   * @param {Object} item - {value, text, disabled?, selected?}
+   */
+  addItem(item) {
+    this.items.push(item);
+    this.render();
+  }
+
+  /**
+   * Remove an item from the dropdown
+   * @param {string} value - Value of the item to remove
+   */
+  removeItem(value) {
+    this.items = this.items.filter(item => item.value !== value);
+    this.render();
+  }
+
+  /**
+   * Clear all items
+   */
+  clearItems() {
+    this.items = [];
+    this.render();
+  }
+}
+
+customElements.define('status-dropdown', StatusDropdown);
+
+/**
+ * Separator widget for the status bar
+ * Visual separator between status bar widgets
+ */
+
+class StatusSeparator extends HTMLElement {
+  static get observedAttributes() {
+    return ['variant', 'spacing'];
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.render();
+  }
+
+  connectedCallback() {
+    this.render();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+  }
+
+  render() {
+    this.getAttribute('variant') || 'vertical';
+    this.getAttribute('spacing') || 'normal';
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          user-select: none;
+          flex-shrink: 0;
+        }
+
+        :host([variant="vertical"]) {
+          width: 1px;
+          height: 12px;
+          margin: 0;
+        }
+
+        :host([variant="horizontal"]) {
+          height: 1px;
+          width: 12px;
+          margin: 0;
+        }
+
+        :host([spacing="tight"]) {
+          margin: 0 2px;
+        }
+
+        :host([spacing="normal"]) {
+          margin: 0 4px;
+        }
+
+        :host([spacing="loose"]) {
+          margin: 0 8px;
+        }
+
+        .separator {
+          background-color: var(--sl-color-neutral-300);
+          width: 100%;
+          height: 100%;
+          border-radius: 1px;
+        }
+
+        :host([variant="dotted"]) .separator {
+          background: none;
+          position: relative;
+        }
+
+        :host([variant="dotted"]) .separator::after {
+          content: '•';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: var(--sl-color-neutral-400);
+          font-size: 8px;
+          line-height: 1;
+        }
+
+        :host([variant="space"]) .separator {
+          background: none;
+          width: 8px;
+          height: 1px;
+        }
+
+        :host([variant="space"][spacing="tight"]) .separator {
+          width: 4px;
+        }
+
+        :host([variant="space"][spacing="loose"]) .separator {
+          width: 12px;
+        }
+
+        @media (max-width: 480px) {
+          :host([hide-mobile]) {
+            display: none;
+          }
+          
+          :host([spacing="normal"]) {
+            margin: 0 2px;
+          }
+          
+          :host([spacing="loose"]) {
+            margin: 0 4px;
+          }
+        }
+      </style>
+      
+      <div class="separator"></div>
+    `;
+  }
+
+  get variant() {
+    return this.getAttribute('variant') || 'vertical';
+  }
+
+  set variant(value) {
+    const validVariants = ['vertical', 'horizontal', 'dotted', 'space'];
+    if (validVariants.includes(value)) {
+      this.setAttribute('variant', value);
+    } else {
+      this.removeAttribute('variant');
+    }
+  }
+
+  get spacing() {
+    return this.getAttribute('spacing') || 'normal';
+  }
+
+  set spacing(value) {
+    const validSpacing = ['tight', 'normal', 'loose'];
+    if (validSpacing.includes(value)) {
+      this.setAttribute('spacing', value);
+    } else {
+      this.removeAttribute('spacing');
+    }
+  }
+
+  get hideMobile() {
+    return this.hasAttribute('hide-mobile');
+  }
+
+  set hideMobile(value) {
+    if (value) {
+      this.setAttribute('hide-mobile', '');
+    } else {
+      this.removeAttribute('hide-mobile');
+    }
+  }
+}
+
+customElements.define('status-separator', StatusSeparator);
+
+/**
+ * Switch widget for the status bar
+ * Small switch control with optional help text positioned to the right
+ */
+
+class StatusSwitch extends HTMLElement {
+  static get observedAttributes() {
+    return ['checked', 'disabled', 'text', 'help-text', 'size'];
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.render();
+  }
+
+  connectedCallback() {
+    this.render();
+    this.updateHostProperties();
+    this.setupEventListeners();
+  }
+
+  attributeChangedCallback() {
+    this.render();
+    if (this.isConnected) {
+      this.updateHostProperties();
+    }
+  }
+
+  setupEventListeners() {
+    const switchElement = this.shadowRoot?.querySelector('sl-switch');
+    if (switchElement) {
+      switchElement.addEventListener('sl-change', (e) => {
+        this.checked = e.target.checked;
+        
+        this.dispatchEvent(new CustomEvent('widget-change', {
+          bubbles: true,
+          detail: {
+            checked: e.target.checked,
+            widget: this
+          }
+        }));
+      });
+    }
+  }
+
+  render() {
+    const checked = this.hasAttribute('checked');
+    const disabled = this.hasAttribute('disabled');
+    const text = this.getAttribute('text') || '';
+    const helpText = this.getAttribute('help-text') || '';
+    const size = this.getAttribute('size') || 'small';
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 2px 4px;
+          font-size: var(--sl-font-size-x-small);
+          user-select: none;
+        }
+
+        .switch-container {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        sl-switch {
+          --height: 14px;
+          --width: 24px;
+          --thumb-size: 10px;
+        }
+
+        sl-switch::part(control) {
+          border: 1px solid var(--sl-color-neutral-300);
+        }
+
+        sl-switch::part(thumb) {
+          border: 1px solid var(--sl-color-neutral-300);
+        }
+
+        .text {
+          font-size: var(--sl-font-size-x-small);
+          color: var(--sl-color-neutral-600);
+          white-space: nowrap;
+        }
+
+        .help-text {
+          font-size: var(--sl-font-size-2x-small);
+          color: var(--sl-color-neutral-500);
+          white-space: nowrap;
+          margin-left: 4px;
+        }
+
+        :host([disabled]) {
+          opacity: 0.5;
+          pointer-events: none;
+        }
+      </style>
+      
+      <div class="switch-container">
+        ${text ? `<span class="text">${text}</span>` : ''}
+        <sl-switch 
+          size="${size}" 
+          ${checked ? 'checked' : ''} 
+          ${disabled ? 'disabled' : ''}
+        ></sl-switch>
+        ${helpText ? `<span class="help-text">${helpText}</span>` : ''}
+      </div>
+    `;
+    
+    // Re-establish event listeners after render since innerHTML wipes them out
+    this.setupEventListeners();
+  }
+
+  updateHostProperties() {
+    // No specific host properties needed for switch
+  }
+
+  get checked() {
+    return this.hasAttribute('checked');
+  }
+
+  set checked(value) {
+    if (value) {
+      this.setAttribute('checked', '');
+    } else {
+      this.removeAttribute('checked');
+    }
+  }
+
+  get disabled() {
+    return this.hasAttribute('disabled');
+  }
+
+  set disabled(value) {
+    if (value) {
+      this.setAttribute('disabled', '');
+    } else {
+      this.removeAttribute('disabled');
+    }
+  }
+
+  get text() {
+    return this.getAttribute('text') || '';
+  }
+
+  set text(value) {
+    if (value) {
+      this.setAttribute('text', value);
+    } else {
+      this.removeAttribute('text');
+    }
+  }
+
+  get helpText() {
+    return this.getAttribute('help-text') || '';
+  }
+
+  set helpText(value) {
+    if (value) {
+      this.setAttribute('help-text', value);
+    } else {
+      this.removeAttribute('help-text');
+    }
+  }
+
+  get size() {
+    return this.getAttribute('size') || 'small';
+  }
+
+  set size(value) {
+    this.setAttribute('size', value);
+  }
+}
+
+customElements.define('status-switch', StatusSwitch);
+
+/**
+ * Modern Status Bar Module
+ * 
+ * A lightweight, VS Code-inspired status bar implementation using web components.
+ * Provides a flexible container and various specialized widgets.
+ * 
+ * @example
+ * ```javascript
+ * import { StatusBar, StatusText, StatusButton } from './modules/statusbar/index.js';
+ * 
+ * const statusBar = document.createElement('status-bar');
+ * document.body.appendChild(statusBar);
+ * 
+ * const textWidget = document.createElement('status-text');
+ * textWidget.text = 'Ready';
+ * textWidget.icon = 'check-circle';
+ * statusBar.addWidget(textWidget, 'left', 10);
+ * 
+ * const buttonWidget = document.createElement('status-button');
+ * buttonWidget.text = 'Build';
+ * buttonWidget.action = 'build';
+ * statusBar.addWidget(buttonWidget, 'right', 5);
+ * ```
+ */
+
+
+/**
+ * Helper function to create and configure a widget
+ * Note: Should only be called after custom elements are defined
+ */
+function createWidget(tagName, options = {}) {
+  const widget = document.createElement(tagName);
+  
+  // Apply options immediately after creation
+  Object.keys(options).forEach(key => {
+    const value = options[key];
+    if (value !== undefined) {
+      try {
+        if (typeof value === 'boolean' && value) {
+          const attrName = key === 'hideMobile' ? 'hide-mobile' : 
+                          key === 'hiddenWhenZero' ? 'hidden-when-zero' : key;
+          widget.setAttribute(attrName, '');
+        } else if (typeof value !== 'boolean') {
+          // Handle special attribute name mappings
+          const attrName = key === 'helpText' ? 'help-text' : key;
+          widget.setAttribute(attrName, value.toString());
+        }
+      } catch (e) {
+        // Ignore setAttribute errors for unsupported operations
+        console.warn(`Could not set attribute ${key} on ${tagName}:`, e.message);
+      }
+    }
+  });
+  
+  return widget;
+}
+
+/**
+ * Utility functions for creating widgets
+ */
+const StatusBarUtils = {
+  /**
+   * Create a text widget with the given properties
+   * @param {Object} options - Widget options
+   * @param {string} options.text - Text to display
+   * @param {string} [options.icon] - Optional icon name
+   * @param {string} [options.tooltip] - Optional tooltip
+   * @param {string} [options.variant] - Optional variant (error, warning, success)
+   * @param {boolean} [options.clickable] - Whether the widget is clickable
+   * @returns {StatusText}
+   */
+  createText(options = {}) {
+    return createWidget('status-text', options);
+  },
+
+  /**
+   * Create a button widget with the given properties
+   * @param {Object} options - Widget options
+   * @param {string} [options.text] - Button text
+   * @param {string} [options.icon] - Button icon
+   * @param {string} [options.tooltip] - Button tooltip
+   * @param {string} [options.action] - Action identifier
+   * @param {string} [options.variant] - Button variant
+   * @param {boolean} [options.disabled] - Whether button is disabled
+   * @returns {StatusButton}
+   */
+  createButton(options = {}) {
+    return createWidget('status-button', options);
+  },
+
+  /**
+   * Create a progress widget with the given properties
+   * @param {Object} options - Widget options
+   * @param {number} [options.value] - Current progress value
+   * @param {number} [options.max] - Maximum progress value
+   * @param {string} [options.text] - Progress text
+   * @param {boolean} [options.indeterminate] - Whether progress is indeterminate
+   * @param {string} [options.variant] - Progress variant
+   * @returns {StatusProgress}
+   */
+  createProgress(options = {}) {
+    return createWidget('status-progress', options);
+  },
+
+  /**
+   * Create a badge widget with the given properties
+   * @param {Object} options - Widget options
+   * @param {number} [options.count] - Badge count
+   * @param {string} [options.text] - Badge text (alternative to count)
+   * @param {string} [options.variant] - Badge variant
+   * @param {string} [options.icon] - Badge icon
+   * @param {number} [options.max] - Maximum count display
+   * @param {boolean} [options.clickable] - Whether badge is clickable
+   * @param {boolean} [options.dot] - Show as dot instead of count
+   * @param {boolean} [options.pulse] - Enable pulse animation
+   * @param {boolean} [options.hiddenWhenZero] - Hide when count is zero
+   * @returns {StatusBadge}
+   */
+  createBadge(options = {}) {
+    return createWidget('status-badge', options);
+  },
+
+  /**
+   * Create a dropdown widget with the given properties
+   * @param {Object} options - Widget options
+   * @param {string} [options.text] - Dropdown text
+   * @param {string} [options.placeholder] - Placeholder text
+   * @param {string} [options.selected] - Selected value
+   * @param {Array} [options.items] - Dropdown items
+   * @param {boolean} [options.disabled] - Whether dropdown is disabled
+   * @returns {StatusDropdown}
+   */
+  createDropdown(options = {}) {
+    const { items, ...attrs } = options;
+    const widget = createWidget('status-dropdown', attrs);
+    
+    // Handle items specially
+    if (items && Array.isArray(items)) {
+      if (widget.setItems) {
+        widget.setItems(items);
+      }
+    }
+
+    return widget;
+  },
+
+  /**
+   * Create a separator widget with the given properties
+   * @param {Object} options - Widget options
+   * @param {string} [options.variant] - Separator variant (vertical, horizontal, dotted, space)
+   * @param {string} [options.spacing] - Separator spacing (tight, normal, loose)
+   * @param {boolean} [options.hideMobile] - Whether to hide on mobile
+   * @returns {StatusSeparator}
+   */
+  createSeparator(options = {}) {
+    return createWidget('status-separator', options);
+  },
+
+  /**
+   * Create a switch widget with the given properties
+   * @param {Object} options - Widget options
+   * @param {string} [options.text] - Switch label text
+   * @param {string} [options.helpText] - Help text shown to the right
+   * @param {boolean} [options.checked] - Whether switch is checked
+   * @param {boolean} [options.disabled] - Whether switch is disabled
+   * @param {string} [options.size] - Switch size (small, medium, large)
+   * @param {string} [options.name] - Name attribute for UI element lookup
+   * @returns {StatusSwitch}
+   */
+  createSwitch(options = {}) {
+    return createWidget('status-switch', options);
+  }
+};
+
 /**
  * The UI of the application as a typed object structure, which can then be traversed. 
  * In this structure, each named DOM element encapsulates all named descencdent elements.
@@ -10930,15 +13374,40 @@ SlDivider.define("sl-divider");
  * @typedef {object} namedElementsTree
  * @property {toolbarComponent} toolbar - The main toolbar
  * @property {floatingPanelComponent} floatingPanel - The floating panel with navigation buttons
- * @property {HTMLDivElement} pdfViewer - The PDFJS-based PDF viewer contained in an iFrame child node
- * @property {HTMLDivElement} xmlEditor - The codemirror-based xml editor
+ * @property {pdfViewerComponent} pdfViewer - The PDFJS-based PDF viewer with statusbar
+ * @property {xmlEditorComponent} xmlEditor - The codemirror-based xml editor with statusbar
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes and block the application while they are ongoing
  * @property {dialogComponent} dialog - A dialog to display messages or errors
  * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
  * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
  * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
- * @property {statusBarComponent} statusBar - A status bar to display messages about the current state of the application
  * @property {loginDialog} loginDialog - A dialog for login
+ */
+
+/**
+ * PDF viewer component with statusbar
+ * @typedef {object} pdfViewerComponent
+ * @property {HTMLDivElement} self - The PDF viewer container
+ * @property {pdfViewerStatusBar} statusbar - The PDF viewer statusbar
+ */
+
+/**
+ * XML editor component with statusbar
+ * @typedef {object} xmlEditorComponent 
+ * @property {HTMLDivElement} self - The XML editor container
+ * @property {xmlEditorStatusBar} statusbar - The XML editor statusbar
+ */
+
+/**
+ * PDF viewer statusbar with specific widgets
+ * @typedef {object} pdfViewerStatusBar
+ * @property {HTMLElement} searchSwitch - The autosearch toggle switch
+ */
+
+/**
+ * XML editor statusbar with specific widgets
+ * @typedef {object} xmlEditorStatusBar
+ * @property {HTMLElement} self - The statusbar element
  */
 
 /**
@@ -10955,13 +13424,6 @@ SlDivider.define("sl-divider");
  * @property {SlButton} logoutButton
  */
 
-/**
- * The status bar with messages about the current state of the application
- * @typedef {object} statusBarComponent
- * @property {HTMLDivElement} self - The status bar element
- * @property {HTMLDivElement} statusMessagePdf - The status message for the PDF viewer
- * @property {HTMLDivElement} statusMessageXml - The status message for the XML editor 
- */
 
 /**
  * This variable represents the document node, which has the next-level named elements as virtual properties
@@ -11016,123 +13478,6 @@ function updateUi() {
 
 updateUi();
 var ui$1 = ui;
-
-/**
- * This implements the application statusbar
- */
-
-
-/**
- * plugin API
- */
-const api$a = {
-  addMessage,
-  removeMessage
-};
-
-/**
- * component plugin
- */
-const plugin$f = {
-  name: "statusbar",
-  install: install$e,
-  state: {
-    update: update$a
-  }
-};
-
-let eventSource = null;
-let cachedSessionId = null;
-
-/** 
- * @param {ApplicationState} state 
- */
-async function install$e(state){
-  api$d.debug(`Installing plugin "${plugin$f.name}"`);
-}
-
-/**
- * @param {ApplicationState} state 
- */
-async function update$a(state) {
-  const { user, sessionId } = state;
-
-  // Close existing connection if the session ID has changed or user logged out
-  if (eventSource && (sessionId !== cachedSessionId || !user)) {
-    api$d.debug('Closing SSE connection due to session change or logout.');
-    eventSource.close();
-    eventSource = null;
-    cachedSessionId = null;
-    removeMessage('xml', 'sse-status');
-  }
-
-  // Open a new connection if user is logged in and there's no active connection
-  if (user && sessionId && !eventSource) {
-    api$d.debug(`User is logged in, subscribing to SSE with session ID ${sessionId}.`);
-    const url = `/sse/subscribe?session_id=${sessionId}`;
-    eventSource = new EventSource(url);
-    cachedSessionId = sessionId;
-    let messageTimeout = null;
-    eventSource.addEventListener('updateStatus', (event) => {
-      addMessage(event.data, 'xml', 'sse-status');
-      if (messageTimeout) {
-        clearTimeout(messageTimeout);
-      }
-      messageTimeout = setTimeout(() => removeMessage('xml','sse-status'), 5000);
-    });
-
-    eventSource.onerror = (err) => {
-      api$d.error("EventSource failed:", err);
-      if (eventSource) {
-        eventSource.close();
-      }
-      eventSource = null;
-      cachedSessionId = null;
-    };
-  }
-}
-
-/**
- * Returns the status bar DIV of either the PDF viewer or the XML editor
- * @param {string} type 
- * @returns {HTMLDivElement}
- */
-function getStatusBar(type) {
-  if (!["xml","pdf"].includes(type)){
-    throw new Error(`${type} must be "xml" or "pdf"`)
-  }
-  return type === "xml" ? ui$1.statusBar.statusMessageXml : ui$1.statusBar.statusMessagePdf
-}
-
-/**
- * Adds/replaces a message to the statusbar with a given id
- * @param {string} message The message to display
- * @param {string} type Either "pdf" or "xml"
- * @param {string} id The id of the message (by which it can be removed)
- */
-function addMessage(message, type, id) {
-  const statusbar = getStatusBar(type);
-  const span = statusbar.querySelector(`[name="${id}"]`) || document.createElement('span');
-  span.setAttribute('name', id); 
-  span.innerHTML = message;
-  statusbar.append(span);
-}
-
-/**
- * Removes a message to the statusbar identified by its id
- * @param {string} type Either "pdf" or "xml"
- * @param {string} id The id of the message (by which it can be removed)
- * @throws {Error} if no message(s) with that id can be found
- */
-function removeMessage(type, id) {
-  const statusbar = getStatusBar(type);
-  const span = statusbar.querySelector(`[name="${id}"]`);
-  if (span) {
-    statusbar.removeChild(span);
-  } else {
-    api$d.warn(`${type} statusbar does not contain a message with id ${id}`);
-  }
-}
 
 /**
  * This application plugin implements a dialog registered as the "diaolog" property of the app
@@ -11647,6 +13992,21 @@ async function install$c(state) {
   await pdfViewer.isReady();
   api$d.info("PDF Viewer ready.");
   pdfViewer.show();
+  
+  // Add autosearch switch to PDF viewer statusbar
+  const statusBar = ui$1.pdfViewer.statusbar;
+  const autoSearchSwitch = StatusBarUtils.createSwitch({
+    text: 'Autosearch',
+    helpText: 'off',
+    checked: false,
+    name: 'searchSwitch'
+  });
+  
+  autoSearchSwitch.addEventListener('widget-change', onAutoSearchSwitchChange);
+  statusBar.addWidget(autoSearchSwitch, 'left', 10);
+  
+  // Update UI to register named elements
+  updateUi();
 }
 
 /**
@@ -11659,6 +14019,27 @@ async function update$9(state) {
     //if (state.pdf === null && state.user === null) {
     //  pdfViewer.load('empty.pdf')
     //}
+  }
+}
+
+/**
+ * Called when the autosearch switch is toggled
+ * @param {Event} evt 
+ */
+async function onAutoSearchSwitchChange(evt) {
+  const customEvt = /** @type {CustomEvent} */ (evt);
+  const checked = customEvt.detail.checked;
+  const autoSearchSwitch = customEvt.detail.widget;
+  
+  // Update help text
+  if (autoSearchSwitch) {
+    const newHelpText = checked ? 'on' : 'off';
+    autoSearchSwitch.setAttribute('help-text', newHelpText);
+  }
+  
+  api$d.info(`Auto search is: ${checked}`);
+  if (checked && xmlEditor.selectedNode) {
+    await api$4.searchNodeContentsInPdf(xmlEditor.selectedNode);
   }
 }
 
@@ -42124,6 +44505,9 @@ class NavXmlEditor extends XMLEditor {
  */
 const xmlEditor = new NavXmlEditor('codemirror-container');
 
+// Status widgets for XML editor statusbar
+let readOnlyStatusWidget = null;
+
 /**
  * component plugin
  */
@@ -42143,6 +44527,20 @@ async function install$b(state) {
   api$d.debug(`Installing plugin "${plugin$c.name}"`);
   // Note: Autocomplete data is now loaded dynamically per document in services.js
   // The static tagData loading has been removed in favor of schema-specific autocomplete data
+
+  // Create status widgets for XML editor statusbar
+  readOnlyStatusWidget = StatusBarUtils.createText({
+    text: '🔒 File is read-only',
+    variant: 'warning'
+  });
+  StatusBarUtils.createText({
+    text: 'Invalid XML',
+    variant: 'error'
+  });
+  StatusBarUtils.createText({
+    text: 'Saving XML...',
+    variant: 'info'
+  });
 
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
@@ -42181,10 +44579,14 @@ async function update$8(state) {
     api$d.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     if (state.editorReadOnly) {
       ui$1.xmlEditor.classList.add("editor-readonly");
-      api$a.addMessage("🔒 File is read-only", "xml", "readonly-state");
+      if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
+        ui$1.xmlEditor.statusbar.addWidget(readOnlyStatusWidget, 'left', 5);
+      }
     } else {
       ui$1.xmlEditor.classList.remove("editor-readonly");
-      api$a.removeMessage("xml", "readonly-state");
+      if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
+        ui$1.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget);
+      }
     }
   }
 
@@ -45098,6 +47500,9 @@ const plugin$7 = {
   validation: { inProgress }
 };
 
+// Status widget for saving progress
+let savingStatusWidget = null;
+
 //
 // UI
 //
@@ -45170,6 +47575,12 @@ async function install$7(state) {
   document.body.append(newVersionDialog);
   document.body.append(saveRevisionDialog);
   updateUi();
+  
+  // Create saving status widget
+  savingStatusWidget = StatusBarUtils.createText({
+    text: 'Saving XML...',
+    variant: 'info'
+  });
 
   ui$1.toolbar.self;
 
@@ -45382,7 +47793,13 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error("No XML valid document in the editor")
   }
   try {
-    api$a.addMessage("Saving XML...", "xml", "saving");
+    // Show saving status
+    if (savingStatusWidget && !savingStatusWidget.isConnected) {
+      console.log('XML Editor statusbar exists?', ui$1.xmlEditor.statusbar);
+      if (ui$1.xmlEditor.statusbar) {
+        ui$1.xmlEditor.statusbar.addWidget(savingStatusWidget, 'left', 10);
+      }
+    }
     return await api$7.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message);
@@ -45390,7 +47807,11 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     throw new Error(`Could not save XML: ${e.message}`)
   } finally {
     // clear status message after 1 second 
-    setTimeout(() => { api$a.removeMessage("xml", "saving"); }, 1000);
+    setTimeout(() => {
+      if (savingStatusWidget && savingStatusWidget.isConnected) {
+        ui$1.xmlEditor.statusbar.removeWidget(savingStatusWidget);
+      }
+    }, 1000);
   }
 }
 
@@ -45930,7 +48351,6 @@ const plugin$6 = {
  * @property {HTMLSpanElement} selectionIndex
  * @property {HTMLButtonElement} nextNode
  * @property {HTMLDivElement} markNodeButtons - children have class="node-status" and 'data-status' attribute
- * @property {Switch} switchAutoSearch
  * @property {diffNavigationComponent} diffNavigation
  * 
  */
@@ -46014,8 +48434,6 @@ async function install$6(state) {
     api$4.removeMergeView(state);
   });
 
-  // @ts-ignore
-  fp.switchAutoSearch.addEventListener('change', onAutoSearchSwitchChange); // toggle search of node in the PDF
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex); // allow to input node index
 
   // configure "status" buttons
@@ -46109,17 +48527,6 @@ async function changeNodeIndex(state, delta) {
 // Event handlers
 //
 
-/**
- * Called when the switch for auto-search is toggled
- * @param {CustomEvent} evt 
- */
-async function onAutoSearchSwitchChange(evt) {
-  const checked = evt.detail.checked;
-  api$d.info(`Auto search is: ${checked}`);
-  if (checked && xmlEditor.selectedNode) {
-    await api$4.searchNodeContentsInPdf(xmlEditor.selectedNode);
-  }
-}
 
 /**
  * Called when the user clicks on the counter to enter the node index
@@ -55285,6 +57692,7 @@ const plugin$1 = {
 //
 
 let spinner;
+let validationStatusWidget = null;
 
 /**
  * Invoked for plugin installation
@@ -55298,6 +57706,12 @@ async function install$1(state) {
   spinner.setAttribute('name', "spinner");
   document.body.appendChild(spinner);
   updateUi();
+  
+  // Create validation status widget
+  validationStatusWidget = StatusBarUtils.createText({
+    text: 'Invalid XML',
+    variant: 'error'
+  });
 }
 
 /**
@@ -55438,7 +57852,10 @@ function configureXmlEditor() {
     const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
     console.warn("XML is not well-formed", diagnostics);
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
-    api$a.addMessage("Invalid XML", "xml", "xml-status");
+    // Show validation error in statusbar
+    if (validationStatusWidget && !validationStatusWidget.isConnected) {
+      ui$1.xmlEditor.statusbar.addWidget(validationStatusWidget, 'left', 5);
+    }
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
   });
@@ -55446,7 +57863,10 @@ function configureXmlEditor() {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
-    api$a.removeMessage("xml", "xml-status");
+    // Remove validation error from statusbar
+    if (validationStatusWidget && validationStatusWidget.isConnected) {
+      ui$1.xmlEditor.statusbar.removeWidget(validationStatusWidget);
+    }
   });
 }
 
@@ -55568,10 +57988,10 @@ async function searchNodeContents() {
   // workaround for the node selection not being updated immediately
   await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
   // trigger auto-search if enabled and if a new node has been selected
-  const autoSearchSwitch = ui$1.floatingPanel.switchAutoSearch;
+  const autoSearchSwitch = /** @type {any} */ (ui$1.pdfViewer.statusbar.searchSwitch);
   const node = xmlEditor.selectedNode;
 
-  if (autoSearchSwitch.checked && node && node !== lastNode) {
+  if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
     await api$4.searchNodeContentsInPdf(node);
     lastNode = node;
   }
@@ -55868,7 +58288,6 @@ try {
   tmpState = await api$7.state();
 }
 updateState(state, tmpState);
-console.warn(state);
 window.addEventListener('beforeunload', evt => {
   api$d.debug("Saving state in sessionStorage");
   sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state));
@@ -55880,4 +58299,4 @@ await api$b.updateStateFromUrlHash(state);
 // start the application 
 await invoke(endpoints.start, state);
 
-export { api$1 as appInfo, api as authentication, api$7 as client, api$c as config, api$9 as dialog, endpoints, api$5 as extraction, api$6 as fileselection, api$3 as floatingPanel, invoke, api$d as logger, pdfViewer, pluginManager, plugins, api$2 as promptEditor, api$4 as services, state, api$a as statusbar, updateState, api$b as urlHash, api$8 as validation, xmlEditor };
+export { api$1 as appInfo, api as authentication, api$7 as client, api$c as config, api$9 as dialog, endpoints, api$5 as extraction, api$6 as fileselection, api$3 as floatingPanel, invoke, api$d as logger, pdfViewer, pluginManager, plugins, api$2 as promptEditor, api$4 as services, api$a as sse, state, updateState, api$b as urlHash, api$8 as validation, xmlEditor };
