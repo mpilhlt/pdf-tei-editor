@@ -318,25 +318,34 @@
           <div class="mock-editor">Pure HTML Example</div>
           <status-bar id="html-showcase">
             <!-- Left section widgets -->
-            <status-text text="index.html" icon="file-earmark-code" slot="left"></status-text>
-            <status-separator variant="vertical" slot="left"></status-separator>
-            <status-text text="Modified" variant="warning" slot="left"></status-text>
-            <status-badge count="3" variant="danger" icon="exclamation-triangle-fill" clickable slot="left"></status-badge>
+            <status-text text="index.html" icon="file-earmark-code" slot="left" data-priority="10"></status-text>
+            <status-separator variant="vertical" slot="left" data-priority="9"></status-separator>
+            <status-text text="Modified" variant="warning" slot="left" data-priority="8"></status-text>
+            <status-badge count="3" variant="danger" icon="exclamation-triangle-fill" clickable slot="left" data-priority="9">
+              <div slot="popup">
+                <strong>Issues Found:</strong><br>
+                • Missing semicolon on line 42<br>
+                • Unused variable 'temp'<br>
+                • Deprecated method call
+              </div>
+            </status-badge>
             
             <!-- Center section widgets -->
-            <status-progress value="65" text="Building..." variant="primary" slot="center"></status-progress>
+            <status-progress value="65" text="Building..." variant="primary" slot="center" data-priority="5"></status-progress>
             
             <!-- Right section widgets -->
-            <status-button text="Format" icon="magic" action="format" slot="right"></status-button>
-            <status-separator variant="dotted" slot="right"></status-separator>
-            <status-dropdown selected="js" placeholder="Language" slot="right">
+            <status-button text="Format" icon="magic" action="format" slot="right" data-priority="3"></status-button>
+            <status-separator variant="dotted" slot="right" data-priority="4"></status-separator>
+            <status-switch text="Auto Save" help-text="(5s)" checked slot="right" data-priority="6"></status-switch>
+            <status-separator slot="right" data-priority="7"></status-separator>
+            <status-dropdown selected="js" placeholder="Language" slot="right" data-priority="8">
               <option value="js">JavaScript</option>
               <option value="ts">TypeScript</option>
               <option value="py">Python</option>
               <option value="html">HTML</option>
             </status-dropdown>
-            <status-separator slot="right"></status-separator>
-            <status-text text="Ln 42, Col 15" tooltip="Line 42, Column 15" slot="right"></status-text>
+            <status-separator slot="right" data-priority="9"></status-separator>
+            <status-text text="Ln 42, Col 15" tooltip="Line 42, Column 15" slot="right" data-priority="10"></status-text>
           </status-bar>
         </div>
 
@@ -344,25 +353,34 @@
           <h4>HTML Source:</h4>
           <pre><code>&lt;status-bar&gt;
   &lt;!-- Left section widgets --&gt;
-  &lt;status-text text="index.html" icon="file-earmark-code" slot="left"&gt;&lt;/status-text&gt;
-  &lt;status-separator variant="vertical" slot="left"&gt;&lt;/status-separator&gt;
-  &lt;status-text text="Modified" variant="warning" slot="left"&gt;&lt;/status-text&gt;
-  &lt;status-badge count="3" variant="danger" icon="exclamation-triangle-fill" clickable slot="left"&gt;&lt;/status-badge&gt;
+  &lt;status-text text="index.html" icon="file-earmark-code" slot="left" data-priority="10"&gt;&lt;/status-text&gt;
+  &lt;status-separator variant="vertical" slot="left" data-priority="9"&gt;&lt;/status-separator&gt;
+  &lt;status-text text="Modified" variant="warning" slot="left" data-priority="8"&gt;&lt;/status-text&gt;
+  &lt;status-badge count="3" variant="danger" icon="exclamation-triangle-fill" clickable slot="left" data-priority="9"&gt;
+    &lt;div slot="popup"&gt;
+      &lt;strong&gt;Issues Found:&lt;/strong&gt;&lt;br&gt;
+      • Missing semicolon on line 42&lt;br&gt;
+      • Unused variable 'temp'&lt;br&gt;
+      • Deprecated method call
+    &lt;/div&gt;
+  &lt;/status-badge&gt;
   
   &lt;!-- Center section widgets --&gt;
-  &lt;status-progress value="65" text="Building..." variant="primary" slot="center"&gt;&lt;/status-progress&gt;
+  &lt;status-progress value="65" text="Building..." variant="primary" slot="center" data-priority="5"&gt;&lt;/status-progress&gt;
   
   &lt;!-- Right section widgets --&gt;
-  &lt;status-button text="Format" icon="magic" action="format" slot="right"&gt;&lt;/status-button&gt;
-  &lt;status-separator variant="dotted" slot="right"&gt;&lt;/status-separator&gt;
-  &lt;status-dropdown selected="js" placeholder="Language" slot="right"&gt;
+  &lt;status-button text="Format" icon="magic" action="format" slot="right" data-priority="3"&gt;&lt;/status-button&gt;
+  &lt;status-separator variant="dotted" slot="right" data-priority="4"&gt;&lt;/status-separator&gt;
+  &lt;status-switch text="Auto Save" help-text="(5s)" checked slot="right" data-priority="6"&gt;&lt;/status-switch&gt;
+  &lt;status-separator slot="right" data-priority="7"&gt;&lt;/status-separator&gt;
+  &lt;status-dropdown selected="js" placeholder="Language" slot="right" data-priority="8"&gt;
     &lt;option value="js"&gt;JavaScript&lt;/option&gt;
     &lt;option value="ts"&gt;TypeScript&lt;/option&gt;
     &lt;option value="py"&gt;Python&lt;/option&gt;
     &lt;option value="html"&gt;HTML&lt;/option&gt;
   &lt;/status-dropdown&gt;
-  &lt;status-separator slot="right"&gt;&lt;/status-separator&gt;
-  &lt;status-text text="Ln 42, Col 15" tooltip="Line 42, Column 15" slot="right"&gt;&lt;/status-text&gt;
+  &lt;status-separator slot="right" data-priority="9"&gt;&lt;/status-separator&gt;
+  &lt;status-text text="Ln 42, Col 15" tooltip="Line 42, Column 15" slot="right" data-priority="10"&gt;&lt;/status-text&gt;
 &lt;/status-bar&gt;</code></pre>
         </div>
       </div>
@@ -378,6 +396,8 @@
     import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/menu/menu.js';
     import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/menu-item/menu-item.js';
     import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/icon/icon.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/popup/popup.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/switch/switch.js';
   </script>
   
   <!-- Status Bar Module -->
@@ -568,57 +588,131 @@
       const statusBar = document.getElementById('responsive-statusbar');
       statusBar.clearWidgets();
 
-      // Left section
+      // Left section - File info and editor state
       const fileText = StatusBarUtils.createText({
-        text: 'main.js',
+        text: 'src/components/StatusBar.jsx',
         icon: 'file-earmark-code'
+      });
+
+      const gitBranchText = StatusBarUtils.createText({
+        text: 'feature/status-bar',
+        icon: 'git',
+        tooltip: 'Current Git branch'
+      });
+
+      const unsavedBadge = StatusBarUtils.createBadge({
+        count: 3,
+        variant: 'warning',
+        icon: 'exclamation-triangle-fill',
+        tooltip: 'Unsaved changes'
       });
 
       const modeText = StatusBarUtils.createText({
         text: 'Insert Mode',
-        variant: 'warning'
+        variant: 'success'
       });
 
-      // Center section  
-      const branchText = StatusBarUtils.createText({
-        text: 'main',
-        icon: 'git'
+      // Center section - Build and sync status
+      const buildProgress = StatusBarUtils.createProgress({
+        value: 75,
+        text: 'Building...',
+        variant: 'primary'
       });
 
-      // Right section
+      const syncButton = StatusBarUtils.createButton({
+        text: 'Sync',
+        icon: 'arrow-repeat',
+        action: 'sync',
+        tooltip: 'Sync changes'
+      });
+
+      // Right section - Tools and settings
+      const formatButton = StatusBarUtils.createButton({
+        text: 'Format',
+        icon: 'magic',
+        action: 'format'
+      });
+
+      const autoSaveSwitch = StatusBarUtils.createSwitch({
+        text: 'Auto Save',
+        helpText: '(5s)',
+        checked: true
+      });
+
+      const languageDropdown = StatusBarUtils.createDropdown({
+        selected: 'javascript',
+        items: [
+          { value: 'javascript', text: 'JavaScript' },
+          { value: 'typescript', text: 'TypeScript' },
+          { value: 'python', text: 'Python' },
+          { value: 'html', text: 'HTML' },
+          { value: 'css', text: 'CSS' }
+        ]
+      });
+
       const encodingDropdown = StatusBarUtils.createDropdown({
         selected: 'utf8',
         items: [
           { value: 'utf8', text: 'UTF-8' },
           { value: 'ascii', text: 'ASCII' },
-          { value: 'latin1', text: 'Latin-1' }
+          { value: 'latin1', text: 'Latin-1' },
+          { value: 'utf16', text: 'UTF-16' }
+        ]
+      });
+
+      const eolDropdown = StatusBarUtils.createDropdown({
+        selected: 'lf',
+        items: [
+          { value: 'lf', text: 'LF' },
+          { value: 'crlf', text: 'CRLF' },
+          { value: 'cr', text: 'CR' }
         ]
       });
 
       const positionText = StatusBarUtils.createText({
-        text: '1:1',
-        tooltip: 'Line 1, Column 1'
+        text: 'Ln 42, Col 15',
+        tooltip: 'Line 42, Column 15'
       });
 
-      const spacingButton = StatusBarUtils.createButton({
-        text: 'Spaces: 2',
-        action: 'toggle-spacing'
+      const selectionText = StatusBarUtils.createText({
+        text: '(15 selected)',
+        tooltip: '15 characters selected'
       });
 
       // Separators
-      const sep1 = StatusBarUtils.createSeparator({ hideMobile: true });
-      const sep2 = StatusBarUtils.createSeparator({ hideMobile: true });
+      const sep1 = StatusBarUtils.createSeparator();
+      const sep2 = StatusBarUtils.createSeparator();
       const sep3 = StatusBarUtils.createSeparator();
+      const sep4 = StatusBarUtils.createSeparator();
+      const sep5 = StatusBarUtils.createSeparator();
+      const sep6 = StatusBarUtils.createSeparator();
+      const sep7 = StatusBarUtils.createSeparator();
+      const sep8 = StatusBarUtils.createSeparator();
 
-      statusBar.addWidget(fileText, 'left', 10);
+      // Add widgets with priorities (higher = more important, stays visible longer)
+      statusBar.addWidget(fileText, 'left', 10);           // Most important - file name
       statusBar.addWidget(sep1, 'left', 9);
-      statusBar.addWidget(modeText, 'left', 8);
-      statusBar.addWidget(branchText, 'center', 5);
-      statusBar.addWidget(spacingButton, 'right', 8);
-      statusBar.addWidget(sep2, 'right', 7);
-      statusBar.addWidget(encodingDropdown, 'right', 6);
-      statusBar.addWidget(sep3, 'right', 5);
-      statusBar.addWidget(positionText, 'right', 4);
+      statusBar.addWidget(unsavedBadge, 'left', 9);        // Important - unsaved changes
+      statusBar.addWidget(sep2, 'left', 8);
+      statusBar.addWidget(gitBranchText, 'left', 7);       // Git info
+      statusBar.addWidget(sep3, 'left', 6);
+      statusBar.addWidget(modeText, 'left', 5);            // Editor mode
+
+      statusBar.addWidget(buildProgress, 'center', 6);     // Build status
+      statusBar.addWidget(sep4, 'center', 5);
+      statusBar.addWidget(syncButton, 'center', 4);        // Sync button
+
+      statusBar.addWidget(positionText, 'right', 10);      // Most important - cursor position
+      statusBar.addWidget(sep5, 'right', 9);
+      statusBar.addWidget(selectionText, 'right', 8);      // Selection info
+      statusBar.addWidget(sep6, 'right', 7);
+      statusBar.addWidget(languageDropdown, 'right', 6);   // Language selector
+      statusBar.addWidget(sep7, 'right', 5);
+      statusBar.addWidget(encodingDropdown, 'right', 4);   // Encoding
+      statusBar.addWidget(sep8, 'right', 3);
+      statusBar.addWidget(eolDropdown, 'right', 2);        // Line endings
+      statusBar.addWidget(autoSaveSwitch, 'right', 1);     // Auto save setting
+      statusBar.addWidget(formatButton, 'right', 0);       // Least important - format button
     };
 
     // Widget showcase

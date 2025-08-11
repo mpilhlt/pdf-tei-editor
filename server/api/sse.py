@@ -48,6 +48,7 @@ def subscribe():
     return Response(event_stream(client_id, logger), mimetype='text/event-stream')
 
 @bp.route('/test')
+@session_required
 def test_sse():
     session_id = get_session_id(request)
     user = auth.get_user_by_session_id(session_id)
@@ -59,7 +60,7 @@ def test_sse():
         q = message_queues[client_id]
         for i in range(10):
             message = f"The server time is {time.strftime('%H:%M:%S')}"
-            q.put(("updateStatus", message))
+            q.put(("test", message))
             print(message)
             time.sleep(1)
         # No need to send an end signal here, the connection remains open
@@ -67,7 +68,7 @@ def test_sse():
     from threading import Thread
     Thread(target=message_generator).start()
     
-    return "Test started. Check the status bar for updates.", 200
+    return "Test started. Use sseObj.addEventListener('test', ...) to listen for events.", 200
 
 def send_sse_message(client_id, event_type, data):
     """

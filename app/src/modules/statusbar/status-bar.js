@@ -13,9 +13,13 @@ class StatusBar extends HTMLElement {
       center: [],
       right: []
     };
+    this.hiddenWidgets = new Set();
+    this.resizeObserver = null;
+    this.measurementCache = new Map();
     
     this.render();
     this.setupEventListeners();
+    this.setupOverflowDetection();
   }
 
   render() {
@@ -24,7 +28,6 @@ class StatusBar extends HTMLElement {
         :host {
           display: flex;
           align-items: center;
-          justify-content: space-between;
           height: 22px;
           padding: 0 8px;
           background-color: var(--sl-color-neutral-50);
@@ -44,61 +47,32 @@ class StatusBar extends HTMLElement {
 
         .section.left {
           justify-content: flex-start;
-          flex: 1;
+          flex: 0 1 auto;
         }
 
         .section.center {
           justify-content: center;
-          flex: 0 1 auto;
+          flex: 1;
         }
 
         .section.right {
           justify-content: flex-end;
-          flex: 1;
+          flex: 0 1 auto;
+          margin-left: auto;
         }
 
         ::slotted(*) {
           white-space: nowrap;
         }
 
-        @media (max-width: 768px) {
-          .section.center {
-            display: none;
-          }
-          
-          ::slotted([data-priority="1"]),
-          ::slotted([data-priority="2"]),
-          ::slotted([data-priority="3"]) {
-            display: none !important;
-          }
+        /* Dynamic overflow hiding - applied via JavaScript */
+        ::slotted([data-overflow-hidden]) {
+          display: none !important;
         }
 
-        @media (max-width: 600px) {
-          ::slotted([data-priority="4"]),
-          ::slotted([data-priority="5"]) {
-            display: none !important;
-          }
-        }
-
-        @media (max-width: 480px) {
-          :host {
-            padding: 0 4px;
-            gap: 4px;
-          }
-          .section {
-            gap: 2px;
-          }
-          
-          ::slotted([data-priority="6"]),
-          ::slotted([data-priority="7"]) {
-            display: none !important;
-          }
-        }
-
-        @media (max-width: 360px) {
-          ::slotted([data-priority="8"]) {
-            display: none !important;
-          }
+        /* Smooth transitions for hiding/showing */
+        ::slotted(*) {
+          transition: opacity 0.1s ease;
         }
       </style>
       
@@ -117,6 +91,171 @@ class StatusBar extends HTMLElement {
   setupEventListeners() {
     this.addEventListener('widget-click', this.handleWidgetClick.bind(this));
     this.addEventListener('widget-change', this.handleWidgetChange.bind(this));
+  }
+
+  setupOverflowDetection() {
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          this.checkAndResolveOverflow();
+        }
+      });
+    }
+
+    // Also check overflow when widgets are added or modified
+    this.addEventListener('slotchange', () => {
+      setTimeout(() => this.checkAndResolveOverflow(), 0);
+    });
+  }
+
+  connectedCallback() {
+    if (this.resizeObserver) {
+      this.resizeObserver.observe(this);
+    }
+    // Initial overflow check after everything is rendered
+    setTimeout(() => this.checkAndResolveOverflow(), 100);
+  }
+
+  disconnectedCallback() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+  }
+
+  checkAndResolveOverflow() {
+    const containerRect = this.getBoundingClientRect();
+    const availableWidth = containerRect.width;
+    
+    if (availableWidth === 0) return; // Not rendered yet
+
+    // Get all widgets with their measurements
+    const allWidgets = this.getAllWidgetsWithPriority();
+    const totalWidth = this.calculateTotalWidth(allWidgets);
+    
+    // Add a small safety margin to prevent edge cases
+    const safetyMargin = 5;
+    const effectiveAvailableWidth = availableWidth - safetyMargin;
+    
+    if (totalWidth > effectiveAvailableWidth) {
+      this.hideWidgetsToFit(allWidgets, effectiveAvailableWidth);
+    } else {
+      this.showWidgetsIfSpace(allWidgets, effectiveAvailableWidth);
+    }
+  }
+
+  getAllWidgetsWithPriority() {
+    const widgets = [];
+    
+    // Get all slotted elements
+    const leftSlot = this.shadowRoot.querySelector('slot[name="left"]');
+    const centerSlot = this.shadowRoot.querySelector('slot[name="center"]');
+    const rightSlot = this.shadowRoot.querySelector('slot[name="right"]');
+    
+    [leftSlot, centerSlot, rightSlot].forEach(slot => {
+      if (slot) {
+        const slottedElements = slot.assignedElements();
+        slottedElements.forEach(widget => {
+          const priority = parseInt(widget.dataset.priority) || 0;
+          widgets.push({ element: widget, priority, slot: slot.name });
+        });
+      }
+    });
+    
+    return widgets;
+  }
+
+  calculateTotalWidth(widgets) {
+    let totalWidth = 0;
+    const containerStyle = getComputedStyle(this);
+    const paddingLeft = parseInt(containerStyle.paddingLeft) || 8;
+    const paddingRight = parseInt(containerStyle.paddingRight) || 8;
+    
+    totalWidth += paddingLeft + paddingRight;
+    
+    // Group widgets by section
+    const sections = { left: [], center: [], right: [] };
+    widgets.forEach(widget => {
+      if (!widget.element.hasAttribute('data-overflow-hidden')) {
+        sections[widget.slot].push(widget);
+      }
+    });
+    
+    // Calculate minimum width needed for each section's content
+    let leftWidth = 0, centerWidth = 0, rightWidth = 0;
+    
+    sections.left.forEach((widget, index) => {
+      const rect = widget.element.getBoundingClientRect();
+      leftWidth += rect.width;
+      if (index < sections.left.length - 1) leftWidth += 4; // Gap between widgets
+    });
+    
+    sections.center.forEach((widget, index) => {
+      const rect = widget.element.getBoundingClientRect();
+      centerWidth += rect.width;
+      if (index < sections.center.length - 1) centerWidth += 4; // Gap between widgets
+    });
+    
+    sections.right.forEach((widget, index) => {
+      const rect = widget.element.getBoundingClientRect();
+      rightWidth += rect.width;
+      if (index < sections.right.length - 1) rightWidth += 4; // Gap between widgets
+    });
+    
+    // Add the content widths
+    totalWidth += leftWidth + centerWidth + rightWidth;
+    
+    // Add gaps between sections (8px each)
+    const activeSections = [leftWidth, centerWidth, rightWidth].filter(w => w > 0);
+    if (activeSections.length > 1) {
+      totalWidth += (activeSections.length - 1) * 8; // 8px gap between sections
+    }
+    
+    return totalWidth;
+  }
+
+  hideWidgetsToFit(allWidgets, availableWidth) {
+    // Sort by priority (lowest first) for hiding
+    const sortedWidgets = allWidgets
+      .filter(w => !w.element.hasAttribute('data-overflow-hidden'))
+      .sort((a, b) => a.priority - b.priority);
+    
+    let currentWidth = this.calculateTotalWidth(allWidgets);
+    
+    for (const widget of sortedWidgets) {
+      if (currentWidth <= availableWidth) break;
+      
+      // Hide this widget
+      widget.element.setAttribute('data-overflow-hidden', '');
+      this.hiddenWidgets.add(widget.element);
+      
+      // Recalculate width
+      currentWidth = this.calculateTotalWidth(allWidgets);
+    }
+  }
+
+  showWidgetsIfSpace(allWidgets, availableWidth) {
+    // Sort hidden widgets by priority (highest first) for showing
+    const hiddenWidgets = Array.from(this.hiddenWidgets)
+      .map(element => {
+        const priority = parseInt(element.dataset.priority) || 0;
+        return { element, priority };
+      })
+      .sort((a, b) => b.priority - a.priority);
+    
+    for (const widget of hiddenWidgets) {
+      // Temporarily show the widget to measure
+      widget.element.removeAttribute('data-overflow-hidden');
+      const testWidth = this.calculateTotalWidth(allWidgets);
+      
+      if (testWidth <= availableWidth) {
+        // Keep it shown
+        this.hiddenWidgets.delete(widget.element);
+      } else {
+        // Hide it again
+        widget.element.setAttribute('data-overflow-hidden', '');
+        break;
+      }
+    }
   }
 
   handleWidgetClick(event) {
@@ -164,6 +303,10 @@ class StatusBar extends HTMLElement {
     this.positions[position].sort((a, b) => b.priority - a.priority);
     
     this.appendChild(widget);
+    
+    // Check for overflow after adding
+    setTimeout(() => this.checkAndResolveOverflow(), 0);
+    
     return widgetId;
   }
 
@@ -175,14 +318,21 @@ class StatusBar extends HTMLElement {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 
-    const { position } = widget;
+    const { position, element } = widget;
     this.positions[position] = this.positions[position].filter(w => w.id !== widgetId);
     
-    if (widget.element.parentNode === this) {
-      this.removeChild(widget.element);
+    // Remove from hidden widgets set
+    this.hiddenWidgets.delete(element);
+    
+    if (element.parentNode === this) {
+      this.removeChild(element);
     }
     
     this.widgets.delete(widgetId);
+    
+    // Check if we can show more widgets after removal
+    setTimeout(() => this.checkAndResolveOverflow(), 0);
+    
     return true;
   }
 
@@ -198,6 +348,7 @@ class StatusBar extends HTMLElement {
     
     this.widgets.clear();
     this.positions = { left: [], center: [], right: [] };
+    this.hiddenWidgets.clear();
   }
 
   /**

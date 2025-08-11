@@ -29,6 +29,21 @@ class StatusBadge extends HTMLElement {
 
   setupEventListeners() {
     this.addEventListener('click', this.handleClick.bind(this));
+    
+    // Setup popup toggle if popup content exists
+    const hasPopupContent = this.querySelector('[slot="popup"]') !== null;
+    if (hasPopupContent) {
+      const popup = this.shadowRoot?.querySelector('sl-popup');
+      if (popup) {
+        const anchor = popup.querySelector('[slot="anchor"]');
+        if (anchor) {
+          anchor.addEventListener('click', (e) => {
+            e.stopPropagation();
+            popup.active = !popup.active;
+          });
+        }
+      }
+    }
   }
 
   render() {
@@ -41,6 +56,7 @@ class StatusBadge extends HTMLElement {
 
     const displayCount = count > max ? `${max}+` : count.toString();
     const showBadge = count > 0 || text;
+    const hasPopupContent = this.querySelector('[slot="popup"]') !== null;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -49,7 +65,7 @@ class StatusBadge extends HTMLElement {
           align-items: center;
           gap: 4px;
           padding: 0 4px;
-          cursor: ${this.hasAttribute('clickable') ? 'pointer' : 'default'};
+          cursor: ${this.hasAttribute('clickable') || hasPopupContent ? 'pointer' : 'default'};
           user-select: none;
           border-radius: var(--sl-border-radius-small);
           transition: background-color 0.1s ease;
@@ -139,16 +155,50 @@ class StatusBadge extends HTMLElement {
         :host([hidden-when-zero]) {
           display: ${count === 0 && !text ? 'none' : 'inline-flex'};
         }
+
+        sl-popup::part(popup) {
+          z-index: 10000;
+          background: white;
+          border: 1px solid var(--sl-color-neutral-200);
+          border-radius: var(--sl-border-radius-medium);
+          box-shadow: var(--sl-shadow-large);
+          padding: 0;
+        }
+
+        .popup-content {
+          padding: 12px;
+          font-size: var(--sl-font-size-small);
+          min-width: 180px;
+          max-width: 300px;
+          line-height: 1.4;
+          color: var(--sl-color-neutral-700);
+        }
       </style>
       
-      <div class="container">
-        ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
-        ${showBadge ? `
-          <span class="badge ${this.hasAttribute('dot') ? 'dot' : ''} ${this.hasAttribute('pulse') ? 'pulse' : ''}">
-            ${this.hasAttribute('dot') ? '' : (text || displayCount)}
-          </span>
-        ` : ''}
-      </div>
+      ${hasPopupContent ? `
+        <sl-popup placement="top" distance="8" hoist>
+          <div slot="anchor" class="container">
+            ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
+            ${showBadge ? `
+              <span class="badge ${this.hasAttribute('dot') ? 'dot' : ''} ${this.hasAttribute('pulse') ? 'pulse' : ''}">
+                ${this.hasAttribute('dot') ? '' : (text || displayCount)}
+              </span>
+            ` : ''}
+          </div>
+          <div class="popup-content">
+            <slot name="popup"></slot>
+          </div>
+        </sl-popup>
+      ` : `
+        <div class="container">
+          ${icon ? `<sl-icon class="icon" name="${icon}"></sl-icon>` : ''}
+          ${showBadge ? `
+            <span class="badge ${this.hasAttribute('dot') ? 'dot' : ''} ${this.hasAttribute('pulse') ? 'pulse' : ''}">
+              ${this.hasAttribute('dot') ? '' : (text || displayCount)}
+            </span>
+          ` : ''}
+        </div>
+      `}
     `;
   }
 

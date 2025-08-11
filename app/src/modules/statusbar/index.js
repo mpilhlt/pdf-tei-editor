@@ -31,6 +31,7 @@ import { StatusProgress } from './widgets/status-progress.js';
 import { StatusBadge } from './widgets/status-badge.js';
 import { StatusDropdown } from './widgets/status-dropdown.js';
 import { StatusSeparator } from './widgets/status-separator.js';
+import { StatusSwitch } from './widgets/status-switch.js';
 
 /**
  * Helper function to create and configure a widget
@@ -160,6 +161,28 @@ const StatusBarUtils = {
    */
   createSeparator(options = {}) {
     return createWidget('status-separator', options);
+  },
+
+  /**
+   * Create a switch widget with the given properties
+   * @param {Object} options - Widget options
+   * @param {string} [options.text] - Switch label text
+   * @param {string} [options.helpText] - Help text shown to the right
+   * @param {boolean} [options.checked] - Whether switch is checked
+   * @param {boolean} [options.disabled] - Whether switch is disabled
+   * @param {string} [options.size] - Switch size (small, medium, large)
+   * @returns {StatusSwitch}
+   */
+  createSwitch(options = {}) {
+    const { helpText, ...attrs } = options;
+    const widget = createWidget('status-switch', attrs);
+    
+    // Handle help-text attribute specially (kebab-case)
+    if (helpText) {
+      widget.setAttribute('help-text', helpText);
+    }
+    
+    return widget;
   }
 };
 
@@ -180,6 +203,7 @@ export {
   StatusBadge,
   StatusDropdown,
   StatusSeparator,
+  StatusSwitch,
   StatusBarUtils,
   createStatusBar
 };
@@ -193,6 +217,7 @@ export default {
   StatusBadge,
   StatusDropdown,
   StatusSeparator,
+  StatusSwitch,
   StatusBarUtils,
   createStatusBar
 };
