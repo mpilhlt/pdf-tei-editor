@@ -75,7 +75,7 @@ async function install(state) {
   updateUi()
 
   const pe = ui.promptEditor
-  pe.self.addEventListener("sl-request-close", dialogOnRequestClose)
+  pe.addEventListener("sl-request-close", dialogOnRequestClose)
   pe.labelMenu.addEventListener('sl-select', menuOnSelect);
   pe.submit.addEventListener('click', submit)
   pe.duplicate.addEventListener('click', duplicateInstructions)
@@ -83,7 +83,7 @@ async function install(state) {
   pe.delete.addEventListener('click', deletePrompt)
 
   // add a button to the command bar to show dialog with prompt editor
-  ui.toolbar.extractionActions.self.append(promptEditorButton)
+  ui.toolbar.extractionActions.append(promptEditorButton)
   promptEditorButton.addEventListener("click", () => api.open())
 }
 
@@ -116,7 +116,7 @@ async function open() {
   
   ui.promptEditor.delete.disabled = prompts.length < 2
   api.edit(currentIndex)
-  ui.promptEditor.self.show()
+  ui.promptEditor.show()
 }
 
 /**
@@ -201,7 +201,7 @@ function submit() {
  * Closes the prompt editor
  */
 function close() {
-  ui.promptEditor.self.hide()
+  ui.promptEditor.hide()
 }
 
 /**

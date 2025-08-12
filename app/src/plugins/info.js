@@ -86,11 +86,11 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
   // add the component html
   await createHtmlElements(infoHtml, document.body)
-  ui.infoDialog.closeBtn.addEventListener('click', () => ui.infoDialog.self.hide());
+  ui.infoDialog.closeBtn.addEventListener('click', () => ui.infoDialog.hide());
 
   // add a button to the command bar to show dialog with prompt editor
   const button = (await createHtmlElements(buttonHtml))[0]
-  ui.toolbar.self.append(button)
+  ui.toolbar.append(button)
   updateUi()
   button.addEventListener("click", () => api.open())
   
@@ -114,7 +114,7 @@ async function install(state) {
  * todo this needs to always reload the data since it might have changed on the server
  */
 async function open() {
-  ui.infoDialog.self.show()
+  ui.infoDialog.show()
 }
 
 /**
@@ -152,6 +152,6 @@ async function load(mdPath){
  * Closes the prompt editor
  */
 function close() {
-  ui.promptEditor.self.hide()
+  ui.promptEditor.hide()
 }
 

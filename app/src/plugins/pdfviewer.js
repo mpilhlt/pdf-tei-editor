@@ -3,10 +3,28 @@
  */
 
 /** @import { ApplicationState } from '../app.js' */
+/** @import { UIElement } from '../ui.js' */
+/** @import { StatusBar } from '../modules/statusbar/status-bar.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { StatusBarUtils } from '../modules/statusbar/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor } from '../app.js'
+
+//
+// UI Components
+//
+
+/**
+ * PDF viewer statusbar navigation properties
+ * @typedef {object} pdfViewerStatusbarComponent
+ * @property {HTMLElement} searchSwitch - The autosearch toggle switch
+ */
+
+/**
+ * PDF viewer navigation properties
+ * @typedef {object} pdfViewerComponent
+ * @property {UIElement<StatusBar, pdfViewerStatusbarComponent>} statusbar - The PDF viewer statusbar
+ */
 
 /**
  * Expose the PDFViewer API

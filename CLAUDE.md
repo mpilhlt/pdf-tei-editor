@@ -89,6 +89,45 @@ npm run test:sync
 - **Build**: Rollup for bundling, importmap for development
 - **Schema validation**: TEI/XML schema validation with RelaxNG
 
+### UI Component System
+The application uses a typed UI hierarchy system with the following rules:
+
+#### Component Naming Convention
+- Each UI component typedef is called a "component" and follows camelCase naming
+- Component names always end with "Component" (e.g., `toolbarComponent`, `dialogComponent`)
+- Since components represent singletons in the UI, they use lowercase naming
+
+#### Component Location and Documentation
+- Components are defined in the plugin that uses/creates them
+- Each component documents the named element hierarchy from its HTML templates
+- Components use the `UIElement<T, N>` generic type that combines DOM element type `T` with navigation properties type `N`
+
+#### Type Usage Rules
+- When a component property is a pure HTMLElement with no navigation properties, use the DOM element type directly
+- When a component has child navigation properties, use `UIElement<DOMElementType, NavigationPropertiesType>`
+- Elements serve as both DOM elements and navigation objects - no `self` property needed
+- Access DOM methods directly: `ui.dialog.show()` instead of `ui.dialog.self.show()`
+
+#### Examples
+```javascript
+// Component definition
+/**
+ * @typedef {object} dialogComponent  
+ * @property {HTMLSpanElement} message - Direct DOM element (no navigation)
+ * @property {SlButton} closeBtn - Direct DOM element (no navigation)
+ */
+
+// Usage in parent component
+/**
+ * @typedef {object} namedElementsTree
+ * @property {UIElement<SlDialog, dialogComponent>} dialog - Dialog with navigation properties
+ */
+
+// Usage in code
+ui.dialog.show()                    // Call DOM method directly
+ui.dialog.message.innerHTML = text  // Access child element
+```
+
 ### Development Workflow
 1. Frontend changes: Edit files in `app/src/`, test with `?dev` URL parameter
 2. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode

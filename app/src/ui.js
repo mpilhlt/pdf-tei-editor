@@ -1,13 +1,13 @@
 /**
  * The UI of the application as a typed object structure, which can then be traversed. 
  * In this structure, each named DOM element encapsulates all named descencdent elements.
- * This allows to access the elements via `ui.toolbar.pdf`, `ui.floatingPanel.self`, etc. The structure
+ * This allows to access the elements via `ui.toolbar.pdf`, `ui.floatingPanel`, etc. The structure
  * is created by the `accessNamedDescendentsAsProperties` function, which is called on the document
  * body at the end of this file. The JSDoc structure is used to document the UI elements and their 
  * properties and allow autocompletion in IDEs that support JSDoc.   
  */
 
-import { accessNamedDescendentsAsProperties } from './modules/browser-utils.js';
+import { createNavigableElement } from './modules/browser-utils.js';
 
 import { Spinner } from './modules/spinner.js'
 import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
@@ -36,76 +36,48 @@ import './modules/statusbar/index.js';
  * @import {dialogComponent} from './plugins/dialog.js'
  * @import {promptEditorComponent} from './plugins/prompt-editor.js'
  * @import {floatingPanelComponent} from './plugins/floating-panel.js'
- * @import {documentActionsComponent, teiServicesComponents} from './plugins/services.js'
+ * @import {documentActionsComponent, teiServicesComponent} from './plugins/services.js'
  * @import {extractionActionsComponent, extractionOptionsDialog} from './plugins/extraction.js'
  * @import {infoDialogComponent} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
+ * @import {pdfViewerComponent} from './plugins/pdfviewer.js'
+ * @import {xmlEditorComponent} from './plugins/xmleditor.js'
+ * @import {toolbarComponent} from './plugins/toolbar.js'
+ * @import {teiWizardDialogComponent} from './plugins/tei-wizard.js'
  */
 
 /**
- * The top-level UI parts 
+ * Generic UI element type that combines DOM element properties with navigation properties
+ * @template {Element} T - The DOM element type
+ * @template {Record<string, any>} N - The navigation properties type
+ * @typedef {T & N} UIElement
+ */
+
+/**
+ * The top-level UI parts
  * @typedef {object} namedElementsTree
- * @property {toolbarComponent} toolbar - The main toolbar
- * @property {floatingPanelComponent} floatingPanel - The floating panel with navigation buttons
- * @property {pdfViewerComponent} pdfViewer - The PDFJS-based PDF viewer with statusbar
- * @property {xmlEditorComponent} xmlEditor - The codemirror-based xml editor with statusbar
- * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes and block the application while they are ongoing
- * @property {dialogComponent} dialog - A dialog to display messages or errors
- * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
- * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
- * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
- * @property {loginDialog} loginDialog - A dialog for login
+ * @property {UIElement<HTMLDivElement, toolbarComponent>} toolbar - The main toolbar
+ * @property {UIElement<HTMLDivElement, floatingPanelComponent>} floatingPanel - The floating panel with navigation buttons
+ * @property {UIElement<HTMLDivElement, pdfViewerComponent>} pdfViewer - The PDFJS-based PDF viewer with statusbar
+ * @property {UIElement<HTMLDivElement, xmlEditorComponent>} xmlEditor - The codemirror-based xml editor with statusbar
+ * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
+ * @property {UIElement<SlDialog, dialogComponent>} dialog - A dialog to display messages or errors
+ * @property {UIElement<SlDialog, promptEditorComponent>} promptEditor - A dialog to edit the prompt instructions
+ * @property {UIElement<SlDialog, extractionOptionsDialog>} extractionOptions - A dialog to choose extraction options
+ * @property {UIElement<SlDialog, infoDialogComponent>} infoDialog - A dialog to display information and help
+ * @property {UIElement<SlDialog, loginDialog>} loginDialog - A dialog for login
+ * @property {UIElement<SlDialog, teiWizardDialogComponent>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  */
 
-/**
- * PDF viewer component with statusbar
- * @typedef {object} pdfViewerComponent
- * @property {HTMLDivElement} self - The PDF viewer container
- * @property {pdfViewerStatusBar} statusbar - The PDF viewer statusbar
- */
 
-/**
- * XML editor component with statusbar
- * @typedef {object} xmlEditorComponent 
- * @property {HTMLDivElement} self - The XML editor container
- * @property {xmlEditorStatusBar} statusbar - The XML editor statusbar
- */
-
-/**
- * PDF viewer statusbar with specific widgets
- * @typedef {object} pdfViewerStatusBar
- * @property {HTMLElement} searchSwitch - The autosearch toggle switch
- */
-
-/**
- * XML editor statusbar with specific widgets
- * @typedef {object} xmlEditorStatusBar
- * @property {HTMLElement} self - The statusbar element
- */
-
-/**
- * The main toolbar with controls added by the plugins
- * @typedef {object} toolbarComponent
- * @property {HTMLDivElement} self
- * @property {SlSelect} variant - The selectbox for the variant filter
- * @property {SlSelect} pdf - The selectbox for the pdf document
- * @property {SlSelect} xml - The selectbox for the xml document
- * @property {SlSelect} diff - The selectbox for the xml-diff document
- * @property {documentActionsComponent} documentActions 
- * @property {teiServicesComponents} teiActions
- * @property {extractionActionsComponent} extractionActions
- * @property {SlButton} logoutButton
- */
 
 
 /**
- * This variable represents the document node, which has the next-level named elements as virtual properties
- * with that name, which then have their named descendants as properties, etc. The property "self" is a reference to the node for the 
- * purpose of documenting the node type, which must be "object" for a `@typedef`.
- * @type{namedElementsTree}
+ * This variable provides access to the top-level UI components through named properties.
+ * Each property gives direct access to the component and its navigation hierarchy.
+ * @type {namedElementsTree}
  */
-// @ts-ignore
-let ui = null;
+let ui = /** @type {namedElementsTree} */(/** @type {unknown} */(null));
 
 /**
  * Generates UI elements from templates in the 'app/src/templates' folder or from
@@ -145,8 +117,7 @@ async function createHtmlElements(htmlOrFile, parentNode=null){
  * Updates the UI structure
  */
 function updateUi() {
-  // @ts-ignore
-  ui = accessNamedDescendentsAsProperties(document);
+  ui = /** @type {namedElementsTree} */(/** @type {unknown} */(createNavigableElement(document)));
 }
 
 updateUi()

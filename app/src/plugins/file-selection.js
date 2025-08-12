@@ -63,7 +63,7 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`);
   
   // install controls on menubar
-  ui.toolbar.self.append(...fileSelectionControls)
+  ui.toolbar.append(...fileSelectionControls)
   updateUi()
   
   /**  @type {[SlSelect,function][]} */
@@ -172,7 +172,7 @@ async function populateVariantSelectbox(state) {
   const allOption = new SlOption();
   allOption.value = "";
   allOption.textContent = "All";
-  // @ts-ignore
+  // @ts-ignore - size property not in SlOption type definition
   allOption.size = "small";
   ui.toolbar.variant.appendChild(allOption);
 
@@ -180,7 +180,7 @@ async function populateVariantSelectbox(state) {
   const noneOption = new SlOption();
   noneOption.value = "none";
   noneOption.textContent = "None";
-  // @ts-ignore
+  // @ts-ignore - size property not in SlOption type definition
   noneOption.size = "small";
   ui.toolbar.variant.appendChild(noneOption);
 
@@ -189,7 +189,7 @@ async function populateVariantSelectbox(state) {
     const option = new SlOption();
     option.value = variant;
     option.textContent = variant;
-    // @ts-ignore
+    // @ts-ignore - size property not in SlOption type definition
     option.size = "small";
     ui.toolbar.variant.appendChild(option);
   });

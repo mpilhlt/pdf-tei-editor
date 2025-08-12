@@ -289,9 +289,9 @@ api$d.error = api$d.critical; // alias for critical
 /**
  * component plugin
  */
-const plugin$i = {
+const plugin$j = {
   name: name$1,
-  install: install$g,
+  install: install$h,
   log: {
     setLogLevel,
     debug,
@@ -305,8 +305,8 @@ const plugin$i = {
 // implementation
 //
 
-async function install$g(state) {
-  console.log(`Installing plugin "${plugin$i.name}"`);
+async function install$h(state) {
+  console.log(`Installing plugin "${plugin$j.name}"`);
 }
 
 
@@ -396,7 +396,7 @@ const api$c = {
  * The configuration plugin definition.
  * @type {Plugin}
  */
-const plugin$h = {
+const plugin$i = {
   name: "config",
   deps: ['client']
 };
@@ -557,7 +557,7 @@ function escapeHtml$1(text) {
  * named nodes are excluded.  If duplicate names are found, the first
  * occurrence is used.
  *
- * @param {Element} node The starting node to search from.
+ * @param {Element|Document} node The starting node to search from.
  * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
  */
 function findNamedDescendants(node) {
@@ -565,7 +565,7 @@ function findNamedDescendants(node) {
 
   /**
    * Recursive function that adds to the results object
-   * @param {Element} currentNode 
+   * @param {Element|Document} currentNode 
    * @returns {void}
    */
   function traverse(currentNode) {
@@ -575,8 +575,7 @@ function findNamedDescendants(node) {
 
     for (let i = 0; i < currentNode.childNodes.length; i++) {
       /** @type {Element} */
-      // @ts-ignore
-      const childNode = currentNode.childNodes[i];
+      const childNode = /** @type {Element} */(currentNode.childNodes[i]);
       // Check if it's an element (important to avoid text nodes)
       if (childNode.nodeType === Node.ELEMENT_NODE) {
 
@@ -594,25 +593,23 @@ function findNamedDescendants(node) {
     }
   }
   traverse(node);
-  // @ts-ignore
-  return results;
+  return /** @type {{ [x: string]: Element }} */(results);
 }
 
 /**
- * Modifies a node to access named descendant elements through added properties of their name.
- * Also adds a property "self" that allows JSDoc annotations of the original node. 
+ * Creates a navigable element by adding named descendant elements as properties.
+ * Each property gives direct access to the DOM element (which is also the navigation object).
  * You must be careful to use names that do not override existing properties.
  *
- * @param {Element} node The element to modify
- * @returns {Element} The element with with an added "self" property as well as properties
- *          to access named descendants
+ * @template {Element|Document} T
+ * @param {T} node The element to enhance with navigation
+ * @returns {T & Record<string, any>} The element with added navigation properties
  */
-function accessNamedDescendentsAsProperties(node) {
+function createNavigableElement(node) {
   const namedDescendants = findNamedDescendants(node);
   for (let name in namedDescendants) {
-    namedDescendants[name] = accessNamedDescendentsAsProperties(namedDescendants[name]);
+    namedDescendants[name] = createNavigableElement(namedDescendants[name]);
   }
-  namedDescendants.self = node;
   const modifiedObj = Object.assign(node, namedDescendants);
   return modifiedObj
 }
@@ -672,10 +669,10 @@ const api$b = {
 /**
  * component plugin
  */
-const plugin$g = {
+const plugin$h = {
   name: "url-hash-state",
   deps: ['config'],
-  install: install$f,
+  install: install$g,
   state: {
     update: update$c
   }
@@ -688,8 +685,8 @@ const plugin$g = {
 /** 
  * @param {ApplicationState} state 
  */
-async function install$f(state) {
-  api$d.debug(`Installing plugin "${plugin$g.name}"`);
+async function install$g(state) {
+  api$d.debug(`Installing plugin "${plugin$h.name}"`);
   showInUrl = await api$c.get("state.showInUrl") || [];
   allowSetFromUrl = await api$c.get("state.allowSetFromUrl") || [];
 }
@@ -779,9 +776,9 @@ const api$a = {
 /**
  * component plugin
  */
-const plugin$f = {
+const plugin$g = {
   name: "sse",
-  install: install$e,
+  install: install$f,
   state: {
     update: update$b
   }
@@ -794,8 +791,8 @@ let queuedListeners = {};
 /** 
  * @param {ApplicationState} state 
  */
-async function install$e(state){
-  api$d.debug(`Installing plugin "${plugin$f.name}"`);
+async function install$f(state){
+  api$d.debug(`Installing plugin "${plugin$g.name}"`);
 }
 
 /**
@@ -13350,7 +13347,7 @@ const StatusBarUtils = {
 /**
  * The UI of the application as a typed object structure, which can then be traversed. 
  * In this structure, each named DOM element encapsulates all named descencdent elements.
- * This allows to access the elements via `ui.toolbar.pdf`, `ui.floatingPanel.self`, etc. The structure
+ * This allows to access the elements via `ui.toolbar.pdf`, `ui.floatingPanel`, etc. The structure
  * is created by the `accessNamedDescendentsAsProperties` function, which is called on the document
  * body at the end of this file. The JSDoc structure is used to document the UI elements and their 
  * properties and allow autocompletion in IDEs that support JSDoc.   
@@ -13363,76 +13360,48 @@ const StatusBarUtils = {
  * @import {dialogComponent} from './plugins/dialog.js'
  * @import {promptEditorComponent} from './plugins/prompt-editor.js'
  * @import {floatingPanelComponent} from './plugins/floating-panel.js'
- * @import {documentActionsComponent, teiServicesComponents} from './plugins/services.js'
+ * @import {documentActionsComponent, teiServicesComponent} from './plugins/services.js'
  * @import {extractionActionsComponent, extractionOptionsDialog} from './plugins/extraction.js'
  * @import {infoDialogComponent} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
+ * @import {pdfViewerComponent} from './plugins/pdfviewer.js'
+ * @import {xmlEditorComponent} from './plugins/xmleditor.js'
+ * @import {toolbarComponent} from './plugins/toolbar.js'
+ * @import {teiWizardDialogComponent} from './plugins/tei-wizard.js'
  */
 
 /**
- * The top-level UI parts 
+ * Generic UI element type that combines DOM element properties with navigation properties
+ * @template {Element} T - The DOM element type
+ * @template {Record<string, any>} N - The navigation properties type
+ * @typedef {T & N} UIElement
+ */
+
+/**
+ * The top-level UI parts
  * @typedef {object} namedElementsTree
- * @property {toolbarComponent} toolbar - The main toolbar
- * @property {floatingPanelComponent} floatingPanel - The floating panel with navigation buttons
- * @property {pdfViewerComponent} pdfViewer - The PDFJS-based PDF viewer with statusbar
- * @property {xmlEditorComponent} xmlEditor - The codemirror-based xml editor with statusbar
- * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes and block the application while they are ongoing
- * @property {dialogComponent} dialog - A dialog to display messages or errors
- * @property {promptEditorComponent} promptEditor - A dialog to edit the prompt instructions
- * @property {extractionOptionsDialog} extractionOptions - A dialog to choose the options for the instructiopns
- * @property {infoDialogComponent} infoDialog - A dialog to display information and help on the application
- * @property {loginDialog} loginDialog - A dialog for login
+ * @property {UIElement<HTMLDivElement, toolbarComponent>} toolbar - The main toolbar
+ * @property {UIElement<HTMLDivElement, floatingPanelComponent>} floatingPanel - The floating panel with navigation buttons
+ * @property {UIElement<HTMLDivElement, pdfViewerComponent>} pdfViewer - The PDFJS-based PDF viewer with statusbar
+ * @property {UIElement<HTMLDivElement, xmlEditorComponent>} xmlEditor - The codemirror-based xml editor with statusbar
+ * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
+ * @property {UIElement<SlDialog, dialogComponent>} dialog - A dialog to display messages or errors
+ * @property {UIElement<SlDialog, promptEditorComponent>} promptEditor - A dialog to edit the prompt instructions
+ * @property {UIElement<SlDialog, extractionOptionsDialog>} extractionOptions - A dialog to choose extraction options
+ * @property {UIElement<SlDialog, infoDialogComponent>} infoDialog - A dialog to display information and help
+ * @property {UIElement<SlDialog, loginDialog>} loginDialog - A dialog for login
+ * @property {UIElement<SlDialog, teiWizardDialogComponent>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  */
 
-/**
- * PDF viewer component with statusbar
- * @typedef {object} pdfViewerComponent
- * @property {HTMLDivElement} self - The PDF viewer container
- * @property {pdfViewerStatusBar} statusbar - The PDF viewer statusbar
- */
 
-/**
- * XML editor component with statusbar
- * @typedef {object} xmlEditorComponent 
- * @property {HTMLDivElement} self - The XML editor container
- * @property {xmlEditorStatusBar} statusbar - The XML editor statusbar
- */
-
-/**
- * PDF viewer statusbar with specific widgets
- * @typedef {object} pdfViewerStatusBar
- * @property {HTMLElement} searchSwitch - The autosearch toggle switch
- */
-
-/**
- * XML editor statusbar with specific widgets
- * @typedef {object} xmlEditorStatusBar
- * @property {HTMLElement} self - The statusbar element
- */
-
-/**
- * The main toolbar with controls added by the plugins
- * @typedef {object} toolbarComponent
- * @property {HTMLDivElement} self
- * @property {SlSelect} variant - The selectbox for the variant filter
- * @property {SlSelect} pdf - The selectbox for the pdf document
- * @property {SlSelect} xml - The selectbox for the xml document
- * @property {SlSelect} diff - The selectbox for the xml-diff document
- * @property {documentActionsComponent} documentActions 
- * @property {teiServicesComponents} teiActions
- * @property {extractionActionsComponent} extractionActions
- * @property {SlButton} logoutButton
- */
 
 
 /**
- * This variable represents the document node, which has the next-level named elements as virtual properties
- * with that name, which then have their named descendants as properties, etc. The property "self" is a reference to the node for the 
- * purpose of documenting the node type, which must be "object" for a `@typedef`.
- * @type{namedElementsTree}
+ * This variable provides access to the top-level UI components through named properties.
+ * Each property gives direct access to the component and its navigation hierarchy.
+ * @type {namedElementsTree}
  */
-// @ts-ignore
-let ui = null;
+let ui = /** @type {namedElementsTree} */(/** @type {unknown} */(null));
 
 /**
  * Generates UI elements from templates in the 'app/src/templates' folder or from
@@ -13472,8 +13441,7 @@ async function createHtmlElements(htmlOrFile, parentNode=null){
  * Updates the UI structure
  */
 function updateUi() {
-  // @ts-ignore
-  ui = accessNamedDescendentsAsProperties(document);
+  ui = /** @type {namedElementsTree} */(/** @type {unknown} */(createNavigableElement(document)));
 }
 
 updateUi();
@@ -13494,9 +13462,9 @@ const api$9 = {
 };
 
 // Plugin object
-const plugin$e = {
+const plugin$f = {
   name: "dialog",
-  install: install$d
+  install: install$e
 };
 
 //
@@ -13504,8 +13472,9 @@ const plugin$e = {
 //
 
 /**
+ * Dialog component navigation properties. The dialog element itself serves as both
+ * the SlDialog DOM element and the navigation object for its descendants.
  * @typedef {object} dialogComponent
- * @property {SlDialog} self
  * @property {HTMLSpanElement} message
  * @property {HTMLDivElement} icon
  * @property {SlButton} closeBtn
@@ -13519,11 +13488,11 @@ const plugin$e = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-async function install$d(app) {
-  api$d.debug(`Installing plugin "${plugin$e.name}"`);
+async function install$e(app) {
+  api$d.debug(`Installing plugin "${plugin$f.name}"`);
   await createHtmlElements("dialog.html", document.body);
   updateUi();
-  ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.self.hide());
+  ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.hide());
 }
 
 /**
@@ -13531,10 +13500,10 @@ async function install$d(app) {
  * @param {string} message 
  */
 function info(message) {
-  ui$1.dialog.self.setAttribute("label", "Information");
+  ui$1.dialog.setAttribute("label", "Information");
   ui$1.dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
   ui$1.dialog.message.innerHTML = message;
-  ui$1.dialog.self.show();
+  ui$1.dialog.show();
 }
 
 /**
@@ -13542,10 +13511,10 @@ function info(message) {
  * @param {string} message 
  */
 function error$1(message) {
-  ui$1.dialog.self.setAttribute("label", "Error");
+  ui$1.dialog.setAttribute("label", "Error");
   ui$1.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
   ui$1.dialog.message.innerHTML = message;
-  ui$1.dialog.self.show();
+  ui$1.dialog.show();
 }
 
 /**
@@ -13553,10 +13522,10 @@ function error$1(message) {
  * @param {string} message 
  */
 function success(message) {
-  ui$1.dialog.self.setAttribute("label", "Success");
+  ui$1.dialog.setAttribute("label", "Success");
   ui$1.dialog.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
   ui$1.dialog.message.innerHTML = message;
-  ui$1.dialog.self.show();
+  ui$1.dialog.show();
 }
 
 /**
@@ -13959,6 +13928,22 @@ class PDFJSViewer {
  */
 
 
+//
+// UI Components
+//
+
+/**
+ * PDF viewer statusbar navigation properties
+ * @typedef {object} pdfViewerStatusbarComponent
+ * @property {HTMLElement} searchSwitch - The autosearch toggle switch
+ */
+
+/**
+ * PDF viewer navigation properties
+ * @typedef {object} pdfViewerComponent
+ * @property {UIElement<StatusBar, pdfViewerStatusbarComponent>} statusbar - The PDF viewer statusbar
+ */
+
 /**
  * Expose the PDFViewer API
  * @type {PDFJSViewer}
@@ -13973,9 +13958,9 @@ let currentFile;
 /**
  * plugin object
  */
-const plugin$d = {
+const plugin$e = {
   name: "pdfviewer",
-  install: install$c,
+  install: install$d,
   state: { update: update$9 }
 };
 
@@ -13987,8 +13972,8 @@ const plugin$d = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$c(state) {
-  api$d.debug(`Installing plugin "${plugin$d.name}"`);
+async function install$d(state) {
+  api$d.debug(`Installing plugin "${plugin$e.name}"`);
   await pdfViewer.isReady();
   api$d.info("PDF Viewer ready.");
   pdfViewer.show();
@@ -44496,6 +44481,22 @@ class NavXmlEditor extends XMLEditor {
  */
 
 
+//
+// UI Components
+//
+
+/**
+ * XML editor statusbar navigation properties
+ * @typedef {object} xmlEditorStatusbarComponent
+ * @property {HTMLElement} cursorPosition - The cursor position widget
+ */
+
+/**
+ * XML editor navigation properties
+ * @typedef {object} xmlEditorComponent
+ * @property {UIElement<StatusBar, xmlEditorStatusbarComponent>} statusbar - The XML editor statusbar
+ */
+
 // the path to the autocompletion data
 // Note: tagDataPath removed - autocomplete data now loaded dynamically per document
 
@@ -44512,9 +44513,9 @@ let cursorPositionWidget = null;
 /**
  * component plugin
  */
-const plugin$c = {
+const plugin$d = {
   name: "xmleditor",
-  install: install$b,
+  install: install$c,
   state: {
     update: update$8
   }
@@ -44524,8 +44525,8 @@ const plugin$c = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$b(state) {
-  api$d.debug(`Installing plugin "${plugin$c.name}"`);
+async function install$c(state) {
+  api$d.debug(`Installing plugin "${plugin$d.name}"`);
   // Note: Autocomplete data is now loaded dynamically per document in services.js
   // The static tagData loading has been removed in favor of schema-specific autocomplete data
 
@@ -44550,7 +44551,6 @@ async function install$b(state) {
   });
   
   // Add cursor position widget to right side of statusbar
-  // @ts-ignore
   ui$1.xmlEditor.statusbar.addWidget(cursorPositionWidget, 'right', 1);
 
   // selection => xpath state
@@ -44677,10 +44677,10 @@ const api$8 = {
   isDisabled
 };
 
-const plugin$b = {
+const plugin$c = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
-  install: install$a,
+  install: install$b,
   state: {update: update$7},
   validation: {
     validate,
@@ -44702,8 +44702,8 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-async function install$a(state) {
-  api$d.debug(`Installing plugin "${plugin$b.name}"`);
+async function install$b(state) {
+  api$d.debug(`Installing plugin "${plugin$c.name}"`);
   // add the linter to the editor
   xmlEditor.addLinter([
     linter(lintSource, { 
@@ -45504,7 +45504,7 @@ const api$7 = {
 /**
  * component plugin
  */
-const plugin$a = {
+const plugin$b = {
   name: "client",
   state: {
     update: update$6
@@ -46016,10 +46016,10 @@ const api$6 = {
 /**
  * component plugin
  */
-const plugin$9 = {
+const plugin$a = {
   name: "file-selection",
 
-  install: install$9,
+  install: install$a,
   state: {
     update: update$5
   }
@@ -46042,12 +46042,12 @@ const fileSelectionControls = await createHtmlElements('file-selection.html');
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$9(state) {
+async function install$a(state) {
 
-  api$d.debug(`Installing plugin "${plugin$9.name}"`);
+  api$d.debug(`Installing plugin "${plugin$a.name}"`);
   
   // install controls on menubar
-  ui$1.toolbar.self.append(...fileSelectionControls);
+  ui$1.toolbar.append(...fileSelectionControls);
   updateUi();
   
   /**  @type {[SlSelect,function][]} */
@@ -46156,7 +46156,7 @@ async function populateVariantSelectbox(state) {
   const allOption = new option_default();
   allOption.value = "";
   allOption.textContent = "All";
-  // @ts-ignore
+  // @ts-ignore - size property not in SlOption type definition
   allOption.size = "small";
   ui$1.toolbar.variant.appendChild(allOption);
 
@@ -46164,7 +46164,7 @@ async function populateVariantSelectbox(state) {
   const noneOption = new option_default();
   noneOption.value = "none";
   noneOption.textContent = "None";
-  // @ts-ignore
+  // @ts-ignore - size property not in SlOption type definition
   noneOption.size = "small";
   ui$1.toolbar.variant.appendChild(noneOption);
 
@@ -46173,7 +46173,7 @@ async function populateVariantSelectbox(state) {
     const option = new option_default();
     option.value = variant;
     option.textContent = variant;
-    // @ts-ignore
+    // @ts-ignore - size property not in SlOption type definition
     option.size = "small";
     ui$1.toolbar.variant.appendChild(option);
   });
@@ -46454,10 +46454,10 @@ const api$5 = {
 /**
  * plugin object
  */
-const plugin$8 = {
+const plugin$9 = {
   name: "extraction",
   deps: ['services'],
-  install: install$8,
+  install: install$9,
   state: {update: update$4}
 };
 
@@ -46506,11 +46506,11 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
 /**
  * @param {ApplicationState} state
  */
-async function install$8(state) {
-  api$d.debug(`Installing plugin "${plugin$8.name}"`);
+async function install$9(state) {
+  api$d.debug(`Installing plugin "${plugin$9.name}"`);
 
   // install controls on menubar
-  ui$1.toolbar.self.append(extractionBtnGroup);
+  ui$1.toolbar.append(extractionBtnGroup);
   document.body.append(optionsDialog);
   updateUi();
 
@@ -46524,7 +46524,7 @@ async function install$8(state) {
  */
 async function update$4(state) {
   // @ts-ignore
-  extractionBtnGroup.self.childNodes.forEach(child => child.disabled = state.offline); 
+  extractionBtnGroup.childNodes.forEach(child => child.disabled = state.offline); 
   extractionBtnGroup.extractCurrent.disabled = !state.pdf;
   //console.warn(plugin.name,"done")
 }
@@ -47525,10 +47525,10 @@ const api$4 = {
 /**
  * component plugin
  */
-const plugin$7 = {
+const plugin$8 = {
   name: "services",
   deps: ['file-selection'],
-  install: install$7,
+  install: install$8,
   state: { update: update$3 },
   validation: { inProgress }
 };
@@ -47541,25 +47541,24 @@ let savingStatusWidget = null;
 //
 
 /**
- * Document actions button group
+ * Document actions button group navigation properties
  * @typedef {object} documentActionsComponent
- * @property {SlButtonGroup} self
- * @property {SlButton} saveRevision 
- * @property {SlButton} createNewVersion
- * @property {SlButton} sync
- * @property {SlButton} upload
- * @property {SlButton} download
- * @property {SlButton} deleteBtn
- * @property {SlButton} deleteCurrentVersion
- * @property {SlButton} deleteAllVersions
- * @property {SlButton} deleteAll
+ * @property {SlButton} saveRevision - Save current revision button
+ * @property {SlButton} createNewVersion - Create new version button
+ * @property {SlButton} sync - Sync files button
+ * @property {SlButton} upload - Upload file button
+ * @property {SlButton} download - Download file button
+ * @property {SlButton} deleteBtn - Delete dropdown button
+ * @property {SlButton} deleteCurrentVersion - Delete current version button
+ * @property {SlButton} deleteAllVersions - Delete all versions button
+ * @property {SlButton} deleteAll - Delete all files button
  */
 
 /**
- * TEI actions button group
- * @typedef {object} teiServicesComponents
- * @property {SlButtonGroup} self
- * @property {SlButton} validate 
+ * TEI services button group navigation properties
+ * @typedef {object} teiServicesComponent
+ * @property {SlButton} validate - Validate XML button
+ * @property {SlButton} teiWizard - TEI Wizard button (added by tei-wizard plugin)
  */
 
 // todo align template with definition
@@ -47580,15 +47579,14 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
 const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0];
 
 /**
- * Dialog for documenting a revision
- * @typedef {object} newRevisionChangeDialog
- * @property {SlDialog} self
- * @property {SlInput} persId
- * @property {SlInput} persName 
- * @property {SlInput} changeDesc 
+ * Dialog for documenting a revision navigation properties
+ * @typedef {object} newRevisionChangeDialogComponent
+ * @property {SlInput} persId - Person ID input
+ * @property {SlInput} persName - Person name input
+ * @property {SlInput} changeDesc - Change description input
  */
 
-/** @type {newRevisionChangeDialog & SlDialog} */
+/** @type {newRevisionChangeDialogComponent & SlDialog} */
 // @ts-ignore
 const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0];
 
@@ -47600,11 +47598,11 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 /**
  * @param {ApplicationState} state
  */
-async function install$7(state) {
-  api$d.debug(`Installing plugin "${plugin$7.name}"`);
+async function install$8(state) {
+  api$d.debug(`Installing plugin "${plugin$8.name}"`);
 
   // install controls on menubar
-  ui$1.toolbar.self.append(...documentActionButtons);
+  ui$1.toolbar.append(...documentActionButtons);
   document.body.append(newVersionDialog);
   document.body.append(saveRevisionDialog);
   updateUi();
@@ -47615,7 +47613,7 @@ async function install$7(state) {
     variant: 'info'
   });
 
-  ui$1.toolbar.self;
+  ui$1.toolbar;
 
   // === Document button group ===
 
@@ -47663,7 +47661,7 @@ async function update$3(state) {
   // disable deletion if there are no versions or gold is selected
   const da = ui$1.toolbar.documentActions;
 
-  da.self.childNodes.forEach(el => el.disabled = state.offline);
+  da.childNodes.forEach(el => el.disabled = state.offline);
   if (state.offline) {
     return
   }
@@ -48124,7 +48122,7 @@ async function saveRevision(state) {
     await new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', resolve, { once: true });
       dialog.cancel.addEventListener('click', reject, { once: true });
-      dialog.self.addEventListener('sl-hide', reject, { once: true });
+      dialog.addEventListener('sl-hide', reject, { once: true });
     });
   } catch (e) {
     console.warn("User cancelled");
@@ -48193,7 +48191,7 @@ async function createNewVersion(state) {
     await new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', resolve, { once: true });
       dialog.cancel.addEventListener('click', reject, { once: true });
-      dialog.self.addEventListener('sl-hide', reject, { once: true });
+      dialog.addEventListener('sl-hide', reject, { once: true });
     });
   } catch (e) {
     console.warn("User cancelled");
@@ -48348,22 +48346,23 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 /** 
  * @import { ApplicationState } from '../app.js'
  * @import { Switch } from '../modules/switch.js'
+ * @import { UIElement } from '../ui.js'
  */
 
 /**
  * plugin API
  */
 const api$3 = {
-  show: () => ui$1.floatingPanel.self.classList.remove("hidden"),
-  hide: () => ui$1.floatingPanel.self.classList.add("hidden"),
+  show: () => ui$1.floatingPanel.classList.remove("hidden"),
+  hide: () => ui$1.floatingPanel.classList.add("hidden"),
 };
 
 /**
  * component plugin
  */
-const plugin$6 = {
+const plugin$7 = {
   name: "floating-panel",
-  install: install$6,
+  install: install$7,
   state: { update: update$2 }
 };
 
@@ -48383,16 +48382,15 @@ const plugin$6 = {
  * @property {HTMLSpanElement} selectionIndex
  * @property {HTMLButtonElement} nextNode
  * @property {HTMLDivElement} markNodeButtons - children have class="node-status" and 'data-status' attribute
- * @property {diffNavigationComponent} diffNavigation
+ * @property {UIElement<HTMLDivElement, diffNavigationComponent>} diffNavigation
  * 
  */
 /** @type {floatingPanelComponent} */
 const floatingPanelControls = await createHtmlElements('floating-panel.html');
 
 /**
- * Diff Navigation
+ * Diff Navigation navigation properties
  * @typedef {object} diffNavigationComponent
- * @property {HTMLDivElement} self
  * @property {HTMLButtonElement} prevDiff
  * @property {HTMLButtonElement} nextDiff
  * @property {HTMLButtonElement} diffKeepAll
@@ -48407,8 +48405,8 @@ const pluginId = "floating-panel";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$6(state) {
-  api$d.debug(`Installing plugin "${plugin$6.name}"`);
+async function install$7(state) {
+  api$d.debug(`Installing plugin "${plugin$7.name}"`);
 
   document.body.append(...floatingPanelControls);
   updateUi();
@@ -48417,7 +48415,7 @@ async function install$6(state) {
   addBringToForegroundListener([`#${pluginId}`, '.cm-panels']);
 
   // make navigation draggable
-  makeDraggable(ui$1.floatingPanel.self);
+  makeDraggable(ui$1.floatingPanel);
 
   // populate the xpath selectbox
   const xp = ui$1.floatingPanel.xpath;
@@ -48513,7 +48511,7 @@ async function update$2(state) {
   ui$1.floatingPanel.markNodeButtons.querySelectorAll("button").forEach(btn => btn.disabled = !Boolean(state.xpath));
 
   // configure diff navigation buttons
-  ui$1.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
+  ui$1.floatingPanel.diffNavigation.querySelectorAll("button").forEach(node => {
     node.disabled = !state.diff || state.diff === state.xml;
   });
   //console.warn(plugin.name,"done")
@@ -48682,10 +48680,10 @@ const api$2 = {
 /**
  * Plugin object
  */
-const plugin$5 = {
+const plugin$6 = {
   name: "prompt-editor",
   deps: ['extraction'],
-  install: install$5
+  install: install$6
 };
 
 //
@@ -48721,15 +48719,15 @@ const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$5(state) {
-  api$d.debug(`Installing plugin "${plugin$5.name}"`);
+async function install$6(state) {
+  api$d.debug(`Installing plugin "${plugin$6.name}"`);
   
   // add prompt editor component
   document.body.append(promptEditorDialog);
   updateUi();
 
   const pe = ui$1.promptEditor;
-  pe.self.addEventListener("sl-request-close", dialogOnRequestClose);
+  pe.addEventListener("sl-request-close", dialogOnRequestClose);
   pe.labelMenu.addEventListener('sl-select', menuOnSelect);
   pe.submit.addEventListener('click', submit);
   pe.duplicate.addEventListener('click', duplicateInstructions);
@@ -48737,7 +48735,7 @@ async function install$5(state) {
   pe.delete.addEventListener('click', deletePrompt);
 
   // add a button to the command bar to show dialog with prompt editor
-  ui$1.toolbar.extractionActions.self.append(promptEditorButton);
+  ui$1.toolbar.extractionActions.append(promptEditorButton);
   promptEditorButton.addEventListener("click", () => api$2.open());
 }
 
@@ -48770,7 +48768,7 @@ async function open$1() {
   
   ui$1.promptEditor.delete.disabled = prompts.length < 2;
   api$2.edit(currentIndex);
-  ui$1.promptEditor.self.show();
+  ui$1.promptEditor.show();
 }
 
 /**
@@ -48855,7 +48853,7 @@ function submit() {
  * Closes the prompt editor
  */
 function close$1() {
-  ui$1.promptEditor.self.hide();
+  ui$1.promptEditor.hide();
 }
 
 /**
@@ -48949,9 +48947,9 @@ const enhancements = [
 
 
 
-const plugin$4 = {
+const plugin$5 = {
   name: "tei-wizard",
-  install: install$4,
+  install: install$5,
   state: {update: update$1},
   deps: ['services']
 };
@@ -48968,19 +48966,18 @@ const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 /**
  * @param {ApplicationState} state 
  */
-async function install$4(state) {
-  api$d.debug(`Installing plugin "${plugin$4.name}"`);
+async function install$5(state) {
+  api$d.debug(`Installing plugin "${plugin$5.name}"`);
 
   // button
-  ui$1.toolbar.teiActions.self.append(teiWizardButton);
+  ui$1.toolbar.teiActions.append(teiWizardButton);
   document.body.append(teiWizardDialog);
   updateUi();
 
-  // @ts-ignore
   ui$1.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard);
 
-  // @ts-ignore
-  const dialog = ui$1.teiWizardDialog;
+  /** @type {teiWizardDialogComponent & SlDialog} */
+  const dialog = /** @type {any} */(ui$1.teiWizardDialog);
 
   // Populate enhancement list
   enhancements.forEach(async enhancement => {
@@ -49014,16 +49011,16 @@ async function update$1(state) {
 }
 
 async function getSelectedEnhancements() {
-  // @ts-ignore
-  const dialog = ui$1.teiWizardDialog;
-  dialog.self.show();
+  /** @type {teiWizardDialogComponent & SlDialog} */
+  const dialog = /** @type {any} */(ui$1.teiWizardDialog);
+  dialog.show();
   return new Promise((resolve) => {
-    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([]));
+    dialog.cancel.addEventListener('click', () => dialog.hide() && resolve([]));
     dialog.executeBtn.addEventListener('click', () => {
       const enhancementFunctions = Array.from(dialog.enhancementList.querySelectorAll('sl-checkbox'))
         .filter(checkbox => checkbox.checked)
         .map(checkbox => enhancements.find(e => e.name === checkbox.dataset.enhancement));
-      dialog.self.hide();
+      dialog.hide();
       resolve(enhancementFunctions);
     });
   });
@@ -49065,7 +49062,7 @@ async function runTeiWizard() {
   xmlEditor.showMergeView(xmlstring);
 
   // enable diff navigation buttons
-  ui$1.floatingPanel.diffNavigation.self
+  ui$1.floatingPanel.diffNavigation
     .querySelectorAll("button")
     .forEach(node => node.disabled = false);
 
@@ -57445,9 +57442,9 @@ const api$1 = {
 /**
  * Plugin object
  */
-const plugin$3 = {
+const plugin$4 = {
   name: "info",
-  install: install$3
+  install: install$4
 };
 
 //
@@ -57500,15 +57497,15 @@ const docsBasePath = "../../docs";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$3(state) {
-  api$d.debug(`Installing plugin "${plugin$3.name}"`);
+async function install$4(state) {
+  api$d.debug(`Installing plugin "${plugin$4.name}"`);
   // add the component html
   await createHtmlElements(infoHtml, document.body);
-  ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.self.hide());
+  ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.hide());
 
   // add a button to the command bar to show dialog with prompt editor
   const button = (await createHtmlElements(buttonHtml))[0];
-  ui$1.toolbar.self.append(button);
+  ui$1.toolbar.append(button);
   updateUi();
   button.addEventListener("click", () => api$1.open());
   
@@ -57532,7 +57529,7 @@ async function install$3(state) {
  * todo this needs to always reload the data since it might have changed on the server
  */
 async function open() {
-  ui$1.infoDialog.self.show();
+  ui$1.infoDialog.show();
 }
 
 /**
@@ -57570,7 +57567,7 @@ async function load(mdPath){
  * Closes the prompt editor
  */
 function close() {
-  ui$1.promptEditor.self.hide();
+  ui$1.promptEditor.hide();
 }
 
 /**
@@ -57578,10 +57575,10 @@ function close() {
  */
 
 
-const plugin$2 = {
+const plugin$3 = {
   name: "move-files",
   deps: ['services'],
-  install: install$2
+  install: install$3
 };
 
 //
@@ -57616,11 +57613,11 @@ const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
 /**
  * @param {ApplicationState} state
  */
-async function install$2(state) {
-  api$d.debug(`Installing plugin "${plugin$2.name}"`);
+async function install$3(state) {
+  api$d.debug(`Installing plugin "${plugin$3.name}"`);
 
   // install button & dialog
-  ui$1.toolbar.documentActions.self.append(moveBtn);
+  ui$1.toolbar.documentActions.append(moveBtn);
   document.body.append(moveFilesDialog);
   updateUi();
 
@@ -57671,7 +57668,7 @@ async function showMoveFilesDialog(state) {
     await new Promise((resolve, reject) => {
       moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
       moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
-      moveFilesDialog.self.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
+      moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
     api$d.warn("User cancelled move files dialog");
@@ -57712,9 +57709,9 @@ async function showMoveFilesDialog(state) {
  * Plugin object
  * dependencies are automatically set to all other plugins, so that it is the last one to be installed
  */
-const plugin$1 = {
+const plugin$2 = {
   name: "start",
-  install: install$1,
+  install: install$2,
   start
 };
 
@@ -57730,8 +57727,8 @@ let validationStatusWidget = null;
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-async function install$1(state) {
-  api$d.debug(`Installing plugin "${plugin$1.name}"`);
+async function install$2(state) {
+  api$d.debug(`Installing plugin "${plugin$2.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -58063,10 +58060,10 @@ const api = {
 /**
  * Plugin definition
  */
-const plugin = {
+const plugin$1 = {
   name: "authentication",
   deps: ['client'],
-  install,
+  install: install$1,
   state: {update}
 };
 
@@ -58091,11 +58088,11 @@ let user = null;
  * Installs the plugin.
  * @param {ApplicationState} state
  */
-async function install(state) {
-  api$d.debug(`Installing plugin "${plugin.name}"`);
+async function install$1(state) {
+  api$d.debug(`Installing plugin "${plugin$1.name}"`);
   state.user = null;
-  // @ts-ignore
-  ui$1.toolbar.self.insertAdjacentElement("beforeend", buttonElement);
+  // @ts-ignore - insertAdjacentElement type issue
+  ui$1.toolbar.insertAdjacentElement("beforeend", buttonElement);
   updateUi();
   ui$1.toolbar.logoutButton.addEventListener("click", logout);
   // prevent dialog from closing
@@ -58208,6 +58205,55 @@ async function _hashPassword(password) {
 }
 
 /**
+ * Toolbar Plugin
+ * 
+ * This plugin documents the toolbar component structure and will eventually
+ * provide a real implementation similar to the statusbar system.
+ * Currently, the toolbar is just a container div where other plugins add their controls.
+ */
+
+
+//
+// UI Components
+//
+
+/**
+ * The main toolbar navigation properties.
+ * This documents the structure created by various plugins that add controls to the toolbar.
+ * @typedef {object} toolbarComponent
+ * @property {SlSelect} variant - The selectbox for the variant filter (added by file-selection plugin)
+ * @property {SlSelect} pdf - The selectbox for the pdf document (added by file-selection plugin)  
+ * @property {SlSelect} xml - The selectbox for the xml document (added by file-selection plugin)
+ * @property {SlSelect} diff - The selectbox for the xml-diff document (added by file-selection plugin)
+ * @property {UIElement<SlButtonGroup, documentActionsComponent>} documentActions - Document action buttons (added by services plugin)
+ * @property {UIElement<SlButtonGroup, teiServicesComponent>} teiActions - TEI service buttons (added by services plugin)
+ * @property {UIElement<SlButtonGroup, extractionActionsComponent>} extractionActions - Extraction action buttons (added by extraction plugin)
+ * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
+ */
+
+/**
+ * plugin object
+ */
+const plugin = {
+  name: "toolbar",
+  install
+};
+
+//
+// Implementation
+//
+
+/**
+ * @param {ApplicationState} state
+ * @returns {Promise<void>}
+ */
+async function install(state) {
+  api$d.debug(`Installing plugin "${plugin.name}"`);
+  // Currently, the toolbar is just a static container div.
+  // Future implementation will provide dynamic toolbar management similar to StatusBar.
+}
+
+/**
  * PDF-TEI-Editor
  * 
  * @author Christian Boulanger (@cboulanger), Max Planck Institute for Legal History and Legal Theory
@@ -58256,15 +58302,15 @@ let state = {
  */
 
 /** @type {Plugin[]} */
-const plugins = [plugin$i, plugin$g, plugin$a, plugin$h, 
-  plugin$e, plugin$d, plugin$c, plugin$9,
-  plugin$7, plugin$8, plugin$6, plugin$5,
-  plugin$4, plugin$b, plugin$3, plugin$2, plugin$f,
-  plugin,
-  /* must be the last plugin */ plugin$1];
+const plugins = [plugin$j, plugin$h, plugin$b, plugin$i, 
+  plugin$f, plugin, plugin$e, plugin$d, plugin$a,
+  plugin$8, plugin$9, plugin$7, plugin$6,
+  plugin$5, plugin$c, plugin$4, plugin$3, plugin$g,
+  plugin$1,
+  /* must be the last plugin */ plugin$2];
 
 // add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
-plugin$1.deps = plugins.slice(0,-1).map(p => p.name);
+plugin$2.deps = plugins.slice(0,-1).map(p => p.name);
 
 // register plugins
 for (const plugin of plugins) {
