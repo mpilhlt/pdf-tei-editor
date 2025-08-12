@@ -13357,48 +13357,45 @@ const StatusBarUtils = {
 /**
  * Import type definitions from plugins
  * 
- * @import {dialogComponent} from './plugins/dialog.js'
- * @import {promptEditorComponent} from './plugins/prompt-editor.js'
- * @import {floatingPanelComponent} from './plugins/floating-panel.js'
- * @import {documentActionsComponent, teiServicesComponent} from './plugins/services.js'
- * @import {extractionActionsComponent, extractionOptionsDialog} from './plugins/extraction.js'
- * @import {infoDialogComponent} from './plugins/info.js'
+ * @import {dialogPart} from './plugins/dialog.js'
+ * @import {promptEditorPart} from './plugins/prompt-editor.js'
+ * @import {floatingPanelPart} from './plugins/floating-panel.js'
+ * @import {documentActionsPart, teiServicesPart} from './plugins/services.js'
+ * @import {extractionActionsPart, extractionOptionsDialog} from './plugins/extraction.js'
+ * @import {infoDialogPart} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
- * @import {pdfViewerComponent} from './plugins/pdfviewer.js'
- * @import {xmlEditorComponent} from './plugins/xmleditor.js'
- * @import {toolbarComponent} from './plugins/toolbar.js'
- * @import {teiWizardDialogComponent} from './plugins/tei-wizard.js'
+ * @import {pdfViewerPart} from './plugins/pdfviewer.js'
+ * @import {xmlEditorPart} from './plugins/xmleditor.js'
+ * @import {toolbarPart} from './plugins/toolbar.js'
+ * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
  */
 
 /**
  * Generic UI element type that combines DOM element properties with navigation properties
  * @template {Element} T - The DOM element type
  * @template {Record<string, any>} N - The navigation properties type
- * @typedef {T & N} UIElement
+ * @typedef {T & N} UIPart
  */
 
 /**
  * The top-level UI parts
  * @typedef {object} namedElementsTree
- * @property {UIElement<HTMLDivElement, toolbarComponent>} toolbar - The main toolbar
- * @property {UIElement<HTMLDivElement, floatingPanelComponent>} floatingPanel - The floating panel with navigation buttons
- * @property {UIElement<HTMLDivElement, pdfViewerComponent>} pdfViewer - The PDFJS-based PDF viewer with statusbar
- * @property {UIElement<HTMLDivElement, xmlEditorComponent>} xmlEditor - The codemirror-based xml editor with statusbar
+ * @property {UIPart<HTMLDivElement, toolbarPart>} toolbar - The main toolbar
+ * @property {UIPart<HTMLDivElement, floatingPanelPart>} floatingPanel - The floating panel with navigation buttons
+ * @property {UIPart<HTMLDivElement, pdfViewerPart>} pdfViewer - The PDFJS-based PDF viewer with statusbar
+ * @property {UIPart<HTMLDivElement, xmlEditorPart>} xmlEditor - The codemirror-based xml editor with statusbar
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
- * @property {UIElement<SlDialog, dialogComponent>} dialog - A dialog to display messages or errors
- * @property {UIElement<SlDialog, promptEditorComponent>} promptEditor - A dialog to edit the prompt instructions
- * @property {UIElement<SlDialog, extractionOptionsDialog>} extractionOptions - A dialog to choose extraction options
- * @property {UIElement<SlDialog, infoDialogComponent>} infoDialog - A dialog to display information and help
- * @property {UIElement<SlDialog, loginDialog>} loginDialog - A dialog for login
- * @property {UIElement<SlDialog, teiWizardDialogComponent>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
+ * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
+ * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
+ * @property {UIPart<SlDialog, extractionOptionsDialog>} extractionOptions - A dialog to choose extraction options
+ * @property {UIPart<SlDialog, infoDialogPart>} infoDialog - A dialog to display information and help
+ * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
+ * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  */
 
-
-
-
 /**
- * This variable provides access to the top-level UI components through named properties.
- * Each property gives direct access to the component and its navigation hierarchy.
+ * This variable provides access to the top-level UI parts through named properties.
+ * Each property gives direct access to the part and its navigation hierarchy.
  * @type {namedElementsTree}
  */
 let ui = /** @type {namedElementsTree} */(/** @type {unknown} */(null));
@@ -13474,7 +13471,7 @@ const plugin$f = {
 /**
  * Dialog component navigation properties. The dialog element itself serves as both
  * the SlDialog DOM element and the navigation object for its descendants.
- * @typedef {object} dialogComponent
+ * @typedef {object} dialogPart
  * @property {HTMLSpanElement} message
  * @property {HTMLDivElement} icon
  * @property {SlButton} closeBtn
@@ -13929,19 +13926,19 @@ class PDFJSViewer {
 
 
 //
-// UI Components
+// UI Parts
 //
 
 /**
  * PDF viewer statusbar navigation properties
- * @typedef {object} pdfViewerStatusbarComponent
+ * @typedef {object} pdfViewerStatusbarPart
  * @property {HTMLElement} searchSwitch - The autosearch toggle switch
  */
 
 /**
  * PDF viewer navigation properties
- * @typedef {object} pdfViewerComponent
- * @property {UIElement<StatusBar, pdfViewerStatusbarComponent>} statusbar - The PDF viewer statusbar
+ * @typedef {object} pdfViewerPart
+ * @property {UIPart<StatusBar, pdfViewerStatusbarPart>} statusbar - The PDF viewer statusbar
  */
 
 /**
@@ -44016,7 +44013,7 @@ class XMLEditor extends EventTarget {
 }
 
 /**
- * @typedef {object} ParsedXPathStepComponentsSimple
+ * @typedef {object} ParsedXPathStepPartsSimple
  * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child').
  * @property {string} finalStep - The core name part of the XPath step (e.g., 'elementName', 'prefix:elementName', 
  *    '@attribute', 'text()', '*').
@@ -44031,7 +44028,7 @@ class XMLEditor extends EventTarget {
  */
 
 /**
- * @typedef {object} ParsedXPathStepComponents
+ * @typedef {object} ParsedXPathStepParts
  * @property {string} input - The XPath as passed in, for debugging purposes only
  * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child'). Includes the trailing separator if present, or is empty for relative paths starting with nodeTest.
  * @property {string} finalStep - The complete string representation of the last step, including node test and predicates (e.g., 'elementName[1]', '@attribute', 'text()').
@@ -44052,7 +44049,7 @@ class XMLEditor extends EventTarget {
  * the index from the first simple positional predicate if present.
  *
  * @param {string} xpath An XPath expression (e.g., '/html/body/div[1]/span[@class="text"][position()=2]/text()')
- * @returns {ParsedXPathStepComponents} An object containing the parsed components of the XPath step.
+ * @returns {ParsedXPathStepParts} An object containing the parsed components of the XPath step.
  * @throws {Error} If the xpath is empty, ends in a separator, or cannot be parsed due to syntax errors (mismatched brackets, invalid node test).
  */
 function parseXPath(xpath) {
@@ -44482,19 +44479,19 @@ class NavXmlEditor extends XMLEditor {
 
 
 //
-// UI Components
+// UI Parts
 //
 
 /**
  * XML editor statusbar navigation properties
- * @typedef {object} xmlEditorStatusbarComponent
+ * @typedef {object} xmlEditorStatusbarPart
  * @property {HTMLElement} cursorPosition - The cursor position widget
  */
 
 /**
  * XML editor navigation properties
- * @typedef {object} xmlEditorComponent
- * @property {UIElement<StatusBar, xmlEditorStatusbarComponent>} statusbar - The XML editor statusbar
+ * @typedef {object} xmlEditorPart
+ * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
  */
 
 // the path to the autocompletion data
@@ -46467,13 +46464,13 @@ const plugin$9 = {
 
 /**
  * Extraction actions button group
- * @typedef {object} extractionActionsComponent
+ * @typedef {object} extractionActionsPart
  * @property {SlButtonGroup} self
  * @property {SlButton} extractNew 
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
-/** @type {SlButtonGroup & extractionActionsComponent} */
+/** @type {SlButtonGroup & extractionActionsPart} */
 // @ts-ignore
 const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0];
 
@@ -47542,7 +47539,7 @@ let savingStatusWidget = null;
 
 /**
  * Document actions button group navigation properties
- * @typedef {object} documentActionsComponent
+ * @typedef {object} documentActionsPart
  * @property {SlButton} saveRevision - Save current revision button
  * @property {SlButton} createNewVersion - Create new version button
  * @property {SlButton} sync - Sync files button
@@ -47556,7 +47553,7 @@ let savingStatusWidget = null;
 
 /**
  * TEI services button group navigation properties
- * @typedef {object} teiServicesComponent
+ * @typedef {object} teiServicesPart
  * @property {SlButton} validate - Validate XML button
  * @property {SlButton} teiWizard - TEI Wizard button (added by tei-wizard plugin)
  */
@@ -47580,13 +47577,13 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
 
 /**
  * Dialog for documenting a revision navigation properties
- * @typedef {object} newRevisionChangeDialogComponent
+ * @typedef {object} newRevisionChangeDialogPart
  * @property {SlInput} persId - Person ID input
  * @property {SlInput} persName - Person name input
  * @property {SlInput} changeDesc - Change description input
  */
 
-/** @type {newRevisionChangeDialogComponent & SlDialog} */
+/** @type {newRevisionChangeDialogPart & SlDialog} */
 // @ts-ignore
 const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0];
 
@@ -48346,7 +48343,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 /** 
  * @import { ApplicationState } from '../app.js'
  * @import { Switch } from '../modules/switch.js'
- * @import { UIElement } from '../ui.js'
+ * @import { UIPart } from '../ui.js'
  */
 
 /**
@@ -48374,23 +48371,22 @@ const plugin$7 = {
 
 /**
  * Floating panel
- * @typedef {object} floatingPanelComponent
- * @property {HTMLDivElement} self
+ * @typedef {object} floatingPanelPart
  * @property {HTMLSelectElement} xpath
  * @property {HTMLButtonElement} editXpath
  * @property {HTMLButtonElement} previousNode
  * @property {HTMLSpanElement} selectionIndex
  * @property {HTMLButtonElement} nextNode
  * @property {HTMLDivElement} markNodeButtons - children have class="node-status" and 'data-status' attribute
- * @property {UIElement<HTMLDivElement, diffNavigationComponent>} diffNavigation
+ * @property {UIPart<HTMLDivElement, diffNavigationPart>} diffNavigation
  * 
  */
-/** @type {floatingPanelComponent} */
+/** @type {ChildNode[]} */
 const floatingPanelControls = await createHtmlElements('floating-panel.html');
 
 /**
  * Diff Navigation navigation properties
- * @typedef {object} diffNavigationComponent
+ * @typedef {object} diffNavigationPart
  * @property {HTMLButtonElement} prevDiff
  * @property {HTMLButtonElement} nextDiff
  * @property {HTMLButtonElement} diffKeepAll
@@ -48692,7 +48688,7 @@ const plugin$6 = {
 
 /**
  * Prompt editor
- * @typedef {object} promptEditorComponent
+ * @typedef {object} promptEditorPart
  * @property {SlDialog} self
  * @property {SlInput} label
  * @property {SlMenu} labelMenu
@@ -48705,7 +48701,7 @@ const plugin$6 = {
  */
 
 // editor dialog
-/** @type {promptEditorComponent} */
+/** @type {promptEditorPart} */
 const promptEditorDialog = (await createHtmlElements("prompt-editor.html"))[0];
 
 // button, documented in services.js
@@ -48976,7 +48972,7 @@ async function install$5(state) {
 
   ui$1.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard);
 
-  /** @type {teiWizardDialogComponent & SlDialog} */
+  /** @type {teiWizardDialogPart & SlDialog} */
   const dialog = /** @type {any} */(ui$1.teiWizardDialog);
 
   // Populate enhancement list
@@ -49011,7 +49007,7 @@ async function update$1(state) {
 }
 
 async function getSelectedEnhancements() {
-  /** @type {teiWizardDialogComponent & SlDialog} */
+  /** @type {teiWizardDialogPart & SlDialog} */
   const dialog = /** @type {any} */(ui$1.teiWizardDialog);
   dialog.show();
   return new Promise((resolve) => {
@@ -57453,7 +57449,7 @@ const plugin$4 = {
 
 /**
  * Help Dialog
- * @typedef {object} infoDialogComponent
+ * @typedef {object} infoDialogPart
  * @property {SlDialog} self
  * @property {HTMLDivElement} content
  * @property {SlButton} closeBtn
@@ -58214,20 +58210,20 @@ async function _hashPassword(password) {
 
 
 //
-// UI Components
+// UI Parts
 //
 
 /**
  * The main toolbar navigation properties.
  * This documents the structure created by various plugins that add controls to the toolbar.
- * @typedef {object} toolbarComponent
+ * @typedef {object} toolbarPart
  * @property {SlSelect} variant - The selectbox for the variant filter (added by file-selection plugin)
  * @property {SlSelect} pdf - The selectbox for the pdf document (added by file-selection plugin)  
  * @property {SlSelect} xml - The selectbox for the xml document (added by file-selection plugin)
  * @property {SlSelect} diff - The selectbox for the xml-diff document (added by file-selection plugin)
- * @property {UIElement<SlButtonGroup, documentActionsComponent>} documentActions - Document action buttons (added by services plugin)
- * @property {UIElement<SlButtonGroup, teiServicesComponent>} teiActions - TEI service buttons (added by services plugin)
- * @property {UIElement<SlButtonGroup, extractionActionsComponent>} extractionActions - Extraction action buttons (added by extraction plugin)
+ * @property {UIPart<SlButtonGroup, documentActionsPart>} documentActions - Document action buttons (added by services plugin)
+ * @property {UIPart<SlButtonGroup, teiServicesPart>} teiActions - TEI service buttons (added by services plugin)
+ * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
  * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
  */
 
