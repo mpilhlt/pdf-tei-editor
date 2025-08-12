@@ -4,14 +4,14 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlButton, SlButtonGroup, SlDialog, SlInput } from '../ui.js'
+ * @import { SlButton, SlDialog, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  * @import { UserData } from '../plugins/authentication.js'
  */
 import ui, { updateUi } from '../ui.js'
 import {
   updateState, client, logger, dialog, config,
-  fileselection, xmlEditor, pdfViewer, services, validation, authentication
+  fileselection, xmlEditor, pdfViewer, services, validation, authentication, sync
 } from '../app.js'
 import { StatusBarUtils } from '../modules/statusbar/index.js'
 import { createHtmlElements } from '../ui.js'
@@ -37,8 +37,7 @@ const api = {
   downloadXml,
   uploadXml,
   inProgress,
-  searchNodeContentsInPdf,
-  syncFiles
+  searchNodeContentsInPdf
 }
 
 /**
@@ -67,7 +66,6 @@ let savingStatusWidget = null
  * @typedef {object} documentActionsPart
  * @property {SlButton} saveRevision - Save current revision button
  * @property {SlButton} createNewVersion - Create new version button
- * @property {SlButton} sync - Sync files button
  * @property {SlButton} upload - Upload file button
  * @property {SlButton} download - Download file button
  * @property {SlButton} deleteBtn - Delete dropdown button
@@ -93,7 +91,9 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
  * @property {SlInput} versionName 
  * @property {SlInput} persName 
  * @property {SlInput} persId 
- * @property {SlInput} editionNote 
+ * @property {SlInput} editionNote
+ * @property {SlButton} submit
+ * @property {SlButton} cancel 
  */
 
 /** @type {newVersionDialog & SlDialog} */
@@ -106,6 +106,8 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
  * @property {SlInput} persId - Person ID input
  * @property {SlInput} persName - Person name input
  * @property {SlInput} changeDesc - Change description input
+ * @property {SlButton} submit - Submit button
+ * @property {SlButton} cancel - Cancel button
  */
 
 /** @type {newRevisionChangeDialogPart & SlDialog} */
@@ -135,7 +137,6 @@ async function install(state) {
     variant: 'info'
   })
 
-  const tb = ui.toolbar
 
   // === Document button group ===
 
@@ -156,9 +157,6 @@ async function install(state) {
 
   // new version
   da.createNewVersion.addEventListener("click", () => createNewVersion(state))
-
-  // sync
-  da.sync.addEventListener("click", () => onClickSyncBtn(state))
 
   // download
   da.download.addEventListener("click", () => downloadXml(state))
@@ -183,13 +181,19 @@ async function update(state) {
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
 
-  da.childNodes.forEach(el => el.disabled = state.offline)
+  da.childNodes.forEach(el => {
+    if (el instanceof HTMLElement && 'disabled' in el) {
+      // @ts-ignore
+      el.disabled = state.offline
+    }
+  })
   if (state.offline) {
     return
   }
 
   da.deleteAll.disabled = fileselection.fileData.length < 2 // at least on PDF must be present
   da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2
+  // @ts-ignore
   da.deleteCurrentVersion.disabled = ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
@@ -199,8 +203,6 @@ async function update(state) {
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xml)
 
-  // disable sync and upload if webdav is not enabled
-  da.sync.disabled = !state.webdavEnabled
 
   // no uploads if editor is readonly
   da.upload.disabled = state.editorReadOnly
@@ -389,6 +391,7 @@ async function showMergeView(state, diff) {
 
 /**
  * Removes all remaining diffs
+ * @param {ApplicationState} state
  */
 function removeMergeView(state) {
   xmlEditor.hideMergeView()
@@ -425,7 +428,7 @@ async function deleteCurrentVersion(state) {
       const xml = ui.toolbar.xml.firstChild?.value
       await load(state, { xml })
       notify(`Version "${versionName}" has been deleted.`)
-      syncFiles(state)
+      sync.syncFiles(state)
         .then(summary => summary && notify("Synchronized files"))
         .catch(e => console.error(e))
     } catch (error) {
@@ -457,7 +460,7 @@ async function deleteAllVersions(state) {
     // load the gold version
     await load(state, { xml: xmlPaths[0] })
     notify("All version have been deleted")
-    syncFiles(state)
+    sync.syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
   } catch (error) {
@@ -494,7 +497,7 @@ async function deleteAll(state) {
   try {
     await client.deleteFiles(filePathsToDelete)
     notify(`${filePathsToDelete.length} files have been deleted.`)
-    syncFiles(state)
+    sync.syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
   } catch (error) {
@@ -511,19 +514,6 @@ async function deleteAll(state) {
   }
 }
 
-/**
- * Synchronizes the files on the server with the WebDAV backend, if so configured
- * @param {ApplicationState} state 
- */
-async function syncFiles(state) {
-  if (state.webdavEnabled) {
-    logger.debug("Synchronizing files on the server")
-    const summary = await client.syncFiles()
-    logger.debug(summary)
-    return summary
-  }
-  return false
-}
 
 /**
  * Downloads the current XML file
@@ -630,12 +620,12 @@ function getIdFromUser(userData) {
  */
 async function saveRevision(state) {
 
-  /** @type {newVersionDialog} */
+  /** @type {newRevisionChangeDialogPart & SlDialog} */
+  // @ts-ignore
   const dialog = document.querySelector('[name="newRevisionChangeDialog"]')
   dialog.changeDesc.value = "Corrections"
   try {
     const user = authentication.getUser()
-    console.warn(user)
     if (user) {
       dialog.persId.value = dialog.persId.value || getIdFromUser(user)
       dialog.persName.value = dialog.persName.value || user.fullname
@@ -670,7 +660,8 @@ async function saveRevision(state) {
   }
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
-    await addTeiHeaderInfo(respStmt, null, revisionChange)
+    await addTeiHeaderInfo(respStmt, undefined, revisionChange)
+    if (!state.xml) throw new Error('No XML file loaded')
     const result = await saveXml(state.xml)
     
     // If migration occurred, first reload file data, then update state
@@ -681,7 +672,7 @@ async function saveRevision(state) {
     }
     
     notify("Document was saved.")
-    syncFiles(state)
+    sync.syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
 
@@ -701,7 +692,8 @@ async function saveRevision(state) {
  */
 async function createNewVersion(state) {
 
-  /** @type {newVersionDialog} */
+  /** @type {newVersionDialog & SlDialog} */
+  // @ts-ignore
   const dialog = document.querySelector('[name="newVersionDialog"]')
   try {
     const user = authentication.getUser()
@@ -738,6 +730,7 @@ async function createNewVersion(state) {
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     // save new version first
+    if (!state.xml) throw new Error('No XML file loaded')
     let { path } = await saveXml(state.xml, true)
 
     // update the state to load the new document
@@ -758,7 +751,7 @@ async function createNewVersion(state) {
     
     // sync the new file to the WebDav server
     if (state.webdavEnabled) {
-      syncFiles(state)
+      sync.syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e))
     }
@@ -771,30 +764,6 @@ async function createNewVersion(state) {
   }
 }
 
-async function onClickSyncBtn(state) {
-  let summary
-  ui.spinner.show('Synchronizing files, please wait...')
-  try {
-    summary = await syncFiles(state)
-  } catch (e) {
-    throw e
-  } finally {
-    ui.spinner.hide()
-  }
-  if (summary) {
-    let msg = []
-    for (const [action, count] of Object.entries(summary)) {
-      if (count > 0) {
-        msg.push(`${action.replace('_', ' ')}: ${count}`)
-      }
-    }
-    if (msg.length > 0) {
-      notify(msg.join(", "))
-      // something has changed, reload the file data
-      await fileselection.reload(state)
-    }
-  }
-}
 
 
 
@@ -810,6 +779,7 @@ function getNodeText(node) {
 
 /**
  * Recursively extracts all text nodes contained in the given node into a flat list
+ * @param {Node} node
  * @return {Array<Node>}
  */
 function getTextNodes(node) {
@@ -851,7 +821,8 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
   // update document: <edition>
   if (edition) {
     const versionName = edition.title
-    const nameExistsInDoc = Array.from(xmlDoc.querySelector('edition > title') || []).some(elem => elem.textContent === versionName)
+    const editionTitleElements = xmlDoc.querySelectorAll('edition > title')
+    const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName)
     const nameExistsInVersions = fileselection.fileData.some(file => file.label === versionName)
     if (nameExistsInDoc || nameExistsInVersions) {
       throw new Error(`The version name "${versionName}" is already being used, pick another one.`)

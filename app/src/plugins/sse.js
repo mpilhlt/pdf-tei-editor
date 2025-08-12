@@ -97,6 +97,9 @@ async function update(state) {
       eventSource = null;
       cachedSessionId = null;
     };
+    eventSource.addEventListener('updateStatus', evt => {
+      logger.info(evt.data)
+    })
   }
 }
 

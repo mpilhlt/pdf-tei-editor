@@ -36,16 +36,25 @@ def event_stream(client_id, logger):
             del message_queues[client_id]
             logger.info(f"Removed message queue for client {client_id}")
 
+def send_sse_message(client_id, event_type, data):
+    """
+    Sends a message to a specific client via SSE.
+    """
+    if client_id in message_queues:
+        message_queues[client_id].put((event_type, data))
+        return True
+    return False
+
 @bp.route('/subscribe')
 @session_required
 def subscribe():
     session_id = get_session_id(request)
     user = auth.get_user_by_session_id(session_id)
-    client_id = user.get('id', 'anonymous') if user else 'anonymous'
+    client_id = user.get('username')
     # We need to get a direct reference to the logger, because current_app is a proxy
     # that is only available in the request context.
     logger = current_app._get_current_object().logger
-    return Response(event_stream(client_id, logger), mimetype='text/event-stream')
+    return Response(event_stream(session_id, logger), mimetype='text/event-stream')
 
 @bp.route('/test')
 @session_required
@@ -69,12 +78,3 @@ def test_sse():
     Thread(target=message_generator).start()
     
     return "Test started. Use sseObj.addEventListener('test', ...) to listen for events.", 200
-
-def send_sse_message(client_id, event_type, data):
-    """
-    Sends a message to a specific client via SSE.
-    """
-    if client_id in message_queues:
-        message_queues[client_id].put((event_type, data))
-        return True
-    return False

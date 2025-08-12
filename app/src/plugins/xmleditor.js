@@ -19,7 +19,7 @@ import { api as logger } from './logger.js'
 import { setDiagnostics } from '@codemirror/lint'
 
 //
-// UI Parts
+// UI
 //
 
 /**
@@ -144,7 +144,7 @@ async function update(state) {
     } else {
       ui.xmlEditor.classList.remove("editor-readonly")
       if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget)
+        ui.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget.id)
       }
     }
   }
@@ -163,7 +163,6 @@ async function update(state) {
       console.error(e)
     }
   }
-  //console.warn(plugin.name,"done")
 }
 
 
