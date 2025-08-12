@@ -33,48 +33,45 @@ import './modules/statusbar/index.js';
 /**
  * Import type definitions from plugins
  * 
- * @import {dialogComponent} from './plugins/dialog.js'
- * @import {promptEditorComponent} from './plugins/prompt-editor.js'
- * @import {floatingPanelComponent} from './plugins/floating-panel.js'
- * @import {documentActionsComponent, teiServicesComponent} from './plugins/services.js'
- * @import {extractionActionsComponent, extractionOptionsDialog} from './plugins/extraction.js'
- * @import {infoDialogComponent} from './plugins/info.js'
+ * @import {dialogPart} from './plugins/dialog.js'
+ * @import {promptEditorPart} from './plugins/prompt-editor.js'
+ * @import {floatingPanelPart} from './plugins/floating-panel.js'
+ * @import {documentActionsPart, teiServicesPart} from './plugins/services.js'
+ * @import {extractionActionsPart, extractionOptionsDialog} from './plugins/extraction.js'
+ * @import {infoDialogPart} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
- * @import {pdfViewerComponent} from './plugins/pdfviewer.js'
- * @import {xmlEditorComponent} from './plugins/xmleditor.js'
- * @import {toolbarComponent} from './plugins/toolbar.js'
- * @import {teiWizardDialogComponent} from './plugins/tei-wizard.js'
+ * @import {pdfViewerPart} from './plugins/pdfviewer.js'
+ * @import {xmlEditorPart} from './plugins/xmleditor.js'
+ * @import {toolbarPart} from './plugins/toolbar.js'
+ * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
  */
 
 /**
  * Generic UI element type that combines DOM element properties with navigation properties
  * @template {Element} T - The DOM element type
  * @template {Record<string, any>} N - The navigation properties type
- * @typedef {T & N} UIElement
+ * @typedef {T & N} UIPart
  */
 
 /**
  * The top-level UI parts
  * @typedef {object} namedElementsTree
- * @property {UIElement<HTMLDivElement, toolbarComponent>} toolbar - The main toolbar
- * @property {UIElement<HTMLDivElement, floatingPanelComponent>} floatingPanel - The floating panel with navigation buttons
- * @property {UIElement<HTMLDivElement, pdfViewerComponent>} pdfViewer - The PDFJS-based PDF viewer with statusbar
- * @property {UIElement<HTMLDivElement, xmlEditorComponent>} xmlEditor - The codemirror-based xml editor with statusbar
+ * @property {UIPart<HTMLDivElement, toolbarPart>} toolbar - The main toolbar
+ * @property {UIPart<HTMLDivElement, floatingPanelPart>} floatingPanel - The floating panel with navigation buttons
+ * @property {UIPart<HTMLDivElement, pdfViewerPart>} pdfViewer - The PDFJS-based PDF viewer with statusbar
+ * @property {UIPart<HTMLDivElement, xmlEditorPart>} xmlEditor - The codemirror-based xml editor with statusbar
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
- * @property {UIElement<SlDialog, dialogComponent>} dialog - A dialog to display messages or errors
- * @property {UIElement<SlDialog, promptEditorComponent>} promptEditor - A dialog to edit the prompt instructions
- * @property {UIElement<SlDialog, extractionOptionsDialog>} extractionOptions - A dialog to choose extraction options
- * @property {UIElement<SlDialog, infoDialogComponent>} infoDialog - A dialog to display information and help
- * @property {UIElement<SlDialog, loginDialog>} loginDialog - A dialog for login
- * @property {UIElement<SlDialog, teiWizardDialogComponent>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
+ * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
+ * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
+ * @property {UIPart<SlDialog, extractionOptionsDialog>} extractionOptions - A dialog to choose extraction options
+ * @property {UIPart<SlDialog, infoDialogPart>} infoDialog - A dialog to display information and help
+ * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
+ * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  */
 
-
-
-
 /**
- * This variable provides access to the top-level UI components through named properties.
- * Each property gives direct access to the component and its navigation hierarchy.
+ * This variable provides access to the top-level UI parts through named properties.
+ * Each property gives direct access to the part and its navigation hierarchy.
  * @type {namedElementsTree}
  */
 let ui = /** @type {namedElementsTree} */(/** @type {unknown} */(null));

@@ -71,11 +71,26 @@ Please note there is no central application instance. All functionality of the a
 
 New plugins can be easily added without having to change the application.
 
-The UI is (mostly) build with WebComponents provided by <https://shoelace.style> . The UI of the application is mirrored in an object structure, which can be easily traversed in order to locate the UI element via autocompletion (e.g., ui.toolbar.loginButton). In this structure, each named DOM element provides a reference to all named descencdent elements, which can be accessed as virtual properties by the value of the name attribute. The top element of this hierarchy is the default export of [ui.js](https://github.com/mpilhlt/pdf-tei-editor/blob/main/app/src/ui.js).
-
-UI components are generated from HTML templates located in the `app/src/templates` directory. The `createHtmlElements` function in `app/src/ui.js` is used to load these templates and create the corresponding UI elements.
-
 In addition to the loosely coupled way of plugin invocation (which might or might not be listened to), the plugins can also export an "api" object that exposes methods that can be imported and executed where a tightly coupled approach makes more sense.
+
+#### UI Parts Construction & Documentation
+
+Plugins can programmatically create UI elements or use HTML templates located in the `app/src/templates` directory. The `createHtmlElements` function in `app/src/ui.js` is used to load these templates and create the corresponding DOM elements.
+
+The UI of the application is (mostly) build with WebComponents provided by <https://shoelace.style> . It has an internal hierarchy of named elements and their named descendants, which constitute a logical grouping and are called a "UI Part". These elements can be easily traversed in order to locate a specific UI element via autocompletion (e.g., ui.toolbar.loginButton). The top element of this hierarchy is the default export of [ui.js](https://github.com/mpilhlt/pdf-tei-editor/blob/main/app/src/ui.js). Each part provides a reference to its named descendants through properties with the name of the value of these descendants' "name" attribute. 
+
+The UI hierarchy is documented using JSDoc `@typedef` definitions that describe the structure and properties of each UI part. To annotate a UI part, you use the  `UIPart<T, N>` pattern that combines DOM element type `T` with navigation properties type `N`
+
+For example, a toolbar part might be defined as:
+```javascript
+/**
+ * @typedef {object} toolbarPart
+ * @property {SlButton} saveButton - Save document button
+ * @property {UIPart<SlButtonGroup, actionPart>} actions - Button group for document actions, defined in a separate part typedef
+ */
+```
+
+This documentation system ensures type safety and provides comprehensive autocompletion support throughout the JavaScript codebase without requiring TypeScript compilation.
 
 ## Dev environment
 

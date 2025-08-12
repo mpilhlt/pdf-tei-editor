@@ -6,16 +6,16 @@
 /** 
  * @import { ApplicationState } from '../app.js' 
  * @import { SlButton } from '../ui.js'
- * @import { UIElement } from '../ui.js'
+ * @import { UIPart } from '../ui.js'
  */
 
 //
-// UI Components
+// UI Parts
 //
 
 /**
  * TEI Wizard dialog navigation properties
- * @typedef {object} teiWizardDialogComponent
+ * @typedef {object} teiWizardDialogPart
  * @property {HTMLDivElement} enhancementList - Container for enhancement checkboxes
  * @property {SlButton} selectAll - Select all checkboxes button
  * @property {SlButton} selectNone - Select none checkboxes button
@@ -61,7 +61,7 @@ async function install(state) {
 
   ui.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard)
 
-  /** @type {teiWizardDialogComponent & SlDialog} */
+  /** @type {teiWizardDialogPart & SlDialog} */
   const dialog = /** @type {any} */(ui.teiWizardDialog);
 
   // Populate enhancement list
@@ -96,7 +96,7 @@ async function update(state) {
 }
 
 async function getSelectedEnhancements() {
-  /** @type {teiWizardDialogComponent & SlDialog} */
+  /** @type {teiWizardDialogPart & SlDialog} */
   const dialog = /** @type {any} */(ui.teiWizardDialog);
   dialog.show();
   return new Promise((resolve) => {

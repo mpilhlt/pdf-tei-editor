@@ -1,7 +1,7 @@
 /** 
  * @import { ApplicationState } from '../app.js'
  * @import { Switch } from '../modules/switch.js'
- * @import { UIElement } from '../ui.js'
+ * @import { UIPart } from '../ui.js'
  */
 import { updateState, client, logger, services, dialog, xmlEditor, config } from '../app.js'
 import { $$, isValidXPath } from '../modules/browser-utils.js'
@@ -37,23 +37,22 @@ export default plugin
 
 /**
  * Floating panel
- * @typedef {object} floatingPanelComponent
- * @property {HTMLDivElement} self
+ * @typedef {object} floatingPanelPart
  * @property {HTMLSelectElement} xpath
  * @property {HTMLButtonElement} editXpath
  * @property {HTMLButtonElement} previousNode
  * @property {HTMLSpanElement} selectionIndex
  * @property {HTMLButtonElement} nextNode
  * @property {HTMLDivElement} markNodeButtons - children have class="node-status" and 'data-status' attribute
- * @property {UIElement<HTMLDivElement, diffNavigationComponent>} diffNavigation
+ * @property {UIPart<HTMLDivElement, diffNavigationPart>} diffNavigation
  * 
  */
-/** @type {floatingPanelComponent} */
+/** @type {ChildNode[]} */
 const floatingPanelControls = await createHtmlElements('floating-panel.html')
 
 /**
  * Diff Navigation navigation properties
- * @typedef {object} diffNavigationComponent
+ * @typedef {object} diffNavigationPart
  * @property {HTMLButtonElement} prevDiff
  * @property {HTMLButtonElement} nextDiff
  * @property {HTMLButtonElement} diffKeepAll

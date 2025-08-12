@@ -8,28 +8,28 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlSelect, SlButton, SlButtonGroup, UIElement } from '../ui.js'
- * @import { documentActionsComponent, teiServicesComponent } from './services.js'
- * @import { extractionActionsComponent } from './extraction.js'
+ * @import { SlSelect, SlButton, SlButtonGroup, UIPart } from '../ui.js'
+ * @import { documentActionsPart, teiServicesPart } from './services.js'
+ * @import { extractionActionsPart } from './extraction.js'
  */
 
 import { logger } from '../app.js'
 
 //
-// UI Components
+// UI Parts
 //
 
 /**
  * The main toolbar navigation properties.
  * This documents the structure created by various plugins that add controls to the toolbar.
- * @typedef {object} toolbarComponent
+ * @typedef {object} toolbarPart
  * @property {SlSelect} variant - The selectbox for the variant filter (added by file-selection plugin)
  * @property {SlSelect} pdf - The selectbox for the pdf document (added by file-selection plugin)  
  * @property {SlSelect} xml - The selectbox for the xml document (added by file-selection plugin)
  * @property {SlSelect} diff - The selectbox for the xml-diff document (added by file-selection plugin)
- * @property {UIElement<SlButtonGroup, documentActionsComponent>} documentActions - Document action buttons (added by services plugin)
- * @property {UIElement<SlButtonGroup, teiServicesComponent>} teiActions - TEI service buttons (added by services plugin)
- * @property {UIElement<SlButtonGroup, extractionActionsComponent>} extractionActions - Extraction action buttons (added by extraction plugin)
+ * @property {UIPart<SlButtonGroup, documentActionsPart>} documentActions - Document action buttons (added by services plugin)
+ * @property {UIPart<SlButtonGroup, teiServicesPart>} teiActions - TEI service buttons (added by services plugin)
+ * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
  * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
  */
 

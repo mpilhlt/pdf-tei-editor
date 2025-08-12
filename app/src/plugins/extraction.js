@@ -39,13 +39,13 @@ export default plugin
 
 /**
  * Extraction actions button group
- * @typedef {object} extractionActionsComponent
+ * @typedef {object} extractionActionsPart
  * @property {SlButtonGroup} self
  * @property {SlButton} extractNew 
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
-/** @type {SlButtonGroup & extractionActionsComponent} */
+/** @type {SlButtonGroup & extractionActionsPart} */
 // @ts-ignore
 const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0]
 

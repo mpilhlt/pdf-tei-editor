@@ -81,7 +81,7 @@ export class CookieStorage {
       value = JSON.stringify(value);
     }
     const { path, secure, sameSite, maxAge } = { ...this.config, ...options };
-    let cookie = `${key}=${encodeURIComponent(value)}; path=${path}; samesite=${sameSite}`;
+    let cookie = `${key}=${encodeURIPart(value)}; path=${path}; samesite=${sameSite}`;
     if (secure) cookie += '; secure';
     if (maxAge !== undefined) cookie += `; max-age=${maxAge}`;
     document.cookie = cookie;

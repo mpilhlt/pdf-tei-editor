@@ -3,7 +3,7 @@ export function escapeRegExp(string) {
 }
 
 /**
- * @typedef {object} ParsedXPathStepComponentsSimple
+ * @typedef {object} ParsedXPathStepPartsSimple
  * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child').
  * @property {string} finalStep - The core name part of the XPath step (e.g., 'elementName', 'prefix:elementName', 
  *    '@attribute', 'text()', '*').
@@ -18,7 +18,7 @@ export function escapeRegExp(string) {
  */
 
 /**
- * @typedef {object} ParsedXPathStepComponents
+ * @typedef {object} ParsedXPathStepParts
  * @property {string} input - The XPath as passed in, for debugging purposes only
  * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child'). Includes the trailing separator if present, or is empty for relative paths starting with nodeTest.
  * @property {string} finalStep - The complete string representation of the last step, including node test and predicates (e.g., 'elementName[1]', '@attribute', 'text()').
@@ -39,7 +39,7 @@ export function escapeRegExp(string) {
  * the index from the first simple positional predicate if present.
  *
  * @param {string} xpath An XPath expression (e.g., '/html/body/div[1]/span[@class="text"][position()=2]/text()')
- * @returns {ParsedXPathStepComponents} An object containing the parsed components of the XPath step.
+ * @returns {ParsedXPathStepParts} An object containing the parsed components of the XPath step.
  * @throws {Error} If the xpath is empty, ends in a separator, or cannot be parsed due to syntax errors (mismatched brackets, invalid node test).
  */
 export function parseXPath(xpath) {

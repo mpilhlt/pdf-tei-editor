@@ -64,7 +64,7 @@ let savingStatusWidget = null
 
 /**
  * Document actions button group navigation properties
- * @typedef {object} documentActionsComponent
+ * @typedef {object} documentActionsPart
  * @property {SlButton} saveRevision - Save current revision button
  * @property {SlButton} createNewVersion - Create new version button
  * @property {SlButton} sync - Sync files button
@@ -78,7 +78,7 @@ let savingStatusWidget = null
 
 /**
  * TEI services button group navigation properties
- * @typedef {object} teiServicesComponent
+ * @typedef {object} teiServicesPart
  * @property {SlButton} validate - Validate XML button
  * @property {SlButton} teiWizard - TEI Wizard button (added by tei-wizard plugin)
  */
@@ -102,13 +102,13 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
 
 /**
  * Dialog for documenting a revision navigation properties
- * @typedef {object} newRevisionChangeDialogComponent
+ * @typedef {object} newRevisionChangeDialogPart
  * @property {SlInput} persId - Person ID input
  * @property {SlInput} persName - Person name input
  * @property {SlInput} changeDesc - Change description input
  */
 
-/** @type {newRevisionChangeDialogComponent & SlDialog} */
+/** @type {newRevisionChangeDialogPart & SlDialog} */
 // @ts-ignore
 const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0]
 

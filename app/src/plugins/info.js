@@ -38,7 +38,7 @@ export default plugin
 
 /**
  * Help Dialog
- * @typedef {object} infoDialogComponent
+ * @typedef {object} infoDialogPart
  * @property {SlDialog} self
  * @property {HTMLDivElement} content
  * @property {SlButton} closeBtn

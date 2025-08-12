@@ -92,35 +92,35 @@ npm run test:sync
 ### UI Component System
 The application uses a typed UI hierarchy system with the following rules:
 
-#### Component Naming Convention
-- Each UI component typedef is called a "component" and follows camelCase naming
-- Component names always end with "Component" (e.g., `toolbarComponent`, `dialogComponent`)
-- Since components represent singletons in the UI, they use lowercase naming
+#### UI Part Naming Convention
+- Each UI part typedef is called a "part" and follows camelCase naming
+- Part names always end with "Part" (e.g., `toolbarPart`, `dialogPart`)
+- Since UI parts represent singletons in the UI, they use lowercase naming
 
-#### Component Location and Documentation
-- Components are defined in the plugin that uses/creates them
-- Each component documents the named element hierarchy from its HTML templates
-- Components use the `UIElement<T, N>` generic type that combines DOM element type `T` with navigation properties type `N`
+#### UI Part Location and Documentation
+- UI parts are defined in the plugin that uses/creates them
+- Each part documents the named element hierarchy from its HTML templates
+- UI parts use the `UIPart<T, N>` generic type that combines DOM element type `T` with navigation properties type `N`
 
 #### Type Usage Rules
-- When a component property is a pure HTMLElement with no navigation properties, use the DOM element type directly
-- When a component has child navigation properties, use `UIElement<DOMElementType, NavigationPropertiesType>`
+- When a UI part property is a pure HTMLElement with no navigation properties, use the DOM element type directly
+- When a UI part has child navigation properties, use `UIPart<DOMElementType, NavigationPropertiesType>`
 - Elements serve as both DOM elements and navigation objects - no `self` property needed
 - Access DOM methods directly: `ui.dialog.show()` instead of `ui.dialog.self.show()`
 
 #### Examples
 ```javascript
-// Component definition
+// UI part definition
 /**
- * @typedef {object} dialogComponent  
+ * @typedef {object} dialogPart  
  * @property {HTMLSpanElement} message - Direct DOM element (no navigation)
  * @property {SlButton} closeBtn - Direct DOM element (no navigation)
  */
 
-// Usage in parent component
+// Usage in parent part
 /**
  * @typedef {object} namedElementsTree
- * @property {UIElement<SlDialog, dialogComponent>} dialog - Dialog with navigation properties
+ * @property {UIPart<SlDialog, dialogPart>} dialog - Dialog with navigation properties
  */
 
 // Usage in code

@@ -40,7 +40,7 @@ export default plugin
 
 /**
  * Prompt editor
- * @typedef {object} promptEditorComponent
+ * @typedef {object} promptEditorPart
  * @property {SlDialog} self
  * @property {SlInput} label
  * @property {SlMenu} labelMenu
@@ -53,7 +53,7 @@ export default plugin
  */
 
 // editor dialog
-/** @type {promptEditorComponent} */
+/** @type {promptEditorPart} */
 const promptEditorDialog = (await createHtmlElements("prompt-editor.html"))[0]
 
 // button, documented in services.js

@@ -31,7 +31,7 @@ export default plugin
 /**
  * Dialog component navigation properties. The dialog element itself serves as both
  * the SlDialog DOM element and the navigation object for its descendants.
- * @typedef {object} dialogComponent
+ * @typedef {object} dialogPart
  * @property {HTMLSpanElement} message
  * @property {HTMLDivElement} icon
  * @property {SlButton} closeBtn

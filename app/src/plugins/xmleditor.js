@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../app.js' 
  * @import { Diagnostic } from '@codemirror/lint'
  * @import { StatusText } from '../modules/statusbar/widgets/status-text.js'
- * @import { UIElement } from '../ui.js'
+ * @import { UIPart } from '../ui.js'
  * @import { StatusBar } from '../modules/statusbar/status-bar.js'
  */
 
@@ -19,19 +19,19 @@ import { api as logger } from './logger.js'
 import { setDiagnostics } from '@codemirror/lint'
 
 //
-// UI Components
+// UI Parts
 //
 
 /**
  * XML editor statusbar navigation properties
- * @typedef {object} xmlEditorStatusbarComponent
+ * @typedef {object} xmlEditorStatusbarPart
  * @property {HTMLElement} cursorPosition - The cursor position widget
  */
 
 /**
  * XML editor navigation properties
- * @typedef {object} xmlEditorComponent
- * @property {UIElement<StatusBar, xmlEditorStatusbarComponent>} statusbar - The XML editor statusbar
+ * @typedef {object} xmlEditorPart
+ * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
  */
 
 // the path to the autocompletion data
