@@ -1,6 +1,7 @@
 /** 
  * @import { ApplicationState } from '../app.js'
  * @import { Switch } from '../modules/switch.js'
+ * @import { UIElement } from '../ui.js'
  */
 import { updateState, client, logger, services, dialog, xmlEditor, config } from '../app.js'
 import { $$, isValidXPath } from '../modules/browser-utils.js'
@@ -12,8 +13,8 @@ import ui from '../ui.js'
  * plugin API
  */
 const api = {
-  show: () => ui.floatingPanel.self.classList.remove("hidden"),
-  hide: () => ui.floatingPanel.self.classList.add("hidden"),
+  show: () => ui.floatingPanel.classList.remove("hidden"),
+  hide: () => ui.floatingPanel.classList.add("hidden"),
 }
 
 /**
@@ -44,16 +45,15 @@ export default plugin
  * @property {HTMLSpanElement} selectionIndex
  * @property {HTMLButtonElement} nextNode
  * @property {HTMLDivElement} markNodeButtons - children have class="node-status" and 'data-status' attribute
- * @property {diffNavigationComponent} diffNavigation
+ * @property {UIElement<HTMLDivElement, diffNavigationComponent>} diffNavigation
  * 
  */
 /** @type {floatingPanelComponent} */
 const floatingPanelControls = await createHtmlElements('floating-panel.html')
 
 /**
- * Diff Navigation
+ * Diff Navigation navigation properties
  * @typedef {object} diffNavigationComponent
- * @property {HTMLDivElement} self
  * @property {HTMLButtonElement} prevDiff
  * @property {HTMLButtonElement} nextDiff
  * @property {HTMLButtonElement} diffKeepAll
@@ -78,7 +78,7 @@ async function install(state) {
   addBringToForegroundListener([`#${pluginId}`, '.cm-panels']);
 
   // make navigation draggable
-  makeDraggable(ui.floatingPanel.self)
+  makeDraggable(ui.floatingPanel)
 
   // populate the xpath selectbox
   const xp = ui.floatingPanel.xpath
@@ -174,7 +174,7 @@ async function update(state) {
   ui.floatingPanel.markNodeButtons.querySelectorAll("button").forEach(btn => btn.disabled = !Boolean(state.xpath))
 
   // configure diff navigation buttons
-  ui.floatingPanel.diffNavigation.self.querySelectorAll("button").forEach(node => {
+  ui.floatingPanel.diffNavigation.querySelectorAll("button").forEach(node => {
     node.disabled = !state.diff || state.diff === state.xml
   })
   //console.warn(plugin.name,"done")

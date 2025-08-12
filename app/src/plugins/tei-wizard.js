@@ -6,6 +6,21 @@
 /** 
  * @import { ApplicationState } from '../app.js' 
  * @import { SlButton } from '../ui.js'
+ * @import { UIElement } from '../ui.js'
+ */
+
+//
+// UI Components
+//
+
+/**
+ * TEI Wizard dialog navigation properties
+ * @typedef {object} teiWizardDialogComponent
+ * @property {HTMLDivElement} enhancementList - Container for enhancement checkboxes
+ * @property {SlButton} selectAll - Select all checkboxes button
+ * @property {SlButton} selectNone - Select none checkboxes button
+ * @property {SlButton} executeBtn - Execute wizard button
+ * @property {SlButton} cancel - Cancel button
  */
 import ui from '../ui.js';
 import { xmlEditor, logger } from '../app.js';
@@ -40,15 +55,14 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // button
-  ui.toolbar.teiActions.self.append(teiWizardButton)
+  ui.toolbar.teiActions.append(teiWizardButton)
   document.body.append(teiWizardDialog)
   updateUi()
 
-  // @ts-ignore
   ui.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard)
 
-  // @ts-ignore
-  const dialog = ui.teiWizardDialog;
+  /** @type {teiWizardDialogComponent & SlDialog} */
+  const dialog = /** @type {any} */(ui.teiWizardDialog);
 
   // Populate enhancement list
   enhancements.forEach(async enhancement => {
@@ -82,16 +96,16 @@ async function update(state) {
 }
 
 async function getSelectedEnhancements() {
-  // @ts-ignore
-  const dialog = ui.teiWizardDialog;
-  dialog.self.show();
+  /** @type {teiWizardDialogComponent & SlDialog} */
+  const dialog = /** @type {any} */(ui.teiWizardDialog);
+  dialog.show();
   return new Promise((resolve) => {
-    dialog.cancel.addEventListener('click', () => dialog.self.hide() && resolve([]));
+    dialog.cancel.addEventListener('click', () => dialog.hide() && resolve([]));
     dialog.executeBtn.addEventListener('click', () => {
       const enhancementFunctions = Array.from(dialog.enhancementList.querySelectorAll('sl-checkbox'))
         .filter(checkbox => checkbox.checked)
         .map(checkbox => enhancements.find(e => e.name === checkbox.dataset.enhancement));
-      dialog.self.hide()
+      dialog.hide()
       resolve(enhancementFunctions);
     });
   });
@@ -133,7 +147,7 @@ async function runTeiWizard() {
   xmlEditor.showMergeView(xmlstring);
 
   // enable diff navigation buttons
-  ui.floatingPanel.diffNavigation.self
+  ui.floatingPanel.diffNavigation
     .querySelectorAll("button")
     .forEach(node => node.disabled = false);
 

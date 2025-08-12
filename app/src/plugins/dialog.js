@@ -29,8 +29,9 @@ export default plugin
 //
 
 /**
+ * Dialog component navigation properties. The dialog element itself serves as both
+ * the SlDialog DOM element and the navigation object for its descendants.
  * @typedef {object} dialogComponent
- * @property {SlDialog} self
  * @property {HTMLSpanElement} message
  * @property {HTMLDivElement} icon
  * @property {SlButton} closeBtn
@@ -48,7 +49,7 @@ async function install(app) {
   logger.debug(`Installing plugin "${plugin.name}"`)
   await createHtmlElements("dialog.html", document.body)
   updateUi();
-  ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.self.hide());
+  ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.hide());
 }
 
 /**
@@ -56,10 +57,10 @@ async function install(app) {
  * @param {string} message 
  */
 function info(message) {
-  ui.dialog.self.setAttribute("label", "Information");
+  ui.dialog.setAttribute("label", "Information");
   ui.dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
   ui.dialog.message.innerHTML = message
-  ui.dialog.self.show()
+  ui.dialog.show()
 }
 
 /**
@@ -67,10 +68,10 @@ function info(message) {
  * @param {string} message 
  */
 function error(message) {
-  ui.dialog.self.setAttribute("label", "Error");
+  ui.dialog.setAttribute("label", "Error");
   ui.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
   ui.dialog.message.innerHTML = message
-  ui.dialog.self.show()
+  ui.dialog.show()
 }
 
 /**
@@ -78,8 +79,8 @@ function error(message) {
  * @param {string} message 
  */
 function success(message) {
-  ui.dialog.self.setAttribute("label", "Success");
+  ui.dialog.setAttribute("label", "Success");
   ui.dialog.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
   ui.dialog.message.innerHTML = message
-  ui.dialog.self.show()
+  ui.dialog.show()
 }

@@ -82,7 +82,7 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // install controls on menubar
-  ui.toolbar.self.append(extractionBtnGroup)
+  ui.toolbar.append(extractionBtnGroup)
   document.body.append(optionsDialog)
   updateUi()
 
@@ -96,7 +96,7 @@ async function install(state) {
  */
 async function update(state) {
   // @ts-ignore
-  extractionBtnGroup.self.childNodes.forEach(child => child.disabled = state.offline) 
+  extractionBtnGroup.childNodes.forEach(child => child.disabled = state.offline) 
   extractionBtnGroup.extractCurrent.disabled = !state.pdf
   //console.warn(plugin.name,"done")
 }

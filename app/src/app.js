@@ -28,6 +28,7 @@ import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
 import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as authenticationPlugin, api as authentication } from './plugins/authentication.js'
+import { plugin as toolbarPlugin } from './plugins/toolbar.js'
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
 /**
@@ -71,7 +72,7 @@ let state = {
 
 /** @type {Plugin[]} */
 const plugins = [loggerPlugin, urlHashStatePlugin, clientPlugin, configPlugin, 
-  dialogPlugin, pdfViewerPlugin, xmlEditorPlugin, fileselectionPlugin,
+  dialogPlugin, toolbarPlugin, pdfViewerPlugin, xmlEditorPlugin, fileselectionPlugin,
   servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
   teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, ssePlugin,
   authenticationPlugin,

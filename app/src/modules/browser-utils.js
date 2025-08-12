@@ -224,7 +224,7 @@ export function escapeHtml(text) {
  * named nodes are excluded.  If duplicate names are found, the first
  * occurrence is used.
  *
- * @param {Element} node The starting node to search from.
+ * @param {Element|Document} node The starting node to search from.
  * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
  */
 function findNamedDescendants(node) {
@@ -232,7 +232,7 @@ function findNamedDescendants(node) {
 
   /**
    * Recursive function that adds to the results object
-   * @param {Element} currentNode 
+   * @param {Element|Document} currentNode 
    * @returns {void}
    */
   function traverse(currentNode) {
@@ -242,8 +242,7 @@ function findNamedDescendants(node) {
 
     for (let i = 0; i < currentNode.childNodes.length; i++) {
       /** @type {Element} */
-      // @ts-ignore
-      const childNode = currentNode.childNodes[i];
+      const childNode = /** @type {Element} */(currentNode.childNodes[i]);
       // Check if it's an element (important to avoid text nodes)
       if (childNode.nodeType === Node.ELEMENT_NODE) {
 
@@ -261,25 +260,23 @@ function findNamedDescendants(node) {
     }
   }
   traverse(node);
-  // @ts-ignore
-  return results;
+  return /** @type {{ [x: string]: Element }} */(results);
 }
 
 /**
- * Modifies a node to access named descendant elements through added properties of their name.
- * Also adds a property "self" that allows JSDoc annotations of the original node. 
+ * Creates a navigable element by adding named descendant elements as properties.
+ * Each property gives direct access to the DOM element (which is also the navigation object).
  * You must be careful to use names that do not override existing properties.
  *
- * @param {Element} node The element to modify
- * @returns {Element} The element with with an added "self" property as well as properties
- *          to access named descendants
+ * @template {Element|Document} T
+ * @param {T} node The element to enhance with navigation
+ * @returns {T & Record<string, any>} The element with added navigation properties
  */
-export function accessNamedDescendentsAsProperties(node) {
+export function createNavigableElement(node) {
   const namedDescendants = findNamedDescendants(node)
   for (let name in namedDescendants) {
-    namedDescendants[name] = accessNamedDescendentsAsProperties(namedDescendants[name])
+    namedDescendants[name] = createNavigableElement(namedDescendants[name])
   }
-  namedDescendants.self = node
   const modifiedObj = Object.assign(node, namedDescendants)
   return modifiedObj
 }

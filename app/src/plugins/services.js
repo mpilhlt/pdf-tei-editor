@@ -63,25 +63,24 @@ let savingStatusWidget = null
 //
 
 /**
- * Document actions button group
+ * Document actions button group navigation properties
  * @typedef {object} documentActionsComponent
- * @property {SlButtonGroup} self
- * @property {SlButton} saveRevision 
- * @property {SlButton} createNewVersion
- * @property {SlButton} sync
- * @property {SlButton} upload
- * @property {SlButton} download
- * @property {SlButton} deleteBtn
- * @property {SlButton} deleteCurrentVersion
- * @property {SlButton} deleteAllVersions
- * @property {SlButton} deleteAll
+ * @property {SlButton} saveRevision - Save current revision button
+ * @property {SlButton} createNewVersion - Create new version button
+ * @property {SlButton} sync - Sync files button
+ * @property {SlButton} upload - Upload file button
+ * @property {SlButton} download - Download file button
+ * @property {SlButton} deleteBtn - Delete dropdown button
+ * @property {SlButton} deleteCurrentVersion - Delete current version button
+ * @property {SlButton} deleteAllVersions - Delete all versions button
+ * @property {SlButton} deleteAll - Delete all files button
  */
 
 /**
- * TEI actions button group
- * @typedef {object} teiServicesComponents
- * @property {SlButtonGroup} self
- * @property {SlButton} validate 
+ * TEI services button group navigation properties
+ * @typedef {object} teiServicesComponent
+ * @property {SlButton} validate - Validate XML button
+ * @property {SlButton} teiWizard - TEI Wizard button (added by tei-wizard plugin)
  */
 
 // todo align template with definition
@@ -102,15 +101,14 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
 const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0]
 
 /**
- * Dialog for documenting a revision
- * @typedef {object} newRevisionChangeDialog
- * @property {SlDialog} self
- * @property {SlInput} persId
- * @property {SlInput} persName 
- * @property {SlInput} changeDesc 
+ * Dialog for documenting a revision navigation properties
+ * @typedef {object} newRevisionChangeDialogComponent
+ * @property {SlInput} persId - Person ID input
+ * @property {SlInput} persName - Person name input
+ * @property {SlInput} changeDesc - Change description input
  */
 
-/** @type {newRevisionChangeDialog & SlDialog} */
+/** @type {newRevisionChangeDialogComponent & SlDialog} */
 // @ts-ignore
 const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0]
 
@@ -126,7 +124,7 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // install controls on menubar
-  ui.toolbar.self.append(...documentActionButtons)
+  ui.toolbar.append(...documentActionButtons)
   document.body.append(newVersionDialog)
   document.body.append(saveRevisionDialog)
   updateUi()
@@ -137,7 +135,7 @@ async function install(state) {
     variant: 'info'
   })
 
-  const tb = ui.toolbar.self
+  const tb = ui.toolbar
 
   // === Document button group ===
 
@@ -185,7 +183,7 @@ async function update(state) {
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
 
-  da.self.childNodes.forEach(el => el.disabled = state.offline)
+  da.childNodes.forEach(el => el.disabled = state.offline)
   if (state.offline) {
     return
   }
@@ -646,7 +644,7 @@ async function saveRevision(state) {
     await new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', resolve, { once: true })
       dialog.cancel.addEventListener('click', reject, { once: true })
-      dialog.self.addEventListener('sl-hide', reject, { once: true })
+      dialog.addEventListener('sl-hide', reject, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
@@ -715,7 +713,7 @@ async function createNewVersion(state) {
     await new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', resolve, { once: true })
       dialog.cancel.addEventListener('click', reject, { once: true })
-      dialog.self.addEventListener('sl-hide', reject, { once: true })
+      dialog.addEventListener('sl-hide', reject, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")

@@ -73,8 +73,8 @@ let user = null;
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`);
   state.user = null;
-  // @ts-ignore
-  ui.toolbar.self.insertAdjacentElement("beforeend", buttonElement)
+  // @ts-ignore - insertAdjacentElement type issue
+  ui.toolbar.insertAdjacentElement("beforeend", buttonElement)
   updateUi()
   ui.toolbar.logoutButton.addEventListener("click", logout)
   // prevent dialog from closing

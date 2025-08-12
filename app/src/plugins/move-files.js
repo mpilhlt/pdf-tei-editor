@@ -56,7 +56,7 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // install button & dialog
-  ui.toolbar.documentActions.self.append(moveBtn)
+  ui.toolbar.documentActions.append(moveBtn)
   document.body.append(moveFilesDialog)
   updateUi()
 
@@ -107,7 +107,7 @@ async function showMoveFilesDialog(state) {
     await new Promise((resolve, reject) => {
       moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
       moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
-      moveFilesDialog.self.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
+      moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
     logger.warn("User cancelled move files dialog");

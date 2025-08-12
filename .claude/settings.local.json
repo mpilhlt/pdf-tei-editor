@@ -9,7 +9,8 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   }
