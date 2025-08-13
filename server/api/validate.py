@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import signal
 import time
+import logging
 from lxml import etree
 from lxml.etree import XMLSyntaxError, XMLSchema, RelaxNG, XMLSchemaParseError, DocumentInvalid
 import xmlschema # too slow for validation but has some nice features like exporting a local copy of the schema
@@ -15,6 +16,8 @@ import requests
 from server.lib.decorators import handle_api_errors
 from server.lib.server_utils import ApiError
 from server.lib.relaxng_to_codemirror import generate_autocomplete_map
+
+logger = logging.getLogger(__name__)
 
 RELAXNG_NAMESPACE = "http://relaxng.org/ns/structure/1.0"
 XSD_NAMESPACE = "http://www.w3.org/2001/XMLSchema"
@@ -168,7 +171,7 @@ def autocomplete_data_route():
     # Get the schema locations from the XML
     schema_locations = extract_schema_locations(xml_string)
     if not schema_locations:
-        current_app.logger.debug('No schema location found in XML, cannot generate autocomplete data.')
+        logger.debug('No schema location found in XML, cannot generate autocomplete data.')
         return jsonify({"error": "No schema location found in XML document"})
     
     # For autocomplete, prioritize RelaxNG schemas, fall back to first available
@@ -187,7 +190,7 @@ def autocomplete_data_route():
     if not schema_location.startswith("http"):
         raise ApiError(f"Schema location must start with 'http': {schema_location}")
     
-    current_app.logger.debug(f"Generating autocomplete data for namespace {namespace} with {schema_type} schema at {schema_location}")
+    logger.debug(f"Generating autocomplete data for namespace {namespace} with {schema_type} schema at {schema_location}")
     
     # Get cache information
     schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location)
@@ -195,7 +198,7 @@ def autocomplete_data_route():
     
     # Check if autocomplete data is already cached
     if os.path.isfile(autocomplete_cache_file):
-        current_app.logger.debug(f"Using cached autocomplete data at {autocomplete_cache_file}")
+        logger.debug(f"Using cached autocomplete data at {autocomplete_cache_file}")
         with open(autocomplete_cache_file, 'r', encoding='utf-8') as f:
             return jsonify(json.load(f))
     
@@ -203,7 +206,7 @@ def autocomplete_data_route():
     if not os.path.isfile(schema_cache_file):
         download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
     else:
-        current_app.logger.debug(f"Using cached schema at {schema_cache_file}")
+        logger.debug(f"Using cached schema at {schema_cache_file}")
     
     # Parse schema to determine type
     try:
@@ -218,7 +221,7 @@ def autocomplete_data_route():
     
     # Generate autocomplete data using the RelaxNG converter
     try:
-        current_app.logger.debug(f"Generating autocomplete data from RelaxNG schema: {schema_cache_file}")
+        logger.debug(f"Generating autocomplete data from RelaxNG schema: {schema_cache_file}")
         autocomplete_data = generate_autocomplete_map(
             schema_cache_file, 
             include_global_attrs=True, 
@@ -231,7 +234,7 @@ def autocomplete_data_route():
         with open(autocomplete_cache_file, 'w', encoding='utf-8') as f:
             json.dump(autocomplete_data, f, indent=2, ensure_ascii=False)
         
-        current_app.logger.debug(f"Cached autocomplete data to {autocomplete_cache_file}")
+        logger.debug(f"Cached autocomplete data to {autocomplete_cache_file}")
         return jsonify(autocomplete_data)
         
     except Exception as e:
@@ -291,7 +294,7 @@ def download_schema_file(schema_location, schema_cache_dir, schema_cache_file):
     Download a schema file using simple HTTP request.
     Used by autocomplete route which only supports RelaxNG anyway.
     """
-    current_app.logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
+    logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
     os.makedirs(schema_cache_dir, exist_ok=True)
     
     try:
@@ -330,7 +333,7 @@ def validate(xml_string):
     # validate xml schema
     schema_locations = extract_schema_locations(xml_string)
     if not schema_locations:
-        current_app.logger.debug(f'No schema location found in XML, skipping validation.')
+        logger.debug(f'No schema location found in XML, skipping validation.')
         return []
     
     for sl in schema_locations:
@@ -339,23 +342,23 @@ def validate(xml_string):
         schema_type = sl.get('type', 'unknown')
         
         if not schema_location.startswith("http"):
-            current_app.logger.warning(f"Not validating for namespace {namespace} with schema at {schema_location}: schema location must start with 'http'")
+            logger.warning(f"Not validating for namespace {namespace} with schema at {schema_location}: schema location must start with 'http'")
             continue
             
-        current_app.logger.debug(f"Validating doc for namespace {namespace} with {schema_type} schema at {schema_location}")
+        logger.debug(f"Validating doc for namespace {namespace} with {schema_type} schema at {schema_location}")
         
         # Check for schema-specific configuration
         validation_timeout = VALIDATION_TIMEOUT
         if schema_location in SCHEMA_CONFIG:
             schema_config = SCHEMA_CONFIG[schema_location]
             validation_timeout = schema_config.get("timeout", VALIDATION_TIMEOUT)
-            current_app.logger.debug(f"Using custom timeout {validation_timeout}s for {schema_location}: {schema_config.get('reason', '')}")
+            logger.debug(f"Using custom timeout {validation_timeout}s for {schema_location}: {schema_config.get('reason', '')}")
         
         schema_cache_dir, schema_cache_file, schema_file_name = get_schema_cache_info(schema_location)
         
         # Download schema if not cached
         if not os.path.isfile(schema_cache_file):
-            current_app.logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
+            logger.debug(f"Downloading schema from {schema_location} and caching it at {schema_cache_file}")
             os.makedirs(schema_cache_dir, exist_ok=True)
             try:
                 if schema_type == "relaxng":
@@ -373,7 +376,7 @@ def validate(xml_string):
             except xmlschema.XMLSchemaParseError as e:
                 raise ApiError(f"Failed to parse schema for {namespace} from {schema_location}: {str(e)}")
         else:
-            current_app.logger.debug(f"Using cached version at {schema_cache_file}")
+            logger.debug(f"Using cached version at {schema_cache_file}")
         
         # Parse schema to determine actual type from file content
         try:
@@ -397,7 +400,7 @@ def validate(xml_string):
             
         # Perform validation with timeout protection using subprocess isolation
         try:
-            current_app.logger.debug(f"Starting validation with {validation_timeout}s timeout")
+            logger.debug(f"Starting validation with {validation_timeout}s timeout")
             validation_errors = validate_with_timeout(
                 schema_cache_file,  # Pass file path instead of tree
                 validation_xml_bytes, 
@@ -405,10 +408,10 @@ def validate(xml_string):
                 timeout=validation_timeout
             )
             errors.extend(validation_errors)
-            current_app.logger.debug(f"Validation completed with {len(validation_errors)} errors")
+            logger.debug(f"Validation completed with {len(validation_errors)} errors")
             
         except ValidationTimeoutError as e:
-            current_app.logger.warning(f"⏰ VALIDATION TIMEOUT: {namespace} schema validation timed out after {validation_timeout}s - {schema_location}")
+            logger.warning(f"⏰ VALIDATION TIMEOUT: {namespace} schema validation timed out after {validation_timeout}s - {schema_location}")
             errors.append({
                 "message": f"⏰ Schema validation timed out after {validation_timeout} seconds. The schema may be too complex or the document too large. Validation was skipped for performance reasons.",
                 "line": 1,
@@ -416,7 +419,7 @@ def validate(xml_string):
                 "severity": "warning"
             })
         except Exception as e:
-            current_app.logger.error(f"Validation failed for {namespace}: {str(e)}")
+            logger.error(f"Validation failed for {namespace}: {str(e)}")
             errors.append({
                 "message": f"Validation error: {str(e)}",
                 "line": 1,

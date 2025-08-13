@@ -13,7 +13,9 @@ _cache_status = {
     "dirty": False,
     "last_modified": None,
     "last_checked": None,
-    "last_synced": None
+    "last_synced": None,
+    "sync_needed": False,
+    "sync_last_needed": None
 }
 
 def mark_cache_dirty():
@@ -60,6 +62,30 @@ def get_last_synced_datetime():
         return datetime.fromisoformat(_cache_status["last_synced"])
     return None
 
+def mark_sync_needed():
+    """Mark that files need sync (called when files are saved/changed)."""
+    global _cache_status
+    _cache_status["sync_needed"] = True
+    _cache_status["sync_last_needed"] = datetime.now(timezone.utc).isoformat()
+    current_app.logger.debug("Sync marked as needed")
+
+def is_sync_needed():
+    """Check if sync is needed (fast - just checks flag)."""
+    return _cache_status["sync_needed"]
+
+def mark_sync_completed():
+    """Mark sync as completed (called only after successful sync)."""
+    global _cache_status
+    _cache_status["sync_needed"] = False
+    _cache_status["last_synced"] = datetime.now(timezone.utc).isoformat()
+    current_app.logger.debug("Sync marked as completed")
+
+def get_sync_last_needed_datetime():
+    """Get the timestamp when sync was last marked as needed."""
+    if _cache_status.get("sync_last_needed"):
+        return datetime.fromisoformat(_cache_status["sync_last_needed"])
+    return None
+
 def reset_cache_status():
     """Reset cache status (for testing purposes)."""
     global _cache_status
@@ -67,5 +93,7 @@ def reset_cache_status():
         "dirty": False,
         "last_modified": None,
         "last_checked": None,
-        "last_synced": None
+        "last_synced": None,
+        "sync_needed": False,
+        "sync_last_needed": None
     }

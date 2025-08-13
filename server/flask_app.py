@@ -47,22 +47,53 @@ config_dir = project_root / 'config'
 
 # Flask app
 app = Flask(__name__, static_folder=str(project_root))
+logger = logging.getLogger(__name__)
 
-# Configure colorized logging for development
-if app.debug:
-    # Remove default handler
-    app.logger.handlers.clear()
+def configure_logger_with_colors(target_logger, level=logging.DEBUG):
+    """Configure a logger with colorized output for development and file logging"""
+    # Always configure for development since we're using this in dev mode
+    target_logger.handlers.clear()
     
-    # Create new handler with colors
-    handler = logging.StreamHandler()
-    handler.setFormatter(ColoredFormatter(
+    # Console handler with colors
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(ColoredFormatter(
         '[%(asctime)s] %(levelname)s in %(name)s: %(message)s'
     ))
+    target_logger.addHandler(console_handler)
     
-    # Set level and add handler
-    app.logger.setLevel(logging.DEBUG)
-    app.logger.addHandler(handler)
-    app.logger.propagate = False
+    # File handler for log/server.log
+    log_dir = project_root / 'log'
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / 'server.log'
+    
+    file_handler = logging.FileHandler(str(log_file))
+    file_handler.setFormatter(logging.Formatter(
+        '[%(asctime)s] %(levelname)s in %(name)s: %(message)s'
+    ))
+    target_logger.addHandler(file_handler)
+    
+    target_logger.setLevel(level)
+    target_logger.propagate = False
+
+# Configure colorized logging for development
+configure_logger_with_colors(logger)
+# Configure Flask's logger to use the same setup
+app.logger.handlers = logger.handlers
+app.logger.setLevel(logger.level)
+
+# Configure separate access logging for HTTP requests
+log_dir = project_root / 'log'
+log_dir.mkdir(exist_ok=True)
+access_log_file = log_dir / 'access.log'
+
+# Create access logger that only handles HTTP requests
+access_logger = logging.getLogger('werkzeug')
+access_logger.handlers.clear()
+access_handler = logging.FileHandler(str(access_log_file))
+access_handler.setFormatter(logging.Formatter('%(message)s'))
+access_logger.addHandler(access_handler)
+access_logger.setLevel(logging.INFO)
+access_logger.propagate = False
 
 # Dir to place app data in
 app_db_dir = project_root / 'db'
@@ -87,6 +118,22 @@ for key, value in config_template.items():
 with open(app_db_dir / 'config.json', "w") as f:
     json.dump(config_db, f, indent=2)
 
+# Set default logging level for all loggers
+logging.getLogger().setLevel(logging.INFO)
+
+# Configure logging levels from config
+log_levels = config_db.get("server.logging.level", {})
+for logger_name, level in log_levels.items():
+    log_level = getattr(logging, level.upper(), None)
+    if log_level:
+        module_logger = logging.getLogger(logger_name)
+        configure_logger_with_colors(module_logger, log_level)
+        print(f"Set log level for {logger_name} to {level.upper()}")
+
+# A simple in-memory message queue for each client
+# This is a dictionary that will hold a queue for each client, identified by a unique ID
+app.message_queues = {}
+
 # Dynamically register blueprints from the 'api' folder
 api_folder = os.path.join(server_root, 'api')
 for filename in os.listdir(api_folder):
@@ -102,29 +149,29 @@ for filename in os.listdir(api_folder):
         # Dymnically register the blueprint if it exists
         if hasattr(module, 'bp'):
             app.register_blueprint(module.bp)
-            print(f"Registered blueprint: {module_name}")  
+            logger.info(f"Registered blueprint: {module_name}")  
         else:
-            print(f"Warning: No blueprint ('bp' attribute) found in {module_name}")
+            logger.warning(f"Warning: No blueprint ('bp' attribute) found in {module_name}")
 
 # Save the absolute path of the different root paths
 app.config['PROJECT_ROOT'] = str(project_root)
 app.config['WEB_ROOT'] = str(web_root)
-print(f"Web files served from {web_root}")
+logger.info(f"Web files served from {web_root}")
 
 # WebDAV support
 if local_webdav_root is not None:
     app.config['WEBDAV_ENABLED'] = True
-    print(f"WebDAV synchronization with {os.environ.get('WEBDAV_HOST')} enabled")
+    logger.info(f"WebDAV synchronization with {os.environ.get('WEBDAV_HOST')} enabled")
 else:
     app.config['WEBDAV_ENABLED'] = False
 
 # Path to the data files
 app.config['DATA_ROOT'] = str(data_root)
-print(f"Data files served from {data_root}")
+logger.info(f"Data files served from {data_root}")
 
 # Provide a temporary directory for file uploads
 app.config['UPLOAD_DIR'] = tempfile.mkdtemp()
-print(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
+logger.info(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
 
 ### Routes ###
 

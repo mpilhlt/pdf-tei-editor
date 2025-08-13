@@ -5,9 +5,12 @@ from flask import Blueprint, jsonify, request, current_app
 import os
 import threading
 import json
+import logging
 
 from server.lib.decorators import handle_api_errors
 from server.lib.server_utils import ApiError
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint("config", __name__, url_prefix="/api/config")
 
@@ -99,7 +102,7 @@ def save_instructions():
     data = request.get_json()
     with open(INSTRUCTION_DATA_PATH, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
-    current_app.logger.info(f"Saved instructions.")
+    logger.info(f"Saved instructions.")
     return jsonify({"result": "ok"})
 
 @bp.route("/state", methods=["GET"])

@@ -1,9 +1,10 @@
-from flask import Blueprint, current_app, request
+from flask import Blueprint, request
 import os
 import unicodedata
 import time
 import json
 import hashlib
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from webdav4.fsspec import WebdavFileSystem
@@ -11,32 +12,31 @@ from webdav4.fsspec import WebdavFileSystem
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError, get_session_id
 from server.lib.locking import purge_stale_locks
-from server.lib.cache_manager import get_last_modified_datetime, get_last_synced_datetime, mark_last_synced
+from server.lib.cache_manager import get_last_modified_datetime, get_last_synced_datetime, mark_last_synced, is_sync_needed, get_sync_last_needed_datetime, mark_sync_completed
 from server.lib import auth
 from server.api.sse import send_sse_message
 
+logger = logging.getLogger(__name__)
 bp = Blueprint("files", __name__, url_prefix="/api/files")
 
 # Constants for sync metadata
 SYNC_METADATA_FILENAME = ".sync-metadata.json"
 SYNC_LOCK_FILENAME = ".sync-metadata.lock"
 
-def _send_progress_update(client_id: str, progress: int):
+def _send_progress_update(client_id: str, progress: int, logger):
     """Send progress update via SSE"""
-    if client_id:
-        send_sse_message(client_id, "syncProgress", str(progress))
+    send_sse_message(client_id, "syncProgress", str(progress))
 
-def _send_sync_message(client_id: str, message: str):
+def _send_sync_message(client_id: str, message: str, logger):
     """Send sync message via SSE"""
-    if client_id:
-        send_sse_message(client_id, "syncMessage", message)
+    send_sse_message(client_id, "syncMessage", message)
 
 def _get_client_id():
     """Get the current client ID from the session"""
     try:
         session_id = get_session_id(request)
-        user = auth.get_user_by_session_id(session_id)
-        return user.get('id', 'anonymous') if user else 'anonymous'
+        # Use session_id as client_id to match SSE message queue keys
+        return session_id
     except:
         return None
 
@@ -78,15 +78,16 @@ def _acquire_sync_lock(fs: WebdavFileSystem, remote_root: str, timeout_seconds: 
                     lock_info = _retry_operation(fs.info, lock_path)
                     if lock_info.get('modified'):
                         lock_age = datetime.now(timezone.utc) - lock_info['modified']
-                        if lock_age.total_seconds() > 600:  # 10 minutes
-                            current_app.logger.warning(f"Removing stale sync lock (age: {lock_age})")
+                        logger.debug(f"Sync lock age: {lock_age} (threshold: 1 minute)")
+                        if lock_age.total_seconds() > 60:  # 1 minute
+                            logger.warning(f"Removing stale sync lock (age: {lock_age})")
                             _retry_operation(fs.rm, lock_path)
                         else:
-                            current_app.logger.debug("Sync lock exists and is recent, waiting...")
+                            logger.debug(f"Sync lock exists and is recent (age: {lock_age}), waiting...")
                             time.sleep(2)
                             continue
                 except Exception as e:
-                    current_app.logger.warning(f"Could not check lock file age: {e}")
+                    logger.warning(f"Could not check lock file age: {e}")
                     time.sleep(2)
                     continue
             
@@ -95,14 +96,14 @@ def _acquire_sync_lock(fs: WebdavFileSystem, remote_root: str, timeout_seconds: 
             with fs.open(lock_path, 'w') as f:
                 f.write(lock_json)
             
-            current_app.logger.debug(f"Sync lock acquired: {lock_path}")
+            logger.debug(f"Sync lock acquired: {lock_path}")
             return True
             
         except Exception as e:
-            current_app.logger.debug(f"Failed to acquire sync lock: {e}")
+            logger.debug(f"Failed to acquire sync lock: {e}")
             time.sleep(2)
     
-    current_app.logger.error(f"Failed to acquire sync lock within {timeout_seconds} seconds")
+    logger.error(f"Failed to acquire sync lock within {timeout_seconds} seconds")
     return False
 
 def _release_sync_lock(fs: WebdavFileSystem, remote_root: str):
@@ -111,9 +112,9 @@ def _release_sync_lock(fs: WebdavFileSystem, remote_root: str):
     try:
         if fs.exists(lock_path):
             _retry_operation(fs.rm, lock_path)
-            current_app.logger.debug(f"Sync lock released: {lock_path}")
+            logger.debug(f"Sync lock released: {lock_path}")
     except Exception as e:
-        current_app.logger.warning(f"Failed to release sync lock: {e}")
+        logger.warning(f"Failed to release sync lock: {e}")
 
 def _get_sync_metadata(fs: WebdavFileSystem, remote_root: str) -> dict:
     """
@@ -126,17 +127,17 @@ def _get_sync_metadata(fs: WebdavFileSystem, remote_root: str) -> dict:
     
     try:
         if not fs.exists(metadata_path):
-            current_app.logger.debug("Sync metadata file does not exist")
+            logger.debug("Sync metadata file does not exist")
             return {}
         
         with fs.open(metadata_path, 'r') as f:
             metadata = json.load(f)
         
-        current_app.logger.debug(f"Retrieved sync metadata: {metadata}")
+        logger.debug(f"Retrieved sync metadata: {metadata}")
         return metadata
         
     except Exception as e:
-        current_app.logger.warning(f"Failed to retrieve sync metadata: {e}")
+        logger.warning(f"Failed to retrieve sync metadata: {e}")
         return {}
 
 def _update_sync_metadata(fs: WebdavFileSystem, remote_root: str, local_last_modified: datetime, remote_last_modified: datetime, file_count: int):
@@ -169,10 +170,10 @@ def _update_sync_metadata(fs: WebdavFileSystem, remote_root: str, local_last_mod
         with fs.open(metadata_path, 'w') as f:
             f.write(metadata_json)
         
-        current_app.logger.debug(f"Updated sync metadata: {metadata}")
+        logger.debug(f"Updated sync metadata: {metadata}")
         
     except Exception as e:
-        current_app.logger.error(f"Failed to update sync metadata: {e}")
+        logger.error(f"Failed to update sync metadata: {e}")
         raise ApiError(f"Failed to update sync metadata: {e}")
 
 def _needs_sync(fs: WebdavFileSystem, remote_root: str) -> tuple[bool, dict]:
@@ -187,20 +188,25 @@ def _needs_sync(fs: WebdavFileSystem, remote_root: str) -> tuple[bool, dict]:
         remote_metadata = _get_sync_metadata(fs, remote_root)
         
         if not remote_metadata:
-            current_app.logger.debug("No remote metadata found, full sync needed")
+            logger.debug("No remote metadata found, full sync needed")
             return True, {}
         
-        # Get local cache status - we need both sync time and modification time
-        local_last_synced = get_last_synced_datetime()
-        local_last_modified = get_last_modified_datetime()
-        
-        if not local_last_synced:
-            current_app.logger.debug("No local sync timestamp, full sync needed")
+        # Check if sync is needed based on dedicated sync tracking
+        if is_sync_needed():
+            logger.debug("Sync needed - files have been modified")
             return True, remote_metadata
         
-        # If files have been modified since our last sync, we need to sync
-        if local_last_modified and local_last_modified > local_last_synced:
-            current_app.logger.debug("Local files modified since last sync, full sync needed")
+        # Also check traditional timestamp comparison as fallback
+        local_last_synced = get_last_synced_datetime()
+        local_sync_last_needed = get_sync_last_needed_datetime()
+        
+        if not local_last_synced:
+            logger.debug("No local sync timestamp, full sync needed")
+            return True, remote_metadata
+        
+        # If sync was marked as needed after our last successful sync
+        if local_sync_last_needed and local_sync_last_needed > local_last_synced:
+            logger.debug("Sync needed - changes detected after last sync")
             return True, remote_metadata
         
         # Parse remote timestamps
@@ -208,7 +214,7 @@ def _needs_sync(fs: WebdavFileSystem, remote_root: str) -> tuple[bool, dict]:
         remote_remote_modified = remote_metadata.get("remote_last_modified")
         
         if not remote_local_modified or not remote_remote_modified:
-            current_app.logger.debug("Missing timestamp data in metadata, full sync needed")
+            logger.debug("Missing timestamp data in metadata, full sync needed")
             return True, remote_metadata
         
         remote_local_dt = datetime.fromisoformat(remote_local_modified)
@@ -225,17 +231,17 @@ def _needs_sync(fs: WebdavFileSystem, remote_root: str) -> tuple[bool, dict]:
                 if last_sync_remote:
                     last_sync_remote_dt = datetime.fromisoformat(last_sync_remote)
                     if local_last_synced >= last_sync_remote_dt:
-                        current_app.logger.info("No sync needed - no changes detected since last sync")
+                        logger.info("No sync needed - no changes detected since last sync")
                         return False, remote_metadata
                     
             except Exception as e:
-                current_app.logger.warning(f"Could not check metadata timestamps: {e}")
+                logger.warning(f"Could not check metadata timestamps: {e}")
         
-        current_app.logger.debug("Sync needed - changes detected since last sync")
+        logger.debug("Sync needed - changes detected since last sync")
         return True, remote_metadata
         
     except Exception as e:
-        current_app.logger.warning(f"Error checking sync necessity: {e}")
+        logger.warning(f"Error checking sync necessity: {e}")
         return True, {}
 
 def _retry_operation(operation, *args, max_attempts=3, base_timeout=30, **kwargs):
@@ -260,7 +266,7 @@ def _retry_operation(operation, *args, max_attempts=3, base_timeout=30, **kwargs
         timeout = base_timeout * (2 ** attempt)  # Exponential backoff: 30s, 60s, 120s
         
         try:
-            current_app.logger.debug(f"Attempt {attempt + 1}/{max_attempts} with timeout {timeout}s")
+            logger.debug(f"Attempt {attempt + 1}/{max_attempts} with timeout {timeout}s")
             
             # Set timeout for webdav operations if applicable
             if hasattr(operation, '__self__') and hasattr(operation.__self__, 'session'):
@@ -274,14 +280,14 @@ def _retry_operation(operation, *args, max_attempts=3, base_timeout=30, **kwargs
             
             # Check if it's a timeout-related error
             if any(keyword in error_msg for keyword in ['timeout', 'timed out', 'connection timeout']):
-                current_app.logger.warning(f"Attempt {attempt + 1} failed with timeout (timeout={timeout}s): {e}")
+                logger.warning(f"Attempt {attempt + 1} failed with timeout (timeout={timeout}s): {e}")
                 if attempt < max_attempts - 1:
-                    current_app.logger.info(f"Retrying in 5 seconds...")
+                    logger.info(f"Retrying in 5 seconds...")
                     time.sleep(5)  # Brief pause between retries
                     continue
             else:
                 # Non-timeout error, don't retry
-                current_app.logger.error(f"Non-timeout error on attempt {attempt + 1}: {type(e).__name__}: {e}")
+                logger.error(f"Non-timeout error on attempt {attempt + 1}: {type(e).__name__}: {e}")
                 raise e
     
     # All attempts failed with timeout
@@ -303,7 +309,7 @@ def _get_local_map(root_path: str) -> dict:
 
             # Handle conflict: both file and marker exist locally
             if original_name in local_map:
-                current_app.logger.warning(f"Conflict detected: Both a file and its deletion marker exist for '{original_name}' locally. Resolving by comparing modification times.")
+                logger.warning(f"Conflict detected: Both a file and its deletion marker exist for '{original_name}' locally. Resolving by comparing modification times.")
                 
                 try:
                     existing_mtime_ts = os.path.getmtime(os.path.join(root_path, local_map[original_name]['relative_path']))
@@ -315,17 +321,17 @@ def _get_local_map(root_path: str) -> dict:
                     if current_mtime_utc > existing_mtime_utc:
                         # Current file is newer, remove the existing one
                         older_path = os.path.join(root_path, local_map[original_name]['relative_path'])
-                        current_app.logger.info(f"Removing older {'deletion marker' if local_map[original_name]['is_deleted'] else 'file'}: {older_path}")
+                        logger.info(f"Removing older {'deletion marker' if local_map[original_name]['is_deleted'] else 'file'}: {older_path}")
                         os.remove(older_path)
                         # Continue with current file (will be added below)
                     else:
                         # Existing file is newer, remove the current one
-                        current_app.logger.info(f"Removing older {'deletion marker' if is_deleted else 'file'}: {full_path}")
+                        logger.info(f"Removing older {'deletion marker' if is_deleted else 'file'}: {full_path}")
                         os.remove(full_path)
                         continue  # Skip adding current file to map
                         
                 except OSError as e:
-                    current_app.logger.error(f"Could not resolve file conflict for '{original_name}': {e}")
+                    logger.error(f"Could not resolve file conflict for '{original_name}': {e}")
                     raise ApiError(f"Could not resolve file conflict for '{original_name}': {e}")
 
             try:
@@ -337,14 +343,14 @@ def _get_local_map(root_path: str) -> dict:
                     'is_deleted': is_deleted,
                 }
             except OSError as e:
-                current_app.logger.warning(f"Could not read local file mtime '{full_path}': {e}")
+                logger.warning(f"Could not read local file mtime '{full_path}': {e}")
     return local_map
 
 def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
     """Gathers metadata for all remote files and deletion markers."""
     remote_map = {}
     try:
-        current_app.logger.info(f"Listing remote files from '{root_path}' with retry mechanism")
+        logger.info(f"Listing remote files from '{root_path}'")
         all_files = _retry_operation(fs.find, root_path, detail=True)
     except Exception as e:
         raise ApiError(f"Failed to list remote files from '{root_path}': {type(e).__name__}: {e}")
@@ -360,32 +366,32 @@ def _get_remote_map(fs: WebdavFileSystem, root_path: str) -> dict:
         
         # Handle conflict: both file and marker exist on remote server
         if original_name in remote_map:
-            current_app.logger.warning(f"Conflict detected: Both a file and its deletion marker exist for '{original_name}' on the remote server. Resolving by comparing modification times.")
+            logger.warning(f"Conflict detected: Both a file and its deletion marker exist for '{original_name}' on the remote server. Resolving by comparing modification times.")
             
             try:
                 existing_mtime = remote_map[original_name]['mtime']
                 current_mtime = details.get('modified')
                 
                 if not existing_mtime or not current_mtime:
-                    current_app.logger.warning(f"Cannot compare modification times for '{original_name}' (missing timestamps), keeping existing entry")
+                    logger.warning(f"Cannot compare modification times for '{original_name}' (missing timestamps), keeping existing entry")
                     continue
                 
                 # Keep the newer file, delete the older one
                 if current_mtime > existing_mtime:
                     # Current file is newer, remove the existing one
                     older_path = f"{root_path.rstrip('/')}/{remote_map[original_name]['relative_path']}"
-                    current_app.logger.info(f"Removing older remote {'deletion marker' if remote_map[original_name]['is_deleted'] else 'file'}: {older_path}")
+                    logger.info(f"Removing older remote {'deletion marker' if remote_map[original_name]['is_deleted'] else 'file'}: {older_path}")
                     _retry_operation(fs.rm, older_path)
                     # Continue with current file (will be added below)
                 else:
                     # Existing file is newer, remove the current one
                     current_path = f"{root_path.rstrip('/')}/{relative_path}"
-                    current_app.logger.info(f"Removing older remote {'deletion marker' if is_deleted else 'file'}: {current_path}")
+                    logger.info(f"Removing older remote {'deletion marker' if is_deleted else 'file'}: {current_path}")
                     _retry_operation(fs.rm, current_path)
                     continue  # Skip adding current file to map
                     
             except Exception as e:
-                current_app.logger.error(f"Could not resolve remote file conflict for '{original_name}': {e}")
+                logger.error(f"Could not resolve remote file conflict for '{original_name}': {e}")
                 raise ApiError(f"Could not resolve remote file conflict for '{original_name}': {e}")
             
         mtime_utc = details.get('modified')
@@ -405,7 +411,7 @@ def _upload_and_align(fs: WebdavFileSystem, local_path: str, remote_path: str, l
         raise ApiError(f"Failed to create remote directory for '{remote_path}': {e}")
     
     # Use retry mechanism for the upload operation
-    logger.info(f"Uploading '{local_path}' to '{remote_path}' with retry mechanism")
+    logger.info(f"Uploading '{local_path}' to '{remote_path}'")
     try:
         # Check if local file exists before attempting upload
         if not os.path.exists(local_path):
@@ -431,6 +437,7 @@ def _perform_full_sync(fs: WebdavFileSystem, local_root: str, remote_root: str, 
     Returns:
         Dictionary with sync summary statistics
     """
+    logger.debug(f"_perform_full_sync called with client_id='{client_id}'")
     summary = {
         "uploads": 0, "downloads": 0, "remote_deletes": 0,
         "local_deletes": 0, "conflicts_resolved": 0,
@@ -438,20 +445,20 @@ def _perform_full_sync(fs: WebdavFileSystem, local_root: str, remote_root: str, 
     }
 
     # Send initial progress
-    _send_progress_update(client_id, 0)
-    _send_sync_message(client_id, "Starting synchronization...")
+    _send_progress_update(client_id, 0, logger)
+    _send_sync_message(client_id, "Starting synchronization...", logger)
 
     local_map = _get_local_map(local_root)
-    _send_progress_update(client_id, 20)
-    _send_sync_message(client_id, f"Found {len(local_map)} local files")
+    _send_progress_update(client_id, 20, logger)
+    _send_sync_message(client_id, f"Found {len(local_map)} local files", logger)
     
     remote_map = _get_remote_map(fs, remote_root)
-    _send_progress_update(client_id, 40)
-    _send_sync_message(client_id, f"Found {len(remote_map)} remote files")
+    _send_progress_update(client_id, 40, logger)
+    _send_sync_message(client_id, f"Found {len(remote_map)} remote files", logger)
     
     all_paths = set(local_map.keys()) | set(remote_map.keys())
     total_files = len(all_paths)
-    _send_sync_message(client_id, f"Processing {total_files} files for synchronization")
+    _send_sync_message(client_id, f"Processing {total_files} files for synchronization", logger)
     processed_files = 0
 
     for path in all_paths:
@@ -466,7 +473,7 @@ def _perform_full_sync(fs: WebdavFileSystem, local_root: str, remote_root: str, 
         # Update progress (40% for initial scan, 50% for processing files)
         processed_files += 1
         file_progress = 40 + int((processed_files / total_files) * 50)
-        _send_progress_update(client_id, file_progress)
+        _send_progress_update(client_id, file_progress, logger)
         
         try:
             # Case 1: File/marker exists on both sides
@@ -482,7 +489,7 @@ def _perform_full_sync(fs: WebdavFileSystem, local_root: str, remote_root: str, 
                         if file_info == remote_info: # Remote file is newer, restore locally.
                             message = f"Conflict: Remote file '{path}' is newer than local marker. Restoring local file."
                             logger.info(message)
-                            _send_sync_message(client_id, message)
+                            _send_sync_message(client_id, message, logger)
                             local_file_path = str(Path(local_root) / file_info['relative_path'])
                             _download_and_align(fs, remote_path, local_file_path, remote_info['mtime'], logger)
                             os.remove(str(Path(local_root) / marker_info['relative_path'])) # Remove the old local .deleted marker
@@ -490,7 +497,7 @@ def _perform_full_sync(fs: WebdavFileSystem, local_root: str, remote_root: str, 
                         else: # Local file is newer, restore remotely.
                             message = f"Conflict: Local file '{path}' is newer than remote marker. Restoring remote file."
                             logger.info(message)
-                            _send_sync_message(client_id, message)
+                            _send_sync_message(client_id, message, logger)
                             remote_file_path = f"{remote_root.rstrip('/')}/{file_info['relative_path']}"
                             _upload_and_align(fs, local_path, remote_file_path, logger)
                             _retry_operation(fs.rm, remote_path) # Remove the old remote .deleted marker
@@ -523,13 +530,13 @@ def _perform_full_sync(fs: WebdavFileSystem, local_root: str, remote_root: str, 
                     if local_info['mtime'] > remote_info['mtime']:
                         message = f"Local file '{path}' is newer. Uploading."
                         logger.info(message)
-                        _send_sync_message(client_id, message)
+                        _send_sync_message(client_id, message, logger)
                         _upload_and_align(fs, local_path, remote_path, logger)
                         summary['uploads'] += 1
                     else: # Remote is newer
                         message = f"Remote file '{path}' is newer. Downloading."
                         logger.info(message)
-                        _send_sync_message(client_id, message)
+                        _send_sync_message(client_id, message, logger)
                         _download_and_align(fs, remote_path, local_path, remote_info['mtime'], logger)
                         summary['downloads'] += 1
 
@@ -607,16 +614,17 @@ def _perform_full_sync(fs: WebdavFileSystem, local_root: str, remote_root: str, 
             remote_last_modified = max(remote_times)
     
     # Update sync metadata
-    _send_progress_update(client_id, 95)
-    _send_sync_message(client_id, "Updating sync metadata...")
+    _send_progress_update(client_id, 95, logger)
+    _send_sync_message(client_id, "Updating sync metadata...", logger)
     total_files = len(all_paths)
     _update_sync_metadata(fs, remote_root, local_last_modified, remote_last_modified, total_files)
     
     # Mark when this sync completed successfully
     mark_last_synced()
+    mark_sync_completed()
     
-    _send_progress_update(client_id, 100)
-    _send_sync_message(client_id, "Synchronization completed successfully")
+    _send_progress_update(client_id, 100, logger)
+    _send_sync_message(client_id, "Synchronization completed successfully", logger)
     
     return summary
 
@@ -625,7 +633,7 @@ def _download_and_align(fs: WebdavFileSystem, remote_path: str, local_path: str,
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
     
     # Use retry mechanism for the download operation
-    logger.info(f"Downloading '{remote_path}' to '{local_path}' with retry mechanism")
+    logger.info(f"Downloading '{remote_path}' to '{local_path}'")
     try:
         # Check if remote file exists before attempting download
         if not fs.exists(remote_path):
@@ -652,7 +660,6 @@ def sync():
     Uses remote metadata file and locking to prevent unnecessary syncs and conflicts.
     """
     
-    logger = current_app.logger
     
     if os.environ.get('WEBDAV_ENABLED', 0) != "1":
         logger.info("WebDAV sync not enabled")
@@ -694,6 +701,7 @@ def sync():
         
         # Get client ID for SSE messages
         client_id = _get_client_id()
+        logger.debug(f"Retrieved client_id='{client_id}' for sync operation")
         
         # Perform the actual synchronization
         summary = _perform_full_sync(fs, local_root, remote_root, keep_deleted_markers, logger, client_id)

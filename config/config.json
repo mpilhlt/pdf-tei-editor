@@ -1,4 +1,7 @@
 {
+  "server.logging.level": {
+    "server.api.sse": "info"
+  },
   "navigation.xpath.list": [
     {
       "value": "//tei:biblStruct",

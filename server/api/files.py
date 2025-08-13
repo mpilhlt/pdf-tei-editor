@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, current_app, send_file
 import os
 import re
+import logging
 from lxml import etree
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from server.lib.file_data import (
     find_collection_for_file_id,
     construct_variant_filename
 )
-from server.lib.cache_manager import get_cache_status, mark_cache_dirty, is_cache_dirty
+from server.lib.cache_manager import get_cache_status, mark_cache_dirty, is_cache_dirty, mark_sync_needed
 from server.lib.locking import (
     acquire_lock, release_lock, get_all_active_locks, check_lock
 )
@@ -23,6 +24,7 @@ from server.lib.xml_utils import encode_xml_entities
 from server.lib.tei_utils import serialize_tei_with_formatted_header
 from server.api.config import read_config
 
+logger = logging.getLogger(__name__)
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
 
 @bp.route("/list", methods=["GET"])
@@ -82,7 +84,7 @@ def save():
     
     # encode xml entities as per configuration
     if read_config().get("xml.encode-entities.server", False) == True:
-        current_app.logger.debug("Encoding XML entities")
+        logger.debug("Encoding XML entities")
         xml_string = encode_xml_entities(xml_string)
     
     # Extract file_id and variant from XML content and ensure file_id is stored
@@ -105,7 +107,7 @@ def save():
         
         if fileref_elem is not None and fileref_elem.text:
             file_id = fileref_elem.text
-            current_app.logger.debug(f"Found existing file_id in XML: {file_id}, variant: {variant}")
+            logger.debug(f"Found existing file_id in XML: {file_id}, variant: {variant}")
         else:
             # No fileref found - derive file_id from filename and add it to XML
             file_path_safe = safe_file_path(file_path_rel)
@@ -142,10 +144,10 @@ def save():
                 
                 # Update xml_string with the modified XML (formatted header only)
                 xml_string = serialize_tei_with_formatted_header(xml_root)
-                current_app.logger.debug(f"Added file_id to XML: {file_id}")
+                logger.debug(f"Added file_id to XML: {file_id}")
         
     except Exception as e:
-        current_app.logger.warning(f"Could not extract metadata from XML: {e}")
+        logger.warning(f"Could not extract metadata from XML: {e}")
         # Fallback to filename-based extraction
         file_path_safe = safe_file_path(file_path_rel)
         file_id = Path(file_path_safe).stem
@@ -169,14 +171,14 @@ def save():
             
             # If no gold variant file exists, this version should become the new gold
             if not os.path.exists(expected_gold_variant_path):
-                current_app.logger.info(f"Promoting version file to gold: {file_path_rel} -> tei/{collection}/{variant_filename}")
+                logger.info(f"Promoting version file to gold: {file_path_rel} -> tei/{collection}/{variant_filename}")
                 version_to_gold_promotion = True
                 promotion_collection = collection
                 # Create deletion marker for the original version file location
                 if current_app.config.get('WEBDAV_ENABLED', False):
                     original_full_path = get_data_file_path(file_path_rel)
                     Path(original_full_path + ".deleted").touch()
-                    current_app.logger.info(f"Created deletion marker for {original_full_path}")
+                    logger.info(f"Created deletion marker for {original_full_path}")
     
     # Determine the final save path
     if version_to_gold_promotion:
@@ -196,7 +198,7 @@ def save():
             
             # If no gold variant file exists, create it as gold instead of version
             if not os.path.exists(expected_gold_variant_path):
-                current_app.logger.info(f"No existing gold variant file found at {expected_gold_variant_path}, creating as gold file")
+                logger.info(f"No existing gold variant file found at {expected_gold_variant_path}, creating as gold file")
                 final_file_rel = (original_dir / variant_filename).as_posix()
                 status = "new_gold_variant"
             else:
@@ -231,7 +233,7 @@ def save():
     if not acquire_lock(lock_file_path, session_id):
         # Use a specific error message for the frontend to catch
         raise ApiError("Failed to acquire lock", status_code = 423)
-    current_app.logger.info(f"Acquired lock for {lock_file_path}")
+    logger.info(f"Acquired lock for {lock_file_path}")
     
     # get the full path and create directories if necessary
     data_root = current_app.config["DATA_ROOT"]
@@ -243,10 +245,12 @@ def save():
     # Write the file
     with open(full_save_path, "w", encoding="utf-8") as f:
         f.write(xml_string)
-    current_app.logger.info(f"Saved file to {full_save_path}")
+    logger.info(f"Saved file to {full_save_path}")
     
     # Mark cache as dirty since we modified the filesystem
     mark_cache_dirty()
+    # Mark sync as needed since files were changed
+    mark_sync_needed()
 
     # Migration: For regular saves, migrate any existing old version files for this file_id
     if not save_as_new_version:
@@ -257,7 +261,7 @@ def save():
             current_app.config.get('WEBDAV_ENABLED', False)
         )
         if migrated_count > 0:
-            current_app.logger.info(f"Migrated {migrated_count} old version files during save of {file_id}")
+            logger.info(f"Migrated {migrated_count} old version files during save of {file_id}")
             status = "saved_with_migration"  # Special status to trigger frontend file data reload
 
     return jsonify({'status': status, 'path': "/data/" + final_file_rel})
@@ -280,7 +284,7 @@ def delete():
         resolved_path = resolve_document_identifier(file)
         file_path = os.path.join(data_root, safe_file_path(resolved_path))
         # delete the file 
-        current_app.logger.info(f"Deleting file {file_path}")
+        logger.info(f"Deleting file {file_path}")
         if os.path.exists(file_path):
             # delete file
             os.remove(file_path)
@@ -293,6 +297,8 @@ def delete():
     
     # Mark cache as dirty since we deleted files
     mark_cache_dirty()
+    # Mark sync as needed since files were changed
+    mark_sync_needed()
     return jsonify({"result": "ok"})
 
 
@@ -328,7 +334,7 @@ def create_version_from_upload():
     timestamp = make_version_timestamp()
     new_version_path = get_version_path(file_id, timestamp, ".xml")
     full_version_path = os.path.join(data_root, new_version_path)
-    remove_obsolete_marker_if_exists(full_version_path, current_app.logger)
+    remove_obsolete_marker_if_exists(full_version_path, logger)
     os.makedirs(os.path.dirname(full_version_path), exist_ok=True)
 
     with open(temp_filepath, "r", encoding="utf-8") as f_in:
@@ -343,6 +349,8 @@ def create_version_from_upload():
     
     # Mark cache as dirty since we created a new version file
     mark_cache_dirty()
+    # Mark sync as needed since files were changed
+    mark_sync_needed()
 
     # No migration needed for new versions - we're creating a new file
     return jsonify({"path": "/data/" + new_version_path})
@@ -371,6 +379,8 @@ def move_files():
 
     # Mark cache as dirty since we moved files
     mark_cache_dirty()
+    # Mark sync as needed since files were changed
+    mark_sync_needed()
 
     return jsonify({
         "new_pdf_path": new_pdf_path,
@@ -397,13 +407,13 @@ def _move_file(file_path_str, file_type, destination_collection):
 
     # Move file
     os.rename(original_path, new_path)
-    current_app.logger.info(f"Moved {original_path} to {new_path}")
+    logger.info(f"Moved {original_path} to {new_path}")
 
     # Create .deleted marker
     if current_app.config['WEBDAV_ENABLED']:
-        remove_obsolete_marker_if_exists(new_path, current_app.logger)
+        remove_obsolete_marker_if_exists(new_path, logger)
         Path(str(original_path) + ".deleted").touch()
-        current_app.logger.info(f"Created .deleted marker for {original_path}")
+        logger.info(f"Created .deleted marker for {original_path}")
 
     return f"/data/{file_type}/{destination_collection}/{original_path.name}"
 
@@ -522,7 +532,7 @@ def serve_file_by_id(document_id):
         # Re-raise API errors as-is
         raise
     except Exception as e:
-        current_app.logger.error(f"Error serving file {document_id}: {e}")
+        logger.error(f"Error serving file {document_id}: {e}")
         raise ApiError("Failed to serve file", status_code=500)
 
 

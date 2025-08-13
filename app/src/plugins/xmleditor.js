@@ -45,7 +45,6 @@ const xmlEditor = new NavXmlEditor('codemirror-container')
 
 // Status widgets for XML editor statusbar
 let readOnlyStatusWidget = null
-let savingStatusWidget = null
 let cursorPositionWidget = null
 
 /**
@@ -77,12 +76,6 @@ async function install(state) {
   readOnlyStatusWidget = StatusBarUtils.createText({
     text: '🔒 File is read-only',
     variant: 'warning'
-  })
-
-  /** @type {StatusText} */
-  savingStatusWidget = StatusBarUtils.createText({
-    text: 'Saving XML...',
-    variant: 'info'
   })
 
   /** @type {StatusText} */

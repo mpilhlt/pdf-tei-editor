@@ -132,8 +132,10 @@ async function install(state) {
   updateUi()
   
   // Create saving status widget
+  // <sl-icon name="floppy"></sl-icon>
   savingStatusWidget = StatusBarUtils.createText({
-    text: 'Saving XML...',
+    text: '',
+    icon: 'floppy',
     variant: 'info'
   })
 
