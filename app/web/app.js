@@ -749,6 +749,10 @@ async function updateStateFromUrlHash(state) {
  * plugin API
  */
 const api$b = {
+  /**
+   * @param {string} type
+   * @param {(event: MessageEvent) => void} listener
+   */
   addEventListener: (type, listener) => {
     if (eventSource) {
       eventSource.addEventListener(type, listener);
@@ -760,6 +764,10 @@ const api$b = {
       queuedListeners[type].push(listener);
     }
   },
+  /**
+   * @param {string} type
+   * @param {(event: MessageEvent) => void} listener
+   */
   removeEventListener: (type, listener) => {
     if (eventSource) {
       eventSource.removeEventListener(type, listener);
@@ -770,6 +778,21 @@ const api$b = {
   },
   get url() {
     return eventSource ? eventSource.url : null
+  },
+  get reconnectAttempts() {
+    return reconnectAttempts
+  },
+  /**
+   * Force a reconnection attempt
+   */
+  reconnect() {
+    if (cachedSessionId) {
+      api$e.info('Manual reconnection requested');
+      cleanupConnection();
+      establishConnection(cachedSessionId);
+    } else {
+      api$e.warn('Cannot reconnect: no cached session ID');
+    }
   }
 };
 
@@ -787,6 +810,10 @@ const plugin$h = {
 let eventSource = null;
 let cachedSessionId = null;
 let queuedListeners = {};
+let reconnectTimeout = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
 
 /** 
  * @param {ApplicationState} state 
@@ -804,38 +831,120 @@ async function update$c(state) {
   // Close existing connection if the session ID has changed or user logged out
   if (eventSource && (sessionId !== cachedSessionId || !user)) {
     api$e.debug('Closing SSE connection due to session change or logout.');
-    eventSource.close();
-    eventSource = null;
-    cachedSessionId = null;
+    cleanupConnection();
   }
 
   // Open a new connection if user is logged in and there's no active connection
   if (user && sessionId && !eventSource) {
-    api$e.debug(`User is logged in, subscribing to SSE with session ID ${sessionId}.`);
-    const url = `/sse/subscribe?session_id=${sessionId}`;
-    eventSource = new EventSource(url);
-    cachedSessionId = sessionId;
-
-    // Add any queued listeners
-    Object.keys(queuedListeners).forEach(type => {
-      queuedListeners[type].forEach(listener => {
-        eventSource.addEventListener(type, listener);
-      });
-    });
-    queuedListeners = {};
-
-    eventSource.onerror = (err) => {
-      api$e.error("EventSource failed:", err);
-      if (eventSource) {
-        eventSource.close();
-      }
-      eventSource = null;
-      cachedSessionId = null;
-    };
-    eventSource.addEventListener('updateStatus', evt => {
-      api$e.info(evt.data);
-    });
+    establishConnection(sessionId);
   }
+}
+
+/**
+ * Establish SSE connection with retry logic
+ * @param {string} sessionId 
+ */
+function establishConnection(sessionId) {
+  api$e.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
+  
+  const url = `/sse/subscribe?session_id=${sessionId}`;
+  eventSource = new EventSource(url);
+  cachedSessionId = sessionId;
+
+  eventSource.onopen = () => {
+    api$e.info('SSE connection established successfully');
+    reconnectAttempts = 0; // Reset reconnection attempts on successful connection
+    
+    // Clear any pending reconnection timeout
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
+  };
+
+  // Add any queued listeners
+  Object.keys(queuedListeners).forEach(type => {
+    queuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
+      eventSource.addEventListener(type, listener);
+    });
+  });
+
+  eventSource.onerror = (_event) => {
+    const readyState = eventSource ? eventSource.readyState : 'unknown';
+    const errorMsg = `EventSource failed (readyState: ${readyState})`;
+    
+    // Provide more detailed error information
+    if (readyState === EventSource.CONNECTING) {
+      api$e.warn(`${errorMsg} - Connection attempt failed`);
+    } else if (readyState === EventSource.CLOSED) {
+      api$e.warn(`${errorMsg} - Connection was closed`);
+    } else {
+      api$e.error(`${errorMsg} - Unexpected error`);
+    }
+
+    // Close the connection
+    if (eventSource) {
+      eventSource.close();
+    }
+    eventSource = null;
+
+    // Attempt reconnection if we haven't exceeded the limit
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      const delay = RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts); // Exponential backoff
+      reconnectAttempts++;
+      
+      api$e.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+      
+      reconnectTimeout = setTimeout(() => {
+        if (cachedSessionId) { // Only reconnect if we still have a session
+          establishConnection(cachedSessionId);
+        }
+      }, delay);
+    } else {
+      api$e.error(`Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) exceeded. SSE connection abandoned.`);
+      cachedSessionId = null;
+      reconnectAttempts = 0;
+    }
+  };
+
+  // Clear queued listeners after adding them (but keep the reference for new connections)
+  const currentQueuedListeners = { ...queuedListeners };
+  queuedListeners = {};
+  
+  // Re-add listeners for reconnections
+  Object.keys(currentQueuedListeners).forEach(type => {
+    currentQueuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
+      api$b.addEventListener(type, listener);
+    });
+  });
+
+  // Standard message channels
+  eventSource.addEventListener('updateStatus', /** @param {MessageEvent} evt */ evt => {
+    api$e.info('SSE Status Update:' + evt.data);
+  });
+}
+
+/**
+ * Clean up SSE connection and cancel any pending reconnections
+ */
+function cleanupConnection() {
+  // Cancel any pending reconnection
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  
+  // Close the connection
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  
+  // Reset state
+  cachedSessionId = null;
+  reconnectAttempts = 0;
+  
+  api$e.debug('SSE connection cleaned up');
 }
 
 /**
@@ -44539,12 +44648,6 @@ async function install$d(state) {
   });
 
   /** @type {StatusText} */
-  StatusBarUtils.createText({
-    text: 'Saving XML...',
-    variant: 'info'
-  });
-
-  /** @type {StatusText} */
   cursorPositionWidget =  StatusBarUtils.createText({
     text: 'Ln 1, Col 1',
     variant: 'neutral'
@@ -47609,8 +47712,10 @@ async function install$9(state) {
   updateUi();
   
   // Create saving status widget
+  // <sl-icon name="floppy"></sl-icon>
   savingStatusWidget = StatusBarUtils.createText({
-    text: 'Saving XML...',
+    text: '',
+    icon: 'floppy',
     variant: 'info'
   });
 
@@ -58257,6 +58362,9 @@ const plugin = {
 
 const syncActionButtons = await createHtmlElements("sync-action-buttons.html");
 
+// Sync progress widget for XML editor statusbar
+let syncProgressWidget = null;
+
 //
 // Implementation
 //
@@ -58279,13 +58387,50 @@ async function install(state) {
   // Set up SSE listeners for sync progress and messages
   api$b.addEventListener('syncProgress', (event) => {
     const progress = parseInt(event.data);
-    console.log(`Sync progress: ${progress}%`);
+    // Don't log progress counter to console, only update the progress bar
+    if (syncProgressWidget && syncProgressWidget.isConnected) {
+      syncProgressWidget.indeterminate = false;
+      syncProgressWidget.value = progress;
+    }
   });
 
   api$b.addEventListener('syncMessage', (event) => {
     const message = event.data;
+    // Log sync messages to console instead of displaying in widget
     console.log(`Sync: ${message}`);
   });
+
+  // Create sync progress widget for XML editor statusbar
+  syncProgressWidget = new StatusProgress();
+  syncProgressWidget.text = '';
+  syncProgressWidget.indeterminate = false;
+  syncProgressWidget.value = 0;
+  syncProgressWidget.hidePercentage = true;
+  
+  // Make the progress bar half the default size
+  syncProgressWidget.style.minWidth = '40px';
+  syncProgressWidget.style.maxWidth = '75px';
+  
+  // Create clickable icon element for the progress widget
+  const syncIcon = document.createElement('sl-icon');
+  syncIcon.name = 'arrow-repeat';
+  syncIcon.style.marginRight = '4px';
+  syncIcon.style.cursor = 'pointer';
+  syncIcon.title = 'Click to sync files';
+  
+  // Add click handler to sync icon to start sync
+  syncIcon.addEventListener('click', () => onClickSyncBtn(state));
+  
+  // Create a container that includes the icon and progress bar
+  const syncContainer = document.createElement('div');
+  syncContainer.style.display = 'flex';
+  syncContainer.style.alignItems = 'center';
+  syncContainer.appendChild(syncIcon);
+  syncContainer.appendChild(syncProgressWidget);
+  
+  // Add the sync widget to the XML editor statusbar permanently
+  ui$1.xmlEditor.statusbar.addWidget(syncContainer, 'left', 3);
+  
 }
 
 /**
@@ -58334,30 +58479,43 @@ async function syncFiles(state) {
  */
 async function onClickSyncBtn(state) {
   let summary;
-  ui$1.spinner.show('Synchronizing files, please wait...');
+  
+  // Store original read-only state to restore later
+  const originalReadOnly = state.editorReadOnly;
+  
+  // Set editor to read-only during sync to prevent conflicts
+  updateState(state, { editorReadOnly: true });
+  
+  // Reset progress widget for new sync
+  if (syncProgressWidget) {
+    syncProgressWidget.indeterminate = true;
+    syncProgressWidget.value = 0;
+  }
+  
   try {
     summary = await syncFiles(state);
   } catch (e) {
     throw e
   } finally {
-    ui$1.spinner.hide();
+    // Reset progress widget to 0% after sync completion
+    if (syncProgressWidget) {
+      syncProgressWidget.indeterminate = false;
+      syncProgressWidget.value = 0;
+    }
+    
+    // Restore original read-only state
+    updateState(state, { editorReadOnly: originalReadOnly });
   }
   if (summary) {
-    if (summary.skipped) {
-      notify("Sync skipped - no changes detected");
-    } else {
-      let msg = [];
-      for (const [action, count] of Object.entries(summary)) {
-        if (count > 0 && action !== 'skipped') {
-          msg.push(`${action.replace('_', ' ')}: ${count}`);
-        }
-      }
-      if (msg.length > 0) {
-        notify(msg.join(", "));
+    if (!summary.skipped) {
+      // Check if any changes were made and reload file data if needed
+      const hasChanges = Object.entries(summary).some(([action, count]) => 
+        count > 0 && action !== 'skipped' && action !== 'stale_locks_purged'
+      );
+      
+      if (hasChanges) {
         // something has changed, reload the file data
         await api$7.reload(state);
-      } else {
-        notify("Sync completed - no changes needed");
       }
     }
   }
