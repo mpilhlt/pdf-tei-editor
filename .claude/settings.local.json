@@ -10,7 +10,14 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(mkdir:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(claude mcp:*)",
+      "mcp__browser-mcp__browser_navigate",
+      "mcp__browser-mcp__browser_screenshot",
+      "mcp__browser-mcp__browser_get_clickable_elements",
+      "mcp__browser-mcp__browser_form_input_fill",
+      "mcp__browser-mcp__browser_get_markdown",
+      "mcp__browser-mcp__browser_evaluate"
     ],
     "deny": []
   }

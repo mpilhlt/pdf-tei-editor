@@ -1,4 +1,5 @@
 import os
+import logging
 from flask import Blueprint, request, jsonify, current_app
 from pathlib import Path
 from shutil import move
@@ -8,10 +9,11 @@ from server.lib.server_utils import (
     ApiError, make_timestamp, remove_obsolete_marker_if_exists,
     get_version_full_path, resolve_document_identifier
 )
-from server.lib.cache_manager import mark_cache_dirty
+from server.lib.cache_manager import mark_cache_dirty, mark_sync_needed
 from server.extractors.discovery import list_extractors, create_extractor
 from server.lib.debug_utils import log_extraction_response
 
+logger = logging.getLogger(__name__)
 bp = Blueprint("extract", __name__, url_prefix="/api/extract")
 
 @bp.route("/list", methods=["GET"])
@@ -63,7 +65,7 @@ def extract():
             log_extraction_response(extractor_id, pdf_path, tei_xml, ".result.xml")
         
     except Exception as e:
-        current_app.logger.error(f"Extraction failed with {extractor_id}: {e}")
+        logger.error(f"Extraction failed with {extractor_id}: {e}")
         
         # Log the error details with context
         error_context = {
@@ -118,7 +120,7 @@ def _process_pdf_file(pdf_filename: str, options: dict) -> str:
     
     upload_pdf_path = Path(os.path.join(UPLOAD_DIR, pdf_filename))
     target_pdf_path = Path(os.path.join(target_dir, file_id + ".pdf"))
-    remove_obsolete_marker_if_exists(target_pdf_path, current_app.logger)
+    remove_obsolete_marker_if_exists(target_pdf_path, logger)
     
     # check for uploaded file
     if upload_pdf_path.exists():
@@ -126,6 +128,8 @@ def _process_pdf_file(pdf_filename: str, options: dict) -> str:
         move(upload_pdf_path, target_pdf_path)
         # Mark cache as dirty since we added a new PDF file
         mark_cache_dirty()
+        # Mark sync as needed since files were changed
+        mark_sync_needed()
     elif not target_pdf_path.exists():
         raise ApiError(f"File {pdf_filename} has not been uploaded.")
     
@@ -155,7 +159,7 @@ def _save_extraction_result(pdf_filename: str, tei_xml: str, options: dict) -> d
         timestamp = make_timestamp().replace(" ", "_").replace(":", "-")
         final_tei_path = get_version_full_path(file_id, DATA_ROOT, timestamp, ".tei.xml")
     
-    remove_obsolete_marker_if_exists(final_tei_path, current_app.logger)
+    remove_obsolete_marker_if_exists(final_tei_path, logger)
     os.makedirs(os.path.dirname(final_tei_path), exist_ok=True)
     
     with open(final_tei_path, "w", encoding="utf-8") as f:
@@ -163,6 +167,8 @@ def _save_extraction_result(pdf_filename: str, tei_xml: str, options: dict) -> d
     
     # Mark cache as dirty since we created/modified files
     mark_cache_dirty()
+    # Mark sync as needed since files were changed
+    mark_sync_needed()
     
     # No migration needed - extraction creates new files or versions
     

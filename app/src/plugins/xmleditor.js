@@ -19,7 +19,7 @@ import { api as logger } from './logger.js'
 import { setDiagnostics } from '@codemirror/lint'
 
 //
-// UI Parts
+// UI
 //
 
 /**
@@ -45,7 +45,6 @@ const xmlEditor = new NavXmlEditor('codemirror-container')
 
 // Status widgets for XML editor statusbar
 let readOnlyStatusWidget = null
-let savingStatusWidget = null
 let cursorPositionWidget = null
 
 /**
@@ -77,12 +76,6 @@ async function install(state) {
   readOnlyStatusWidget = StatusBarUtils.createText({
     text: '🔒 File is read-only',
     variant: 'warning'
-  })
-
-  /** @type {StatusText} */
-  savingStatusWidget = StatusBarUtils.createText({
-    text: 'Saving XML...',
-    variant: 'info'
   })
 
   /** @type {StatusText} */
@@ -144,7 +137,7 @@ async function update(state) {
     } else {
       ui.xmlEditor.classList.remove("editor-readonly")
       if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget)
+        ui.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget.id)
       }
     }
   }
@@ -163,7 +156,6 @@ async function update(state) {
       console.error(e)
     }
   }
-  //console.warn(plugin.name,"done")
 }
 
 

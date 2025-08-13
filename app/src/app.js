@@ -29,6 +29,7 @@ import { plugin as moveFilesPlugin } from './plugins/move-files.js'
 import { plugin as startPlugin } from './plugins/start.js'
 import { plugin as authenticationPlugin, api as authentication } from './plugins/authentication.js'
 import { plugin as toolbarPlugin } from './plugins/toolbar.js'
+import { plugin as syncPlugin, api as sync } from './plugins/sync.js'
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
 /**
@@ -73,7 +74,7 @@ let state = {
 /** @type {Plugin[]} */
 const plugins = [loggerPlugin, urlHashStatePlugin, clientPlugin, configPlugin, 
   dialogPlugin, toolbarPlugin, pdfViewerPlugin, xmlEditorPlugin, fileselectionPlugin,
-  servicesPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
+  servicesPlugin, syncPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
   teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, ssePlugin,
   authenticationPlugin,
   /* must be the last plugin */ startPlugin]
@@ -151,4 +152,4 @@ await invoke(ep.start, state)
 // 
 export { state, ep as endpoints, invoke, updateState, pluginManager, plugins }
 export { logger, dialog, pdfViewer, xmlEditor, client, config, validation, fileselection, extraction,
-  services, floatingPanel, promptEditor, urlHash, appInfo, sse, authentication }
+  services, sync, floatingPanel, promptEditor, urlHash, appInfo, sse, authentication }

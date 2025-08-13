@@ -152,7 +152,67 @@ ui.dialog.message.innerHTML = text  // Access child element
 
 ### Python Development
 - Always prefer pathlib Path().as_posix() over manually concatenating path strings or os.path.join()
-- You never need to restart the Flask server since it watches for changes in the filesystem. You can also not access the server logs of the running server. If you need the output, ask the user to supply it to you.
+- **NEVER start, restart, or suggest restarting the Flask server** - It is already running and auto-restarts when changes are detected. You cannot access server logs of the running server. If you need output, ask the user to supply it.
 - The UI name resolution system allows to lookup dom elements by a chain of nested "name" attribute. In the runtime, it is updated by calling updateUi() from ui.js. Then, elements can be referred to by ui.<top-level-name>.<next-level-name>.... etc. Each time a new element with a name is added to the DOM, `updateUi()` has to be called again. In code, this hierarchy has to be manually added by JSDoc/Typescript `@typedef` definitions in order to get autocompletion. TypeScript errors can indicate that such definitions haven't been added. If so, add them.
 - For the moment, do not add API methods to the `@typedef` definitions used for documenting the named html elements hierarchy.
-- never propose to restart the server - the user handles that manually
+
+### Frontend Development
+- **Shoelace Icon Resources**: When using Shoelace icons programmatically (via `icon` attribute or StatusText widget), add a comment with the HTML literal to ensure the build system includes the icon resource: `// <sl-icon name="icon-name"></sl-icon>`
+
+## Browser Automation and Testing
+
+### MCP Browser Integration
+The application can be automated using MCP (Model Context Protocol) browser tools for testing and interaction:
+
+- **Login credentials**: Use "user" / "user" for development testing
+- **Session persistence**: Check `sessionStorage.getItem("pdf-tei-editor.state")` - if user property is not null, already logged in
+- **Application URL**: `http://localhost:3001/index.html?dev` for development mode
+- **Shoelace components**: The UI uses Shoelace web components (`@shoelace-style/shoelace`)
+  - Form inputs are `<sl-input>` elements, not standard HTML `<input>`
+  - Buttons are `<sl-button>` elements
+  - Access form values via JavaScript: `document.querySelector('sl-input[name="username"]').value`
+  - Login form elements: `sl-input[name="username"]` and `sl-input[name="password"]`
+  - Login button: `sl-button[variant="primary"]` with text "Login"
+
+### Browser Automation Best Practices
+- Use JavaScript evaluation to interact with Shoelace components rather than standard form filling
+- After successful login, application shows information dialog: "Load a PDF from the dropdown on the top left"
+- Standard HTML selectors may not work with web components - use component-specific selectors
+- **Console monitoring**: The application generates detailed debug logs visible in browser dev tools, including:
+  - XML editor navigation issues (`navigatable-xmleditor.js`)
+  - TEI validation performance and errors (`tei-validation.js`)
+  - Application lifecycle events (`Logger.js`)
+  - Heartbeat system for server communication
+
+### Console Capture with MCP Browser
+The MCP browser tools can programmatically capture console output for debugging:
+
+```javascript
+// Set up console capture (run immediately after page load)
+window.consoleLogs = [];
+const originalMethods = {};
+['log', 'warn', 'error', 'info', 'debug'].forEach(level => {
+  originalMethods[level] = console[level];
+  console[level] = function(...args) {
+    window.consoleLogs.push({
+      level,
+      timestamp: new Date().toISOString(),
+      message: args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+      ).join(' ')
+    });
+    originalMethods[level].apply(console, args);
+  };
+});
+```
+
+**Limitations:**
+- ❌ Cannot read existing console history (messages logged before capture setup)
+- ✅ Can capture new console messages after setup
+- ✅ Successfully captures application messages like validation results, performance warnings
+- ✅ Eliminates need to copy/paste console output from screenshots
+
+**Typical captured messages:**
+- `"Received validation results for document version 1: 3 errors."`
+- `"Validation took 22 seconds, disabling it."`
+- `"DEBUG Sending heartbeat to server to keep file lock alive"`
