@@ -1,91 +1,42 @@
 /**
- * Modern status bar container component inspired by VS Code
- * Manages layout and responsive behavior for status bar widgets
+ * Base horizontal panel component with priority-based overflow management
+ * Provides common functionality for StatusBar, MenuBar, and ToolBar
  */
 
-class StatusBar extends HTMLElement {
+class BasePanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
     this.widgets = new Map();
-    this.positions = {
-      left: [],
-      center: [],
-      right: []
-    };
     this.hiddenWidgets = new Set();
     this.resizeObserver = null;
-    this.measurementCache = new Map();
+    this.overflowContainer = null;
     
-    this.render();
     this.setupEventListeners();
     this.setupOverflowDetection();
   }
 
+  /**
+   * Override in subclasses to provide custom rendering
+   */
   render() {
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host {
-          display: flex;
-          align-items: center;
-          height: 22px;
-          padding: 0 8px;
-          background-color: var(--sl-color-neutral-50);
-          border-top: 1px solid var(--sl-color-neutral-200);
-          font-size: var(--sl-font-size-x-small);
-          color: var(--sl-color-neutral-600);
-          gap: 8px;
-          overflow: hidden;
-        }
+    throw new Error('render() must be implemented by subclass');
+  }
 
-        .section {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          min-width: 0;
-        }
+  /**
+   * Override in subclasses to create overflow containers
+   * @returns {HTMLElement|null} The overflow container element
+   */
+  createOverflowContainer() {
+    return null;
+  }
 
-        .section.left {
-          justify-content: flex-start;
-          flex: 0 1 auto;
-        }
-
-        .section.center {
-          justify-content: center;
-          flex: 1;
-        }
-
-        .section.right {
-          justify-content: flex-end;
-          flex: 0 1 auto;
-          margin-left: auto;
-        }
-
-        ::slotted(*) {
-          white-space: nowrap;
-        }
-
-        /* Dynamic overflow hiding - applied via JavaScript */
-        ::slotted([data-overflow-hidden]) {
-          display: none !important;
-        }
-
-        /* Smooth transitions for hiding/showing */
-        ::slotted(*) {
-          transition: opacity 0.1s ease;
-        }
-      </style>
-      
-      <div class="section left">
-        <slot name="left"></slot>
-      </div>
-      <div class="section center">
-        <slot name="center"></slot>
-      </div>
-      <div class="section right">
-        <slot name="right"></slot>
-      </div>
-    `;
+  /**
+   * Override in subclasses to handle overflow widget display
+   * @param {Array} hiddenWidgets - Array of hidden widget objects
+   */
+  updateOverflowContainer(hiddenWidgets) {
+    // Default implementation does nothing
   }
 
   setupEventListeners() {
@@ -109,6 +60,8 @@ class StatusBar extends HTMLElement {
   }
 
   connectedCallback() {
+    this.render();
+    
     if (this.resizeObserver) {
       this.resizeObserver.observe(this);
     }
@@ -141,25 +94,30 @@ class StatusBar extends HTMLElement {
     } else {
       this.showWidgetsIfSpace(allWidgets, effectiveAvailableWidth);
     }
+
+    // Update overflow container after hiding/showing widgets
+    const hiddenWidgetObjects = Array.from(this.hiddenWidgets).map(element => {
+      const priority = parseInt(element.dataset.priority) || 0;
+      return { element, priority };
+    });
+    this.updateOverflowContainer(hiddenWidgetObjects);
   }
 
   getAllWidgetsWithPriority() {
     const widgets = [];
     
-    // Get all slotted elements
-    const leftSlot = this.shadowRoot.querySelector('slot[name="left"]');
-    const centerSlot = this.shadowRoot.querySelector('slot[name="center"]');
-    const rightSlot = this.shadowRoot.querySelector('slot[name="right"]');
-    
-    [leftSlot, centerSlot, rightSlot].forEach(slot => {
-      if (slot) {
-        const slottedElements = slot.assignedElements();
-        slottedElements.forEach(widget => {
-          const priority = parseInt(widget.dataset.priority) || 0;
-          widgets.push({ element: widget, priority, slot: slot.name });
-        });
-      }
-    });
+    // Get all slotted elements from the main slot
+    const mainSlot = this.shadowRoot.querySelector('slot:not([name])');
+    if (mainSlot) {
+      const slottedElements = mainSlot.assignedElements();
+      slottedElements.forEach(widget => {
+        // Skip the overflow container itself
+        if (widget === this.overflowContainer) return;
+        
+        const priority = parseInt(widget.dataset.priority) || 0;
+        widgets.push({ element: widget, priority });
+      });
+    }
     
     return widgets;
   }
@@ -167,47 +125,33 @@ class StatusBar extends HTMLElement {
   calculateTotalWidth(widgets) {
     let totalWidth = 0;
     const containerStyle = getComputedStyle(this);
-    const paddingLeft = parseInt(containerStyle.paddingLeft) || 8;
-    const paddingRight = parseInt(containerStyle.paddingRight) || 8;
+    const paddingLeft = parseInt(containerStyle.paddingLeft) || 0;
+    const paddingRight = parseInt(containerStyle.paddingRight) || 0;
     
     totalWidth += paddingLeft + paddingRight;
     
-    // Group widgets by section
-    const sections = { left: [], center: [], right: [] };
-    widgets.forEach(widget => {
+    // Calculate width of visible widgets
+    widgets.forEach((widget, index) => {
       if (!widget.element.hasAttribute('data-overflow-hidden')) {
-        sections[widget.slot].push(widget);
+        const rect = widget.element.getBoundingClientRect();
+        totalWidth += rect.width;
+        
+        // Add gap between widgets
+        if (index < widgets.length - 1) {
+          const gap = parseInt(containerStyle.gap) || 4;
+          totalWidth += gap;
+        }
       }
     });
-    
-    // Calculate minimum width needed for each section's content
-    let leftWidth = 0, centerWidth = 0, rightWidth = 0;
-    
-    sections.left.forEach((widget, index) => {
-      const rect = widget.element.getBoundingClientRect();
-      leftWidth += rect.width;
-      if (index < sections.left.length - 1) leftWidth += 4; // Gap between widgets
-    });
-    
-    sections.center.forEach((widget, index) => {
-      const rect = widget.element.getBoundingClientRect();
-      centerWidth += rect.width;
-      if (index < sections.center.length - 1) centerWidth += 4; // Gap between widgets
-    });
-    
-    sections.right.forEach((widget, index) => {
-      const rect = widget.element.getBoundingClientRect();
-      rightWidth += rect.width;
-      if (index < sections.right.length - 1) rightWidth += 4; // Gap between widgets
-    });
-    
-    // Add the content widths
-    totalWidth += leftWidth + centerWidth + rightWidth;
-    
-    // Add gaps between sections (8px each)
-    const activeSections = [leftWidth, centerWidth, rightWidth].filter(w => w > 0);
-    if (activeSections.length > 1) {
-      totalWidth += (activeSections.length - 1) * 8; // 8px gap between sections
+
+    // Include overflow container if it exists and is visible
+    if (this.overflowContainer && !this.overflowContainer.hasAttribute('data-overflow-hidden')) {
+      const overflowRect = this.overflowContainer.getBoundingClientRect();
+      totalWidth += overflowRect.width;
+      if (widgets.some(w => !w.element.hasAttribute('data-overflow-hidden'))) {
+        const gap = parseInt(containerStyle.gap) || 4;
+        totalWidth += gap;
+      }
     }
     
     return totalWidth;
@@ -227,6 +171,11 @@ class StatusBar extends HTMLElement {
       // Hide this widget
       widget.element.setAttribute('data-overflow-hidden', '');
       this.hiddenWidgets.add(widget.element);
+      
+      // Show overflow container if we have hidden widgets
+      if (this.overflowContainer) {
+        this.overflowContainer.removeAttribute('data-overflow-hidden');
+      }
       
       // Recalculate width
       currentWidth = this.calculateTotalWidth(allWidgets);
@@ -256,11 +205,16 @@ class StatusBar extends HTMLElement {
         break;
       }
     }
+
+    // Hide overflow container if no widgets are hidden
+    if (this.hiddenWidgets.size === 0 && this.overflowContainer) {
+      this.overflowContainer.setAttribute('data-overflow-hidden', '');
+    }
   }
 
   handleWidgetClick(event) {
     // Bubble up widget click events for external handling
-    this.dispatchEvent(new CustomEvent('status-action', {
+    this.dispatchEvent(new CustomEvent('panel-action', {
       bubbles: true,
       detail: {
         action: event.detail.action,
@@ -271,7 +225,7 @@ class StatusBar extends HTMLElement {
 
   handleWidgetChange(event) {
     // Bubble up widget change events for external handling
-    this.dispatchEvent(new CustomEvent('status-change', {
+    this.dispatchEvent(new CustomEvent('panel-change', {
       bubbles: true,
       detail: {
         value: event.detail.value,
@@ -281,27 +235,16 @@ class StatusBar extends HTMLElement {
   }
 
   /**
-   * Add a widget to the status bar
+   * Add a widget to the panel
    * @param {HTMLElement} widget - The widget element
-   * @param {string} position - 'left', 'center', or 'right'
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
    */
-  addWidget(widget, position = 'left', priority = 0) {
-    if (!['left', 'center', 'right'].includes(position)) {
-      throw new Error('Position must be "left", "center", or "right"');
-    }
-
+  addWidget(widget, priority = 0) {
     const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     widget.id = widgetId;
-    widget.slot = position;
     widget.dataset.priority = priority;
 
-    this.widgets.set(widgetId, { element: widget, position, priority });
-    this.positions[position].push({ id: widgetId, priority });
-    
-    // Sort by priority (higher first)
-    this.positions[position].sort((a, b) => b.priority - a.priority);
-    
+    this.widgets.set(widgetId, { element: widget, priority });
     this.appendChild(widget);
     
     // Check for overflow after adding
@@ -311,15 +254,14 @@ class StatusBar extends HTMLElement {
   }
 
   /**
-   * Remove a widget from the status bar
+   * Remove a widget from the panel
    * @param {string} widgetId - The ID of the widget to remove
    */
   removeWidget(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 
-    const { position, element } = widget;
-    this.positions[position] = this.positions[position].filter(w => w.id !== widgetId);
+    const { element } = widget;
     
     // Remove from hidden widgets set
     this.hiddenWidgets.delete(element);
@@ -337,7 +279,7 @@ class StatusBar extends HTMLElement {
   }
 
   /**
-   * Clear all widgets from the status bar
+   * Clear all widgets from the panel
    */
   clearWidgets() {
     this.widgets.forEach((widget) => {
@@ -347,18 +289,13 @@ class StatusBar extends HTMLElement {
     });
     
     this.widgets.clear();
-    this.positions = { left: [], center: [], right: [] };
     this.hiddenWidgets.clear();
   }
 
   /**
-   * Get all widgets in a specific position
-   * @param {string} position - 'left', 'center', or 'right'
+   * Get all widgets
    */
-  getWidgets(position) {
-    if (position) {
-      return this.positions[position].map(w => this.widgets.get(w.id));
-    }
+  getWidgets() {
     return Array.from(this.widgets.values());
   }
 
@@ -374,17 +311,11 @@ class StatusBar extends HTMLElement {
     widget.priority = priority;
     widget.element.dataset.priority = priority;
 
-    const { position } = widget;
-    const positionWidget = this.positions[position].find(w => w.id === widgetId);
-    if (positionWidget) {
-      positionWidget.priority = priority;
-      this.positions[position].sort((a, b) => b.priority - a.priority);
-    }
+    // Re-check overflow after priority change
+    setTimeout(() => this.checkAndResolveOverflow(), 0);
 
     return true;
   }
 }
 
-customElements.define('status-bar', StatusBar);
-
-export { StatusBar };
+export { BasePanel };

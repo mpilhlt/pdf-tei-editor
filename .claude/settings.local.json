@@ -17,7 +17,9 @@
       "mcp__browser-mcp__browser_get_clickable_elements",
       "mcp__browser-mcp__browser_form_input_fill",
       "mcp__browser-mcp__browser_get_markdown",
-      "mcp__browser-mcp__browser_evaluate"
+      "mcp__browser-mcp__browser_evaluate",
+      "mcp__browser-mcp__browser_click",
+      "mcp__browser-mcp__browser_scroll"
     ],
     "deny": []
   }
