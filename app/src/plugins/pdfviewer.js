@@ -4,9 +4,9 @@
 
 /** @import { ApplicationState } from '../app.js' */
 /** @import { UIPart } from '../ui.js' */
-/** @import { StatusBar } from '../modules/statusbar/status-bar.js' */
+/** @import { StatusBar } from '../modules/panels/status-bar.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
-import { StatusBarUtils } from '../modules/statusbar/index.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor } from '../app.js'
 
@@ -65,7 +65,7 @@ async function install(state) {
   
   // Add autosearch switch to PDF viewer statusbar
   const statusBar = ui.pdfViewer.statusbar
-  const autoSearchSwitch = StatusBarUtils.createSwitch({
+  const autoSearchSwitch = PanelUtils.createSwitch({
     text: 'Autosearch',
     helpText: 'off',
     checked: false,

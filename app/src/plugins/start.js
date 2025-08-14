@@ -14,7 +14,7 @@ import {
   updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
   config, authentication, state
 } from '../app.js'
-import { StatusBarUtils } from '../modules/statusbar/index.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -57,7 +57,7 @@ async function install(state) {
   updateUi()
   
   // Create validation status widget
-  validationStatusWidget = StatusBarUtils.createText({
+  validationStatusWidget = PanelUtils.createText({
     text: 'Invalid XML',
     variant: 'error'
   })

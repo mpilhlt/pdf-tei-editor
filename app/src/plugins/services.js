@@ -13,7 +13,7 @@ import {
   updateState, client, logger, dialog, config,
   fileselection, xmlEditor, pdfViewer, services, validation, authentication, sync
 } from '../app.js'
-import { StatusBarUtils } from '../modules/statusbar/index.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import { createHtmlElements } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -133,7 +133,7 @@ async function install(state) {
   
   // Create saving status widget
   // <sl-icon name="floppy"></sl-icon>
-  savingStatusWidget = StatusBarUtils.createText({
+  savingStatusWidget = PanelUtils.createText({
     text: '',
     icon: 'floppy',
     variant: 'info'

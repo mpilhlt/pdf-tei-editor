@@ -5,14 +5,14 @@
 /** 
  * @import { ApplicationState } from '../app.js' 
  * @import { Diagnostic } from '@codemirror/lint'
- * @import { StatusText } from '../modules/statusbar/widgets/status-text.js'
+ * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { UIPart } from '../ui.js'
- * @import { StatusBar } from '../modules/statusbar/status-bar.js'
+ * @import { StatusBar } from '../modules/panels/status-bar.js'
  */
 
 import ui, { updateUi } from '../ui.js'
 import { validation, services } from '../app.js'
-import { StatusBarUtils } from '../modules/statusbar/index.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { api as logger } from './logger.js'
@@ -73,13 +73,13 @@ async function install(state) {
   // Create status widgets for XML editor statusbar
 
   /** @type {StatusText} */
-  readOnlyStatusWidget = StatusBarUtils.createText({
+  readOnlyStatusWidget = PanelUtils.createText({
     text: '🔒 File is read-only',
     variant: 'warning'
   })
 
   /** @type {StatusText} */
-  cursorPositionWidget =  StatusBarUtils.createText({
+  cursorPositionWidget =  PanelUtils.createText({
     text: 'Ln 1, Col 1',
     variant: 'neutral'
   })

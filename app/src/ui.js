@@ -27,8 +27,8 @@ import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/check
 import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import SlSwitch from '@shoelace-style/shoelace/dist/components/switch/switch.js';
 
-// Import statusbar components early so web components are defined
-import './modules/statusbar/index.js';
+// Import panels components early so web components are defined
+import './modules/panels/index.js';
 
 /**
  * Import type definitions from plugins
