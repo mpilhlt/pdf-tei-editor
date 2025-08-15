@@ -1,30 +1,41 @@
 /**
- * Modern Status Bar Module
+ * Modern UI Panels Module
  * 
- * A lightweight, VS Code-inspired status bar implementation using web components.
- * Provides a flexible container and various specialized widgets.
+ * A lightweight, VS Code-inspired UI panel implementation using web components.
+ * Provides horizontal layout containers including StatusBar, ToolBar, and MenuBar
+ * with responsive overflow management and specialized widgets.
  * 
  * @example
  * ```javascript
- * import { StatusBar, StatusText, StatusButton } from './modules/statusbar/index.js';
+ * import { StatusBar, ToolBar, MenuBar, StatusText, StatusButton } from './modules/panels/index.js';
  * 
+ * // Create a status bar
  * const statusBar = document.createElement('status-bar');
  * document.body.appendChild(statusBar);
  * 
  * const textWidget = document.createElement('status-text');
  * textWidget.text = 'Ready';
  * textWidget.icon = 'check-circle';
- * statusBar.addWidget(textWidget, 'left', 10);
+ * statusBar.add(textWidget, 'left', 10);
  * 
- * const buttonWidget = document.createElement('status-button');
- * buttonWidget.text = 'Build';
- * buttonWidget.action = 'build';
- * statusBar.addWidget(buttonWidget, 'right', 5);
+ * // Create a toolbar
+ * const toolBar = document.createElement('tool-bar');
+ * toolBar.addButton({ text: 'Save', icon: 'save', action: 'save' }, 10);
+ * 
+ * // Create a menubar
+ * const menuBar = document.createElement('menu-bar');
+ * menuBar.addMenu('File', [
+ *   { text: 'New', action: 'new' },
+ *   { text: 'Open', action: 'open' }
+ * ], 10);
  * ```
  */
 
 // Import all components
+import { BasePanel } from './base-panel.js';
 import { StatusBar } from './status-bar.js';
+import { ToolBar } from './tool-bar.js';
+import { MenuBar } from './menu-bar.js';
 import { StatusText } from './widgets/status-text.js';
 import { StatusButton } from './widgets/status-button.js';
 import { StatusProgress } from './widgets/status-progress.js';
@@ -65,9 +76,10 @@ function createWidget(tagName, options = {}) {
 }
 
 /**
- * Utility functions for creating widgets
+ * Utility functions for creating panel widgets
+ * Compatible with StatusBar, ToolBar, and MenuBar components
  */
-const StatusBarUtils = {
+const PanelUtils = {
   /**
    * Create a text widget with the given properties
    * @param {Object} options - Widget options
@@ -189,9 +201,28 @@ function createStatusBar() {
   return document.createElement('status-bar');
 }
 
+/**
+ * ToolBar factory function
+ * @returns {ToolBar} A new toolbar instance
+ */
+function createToolBar() {
+  return document.createElement('tool-bar');
+}
+
+/**
+ * MenuBar factory function
+ * @returns {MenuBar} A new menubar instance
+ */
+function createMenuBar() {
+  return document.createElement('menu-bar');
+}
+
 // Export all components and utilities
 export {
+  BasePanel,
   StatusBar,
+  ToolBar,
+  MenuBar,
   StatusText,
   StatusButton,
   StatusProgress,
@@ -199,13 +230,18 @@ export {
   StatusDropdown,
   StatusSeparator,
   StatusSwitch,
-  StatusBarUtils,
-  createStatusBar
+  PanelUtils,
+  createStatusBar,
+  createToolBar,
+  createMenuBar
 };
 
 // Default export for convenience
 export default {
+  BasePanel,
   StatusBar,
+  ToolBar,
+  MenuBar,
   StatusText,
   StatusButton,
   StatusProgress,
@@ -213,6 +249,8 @@ export default {
   StatusDropdown,
   StatusSeparator,
   StatusSwitch,
-  StatusBarUtils,
-  createStatusBar
+  PanelUtils,
+  createStatusBar,
+  createToolBar,
+  createMenuBar
 };

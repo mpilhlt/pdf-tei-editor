@@ -11252,8 +11252,355 @@ __decorateClass([
 SlSwitch.define("sl-switch");
 
 /**
+ * Base horizontal panel component with priority-based overflow management
+ * Provides common functionality for StatusBar, MenuBar, and ToolBar
+ */
+
+class BasePanel extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.widgets = new Map();
+    this.hiddenWidgets = new Set();
+    this.resizeObserver = null;
+    this.overflowContainer = null;
+    
+    this.setupEventListeners();
+    this.setupOverflowDetection();
+  }
+
+  /**
+   * Override in subclasses to provide custom rendering
+   */
+  render() {
+    throw new Error('render() must be implemented by subclass');
+  }
+
+  /**
+   * Override in subclasses to create overflow containers
+   * @returns {HTMLElement|null} The overflow container element
+   */
+  createOverflowContainer() {
+    return null;
+  }
+
+  /**
+   * Override in subclasses to handle overflow widget display
+   * @param {Array} hiddenWidgets - Array of hidden widget objects
+   */
+  updateOverflowContainer(hiddenWidgets) {
+    // Default implementation does nothing
+  }
+
+  setupEventListeners() {
+    this.addEventListener('widget-click', this.handleWidgetClick.bind(this));
+    this.addEventListener('widget-change', this.handleWidgetChange.bind(this));
+  }
+
+  setupOverflowDetection() {
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          this.checkAndResolveOverflow();
+        }
+      });
+    }
+
+    // Also check overflow when widgets are added or modified
+    this.addEventListener('slotchange', () => {
+      setTimeout(() => this.checkAndResolveOverflow(), 100);
+    });
+  }
+
+  connectedCallback() {
+    this.render();
+    
+    if (this.resizeObserver) {
+      this.resizeObserver.observe(this);
+    }
+    // Initial overflow check after everything is rendered (longer delay for plugins to add widgets)
+    setTimeout(() => this.checkAndResolveOverflow(), 500);
+  }
+
+  disconnectedCallback() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+  }
+
+  checkAndResolveOverflow() {
+    // Check if smart overflow management is disabled
+    if (this.getAttribute('smart-overflow') !== 'on') {
+      return;
+    }
+    
+    const containerRect = this.getBoundingClientRect();
+    const availableWidth = containerRect.width;
+    
+    if (availableWidth === 0) return; // Not rendered yet
+
+    // Get all widgets with their measurements
+    const allWidgets = this.getAllWidgetsWithPriority();
+    const totalWidth = this.calculateTotalWidth(allWidgets);
+    
+    // Add a small safety margin to prevent edge cases
+    const safetyMargin = 5;
+    const effectiveAvailableWidth = availableWidth - safetyMargin;
+    
+    if (totalWidth > effectiveAvailableWidth) {
+      this.hideWidgetsToFit(allWidgets, effectiveAvailableWidth);
+    } else {
+      this.showWidgetsIfSpace(allWidgets, effectiveAvailableWidth);
+    }
+
+    // Update overflow container after hiding/showing widgets
+    const hiddenWidgetObjects = Array.from(this.hiddenWidgets).map(element => {
+      const priority = parseInt(element.dataset.priority) || 0;
+      return { element, priority };
+    });
+    this.updateOverflowContainer(hiddenWidgetObjects);
+  }
+
+  getAllWidgetsWithPriority() {
+    const widgets = [];
+    
+    // Get all slotted elements from the main slot
+    const mainSlot = this.shadowRoot.querySelector('slot:not([name])');
+    if (mainSlot) {
+      const slottedElements = mainSlot.assignedElements();
+      slottedElements.forEach(widget => {
+        // Skip the overflow container itself
+        if (widget === this.overflowContainer) return;
+        
+        const priority = parseInt(widget.dataset.priority) || 0;
+        widgets.push({ element: widget, priority });
+      });
+    }
+    
+    return widgets;
+  }
+
+  calculateTotalWidth(widgets) {
+    let totalWidth = 0;
+    const containerStyle = getComputedStyle(this);
+    const paddingLeft = parseInt(containerStyle.paddingLeft) || 0;
+    const paddingRight = parseInt(containerStyle.paddingRight) || 0;
+    
+    totalWidth += paddingLeft + paddingRight;
+    
+    // Calculate width of visible widgets
+    widgets.forEach((widget, index) => {
+      if (!widget.element.hasAttribute('data-overflow-hidden')) {
+        const rect = widget.element.getBoundingClientRect();
+        totalWidth += rect.width;
+        
+        // Add gap between widgets
+        if (index < widgets.length - 1) {
+          const gap = parseInt(containerStyle.gap) || 4;
+          totalWidth += gap;
+        }
+      }
+    });
+
+    // Include overflow container if it exists and is visible
+    if (this.overflowContainer && !this.overflowContainer.hasAttribute('data-overflow-hidden')) {
+      const overflowRect = this.overflowContainer.getBoundingClientRect();
+      totalWidth += overflowRect.width;
+      if (widgets.some(w => !w.element.hasAttribute('data-overflow-hidden'))) {
+        const gap = parseInt(containerStyle.gap) || 4;
+        totalWidth += gap;
+      }
+    }
+    
+    return totalWidth;
+  }
+
+  hideWidgetsToFit(allWidgets, availableWidth) {
+    // Sort by priority (lowest first) for hiding
+    const sortedWidgets = allWidgets
+      .filter(w => !w.element.hasAttribute('data-overflow-hidden'))
+      .sort((a, b) => a.priority - b.priority);
+    
+    let currentWidth = this.calculateTotalWidth(allWidgets);
+    
+    for (const widget of sortedWidgets) {
+      if (currentWidth <= availableWidth) break;
+      
+      // Hide this widget
+      widget.element.setAttribute('data-overflow-hidden', '');
+      this.hiddenWidgets.add(widget.element);
+      
+      // Show overflow container if we have hidden widgets
+      if (this.overflowContainer) {
+        this.overflowContainer.removeAttribute('data-overflow-hidden');
+      }
+      
+      // Recalculate width
+      currentWidth = this.calculateTotalWidth(allWidgets);
+    }
+  }
+
+  showWidgetsIfSpace(allWidgets, availableWidth) {
+    // Sort hidden widgets by priority (highest first) for showing
+    const hiddenWidgets = Array.from(this.hiddenWidgets)
+      .map(element => {
+        const priority = parseInt(element.dataset.priority) || 0;
+        return { element, priority };
+      })
+      .sort((a, b) => b.priority - a.priority);
+    
+    for (const widget of hiddenWidgets) {
+      // Temporarily show the widget to measure
+      widget.element.removeAttribute('data-overflow-hidden');
+      const testWidth = this.calculateTotalWidth(allWidgets);
+      
+      if (testWidth <= availableWidth) {
+        // Keep it shown
+        this.hiddenWidgets.delete(widget.element);
+      } else {
+        // Hide it again
+        widget.element.setAttribute('data-overflow-hidden', '');
+        break;
+      }
+    }
+
+    // Hide overflow container if no widgets are hidden
+    if (this.hiddenWidgets.size === 0 && this.overflowContainer) {
+      this.overflowContainer.setAttribute('data-overflow-hidden', '');
+    }
+  }
+
+  handleWidgetClick(event) {
+    // Bubble up widget click events for external handling
+    this.dispatchEvent(new CustomEvent('panel-action', {
+      bubbles: true,
+      detail: {
+        action: event.detail.action,
+        widget: event.detail.widget
+      }
+    }));
+  }
+
+  handleWidgetChange(event) {
+    // Bubble up widget change events for external handling
+    this.dispatchEvent(new CustomEvent('panel-change', {
+      bubbles: true,
+      detail: {
+        value: event.detail.value,
+        widget: event.detail.widget
+      }
+    }));
+  }
+
+  /**
+   * Add a widget to the panel
+   * @param {HTMLElement} widget - The widget element
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   */
+  add(widget, priority = 0) {
+    const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    widget.id = widgetId;
+    widget.dataset.priority = String(priority);
+
+    this.widgets.set(widgetId, { element: widget, priority });
+    this.appendChild(widget);
+    
+    // Reapply flex layout if in flex mode (for ToolBar)
+    if (this.tagName === 'TOOL-BAR' && this.getAttribute('smart-overflow') === 'off') {
+      setTimeout(() => {
+        const inputElements = this.querySelectorAll('sl-select, sl-input, sl-textarea, input, textarea');
+        inputElements.forEach(element => {
+          if (element instanceof HTMLElement) {
+            element.style.flex = '1 1 auto';
+            element.style.minWidth = '80px';
+            element.style.width = 'auto';
+          }
+        });
+        
+        const fixedElements = this.querySelectorAll('sl-button, button, sl-button-group, sl-icon-button, sl-badge, sl-switch');
+        fixedElements.forEach(element => {
+          if (element instanceof HTMLElement) {
+            element.style.flex = '0 0 auto';
+          }
+        });
+      }, 50);
+    }
+    
+    // Check for overflow after adding (delay to let all widgets be added)
+    setTimeout(() => this.checkAndResolveOverflow(), 200);
+    
+    return widgetId;
+  }
+
+  /**
+   * Remove a widget from the panel
+   * @param {string} widgetId - The ID of the widget to remove
+   */
+  removeById(widgetId) {
+    const widget = this.widgets.get(widgetId);
+    if (!widget) return false;
+
+    const { element } = widget;
+    
+    // Remove from hidden widgets set
+    this.hiddenWidgets.delete(element);
+    
+    if (element.parentNode === this) {
+      this.removeChild(element);
+    }
+    
+    this.widgets.delete(widgetId);
+    
+    // Check if we can show more widgets after removal
+    setTimeout(() => this.checkAndResolveOverflow(), 0);
+    
+    return true;
+  }
+
+  /**
+   * Clear all widgets from the panel
+   */
+  clearWidgets() {
+    this.widgets.forEach((widget) => {
+      if (widget.element.parentNode === this) {
+        this.removeChild(widget.element);
+      }
+    });
+    
+    this.widgets.clear();
+    this.hiddenWidgets.clear();
+  }
+
+  /**
+   * Get all widgets
+   */
+  getWidgets() {
+    return Array.from(this.widgets.values());
+  }
+
+  /**
+   * Update widget priority
+   * @param {string} widgetId - The widget ID
+   * @param {number} priority - New priority value
+   */
+  updatePriority(widgetId, priority) {
+    const widget = this.widgets.get(widgetId);
+    if (!widget) return false;
+
+    widget.priority = priority;
+    widget.element.dataset.priority = priority;
+
+    // Re-check overflow after priority change
+    setTimeout(() => this.checkAndResolveOverflow(), 0);
+
+    return true;
+  }
+}
+
+/**
  * Modern status bar container component inspired by VS Code
  * Manages layout and responsive behavior for status bar widgets
+ * Provides consistent event handling with other panel components
  */
 
 class StatusBar extends HTMLElement {
@@ -11520,11 +11867,29 @@ class StatusBar extends HTMLElement {
         widget: event.detail.widget
       }
     }));
+    
+    // Also emit generic panel-action for consistency with other components
+    this.dispatchEvent(new CustomEvent('panel-action', {
+      bubbles: true,
+      detail: {
+        action: event.detail.action,
+        widget: event.detail.widget
+      }
+    }));
   }
 
   handleWidgetChange(event) {
     // Bubble up widget change events for external handling
     this.dispatchEvent(new CustomEvent('status-change', {
+      bubbles: true,
+      detail: {
+        value: event.detail.value,
+        widget: event.detail.widget
+      }
+    }));
+    
+    // Also emit generic panel-change for consistency with other components
+    this.dispatchEvent(new CustomEvent('panel-change', {
       bubbles: true,
       detail: {
         value: event.detail.value,
@@ -11539,7 +11904,7 @@ class StatusBar extends HTMLElement {
    * @param {string} position - 'left', 'center', or 'right'
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
    */
-  addWidget(widget, position = 'left', priority = 0) {
+  add(widget, position = 'left', priority = 0) {
     if (!['left', 'center', 'right'].includes(position)) {
       throw new Error('Position must be "left", "center", or "right"');
     }
@@ -11547,7 +11912,7 @@ class StatusBar extends HTMLElement {
     const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     widget.id = widgetId;
     widget.slot = position;
-    widget.dataset.priority = priority;
+    widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, position, priority });
     this.positions[position].push({ id: widgetId, priority });
@@ -11567,7 +11932,7 @@ class StatusBar extends HTMLElement {
    * Remove a widget from the status bar
    * @param {string} widgetId - The ID of the widget to remove
    */
-  removeWidget(widgetId) {
+  removeById(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 
@@ -11639,6 +12004,768 @@ class StatusBar extends HTMLElement {
 }
 
 customElements.define('status-bar', StatusBar);
+
+/**
+ * ToolBar component for SlButton containers with >> overflow
+ * Extends BasePanel to provide toolbar-specific functionality
+ */
+
+
+class ToolBar extends BasePanel {
+  constructor() {
+    super();
+    this.overflowMenu = null;
+  }
+
+  static get observedAttributes() {
+    return ['smart-overflow'];
+  }
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    if (name === 'smart-overflow') {
+      this.handleSmartOverflowChange(newValue);
+    }
+  }
+
+  get smartOverflow() {
+    return this.getAttribute('smart-overflow') || 'off';
+  }
+
+  set smartOverflow(value) {
+    this.setAttribute('smart-overflow', value);
+  }
+
+  handleSmartOverflowChange(value) {
+    const smartOverflowMode = value || 'off';
+    
+    if (smartOverflowMode === 'on') {
+      // Enable smart overflow management
+      this.enableSmartOverflow();
+    } else {
+      // Use standard flex layout (default behavior)
+      this.enableFlexLayout();
+    }
+  }
+
+  enableFlexLayout() {
+    // Stop observing resize
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+    
+    // Show all hidden widgets
+    this.hiddenWidgets.forEach(widget => {
+      widget.removeAttribute('data-overflow-hidden');
+    });
+    this.hiddenWidgets.clear();
+    
+    // Hide overflow container
+    if (this.overflowContainer) {
+      this.overflowContainer.setAttribute('data-overflow-hidden', '');
+    }
+    
+    // Apply flex layout with proper width constraints
+    this.style.cssText += `
+
+      font-size: small !important;
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center !important;
+      gap: 5px !important;
+      flex-shrink: 0 !important;
+      overflow: visible !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      padding-right: 5px !important;
+      position: relative !important;
+      z-index: 100 !important;
+    `;
+    
+    // Apply flex styles directly to elements since CSS ::slotted might not work
+    const inputElements = this.querySelectorAll('sl-select, sl-input, sl-textarea, input, textarea');
+    inputElements.forEach(element => {
+      element.style.flex = '1 1 auto';
+      element.style.minWidth = '80px';
+      element.style.width = 'auto';
+    });
+    
+    const fixedElements = this.querySelectorAll('sl-button, button, sl-button-group, sl-icon-button, sl-badge, sl-switch');
+    fixedElements.forEach(element => {
+      element.style.flex = '0 0 auto';
+    });
+  }
+
+  enableSmartOverflow() {
+    // Re-enable resize observer
+    if (this.resizeObserver) {
+      this.resizeObserver.observe(this);
+    } else {
+      this.setupOverflowDetection();
+    }
+    
+    // Reset styles to default component behavior (remove all flex layout overrides)
+    this.style.cssText = this.style.cssText.replace(/height: 50px !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/font-size: small !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/display: flex !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/flex-direction: row !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/align-items: center !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/gap: 5px !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/flex-shrink: 0 !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/overflow: visible !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/width: 100% !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/box-sizing: border-box !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/padding-right: 5px !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/position: relative !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/z-index: 100 !important;/, '');
+    
+    // Ensure all widgets are visible and unhidden before re-checking overflow
+    this.hiddenWidgets.forEach(widget => {
+      widget.removeAttribute('data-overflow-hidden');
+    });
+    this.hiddenWidgets.clear();
+    
+    // Remove flex styles that were applied in flex mode
+    const allElements = this.querySelectorAll('sl-select, sl-input, sl-textarea, input, textarea, sl-button, button, sl-button-group, sl-icon-button, sl-badge, sl-switch');
+    allElements.forEach(element => {
+      element.style.flex = '';
+      element.style.minWidth = '';
+      element.style.width = '';
+    });
+    
+    // Hide overflow container initially
+    if (this.overflowContainer) {
+      this.overflowContainer.setAttribute('data-overflow-hidden', '');
+    }
+    
+    // Re-check overflow with a longer delay to ensure layout is settled
+    setTimeout(() => {
+      // Debug: log the dimensions before overflow check
+      const containerRect = this.getBoundingClientRect();
+      console.log('Smart overflow check:', {
+        containerWidth: containerRect.width,
+        widgets: this.getAllWidgetsWithPriority().length
+      });
+      this.checkAndResolveOverflow();
+    }, 300);
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    
+    // Apply the default behavior after plugins have added their widgets
+    setTimeout(() => {
+      // Trigger initialization with default value using the proper flow
+      const smartOverflowMode = this.getAttribute('smart-overflow') || 'off';
+      console.log('ToolBar initializing with smart-overflow:', smartOverflowMode);
+      this.handleSmartOverflowChange(smartOverflowMode);
+    }, 100);
+  }
+
+  render() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: flex;
+          align-items: center;
+          background-color: var(--sl-color-neutral-0);
+          border-bottom: 1px solid var(--sl-color-neutral-200);
+          gap: 4px;
+          overflow: visible;
+          font-size: var(--sl-font-size-small);
+          position: relative;
+          z-index: 100;
+        }
+
+        ::slotted(*) {
+          flex-shrink: 0;
+        }
+        
+        /* In flex mode, allow natural flex behavior */
+        :host([smart-overflow="off"]) ::slotted(*) {
+          flex-shrink: 1;
+        }
+        
+        /* Make input-type elements flexible in flex mode */
+        :host([smart-overflow="off"]) ::slotted(sl-select),
+        :host([smart-overflow="off"]) ::slotted(sl-input),
+        :host([smart-overflow="off"]) ::slotted(sl-textarea),
+        :host([smart-overflow="off"]) ::slotted(input),
+        :host([smart-overflow="off"]) ::slotted(textarea) {
+          flex: 1 1 auto !important;
+          min-width: 80px !important;
+          width: auto !important;
+        }
+        
+        /* Keep control elements fixed size in flex mode */
+        :host([smart-overflow="off"]) ::slotted(sl-button),
+        :host([smart-overflow="off"]) ::slotted(button),
+        :host([smart-overflow="off"]) ::slotted(sl-button-group),
+        :host([smart-overflow="off"]) ::slotted(sl-icon-button),
+        :host([smart-overflow="off"]) ::slotted(sl-badge),
+        :host([smart-overflow="off"]) ::slotted(sl-switch) {
+          flex: 0 0 auto;
+        }
+        
+        /* Allow dropdowns to size naturally based on content */
+        :host([smart-overflow="off"]) ::slotted(sl-select)::part(listbox) {
+          width: max-content !important;
+          min-width: 200px !important;
+        }
+
+        /* Dynamic overflow hiding - applied via JavaScript */
+        ::slotted([data-overflow-hidden]) {
+          display: none !important;
+        }
+
+        .overflow-container {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+        }
+
+        .overflow-button {
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 6px;
+          font-size: var(--sl-font-size-small);
+          cursor: pointer;
+          border: 1px solid var(--sl-color-neutral-300);
+          border-radius: var(--sl-border-radius-medium);
+          background: var(--sl-color-neutral-0);
+          color: var(--sl-color-neutral-700);
+          min-height: 24px;
+        }
+
+        .overflow-button:hover {
+          background: var(--sl-color-neutral-50);
+          border-color: var(--sl-color-neutral-400);
+        }
+
+      </style>
+      
+      <slot></slot>
+    `;
+  }
+
+  createOverflowContainer() {
+    if (this.overflowContainer) return this.overflowContainer;
+
+    const dropdown = document.createElement('sl-dropdown');
+    dropdown.setAttribute('data-overflow-hidden', ''); // Initially hidden
+
+    const trigger = document.createElement('sl-button');
+    trigger.slot = 'trigger';
+    trigger.size = 'small';
+    trigger.innerHTML = '&raquo;';
+    trigger.setAttribute('title', 'More tools');
+
+    const menu = document.createElement('sl-menu');
+    menu.style.minWidth = '200px';
+
+    dropdown.appendChild(trigger);
+    dropdown.appendChild(menu);
+
+    this.overflowContainer = dropdown;
+    this.overflowMenu = menu;
+    this.appendChild(dropdown);
+
+    return dropdown;
+  }
+
+  updateOverflowContainer(hiddenWidgets) {
+    if (!this.overflowContainer) {
+      if (hiddenWidgets.length > 0) {
+        this.createOverflowContainer();
+      } else {
+        return;
+      }
+    }
+
+    // Clear existing menu items
+    this.overflowMenu.innerHTML = '';
+
+    if (hiddenWidgets.length === 0) {
+      this.overflowContainer.setAttribute('data-overflow-hidden', '');
+      return;
+    }
+
+    this.overflowContainer.removeAttribute('data-overflow-hidden');
+
+    // Sort hidden widgets by priority (highest first) for menu display
+    hiddenWidgets.sort((a, b) => b.priority - a.priority);
+
+    // Separate buttons from other complex widgets
+    const hiddenButtons = [];
+    
+    hiddenWidgets.forEach(widget => {
+      // Whitelist of elements that can go into overflow dropdown
+      const canOverflow = ['SL-BUTTON', 'BUTTON'].includes(widget.element.tagName);
+      
+      if (canOverflow) {
+        hiddenButtons.push(widget);
+      }
+    });
+    
+    // Create menu items only for simple buttons
+    hiddenButtons.forEach(widget => {
+      const menuItem = document.createElement('sl-menu-item');
+      
+      // Copy button text and icon if available
+      const buttonText = widget.element.textContent?.trim() || widget.element.getAttribute('text')?.trim() || '';
+      const icon = widget.element.querySelector('sl-icon');
+      
+      if (icon) {
+        const menuIcon = icon.cloneNode(true);
+        menuItem.appendChild(menuIcon);
+      }
+      
+      // Always add text node, even if empty - this ensures proper menu item structure
+      const textNode = document.createTextNode(buttonText);
+      menuItem.appendChild(textNode);
+      
+      // Handle menu item clicks to trigger original button
+      menuItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Close the dropdown first
+        this.overflowContainer.hide?.();
+        // Then trigger the original button click
+        setTimeout(() => {
+          const clickEvent = new Event('click', { bubbles: true });
+          widget.element.dispatchEvent(clickEvent);
+        }, 100);
+      });
+      
+      this.overflowMenu.appendChild(menuItem);
+    });
+    
+    // Show overflow dropdown only if there are hidden buttons
+    if (hiddenButtons.length === 0) {
+      this.overflowContainer.setAttribute('data-overflow-hidden', '');
+    }
+  }
+
+  /**
+   * Add a button to the toolbar
+   * @param {HTMLElement|Object} button - Button element or options object
+   * @param {number} priority - Higher priority buttons stay visible longer
+   */
+  addButton(button, priority = 0) {
+    // If button is options object, create sl-button
+    if (typeof button === 'object' && !button.tagName) {
+      const btnElement = document.createElement('sl-button');
+      
+      // Apply button properties
+      if (button.text) btnElement.textContent = button.text;
+      if (button.variant) btnElement.variant = button.variant;
+      if (button.size) btnElement.size = button.size;
+      if (button.disabled) btnElement.disabled = button.disabled;
+      if (button.outline) btnElement.outline = button.outline;
+      if (button.pill) btnElement.pill = button.pill;
+      if (button.circle) btnElement.circle = button.circle;
+      if (button.loading) btnElement.loading = button.loading;
+      
+      // Handle action/click
+      if (button.action) {
+        btnElement.addEventListener('click', () => {
+          this.dispatchEvent(new CustomEvent('panel-action', {
+            bubbles: true,
+            detail: { action: button.action, widget: btnElement }
+          }));
+        });
+      }
+
+      button = btnElement;
+    }
+
+    return this.add(button, priority);
+  }
+}
+
+customElements.define('tool-bar', ToolBar);
+
+/**
+ * MenuBar component for SlMenu/SlDropdown containers with hamburger overflow
+ * Extends BasePanel to provide menubar-specific functionality
+ */
+
+
+class MenuBar extends BasePanel {
+  constructor() {
+    super();
+    this.hamburgerMenu = null;
+  }
+
+  render() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: flex;
+          align-items: center;
+          height: 32px;
+          padding: 4px 8px;
+          background-color: var(--sl-color-neutral-0);
+          border-bottom: 1px solid var(--sl-color-neutral-200);
+          gap: 4px;
+          overflow: hidden;
+          font-size: var(--sl-font-size-small);
+        }
+
+        ::slotted(*) {
+          flex-shrink: 0;
+        }
+
+        /* Dynamic overflow hiding - applied via JavaScript */
+        ::slotted([data-overflow-hidden]) {
+          display: none !important;
+        }
+
+        .overflow-container {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+        }
+
+        .hamburger-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          cursor: pointer;
+          border: 1px solid var(--sl-color-neutral-300);
+          border-radius: var(--sl-border-radius-medium);
+          background: var(--sl-color-neutral-0);
+          color: var(--sl-color-neutral-700);
+        }
+
+        .hamburger-button:hover {
+          background: var(--sl-color-neutral-50);
+          border-color: var(--sl-color-neutral-400);
+        }
+
+        .hamburger-icon {
+          font-size: 14px;
+        }
+
+        .hamburger-menu {
+          position: absolute;
+          top: 100%;
+          right: 0;
+          margin-top: 2px;
+          min-width: 180px;
+          max-height: 400px;
+          overflow-y: auto;
+          background: var(--sl-color-neutral-0);
+          border: 1px solid var(--sl-color-neutral-200);
+          border-radius: var(--sl-border-radius-medium);
+          box-shadow: var(--sl-shadow-large);
+          z-index: 1000;
+          display: none;
+          padding: 4px;
+        }
+
+        .hamburger-menu[data-visible] {
+          display: block;
+        }
+
+        .hamburger-menu-item {
+          display: block;
+          width: 100%;
+          padding: 8px 12px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          border-radius: var(--sl-border-radius-small);
+          font-size: var(--sl-font-size-small);
+          color: var(--sl-color-neutral-700);
+          text-align: left;
+          margin-bottom: 2px;
+        }
+
+        .hamburger-menu-item:hover {
+          background: var(--sl-color-neutral-100);
+        }
+
+        .hamburger-menu-item:last-child {
+          margin-bottom: 0;
+        }
+      </style>
+      
+      <slot></slot>
+    `;
+  }
+
+  createOverflowContainer() {
+    if (this.overflowContainer) return this.overflowContainer;
+
+    const dropdown = document.createElement('sl-dropdown');
+    dropdown.setAttribute('data-overflow-hidden', ''); // Initially hidden
+
+    const trigger = document.createElement('sl-button');
+    trigger.slot = 'trigger';
+    trigger.size = 'small';
+    trigger.variant = 'text';
+    trigger.innerHTML = '<sl-icon name="list"></sl-icon>'; // <sl-icon name="list"></sl-icon>
+    trigger.setAttribute('title', 'More menus');
+
+    const menu = document.createElement('sl-menu');
+
+    dropdown.appendChild(trigger);
+    dropdown.appendChild(menu);
+
+    this.overflowContainer = dropdown;
+    this.hamburgerMenu = menu;
+    this.appendChild(dropdown);
+
+    return dropdown;
+  }
+
+  updateOverflowContainer(hiddenWidgets) {
+    if (!this.overflowContainer) {
+      if (hiddenWidgets.length > 0) {
+        this.createOverflowContainer();
+      } else {
+        return;
+      }
+    }
+
+    // Clear existing menu items
+    this.hamburgerMenu.innerHTML = '';
+
+    if (hiddenWidgets.length === 0) {
+      this.overflowContainer.setAttribute('data-overflow-hidden', '');
+      return;
+    }
+
+    this.overflowContainer.removeAttribute('data-overflow-hidden');
+
+    // Sort hidden widgets by priority (highest first) for menu display
+    hiddenWidgets.sort((a, b) => b.priority - a.priority);
+
+    // Recreate the hamburger menu with hierarchical structure
+    hiddenWidgets.forEach(widget => {
+      if (widget.element.tagName === 'SL-DROPDOWN') {
+        this.createHierarchicalMenuItem(widget.element);
+      } else {
+        // For non-dropdown widgets, create a simple menu item
+        const menuItem = document.createElement('sl-menu-item');
+        const label = this.getMenuLabel(widget.element);
+        menuItem.textContent = label;
+        
+        menuItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const clickEvent = new Event('click', { bubbles: true });
+          widget.element.dispatchEvent(clickEvent);
+        });
+        
+        this.hamburgerMenu.appendChild(menuItem);
+      }
+    });
+  }
+
+  /**
+   * Create a hierarchical menu item with submenu for a dropdown element
+   * @param {HTMLElement} originalDropdown - The original dropdown element
+   */
+  createHierarchicalMenuItem(originalDropdown) {
+    // Get the menu label
+    const label = this.getMenuLabel(originalDropdown);
+    
+    // Create the top-level menu item
+    const parentMenuItem = document.createElement('sl-menu-item');
+    parentMenuItem.textContent = label;
+    
+    // Find the original menu content
+    const originalMenu = originalDropdown.querySelector('sl-menu');
+    if (originalMenu) {
+      // Create a submenu
+      const submenu = document.createElement('sl-menu');
+      submenu.slot = 'submenu';
+      
+      // Copy all original menu items recursively
+      this.copyMenuItemsRecursively(originalMenu, submenu, originalDropdown);
+      
+      // Add the submenu to the parent menu item
+      parentMenuItem.appendChild(submenu);
+    }
+    
+    // Add to the hamburger menu
+    this.hamburgerMenu.appendChild(parentMenuItem);
+  }
+  
+  /**
+   * Recursively copy menu items and maintain references to originals
+   * @param {HTMLElement} sourceMenu - Source menu to copy from
+   * @param {HTMLElement} targetMenu - Target menu to copy to  
+   * @param {HTMLElement} originalDropdown - The original dropdown for event context
+   */
+  copyMenuItemsRecursively(sourceMenu, targetMenu, originalDropdown) {
+    const originalItems = sourceMenu.querySelectorAll(':scope > sl-menu-item');
+    
+    originalItems.forEach(originalItem => {
+      const copiedItem = document.createElement('sl-menu-item');
+      
+      // Copy text content
+      copiedItem.textContent = originalItem.textContent;
+      
+      // Copy attributes that affect appearance
+      if (originalItem.disabled) copiedItem.disabled = true;
+      if (originalItem.value) copiedItem.value = originalItem.value;
+      
+      // Check if this item has a submenu
+      const originalSubmenu = originalItem.querySelector('sl-menu[slot="submenu"]');
+      if (originalSubmenu) {
+        // Recursively handle submenu
+        const copiedSubmenu = document.createElement('sl-menu');
+        copiedSubmenu.slot = 'submenu';
+        this.copyMenuItemsRecursively(originalSubmenu, copiedSubmenu, originalDropdown);
+        copiedItem.appendChild(copiedSubmenu);
+      } else {
+        // This is a leaf item - add click handler to trigger original
+        copiedItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          
+          // Close the hamburger menu first
+          this.overflowContainer.hide?.();
+          
+          // Trigger sl-select event on the original menu with the original item
+          setTimeout(() => {
+            const selectEvent = new CustomEvent('sl-select', {
+              bubbles: true,
+              detail: { item: originalItem }
+            });
+            originalDropdown.dispatchEvent(selectEvent);
+            
+            // Also trigger click on the original item for compatibility
+            originalItem.click();
+          }, 100);
+        });
+      }
+      
+      targetMenu.appendChild(copiedItem);
+    });
+  }
+
+  /**
+   * Extract menu label from widget element
+   * @param {HTMLElement} element 
+   * @returns {string}
+   */
+  getMenuLabel(element) {
+    // Try different ways to get a meaningful label
+    if (element.getAttribute && element.getAttribute('label')) {
+      return element.getAttribute('label');
+    }
+    
+    // For sl-dropdown, look for trigger text
+    if (element.tagName === 'SL-DROPDOWN') {
+      const trigger = element.querySelector('[slot="trigger"]');
+      if (trigger) {
+        return trigger.textContent || trigger.getAttribute('text') || 'Menu';
+      }
+    }
+    
+    // Fallback to textContent or generic label
+    return element.textContent || element.getAttribute('text') || 'Menu';
+  }
+
+  /**
+   * Add a menu to the menubar
+   * @param {string|HTMLElement|Object} menu - Menu label, element, or options object
+   * @param {Array|HTMLElement} items - Menu items or menu element
+   * @param {number} priority - Higher priority menus stay visible longer
+   */
+  addMenu(menu, items = [], priority = 0) {
+    let menuElement;
+
+    // If menu is a string (label), create sl-dropdown
+    if (typeof menu === 'string') {
+      menuElement = document.createElement('sl-dropdown');
+      menuElement.setAttribute('label', menu);
+      
+      const trigger = document.createElement('sl-button');
+      trigger.slot = 'trigger';
+      trigger.textContent = menu;
+      trigger.variant = 'text';
+      trigger.size = 'small';
+      
+      const menuContainer = document.createElement('sl-menu');
+      
+      // Add menu items
+      if (Array.isArray(items)) {
+        items.forEach(item => {
+          const menuItem = document.createElement('sl-menu-item');
+          if (typeof item === 'string') {
+            menuItem.textContent = item;
+          } else if (item.text) {
+            menuItem.textContent = item.text;
+            if (item.value) menuItem.value = item.value;
+            if (item.disabled) menuItem.disabled = item.disabled;
+            if (item.action) {
+              menuItem.addEventListener('click', () => {
+                this.dispatchEvent(new CustomEvent('panel-action', {
+                  bubbles: true,
+                  detail: { action: item.action, widget: menuItem }
+                }));
+              });
+            }
+          }
+          menuContainer.appendChild(menuItem);
+        });
+      }
+      
+      menuElement.appendChild(trigger);
+      menuElement.appendChild(menuContainer);
+      
+    } else if (typeof menu === 'object' && !menu.tagName) {
+      // Menu is options object
+      menuElement = document.createElement('sl-dropdown');
+      menuElement.setAttribute('label', menu.label || 'Menu');
+      
+      const trigger = document.createElement('sl-button');
+      trigger.slot = 'trigger';
+      trigger.textContent = menu.label || 'Menu';
+      trigger.variant = 'text';
+      trigger.size = 'small';
+      
+      const menuContainer = document.createElement('sl-menu');
+      
+      // Add items from options
+      if (menu.items && Array.isArray(menu.items)) {
+        menu.items.forEach(item => {
+          const menuItem = document.createElement('sl-menu-item');
+          if (typeof item === 'string') {
+            menuItem.textContent = item;
+          } else if (item.text) {
+            menuItem.textContent = item.text;
+            if (item.value) menuItem.value = item.value;
+            if (item.disabled) menuItem.disabled = item.disabled;
+            if (item.action) {
+              menuItem.addEventListener('click', () => {
+                this.dispatchEvent(new CustomEvent('panel-action', {
+                  bubbles: true,
+                  detail: { action: item.action, widget: menuItem }
+                }));
+              });
+            }
+          }
+          menuContainer.appendChild(menuItem);
+        });
+      }
+      
+      menuElement.appendChild(trigger);
+      menuElement.appendChild(menuContainer);
+      
+    } else {
+      // Menu is already an element
+      menuElement = menu;
+    }
+
+    return this.add(menuElement, priority);
+  }
+}
+
+customElements.define('menu-bar', MenuBar);
 
 /**
  * Simple text widget for the status bar
@@ -13283,27 +14410,35 @@ class StatusSwitch extends HTMLElement {
 customElements.define('status-switch', StatusSwitch);
 
 /**
- * Modern Status Bar Module
+ * Modern UI Panels Module
  * 
- * A lightweight, VS Code-inspired status bar implementation using web components.
- * Provides a flexible container and various specialized widgets.
+ * A lightweight, VS Code-inspired UI panel implementation using web components.
+ * Provides horizontal layout containers including StatusBar, ToolBar, and MenuBar
+ * with responsive overflow management and specialized widgets.
  * 
  * @example
  * ```javascript
- * import { StatusBar, StatusText, StatusButton } from './modules/statusbar/index.js';
+ * import { StatusBar, ToolBar, MenuBar, StatusText, StatusButton } from './modules/panels/index.js';
  * 
+ * // Create a status bar
  * const statusBar = document.createElement('status-bar');
  * document.body.appendChild(statusBar);
  * 
  * const textWidget = document.createElement('status-text');
  * textWidget.text = 'Ready';
  * textWidget.icon = 'check-circle';
- * statusBar.addWidget(textWidget, 'left', 10);
+ * statusBar.add(textWidget, 'left', 10);
  * 
- * const buttonWidget = document.createElement('status-button');
- * buttonWidget.text = 'Build';
- * buttonWidget.action = 'build';
- * statusBar.addWidget(buttonWidget, 'right', 5);
+ * // Create a toolbar
+ * const toolBar = document.createElement('tool-bar');
+ * toolBar.addButton({ text: 'Save', icon: 'save', action: 'save' }, 10);
+ * 
+ * // Create a menubar
+ * const menuBar = document.createElement('menu-bar');
+ * menuBar.addMenu('File', [
+ *   { text: 'New', action: 'new' },
+ *   { text: 'Open', action: 'open' }
+ * ], 10);
  * ```
  */
 
@@ -13340,9 +14475,10 @@ function createWidget(tagName, options = {}) {
 }
 
 /**
- * Utility functions for creating widgets
+ * Utility functions for creating panel widgets
+ * Compatible with StatusBar, ToolBar, and MenuBar components
  */
-const StatusBarUtils = {
+const PanelUtils = {
   /**
    * Create a text widget with the given properties
    * @param {Object} options - Widget options
@@ -13469,6 +14605,7 @@ const StatusBarUtils = {
 /**
  * Import type definitions from plugins
  * 
+ * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {floatingPanelPart} from './plugins/floating-panel.js'
@@ -13492,7 +14629,7 @@ const StatusBarUtils = {
 /**
  * The top-level UI parts
  * @typedef {object} namedElementsTree
- * @property {UIPart<HTMLDivElement, toolbarPart>} toolbar - The main toolbar
+ * @property {UIPart<ToolBar, toolbarPart>} toolbar - The main toolbar
  * @property {UIPart<HTMLDivElement, floatingPanelPart>} floatingPanel - The floating panel with navigation buttons
  * @property {UIPart<HTMLDivElement, pdfViewerPart>} pdfViewer - The PDFJS-based PDF viewer with statusbar
  * @property {UIPart<HTMLDivElement, xmlEditorPart>} xmlEditor - The codemirror-based xml editor with statusbar
@@ -14089,7 +15226,7 @@ async function install$e(state) {
   
   // Add autosearch switch to PDF viewer statusbar
   const statusBar = ui$1.pdfViewer.statusbar;
-  const autoSearchSwitch = StatusBarUtils.createSwitch({
+  const autoSearchSwitch = PanelUtils.createSwitch({
     text: 'Autosearch',
     helpText: 'off',
     checked: false,
@@ -14097,7 +15234,7 @@ async function install$e(state) {
   });
   
   autoSearchSwitch.addEventListener('widget-change', onAutoSearchSwitchChange);
-  statusBar.addWidget(autoSearchSwitch, 'left', 10);
+  statusBar.add(autoSearchSwitch, 'left', 10);
   
   // Update UI to register named elements
   updateUi();
@@ -44642,19 +45779,19 @@ async function install$d(state) {
   // Create status widgets for XML editor statusbar
 
   /** @type {StatusText} */
-  readOnlyStatusWidget = StatusBarUtils.createText({
+  readOnlyStatusWidget = PanelUtils.createText({
     text: '🔒 File is read-only',
     variant: 'warning'
   });
 
   /** @type {StatusText} */
-  cursorPositionWidget =  StatusBarUtils.createText({
+  cursorPositionWidget =  PanelUtils.createText({
     text: 'Ln 1, Col 1',
     variant: 'neutral'
   });
   
   // Add cursor position widget to right side of statusbar
-  ui$1.xmlEditor.statusbar.addWidget(cursorPositionWidget, 'right', 1);
+  ui$1.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 1);
 
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
@@ -44701,12 +45838,12 @@ async function update$9(state) {
     if (state.editorReadOnly) {
       ui$1.xmlEditor.classList.add("editor-readonly");
       if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
-        ui$1.xmlEditor.statusbar.addWidget(readOnlyStatusWidget, 'left', 5);
+        ui$1.xmlEditor.statusbar.add(readOnlyStatusWidget, 'left', 5);
       }
     } else {
       ui$1.xmlEditor.classList.remove("editor-readonly");
       if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
-        ui$1.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget.id);
+        ui$1.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id);
       }
     }
   }
@@ -46148,8 +47285,22 @@ async function install$b(state) {
 
   api$e.debug(`Installing plugin "${plugin$b.name}"`);
   
-  // install controls on menubar
-  ui$1.toolbar.append(...fileSelectionControls);
+  // Add file selection controls to toolbar with specified priorities
+  const controlPriorities = {
+    'pdf': 10,    // High priority - essential
+    'xml': 10,    // High priority - essential  
+    'variant': 5, // Medium priority
+    'diff': 3     // Lower priority
+  };
+  
+  fileSelectionControls.forEach(control => {
+    // Ensure we're working with HTMLElement
+    if (control instanceof HTMLElement) {
+      const name = control.getAttribute('name');
+      const priority = controlPriorities[name] || 1;
+      ui$1.toolbar.add(control, priority);
+    }
+  });
   updateUi();
   
   /**  @type {[SlSelect,function][]} */
@@ -46611,8 +47762,8 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
 async function install$a(state) {
   api$e.debug(`Installing plugin "${plugin$a.name}"`);
 
-  // install controls on menubar
-  ui$1.toolbar.append(extractionBtnGroup);
+  // Add extraction buttons to toolbar with medium priority
+  ui$1.toolbar.add(extractionBtnGroup, 7);
   document.body.append(optionsDialog);
   updateUi();
 
@@ -47705,15 +48856,21 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 async function install$9(state) {
   api$e.debug(`Installing plugin "${plugin$9.name}"`);
 
-  // install controls on menubar
-  ui$1.toolbar.append(...documentActionButtons);
+  // Add document action buttons to toolbar with medium priority
+  documentActionButtons.forEach(buttonGroup => {
+    // Ensure we're working with HTMLElement
+    if (buttonGroup instanceof HTMLElement) {
+      // Document actions have medium priority (lower than file selection)
+      ui$1.toolbar.add(buttonGroup, 8);
+    }
+  });
   document.body.append(newVersionDialog);
   document.body.append(saveRevisionDialog);
   updateUi();
   
   // Create saving status widget
   // <sl-icon name="floppy"></sl-icon>
-  savingStatusWidget = StatusBarUtils.createText({
+  savingStatusWidget = PanelUtils.createText({
     text: '',
     icon: 'floppy',
     variant: 'info'
@@ -47933,7 +49090,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     // Show saving status
     if (savingStatusWidget && !savingStatusWidget.isConnected) {
       if (ui$1.xmlEditor.statusbar) {
-        ui$1.xmlEditor.statusbar.addWidget(savingStatusWidget, 'left', 10);
+        ui$1.xmlEditor.statusbar.add(savingStatusWidget, 'left', 10);
       }
     }
     return await api$8.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
@@ -47945,7 +49102,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     // clear status message after 1 second 
     setTimeout(() => {
       if (savingStatusWidget && savingStatusWidget.isConnected) {
-        ui$1.xmlEditor.statusbar.removeWidget(savingStatusWidget.id);
+        ui$1.xmlEditor.statusbar.removeById(savingStatusWidget.id);
       }
     }, 1000);
   }
@@ -57811,7 +58968,7 @@ async function install$3(state) {
   updateUi();
   
   // Create validation status widget
-  validationStatusWidget = StatusBarUtils.createText({
+  validationStatusWidget = PanelUtils.createText({
     text: 'Invalid XML',
     variant: 'error'
   });
@@ -57957,7 +59114,7 @@ function configureXmlEditor() {
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
     // Show validation error in statusbar
     if (validationStatusWidget && !validationStatusWidget.isConnected) {
-      ui$1.xmlEditor.statusbar.addWidget(validationStatusWidget, 'left', 5);
+      ui$1.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5);
     }
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
@@ -57968,7 +59125,7 @@ function configureXmlEditor() {
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
-      ui$1.xmlEditor.statusbar.removeWidget(validationStatusWidget.id);
+      ui$1.xmlEditor.statusbar.removeById(validationStatusWidget.id);
     }
   });
 }
@@ -58429,7 +59586,7 @@ async function install(state) {
   syncContainer.appendChild(syncProgressWidget);
   
   // Add the sync widget to the XML editor statusbar permanently
-  ui$1.xmlEditor.statusbar.addWidget(syncContainer, 'left', 3);
+  ui$1.xmlEditor.statusbar.add(syncContainer, 'left', 3);
   
 }
 

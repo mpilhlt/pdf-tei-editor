@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modern UI Panels Demo</title>
+  
+  <!-- Shoelace CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/light.css" />
+  
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+      line-height: 1.6;
+    }
+
+    .demo-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      overflow: visible;
+    }
+
+    .demo-container.resizable {
+      resize: horizontal;
+      overflow: auto;
+      min-width: 300px;
+      width: 800px;
+    }
+    
+    /* Make responsive demo show resize handle hint */
+    .resizable-hint {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+      font-style: italic;
+    }
+
+    .demo-header {
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .demo-header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 300;
+    }
+
+    .demo-header p {
+      margin: 5px 0 0 0;
+      opacity: 0.9;
+      font-size: 14px;
+    }
+
+    .demo-content {
+      padding: 20px;
+    }
+
+    .demo-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      background: #fafafa;
+    }
+
+    .demo-section h2 {
+      margin: 0 0 15px 0;
+      font-size: 18px;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .demo-section p {
+      margin: 0 0 15px 0;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .status-bar-container {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    .mock-editor {
+      height: 200px;
+      background: #f8f9fa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      font-size: 14px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin: 15px 0;
+      flex-wrap: wrap;
+    }
+
+    .controls button {
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .controls button:hover {
+      background: #f0f0f0;
+    }
+
+    .event-log {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 10px;
+      margin: 15px 0;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .event-log .log-entry {
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    .event-log .log-entry.action {
+      color: #0066cc;
+    }
+
+    .event-log .log-entry.change {
+      color: #008000;
+    }
+    .event-log .log-entry.menu-action {
+      border-left: 3px solid #28a745;
+      background-color: #f8fff9;
+      padding-left: 8px;
+    }
+    .event-log .log-entry.original-select {
+      border-left: 3px solid #007acc;
+      background-color: #f0f8ff;
+      padding-left: 8px;
+    }
+    .event-log .log-entry.original-click {
+      border-left: 3px solid #ffc107;
+      background-color: #fffbf0;
+      padding-left: 8px;
+    }
+    .event-log .event-type {
+      font-weight: bold;
+      color: #333;
+    }
+
+    code {
+      background: #f1f3f4;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+
+    /* Tab styles */
+    .component-tabs {
+      display: flex;
+      border-bottom: 2px solid #e0e0e0;
+      margin-bottom: 20px;
+    }
+
+    .tab-button {
+      background: none;
+      border: none;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .tab-button:hover {
+      color: #333;
+      background: #f8f8f8;
+    }
+
+    .tab-button.active {
+      color: #667eea;
+      border-bottom-color: #667eea;
+      background: #f8f9ff;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .code-example {
+      margin-top: 20px;
+      border: 1px solid #e1e5e9;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .code-example h4 {
+      margin: 0;
+      padding: 12px 16px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #e1e5e9;
+      font-size: 14px;
+      font-weight: 600;
+      color: #24292f;
+    }
+
+    .code-example pre {
+      margin: 0;
+      padding: 16px;
+      background: #ffffff;
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .code-example code {
+      background: none;
+      padding: 0;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+      color: #24292f;
+    }
+
+    /* Global styles for hoisted status dropdown popups */
+    sl-dropdown[data-current-placement]::part(panel) {
+      font-size: var(--sl-font-size-x-small) !important;
+      min-width: 120px !important;
+      z-index: 10000 !important;
+      background: white !important;
+      border: 1px solid var(--sl-color-neutral-200) !important;
+      border-radius: var(--sl-border-radius-medium) !important;
+      box-shadow: var(--sl-shadow-large) !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu::part(base) {
+      font-size: var(--sl-font-size-x-small) !important;
+      padding: 4px 0 !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu-item::part(base) {
+      font-size: var(--sl-font-size-x-small) !important;
+      padding: 4px 12px !important;
+      min-height: auto !important;
+    }
+
+    sl-dropdown[data-current-placement] sl-menu-item::part(label) {
+      font-size: var(--sl-font-size-x-small) !important;
+      line-height: 1.2 !important;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+      }
+      
+      .demo-content {
+        padding: 15px;
+      }
+      
+      .demo-section {
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <div class="demo-header">
+      <h1>Modern UI Panels Demo</h1>
+      <p>VS Code-inspired horizontal UI panels including StatusBar, ToolBar, and MenuBar with responsive overflow management</p>
+    </div>
+
+    <div class="demo-content">
+      <!-- Basic Example -->
+      <div class="demo-section">
+        <h2>Basic Components</h2>
+        <p>Simple components with text and button widgets.</p>
+        
+        <div class="component-tabs">
+          <button class="tab-button active" onclick="showTab(this, 'basic-statusbar-tab')">StatusBar</button>
+          <button class="tab-button" onclick="showTab(this, 'basic-toolbar-tab')">ToolBar</button>
+          <button class="tab-button" onclick="showTab(this, 'basic-menubar-tab')">MenuBar</button>
+        </div>
+
+        <div id="basic-statusbar-tab" class="tab-content active">
+          <div class="status-bar-container">
+            <div class="mock-editor">Mock Editor Content</div>
+            <status-bar id="basic-statusbar"></status-bar>
+          </div>
+          <div class="controls">
+            <button onclick="addBasicWidgets('basic-statusbar', 'statusbar')">Load Example</button>
+            <button onclick="clearComponent('basic-statusbar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="basic-toolbar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <tool-bar id="basic-toolbar"></tool-bar>
+            <div class="mock-editor">Mock Editor Content</div>
+          </div>
+          <div class="controls">
+            <button onclick="addBasicWidgets('basic-toolbar', 'toolbar')">Load Example</button>
+            <button onclick="clearComponent('basic-toolbar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="basic-menubar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <menu-bar id="basic-menubar"></menu-bar>
+            <div class="mock-editor">Mock Editor Content</div>
+          </div>
+          <div class="controls">
+            <button onclick="addBasicWidgets('basic-menubar', 'menubar')">Load Example</button>
+            <button onclick="clearComponent('basic-menubar')">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Example -->
+      <div class="demo-section">
+        <h2>Interactive Widgets</h2>
+        <p>Components with various interactive widgets including progress, badges, and dropdowns.</p>
+        
+        <div class="component-tabs">
+          <button class="tab-button active" onclick="showTab(this, 'interactive-statusbar-tab')">StatusBar</button>
+          <button class="tab-button" onclick="showTab(this, 'interactive-toolbar-tab')">ToolBar</button>
+          <button class="tab-button" onclick="showTab(this, 'interactive-menubar-tab')">MenuBar</button>
+        </div>
+
+        <div id="interactive-statusbar-tab" class="tab-content active">
+          <div class="status-bar-container">
+            <div class="mock-editor">Interactive Demo Area</div>
+            <status-bar id="interactive-statusbar"></status-bar>
+          </div>
+          <div class="controls">
+            <button onclick="setupInteractiveDemo('interactive-statusbar', 'statusbar')">Setup Demo</button>
+            <button onclick="simulateProgress()">Simulate Progress</button>
+            <button onclick="incrementBadge()">Increment Badge</button>
+            <button onclick="togglePulse()">Toggle Pulse</button>
+            <button onclick="clearComponent('interactive-statusbar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="interactive-toolbar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <tool-bar id="interactive-toolbar"></tool-bar>
+            <div class="mock-editor">Interactive Demo Area</div>
+          </div>
+          <div class="controls">
+            <button onclick="setupInteractiveDemo('interactive-toolbar', 'toolbar')">Setup Demo</button>
+            <button onclick="simulateProgress()">Simulate Progress</button>
+            <button onclick="incrementBadge()">Increment Badge</button>
+            <button onclick="togglePulse()">Toggle Pulse</button>
+            <button onclick="clearComponent('interactive-toolbar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="interactive-menubar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <menu-bar id="interactive-menubar"></menu-bar>
+            <div class="mock-editor">Interactive Demo Area</div>
+          </div>
+          <div class="controls">
+            <button onclick="setupInteractiveDemo('interactive-menubar', 'menubar')">Setup Demo</button>
+            <button onclick="simulateProgress()">Simulate Progress</button>
+            <button onclick="incrementBadge()">Increment Badge</button>
+            <button onclick="togglePulse()">Toggle Pulse</button>
+            <button onclick="clearComponent('interactive-menubar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="event-log" class="event-log">
+          <div class="log-entry">Event log will appear here...</div>
+        </div>
+      </div>
+
+      <!-- Responsive Example -->
+      <div class="demo-section">
+        <h2>Responsive Design</h2>
+        <p>Resize your browser window to see how components adapt to different screen sizes.</p>
+        
+        <div class="component-tabs">
+          <button class="tab-button active" onclick="showTab(this, 'responsive-statusbar-tab')">StatusBar</button>
+          <button class="tab-button" onclick="showTab(this, 'responsive-toolbar-tab')">ToolBar</button>
+          <button class="tab-button" onclick="showTab(this, 'responsive-menubar-tab')">MenuBar</button>
+        </div>
+
+        <div id="responsive-statusbar-tab" class="tab-content active">
+          <div class="status-bar-container">
+            <div class="mock-editor">Responsive Layout Test</div>
+            <status-bar id="responsive-statusbar"></status-bar>
+          </div>
+          <div class="controls">
+            <button onclick="setupResponsiveDemo('responsive-statusbar', 'statusbar')">Setup Responsive Demo</button>
+            <button onclick="clearComponent('responsive-statusbar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="responsive-toolbar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <tool-bar id="responsive-toolbar" smart-overflow="on"></tool-bar>
+            <div class="mock-editor">Responsive Layout Test</div>
+          </div>
+          <div class="controls">
+            <button onclick="setupResponsiveDemo('responsive-toolbar', 'toolbar')">Setup Responsive Demo</button>
+            <button onclick="toggleSmartOverflow('responsive-toolbar')">Toggle Smart Overflow</button>
+            <button onclick="clearComponent('responsive-toolbar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="responsive-menubar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <menu-bar id="responsive-menubar"></menu-bar>
+            <div class="mock-editor">Responsive Layout Test</div>
+          </div>
+          <div class="controls">
+            <button onclick="setupResponsiveDemo('responsive-menubar', 'menubar')">Setup Responsive Demo</button>
+            <button onclick="clearComponent('responsive-menubar')">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget Showcase -->
+      <div class="demo-section">
+        <h2>Widget Showcase</h2>
+        <p>All available widget types with different configurations.</p>
+        
+        <div class="component-tabs">
+          <button class="tab-button active" onclick="showTab(this, 'showcase-statusbar-tab')">StatusBar</button>
+          <button class="tab-button" onclick="showTab(this, 'showcase-toolbar-tab')">ToolBar</button>
+          <button class="tab-button" onclick="showTab(this, 'showcase-menubar-tab')">MenuBar</button>
+        </div>
+
+        <div id="showcase-statusbar-tab" class="tab-content active">
+          <div class="status-bar-container">
+            <div class="mock-editor">Widget Showcase</div>
+            <status-bar id="showcase-statusbar"></status-bar>
+          </div>
+          <div class="controls">
+            <button onclick="setupWidgetShowcase('showcase-statusbar', 'statusbar')">Show All Widgets</button>
+            <button onclick="clearComponent('showcase-statusbar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="showcase-toolbar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <tool-bar id="showcase-toolbar"></tool-bar>
+            <div class="mock-editor">Widget Showcase</div>
+          </div>
+          <div class="controls">
+            <button onclick="setupWidgetShowcase('showcase-toolbar', 'toolbar')">Show All Widgets</button>
+            <button onclick="clearComponent('showcase-toolbar')">Clear</button>
+          </div>
+        </div>
+
+        <div id="showcase-menubar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <menu-bar id="showcase-menubar"></menu-bar>
+            <div class="mock-editor">Widget Showcase</div>
+          </div>
+          <div class="controls">
+            <button onclick="setupWidgetShowcase('showcase-menubar', 'menubar')">Show All Widgets</button>
+            <button onclick="clearComponent('showcase-menubar')">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- HTML-Only Components -->
+      <div class="demo-section">
+        <h2>HTML-Only Components</h2>
+        <p>Direct usage of web components in HTML without JavaScript - copy and paste ready!</p>
+        
+        <div class="component-tabs">
+          <button class="tab-button active" onclick="showTab(this, 'html-statusbar-tab')">StatusBar</button>
+          <button class="tab-button" onclick="showTab(this, 'html-toolbar-tab')">ToolBar</button>
+          <button class="tab-button" onclick="showTab(this, 'html-menubar-tab')">MenuBar</button>
+        </div>
+
+        <div id="html-statusbar-tab" class="tab-content active">
+          <div class="status-bar-container">
+            <div class="mock-editor">Pure HTML Example</div>
+            <status-bar id="html-statusbar">
+              <!-- Left section widgets -->
+              <status-text text="index.html" icon="file-earmark-code" slot="left" data-priority="10"></status-text>
+              <status-separator variant="vertical" slot="left" data-priority="9"></status-separator>
+              <status-text text="Modified" variant="warning" slot="left" data-priority="8"></status-text>
+              <status-badge count="3" variant="danger" icon="exclamation-triangle-fill" clickable slot="left" data-priority="9">
+                <div slot="popup">
+                  <strong>Issues Found:</strong><br>
+                  • Missing semicolon on line 42<br>
+                  • Unused variable 'temp'<br>
+                  • Deprecated method call
+                </div>
+              </status-badge>
+              
+              <!-- Center section widgets -->
+              <status-progress value="65" text="Building..." variant="primary" slot="center" data-priority="5"></status-progress>
+              
+              <!-- Right section widgets -->
+              <status-button text="Format" icon="magic" action="format" slot="right" data-priority="3"></status-button>
+              <status-separator variant="dotted" slot="right" data-priority="4"></status-separator>
+              <status-switch text="Auto Save" help-text="(5s)" checked slot="right" data-priority="6"></status-switch>
+              <status-separator slot="right" data-priority="7"></status-separator>
+              <status-dropdown selected="js" placeholder="Language" slot="right" data-priority="8">
+                <option value="js">JavaScript</option>
+                <option value="ts">TypeScript</option>
+                <option value="py">Python</option>
+                <option value="html">HTML</option>
+              </status-dropdown>
+              <status-separator slot="right" data-priority="9"></status-separator>
+              <status-text text="Ln 42, Col 15" tooltip="Line 42, Column 15" slot="right" data-priority="10"></status-text>
+            </status-bar>
+          </div>
+          <div class="code-example">
+            <h4>HTML Source:</h4>
+            <pre><code>&lt;status-bar&gt;
+  &lt;!-- Left section widgets --&gt;
+  &lt;status-text text="index.html" icon="file-earmark-code" slot="left" data-priority="10"&gt;&lt;/status-text&gt;
+  &lt;status-separator variant="vertical" slot="left" data-priority="9"&gt;&lt;/status-separator&gt;
+  &lt;status-text text="Modified" variant="warning" slot="left" data-priority="8"&gt;&lt;/status-text&gt;
+  &lt;status-badge count="3" variant="danger" icon="exclamation-triangle-fill" clickable slot="left" data-priority="9"&gt;&lt;/status-badge&gt;
+  
+  &lt;!-- Center section widgets --&gt;
+  &lt;status-progress value="65" text="Building..." variant="primary" slot="center" data-priority="5"&gt;&lt;/status-progress&gt;
+  
+  &lt;!-- Right section widgets --&gt;
+  &lt;status-button text="Format" icon="magic" action="format" slot="right" data-priority="3"&gt;&lt;/status-button&gt;
+  &lt;status-separator variant="dotted" slot="right" data-priority="4"&gt;&lt;/status-separator&gt;
+  &lt;status-switch text="Auto Save" help-text="(5s)" checked slot="right" data-priority="6"&gt;&lt;/status-switch&gt;
+&lt;/status-bar&gt;</code></pre>
+          </div>
+        </div>
+
+        <div id="html-toolbar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <tool-bar id="html-toolbar" smart-overflow="on">
+              <sl-button size="small" data-priority="10">
+                <sl-icon name="file-plus"></sl-icon>
+                New
+              </sl-button>
+              <sl-button size="small" data-priority="9">
+                <sl-icon name="folder2-open"></sl-icon>
+                Open
+              </sl-button>
+              <sl-button size="small" data-priority="8">
+                <sl-icon name="floppy"></sl-icon>
+                Save
+              </sl-button>
+              <sl-button size="small" data-priority="7">
+                <sl-icon name="arrow-counterclockwise"></sl-icon>
+              </sl-button>
+              <sl-button size="small" data-priority="6">
+                <sl-icon name="arrow-clockwise"></sl-icon>
+              </sl-button>
+              <sl-button size="small" variant="primary" data-priority="5">
+                <sl-icon name="play"></sl-icon>
+                Run
+              </sl-button>
+            </tool-bar>
+            <div class="mock-editor">Pure HTML Example</div>
+          </div>
+          <div class="code-example">
+            <h4>HTML Source:</h4>
+            <pre><code>&lt;tool-bar smart-overflow="on"&gt;
+  &lt;sl-button size="small" data-priority="10"&gt;
+    &lt;sl-icon name="file-plus"&gt;&lt;/sl-icon&gt;
+    New
+  &lt;/sl-button&gt;
+  &lt;sl-button size="small" data-priority="9"&gt;
+    &lt;sl-icon name="folder2-open"&gt;&lt;/sl-icon&gt;
+    Open
+  &lt;/sl-button&gt;
+  &lt;sl-button size="small" data-priority="8"&gt;
+    &lt;sl-icon name="floppy"&gt;&lt;/sl-icon&gt;
+    Save
+  &lt;/sl-button&gt;
+  &lt;sl-button size="small" variant="primary" data-priority="5"&gt;
+    &lt;sl-icon name="play"&gt;&lt;/sl-icon&gt;
+    Run
+  &lt;/sl-button&gt;
+&lt;/tool-bar&gt;</code></pre>
+          </div>
+        </div>
+
+        <div id="html-menubar-tab" class="tab-content">
+          <div class="status-bar-container">
+            <menu-bar id="html-menubar" smart-overflow="on">
+              <sl-dropdown data-priority="10">
+                <sl-button slot="trigger" variant="text" size="small">File</sl-button>
+                <sl-menu>
+                  <sl-menu-item>New File</sl-menu-item>
+                  <sl-menu-item>Open File</sl-menu-item>
+                  <sl-menu-item>Save</sl-menu-item>
+                  <sl-divider></sl-divider>
+                  <sl-menu-item>Exit</sl-menu-item>
+                </sl-menu>
+              </sl-dropdown>
+              <sl-dropdown data-priority="9">
+                <sl-button slot="trigger" variant="text" size="small">Edit</sl-button>
+                <sl-menu>
+                  <sl-menu-item>Undo</sl-menu-item>
+                  <sl-menu-item>Redo</sl-menu-item>
+                  <sl-divider></sl-divider>
+                  <sl-menu-item>Cut</sl-menu-item>
+                  <sl-menu-item>Copy</sl-menu-item>
+                  <sl-menu-item>Paste</sl-menu-item>
+                </sl-menu>
+              </sl-dropdown>
+              <sl-dropdown data-priority="8">
+                <sl-button slot="trigger" variant="text" size="small">View</sl-button>
+                <sl-menu>
+                  <sl-menu-item>Zoom In</sl-menu-item>
+                  <sl-menu-item>Zoom Out</sl-menu-item>
+                  <sl-menu-item>Full Screen</sl-menu-item>
+                </sl-menu>
+              </sl-dropdown>
+            </menu-bar>
+            <div class="mock-editor">Pure HTML Example</div>
+          </div>
+          <div class="code-example">
+            <h4>HTML Source:</h4>
+            <pre><code>&lt;menu-bar smart-overflow="on"&gt;
+  &lt;sl-dropdown data-priority="10"&gt;
+    &lt;sl-button slot="trigger" variant="text" size="small"&gt;File&lt;/sl-button&gt;
+    &lt;sl-menu&gt;
+      &lt;sl-menu-item&gt;New File&lt;/sl-menu-item&gt;
+      &lt;sl-menu-item&gt;Open File&lt;/sl-menu-item&gt;
+      &lt;sl-menu-item&gt;Save&lt;/sl-menu-item&gt;
+      &lt;sl-divider&gt;&lt;/sl-divider&gt;
+      &lt;sl-menu-item&gt;Exit&lt;/sl-menu-item&gt;
+    &lt;/sl-menu&gt;
+  &lt;/sl-dropdown&gt;
+  &lt;sl-dropdown data-priority="9"&gt;
+    &lt;sl-button slot="trigger" variant="text" size="small"&gt;Edit&lt;/sl-button&gt;
+    &lt;sl-menu&gt;
+      &lt;sl-menu-item&gt;Undo&lt;/sl-menu-item&gt;
+      &lt;sl-menu-item&gt;Redo&lt;/sl-menu-item&gt;
+    &lt;/sl-menu&gt;
+  &lt;/sl-dropdown&gt;
+&lt;/menu-bar&gt;</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shoelace JS -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace-autoloader.js"></script>
+  
+  <!-- Preload Shoelace components we need -->
+  <script type="module">
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/dropdown/dropdown.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/menu/menu.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/menu-item/menu-item.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/icon/icon.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/popup/popup.js';
+    import 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/components/switch/switch.js';
+  </script>
+  
+  <!-- UI Panels Module -->
+  <script type="module">
+    // Import the panels module
+    import PanelsModule from '../index.js';
+    
+    const { 
+      StatusBar, ToolBar, MenuBar, StatusText, StatusButton, StatusProgress, 
+      StatusBadge, StatusDropdown, StatusSeparator, PanelUtils 
+    } = PanelsModule;
+
+    // Make components available globally for demo functions
+    window.PanelsModule = PanelsModule;
+    window.PanelUtils = PanelUtils;
+
+    // Global variables for demo
+    let progressValue = 0;
+    let badgeCount = 0;
+    let pulseActive = false;
+
+    // Wait for all custom elements to be defined
+    async function initializeDemo() {
+      console.log('Waiting for custom elements to be defined...');
+      
+      try {
+        await Promise.all([
+          customElements.whenDefined('status-bar'),
+          customElements.whenDefined('tool-bar'),
+          customElements.whenDefined('menu-bar'),
+          customElements.whenDefined('status-text'),
+          customElements.whenDefined('status-button'),
+          customElements.whenDefined('status-progress'),
+          customElements.whenDefined('status-badge'),
+          customElements.whenDefined('status-dropdown'),
+          customElements.whenDefined('status-separator')
+        ]);
+        
+        console.log('All custom elements are now defined!');
+        
+        // Load initial demo
+        addBasicWidgets('basic-statusbar', 'statusbar');
+        logEvent('Status Bar Demo initialized');
+        
+      } catch (error) {
+        console.error('Error initializing demo:', error);
+        logEvent('Failed to initialize demo: ' + error.message);
+      }
+    }
+
+    // Enhanced event logging function
+    function logEvent(messageOrType, typeOrMessage = 'info', className = '') {
+      const eventLog = document.getElementById('event-log');
+      const timestamp = new Date().toLocaleTimeString();
+      
+      let finalMessage, finalType, finalClassName;
+      
+      // Handle both function signatures:
+      // logEvent(message, type) - old signature
+      // logEvent(type, message, className) - new signature for menu events
+      if (arguments.length === 2 && typeof typeOrMessage === 'string' && className === '') {
+        // Old signature: logEvent(message, type)
+        finalMessage = messageOrType;
+        finalType = typeOrMessage;
+        finalClassName = typeOrMessage;
+      } else {
+        // New signature: logEvent(type, message, className)
+        finalType = messageOrType;
+        finalMessage = typeOrMessage;
+        finalClassName = className || messageOrType.toLowerCase().replace(/\s+/g, '-');
+      }
+      
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${finalClassName}`;
+      
+      if (finalType && finalMessage !== finalType) {
+        entry.innerHTML = `<strong>[${timestamp}]</strong> <span class="event-type">${finalType}:</span> ${finalMessage}`;
+      } else {
+        entry.textContent = `[${timestamp}] ${finalMessage}`;
+      }
+      
+      eventLog.appendChild(entry);
+      eventLog.scrollTop = eventLog.scrollHeight;
+      
+      // Keep only last 20 entries
+      while (eventLog.children.length > 20) {
+        eventLog.removeChild(eventLog.firstChild);
+      }
+    }
+
+    // Setup event listeners for all status bars
+    document.addEventListener('status-action', (event) => {
+      logEvent(`Action: ${event.detail.action} from widget`, 'action');
+    });
+
+    document.addEventListener('status-change', (event) => {
+      logEvent(`Change: ${event.detail.value} from widget`, 'change');
+    });
+
+    // Tab switching functionality
+    window.showTab = function(button, tabId) {
+      // Hide all tabs in this section
+      const section = button.closest('.demo-section');
+      const allTabs = section.querySelectorAll('.tab-content');
+      const allButtons = section.querySelectorAll('.tab-button');
+      
+      allTabs.forEach(tab => tab.classList.remove('active'));
+      allButtons.forEach(btn => btn.classList.remove('active'));
+      
+      // Show selected tab
+      document.getElementById(tabId).classList.add('active');
+      button.classList.add('active');
+    };
+
+    // Universal component clearing function
+    window.clearComponent = function(componentId) {
+      const component = document.getElementById(componentId);
+      if (component && component.clearWidgets) {
+        component.clearWidgets();
+      }
+    };
+
+    // Basic example
+    window.addBasicWidgets = function(componentId = 'basic-statusbar', componentType = 'statusbar') {
+      const component = document.getElementById(componentId);
+      component.clearWidgets();
+
+      if (componentType === 'statusbar') {
+        const readyText = PanelUtils.createText({
+          text: 'Ready',
+          icon: 'check-circle-fill',
+          variant: 'success'
+        });
+
+        const saveButton = PanelUtils.createButton({
+          text: 'Save',
+          icon: 'floppy',
+          action: 'save',
+          tooltip: 'Save current file'
+        });
+
+        const lineInfo = PanelUtils.createText({
+          text: 'Ln 42, Col 15',
+          tooltip: 'Line 42, Column 15'
+        });
+
+        component.add(readyText, 'left', 10);
+        component.add(saveButton, 'right', 8);
+        component.add(lineInfo, 'right', 5);
+
+      } else if (componentType === 'toolbar') {
+        // Create toolbar buttons
+        const newBtn = document.createElement('sl-button');
+        newBtn.size = 'small';
+        newBtn.innerHTML = '<sl-icon name="file-plus"></sl-icon> New';
+        
+        const saveBtn = document.createElement('sl-button');
+        saveBtn.size = 'small';
+        saveBtn.innerHTML = '<sl-icon name="floppy"></sl-icon> Save';
+        
+        const undoBtn = document.createElement('sl-button');
+        undoBtn.size = 'small';
+        undoBtn.innerHTML = '<sl-icon name="arrow-counterclockwise"></sl-icon>';
+        undoBtn.title = 'Undo';
+
+        component.add(newBtn, 10);
+        component.add(saveBtn, 8);
+        component.add(undoBtn, 5);
+
+      } else if (componentType === 'menubar') {
+        // Create menu dropdowns
+        component.addMenu('File', [
+          { text: 'New', action: 'new' },
+          { text: 'Open', action: 'open' },
+          { text: 'Save', action: 'save' },
+          { text: 'Exit', action: 'exit' }
+        ], 10);
+
+        component.addMenu('Edit', [
+          { text: 'Undo', action: 'undo' },
+          { text: 'Redo', action: 'redo' },
+          { text: 'Cut', action: 'cut' },
+          { text: 'Copy', action: 'copy' },
+          { text: 'Paste', action: 'paste' }
+        ], 8);
+
+        component.addMenu('View', [
+          { text: 'Zoom In', action: 'zoom-in' },
+          { text: 'Zoom Out', action: 'zoom-out' },
+          { text: 'Full Screen', action: 'fullscreen' }
+        ], 5);
+      }
+    };
+
+    // Interactive demo
+    window.setupInteractiveDemo = function(componentId = 'interactive-statusbar', componentType = 'statusbar') {
+      const component = document.getElementById(componentId);
+      component.clearWidgets();
+
+      if (componentType === 'statusbar') {
+        const progressWidget = PanelUtils.createProgress({
+          value: 0,
+          max: 100,
+          text: 'Building...',
+          variant: 'primary'
+        });
+        progressWidget.id = 'demo-progress';
+
+        const badgeWidget = PanelUtils.createBadge({
+          count: 0,
+          variant: 'danger',
+          icon: 'exclamation-triangle-fill',
+          tooltip: 'Error count',
+          clickable: true
+        });
+        badgeWidget.id = 'demo-badge';
+
+        const dropdown = PanelUtils.createDropdown({
+          placeholder: 'Select Language',
+          items: [
+            { value: 'js', text: 'JavaScript' },
+            { value: 'ts', text: 'TypeScript' },
+            { value: 'py', text: 'Python' },
+            { value: 'html', text: 'HTML' }
+          ]
+        });
+
+        const sep1 = PanelUtils.createSeparator();
+        const sep2 = PanelUtils.createSeparator();
+
+        component.add(progressWidget, 'left', 10);
+        component.add(sep1, 'left', 9);
+        component.add(badgeWidget, 'left', 8);
+        component.add(sep2, 'center', 5);
+        component.add(dropdown, 'right', 7);
+
+      } else if (componentType === 'toolbar') {
+        // Build button with progress indicator
+        const buildBtn = document.createElement('sl-button');
+        buildBtn.size = 'small';
+        buildBtn.innerHTML = '<sl-icon name="hammer"></sl-icon> Build';
+        buildBtn.id = 'demo-progress';
+        
+        // Error count badge button
+        const errorBtn = document.createElement('sl-button');
+        errorBtn.size = 'small';
+        errorBtn.innerHTML = '<sl-icon name="exclamation-triangle-fill"></sl-icon> 0 Errors';
+        errorBtn.id = 'demo-badge';
+        errorBtn.variant = 'danger';
+
+        // Language selector button
+        const langBtn = document.createElement('sl-button');
+        langBtn.size = 'small';
+        langBtn.innerHTML = '<sl-icon name="code"></sl-icon> JavaScript';
+
+        component.add(buildBtn, 10);
+        component.add(errorBtn, 8);
+        component.add(langBtn, 7);
+
+      } else if (componentType === 'menubar') {
+        // Build menu with progress
+        component.addMenu('Build', [
+          { text: 'Start Build', action: 'build' },
+          { text: 'Clean Build', action: 'clean-build' },
+          { text: 'Stop Build', action: 'stop-build' }
+        ], 10);
+
+        // Debug menu with error info
+        component.addMenu('Debug', [
+          { text: 'Show Errors', action: 'show-errors' },
+          { text: 'Clear Errors', action: 'clear-errors' },
+          { text: 'Toggle Console', action: 'console' }
+        ], 8);
+
+        // Language selection menu
+        component.addMenu('Language', [
+          { text: 'JavaScript', action: 'lang-js' },
+          { text: 'TypeScript', action: 'lang-ts' },
+          { text: 'Python', action: 'lang-py' },
+          { text: 'HTML', action: 'lang-html' }
+        ], 7);
+      }
+
+      // Reset counters
+      progressValue = 0;
+      badgeCount = 0;
+    };
+
+    // Progress simulation
+    window.simulateProgress = function() {
+      const progressWidget = document.getElementById('demo-progress');
+      if (!progressWidget) return;
+
+      progressValue = 0;
+      const interval = setInterval(() => {
+        progressValue += Math.random() * 15;
+        if (progressValue >= 100) {
+          progressValue = 100;
+          progressWidget.updateProgress(100);
+          progressWidget.text = 'Complete!';
+          progressWidget.variant = 'success';
+          clearInterval(interval);
+          
+          setTimeout(() => {
+            progressWidget.text = 'Building...';
+            progressWidget.variant = 'primary';
+            progressWidget.reset();
+          }, 2000);
+        } else {
+          progressWidget.updateProgress(progressValue);
+        }
+      }, 200);
+    };
+
+    // Badge increment
+    window.incrementBadge = function() {
+      const badgeWidget = document.getElementById('demo-badge');
+      if (!badgeWidget) return;
+
+      badgeCount++;
+      badgeWidget.count = badgeCount;
+    };
+
+    // Toggle pulse
+    window.togglePulse = function() {
+      const badgeWidget = document.getElementById('demo-badge');
+      if (!badgeWidget) return;
+
+      pulseActive = !pulseActive;
+      badgeWidget.pulse = pulseActive;
+    };
+
+    // Responsive demo
+    window.setupResponsiveDemo = function(componentId = 'responsive-statusbar', componentType = 'statusbar') {
+      const component = document.getElementById(componentId);
+      component.clearWidgets();
+
+      if (componentType === 'statusbar') {
+
+      // Left section - File info and editor state
+      const fileText = PanelUtils.createText({
+        text: 'src/components/StatusBar.jsx',
+        icon: 'file-earmark-code'
+      });
+
+      const gitBranchText = PanelUtils.createText({
+        text: 'feature/status-bar',
+        icon: 'git',
+        tooltip: 'Current Git branch'
+      });
+
+      const unsavedBadge = PanelUtils.createBadge({
+        count: 3,
+        variant: 'warning',
+        icon: 'exclamation-triangle-fill',
+        tooltip: 'Unsaved changes'
+      });
+
+      const modeText = PanelUtils.createText({
+        text: 'Insert Mode',
+        variant: 'success'
+      });
+
+      // Center section - Build and sync status
+      const buildProgress = PanelUtils.createProgress({
+        value: 75,
+        text: 'Building...',
+        variant: 'primary'
+      });
+
+      const syncButton = PanelUtils.createButton({
+        text: 'Sync',
+        icon: 'arrow-repeat',
+        action: 'sync',
+        tooltip: 'Sync changes'
+      });
+
+      // Right section - Tools and settings
+      const formatButton = PanelUtils.createButton({
+        text: 'Format',
+        icon: 'magic',
+        action: 'format'
+      });
+
+      const autoSaveSwitch = PanelUtils.createSwitch({
+        text: 'Auto Save',
+        helpText: '(5s)',
+        checked: true
+      });
+
+      const languageDropdown = PanelUtils.createDropdown({
+        selected: 'javascript',
+        items: [
+          { value: 'javascript', text: 'JavaScript' },
+          { value: 'typescript', text: 'TypeScript' },
+          { value: 'python', text: 'Python' },
+          { value: 'html', text: 'HTML' },
+          { value: 'css', text: 'CSS' }
+        ]
+      });
+
+      const encodingDropdown = PanelUtils.createDropdown({
+        selected: 'utf8',
+        items: [
+          { value: 'utf8', text: 'UTF-8' },
+          { value: 'ascii', text: 'ASCII' },
+          { value: 'latin1', text: 'Latin-1' },
+          { value: 'utf16', text: 'UTF-16' }
+        ]
+      });
+
+      const eolDropdown = PanelUtils.createDropdown({
+        selected: 'lf',
+        items: [
+          { value: 'lf', text: 'LF' },
+          { value: 'crlf', text: 'CRLF' },
+          { value: 'cr', text: 'CR' }
+        ]
+      });
+
+      const positionText = PanelUtils.createText({
+        text: 'Ln 42, Col 15',
+        tooltip: 'Line 42, Column 15'
+      });
+
+      const selectionText = PanelUtils.createText({
+        text: '(15 selected)',
+        tooltip: '15 characters selected'
+      });
+
+      // Separators
+      const sep1 = PanelUtils.createSeparator();
+      const sep2 = PanelUtils.createSeparator();
+      const sep3 = PanelUtils.createSeparator();
+      const sep4 = PanelUtils.createSeparator();
+      const sep5 = PanelUtils.createSeparator();
+      const sep6 = PanelUtils.createSeparator();
+      const sep7 = PanelUtils.createSeparator();
+      const sep8 = PanelUtils.createSeparator();
+
+        // Add widgets with priorities (higher = more important, stays visible longer)
+        component.add(fileText, 'left', 10);           // Most important - file name
+        component.add(sep1, 'left', 9);
+        component.add(unsavedBadge, 'left', 9);        // Important - unsaved changes
+        component.add(sep2, 'left', 8);
+        component.add(gitBranchText, 'left', 7);       // Git info
+        component.add(sep3, 'left', 6);
+        component.add(modeText, 'left', 5);            // Editor mode
+
+        component.add(buildProgress, 'center', 6);     // Build status
+        component.add(sep4, 'center', 5);
+        component.add(syncButton, 'center', 4);        // Sync button
+
+        component.add(positionText, 'right', 10);      // Most important - cursor position
+        component.add(sep5, 'right', 9);
+        component.add(selectionText, 'right', 8);      // Selection info
+        component.add(sep6, 'right', 7);
+        component.add(languageDropdown, 'right', 6);   // Language selector
+        component.add(sep7, 'right', 5);
+        component.add(encodingDropdown, 'right', 4);   // Encoding
+        component.add(sep8, 'right', 3);
+        component.add(eolDropdown, 'right', 2);        // Line endings
+        component.add(autoSaveSwitch, 'right', 1);     // Auto save setting
+        component.add(formatButton, 'right', 0);       // Least important - format button
+
+      } else if (componentType === 'toolbar') {
+        // Add a long select box that should grow to take remaining space
+        const projectSelect = document.createElement('sl-select');
+        projectSelect.size = 'small';
+        projectSelect.placeholder = 'Select Project File...';
+        projectSelect.style.width = '200px'; // Fixed width for smart overflow mode
+        projectSelect.hoist = true; // Fix dropdown visibility
+        
+        // Apply flex only when in flex mode
+        const observer = new MutationObserver(() => {
+          if (component.getAttribute('smart-overflow') === 'off') {
+            projectSelect.style.flex = '1 1 auto';
+            projectSelect.style.minWidth = '80px';
+            projectSelect.style.width = '';
+          } else {
+            projectSelect.style.flex = '';
+            projectSelect.style.minWidth = '';
+            projectSelect.style.width = '200px';
+          }
+        });
+        observer.observe(component, { attributes: true, attributeFilter: ['smart-overflow'] });
+        projectSelect.innerHTML = `
+          <sl-option value="app.js">src/components/App.js</sl-option>
+          <sl-option value="toolbar.js">src/components/ToolBar.js</sl-option>
+          <sl-option value="statusbar.js">src/components/StatusBar.js</sl-option>
+          <sl-option value="menubar.js">src/components/MenuBar.js</sl-option>
+          <sl-option value="utils.js">src/utils/PanelUtils.js</sl-option>
+          <sl-option value="demo.html">demo/responsive-demo.html</sl-option>
+          <sl-option value="readme.md">docs/README.md</sl-option>
+        `;
+        component.add(projectSelect, 15); // Highest priority
+
+        // Create multiple buttons with text to test overflow dramatically
+        const buttons = [
+          { name: 'file-plus', text: 'New File', priority: 10 },
+          { name: 'folder2-open', text: 'Open Project', priority: 9 },
+          { name: 'floppy', text: 'Save All', priority: 8 },
+          { name: 'arrow-counterclockwise', text: 'Undo', priority: 7 },
+          { name: 'arrow-clockwise', text: 'Redo', priority: 6 },
+          { name: 'scissors', text: 'Cut', priority: 5 },
+          { name: 'clipboard', text: 'Copy', priority: 4 },
+          { name: 'clipboard-fill', text: 'Paste', priority: 3 },
+          { name: 'search', text: 'Find in Files', priority: 2 },
+          { name: 'arrow-repeat', text: 'Sync Changes', priority: 1 },
+          { name: 'play', text: 'Run Project', priority: 0 },
+          { name: 'bug', text: 'Debug', priority: -1 },
+          { name: 'terminal', text: 'Terminal', priority: -2 },
+          { name: 'gear', text: 'Settings', priority: -3 }
+        ];
+
+        buttons.forEach(btn => {
+          const element = document.createElement('sl-button');
+          element.size = 'small';
+          element.innerHTML = `<sl-icon name="${btn.name}"></sl-icon> ${btn.text}`;
+          element.title = btn.text;
+          component.add(element, btn.priority);
+        });
+
+      } else if (componentType === 'menubar') {
+        // Create multiple menus to test overflow
+        component.addMenu('File', [
+          { text: 'New File', action: 'new' },
+          { text: 'Open File', action: 'open' },
+          { text: 'Recent Files', action: 'recent' },
+          { text: 'Save', action: 'save' },
+          { text: 'Save As', action: 'save-as' },
+          { text: 'Save All', action: 'save-all' }
+        ], 10);
+
+        component.addMenu('Edit', [
+          { text: 'Undo', action: 'undo' },
+          { text: 'Redo', action: 'redo' },
+          { text: 'Cut', action: 'cut' },
+          { text: 'Copy', action: 'copy' },
+          { text: 'Paste', action: 'paste' },
+          { text: 'Select All', action: 'select-all' }
+        ], 9);
+
+        component.addMenu('View', [
+          { text: 'Zoom In', action: 'zoom-in' },
+          { text: 'Zoom Out', action: 'zoom-out' },
+          { text: 'Reset Zoom', action: 'zoom-reset' },
+          { text: 'Full Screen', action: 'fullscreen' }
+        ], 8);
+
+        component.addMenu('Search', [
+          { text: 'Find', action: 'find' },
+          { text: 'Find in Files', action: 'find-files' },
+          { text: 'Replace', action: 'replace' }
+        ], 7);
+
+        component.addMenu('Run', [
+          { text: 'Start Debugging', action: 'debug' },
+          { text: 'Run Without Debugging', action: 'run' },
+          { text: 'Stop', action: 'stop' }
+        ], 6);
+
+        component.addMenu('Terminal', [
+          { text: 'New Terminal', action: 'new-terminal' },
+          { text: 'Split Terminal', action: 'split-terminal' },
+          { text: 'Clear Terminal', action: 'clear-terminal' }
+        ], 5);
+      }
+    };
+
+    // Widget showcase
+    window.setupWidgetShowcase = function(componentId = 'showcase-statusbar', componentType = 'statusbar') {
+      const component = document.getElementById(componentId);
+      component.clearWidgets();
+
+      if (componentType === 'statusbar') {
+
+      // Text variants
+      const infoText = PanelUtils.createText({
+        text: 'Info Text',
+        icon: 'info-circle-fill',
+        variant: 'info'
+      });
+
+      const errorText = PanelUtils.createText({
+        text: 'Error Text',
+        icon: 'x-circle-fill',
+        variant: 'error'
+      });
+
+      // Button variants
+      const primaryBtn = PanelUtils.createButton({
+        text: 'Primary',
+        variant: 'primary',
+        action: 'primary'
+      });
+
+      const dangerBtn = PanelUtils.createButton({
+        icon: 'trash3',
+        variant: 'danger',
+        action: 'delete',
+        tooltip: 'Delete item'
+      });
+
+      // Progress variants
+      const successProgress = PanelUtils.createProgress({
+        value: 75,
+        text: 'Upload',
+        variant: 'success'
+      });
+
+      const indeterminateProgress = PanelUtils.createProgress({
+        indeterminate: true,
+        text: 'Processing'
+      });
+
+      // Badge variants
+      const infoBadge = PanelUtils.createBadge({
+        count: 5,
+        variant: 'info',
+        icon: 'bell'
+      });
+
+      const dotBadge = PanelUtils.createBadge({
+        dot: true,
+        variant: 'success',
+        pulse: true
+      });
+
+      // Separators
+      const vertSep = PanelUtils.createSeparator({ variant: 'vertical' });
+      const dottedSep = PanelUtils.createSeparator({ variant: 'dotted' });
+      const spaceSep = PanelUtils.createSeparator({ variant: 'space' });
+
+        // Add widgets
+        component.add(infoText, 'left', 15);
+        component.add(vertSep, 'left', 14);
+        component.add(errorText, 'left', 13);
+        component.add(dottedSep, 'left', 12);
+        component.add(infoBadge, 'left', 11);
+        component.add(dotBadge, 'left', 10);
+
+        component.add(successProgress, 'center', 8);
+        component.add(spaceSep, 'center', 7);
+        component.add(indeterminateProgress, 'center', 6);
+
+        component.add(primaryBtn, 'right', 10);
+        component.add(dangerBtn, 'right', 9);
+
+      } else if (componentType === 'toolbar') {
+        // Create buttons showcasing different variants and styles
+        const variants = ['default', 'primary', 'success', 'warning', 'danger'];
+        const sizes = ['small'];
+
+        variants.forEach((variant, index) => {
+          const btn = document.createElement('sl-button');
+          btn.size = 'small';
+          btn.variant = variant;
+          btn.innerHTML = `<sl-icon name="star"></sl-icon> ${variant}`;
+          component.add(btn, 10 - index);
+        });
+
+        // Add some icon-only buttons
+        ['heart', 'bookmark', 'gear', 'person', 'bell'].forEach((icon, index) => {
+          const btn = document.createElement('sl-button');
+          btn.size = 'small';
+          btn.innerHTML = `<sl-icon name="${icon}"></sl-icon>`;
+          btn.title = icon;
+          component.add(btn, 5 - index);
+        });
+
+      } else if (componentType === 'menubar') {
+        // Create menus showcasing different options
+        component.addMenu('Formats', [
+          { text: 'Text Format', action: 'format-text' },
+          { text: 'Code Format', action: 'format-code' },
+          { text: 'HTML Format', action: 'format-html' },
+          { text: 'JSON Format', action: 'format-json' }
+        ], 10);
+
+        component.addMenu('Tools', [
+          { text: 'Color Picker', action: 'color-picker' },
+          { text: 'Font Selector', action: 'font-selector' },
+          { text: 'Image Editor', action: 'image-editor' },
+          { text: 'Code Generator', action: 'code-gen' }
+        ], 9);
+
+        component.addMenu('Settings', [
+          { text: 'Preferences', action: 'preferences' },
+          { text: 'Themes', action: 'themes' },
+          { text: 'Extensions', action: 'extensions' },
+          { text: 'Shortcuts', action: 'shortcuts' }
+        ], 8);
+
+        component.addMenu('Help', [
+          { text: 'Documentation', action: 'docs' },
+          { text: 'Tutorials', action: 'tutorials' },
+          { text: 'Support', action: 'support' },
+          { text: 'About', action: 'about' }
+        ], 7);
+      }
+    };
+
+    // Smart overflow toggle function
+    window.toggleSmartOverflow = function(componentId) {
+      const component = document.getElementById(componentId);
+      if (!component) return;
+      
+      const currentMode = component.smartOverflow;
+      const newMode = currentMode === 'on' ? 'off' : 'on';
+      component.smartOverflow = newMode;
+      
+      logEvent(`Smart Overflow ${newMode === 'on' ? 'Enabled' : 'Disabled'}`, `Toolbar now uses ${newMode === 'on' ? 'priority-based overflow management' : 'standard flex layout'}`);
+    };
+
+    // Clear function
+    window.clearStatusBar = function(id) {
+      const statusBar = document.getElementById(id);
+      if (statusBar) {
+        statusBar.clearWidgets();
+      }
+    };
+
+    // Add event listeners to test menu transparency
+    function addMenuEventListeners() {
+      // Listen for panel-action events from all MenuBars
+      document.addEventListener('panel-action', (e) => {
+        if (e.target.tagName === 'MENU-BAR') {
+          logEvent('MenuBar Action', `Action: ${e.detail.action}`, 'menu-action');
+        }
+      });
+      
+      // Listen for sl-select events on dropdowns
+      document.addEventListener('sl-select', (e) => {
+        if (e.target.tagName === 'SL-DROPDOWN') {
+          const menuItem = e.detail.item;
+          const menuLabel = e.target.querySelector('[slot="trigger"]')?.textContent || 'Unknown Menu';
+          const itemText = menuItem?.textContent || 'Unknown Item';
+          logEvent('Original Menu Select', `Menu: ${menuLabel}, Item: ${itemText}`, 'original-select');
+        }
+      });
+      
+      // Listen for clicks on original menu items
+      document.addEventListener('click', (e) => {
+        if (e.target.tagName === 'SL-MENU-ITEM' && !e.target.closest('[data-overflow-hidden]')) {
+          const dropdown = e.target.closest('sl-dropdown');
+          const menuLabel = dropdown?.querySelector('[slot="trigger"]')?.textContent || 'Unknown Menu';
+          logEvent('Original Menu Item Click', `Menu: ${menuLabel}, Item: ${e.target.textContent}`, 'original-click');
+        }
+      });
+    }
+    
+
+    // Initialize demos
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM loaded, starting initialization...');
+      initializeDemo();
+      addMenuEventListeners();
+    });
+  </script>
+</body>
+</html>

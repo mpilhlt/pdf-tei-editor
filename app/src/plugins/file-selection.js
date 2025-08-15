@@ -62,8 +62,22 @@ async function install(state) {
 
   logger.debug(`Installing plugin "${plugin.name}"`);
   
-  // install controls on menubar
-  ui.toolbar.append(...fileSelectionControls)
+  // Add file selection controls to toolbar with specified priorities
+  const controlPriorities = {
+    'pdf': 10,    // High priority - essential
+    'xml': 10,    // High priority - essential  
+    'variant': 5, // Medium priority
+    'diff': 3     // Lower priority
+  };
+  
+  fileSelectionControls.forEach(control => {
+    // Ensure we're working with HTMLElement
+    if (control instanceof HTMLElement) {
+      const name = control.getAttribute('name');
+      const priority = controlPriorities[name] || 1;
+      ui.toolbar.add(control, priority);
+    }
+  });
   updateUi()
   
   /**  @type {[SlSelect,function][]} */

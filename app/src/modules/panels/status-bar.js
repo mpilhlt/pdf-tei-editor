@@ -1,6 +1,7 @@
 /**
  * Modern status bar container component inspired by VS Code
  * Manages layout and responsive behavior for status bar widgets
+ * Provides consistent event handling with other panel components
  */
 
 class StatusBar extends HTMLElement {
@@ -267,11 +268,29 @@ class StatusBar extends HTMLElement {
         widget: event.detail.widget
       }
     }));
+    
+    // Also emit generic panel-action for consistency with other components
+    this.dispatchEvent(new CustomEvent('panel-action', {
+      bubbles: true,
+      detail: {
+        action: event.detail.action,
+        widget: event.detail.widget
+      }
+    }));
   }
 
   handleWidgetChange(event) {
     // Bubble up widget change events for external handling
     this.dispatchEvent(new CustomEvent('status-change', {
+      bubbles: true,
+      detail: {
+        value: event.detail.value,
+        widget: event.detail.widget
+      }
+    }));
+    
+    // Also emit generic panel-change for consistency with other components
+    this.dispatchEvent(new CustomEvent('panel-change', {
       bubbles: true,
       detail: {
         value: event.detail.value,
@@ -286,7 +305,7 @@ class StatusBar extends HTMLElement {
    * @param {string} position - 'left', 'center', or 'right'
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
    */
-  addWidget(widget, position = 'left', priority = 0) {
+  add(widget, position = 'left', priority = 0) {
     if (!['left', 'center', 'right'].includes(position)) {
       throw new Error('Position must be "left", "center", or "right"');
     }
@@ -294,7 +313,7 @@ class StatusBar extends HTMLElement {
     const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     widget.id = widgetId;
     widget.slot = position;
-    widget.dataset.priority = priority;
+    widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, position, priority });
     this.positions[position].push({ id: widgetId, priority });
@@ -314,7 +333,7 @@ class StatusBar extends HTMLElement {
    * Remove a widget from the status bar
    * @param {string} widgetId - The ID of the widget to remove
    */
-  removeWidget(widgetId) {
+  removeById(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 

@@ -179,12 +179,12 @@ logger.info(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
 def log_session_id():
     if request.endpoint and request.endpoint.startswith("serve_"):
         return
-    current_app.logger.info(f"===========================================")
-    current_app.logger.info(f"Request: {request.endpoint} ")
+    current_app.logger.debug(f"===========================================")
+    current_app.logger.debug(f"Request: {request.endpoint} ")
     if 'X-Session-ID' in request.headers:
         session_id = request.headers.get('X-Session-ID')
-        current_app.logger.info(f"Session {session_id}")
-    current_app.logger.info(f"===========================================")
+        current_app.logger.debug(f"Session {session_id}")
+    current_app.logger.debug(f"===========================================")
 
 # Serve from node_modules during development
 @app.route('/node_modules/<path:path>')

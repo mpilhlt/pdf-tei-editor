@@ -81,8 +81,8 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0]
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // install controls on menubar
-  ui.toolbar.append(extractionBtnGroup)
+  // Add extraction buttons to toolbar with medium priority
+  ui.toolbar.add(extractionBtnGroup, 7);
   document.body.append(optionsDialog)
   updateUi()
 

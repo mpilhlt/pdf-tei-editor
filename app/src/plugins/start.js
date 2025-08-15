@@ -14,7 +14,7 @@ import {
   updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
   config, authentication, state
 } from '../app.js'
-import { StatusBarUtils } from '../modules/statusbar/index.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
@@ -57,7 +57,7 @@ async function install(state) {
   updateUi()
   
   // Create validation status widget
-  validationStatusWidget = StatusBarUtils.createText({
+  validationStatusWidget = PanelUtils.createText({
     text: 'Invalid XML',
     variant: 'error'
   })
@@ -203,7 +203,7 @@ function configureXmlEditor() {
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
     // Show validation error in statusbar
     if (validationStatusWidget && !validationStatusWidget.isConnected) {
-      ui.xmlEditor.statusbar.addWidget(validationStatusWidget, 'left', 5)
+      ui.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5)
     }
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
@@ -214,7 +214,7 @@ function configureXmlEditor() {
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
-      ui.xmlEditor.statusbar.removeWidget(validationStatusWidget.id)
+      ui.xmlEditor.statusbar.removeById(validationStatusWidget.id)
     }
   })
 }

@@ -11,8 +11,8 @@ import {
   updateState, client, logger, fileselection, xmlEditor, sse
 } from '../app.js'
 import { createHtmlElements } from '../ui.js'
-import { StatusBarUtils } from '../modules/statusbar/index.js'
-import { StatusProgress } from '../modules/statusbar/widgets/status-progress.js'
+import { PanelUtils } from '../modules/panels/index.js'
+import { StatusProgress } from '../modules/panels/widgets/status-progress.js'
 
 /**
  * plugin API
@@ -113,7 +113,7 @@ async function install(state) {
   syncContainer.appendChild(syncProgressWidget)
   
   // Add the sync widget to the XML editor statusbar permanently
-  ui.xmlEditor.statusbar.addWidget(syncContainer, 'left', 3)
+  ui.xmlEditor.statusbar.add(syncContainer, 'left', 3)
   
 }
 
