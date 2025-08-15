@@ -305,7 +305,7 @@ class StatusBar extends HTMLElement {
    * @param {string} position - 'left', 'center', or 'right'
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
    */
-  addWidget(widget, position = 'left', priority = 0) {
+  add(widget, position = 'left', priority = 0) {
     if (!['left', 'center', 'right'].includes(position)) {
       throw new Error('Position must be "left", "center", or "right"');
     }
@@ -313,7 +313,7 @@ class StatusBar extends HTMLElement {
     const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     widget.id = widgetId;
     widget.slot = position;
-    widget.dataset.priority = priority;
+    widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, position, priority });
     this.positions[position].push({ id: widgetId, priority });
@@ -333,7 +333,7 @@ class StatusBar extends HTMLElement {
    * Remove a widget from the status bar
    * @param {string} widgetId - The ID of the widget to remove
    */
-  removeWidget(widgetId) {
+  removeById(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 

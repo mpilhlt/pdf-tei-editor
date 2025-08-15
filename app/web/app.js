@@ -11497,7 +11497,7 @@ class BasePanel extends HTMLElement {
    * @param {HTMLElement} widget - The widget element
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
    */
-  addWidget(widget, priority = 0) {
+  add(widget, priority = 0) {
     const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     widget.id = widgetId;
     widget.dataset.priority = priority;
@@ -11536,7 +11536,7 @@ class BasePanel extends HTMLElement {
    * Remove a widget from the panel
    * @param {string} widgetId - The ID of the widget to remove
    */
-  removeWidget(widgetId) {
+  remove(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 
@@ -11904,7 +11904,7 @@ class StatusBar extends HTMLElement {
    * @param {string} position - 'left', 'center', or 'right'
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
    */
-  addWidget(widget, position = 'left', priority = 0) {
+  add(widget, position = 'left', priority = 0) {
     if (!['left', 'center', 'right'].includes(position)) {
       throw new Error('Position must be "left", "center", or "right"');
     }
@@ -11932,7 +11932,7 @@ class StatusBar extends HTMLElement {
    * Remove a widget from the status bar
    * @param {string} widgetId - The ID of the widget to remove
    */
-  removeWidget(widgetId) {
+  remove(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 
@@ -12371,7 +12371,7 @@ class ToolBar extends BasePanel {
       button = btnElement;
     }
 
-    return this.addWidget(button, priority);
+    return this.add(button, priority);
   }
 }
 
@@ -12755,7 +12755,7 @@ class MenuBar extends BasePanel {
       menuElement = menu;
     }
 
-    return this.addWidget(menuElement, priority);
+    return this.add(menuElement, priority);
   }
 }
 
@@ -14421,7 +14421,7 @@ customElements.define('status-switch', StatusSwitch);
  * const textWidget = document.createElement('status-text');
  * textWidget.text = 'Ready';
  * textWidget.icon = 'check-circle';
- * statusBar.addWidget(textWidget, 'left', 10);
+ * statusBar.add(textWidget, 'left', 10);
  * 
  * // Create a toolbar
  * const toolBar = document.createElement('tool-bar');
@@ -15228,7 +15228,7 @@ async function install$e(state) {
   });
   
   autoSearchSwitch.addEventListener('widget-change', onAutoSearchSwitchChange);
-  statusBar.addWidget(autoSearchSwitch, 'left', 10);
+  statusBar.add(autoSearchSwitch, 'left', 10);
   
   // Update UI to register named elements
   updateUi();
@@ -45785,7 +45785,7 @@ async function install$d(state) {
   });
   
   // Add cursor position widget to right side of statusbar
-  ui$1.xmlEditor.statusbar.addWidget(cursorPositionWidget, 'right', 1);
+  ui$1.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 1);
 
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
@@ -45832,12 +45832,12 @@ async function update$9(state) {
     if (state.editorReadOnly) {
       ui$1.xmlEditor.classList.add("editor-readonly");
       if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
-        ui$1.xmlEditor.statusbar.addWidget(readOnlyStatusWidget, 'left', 5);
+        ui$1.xmlEditor.statusbar.add(readOnlyStatusWidget, 'left', 5);
       }
     } else {
       ui$1.xmlEditor.classList.remove("editor-readonly");
       if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
-        ui$1.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget.id);
+        ui$1.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id);
       }
     }
   }
@@ -47292,7 +47292,7 @@ async function install$b(state) {
     if (control instanceof HTMLElement) {
       const name = control.getAttribute('name');
       const priority = controlPriorities[name] || 1;
-      ui$1.toolbar.addWidget(control, priority);
+      ui$1.toolbar.add(control, priority);
     }
   });
   updateUi();
@@ -47757,7 +47757,7 @@ async function install$a(state) {
   api$e.debug(`Installing plugin "${plugin$a.name}"`);
 
   // Add extraction buttons to toolbar with medium priority
-  ui$1.toolbar.addWidget(extractionBtnGroup, 7);
+  ui$1.toolbar.add(extractionBtnGroup, 7);
   document.body.append(optionsDialog);
   updateUi();
 
@@ -48855,7 +48855,7 @@ async function install$9(state) {
     // Ensure we're working with HTMLElement
     if (buttonGroup instanceof HTMLElement) {
       // Document actions have medium priority (lower than file selection)
-      ui$1.toolbar.addWidget(buttonGroup, 8);
+      ui$1.toolbar.add(buttonGroup, 8);
     }
   });
   document.body.append(newVersionDialog);
@@ -49084,7 +49084,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     // Show saving status
     if (savingStatusWidget && !savingStatusWidget.isConnected) {
       if (ui$1.xmlEditor.statusbar) {
-        ui$1.xmlEditor.statusbar.addWidget(savingStatusWidget, 'left', 10);
+        ui$1.xmlEditor.statusbar.add(savingStatusWidget, 'left', 10);
       }
     }
     return await api$8.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
@@ -49096,7 +49096,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     // clear status message after 1 second 
     setTimeout(() => {
       if (savingStatusWidget && savingStatusWidget.isConnected) {
-        ui$1.xmlEditor.statusbar.removeWidget(savingStatusWidget.id);
+        ui$1.xmlEditor.statusbar.removeById(savingStatusWidget.id);
       }
     }, 1000);
   }
@@ -59108,7 +59108,7 @@ function configureXmlEditor() {
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
     // Show validation error in statusbar
     if (validationStatusWidget && !validationStatusWidget.isConnected) {
-      ui$1.xmlEditor.statusbar.addWidget(validationStatusWidget, 'left', 5);
+      ui$1.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5);
     }
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
@@ -59119,7 +59119,7 @@ function configureXmlEditor() {
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
-      ui$1.xmlEditor.statusbar.removeWidget(validationStatusWidget.id);
+      ui$1.xmlEditor.statusbar.removeById(validationStatusWidget.id);
     }
   });
 }
@@ -59580,7 +59580,7 @@ async function install(state) {
   syncContainer.appendChild(syncProgressWidget);
   
   // Add the sync widget to the XML editor statusbar permanently
-  ui$1.xmlEditor.statusbar.addWidget(syncContainer, 'left', 3);
+  ui$1.xmlEditor.statusbar.add(syncContainer, 'left', 3);
   
 }
 

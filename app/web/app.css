@@ -1,3 +1,13 @@
+/* Hide shoelace library components until they have been defined */
+:not(:defined) {
+  visibility: hidden;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box; /* Apply to all elements */
+}
+
+
 body {
   font-family: sans-serif;
   height: 100vh;
@@ -8,9 +18,6 @@ body {
   box-sizing: border-box; /* Add this to the body */
 }
 
-*, *::before, *::after {
-  box-sizing: border-box; /* Apply to all elements */
-}
 
 h1,h2,h3 {
   margin:auto
@@ -28,7 +35,6 @@ h1,h2,h3 {
   gap: 10px;
 }
 
-
 #container {
   display: flex;
   flex-direction: column;
@@ -38,22 +44,38 @@ h1,h2,h3 {
 }
 
 #toolbar{
-  height: 50px;
-  font-size: small;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0; 
+  height: 55px;
 }
 
 #toolbar.dropdown-open {
   z-index: var(--sl-z-index-dropdown);
 }
 
-.toolbar-content {
-  max-height: 50px;
+/* special styling of the toolbar to align the labels of the selectboxes and button groups */
+#toolbar sl-button-group[label]:before {
+  content: attr(label);
+  position: absolute; 
+  top: -8px;
+  left: 0;
+  color: var(--sl-color-gray-500);
+  font-size: smaller;
+  white-space: nowrap;
+  display: block; 
 }
+
+#toolbar sl-select::part(form-control) {
+  transform: translateY(-5px);
+}
+
+#toolbar sl-button::part(base) {
+  margin-top: 5px;
+}
+
+sl-select::part(form-control-label) {
+  font-size: smaller;
+  color: var(--sl-color-gray-500)
+}
+
 
 #editors {
   flex-grow: 1;
@@ -82,18 +104,6 @@ iframe {
   order: 1; /* Ensure iframe appears before statusbar */
 }
 
-/* Statusbar styling */
-status-bar {
-  border-top: 1px solid #e0e0e0;
-  background: #f5f5f5;
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  padding: 2px 8px;
-  font-size: 12px;
-  order: 2; /* Ensure statusbar appears after iframe */
-}
-
 #xml-editor {
   width: 50%;
   border: 1px solid #ccc;
@@ -107,43 +117,23 @@ status-bar {
   overflow: scroll;
 }
 
-#status-bar {
-  height: 20px;
-  color: var(--sl-color-gray-500);
-  flex-shrink: 0; /* Prevent status bar from shrinking */
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  padding: 3px;
-  border-top: 1px solid #ccc;
-}
-
-/* Shoelace library */
-
-:not(:defined) {
-  visibility: hidden;
-}
-
-#toolbar sl-button::part(base) {
-  margin-top: 5px;
-}
-
-#toolbar sl-button-group[label]:before {
-  content: attr(label);
-  position: absolute; /* Or relative, depending on your context */
-  top: -8px;
-  left: 0;
-  color: var(--sl-color-gray-500);
-  font-size: smaller; /* Optional: Adjust font size for the label */
-  white-space: nowrap; /* Prevent wrapping */
-  display: block; /*Crucial for positioning and showing the content*/
-}
 
 sl-dialog {
   --header-spacing: var(--sl-spacing-small);
   --body-spacing: var(--sl-spacing-small);
   --footer-spacing: var(--sl-spacing-small);
+}
+
+/* Statusbar styling */
+status-bar {
+  border-top: 1px solid #e0e0e0;
+  background: #f5f5f5;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+  order: 2; /* Ensure statusbar appears after iframe */
 }
 
 .dialog-big {
@@ -162,15 +152,6 @@ sl-dialog {
   gap: 10px;
 }
 
-#toolbar sl-select::part(form-control) {
-  transform: translateY(-6px)
-}
-
-sl-select::part(form-control-label) {
-  font-size: smaller;
-  color: var(--sl-color-gray-500)
-}
-
 sl-select::part(display-input) {
   caret-color: transparent !important;
   font-size: smaller;
@@ -187,27 +168,6 @@ sl-menu-item::part(label) {
 
 sl-button-group[label] {
   position: relative; /* To contain the absolute positioning of the :before pseudo-element */
-}
-
-
-
-#status-message-pdf,
-#status-message-xml {
-  color: var(--sl-color-gray-500);
-  font-size: var(--sl-font-size-x-small);
-  white-space: nowrap; /* Prevent text from wrapping */
-  overflow: hidden; /* Hide overflow text */
-  align-items: center; /* Center align text vertically */
-  text-overflow: ellipsis; /* Add ellipsis for overflow text */
-  max-width: 50%;
-}
-
-#status-message-pdf {
-  text-align: left;
-}
-
-#status-message-xml {
-  text-align: right;
 }
 
 .invalid-xml {

@@ -377,7 +377,7 @@ class MenuBar extends BasePanel {
       menuElement = menu;
     }
 
-    return this.addWidget(menuElement, priority);
+    return this.add(menuElement, priority);
   }
 }
 

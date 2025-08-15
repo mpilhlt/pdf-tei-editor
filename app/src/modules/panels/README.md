@@ -32,7 +32,7 @@ const saveButton = PanelUtils.createButton({
   icon: 'floppy',
   action: 'save'
 });
-statusBar.addWidget(saveButton, 'right', 10);
+statusBar.add(saveButton, 'right', 10);
 
 // Create a toolbar
 const toolBar = document.createElement('tool-bar');
@@ -106,9 +106,9 @@ Three-section horizontal panel for status information.
 const statusBar = document.createElement('status-bar');
 
 // Add widgets to different sections
-statusBar.addWidget(fileWidget, 'left', 10);    // File info
-statusBar.addWidget(progressWidget, 'center', 5); // Build status  
-statusBar.addWidget(positionWidget, 'right', 8);  // Cursor position
+statusBar.add(fileWidget, 'left', 10);    // File info
+statusBar.add(progressWidget, 'center', 5); // Build status  
+statusBar.add(positionWidget, 'right', 8);  // Cursor position
 ```
 
 ### ToolBar  
@@ -126,7 +126,7 @@ toolBar.addButton({
 }, 10);
 
 // Add any widget
-toolBar.addWidget(customButton, 5);
+toolBar.add(customButton, 5);
 ```
 
 ### MenuBar
@@ -244,8 +244,8 @@ All panels support priority-based responsive overflow:
 
 ```javascript
 // Higher priority = stays visible longer
-statusBar.addWidget(importantWidget, 'left', 10);  // High priority
-statusBar.addWidget(lessImportant, 'left', 5);     // Lower priority
+statusBar.add(importantWidget, 'left', 10);  // High priority
+statusBar.add(lessImportant, 'left', 5);     // Lower priority
 
 // When space is limited, lower priority widgets are hidden first
 ```

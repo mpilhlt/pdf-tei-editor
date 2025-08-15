@@ -825,9 +825,9 @@
           tooltip: 'Line 42, Column 15'
         });
 
-        component.addWidget(readyText, 'left', 10);
-        component.addWidget(saveButton, 'right', 8);
-        component.addWidget(lineInfo, 'right', 5);
+        component.add(readyText, 'left', 10);
+        component.add(saveButton, 'right', 8);
+        component.add(lineInfo, 'right', 5);
 
       } else if (componentType === 'toolbar') {
         // Create toolbar buttons
@@ -844,9 +844,9 @@
         undoBtn.innerHTML = '<sl-icon name="arrow-counterclockwise"></sl-icon>';
         undoBtn.title = 'Undo';
 
-        component.addWidget(newBtn, 10);
-        component.addWidget(saveBtn, 8);
-        component.addWidget(undoBtn, 5);
+        component.add(newBtn, 10);
+        component.add(saveBtn, 8);
+        component.add(undoBtn, 5);
 
       } else if (componentType === 'menubar') {
         // Create menu dropdowns
@@ -909,11 +909,11 @@
         const sep1 = PanelUtils.createSeparator();
         const sep2 = PanelUtils.createSeparator();
 
-        component.addWidget(progressWidget, 'left', 10);
-        component.addWidget(sep1, 'left', 9);
-        component.addWidget(badgeWidget, 'left', 8);
-        component.addWidget(sep2, 'center', 5);
-        component.addWidget(dropdown, 'right', 7);
+        component.add(progressWidget, 'left', 10);
+        component.add(sep1, 'left', 9);
+        component.add(badgeWidget, 'left', 8);
+        component.add(sep2, 'center', 5);
+        component.add(dropdown, 'right', 7);
 
       } else if (componentType === 'toolbar') {
         // Build button with progress indicator
@@ -934,9 +934,9 @@
         langBtn.size = 'small';
         langBtn.innerHTML = '<sl-icon name="code"></sl-icon> JavaScript';
 
-        component.addWidget(buildBtn, 10);
-        component.addWidget(errorBtn, 8);
-        component.addWidget(langBtn, 7);
+        component.add(buildBtn, 10);
+        component.add(errorBtn, 8);
+        component.add(langBtn, 7);
 
       } else if (componentType === 'menubar') {
         // Build menu with progress
@@ -1120,29 +1120,29 @@
       const sep8 = PanelUtils.createSeparator();
 
         // Add widgets with priorities (higher = more important, stays visible longer)
-        component.addWidget(fileText, 'left', 10);           // Most important - file name
-        component.addWidget(sep1, 'left', 9);
-        component.addWidget(unsavedBadge, 'left', 9);        // Important - unsaved changes
-        component.addWidget(sep2, 'left', 8);
-        component.addWidget(gitBranchText, 'left', 7);       // Git info
-        component.addWidget(sep3, 'left', 6);
-        component.addWidget(modeText, 'left', 5);            // Editor mode
+        component.add(fileText, 'left', 10);           // Most important - file name
+        component.add(sep1, 'left', 9);
+        component.add(unsavedBadge, 'left', 9);        // Important - unsaved changes
+        component.add(sep2, 'left', 8);
+        component.add(gitBranchText, 'left', 7);       // Git info
+        component.add(sep3, 'left', 6);
+        component.add(modeText, 'left', 5);            // Editor mode
 
-        component.addWidget(buildProgress, 'center', 6);     // Build status
-        component.addWidget(sep4, 'center', 5);
-        component.addWidget(syncButton, 'center', 4);        // Sync button
+        component.add(buildProgress, 'center', 6);     // Build status
+        component.add(sep4, 'center', 5);
+        component.add(syncButton, 'center', 4);        // Sync button
 
-        component.addWidget(positionText, 'right', 10);      // Most important - cursor position
-        component.addWidget(sep5, 'right', 9);
-        component.addWidget(selectionText, 'right', 8);      // Selection info
-        component.addWidget(sep6, 'right', 7);
-        component.addWidget(languageDropdown, 'right', 6);   // Language selector
-        component.addWidget(sep7, 'right', 5);
-        component.addWidget(encodingDropdown, 'right', 4);   // Encoding
-        component.addWidget(sep8, 'right', 3);
-        component.addWidget(eolDropdown, 'right', 2);        // Line endings
-        component.addWidget(autoSaveSwitch, 'right', 1);     // Auto save setting
-        component.addWidget(formatButton, 'right', 0);       // Least important - format button
+        component.add(positionText, 'right', 10);      // Most important - cursor position
+        component.add(sep5, 'right', 9);
+        component.add(selectionText, 'right', 8);      // Selection info
+        component.add(sep6, 'right', 7);
+        component.add(languageDropdown, 'right', 6);   // Language selector
+        component.add(sep7, 'right', 5);
+        component.add(encodingDropdown, 'right', 4);   // Encoding
+        component.add(sep8, 'right', 3);
+        component.add(eolDropdown, 'right', 2);        // Line endings
+        component.add(autoSaveSwitch, 'right', 1);     // Auto save setting
+        component.add(formatButton, 'right', 0);       // Least important - format button
 
       } else if (componentType === 'toolbar') {
         // Add a long select box that should grow to take remaining space
@@ -1174,7 +1174,7 @@
           <sl-option value="demo.html">demo/responsive-demo.html</sl-option>
           <sl-option value="readme.md">docs/README.md</sl-option>
         `;
-        component.addWidget(projectSelect, 15); // Highest priority
+        component.add(projectSelect, 15); // Highest priority
 
         // Create multiple buttons with text to test overflow dramatically
         const buttons = [
@@ -1199,7 +1199,7 @@
           element.size = 'small';
           element.innerHTML = `<sl-icon name="${btn.name}"></sl-icon> ${btn.text}`;
           element.title = btn.text;
-          component.addWidget(element, btn.priority);
+          component.add(element, btn.priority);
         });
 
       } else if (componentType === 'menubar') {
@@ -1314,19 +1314,19 @@
       const spaceSep = PanelUtils.createSeparator({ variant: 'space' });
 
         // Add widgets
-        component.addWidget(infoText, 'left', 15);
-        component.addWidget(vertSep, 'left', 14);
-        component.addWidget(errorText, 'left', 13);
-        component.addWidget(dottedSep, 'left', 12);
-        component.addWidget(infoBadge, 'left', 11);
-        component.addWidget(dotBadge, 'left', 10);
+        component.add(infoText, 'left', 15);
+        component.add(vertSep, 'left', 14);
+        component.add(errorText, 'left', 13);
+        component.add(dottedSep, 'left', 12);
+        component.add(infoBadge, 'left', 11);
+        component.add(dotBadge, 'left', 10);
 
-        component.addWidget(successProgress, 'center', 8);
-        component.addWidget(spaceSep, 'center', 7);
-        component.addWidget(indeterminateProgress, 'center', 6);
+        component.add(successProgress, 'center', 8);
+        component.add(spaceSep, 'center', 7);
+        component.add(indeterminateProgress, 'center', 6);
 
-        component.addWidget(primaryBtn, 'right', 10);
-        component.addWidget(dangerBtn, 'right', 9);
+        component.add(primaryBtn, 'right', 10);
+        component.add(dangerBtn, 'right', 9);
 
       } else if (componentType === 'toolbar') {
         // Create buttons showcasing different variants and styles
@@ -1338,7 +1338,7 @@
           btn.size = 'small';
           btn.variant = variant;
           btn.innerHTML = `<sl-icon name="star"></sl-icon> ${variant}`;
-          component.addWidget(btn, 10 - index);
+          component.add(btn, 10 - index);
         });
 
         // Add some icon-only buttons
@@ -1347,7 +1347,7 @@
           btn.size = 'small';
           btn.innerHTML = `<sl-icon name="${icon}"></sl-icon>`;
           btn.title = icon;
-          component.addWidget(btn, 5 - index);
+          component.add(btn, 5 - index);
         });
 
       } else if (componentType === 'menubar') {

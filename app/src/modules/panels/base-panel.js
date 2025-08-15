@@ -244,10 +244,10 @@ class BasePanel extends HTMLElement {
    * @param {HTMLElement} widget - The widget element
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
    */
-  addWidget(widget, priority = 0) {
+  add(widget, priority = 0) {
     const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     widget.id = widgetId;
-    widget.dataset.priority = priority;
+    widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, priority });
     this.appendChild(widget);
@@ -283,7 +283,7 @@ class BasePanel extends HTMLElement {
    * Remove a widget from the panel
    * @param {string} widgetId - The ID of the widget to remove
    */
-  removeWidget(widgetId) {
+  removeById(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 

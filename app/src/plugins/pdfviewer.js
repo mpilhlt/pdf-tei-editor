@@ -73,7 +73,7 @@ async function install(state) {
   })
   
   autoSearchSwitch.addEventListener('widget-change', onAutoSearchSwitchChange)
-  statusBar.addWidget(autoSearchSwitch, 'left', 10)
+  statusBar.add(autoSearchSwitch, 'left', 10)
   
   // Update UI to register named elements
   updateUi()

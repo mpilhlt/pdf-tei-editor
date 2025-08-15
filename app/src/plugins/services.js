@@ -130,7 +130,7 @@ async function install(state) {
     // Ensure we're working with HTMLElement
     if (buttonGroup instanceof HTMLElement) {
       // Document actions have medium priority (lower than file selection)
-      ui.toolbar.addWidget(buttonGroup, 8);
+      ui.toolbar.add(buttonGroup, 8);
     }
   });
   document.body.append(newVersionDialog)
@@ -359,7 +359,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     // Show saving status
     if (savingStatusWidget && !savingStatusWidget.isConnected) {
       if (ui.xmlEditor.statusbar) {
-        ui.xmlEditor.statusbar.addWidget(savingStatusWidget, 'left', 10)
+        ui.xmlEditor.statusbar.add(savingStatusWidget, 'left', 10)
       }
     }
     return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
@@ -371,7 +371,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
     // clear status message after 1 second 
     setTimeout(() => {
       if (savingStatusWidget && savingStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.removeWidget(savingStatusWidget.id)
+        ui.xmlEditor.statusbar.removeById(savingStatusWidget.id)
       }
     }, 1000)
   }

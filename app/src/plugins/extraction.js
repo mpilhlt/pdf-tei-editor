@@ -82,7 +82,7 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // Add extraction buttons to toolbar with medium priority
-  ui.toolbar.addWidget(extractionBtnGroup, 7);
+  ui.toolbar.add(extractionBtnGroup, 7);
   document.body.append(optionsDialog)
   updateUi()
 

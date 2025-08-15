@@ -16,7 +16,7 @@
  * const textWidget = document.createElement('status-text');
  * textWidget.text = 'Ready';
  * textWidget.icon = 'check-circle';
- * statusBar.addWidget(textWidget, 'left', 10);
+ * statusBar.add(textWidget, 'left', 10);
  * 
  * // Create a toolbar
  * const toolBar = document.createElement('tool-bar');

@@ -113,7 +113,7 @@ async function install(state) {
   syncContainer.appendChild(syncProgressWidget)
   
   // Add the sync widget to the XML editor statusbar permanently
-  ui.xmlEditor.statusbar.addWidget(syncContainer, 'left', 3)
+  ui.xmlEditor.statusbar.add(syncContainer, 'left', 3)
   
 }
 

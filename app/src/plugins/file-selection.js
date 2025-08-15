@@ -75,7 +75,7 @@ async function install(state) {
     if (control instanceof HTMLElement) {
       const name = control.getAttribute('name');
       const priority = controlPriorities[name] || 1;
-      ui.toolbar.addWidget(control, priority);
+      ui.toolbar.add(control, priority);
     }
   });
   updateUi()

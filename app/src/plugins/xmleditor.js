@@ -85,7 +85,7 @@ async function install(state) {
   })
   
   // Add cursor position widget to right side of statusbar
-  ui.xmlEditor.statusbar.addWidget(cursorPositionWidget, 'right', 1)
+  ui.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 1)
 
   // selection => xpath state
   xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
@@ -132,12 +132,12 @@ async function update(state) {
     if (state.editorReadOnly) {
       ui.xmlEditor.classList.add("editor-readonly")
       if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.addWidget(readOnlyStatusWidget, 'left', 5)
+        ui.xmlEditor.statusbar.add(readOnlyStatusWidget, 'left', 5)
       }
     } else {
       ui.xmlEditor.classList.remove("editor-readonly")
       if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.removeWidget(readOnlyStatusWidget.id)
+        ui.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id)
       }
     }
   }

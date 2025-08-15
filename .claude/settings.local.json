@@ -19,7 +19,8 @@
       "mcp__browser-mcp__browser_get_markdown",
       "mcp__browser-mcp__browser_evaluate",
       "mcp__browser-mcp__browser_click",
-      "mcp__browser-mcp__browser_scroll"
+      "mcp__browser-mcp__browser_scroll",
+      "mcp__browser-mcp__browser_close"
     ],
     "deny": []
   }
