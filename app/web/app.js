@@ -11500,7 +11500,7 @@ class BasePanel extends HTMLElement {
   add(widget, priority = 0) {
     const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     widget.id = widgetId;
-    widget.dataset.priority = priority;
+    widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, priority });
     this.appendChild(widget);
@@ -11536,7 +11536,7 @@ class BasePanel extends HTMLElement {
    * Remove a widget from the panel
    * @param {string} widgetId - The ID of the widget to remove
    */
-  remove(widgetId) {
+  removeById(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 
@@ -11912,7 +11912,7 @@ class StatusBar extends HTMLElement {
     const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     widget.id = widgetId;
     widget.slot = position;
-    widget.dataset.priority = priority;
+    widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, position, priority });
     this.positions[position].push({ id: widgetId, priority });
@@ -11932,7 +11932,7 @@ class StatusBar extends HTMLElement {
    * Remove a widget from the status bar
    * @param {string} widgetId - The ID of the widget to remove
    */
-  remove(widgetId) {
+  removeById(widgetId) {
     const widget = this.widgets.get(widgetId);
     if (!widget) return false;
 
@@ -12066,16 +12066,19 @@ class ToolBar extends BasePanel {
     
     // Apply flex layout with proper width constraints
     this.style.cssText += `
-      height: 50px !important;
+
       font-size: small !important;
       display: flex !important;
       flex-direction: row !important;
       align-items: center !important;
       gap: 5px !important;
       flex-shrink: 0 !important;
-      overflow: hidden !important;
+      overflow: visible !important;
       width: 100% !important;
       box-sizing: border-box !important;
+      padding-right: 5px !important;
+      position: relative !important;
+      z-index: 100 !important;
     `;
     
     // Apply flex styles directly to elements since CSS ::slotted might not work
@@ -12108,9 +12111,12 @@ class ToolBar extends BasePanel {
     this.style.cssText = this.style.cssText.replace(/align-items: center !important;/, '');
     this.style.cssText = this.style.cssText.replace(/gap: 5px !important;/, '');
     this.style.cssText = this.style.cssText.replace(/flex-shrink: 0 !important;/, '');
-    this.style.cssText = this.style.cssText.replace(/overflow: hidden !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/overflow: visible !important;/, '');
     this.style.cssText = this.style.cssText.replace(/width: 100% !important;/, '');
     this.style.cssText = this.style.cssText.replace(/box-sizing: border-box !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/padding-right: 5px !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/position: relative !important;/, '');
+    this.style.cssText = this.style.cssText.replace(/z-index: 100 !important;/, '');
     
     // Ensure all widgets are visible and unhidden before re-checking overflow
     this.hiddenWidgets.forEach(widget => {
@@ -12161,13 +12167,13 @@ class ToolBar extends BasePanel {
         :host {
           display: flex;
           align-items: center;
-          height: 32px;
-          padding: 4px 8px;
           background-color: var(--sl-color-neutral-0);
           border-bottom: 1px solid var(--sl-color-neutral-200);
           gap: 4px;
-          overflow: hidden;
+          overflow: visible;
           font-size: var(--sl-font-size-small);
+          position: relative;
+          z-index: 100;
         }
 
         ::slotted(*) {
