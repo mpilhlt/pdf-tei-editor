@@ -47,6 +47,56 @@ menuBar.addMenu('File', [
 ], 10);
 ```
 
+## Smart Overflow Management
+
+The ToolBar and MenuBar components support intelligent overflow management that automatically handles space constraints.
+
+### Smart Overflow Attribute
+
+Control overflow behavior using the `smart-overflow` attribute:
+
+```html
+<!-- Default: Standard flex layout -->
+<tool-bar></tool-bar>
+<tool-bar smart-overflow="off"></tool-bar>
+
+<!-- Enable smart overflow with priority-based hiding -->
+<tool-bar smart-overflow="on"></tool-bar>
+```
+
+**Values:**
+- `"off"` (default): Uses standard CSS flexbox layout. Widgets grow/shrink naturally, with overflow clipped.
+- `"on"`: Enables intelligent overflow management with priority-based hiding and dropdown menus.
+
+### JavaScript Property
+
+```javascript
+const toolbar = document.querySelector('tool-bar');
+
+// Check current mode
+console.log(toolbar.smartOverflow); // "off" or "on"
+
+// Change mode programmatically
+toolbar.smartOverflow = "on";   // Enable smart overflow
+toolbar.smartOverflow = "off";  // Revert to flex layout
+```
+
+### How Smart Overflow Works
+
+When `smart-overflow="on"`:
+
+1. **Priority-Based**: Widgets with lower priority values are hidden first
+2. **Type-Specific**: Only simple buttons can be moved to overflow dropdowns
+3. **Complex Widgets**: Select boxes, button groups, and other complex widgets are simply hidden (not moved to dropdown)
+4. **Overflow Indicators**: ToolBar shows `»` button, MenuBar shows `☰` hamburger menu
+5. **Event Forwarding**: Clicks in overflow menus trigger original widget events
+
+When `smart-overflow="off"` (default):
+- Uses standard CSS flexbox layout with flexible sizing
+- No JavaScript-based overflow management
+- Widgets grow/shrink naturally based on available space
+- Content that doesn't fit is clipped
+
 ## Panel Types
 
 ### StatusBar

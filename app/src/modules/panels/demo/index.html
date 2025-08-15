@@ -422,11 +422,12 @@
 
         <div id="responsive-toolbar-tab" class="tab-content">
           <div class="status-bar-container">
-            <tool-bar id="responsive-toolbar"></tool-bar>
+            <tool-bar id="responsive-toolbar" smart-overflow="on"></tool-bar>
             <div class="mock-editor">Responsive Layout Test</div>
           </div>
           <div class="controls">
             <button onclick="setupResponsiveDemo('responsive-toolbar', 'toolbar')">Setup Responsive Demo</button>
+            <button onclick="toggleSmartOverflow('responsive-toolbar')">Toggle Smart Overflow</button>
             <button onclick="clearComponent('responsive-toolbar')">Clear</button>
           </div>
         </div>
@@ -556,7 +557,7 @@
 
         <div id="html-toolbar-tab" class="tab-content">
           <div class="status-bar-container">
-            <tool-bar id="html-toolbar">
+            <tool-bar id="html-toolbar" smart-overflow="on">
               <sl-button size="small" data-priority="10">
                 <sl-icon name="file-plus"></sl-icon>
                 New
@@ -584,7 +585,7 @@
           </div>
           <div class="code-example">
             <h4>HTML Source:</h4>
-            <pre><code>&lt;tool-bar&gt;
+            <pre><code>&lt;tool-bar smart-overflow="on"&gt;
   &lt;sl-button size="small" data-priority="10"&gt;
     &lt;sl-icon name="file-plus"&gt;&lt;/sl-icon&gt;
     New
@@ -607,7 +608,7 @@
 
         <div id="html-menubar-tab" class="tab-content">
           <div class="status-bar-container">
-            <menu-bar id="html-menubar">
+            <menu-bar id="html-menubar" smart-overflow="on">
               <sl-dropdown data-priority="10">
                 <sl-button slot="trigger" variant="text" size="small">File</sl-button>
                 <sl-menu>
@@ -642,7 +643,7 @@
           </div>
           <div class="code-example">
             <h4>HTML Source:</h4>
-            <pre><code>&lt;menu-bar&gt;
+            <pre><code>&lt;menu-bar smart-overflow="on"&gt;
   &lt;sl-dropdown data-priority="10"&gt;
     &lt;sl-button slot="trigger" variant="text" size="small"&gt;File&lt;/sl-button&gt;
     &lt;sl-menu&gt;
@@ -1144,29 +1145,60 @@
         component.addWidget(formatButton, 'right', 0);       // Least important - format button
 
       } else if (componentType === 'toolbar') {
-        // Create multiple buttons to test overflow
+        // Add a long select box that should grow to take remaining space
+        const projectSelect = document.createElement('sl-select');
+        projectSelect.size = 'small';
+        projectSelect.placeholder = 'Select Project File...';
+        projectSelect.style.width = '200px'; // Fixed width for smart overflow mode
+        projectSelect.hoist = true; // Fix dropdown visibility
+        
+        // Apply flex only when in flex mode
+        const observer = new MutationObserver(() => {
+          if (component.getAttribute('smart-overflow') === 'off') {
+            projectSelect.style.flex = '1 1 auto';
+            projectSelect.style.minWidth = '80px';
+            projectSelect.style.width = '';
+          } else {
+            projectSelect.style.flex = '';
+            projectSelect.style.minWidth = '';
+            projectSelect.style.width = '200px';
+          }
+        });
+        observer.observe(component, { attributes: true, attributeFilter: ['smart-overflow'] });
+        projectSelect.innerHTML = `
+          <sl-option value="app.js">src/components/App.js</sl-option>
+          <sl-option value="toolbar.js">src/components/ToolBar.js</sl-option>
+          <sl-option value="statusbar.js">src/components/StatusBar.js</sl-option>
+          <sl-option value="menubar.js">src/components/MenuBar.js</sl-option>
+          <sl-option value="utils.js">src/utils/PanelUtils.js</sl-option>
+          <sl-option value="demo.html">demo/responsive-demo.html</sl-option>
+          <sl-option value="readme.md">docs/README.md</sl-option>
+        `;
+        component.addWidget(projectSelect, 15); // Highest priority
+
+        // Create multiple buttons with text to test overflow dramatically
         const buttons = [
-          { name: 'file-plus', text: 'New', priority: 10 },
-          { name: 'folder2-open', text: 'Open', priority: 9 },
-          { name: 'floppy', text: 'Save', priority: 8 },
-          { name: 'arrow-counterclockwise', text: '', priority: 7 }, // Undo (icon only)
-          { name: 'arrow-clockwise', text: '', priority: 6 }, // Redo (icon only)
-          { name: 'scissors', text: '', priority: 5 }, // Cut (icon only)
-          { name: 'clipboard', text: '', priority: 4 }, // Copy (icon only)
-          { name: 'clipboard-fill', text: '', priority: 3 }, // Paste (icon only)
-          { name: 'search', text: 'Find', priority: 2 },
-          { name: 'arrow-repeat', text: 'Sync', priority: 1 }
+          { name: 'file-plus', text: 'New File', priority: 10 },
+          { name: 'folder2-open', text: 'Open Project', priority: 9 },
+          { name: 'floppy', text: 'Save All', priority: 8 },
+          { name: 'arrow-counterclockwise', text: 'Undo', priority: 7 },
+          { name: 'arrow-clockwise', text: 'Redo', priority: 6 },
+          { name: 'scissors', text: 'Cut', priority: 5 },
+          { name: 'clipboard', text: 'Copy', priority: 4 },
+          { name: 'clipboard-fill', text: 'Paste', priority: 3 },
+          { name: 'search', text: 'Find in Files', priority: 2 },
+          { name: 'arrow-repeat', text: 'Sync Changes', priority: 1 },
+          { name: 'play', text: 'Run Project', priority: 0 },
+          { name: 'bug', text: 'Debug', priority: -1 },
+          { name: 'terminal', text: 'Terminal', priority: -2 },
+          { name: 'gear', text: 'Settings', priority: -3 }
         ];
 
         buttons.forEach(btn => {
           const element = document.createElement('sl-button');
           element.size = 'small';
-          if (btn.text) {
-            element.innerHTML = `<sl-icon name="${btn.name}"></sl-icon> ${btn.text}`;
-          } else {
-            element.innerHTML = `<sl-icon name="${btn.name}"></sl-icon>`;
-            element.title = btn.name.replace('-', ' '); // Basic tooltip
-          }
+          element.innerHTML = `<sl-icon name="${btn.name}"></sl-icon> ${btn.text}`;
+          element.title = btn.text;
           component.addWidget(element, btn.priority);
         });
 
@@ -1348,6 +1380,18 @@
           { text: 'About', action: 'about' }
         ], 7);
       }
+    };
+
+    // Smart overflow toggle function
+    window.toggleSmartOverflow = function(componentId) {
+      const component = document.getElementById(componentId);
+      if (!component) return;
+      
+      const currentMode = component.smartOverflow;
+      const newMode = currentMode === 'on' ? 'off' : 'on';
+      component.smartOverflow = newMode;
+      
+      logEvent(`Smart Overflow ${newMode === 'on' ? 'Enabled' : 'Disabled'}`, `Toolbar now uses ${newMode === 'on' ? 'priority-based overflow management' : 'standard flex layout'}`);
     };
 
     // Clear function

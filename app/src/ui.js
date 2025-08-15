@@ -33,6 +33,7 @@ import './modules/panels/index.js';
 /**
  * Import type definitions from plugins
  * 
+ * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {floatingPanelPart} from './plugins/floating-panel.js'
@@ -56,7 +57,7 @@ import './modules/panels/index.js';
 /**
  * The top-level UI parts
  * @typedef {object} namedElementsTree
- * @property {UIPart<HTMLDivElement, toolbarPart>} toolbar - The main toolbar
+ * @property {UIPart<ToolBar, toolbarPart>} toolbar - The main toolbar
  * @property {UIPart<HTMLDivElement, floatingPanelPart>} floatingPanel - The floating panel with navigation buttons
  * @property {UIPart<HTMLDivElement, pdfViewerPart>} pdfViewer - The PDFJS-based PDF viewer with statusbar
  * @property {UIPart<HTMLDivElement, xmlEditorPart>} xmlEditor - The codemirror-based xml editor with statusbar

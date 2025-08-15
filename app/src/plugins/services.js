@@ -125,8 +125,14 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // install controls on menubar
-  ui.toolbar.append(...documentActionButtons)
+  // Add document action buttons to toolbar with medium priority
+  documentActionButtons.forEach(buttonGroup => {
+    // Ensure we're working with HTMLElement
+    if (buttonGroup instanceof HTMLElement) {
+      // Document actions have medium priority (lower than file selection)
+      ui.toolbar.addWidget(buttonGroup, 8);
+    }
+  });
   document.body.append(newVersionDialog)
   document.body.append(saveRevisionDialog)
   updateUi()

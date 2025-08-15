@@ -55,7 +55,7 @@ class BasePanel extends HTMLElement {
 
     // Also check overflow when widgets are added or modified
     this.addEventListener('slotchange', () => {
-      setTimeout(() => this.checkAndResolveOverflow(), 0);
+      setTimeout(() => this.checkAndResolveOverflow(), 100);
     });
   }
 
@@ -65,8 +65,8 @@ class BasePanel extends HTMLElement {
     if (this.resizeObserver) {
       this.resizeObserver.observe(this);
     }
-    // Initial overflow check after everything is rendered
-    setTimeout(() => this.checkAndResolveOverflow(), 100);
+    // Initial overflow check after everything is rendered (longer delay for plugins to add widgets)
+    setTimeout(() => this.checkAndResolveOverflow(), 500);
   }
 
   disconnectedCallback() {
@@ -76,6 +76,11 @@ class BasePanel extends HTMLElement {
   }
 
   checkAndResolveOverflow() {
+    // Check if smart overflow management is disabled
+    if (this.getAttribute('smart-overflow') !== 'on') {
+      return;
+    }
+    
     const containerRect = this.getBoundingClientRect();
     const availableWidth = containerRect.width;
     
@@ -247,8 +252,29 @@ class BasePanel extends HTMLElement {
     this.widgets.set(widgetId, { element: widget, priority });
     this.appendChild(widget);
     
-    // Check for overflow after adding
-    setTimeout(() => this.checkAndResolveOverflow(), 0);
+    // Reapply flex layout if in flex mode (for ToolBar)
+    if (this.tagName === 'TOOL-BAR' && this.getAttribute('smart-overflow') === 'off') {
+      setTimeout(() => {
+        const inputElements = this.querySelectorAll('sl-select, sl-input, sl-textarea, input, textarea');
+        inputElements.forEach(element => {
+          if (element instanceof HTMLElement) {
+            element.style.flex = '1 1 auto';
+            element.style.minWidth = '80px';
+            element.style.width = 'auto';
+          }
+        });
+        
+        const fixedElements = this.querySelectorAll('sl-button, button, sl-button-group, sl-icon-button, sl-badge, sl-switch');
+        fixedElements.forEach(element => {
+          if (element instanceof HTMLElement) {
+            element.style.flex = '0 0 auto';
+          }
+        });
+      }, 50);
+    }
+    
+    // Check for overflow after adding (delay to let all widgets be added)
+    setTimeout(() => this.checkAndResolveOverflow(), 200);
     
     return widgetId;
   }
