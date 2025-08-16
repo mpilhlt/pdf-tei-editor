@@ -44347,26 +44347,26 @@ class EventEmitter {
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
  * tree in sync as far as possible, and provides linting and diffing.
+ * 
+ * @fires XMLEditor#selectionChanged - Fired when editor selection changes
+ * @fires XMLEditor#editorReady - Fired when editor is ready for interaction
+ * @fires XMLEditor#editorUpdate - Fired when editor content changes
+ * @fires XMLEditor#editorUpdateDelayed - Fired 1 second after last content change
+ * @fires XMLEditor#editorXmlNotWellFormed - Fired when XML becomes invalid
+ * @fires XMLEditor#editorXmlWellFormed - Fired when XML becomes valid
+ * @fires XMLEditor#editorReadOnly - Fired when read-only state changes
+ * @fires XMLEditor#editorBeforeLoad - Fired before loading new document
  */
 class XMLEditor extends EventEmitter {
 
-  // events
-
-  /** emitted with {RangeWithNode} data when the selection changes */
+  // Event name constants
   static EVENT_SELECTION_CHANGED = "selectionChanged";
-  /** emitted with null data when the editor is ready for user interaction */
   static EVENT_EDITOR_READY = "editorReady";
-  /** emitted with {Update} data when the editor content was changed*/
   static EVENT_EDITOR_UPDATE = "editorUpdate"
-  /** emitted with {Update} data one second after the editor content was last changed */
   static EVENT_EDITOR_DELAYED_UPDATE = "editorUpdateDelayed"
-  /** emitted with array of diagnostic data when the editor content is not well-formed according to XML syntax */
   static EVENT_EDITOR_XML_NOT_WELL_FORMED = "editorXmlNotWellFormed"
-  /** emitted with null data when the editor content is well-formed according to XML syntax */
   static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
-  /** emitted with boolean data which is true if the editor is set to read-only mode */
   static EVENT_EDITOR_READONLY = "editorReadOnly"
-  /** emitted with string data before a new xml document is loaded into the editor  */
   static EVENT_EDITOR_BEFORE_LOAD = "editorBeforeLoad"
 
   // private members
@@ -44494,6 +44494,49 @@ class XMLEditor extends EventEmitter {
     // state change listeners
     this.addSelectionChangeListener(this.#onSelectionChange.bind(this));
     this.addUpdateListener(this.#onUpdate.bind(this));
+  }
+
+  /**
+   * Type-safe event emission with autocompletion support
+   * @template {keyof XMLEditorEventMap} K
+   * @param {K} event - Event name
+   * @param {XMLEditorEventMap[K]} data - Event data
+   * @param {object} [options] - Emit options
+   * @returns {Promise<PromiseSettledResult<any>[] | undefined>}
+   */
+  async emit(event, data, options) {
+    return super.emit(event, data, options);
+  }
+
+  /**
+   * Type-safe event listener registration with autocompletion support
+   * @template {keyof XMLEditorEventMap} K  
+   * @param {K} event - Event name
+   * @param {(data: XMLEditorEventMap[K], signal?: AbortSignal) => void | Promise<void>} listener - Event handler
+   * @returns {number} Listener ID for removal
+   */
+  on(event, listener) {
+    return super.on(event, listener);
+  }
+
+  /**
+   * Type-safe one-time event listener registration with autocompletion support
+   * @template {keyof XMLEditorEventMap} K  
+   * @param {K} event - Event name
+   * @param {(data: XMLEditorEventMap[K], signal?: AbortSignal) => void | Promise<void>} listener - Event handler
+   * @returns {number} Listener ID for removal
+   */
+  once(event, listener) {
+    return super.once(event, listener);
+  }
+
+  /**
+   * Type-safe event listener removal
+   * @param {number | keyof XMLEditorEventMap} eventOrId - Event name or listener ID
+   * @param {Function} [listener] - Specific listener function (when first param is event name)
+   */
+  off(eventOrId, listener) {
+    return super.off(eventOrId, listener);
   }
 
   /**
@@ -45258,11 +45301,6 @@ class XMLEditor extends EventEmitter {
     return xml
   }
 
-  /**
-   * @typedef {Range} RangeWithNode
-   * @property {Element?} node
-   * @property {string?} xpath
-   */
 
   /**
    * Called when the selection in the editor changes
