@@ -365,13 +365,9 @@ export class XMLEditor extends EventEmitter {
     //console.warn("Loading XML")
     const xml = await this.#fetchXml(xmlPathOrString);
 
-    // detect the indentation mode
-    const indentUnit = detectXmlIndentation(xml);
-    console.log("Detected indentation unit: ", JSON.stringify(indentUnit))
-    this.configureIntenation(indentUnit, 4); // default tab size of 4 spaces, needs to be configurable
     
-    // (un)escape xml entities
-    // todo
+    // inform listeners about the xml
+    await this.emit("editorBeforeLoad", xml)
     
     // display xml in editor, this triggers the update handlers
     this.#view.dispatch({
