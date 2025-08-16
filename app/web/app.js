@@ -44671,13 +44671,9 @@ class XMLEditor extends EventEmitter {
     //console.warn("Loading XML")
     const xml = await this.#fetchXml(xmlPathOrString);
 
-    // detect the indentation mode
-    const indentUnit = detectXmlIndentation(xml);
-    console.log("Detected indentation unit: ", JSON.stringify(indentUnit));
-    this.configureIntenation(indentUnit, 4); // default tab size of 4 spaces, needs to be configurable
     
-    // (un)escape xml entities
-    // todo
+    // inform listeners about the xml
+    await this.emit("editorBeforeLoad", xml);
     
     // display xml in editor, this triggers the update handlers
     this.#view.dispatch({
@@ -45954,6 +45950,8 @@ const xmlEditor = new NavXmlEditor('codemirror-container');
 // Status widgets for XML editor statusbar
 let readOnlyStatusWidget = null;
 let cursorPositionWidget = null;
+let indentationStatusWidget = null;
+let statusSeparator = null;
 
 /**
  * component plugin
@@ -45988,9 +45986,22 @@ async function install$d(state) {
     text: 'Ln 1, Col 1',
     variant: 'neutral'
   });
+
+  /** @type {StatusText} */
+  indentationStatusWidget = PanelUtils.createText({
+    text: 'Indent: 2 spaces',
+    variant: 'neutral'
+  });
+
+  // Create separator between indentation and cursor position
+  statusSeparator = PanelUtils.createSeparator({
+    variant: 'dotted'
+  });
   
-  // Add cursor position widget to right side of statusbar
-  ui$1.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 1);
+  // Add widgets to right side of statusbar (higher priority = more to the right)
+  ui$1.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1);  // leftmost - indent to left of position  
+  ui$1.xmlEditor.statusbar.add(statusSeparator, 'right', 2);          // separator in middle
+  ui$1.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 3);     // rightmost - position always on far right
 
   // selection => xpath state
   xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, data => {
@@ -46015,6 +46026,14 @@ async function install$d(state) {
   
   // Update cursor position on editor updates (typing, etc.)
   xmlEditor.on(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition);
+
+  // Handle indentation detection before loading XML
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_BEFORE_LOAD, (xml) => {
+    const indentUnit = detectXmlIndentation(xml);
+    api$e.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
+    xmlEditor.configureIntenation(indentUnit, 4); // default tab size of 4 spaces
+    updateIndentationStatus(indentUnit);
+  });
 }
 
 /**
@@ -46098,6 +46117,24 @@ function updateCursorPosition() {
   const columnNumber = selection.head - line.from + 1;
   
   cursorPositionWidget.text = `Ln ${lineNumber}, Col ${columnNumber}`;
+}
+
+/**
+ * Updates the indentation status widget
+ * @param {string} indentUnit - The detected indentation unit
+ */
+function updateIndentationStatus(indentUnit) {
+  if (!indentationStatusWidget) return
+  
+  let displayText;
+  if (indentUnit === '\t') {
+    displayText = 'Indent: Tabs';
+  } else {
+    const spaceCount = indentUnit.length;
+    displayText = `Indent: ${spaceCount} spaces`;
+  }
+  
+  indentationStatusWidget.text = displayText;
 }
 
 /**
