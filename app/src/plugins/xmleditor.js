@@ -88,19 +88,17 @@ async function install(state) {
   ui.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 1)
 
   // selection => xpath state
-  xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
+  xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, data => {
     xmlEditor.whenReady().then(() => onSelectionChange(state))
     updateCursorPosition()
   });
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-    const customEvent = /** @type CustomEvent */ (evt)
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
     if (validation.isDisabled()) {
       let view = xmlEditor.getView()
-      let diagnostic = customEvent.detail
       try {
-        view.dispatch(setDiagnostics(view.state, [diagnostic]))
+        view.dispatch(setDiagnostics(view.state, diagnostics))
       } catch (error) {
         logger.warn("Error setting diagnostics: " + error.message)
       }
@@ -108,10 +106,10 @@ async function install(state) {
   })
   
   // Update cursor position when editor is ready
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_READY, updateCursorPosition)
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_READY, updateCursorPosition)
   
   // Update cursor position on editor updates (typing, etc.)
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition)
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition)
 }
 
 /**

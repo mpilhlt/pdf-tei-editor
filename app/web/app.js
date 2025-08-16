@@ -486,14 +486,14 @@ class UrlHash {
    */
   static set(keyOrObj, value, dispatchEvent = true) {
     const hash = new URLSearchParams(window.location.hash.slice(1));
-    if (typeof keyOrObj === "string" && typeof value === "string" ) {
+    if (typeof keyOrObj === "string" && typeof value === "string") {
       hash.set(keyOrObj, value);
     } else if (keyOrObj && typeof keyOrObj === "object") {
       Object.entries(keyOrObj).forEach(([key, value]) => hash.set(key, value));
     } else {
       throw new TypeError(`Invalid parameters: ${keyOrObj}, ${value}`)
     }
-    
+
     // Use history.replaceState to update the current history entry
     history.replaceState(null, '', '#' + hash.toString());
     if (dispatchEvent) {
@@ -525,7 +525,7 @@ class UrlHash {
    * @param {string} key - The key of the hash parameter to remove.
    * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
    */
-  static remove(key, dispatchEvent=true) {
+  static remove(key, dispatchEvent = true) {
     if (!UrlHash.has(key)) return; // Do nothing if the key does not exist
     const hash = new URLSearchParams(window.location.hash.slice(1));
     hash.delete(key); // Remove the specified key
@@ -44177,6 +44177,166 @@ function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
 }
 
 /**
+ * A simple Event Emitter that can handle async events with timeout support
+ * 
+ * Example usage:
+ * 
+ * // Basic listener (signal parameter is optional for backwards compatibility)
+ * emitter.on('data', async (data) => {
+ *   await processData(data);
+ * });
+ * 
+ * // Listener with abort signal support
+ * emitter.on('heavyWork', async (data, signal) => {
+ *   for (let i = 0; i < 1000; i++) {
+ *     if (signal?.aborted) {
+ *       console.log('Work cancelled, cleaning up...');
+ *       return;
+ *     }
+ *     await processItem(i);
+ *   }
+ * });
+ * 
+ * // Emit with default timeout
+ * await emitter.emit('data', someData);
+ * 
+ * // Emit with custom timeout
+ * await emitter.emit('heavyWork', workData, { timeout: 10000 });
+ */
+class EventEmitter {
+  /**
+   * Creates a new EventEmitter instance
+   * @param {object} [options={}] - Configuration options
+   * @param {number} [options.defaultTimeout=5000] - Default timeout in milliseconds for listeners
+   */
+  constructor(options = {}) {
+    this.events = {};
+    this.listeners = new Map();
+    this.nextId = 1;
+    this.defaultTimeout = options.defaultTimeout || 5000;
+  }
+
+  /**
+   * Registers an event listener for the specified event
+   * @param {string} event - The event name to listen for
+   * @param {function} listener - The callback function to execute when the event is emitted
+   * @returns {number} An opaque ID that can be used to remove this listener
+   */
+  on(event, listener) {
+    if (!this.events[event]) {
+      this.events[event] = [];
+    }
+    const id = this.nextId++;
+    const listenerInfo = { listener, id };
+    this.events[event].push(listenerInfo);
+    this.listeners.set(id, { event, listenerInfo });
+    return id;
+  }
+
+  /**
+   * Removes an event listener for the specified event
+   * @param {string|number} eventOrId - The event name and listener function, or just the listener ID
+   * @param {function} [listener] - The specific listener function to remove (only when first param is event name)
+   */
+  off(eventOrId, listener) {
+    // If only one argument is passed, treat it as an ID
+    if (arguments.length === 1) {
+      const id = eventOrId;
+      const listenerData = this.listeners.get(id);
+      if (!listenerData) {
+        return;
+      }
+      
+      const { event, listenerInfo } = listenerData;
+      if (this.events[event]) {
+        const index = this.events[event].indexOf(listenerInfo);
+        if (index > -1) {
+          this.events[event].splice(index, 1);
+        }
+        if (this.events[event].length === 0) {
+          delete this.events[event];
+        }
+      }
+      this.listeners.delete(id);
+    } else {
+      // Two arguments: event name and listener function (legacy behavior)
+      const event = eventOrId;
+      if (!this.events[event]) {
+        return;
+      }
+      const index = this.events[event].findIndex(info => info.listener === listener);
+      if (index > -1) {
+        const listenerInfo = this.events[event][index];
+        this.events[event].splice(index, 1);
+        this.listeners.delete(listenerInfo.id);
+      }
+      if (this.events[event].length === 0) {
+        delete this.events[event];
+      }
+    }
+  }
+
+  /**
+   * Registers a one-time event listener for the specified event
+   * @param {string} event - The event name to listen for
+   * @param {function} listener - The callback function to execute when the event is emitted
+   * @returns {number} An opaque ID that can be used to remove this listener
+   */
+  once(event, listener) {
+    const wrappedListener = async (data, signal) => {
+      const result = await listener(data, signal);
+      this.off(id);
+      return result;
+    };
+    const id = this.on(event, wrappedListener);
+    return id;
+  }
+
+  /**
+   * Emits an event, calling all registered listeners asynchronously with timeout support
+   * @param {string} event - The event name to emit
+   * @param {*} data - The data to pass to the event listeners
+   * @param {object} [options={}] - Emit options
+   * @param {number} [options.timeout] - Timeout in milliseconds (uses defaultTimeout if not specified)
+   * @returns {Promise<PromiseSettledResult<any>[] | undefined>} Array of settled results from listener executions, or undefined if no listeners
+   */
+  async emit(event, data, options = {}) {
+    if (!this.events[event] || this.events[event].length === 0) {
+      return undefined;
+    }
+
+    const timeout = options.timeout !== undefined ? options.timeout : this.defaultTimeout;
+    const controller = new AbortController();
+    
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, timeout);
+    
+    try {
+      const results = await Promise.allSettled(
+        this.events[event].map(async (listenerInfo) => {
+          try {
+            // Pass AbortSignal to listener
+            return await listenerInfo.listener(data, controller.signal);
+          } catch (error) {
+            if (error.name === 'AbortError') {
+              console.warn(`Listener for event '${event}' timed out after ${timeout}ms`);
+            } else {
+              console.error(`Error in event listener for ${event}:`, error);
+            }
+            throw error;
+          }
+        })
+      );
+      return results;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+/**
  * @import {SyntaxNode, Tree} from '@lezer/common'
  * @import {Extension, Range} from '@codemirror/state'
  * @import {ViewUpdate} from '@codemirror/view'
@@ -44188,24 +44348,26 @@ function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
  * tree in sync as far as possible, and provides linting and diffing.
  */
-class XMLEditor extends EventTarget {
+class XMLEditor extends EventEmitter {
 
   // events
 
-  /** dispatched a {CustomEvent} with a {RangeWithNode} detail when the selection changes */
+  /** emitted with {RangeWithNode} data when the selection changes */
   static EVENT_SELECTION_CHANGED = "selectionChanged";
-  /** dispatches an {Event} object when the editor is ready for user interaction */
+  /** emitted with null data when the editor is ready for user interaction */
   static EVENT_EDITOR_READY = "editorReady";
-  /** dispatched with a CustomEvent with an {Update} detail when the editor content was changed*/
+  /** emitted with {Update} data when the editor content was changed*/
   static EVENT_EDITOR_UPDATE = "editorUpdate"
-  /** dispatched with a CustomEvent with an {Update} object one second after the editor content was last changed */
+  /** emitted with {Update} data one second after the editor content was last changed */
   static EVENT_EDITOR_DELAYED_UPDATE = "editorUpdateDelayed"
-  /** dispatches an {Event} object when the editor content is well-formed accoring to XML syntax */
+  /** emitted with array of diagnostic data when the editor content is not well-formed according to XML syntax */
   static EVENT_EDITOR_XML_NOT_WELL_FORMED = "editorXmlNotWellFormed"
-  /** dispatches an {Event} object when the editor content is not well-formed accoring to XML syntax */
+  /** emitted with null data when the editor content is well-formed according to XML syntax */
   static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
-  /** dispatched with a CustomEvent with a boolean detail which is true if the editor is set to read-only mode */
+  /** emitted with boolean data which is true if the editor is set to read-only mode */
   static EVENT_EDITOR_READONLY = "editorReadOnly"
+  /** emitted with string data before a new xml document is loaded into the editor  */
+  static EVENT_EDITOR_BEFORE_LOAD = "editorBeforeLoad"
 
   // private members
 
@@ -44409,14 +44571,13 @@ class XMLEditor extends EventTarget {
    * Sets the editor to read-only mode, i.e. the user cannot edit the content of the editor.
    * @param {Boolean} value 
    */
-  setReadOnly(value) { 
+  async setReadOnly(value) { 
     this.#editorIsReadOnly = Boolean(value);
     this.#view.dispatch({
       effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
     });
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_READONLY, { detail: this.#editorIsReadOnly }));
+    await this.emit(XMLEditor.EVENT_EDITOR_READONLY, this.#editorIsReadOnly);
   }
-
 
   /**
    * Returns true if the editor is read-only, i.e. the user cannot edit the content of the editor.
@@ -44453,7 +44614,7 @@ class XMLEditor extends EventTarget {
   }
 
   /**
-   * Loads XML, either from a string or from a given path.
+   * Loads XML, either from a string or from a given path. 
    * @async
    * @param {string} xmlPathOrString - The URL or path to the XML file, or an xml string
    * @returns {Promise<void>} - A promise that resolves with no value when the document is fully loaded and the editor is ready. 
@@ -45031,7 +45192,7 @@ class XMLEditor extends EventTarget {
     }
 
     // once we at least tried to synchronize, we can mark the editor as ready
-    this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_READY));
+    await this.emit(XMLEditor.EVENT_EDITOR_READY, null);
   }
 
   //
@@ -45046,11 +45207,11 @@ class XMLEditor extends EventTarget {
     this.#isReady = false;
     this.#readyPromise = this.#readyPromise ||
       /** @type {Promise<void>} */(new Promise(resolve => {
-      this.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => {
+      this.once(XMLEditor.EVENT_EDITOR_READY, () => {
         this.#isReady = true;
         this.#readyPromise = null;
         resolve();
-      }, { once: true });
+      });
     }));
   }
 
@@ -45130,7 +45291,7 @@ class XMLEditor extends EventTarget {
     }
 
     // inform the listeners
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: rangesWithNode }));
+    await this.emit(XMLEditor.EVENT_SELECTION_CHANGED, rangesWithNode);
   }
 
   #updateTimeout = null
@@ -45149,7 +45310,7 @@ class XMLEditor extends EventTarget {
     this.#editorIsDirty = true;
 
     // inform the listeners
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_UPDATE, { detail: update }));
+    await this.emit(XMLEditor.EVENT_EDITOR_UPDATE, update);
 
     if (this.#updateTimeout) {
       clearTimeout(this.#updateTimeout);
@@ -45173,7 +45334,7 @@ class XMLEditor extends EventTarget {
     await this.sync();
 
     // inform the listeners
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, { detail: update }));
+    await this.emit(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, update);
   }
 
 
@@ -45182,7 +45343,7 @@ class XMLEditor extends EventTarget {
    * @param {Object} changes The changes to apply to the editor
    */
   async #waitForEditorUpdate(changes) {
-    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_EDITOR_READY, resolve, { once: true }));
+    const promise = new Promise(resolve => this.once(XMLEditor.EVENT_EDITOR_READY, resolve));
     this.#view.dispatch({ changes });
     await promise;
   }
@@ -45222,12 +45383,12 @@ class XMLEditor extends EventTarget {
       const diagnostic = this.#parseErrorNode(errorNode);
       // @ts-ignore
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`);
-      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: [diagnostic] }));
+      await this.emit(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, [diagnostic]);
       this.#xmlTree = null;
       return false;
     }
     console.log("Document was updated and is well-formed.");
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, { detail: null }));
+    await this.emit(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, null);
     this.#xmlTree = doc;
 
     // Track processing instructions for better synchronization
@@ -45567,20 +45728,20 @@ class NavXmlEditor extends XMLEditor {
   constructor(editorDivId, tagData=null) {
     super(editorDivId, tagData);
     // handle selection change
-    this.addEventListener(
+    this.on(
       XMLEditor.EVENT_SELECTION_CHANGED,
       // @ts-ignore
-      this.#onSelectionChange
+      this.#onSelectionChange.bind(this)
     );
   }
 
   /**
    * 
-   * @param {CustomEvent} evt 
+   * @param {any} data 
    */
-  async #onSelectionChange(evt) {
+  async #onSelectionChange(data) {
     await this.whenReady();
-    await this.handeSelectionChange(evt.detail);
+    await this.handeSelectionChange(data);
   }
 
   /**
@@ -45645,10 +45806,10 @@ class NavXmlEditor extends XMLEditor {
     // Wait for editor to be ready
     if (!this.isReady()) {
       console.log("Editor not ready, deferring selection");
-      this.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => {
+      this.once(XMLEditor.EVENT_EDITOR_READY, () => {
         console.log("Editor is now ready");
         this.selectByIndex(index);
-      }, { once: true });
+      });
       return;
     }
 
@@ -45794,19 +45955,17 @@ async function install$d(state) {
   ui$1.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 1);
 
   // selection => xpath state
-  xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, evt => {
+  xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, data => {
     xmlEditor.whenReady().then(() => onSelectionChange(state));
     updateCursorPosition();
   });
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-    const customEvent = /** @type CustomEvent */ (evt);
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
     if (api$9.isDisabled()) {
       let view = xmlEditor.getView();
-      let diagnostic = customEvent.detail;
       try {
-        view.dispatch(setDiagnostics(view.state, [diagnostic]));
+        view.dispatch(setDiagnostics(view.state, diagnostics));
       } catch (error) {
         api$e.warn("Error setting diagnostics: " + error.message);
       }
@@ -45814,10 +45973,10 @@ async function install$d(state) {
   });
   
   // Update cursor position when editor is ready
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_READY, updateCursorPosition);
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_READY, updateCursorPosition);
   
   // Update cursor position on editor updates (typing, etc.)
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition);
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition);
 }
 
 /**
@@ -45954,7 +46113,7 @@ async function install$c(state) {
   ]);
   // listen for delayed editor updates
   // @ts-ignore
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (evt) => removeDiagnosticsInChangedRanges(evt.detail));
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (updateData) => removeDiagnosticsInChangedRanges(updateData));
 }
 
 /**
@@ -48884,7 +49043,7 @@ async function install$9(state) {
   // save a revision
   da.saveRevision.addEventListener('click', () => saveRevision(state));
   // enable save button on dirty editor
-  xmlEditor.addEventListener(
+  xmlEditor.on(
     XMLEditor.EVENT_EDITOR_READY,
     () => da.saveRevision.disabled = false
   );
@@ -59088,16 +59247,14 @@ async function saveIfDirty() {
 
 function configureXmlEditor() {
   // Find the currently selected node's contents in the PDF
-  xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents);
+  xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents);
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
     if (api$9.isDisabled()) {
       let view = xmlEditor.getView();
-      // @ts-ignore
-      let diagnostic = evt.detail;
       try {
-        view.dispatch(setDiagnostics(view.state, [diagnostic]));
+        view.dispatch(setDiagnostics(view.state, diagnostics));
       } catch (error) {
         api$e.warn("Error setting diagnostics: " + error.message);
       }
@@ -59105,11 +59262,10 @@ function configureXmlEditor() {
   });
 
   // save dirty editor content after an update
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty());
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty());
 
   // xml vaidation events
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-    const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
     console.warn("XML is not well-formed", diagnostics);
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
     // Show validation error in statusbar
@@ -59119,7 +59275,7 @@ function configureXmlEditor() {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
   });
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, data => {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));

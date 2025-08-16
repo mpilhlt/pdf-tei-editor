@@ -153,7 +153,7 @@ async function install(state) {
   // save a revision
   da.saveRevision.addEventListener('click', () => saveRevision(state));
   // enable save button on dirty editor
-  xmlEditor.addEventListener(
+  xmlEditor.on(
     XMLEditor.EVENT_EDITOR_READY,
     () => da.saveRevision.disabled = false
   );
