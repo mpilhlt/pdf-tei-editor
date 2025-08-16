@@ -23,6 +23,11 @@ from server.lib.locking import (
 from server.lib.xml_utils import encode_xml_entities
 from server.lib.tei_utils import serialize_tei_with_formatted_header
 from server.api.config import read_config
+from server.lib.auth import get_user_by_session_id
+from server.lib.access_control import (
+    DocumentAccessFilter, AccessControlChecker, 
+    get_document_permissions, check_file_access
+)
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
@@ -52,6 +57,11 @@ def file_list():
     # Apply variant filtering if specified
     if variant_filter is not None:
         files_data = apply_variant_filtering(files_data, variant_filter)
+    
+    # Apply access control filtering
+    session_id = get_session_id(request)
+    user = get_user_by_session_id(session_id) if session_id else None
+    files_data = DocumentAccessFilter.filter_files_by_access(files_data, user)
 
     return jsonify(files_data)
 
@@ -81,6 +91,11 @@ def save():
     
     # Resolve hash to path if needed
     file_path_rel = resolve_document_identifier(file_path_or_hash)
+    
+    # Check write access permissions
+    user = get_user_by_session_id(session_id)
+    if not check_file_access(file_path_rel, user, 'write'):
+        raise ApiError("Insufficient permissions to modify this document", status_code=403)
     
     # encode xml entities as per configuration
     if read_config().get("xml.encode-entities.server", False) == True:
@@ -279,9 +294,17 @@ def delete():
     if not files or not isinstance(files, list): 
         raise ApiError("Files must be a list of paths")
     
+    session_id = get_session_id(request)
+    user = get_user_by_session_id(session_id)
+    
     for file in files: 
         # Resolve hash to path if needed, then get real file path
         resolved_path = resolve_document_identifier(file)
+        
+        # Check write access permissions for deletion
+        if not check_file_access(resolved_path, user, 'write'):
+            raise ApiError(f"Insufficient permissions to delete {resolved_path}", status_code=403)
+        
         file_path = os.path.join(data_root, safe_file_path(resolved_path))
         # delete the file 
         logger.info(f"Deleting file {file_path}")
@@ -534,5 +557,122 @@ def serve_file_by_id(document_id):
     except Exception as e:
         logger.error(f"Error serving file {document_id}: {e}")
         raise ApiError("Failed to serve file", status_code=500)
+
+
+@bp.route("/permissions/<document_id>", methods=["GET"])
+@handle_api_errors
+@session_required
+def get_document_permissions_route(document_id):
+    """
+    Get access control permissions for a document.
+    """
+    try:
+        # Resolve the document identifier to a file path
+        file_path = resolve_document_identifier(document_id)
+        
+        # Get user
+        session_id = get_session_id(request)
+        user = get_user_by_session_id(session_id)
+        
+        # Check if user has read access
+        if not check_file_access(file_path, user, 'read'):
+            raise ApiError("Document not found or access denied", status_code=404)
+        
+        # Get permissions
+        permissions = get_document_permissions(file_path)
+        
+        # Check if user can modify permissions
+        can_modify = AccessControlChecker.can_modify_permissions(permissions, user)
+        
+        return jsonify({
+            'visibility': permissions.visibility,
+            'editability': permissions.editability,
+            'owner': permissions.owner,
+            'status_values': permissions.status_values,
+            'last_changed': permissions.change_timestamp,
+            'can_modify': can_modify
+        })
+        
+    except ApiError:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting permissions for {document_id}: {e}")
+        raise ApiError("Failed to get document permissions", status_code=500)
+
+
+@bp.route("/permissions/<document_id>", methods=["POST"])
+@handle_api_errors
+@session_required
+def update_document_permissions_route(document_id):
+    """
+    Update access control permissions for a document.
+    """
+    try:
+        # Resolve the document identifier to a file path
+        file_path = resolve_document_identifier(document_id)
+        
+        # Get user
+        session_id = get_session_id(request)
+        user = get_user_by_session_id(session_id)
+        
+        # Get current permissions to check modification rights
+        current_permissions = get_document_permissions(file_path)
+        if not AccessControlChecker.can_modify_permissions(current_permissions, user):
+            raise ApiError("Insufficient permissions to modify document access", status_code=403)
+        
+        # Parse request data
+        data = request.get_json()
+        new_visibility = data.get('visibility', current_permissions.visibility)
+        new_editability = data.get('editability', current_permissions.editability) 
+        new_owner = data.get('owner', current_permissions.owner)
+        description = data.get('description')
+        
+        # Validate values
+        if new_visibility not in ['public', 'private']:
+            raise ApiError("visibility must be 'public' or 'private'")
+        if new_editability not in ['editable', 'protected']:
+            raise ApiError("editability must be 'editable' or 'protected'")
+        
+        # Build new status string
+        status_parts = []
+        if new_visibility == 'private':
+            status_parts.append('private')
+        if new_editability == 'protected':
+            status_parts.append('protected')
+        new_status = ' '.join(status_parts) if status_parts else 'public editable'
+        
+        # Read current XML content
+        data_root = current_app.config["DATA_ROOT"]
+        full_path = os.path.join(data_root, safe_file_path(file_path))
+        with open(full_path, 'r', encoding='utf-8') as f:
+            xml_content = f.read()
+        
+        # Update permissions in XML
+        from server.lib.access_control import AccessControlUpdater
+        updated_xml = AccessControlUpdater.update_document_permissions(
+            xml_content, new_status, new_owner, user, description
+        )
+        
+        # Save updated XML
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(updated_xml)
+        
+        # Mark cache as dirty since we modified the file
+        mark_cache_dirty()
+        
+        logger.info(f"Updated permissions for {file_path}: {new_status} (owner: {new_owner})")
+        
+        return jsonify({
+            'status': 'updated',
+            'visibility': new_visibility,
+            'editability': new_editability,
+            'owner': new_owner
+        })
+        
+    except ApiError:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating permissions for {document_id}: {e}")
+        raise ApiError("Failed to update document permissions", status_code=500)
 
 

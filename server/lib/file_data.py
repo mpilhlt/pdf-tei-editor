@@ -62,12 +62,36 @@ def get_tei_metadata(file_path):
         'last_status': 'status'
     }
     
+    # Access control attributes (parsed from last change element)
+    access_control = {
+        'visibility': 'public',      # default
+        'editability': 'editable',   # default
+        'owner': None,
+        'status_values': []
+    }
+    
     change_elements = root.xpath('.//tei:revisionDesc/tei:change[@when]', namespaces=ns)
     if change_elements:
         # Get the most recent change (last in document order)
         last_change = change_elements[-1]
         for result_key, attr_name in change_attr_mapping.items():
             change_attributes[result_key] = last_change.get(attr_name)
+        
+        # Parse access control from the last change element
+        status_attr = last_change.get('status', '')
+        who_attr = last_change.get('who', '')
+        
+        if status_attr or who_attr:
+            # Parse status values (space-separated)
+            status_values = status_attr.split() if status_attr else []
+            access_control['status_values'] = status_values
+            access_control['owner'] = who_attr if who_attr else None
+            
+            # Determine visibility: private if 'private' in status, otherwise public
+            access_control['visibility'] = 'private' if 'private' in status_values else 'public'
+            
+            # Determine editability: protected if 'protected' in status, otherwise editable
+            access_control['editability'] = 'protected' if 'protected' in status_values else 'editable'
     
     return {
         "author": author.text if author is not None else "",
@@ -76,7 +100,8 @@ def get_tei_metadata(file_path):
         "doi": doi.text if doi is not None else "",
         "fileref": fileref.text if fileref is not None else "",
         "variant_id": variant_id,  # Backward compatible - None if not found
-        **change_attributes  # Include all change attributes
+        **change_attributes,  # Include all change attributes
+        "access_control": access_control  # Include access control metadata
     }
 
 def get_version_name(file_path):
