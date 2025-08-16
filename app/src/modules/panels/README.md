@@ -1,6 +1,6 @@
-# Modern UI Panels Module
+# UI Panels Shoelace Web Components
 
-A lightweight, VS Code-inspired UI panel implementation using web components. Provides horizontal layout containers including **StatusBar**, **ToolBar**, and **MenuBar** with responsive overflow management and specialized widgets.
+A lightweight, VS Code-inspired UI panel implementation using web components. Provides horizontal layout containers including **StatusBar**, **ToolBar**, and **MenuBar** with responsive overflow management and specialized widgets. Built with, and thus requires Shoelace Components (https://shoelace.style).
 
 ## Features
 
@@ -49,7 +49,7 @@ menuBar.addMenu('File', [
 
 ## Smart Overflow Management
 
-The ToolBar and MenuBar components support intelligent overflow management that automatically handles space constraints.
+The ToolBar and MenuBar components support automatic overflow management that handles space constraints. Currently only works with SlButton and SlDropdown elememnts.
 
 ### Smart Overflow Attribute
 
@@ -86,7 +86,7 @@ toolbar.smartOverflow = "off";  // Revert to flex layout
 When `smart-overflow="on"`:
 
 1. **Priority-Based**: Widgets with lower priority values are hidden first
-2. **Type-Specific**: Only simple buttons can be moved to overflow dropdowns
+2. **Type-Specific**: Currently, only simple buttons and dropdown components can be moved to overflow dropdowns
 3. **Complex Widgets**: Select boxes, button groups, and other complex widgets are simply hidden (not moved to dropdown)
 4. **Overflow Indicators**: ToolBar shows `»` button, MenuBar shows `☰` hamburger menu
 5. **Event Forwarding**: Clicks in overflow menus trigger original widget events
@@ -142,6 +142,8 @@ menuBar.addMenu('Edit', [
   { text: 'Cut', action: 'cut' }
 ], 9);
 ```
+
+The `add()` method returns an (opaque) ID which can be used to remove the child element using `removeById()` 
 
 ## HTML Usage
 
@@ -250,14 +252,9 @@ statusBar.add(lessImportant, 'left', 5);     // Lower priority
 // When space is limited, lower priority widgets are hidden first
 ```
 
-### ToolBar Overflow
-When buttons don't fit, they move to a '>>' dropdown menu.
-
-### MenuBar Overflow  
-When menus don't fit, they move to a hamburger menu with hierarchical structure.
-
-### StatusBar Overflow
-When widgets don't fit, lower priority widgets are hidden (no overflow menu).
+- ToolBar: When buttons don't fit, they move to a '>>' dropdown menu.
+- MenuBar: When menus don't fit, they move to a hamburger menu with hierarchical structure.
+- StatusBar Overflow: When widgets don't fit, lower priority widgets are hidden (no overflow menu).
 
 ## Event Handling
 
@@ -321,3 +318,8 @@ See the [demo](demo/index.html) for comprehensive examples including:
 ## Dependencies
 
 - [Shoelace Design System](https://shoelace.style/) - UI components and styling
+
+## Acknowledgements and License
+
+This module was generated using Claude Code from prompts by @cboulanger. The code is therefore in the Public Domain.
+
