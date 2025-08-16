@@ -18,31 +18,32 @@ import { indentWithTab } from "@codemirror/commands"
 
 import { selectionChangeListener, linkSyntaxTreeWithDOM, isExtension, detectXmlIndentation } from './codemirror_utils.js';
 import { $$ } from './browser-utils.js';
-
-import { encodeXML } from 'entities';
+import { EventEmitter } from './event-emitter.js';
 
 /**
  * An XML editor based on the CodeMirror editor, which keeps the CodeMirror syntax tree and a DOM XML 
  * tree in sync as far as possible, and provides linting and diffing.
  */
-export class XMLEditor extends EventTarget {
+export class XMLEditor extends EventEmitter {
 
   // events
 
-  /** dispatched a {CustomEvent} with a {RangeWithNode} detail when the selection changes */
+  /** emitted with {RangeWithNode} data when the selection changes */
   static EVENT_SELECTION_CHANGED = "selectionChanged";
-  /** dispatches an {Event} object when the editor is ready for user interaction */
+  /** emitted with null data when the editor is ready for user interaction */
   static EVENT_EDITOR_READY = "editorReady";
-  /** dispatched with a CustomEvent with an {Update} detail when the editor content was changed*/
+  /** emitted with {Update} data when the editor content was changed*/
   static EVENT_EDITOR_UPDATE = "editorUpdate"
-  /** dispatched with a CustomEvent with an {Update} object one second after the editor content was last changed */
+  /** emitted with {Update} data one second after the editor content was last changed */
   static EVENT_EDITOR_DELAYED_UPDATE = "editorUpdateDelayed"
-  /** dispatches an {Event} object when the editor content is well-formed accoring to XML syntax */
+  /** emitted with array of diagnostic data when the editor content is not well-formed according to XML syntax */
   static EVENT_EDITOR_XML_NOT_WELL_FORMED = "editorXmlNotWellFormed"
-  /** dispatches an {Event} object when the editor content is not well-formed accoring to XML syntax */
+  /** emitted with null data when the editor content is well-formed according to XML syntax */
   static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
-  /** dispatched with a CustomEvent with a boolean detail which is true if the editor is set to read-only mode */
+  /** emitted with boolean data which is true if the editor is set to read-only mode */
   static EVENT_EDITOR_READONLY = "editorReadOnly"
+  /** emitted with string data before a new xml document is loaded into the editor  */
+  static EVENT_EDITOR_BEFORE_LOAD = "editorBeforeLoad"
 
   // private members
 
@@ -246,14 +247,13 @@ export class XMLEditor extends EventTarget {
    * Sets the editor to read-only mode, i.e. the user cannot edit the content of the editor.
    * @param {Boolean} value 
    */
-  setReadOnly(value) { 
+  async setReadOnly(value) { 
     this.#editorIsReadOnly = Boolean(value)
     this.#view.dispatch({
       effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
     });
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_READONLY, { detail: this.#editorIsReadOnly }))
+    await this.emit(XMLEditor.EVENT_EDITOR_READONLY, this.#editorIsReadOnly)
   }
-
 
   /**
    * Returns true if the editor is read-only, i.e. the user cannot edit the content of the editor.
@@ -290,7 +290,7 @@ export class XMLEditor extends EventTarget {
   }
 
   /**
-   * Loads XML, either from a string or from a given path.
+   * Loads XML, either from a string or from a given path. 
    * @async
    * @param {string} xmlPathOrString - The URL or path to the XML file, or an xml string
    * @returns {Promise<void>} - A promise that resolves with no value when the document is fully loaded and the editor is ready. 
@@ -869,7 +869,7 @@ export class XMLEditor extends EventTarget {
     }
 
     // once we at least tried to synchronize, we can mark the editor as ready
-    this.dispatchEvent(new Event(XMLEditor.EVENT_EDITOR_READY));
+    await this.emit(XMLEditor.EVENT_EDITOR_READY, null);
   }
 
   //
@@ -884,11 +884,11 @@ export class XMLEditor extends EventTarget {
     this.#isReady = false
     this.#readyPromise = this.#readyPromise ||
       /** @type {Promise<void>} */(new Promise(resolve => {
-      this.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => {
+      this.once(XMLEditor.EVENT_EDITOR_READY, () => {
         this.#isReady = true
         this.#readyPromise = null
         resolve();
-      }, { once: true })
+      })
     }))
   }
 
@@ -968,7 +968,7 @@ export class XMLEditor extends EventTarget {
     }
 
     // inform the listeners
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_SELECTION_CHANGED, { detail: rangesWithNode }))
+    await this.emit(XMLEditor.EVENT_SELECTION_CHANGED, rangesWithNode)
   }
 
   #updateTimeout = null
@@ -987,7 +987,7 @@ export class XMLEditor extends EventTarget {
     this.#editorIsDirty = true;
 
     // inform the listeners
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_UPDATE, { detail: update }))
+    await this.emit(XMLEditor.EVENT_EDITOR_UPDATE, update)
 
     if (this.#updateTimeout) {
       clearTimeout(this.#updateTimeout)
@@ -1011,7 +1011,7 @@ export class XMLEditor extends EventTarget {
     await this.sync()
 
     // inform the listeners
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, { detail: update }))
+    await this.emit(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, update)
   }
 
 
@@ -1020,7 +1020,7 @@ export class XMLEditor extends EventTarget {
    * @param {Object} changes The changes to apply to the editor
    */
   async #waitForEditorUpdate(changes) {
-    const promise = new Promise(resolve => this.addEventListener(XMLEditor.EVENT_EDITOR_READY, resolve, { once: true }))
+    const promise = new Promise(resolve => this.once(XMLEditor.EVENT_EDITOR_READY, resolve))
     this.#view.dispatch({ changes });
     await promise;
   }
@@ -1060,12 +1060,12 @@ export class XMLEditor extends EventTarget {
       const diagnostic = this.#parseErrorNode(errorNode)
       // @ts-ignore
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
-      this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, { detail: [diagnostic] }))
+      await this.emit(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, [diagnostic])
       this.#xmlTree = null;
       return false;
     }
     console.log("Document was updated and is well-formed.")
-    this.dispatchEvent(new CustomEvent(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, { detail: null }))
+    await this.emit(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, null)
     this.#xmlTree = doc;
 
     // Track processing instructions for better synchronization

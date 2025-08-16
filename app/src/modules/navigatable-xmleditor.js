@@ -41,20 +41,20 @@ export class NavXmlEditor extends XMLEditor {
   constructor(editorDivId, tagData=null) {
     super(editorDivId, tagData)
     // handle selection change
-    this.addEventListener(
+    this.on(
       XMLEditor.EVENT_SELECTION_CHANGED,
       // @ts-ignore
-      this.#onSelectionChange
+      this.#onSelectionChange.bind(this)
     )
   }
 
   /**
    * 
-   * @param {CustomEvent} evt 
+   * @param {any} data 
    */
-  async #onSelectionChange(evt) {
+  async #onSelectionChange(data) {
     await this.whenReady()
-    await this.handeSelectionChange(evt.detail)
+    await this.handeSelectionChange(data)
   }
 
   /**
@@ -119,10 +119,10 @@ export class NavXmlEditor extends XMLEditor {
     // Wait for editor to be ready
     if (!this.isReady()) {
       console.log("Editor not ready, deferring selection")
-      this.addEventListener(XMLEditor.EVENT_EDITOR_READY, () => {
+      this.once(XMLEditor.EVENT_EDITOR_READY, () => {
         console.log("Editor is now ready")
         this.selectByIndex(index)
-      }, { once: true })
+      })
       return;
     }
 

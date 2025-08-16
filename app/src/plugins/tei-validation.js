@@ -56,7 +56,7 @@ async function install(state) {
   ])
   // listen for delayed editor updates
   // @ts-ignore
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (evt) => removeDiagnosticsInChangedRanges(evt.detail));
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (updateData) => removeDiagnosticsInChangedRanges(updateData));
 }
 
 let modeCache;

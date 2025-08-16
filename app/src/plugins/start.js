@@ -177,16 +177,14 @@ async function saveIfDirty() {
 
 function configureXmlEditor() {
   // Find the currently selected node's contents in the PDF
-  xmlEditor.addEventListener(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents)
+  xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents)
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, /** @type CustomEvent */ evt => {
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
     if (validation.isDisabled()) {
       let view = xmlEditor.getView()
-      // @ts-ignore
-      let diagnostic = evt.detail
       try {
-        view.dispatch(setDiagnostics(view.state, [diagnostic]))
+        view.dispatch(setDiagnostics(view.state, diagnostics))
       } catch (error) {
         logger.warn("Error setting diagnostics: " + error.message)
       }
@@ -194,11 +192,10 @@ function configureXmlEditor() {
   })
 
   // save dirty editor content after an update
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
 
   // xml vaidation events
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, evt => {
-    const diagnostics =/** @type {CustomEvent<Diagnostic[]>} */ (evt).detail;
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
     console.warn("XML is not well-formed", diagnostics)
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
     // Show validation error in statusbar
@@ -208,7 +205,7 @@ function configureXmlEditor() {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
   })
-  xmlEditor.addEventListener(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, evt => {
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, data => {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))

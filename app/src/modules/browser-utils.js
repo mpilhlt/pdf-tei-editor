@@ -110,14 +110,14 @@ export class UrlHash {
    */
   static set(keyOrObj, value, dispatchEvent = true) {
     const hash = new URLSearchParams(window.location.hash.slice(1));
-    if (typeof keyOrObj === "string" && typeof value === "string" ) {
+    if (typeof keyOrObj === "string" && typeof value === "string") {
       hash.set(keyOrObj, value)
     } else if (keyOrObj && typeof keyOrObj === "object") {
       Object.entries(keyOrObj).forEach(([key, value]) => hash.set(key, value))
     } else {
       throw new TypeError(`Invalid parameters: ${keyOrObj}, ${value}`)
     }
-    
+
     // Use history.replaceState to update the current history entry
     history.replaceState(null, '', '#' + hash.toString());
     if (dispatchEvent) {
@@ -149,7 +149,7 @@ export class UrlHash {
    * @param {string} key - The key of the hash parameter to remove.
    * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
    */
-  static remove(key, dispatchEvent=true) {
+  static remove(key, dispatchEvent = true) {
     if (!UrlHash.has(key)) return; // Do nothing if the key does not exist
     const hash = new URLSearchParams(window.location.hash.slice(1));
     hash.delete(key); // Remove the specified key
@@ -332,3 +332,4 @@ export function isValidXPath(xpathExpression, xmlDom, namespaceResolver = null) 
     return false;
   }
 }
+
