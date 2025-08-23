@@ -2,7 +2,7 @@
 
 The PDF-TEI Editor features a three-panel layout designed for efficient comparison and editing of PDF documents and their corresponding TEI markup.
 
-![Main Interface](../screenshots/interface-without-dialog.png)
+![Main Interface](./images/interface-overview.png)
 
 ## Main Layout
 
@@ -90,23 +90,3 @@ The PDF and XML panels are synchronized:
 - **Search Integration**: Search terms can be synchronized between panels
 - **Validation Feedback**: XML errors show context-aware information
 
-## Responsive Design
-
-The interface adapts to different screen sizes:
-- **Panel Resizing**: Drag panel borders to adjust widths
-- **Toolbar Overflow**: On smaller screens, toolbar items move to an overflow menu
-- **Mobile Compatibility**: Basic functionality available on tablet devices
-
-## Accessibility Features
-
-- **Keyboard Navigation**: Full keyboard support for all major functions
-- **Screen Reader Support**: Proper ARIA labels and semantic markup
-- **High Contrast**: Support for high contrast display modes
-- **Zoom Support**: Interface scales with browser zoom settings
-
-## Customization Options
-
-Users can customize various aspects of the interface:
-- **Panel Layouts**: Adjust panel sizes and positions
-- **Editor Settings**: Font size, theme, indentation preferences  
-- **Navigation Preferences**: Default XPath expressions and navigation behavior

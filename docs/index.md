@@ -8,7 +8,7 @@ The PDF-TEI Editor is a specialized tool that helps researchers create, validate
 
 For detailed information about the project background and research context, see [About the PDF-TEI Editor](about.md).
 
-This documentation has been created using ai tools (Claude Code) and may contain inaccuracies. Please report any issues on the [GitHub repository](github.com/mpilhlt/pdf-tei-editor/issues).
+> This documentation has been created using ai tools (Claude Code) and contains many inaccuracies. However, it is better to have some documentation than nothing. It will be corrected and expanded incrementally. Please report any issues on the [GitHub repository](github.com/mpilhlt/pdf-tei-editor/issues).
 
 ## Table of Contents
 
@@ -31,11 +31,6 @@ This documentation has been created using ai tools (Claude Code) and may contain
 - [File Synchronization](sync-workflow.md)
 - [Document Revisions](revision-management.md)
 
-### Reference
-- [User Interface Reference](ui-reference.md)
-- [Keyboard Shortcuts](keyboard-shortcuts.md)
-- [File Formats](file-formats.md)
-- [Troubleshooting](troubleshooting.md)
 
 ## Quick Start
 

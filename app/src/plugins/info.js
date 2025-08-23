@@ -99,7 +99,7 @@ async function install(state) {
   ui.infoDialog.closeBtn.addEventListener('click', () => ui.infoDialog.hide());
   ui.infoDialog.backBtn.addEventListener('click', goBack);
 
-  // add a button to the command bar to show dialog with prompt editor
+  // add a button to the command bar to show dialog
   const button = (await createHtmlElements(buttonHtml))[0]
   ui.toolbar.append(button)
   updateUi()
@@ -165,6 +165,9 @@ async function load(mdPath, addToHistory = true){
     )
     // open remote links in new tabs
     .replaceAll(/(href="http)/g, `target="_blank" $1`)
+    // remove comment tags that mask the <sl-icon> tags in the markdown
+    .replaceAll(/<!--|-->/gs, '') 
+
 
   await createHtmlElements(html, ui.infoDialog.content)
 }

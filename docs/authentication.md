@@ -55,15 +55,3 @@ Different users may have different access levels:
 - **Admin**: System-wide administrative access
 
 Your specific permissions will determine which features are available in the interface.
-
-## Troubleshooting Login Issues
-
-### Common Problems
-- **Invalid Credentials**: Verify username and password are correct
-- **Session Expired**: Refresh the page and login again
-- **Server Connection**: Ensure the server is running and accessible
-
-### Getting Help
-- Contact your system administrator for account issues
-- Check browser console for technical error messages
-- Verify network connectivity to the server

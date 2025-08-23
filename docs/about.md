@@ -1,13 +1,11 @@
 # About the PDF-TEI Editor
 
-A viewer/editor web app to compare the PDF source and TEI extraction/annotation results.
+This application has been developed as a part of the ["Legal Theory Knowledge Graph" project](https://www.lhlt.mpg.de/2514927/03-boulanger-legal-theory-graph) at the Max Planck Institute of Legal History and Legal Theory.
 
-Authors/Contributors:
+## Authors/Contributors:
 - Christian Boulanger, Max Planck Institute for Legal History and Legal Theory
 
-This repo is part of the ["Legal Theory Knowledge Graph" project](https://www.lhlt.mpg.de/2514927/03-boulanger-legal-theory-graph) at the Max Planck Institute of Legal History and Legal Theory.
-
-## Purpose
+## Background and Purpose
 
 The purpose of this application is to support the creation of a gold standard dataset of TEI documents that contain extracted information from PDF documents. The main target is reference extraction, i.e. the extraction of citation data, or, less technical, the answer to the question which bibliographic references are cited by a given PDF.
 
@@ -17,6 +15,3 @@ Large Lange Models (LLMs), or more recently, Large Vision Models (LVMs) have cha
 
 Creating this dataset is a time-consuming and often tedious process. This is where tools like the present one come in. This web application is meant to make the manual validation and correction of gold standard files easier and faster. It provides a graphical user interface for the [LLamore](https://github.com/mpilhlt/llamore) library, which provides an adapter to any commercial or open weights model that it can connect to and uses them to extract references from PDFs. 
 
-The app features a variety of tools work with, and enhance the extracted data, to compare different version, and to selectively merge diffs between these versions. If the XML document in the editor contains an URL with the location of a XSD schema file, the XML document is automatically validated. When a selection XPath is specified, the editor allows you to navigate between all nodes that match the XPath, which will typically be the nodes that contain the main data records, i.e, the `<tei:biblStruct>` nodes. 
-
-More information is in preparation.

@@ -37,16 +37,10 @@ export default plugin
 // UI
 //
 
-/**
- * Sync button group navigation properties
- * @typedef {object} syncActionsPart
- * @property {SlButton} sync - Sync files button
- */
-
-const syncActionButtons = await createHtmlElements("sync-action-buttons.html")
-
 // Sync progress widget for XML editor statusbar
 let syncProgressWidget = null
+let syncContainer = null
+let syncIcon = null
 
 //
 // Implementation
@@ -57,15 +51,6 @@ let syncProgressWidget = null
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-
-  // install controls on menubar
-  ui.toolbar.append(...syncActionButtons)
-  updateUi()
-
-  const sa = ui.toolbar.syncActions
-
-  // sync
-  sa.sync.addEventListener("click", () => onClickSyncBtn(state))
 
   // Set up SSE listeners for sync progress and messages
   sse.addEventListener('syncProgress', (event) => {
@@ -95,7 +80,7 @@ async function install(state) {
   syncProgressWidget.style.maxWidth = '75px'
   
   // Create clickable icon element for the progress widget
-  const syncIcon = document.createElement('sl-icon')
+  syncIcon = document.createElement('sl-icon')
   syncIcon.name = 'arrow-repeat'
   syncIcon.style.marginRight = '4px'
   syncIcon.style.cursor = 'pointer'
@@ -105,7 +90,7 @@ async function install(state) {
   syncIcon.addEventListener('click', () => onClickSyncBtn(state))
   
   // Create a container that includes the icon and progress bar
-  const syncContainer = document.createElement('div')
+  syncContainer = document.createElement('div')
   syncContainer.style.display = 'flex'
   syncContainer.style.alignItems = 'center'
   syncContainer.appendChild(syncIcon)
@@ -121,19 +106,10 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
-  const sa = ui.toolbar.syncActions
-
-  sa.childNodes.forEach(el => {
-    if ('disabled' in el) {
-      el.disabled = state.offline}
-    }
-  )
-  if (state.offline) {
-    return
-  }
-
   // disable sync if webdav is not enabled
-  sa.sync.disabled = !state.webdavEnabled
+  syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none'
+  syncIcon.disabled = !state.webdavEnabled || state.editorReadOnly
+  syncProgressWidget.disabled = !state.webdavEnabled || state.editorReadOnly
 }
 
 /**
