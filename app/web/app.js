@@ -246,7 +246,7 @@ let currentLogLevel = logLevel.INFO;
 /**
  * Easy to use logging API which will  send log events to all registered log plugins 
  */
-const api$e = {
+const api$f = {
   /**
    * Sets the log level {@see logLevel}
    * @param {Number} level The log level
@@ -284,14 +284,14 @@ const api$e = {
   critical: message => pluginManager.invoke(endpoints.log.critical, {message})
 };
 
-api$e.error = api$e.critical; // alias for critical
+api$f.error = api$f.critical; // alias for critical
 
 /**
  * component plugin
  */
-const plugin$k = {
+const plugin$l = {
   name: name$1,
-  install: install$i,
+  install: install$j,
   log: {
     setLogLevel,
     debug,
@@ -305,8 +305,8 @@ const plugin$k = {
 // implementation
 //
 
-async function install$i(state) {
-  console.log(`Installing plugin "${plugin$k.name}"`);
+async function install$j(state) {
+  console.log(`Installing plugin "${plugin$l.name}"`);
 }
 
 
@@ -386,7 +386,7 @@ function critical({message}) {
  * The public API of the config plugin.
  * @namespace
  */
-const api$d = {
+const api$e = {
   get,
   set,
   load: updateConfigData
@@ -396,7 +396,7 @@ const api$d = {
  * The configuration plugin definition.
  * @type {Plugin}
  */
-const plugin$j = {
+const plugin$k = {
   name: "config",
   deps: ['client']
 };
@@ -413,8 +413,8 @@ let configMap;
  * @returns {Promise<void>} A promise that resolves when the configuration is updated.
  */
 async function updateConfigData () {
-  api$e.debug('Updating configuration data.');
-  configMap = await api$8.getConfigData();
+  api$f.debug('Updating configuration data.');
+  configMap = await api$9.getConfigData();
 }
 
 /**
@@ -463,7 +463,7 @@ async function get(key, defaultValue, updateFirst=false) {
  */
 async function set(key, value) {
   await _get(key); // this checks the key 
-  await api$8.setConfigValue(key, value);
+  await api$9.setConfigValue(key, value);
 }
 
 /**
@@ -661,7 +661,7 @@ function isValidXPath(xpathExpression, xmlDom, namespaceResolver = null) {
 let showInUrl;
 let allowSetFromUrl;
 
-const api$c = {
+const api$d = {
   updateUrlHashfromState,
   updateStateFromUrlHash
 };
@@ -669,12 +669,12 @@ const api$c = {
 /**
  * component plugin
  */
-const plugin$i = {
+const plugin$j = {
   name: "url-hash-state",
   deps: ['config'],
-  install: install$h,
+  install: install$i,
   state: {
-    update: update$d
+    update: update$e
   }
 };
 
@@ -685,16 +685,16 @@ const plugin$i = {
 /** 
  * @param {ApplicationState} state 
  */
-async function install$h(state) {
-  api$e.debug(`Installing plugin "${plugin$i.name}"`);
-  showInUrl = await api$d.get("state.showInUrl") || [];
-  allowSetFromUrl = await api$d.get("state.allowSetFromUrl") || [];
+async function install$i(state) {
+  api$f.debug(`Installing plugin "${plugin$j.name}"`);
+  showInUrl = await api$e.get("state.showInUrl") || [];
+  allowSetFromUrl = await api$e.get("state.allowSetFromUrl") || [];
 }
 
 /** 
  * @param {ApplicationState} state 
  */
-async function update$d(state) {
+async function update$e(state) {
   updateUrlHashfromState(state);
 }
 
@@ -736,7 +736,7 @@ async function updateStateFromUrlHash(state) {
       UrlHash.remove(key, false);
     }
   }
-  api$e.info("Setting state properties from URL hash:" + Object.keys(tmpState).join(", "));
+  api$f.info("Setting state properties from URL hash:" + Object.keys(tmpState).join(", "));
   return await updateState(state, tmpState)
 }
 
@@ -748,7 +748,7 @@ async function updateStateFromUrlHash(state) {
 /**
  * plugin API
  */
-const api$b = {
+const api$c = {
   /**
    * @param {string} type
    * @param {(event: MessageEvent) => void} listener
@@ -787,11 +787,11 @@ const api$b = {
    */
   reconnect() {
     if (cachedSessionId) {
-      api$e.info('Manual reconnection requested');
+      api$f.info('Manual reconnection requested');
       cleanupConnection();
       establishConnection(cachedSessionId);
     } else {
-      api$e.warn('Cannot reconnect: no cached session ID');
+      api$f.warn('Cannot reconnect: no cached session ID');
     }
   }
 };
@@ -799,11 +799,11 @@ const api$b = {
 /**
  * component plugin
  */
-const plugin$h = {
+const plugin$i = {
   name: "sse",
-  install: install$g,
+  install: install$h,
   state: {
-    update: update$c
+    update: update$d
   }
 };
 
@@ -818,19 +818,19 @@ const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
 /** 
  * @param {ApplicationState} state 
  */
-async function install$g(state){
-  api$e.debug(`Installing plugin "${plugin$h.name}"`);
+async function install$h(state){
+  api$f.debug(`Installing plugin "${plugin$i.name}"`);
 }
 
 /**
  * @param {ApplicationState} state 
  */
-async function update$c(state) {
+async function update$d(state) {
   const { user, sessionId } = state;
 
   // Close existing connection if the session ID has changed or user logged out
   if (eventSource && (sessionId !== cachedSessionId || !user)) {
-    api$e.debug('Closing SSE connection due to session change or logout.');
+    api$f.debug('Closing SSE connection due to session change or logout.');
     cleanupConnection();
   }
 
@@ -845,14 +845,14 @@ async function update$c(state) {
  * @param {string} sessionId 
  */
 function establishConnection(sessionId) {
-  api$e.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
+  api$f.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
   
   const url = `/sse/subscribe?session_id=${sessionId}`;
   eventSource = new EventSource(url);
   cachedSessionId = sessionId;
 
   eventSource.onopen = () => {
-    api$e.info('SSE connection established successfully');
+    api$f.info('SSE connection established successfully');
     reconnectAttempts = 0; // Reset reconnection attempts on successful connection
     
     // Clear any pending reconnection timeout
@@ -875,11 +875,11 @@ function establishConnection(sessionId) {
     
     // Provide more detailed error information
     if (readyState === EventSource.CONNECTING) {
-      api$e.warn(`${errorMsg} - Connection attempt failed`);
+      api$f.warn(`${errorMsg} - Connection attempt failed`);
     } else if (readyState === EventSource.CLOSED) {
-      api$e.warn(`${errorMsg} - Connection was closed`);
+      api$f.warn(`${errorMsg} - Connection was closed`);
     } else {
-      api$e.error(`${errorMsg} - Unexpected error`);
+      api$f.error(`${errorMsg} - Unexpected error`);
     }
 
     // Close the connection
@@ -893,7 +893,7 @@ function establishConnection(sessionId) {
       const delay = RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts); // Exponential backoff
       reconnectAttempts++;
       
-      api$e.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+      api$f.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
       
       reconnectTimeout = setTimeout(() => {
         if (cachedSessionId) { // Only reconnect if we still have a session
@@ -901,7 +901,7 @@ function establishConnection(sessionId) {
         }
       }, delay);
     } else {
-      api$e.error(`Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) exceeded. SSE connection abandoned.`);
+      api$f.error(`Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) exceeded. SSE connection abandoned.`);
       cachedSessionId = null;
       reconnectAttempts = 0;
     }
@@ -914,13 +914,13 @@ function establishConnection(sessionId) {
   // Re-add listeners for reconnections
   Object.keys(currentQueuedListeners).forEach(type => {
     currentQueuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
-      api$b.addEventListener(type, listener);
+      api$c.addEventListener(type, listener);
     });
   });
 
   // Standard message channels
   eventSource.addEventListener('updateStatus', /** @param {MessageEvent} evt */ evt => {
-    api$e.info('SSE Status Update:' + evt.data);
+    api$f.info('SSE Status Update:' + evt.data);
   });
 }
 
@@ -944,7 +944,7 @@ function cleanupConnection() {
   cachedSessionId = null;
   reconnectAttempts = 0;
   
-  api$e.debug('SSE connection cleaned up');
+  api$f.debug('SSE connection cleaned up');
 }
 
 /**
@@ -2425,7 +2425,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$b);
+    const documentElementObserver = new MutationObserver(update$c);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2446,9 +2446,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$b();
+    update$c();
 }
-function update$b() {
+function update$c() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -14482,11 +14482,12 @@ const PanelUtils = {
   /**
    * Create a text widget with the given properties
    * @param {Object} options - Widget options
-   * @param {string} options.text - Text to display
+   * @param {string} [options.text] - Text to display
    * @param {string} [options.icon] - Optional icon name
    * @param {string} [options.tooltip] - Optional tooltip
    * @param {string} [options.variant] - Optional variant (error, warning, success)
    * @param {boolean} [options.clickable] - Whether the widget is clickable
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusText}
    */
   createText(options = {}) {
@@ -14502,6 +14503,7 @@ const PanelUtils = {
    * @param {string} [options.action] - Action identifier
    * @param {string} [options.variant] - Button variant
    * @param {boolean} [options.disabled] - Whether button is disabled
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusButton}
    */
   createButton(options = {}) {
@@ -14516,6 +14518,7 @@ const PanelUtils = {
    * @param {string} [options.text] - Progress text
    * @param {boolean} [options.indeterminate] - Whether progress is indeterminate
    * @param {string} [options.variant] - Progress variant
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusProgress}
    */
   createProgress(options = {}) {
@@ -14534,6 +14537,7 @@ const PanelUtils = {
    * @param {boolean} [options.dot] - Show as dot instead of count
    * @param {boolean} [options.pulse] - Enable pulse animation
    * @param {boolean} [options.hiddenWhenZero] - Hide when count is zero
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusBadge}
    */
   createBadge(options = {}) {
@@ -14548,6 +14552,7 @@ const PanelUtils = {
    * @param {string} [options.selected] - Selected value
    * @param {Array} [options.items] - Dropdown items
    * @param {boolean} [options.disabled] - Whether dropdown is disabled
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusDropdown}
    */
   createDropdown(options = {}) {
@@ -14570,6 +14575,7 @@ const PanelUtils = {
    * @param {string} [options.variant] - Separator variant (vertical, horizontal, dotted, space)
    * @param {string} [options.spacing] - Separator spacing (tight, normal, loose)
    * @param {boolean} [options.hideMobile] - Whether to hide on mobile
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusSeparator}
    */
   createSeparator(options = {}) {
@@ -14701,16 +14707,16 @@ var ui$1 = ui;
 /** @import { ApplicationState } from '../app.js' */
 
 // Plugin API
-const api$a = {
+const api$b = {
   info,
   error: error$1,
   success
 };
 
 // Plugin object
-const plugin$g = {
+const plugin$h = {
   name: "dialog",
-  install: install$f
+  install: install$g
 };
 
 //
@@ -14734,8 +14740,8 @@ const plugin$g = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-async function install$f(app) {
-  api$e.debug(`Installing plugin "${plugin$g.name}"`);
+async function install$g(app) {
+  api$f.debug(`Installing plugin "${plugin$h.name}"`);
   await createHtmlElements("dialog.html", document.body);
   updateUi();
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.hide());
@@ -15204,10 +15210,10 @@ let currentFile;
 /**
  * plugin object
  */
-const plugin$f = {
+const plugin$g = {
   name: "pdfviewer",
-  install: install$e,
-  state: { update: update$a }
+  install: install$f,
+  state: { update: update$b }
 };
 
 //
@@ -15218,10 +15224,10 @@ const plugin$f = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$e(state) {
-  api$e.debug(`Installing plugin "${plugin$f.name}"`);
+async function install$f(state) {
+  api$f.debug(`Installing plugin "${plugin$g.name}"`);
   await pdfViewer.isReady();
-  api$e.info("PDF Viewer ready.");
+  api$f.info("PDF Viewer ready.");
   pdfViewer.show();
   
   // Add autosearch switch to PDF viewer statusbar
@@ -15244,7 +15250,7 @@ async function install$e(state) {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$a(state) {
+async function update$b(state) {
   if (state.pdf !== currentFile) {
     currentFile = state.pdf;
     //if (state.pdf === null && state.user === null) {
@@ -15268,9 +15274,9 @@ async function onAutoSearchSwitchChange(evt) {
     autoSearchSwitch.setAttribute('help-text', newHelpText);
   }
   
-  api$e.info(`Auto search is: ${checked}`);
+  api$f.info(`Auto search is: ${checked}`);
   if (checked && xmlEditor.selectedNode) {
-    await api$5.searchNodeContentsInPdf(xmlEditor.selectedNode);
+    await api$6.searchNodeContentsInPdf(xmlEditor.selectedNode);
   }
 }
 
@@ -34129,6 +34135,15 @@ that tree is foldable and return the range that can be collapsed
 when it is.
 */
 const foldNodeProp = /*@__PURE__*/new NodeProp();
+/**
+[Fold](https://codemirror.net/6/docs/ref/#language.foldNodeProp) function that folds everything but
+the first and the last child of a syntax node. Useful for nodes
+that start and end with delimiters.
+*/
+function foldInside(node) {
+    let first = node.firstChild, last = node.lastChild;
+    return first && first.to < last.from ? { from: first.to, to: last.type.isError ? node.to : last.from } : null;
+}
 function syntaxFolding(state, start, end) {
     let tree = syntaxTree(state);
     if (tree.length < end)
@@ -44176,6 +44191,159 @@ function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
   return defaultIndentation; // Default value if indentation cannot be reliably determined
 }
 
+
+/**
+ * Creates a CodeMirror autocomplete data structure from a compressed version sent
+ * by the server, which uses "#x" references which are reused at different places. This
+ * includes "#Mx" references which are macros containing references. Returns the resolved version
+ * with the string references replaced by the actual object references.
+ * 
+ * Code generated by Claude Code with instructions by @cboulanger
+ * 
+ * @param {Object} data Map to be resolved
+ * @returns {Object} Resolved map
+ */
+function resolveDeduplicated(data) {
+  // Create a copy to avoid modifying the original
+  const resolved = JSON.parse(JSON.stringify(data));
+
+  // Extract and resolve reference definitions (keys starting with #)
+  const refs = {};
+  Object.keys(resolved).forEach(key => {
+    if (key.startsWith('#')) {
+      refs[key] = resolved[key];
+      delete resolved[key];
+    }
+  });
+
+  // Pre-resolve all references to create shared objects
+  const resolvedRefs = {};
+
+  // First pass: resolve simple references and macros
+  Object.keys(refs).forEach(refId => {
+    if (refId.startsWith('#M')) {
+      // Macro reference - resolve to composite pattern
+      const macroContent = refs[refId];
+      if (typeof macroContent === 'string' && macroContent.includes(' ')) {
+        const refIds = macroContent.split(' ').filter(id => id.startsWith('#'));
+        resolvedRefs[refId] = mergeReferences(refIds, refs);
+      } else {
+        resolvedRefs[refId] = refs[refId];
+      }
+    } else {
+      // Simple reference - use as-is (will be shared)
+      resolvedRefs[refId] = refs[refId];
+    }
+  });
+
+  // Recursive function to resolve references using shared objects
+  function resolveRefs(obj) {
+    if (typeof obj === 'string' && obj.includes('#')) {
+      if (obj.startsWith('#') && !obj.includes(' ')) {
+        // Simple reference - return shared object and recursively resolve its contents
+        const resolved = resolvedRefs[obj];
+        if (resolved) {
+          return resolveRefs(resolved); // Recursively resolve the contents
+        }
+        return obj;
+      } else if (obj.includes(' ')) {
+        // Composite reference like "#1 #23 #44"
+        const refIds = obj.split(' ').filter(id => id.startsWith('#'));
+        return mergeReferences(refIds, resolvedRefs);
+      }
+      return obj;
+    } else if (Array.isArray(obj)) {
+      return obj.map(resolveRefs);
+    } else if (obj && typeof obj === 'object') {
+      const result = {};
+      Object.keys(obj).forEach(key => {
+        result[key] = resolveRefs(obj[key]);
+      });
+      return result;
+    }
+    return obj;
+  }
+
+  // Function to merge multiple references into a single object/array
+  function mergeReferences(refIds, refSource) {
+    const resolved = refIds.map(id => refSource[id]).filter(Boolean);
+
+    if (resolved.length === 0) return null;
+    if (resolved.length === 1) return resolved[0]; // Share the single object
+
+    // Determine merge strategy based on types
+    const firstType = Array.isArray(resolved[0]) ? 'array' : typeof resolved[0];
+
+    if (firstType === 'object' && resolved.every(r => typeof r === 'object' && !Array.isArray(r))) {
+      // Merge objects - create new object but reference shared values where possible
+      const merged = {};
+      resolved.forEach(obj => {
+        Object.keys(obj).forEach(key => {
+          if (key === 'doc' && merged[key]) {
+            // Merge documentation fields by concatenating with separator
+            merged[key] = merged[key] + ' | ' + obj[key];
+          } else {
+            merged[key] = obj[key]; // This shares the value reference
+          }
+        });
+      });
+      return merged;
+    } else if (firstType === 'array' && resolved.every(r => Array.isArray(r))) {
+      // Concatenate arrays and deduplicate
+      const concatenated = [].concat(...resolved);
+      const seen = new Set();
+      return concatenated.filter(item => {
+        if (seen.has(item)) return false;
+        seen.add(item);
+        return true;
+      });
+    } else {
+      // Mixed types - return as array
+      return resolved;
+    }
+  }
+
+  // Helper function to deduplicate arrays, preserving order
+  function deduplicateArray(arr) {
+    if (!Array.isArray(arr)) return arr;
+    const seen = new Set();
+    return arr.filter(item => {
+      if (seen.has(item)) return false;
+      seen.add(item);
+      return true;
+    });
+  }
+
+  // Helper function to recursively deduplicate values arrays in objects
+  function deduplicateValues(obj) {
+    if (Array.isArray(obj)) {
+      return obj.map(deduplicateValues);
+    } else if (obj && typeof obj === 'object') {
+      const result = {};
+      Object.keys(obj).forEach(key => {
+        if (key === 'values' && Array.isArray(obj[key])) {
+          // Deduplicate values arrays specifically
+          result[key] = deduplicateArray(obj[key]);
+        } else {
+          result[key] = deduplicateValues(obj[key]);
+        }
+      });
+      return result;
+    }
+    return obj;
+  }
+
+  // Resolve all references in the main data
+  Object.keys(resolved).forEach(key => {
+    resolved[key] = resolveRefs(resolved[key]);
+  });
+  
+  // Deduplicate all values arrays in the resolved data
+  const finalResolved = deduplicateValues(resolved);
+
+  return finalResolved;
+}
+
 /**
  * A simple Event Emitter that can handle async events with timeout support
  * 
@@ -44359,7 +44527,7 @@ class EventEmitter {
  */
 class XMLEditor extends EventEmitter {
 
-  // Event name constants
+  // Event name constants, no longer needed with the typed EventEmitter but kept for backwards compatibility
   static EVENT_SELECTION_CHANGED = "selectionChanged";
   static EVENT_EDITOR_READY = "editorReady";
   static EVENT_EDITOR_UPDATE = "editorUpdate"
@@ -44368,6 +44536,7 @@ class XMLEditor extends EventEmitter {
   static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
   static EVENT_EDITOR_READONLY = "editorReadOnly"
   static EVENT_EDITOR_BEFORE_LOAD = "editorBeforeLoad"
+  static EVENT_EDITOR_AFTER_LOAD = "editorAfterLoad"
 
   // private members
 
@@ -44619,7 +44788,7 @@ class XMLEditor extends EventEmitter {
     this.#view.dispatch({
       effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
     });
-    await this.emit(XMLEditor.EVENT_EDITOR_READONLY, this.#editorIsReadOnly);
+    await this.emit("editorReadOnly", this.#editorIsReadOnly);
   }
 
   /**
@@ -44683,6 +44852,9 @@ class XMLEditor extends EventEmitter {
     this.#documentVersion = 0;
     this.#editorIsDirty = false;
     await this.isReadyPromise();
+    
+    // Emit after load event
+    await this.emit("editorAfterLoad", null);
   }
 
   /**
@@ -44911,9 +45083,12 @@ class XMLEditor extends EventEmitter {
         // @ts-ignore - node is a ProcessingInstruction when nodeType matches
         const piNode = node;
         processingInstructions.push({
+          // @ts-ignore
           target: piNode.target,
+          // @ts-ignore
           data: piNode.data,
           position: i,
+          // @ts-ignore
           fullText: `<?${piNode.target}${piNode.data ? ' ' + piNode.data : ''}?>`
         });
       }
@@ -44947,7 +45122,7 @@ class XMLEditor extends EventEmitter {
   /**
    * Updates the editor from a node in the XML Document. Returns a promise that resolves when
    * the editor is updated
-   * @param {Element} node A XML DOM node
+   * @param {Element | Node} node A XML DOM node
    */
   async updateEditorFromNode(node) {
     const syntaxNode = this.getSyntaxNodeFromDomNode(node);
@@ -44985,7 +45160,7 @@ class XMLEditor extends EventEmitter {
 
   /**
    * Given a XML DOM node, return its position in the editor
-   * @param {Element} domNode The node in the XML DOM
+   * @param {Element | Node} domNode The node in the XML DOM
    * @returns {number}
    */
   getDomNodePosition(domNode) {
@@ -44994,7 +45169,7 @@ class XMLEditor extends EventEmitter {
 
   /**
    * Given a node in the XML document, return the corresponding syntax tree object
-   * @param {Element} domNode A node in the XML DOM 
+   * @param {Element | Node} domNode A node in the XML DOM 
    * @returns {Object} A SyntaxNode objectz
    */
   getSyntaxNodeFromDomNode(domNode) {
@@ -45152,6 +45327,87 @@ class XMLEditor extends EventEmitter {
   }
 
   /**
+   * Folds all DOM nodes that match the given XPath expression in the editor.
+   * @param {string} xpath - The XPath expression to match nodes for folding.
+   * @throws {Error} If the XML tree is not loaded.
+   */
+  foldByXpath(xpath) {
+    if (!this.#xmlTree) {
+      throw new Error("XML tree is not loaded.");
+    }
+    if (!xpath) {
+      throw new Error("XPath is not provided.");
+    }
+
+    const domNodes = this.getDomNodesByXpath(xpath);
+    if (domNodes.length === 0) {
+      console.debug(`No nodes found for XPath: ${xpath}`);
+      return;
+    }
+
+    const effects = [];
+    for (const domNode of domNodes) {
+      try {
+        const syntaxNode = this.getSyntaxNodeFromDomNode(domNode);
+        if (syntaxNode) {
+          // Use foldInside to fold only the content inside the element, keeping the tags visible
+          const foldRange = foldInside(syntaxNode);
+          if (foldRange) {
+            effects.push(foldEffect.of(foldRange));
+          }
+        }
+      } catch (error) {
+        console.warn(`Error getting syntax node for DOM node: ${error.message}`);
+      }
+    }
+
+    if (effects.length > 0) {
+      this.#view.dispatch({ effects });
+      console.debug(`Folded content inside ${effects.length} node(s) matching XPath: ${xpath}`);
+    }
+  }
+
+  /**
+   * Unfolds all DOM nodes that match the given XPath expression in the editor.
+   * @param {string} xpath - The XPath expression to match nodes for unfolding.
+   * @throws {Error} If the XML tree is not loaded.
+   */
+  unfoldByXpath(xpath) {
+    if (!this.#xmlTree) {
+      throw new Error("XML tree is not loaded.");
+    }
+    if (!xpath) {
+      throw new Error("XPath is not provided.");
+    }
+
+    const domNodes = this.getDomNodesByXpath(xpath);
+    if (domNodes.length === 0) {
+      console.debug(`No nodes found for XPath: ${xpath}`);
+      return;
+    }
+
+    const effects = [];
+    for (const domNode of domNodes) {
+      try {
+        const syntaxNode = this.getSyntaxNodeFromDomNode(domNode);
+        if (syntaxNode) {
+          // Use foldInside to get the fold range, then create unfold effect
+          const foldRange = foldInside(syntaxNode);
+          if (foldRange) {
+            effects.push(unfoldEffect.of(foldRange));
+          }
+        }
+      } catch (error) {
+        console.warn(`Error getting syntax node for DOM node: ${error.message}`);
+      }
+    }
+
+    if (effects.length > 0) {
+      this.#view.dispatch({ effects });
+    }
+  }
+
+  /**
    * Generates an XPath expression to locate a given XML node within an XML document.
    * @author Gemini 2.0
    *
@@ -45231,7 +45487,7 @@ class XMLEditor extends EventEmitter {
     }
 
     // once we at least tried to synchronize, we can mark the editor as ready
-    await this.emit(XMLEditor.EVENT_EDITOR_READY, null);
+    await this.emit("editorReady", null);
   }
 
   //
@@ -45246,7 +45502,7 @@ class XMLEditor extends EventEmitter {
     this.#isReady = false;
     this.#readyPromise = this.#readyPromise ||
       /** @type {Promise<void>} */(new Promise(resolve => {
-      this.once(XMLEditor.EVENT_EDITOR_READY, () => {
+      this.once("editorReady", () => {
         this.#isReady = true;
         this.#readyPromise = null;
         resolve();
@@ -45256,7 +45512,7 @@ class XMLEditor extends EventEmitter {
 
   /**
    * serializes the node (or the complete xmlTree if no node is given) to an XML string
-   * @param {Element|Document} node The node to serialize
+   * @param {Element|Document|Node} node The node to serialize
    * @param {boolean} [removeNamespaces=true] Whether to remove the namespace declaration in the output
    */
   #serialize(node, removeNamespaces = true) {
@@ -45325,7 +45581,7 @@ class XMLEditor extends EventEmitter {
     }
 
     // inform the listeners
-    await this.emit(XMLEditor.EVENT_SELECTION_CHANGED, rangesWithNode);
+    await this.emit("selectionChanged", rangesWithNode);
   }
 
   #updateTimeout = null
@@ -45344,7 +45600,7 @@ class XMLEditor extends EventEmitter {
     this.#editorIsDirty = true;
 
     // inform the listeners
-    await this.emit(XMLEditor.EVENT_EDITOR_UPDATE, update);
+    await this.emit("editorUpdate", update);
 
     if (this.#updateTimeout) {
       clearTimeout(this.#updateTimeout);
@@ -45368,7 +45624,7 @@ class XMLEditor extends EventEmitter {
     await this.sync();
 
     // inform the listeners
-    await this.emit(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, update);
+    await this.emit("editorUpdateDelayed", update);
   }
 
 
@@ -45377,7 +45633,7 @@ class XMLEditor extends EventEmitter {
    * @param {Object} changes The changes to apply to the editor
    */
   async #waitForEditorUpdate(changes) {
-    const promise = new Promise(resolve => this.once(XMLEditor.EVENT_EDITOR_READY, resolve));
+    const promise = new Promise(resolve => this.once("editorReady", resolve));
     this.#view.dispatch({ changes });
     await promise;
   }
@@ -45417,12 +45673,12 @@ class XMLEditor extends EventEmitter {
       const diagnostic = this.#parseErrorNode(errorNode);
       // @ts-ignore
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`);
-      await this.emit(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, [diagnostic]);
+      await this.emit("editorXmlNotWellFormed", [diagnostic]);
       this.#xmlTree = null;
       return false;
     }
     console.log("Document was updated and is well-formed.");
-    await this.emit(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, null);
+    await this.emit("editorXmlWellFormed", null);
     this.#xmlTree = doc;
 
     // Track processing instructions for better synchronization
@@ -45929,7 +46185,9 @@ class NavXmlEditor extends XMLEditor {
 /**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
- * @property {HTMLElement} cursorPosition - The cursor position widget
+ * @property {StatusText} readOnlyStatus - The read-only status widget
+ * @property {StatusText} cursorPosition - The cursor position widget
+ * @property {StatusText} indentationStatus - The indentation status widget
  */
 
 /**
@@ -45951,16 +46209,20 @@ const xmlEditor = new NavXmlEditor('codemirror-container');
 let readOnlyStatusWidget = null;
 let cursorPositionWidget = null;
 let indentationStatusWidget = null;
-let statusSeparator = null;
+let statusSeparator$1 = null;
+let teiHeaderToggleWidget = null;
+
+// State to track teiHeader visibility (starts folded)
+let teiHeaderVisible = false;
 
 /**
  * component plugin
  */
-const plugin$e = {
+const plugin$f = {
   name: "xmleditor",
-  install: install$d,
+  install: install$e,
   state: {
-    update: update$9
+    update: update$a
   }
 };
 
@@ -45968,8 +46230,8 @@ const plugin$e = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$d(state) {
-  api$e.debug(`Installing plugin "${plugin$e.name}"`);
+async function install$e(state) {
+  api$f.debug(`Installing plugin "${plugin$f.name}"`);
   // Note: Autocomplete data is now loaded dynamically per document in services.js
   // The static tagData loading has been removed in favor of schema-specific autocomplete data
 
@@ -45977,69 +46239,102 @@ async function install$d(state) {
 
   /** @type {StatusText} */
   readOnlyStatusWidget = PanelUtils.createText({
-    text: '🔒 File is read-only',
-    variant: 'warning'
+    text: 'Read-only',
+    icon: 'lock-fill',
+    variant: 'warning',
+    name: 'readOnlyStatus'
   });
 
   /** @type {StatusText} */
   cursorPositionWidget =  PanelUtils.createText({
     text: 'Ln 1, Col 1',
-    variant: 'neutral'
+    variant: 'neutral',
+    name: 'cursorPosition'
   });
 
   /** @type {StatusText} */
   indentationStatusWidget = PanelUtils.createText({
     text: 'Indent: 2 spaces',
-    variant: 'neutral'
+    variant: 'neutral',
+    name: 'indentationStatus'
+  });
+
+  /** @type {StatusText} */
+  // <sl-icon name="person-gear"></sl-icon>
+  // <sl-icon name="person-fill-gear"></sl-icon>
+  teiHeaderToggleWidget = PanelUtils.createText({
+    text: '',
+    icon: 'person-gear',
+    variant: 'neutral',
+    name: 'teiHeaderToggle'
   });
 
   // Create separator between indentation and cursor position
-  statusSeparator = PanelUtils.createSeparator({
+  statusSeparator$1 = PanelUtils.createSeparator({
     variant: 'dotted'
   });
   
   // Add widgets to right side of statusbar (higher priority = more to the right)
   ui$1.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1);  // leftmost - indent to left of position  
-  ui$1.xmlEditor.statusbar.add(statusSeparator, 'right', 2);          // separator in middle
+  ui$1.xmlEditor.statusbar.add(statusSeparator$1, 'right', 2);          // separator in middle
   ui$1.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 3);     // rightmost - position always on far right
+  
+  // Add teiHeader toggle widget to left side of statusbar
+  ui$1.xmlEditor.statusbar.add(teiHeaderToggleWidget, 'left', 1);
 
   // selection => xpath state
-  xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, data => {
+  xmlEditor.on("selectionChanged", data => {
     xmlEditor.whenReady().then(() => onSelectionChange(state));
     updateCursorPosition();
   });
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
-    if (api$9.isDisabled()) {
+  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
+    if (api$a.isDisabled()) {
       let view = xmlEditor.getView();
       try {
         view.dispatch(setDiagnostics(view.state, diagnostics));
       } catch (error) {
-        api$e.warn("Error setting diagnostics: " + error.message);
+        api$f.warn("Error setting diagnostics: " + error.message);
       }
     }
   });
   
   // Update cursor position when editor is ready
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_READY, updateCursorPosition);
+  xmlEditor.on("editorReady", updateCursorPosition);
   
   // Update cursor position on editor updates (typing, etc.)
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition);
+  xmlEditor.on("editorUpdate", updateCursorPosition);
 
   // Handle indentation detection before loading XML
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_BEFORE_LOAD, (xml) => {
+  xmlEditor.on("editorBeforeLoad", (xml) => {
     const indentUnit = detectXmlIndentation(xml);
-    api$e.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
+    api$f.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
     xmlEditor.configureIntenation(indentUnit, 4); // default tab size of 4 spaces
     updateIndentationStatus(indentUnit);
+  });
+
+  // Fold teiHeader after document is loaded
+  xmlEditor.on("editorAfterLoad", () => {
+    try {
+      xmlEditor.foldByXpath('//tei:teiHeader');
+      teiHeaderVisible = false; // Reset state after document load
+      updateTeiHeaderToggleWidget();
+    } catch (error) {
+      api$f.debug(`Error folding teiHeader: ${error.message}`);
+    }
+  });
+
+  // Add click handler for teiHeader toggle widget
+  teiHeaderToggleWidget.addEventListener('click', () => {
+    toggleTeiHeaderVisibility();
   });
 }
 
 /**
  * @param {ApplicationState} state
  */
-async function update$9(state) {
+async function update$a(state) {
   //console.warn("update", plugin.name, state)
 
   if (state.xml === null) {
@@ -46050,7 +46345,7 @@ async function update$9(state) {
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
     // update the editor read-only state
     xmlEditor.setReadOnly(state.editorReadOnly);
-    api$e.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
+    api$f.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     if (state.editorReadOnly) {
       ui$1.xmlEditor.classList.add("editor-readonly");
       if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
@@ -46138,23 +46433,64 @@ function updateIndentationStatus(indentUnit) {
 }
 
 /**
+ * Toggles the visibility of the teiHeader node
+ */
+function toggleTeiHeaderVisibility() {
+  if (!xmlEditor.isReady()) return
+  
+  try {
+    if (teiHeaderVisible) {
+      // Fold the teiHeader
+      xmlEditor.foldByXpath('//tei:teiHeader');
+      teiHeaderVisible = false;
+      api$f.debug('Folded teiHeader');
+    } else {
+      // Unfold the teiHeader
+      xmlEditor.unfoldByXpath('//tei:teiHeader');
+      teiHeaderVisible = true;
+      api$f.debug('Unfolded teiHeader');
+    }
+    updateTeiHeaderToggleWidget();
+  } catch (error) {
+    api$f.warn(`Error toggling teiHeader visibility: ${error.message}`);
+  }
+}
+
+/**
+ * Updates the teiHeader toggle widget appearance based on visibility state
+ */
+function updateTeiHeaderToggleWidget() {
+  if (!teiHeaderToggleWidget) return
+  
+  if (teiHeaderVisible) {
+    // teiHeader is visible, show filled icon
+    teiHeaderToggleWidget.icon = 'person-fill-gear';
+    teiHeaderToggleWidget.tooltip = 'Hide teiHeader';
+  } else {
+    // teiHeader is hidden, show outline icon
+    teiHeaderToggleWidget.icon = 'person-gear';
+    teiHeaderToggleWidget.tooltip = 'Show teiHeader';
+  }
+}
+
+/**
  * @import { Diagnostic } from '@codemirror/lint'
  * @import { ApplicationState } from '../app.js'
  */
 
 
-const api$9 = {
+const api$a = {
   configure,
   validate,
   isValidDocument,
   isDisabled
 };
 
-const plugin$d = {
+const plugin$e = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
-  install: install$c,
-  state: {update: update$8},
+  install: install$d,
+  state: {update: update$9},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -46175,8 +46511,8 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-async function install$c(state) {
-  api$e.debug(`Installing plugin "${plugin$d.name}"`);
+async function install$d(state) {
+  api$f.debug(`Installing plugin "${plugin$e.name}"`);
   // add the linter to the editor
   xmlEditor.addLinter([
     linter(lintSource, { 
@@ -46194,7 +46530,7 @@ async function install$c(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$8(state) {
+async function update$9(state) {
   if (state.offline || state.editorReadOnly) {
     // if we are offline, disable validation
     configure({ mode: "off" });
@@ -46240,19 +46576,19 @@ async function lintSource(view) {
   const doc = view.state.doc;
   const xml = doc.toString();
   if (xml == "") {
-    api$e.debug("Nothing to validate.");
+    api$f.debug("Nothing to validate.");
     return [];
   }
 
   // don't validate if disabled and use last diagnostics
   if (_isDisabled) {
-    api$e.debug("Ignoring validation request: Validation is disabled");
+    api$f.debug("Ignoring validation request: Validation is disabled");
     return lastDiagnostics;
   }
 
   // if this is called while another validation is ongoing, return the last diagnostics
   if (validationInProgress) {
-    api$e.debug("Ignoring validation request: Validation is ongoing.");
+    api$f.debug("Ignoring validation request: Validation is ongoing.");
     return lastDiagnostics;
   }
 
@@ -46262,19 +46598,19 @@ async function lintSource(view) {
     let validationErrors;
     while (true) {
       validatedVersion = xmlEditor.getDocumentVersion(); // rewrite this!
-      api$e.debug(`Requesting validation for document version ${validatedVersion}...`);
+      api$f.debug(`Requesting validation for document version ${validatedVersion}...`);
       // inform other plugins
       invoke(endpoints.validation.inProgress, validationPromise);
       // send request to server
       try {
-        validationErrors = await api$8.validateXml(xml);
+        validationErrors = await api$9.validateXml(xml);
       } catch (error) {
         return reject(error);
       }
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`);
       // check if document has changed in the meantime
       if (validatedVersion != xmlEditor.getDocumentVersion()) {
-        api$e.debug("Document has changed, restarting validation...");
+        api$f.debug("Document has changed, restarting validation...");
       } else {
         // convert xmllint errors to Diagnostic objects
         const diagnostics = validationErrors.map(/** @type {object} */ error => {
@@ -46311,8 +46647,8 @@ async function lintSource(view) {
     diagnostics = await validationPromise;
   } catch (error) {
     // stop querying
-    if (api$8.lastHttpStatus >= 400) {
-      console.debug("Disabling validation because of server error " + api$8.lastHttpStatus);
+    if (api$9.lastHttpStatus >= 400) {
+      console.debug("Disabling validation because of server error " + api$9.lastHttpStatus);
       configure({mode: "off"});
     }
     return lastDiagnostics
@@ -46338,11 +46674,11 @@ function configure({ mode = "auto" }) {
   switch (mode) {
     case "auto":
       _isDisabled = false;
-      api$e.info("Validation is enabled");
+      api$f.info("Validation is enabled");
       break
     case "off":
       _isDisabled = true;
-      api$e.info("Validation is disabled");
+      api$f.info("Validation is disabled");
       break
     default:
       throw new Error("Invalid mode parameter")
@@ -46357,7 +46693,7 @@ function configure({ mode = "auto" }) {
 async function validate() {
   if (isValidating()) {
     // if a validation is ongoing, we can wait for it to finish and use the result
-    api$e.debug("Validation is ongoing, waiting for it to finish");
+    api$f.debug("Validation is ongoing, waiting for it to finish");
     return await anyCurrentValidation()
   }
 
@@ -46441,7 +46777,7 @@ function removeDiagnosticsInChangedRanges(update) {
       d.to = to;
       diagnostics.push(d);
     } else {
-      api$e.debug("Removing diagnostic " + JSON.stringify(d));
+      api$f.debug("Removing diagnostic " + JSON.stringify(d));
     }
   });
 
@@ -46937,7 +47273,7 @@ const upload_route = '/api/upload';
 /**
  * plugin API
  */
-const api$8 = {
+const api$9 = {
   get lastHttpStatus() {
     return lastHttpStatus
   },
@@ -46977,10 +47313,10 @@ const api$8 = {
 /**
  * component plugin
  */
-const plugin$c = {
+const plugin$d = {
   name: "client",
   state: {
-    update: update$7
+    update: update$8
   }
 };
 
@@ -46988,10 +47324,10 @@ const plugin$c = {
  * 
  * @param {ApplicationState} state 
  */
-async function update$7(state) {
+async function update$8(state) {
   if (sessionId !== state.sessionId) {
     sessionId = state.sessionId;
-    api$e.debug(`Setting session id to ${sessionId}`);
+    api$f.debug(`Setting session id to ${sessionId}`);
   }
   //console.warn(plugin.name,"done")
   return sessionId
@@ -47076,7 +47412,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       error = e;
       if (error instanceof ConnectionError) {
         // retry in case of ConnectionError
-        api$e.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
+        api$f.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
@@ -47087,7 +47423,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
-  api$e.warn([error.statusCode, error.name, error.message].toString());
+  api$f.warn([error.statusCode, error.name, error.message].toString());
   if (!(error instanceof LockedError)) {
     notify(error.message, 'error');
   }
@@ -47480,21 +47816,21 @@ const fileData = [];
 /**
  * plugin API
  */
-const api$7 = {
+const api$8 = {
   reload,
-  update: update$6,
+  update: update$7,
   fileData
 };
 
 /**
  * component plugin
  */
-const plugin$b = {
+const plugin$c = {
   name: "file-selection",
 
-  install: install$b,
+  install: install$c,
   state: {
-    update: update$6
+    update: update$7
   }
 };
 
@@ -47515,9 +47851,9 @@ const fileSelectionControls = await createHtmlElements('file-selection.html');
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$b(state) {
+async function install$c(state) {
 
-  api$e.debug(`Installing plugin "${plugin$b.name}"`);
+  api$f.debug(`Installing plugin "${plugin$c.name}"`);
   
   // Add file selection controls to toolbar with specified priorities
   const controlPriorities = {
@@ -47565,7 +47901,7 @@ async function install$b(state) {
  * 
  * @param {ApplicationState} state 
  */
-async function update$6(state) {
+async function update$7(state) {
   //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
   ui$1.toolbar.pdf.value = state.pdf || "";
@@ -47593,11 +47929,11 @@ async function reload(state, options = {}) {
  * @param {boolean} [options.refresh] - Whether to force refresh of server cache
  */
 async function reloadFileData(state, options = {}) {
-  api$e.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
+  api$f.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
   // Always get all files, don't filter on server side
-  let data = await api$8.getFileList(null, options.refresh);
+  let data = await api$9.getFileList(null, options.refresh);
   if (!data || data.length === 0) {
-    api$a.error("No files found");
+    api$b.error("No files found");
   }
   // update the fileData variable
   fileData.length = 0; // clear the array
@@ -47684,7 +48020,7 @@ async function populateSelectboxes(state) {
   }
   stateCache = jsonState;
 
-  api$e.debug("Populating selectboxes");
+  api$f.debug("Populating selectboxes");
 
   // Only reload if fileData is completely empty (initial load)
   if (fileData.length === 0) {
@@ -47870,9 +48206,9 @@ async function onChangePdfSelection(state) {
 
   if (Object.keys(filesToLoad).length > 0) {
     try {
-      api$5.removeMergeView(state);
+      api$6.removeMergeView(state);
       // @ts-ignore
-      await api$5.load(state, filesToLoad);
+      await api$6.load(state, filesToLoad);
     }
     catch (error) {
       console.error(error);
@@ -47889,8 +48225,8 @@ async function onChangeXmlSelection(state) {
   const xml = ui$1.toolbar.xml.value;
   if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
-      api$5.removeMergeView(state);
-      await api$5.load(state, { xml });
+      api$6.removeMergeView(state);
+      await api$6.load(state, { xml });
     } catch (error) {
       console.error(error);
     }
@@ -47905,12 +48241,12 @@ async function onChangeDiffSelection(state) {
   const diff = ui$1.toolbar.diff.value;
   if (diff && typeof diff == "string" && diff !== ui$1.toolbar.xml.value) {
     try {
-      await api$5.showMergeView(state, diff);
+      await api$6.showMergeView(state, diff);
     } catch (error) {
       console.error(error);
     }
   } else {
-    api$5.removeMergeView(state);
+    api$6.removeMergeView(state);
   }
   updateState(state, { diff: diff });
 }
@@ -47932,7 +48268,7 @@ async function onChangeVariantSelection(state) {
 /**
  * plugin API
  */
-const api$6 = {
+const api$7 = {
   extractFromCurrentPDF,
   extractFromNewPdf,
   extractFromPDF
@@ -47941,11 +48277,11 @@ const api$6 = {
 /**
  * plugin object
  */
-const plugin$a = {
+const plugin$b = {
   name: "extraction",
   deps: ['services'],
-  install: install$a,
-  state: {update: update$5}
+  install: install$b,
+  state: {update: update$6}
 };
 
 //
@@ -47993,8 +48329,8 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
 /**
  * @param {ApplicationState} state
  */
-async function install$a(state) {
-  api$e.debug(`Installing plugin "${plugin$a.name}"`);
+async function install$b(state) {
+  api$f.debug(`Installing plugin "${plugin$b.name}"`);
 
   // Add extraction buttons to toolbar with medium priority
   ui$1.toolbar.add(extractionBtnGroup, 7);
@@ -48009,7 +48345,7 @@ async function install$a(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$5(state) {
+async function update$6(state) {
   // @ts-ignore
   extractionBtnGroup.childNodes.forEach(child => child.disabled = state.offline); 
   extractionBtnGroup.extractCurrent.disabled = !state.pdf;
@@ -48032,7 +48368,7 @@ async function extractFromCurrentPDF(state) {
     if (state.pdf) {
       const collection = state.pdf.split("/").at(-2);
       let { xml } = await extractFromPDF(state, { doi, collection });
-      await api$5.showMergeView(state, xml);
+      await api$6.showMergeView(state, xml);
     }
   } catch (error) {
     console.error(error);
@@ -48045,18 +48381,18 @@ async function extractFromCurrentPDF(state) {
  */
 async function extractFromNewPdf(state) {
   try {
-    const { type, filename, originalFilename } = await api$8.uploadFile();
+    const { type, filename, originalFilename } = await api$9.uploadFile();
     if (type !== "pdf") {
-      api$a.error("Extraction is only possible from PDF files");
+      api$b.error("Extraction is only possible from PDF files");
       return
     }
 
     const doi = getDoiFromFilename(originalFilename);
     const { xml, pdf } = await extractFromPDF(state, { doi, filename });
-    await api$5.load(state, { xml, pdf });
+    await api$6.load(state, { xml, pdf });
 
   } catch (error) {
-    api$a.error(error.message);
+    api$b.error(error.message);
     console.error(error);
   }
 }
@@ -48080,8 +48416,8 @@ async function extractFromPDF(state, defaultOptions={}) {
   let result;
   try {
     const filename = options.filename || state.pdf;
-    result = await api$8.extractReferences(filename, options);
-    await api$7.reload(state);  // todo uncouple
+    result = await api$9.extractReferences(filename, options);
+    await api$8.reload(state);  // todo uncouple
     return result
   } finally {
     ui$1.spinner.hide();
@@ -48098,7 +48434,7 @@ async function extractFromPDF(state, defaultOptions={}) {
 async function promptForExtractionOptions(options={}) {
 
   // load instructions
-  const instructionsData = await api$8.loadInstructions();
+  const instructionsData = await api$9.loadInstructions();
   const instructions = [];
 
   // use doi if available
@@ -48134,7 +48470,7 @@ async function promptForExtractionOptions(options={}) {
   // Get extractors and store for dynamic options
   let availableExtractors = [];
   try {
-    const extractors = await api$8.getExtractorList();
+    const extractors = await api$9.getExtractorList();
     // Filter extractors that support PDF input and TEI document output
     availableExtractors = extractors.filter(extractor => 
       extractor.input.includes("pdf") && extractor.output.includes("tei-document")
@@ -48154,7 +48490,7 @@ async function promptForExtractionOptions(options={}) {
     }
   } catch (error) {
     // No fallback - if we can't load extractors, we can't extract
-    api$a.error("Could not load extraction engines");
+    api$b.error("Could not load extraction engines");
     throw error
   }
   
@@ -48324,7 +48660,7 @@ async function promptForExtractionOptions(options={}) {
   
   // Validate DOI only if one is provided
   if (formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
-    api$a.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
+    api$b.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
     return null
   }
   
@@ -48371,6 +48707,7 @@ function isDoi(doi) {
 }
 
 const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
+const xmlNamespace = 'http://www.w3.org/XML/1998/namespace';
 
 /**
  * Returns the TEI header element or throws an error if not found.
@@ -48392,12 +48729,12 @@ function getTeiHeader(xmlDoc) {
  * Returns the <respStmt> containing a <persName> with the given xml:id or null if none can be found  
  * @param {Document} xmlDoc 
  * @param {string} id 
- * @returns {Element || null}
+ * @returns {Element | null}
  */
 function getRespStmtById(xmlDoc, id) {
   for (const respStmtElem of xmlDoc.getElementsByTagName('respStmt')) {
     for (const persNameElem of respStmtElem.getElementsByTagName('persName')) {
-      const xmlId = persNameElem.getAttributeNodeNS('http://www.w3.org/XML/1998/namespace', 'id').value;
+      const xmlId = persNameElem?.getAttributeNodeNS('http://www.w3.org/XML/1998/namespace', 'id')?.value;
       if (xmlId === id) {
         return respStmtElem
       }
@@ -48432,19 +48769,18 @@ function addRespStmt(xmlDoc, respStmt) {
     throw new Error(`Element with xml:id="${persId}" already exists in the document.`);
   }
   const teiHeader = getTeiHeader(xmlDoc);
-  let titleStmt = teiHeader.getElementsByTagName('titleStmt');
-
-  // Fixed: Create titleStmt if it does not exist, instead of throwing an error.
-  if (!titleStmt.length) {
+  let titleStmts = teiHeader.getElementsByTagName('titleStmt');
+  let titleStmt;
+  if (!titleStmts.length) {
     titleStmt = xmlDoc.createElementNS(teiNamespaceURI, 'titleStmt');
     teiHeader.appendChild(titleStmt);
   } else {
-    titleStmt = titleStmt[0];
+    titleStmt = titleStmts[0];
   }
 
   const respStmtElem = xmlDoc.createElementNS(teiNamespaceURI, 'respStmt');
   const persNameElem = xmlDoc.createElementNS(teiNamespaceURI, 'persName');
-  persNameElem.setAttribute('xml:id', persId);
+  persNameElem.setAttributeNS(xmlNamespace, 'xml:id', persId);
   persNameElem.textContent = persName;
   respStmtElem.appendChild(persNameElem);
 
@@ -48462,6 +48798,7 @@ function addRespStmt(xmlDoc, respStmt) {
  * @property {string} status - The status of the revision.
  * @property {string} persId - The ID of the person making the revision.
  * @property {string} desc - A description of the revision.
+ * @property {string} [fullName] - The full name of the person making the revision.
  */
 
 /**
@@ -48473,18 +48810,25 @@ function addRespStmt(xmlDoc, respStmt) {
  * @returns {void}
  */
 function addRevisionChange(xmlDoc, revisionChange) {
-  const { status = "draft", persId, desc } = revisionChange;
+  const { status = "draft", persId, desc, fullName } = revisionChange;
   if (!persId || !desc) {
     throw new Error("persId and desc data required")
   }
+  
+  // Ensure respStmt exists for the user
+  if (fullName) {
+    ensureRespStmtForUser(xmlDoc, persId, fullName);
+  }
+  
   const currentDateString = new Date().toISOString();
-  let revisionDescElement = xmlDoc.getElementsByTagName('revisionDesc');
-  if (!revisionDescElement.length) {
+  let revisionDescElements = xmlDoc.getElementsByTagName('revisionDesc');
+  let revisionDescElement;
+  if (!revisionDescElements.length) {
     const teiHeader = getTeiHeader(xmlDoc);
     revisionDescElement = xmlDoc.createElementNS(teiNamespaceURI, 'revisionDesc');
     teiHeader.appendChild(revisionDescElement);
   } else {
-    revisionDescElement = revisionDescElement[0];
+    revisionDescElement = revisionDescElements[0];
   }
 
   // Create the <change> element
@@ -48534,7 +48878,6 @@ function addEdition(xmlDoc, edition) {
   if (!fileDescs.length || !titleStmts.length) {
     throw new Error("teiHeader/fileDesc/titleStmt not found in the document.");
   }
-
 
   const editionStmt = xmlDoc.createElementNS(teiNamespaceURI, 'editionStmt');
   const fileDesc = fileDescs[0];
@@ -48677,155 +49020,154 @@ function encodeXmlEntities(xmlString) {
 }
 
 /**
- * Creates a CodeMirror autocomplete data structure from a compressed version sent
- * by the server, which uses "#x" references which are reused at different places. This
- * includes "#Mx" references which are macros containing references. Returns the resolved version
- * with the string references replaced by the actual object references.
+ * Pretty-prints a specific DOM node by inserting whitespace text nodes for proper indentation.
+ * This function modifies the node in place, adding proper indentation while preserving
+ * the formatting of other parts of the document.
  * 
- * Code generated by Claude Code with instructions by @cboulanger
- * 
- * @param {Object} data Map to be resolved
- * @returns {Object} Resolved map
+ * @param {Element} node - The DOM element to pretty-print
+ * @param {string} [spacing='  '] - The string to use for each level of indentation
+ * @returns {Element} - The modified node (same reference, modified in place)
  */
-function resolveDeduplicated(data) {
-  // Create a copy to avoid modifying the original
-  const resolved = JSON.parse(JSON.stringify(data));
+function prettyPrintNode(node, spacing = '  ') {
+  if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+    throw new Error('Invalid parameter: Expected Element node')
+  }
 
-  // Extract and resolve reference definitions (keys starting with #)
-  const refs = {};
-  Object.keys(resolved).forEach(key => {
-    if (key.startsWith('#')) {
-      refs[key] = resolved[key];
-      delete resolved[key];
-    }
-  });
-
-  // Pre-resolve all references to create shared objects
-  const resolvedRefs = {};
-
-  // First pass: resolve simple references and macros
-  Object.keys(refs).forEach(refId => {
-    if (refId.startsWith('#M')) {
-      // Macro reference - resolve to composite pattern
-      const macroContent = refs[refId];
-      if (typeof macroContent === 'string' && macroContent.includes(' ')) {
-        const refIds = macroContent.split(' ').filter(id => id.startsWith('#'));
-        resolvedRefs[refId] = mergeReferences(refIds, refs);
-      } else {
-        resolvedRefs[refId] = refs[refId];
-      }
-    } else {
-      // Simple reference - use as-is (will be shared)
-      resolvedRefs[refId] = refs[refId];
-    }
-  });
-
-  // Recursive function to resolve references using shared objects
-  function resolveRefs(obj) {
-    if (typeof obj === 'string' && obj.includes('#')) {
-      if (obj.startsWith('#') && !obj.includes(' ')) {
-        // Simple reference - return shared object and recursively resolve its contents
-        const resolved = resolvedRefs[obj];
-        if (resolved) {
-          return resolveRefs(resolved); // Recursively resolve the contents
+  // Helper function to remove existing pure whitespace text nodes
+  function removeWhitespaceNodes(element) {
+    const children = Array.from(element.childNodes);
+    for (const child of children) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        // Check if the text node consists only of whitespace
+        if (/^\s*$/.test(child.nodeValue)) {
+          element.removeChild(child);
         }
-        return obj;
-      } else if (obj.includes(' ')) {
-        // Composite reference like "#1 #23 #44"
-        const refIds = obj.split(' ').filter(id => id.startsWith('#'));
-        return mergeReferences(refIds, resolvedRefs);
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        removeWhitespaceNodes(child);
       }
-      return obj;
-    } else if (Array.isArray(obj)) {
-      return obj.map(resolveRefs);
-    } else if (obj && typeof obj === 'object') {
-      const result = {};
-      Object.keys(obj).forEach(key => {
-        result[key] = resolveRefs(obj[key]);
-      });
-      return result;
-    }
-    return obj;
-  }
-
-  // Function to merge multiple references into a single object/array
-  function mergeReferences(refIds, refSource) {
-    const resolved = refIds.map(id => refSource[id]).filter(Boolean);
-
-    if (resolved.length === 0) return null;
-    if (resolved.length === 1) return resolved[0]; // Share the single object
-
-    // Determine merge strategy based on types
-    const firstType = Array.isArray(resolved[0]) ? 'array' : typeof resolved[0];
-
-    if (firstType === 'object' && resolved.every(r => typeof r === 'object' && !Array.isArray(r))) {
-      // Merge objects - create new object but reference shared values where possible
-      const merged = {};
-      resolved.forEach(obj => {
-        Object.keys(obj).forEach(key => {
-          if (key === 'doc' && merged[key]) {
-            // Merge documentation fields by concatenating with separator
-            merged[key] = merged[key] + ' | ' + obj[key];
-          } else {
-            merged[key] = obj[key]; // This shares the value reference
-          }
-        });
-      });
-      return merged;
-    } else if (firstType === 'array' && resolved.every(r => Array.isArray(r))) {
-      // Concatenate arrays and deduplicate
-      const concatenated = [].concat(...resolved);
-      const seen = new Set();
-      return concatenated.filter(item => {
-        if (seen.has(item)) return false;
-        seen.add(item);
-        return true;
-      });
-    } else {
-      // Mixed types - return as array
-      return resolved;
     }
   }
 
-  // Helper function to deduplicate arrays, preserving order
-  function deduplicateArray(arr) {
-    if (!Array.isArray(arr)) return arr;
-    const seen = new Set();
-    return arr.filter(item => {
-      if (seen.has(item)) return false;
-      seen.add(item);
-      return true;
-    });
-  }
-
-  // Helper function to recursively deduplicate values arrays in objects
-  function deduplicateValues(obj) {
-    if (Array.isArray(obj)) {
-      return obj.map(deduplicateValues);
-    } else if (obj && typeof obj === 'object') {
-      const result = {};
-      Object.keys(obj).forEach(key => {
-        if (key === 'values' && Array.isArray(obj[key])) {
-          // Deduplicate values arrays specifically
-          result[key] = deduplicateArray(obj[key]);
-        } else {
-          result[key] = deduplicateValues(obj[key]);
-        }
-      });
-      return result;
+  // Helper function to add indentation recursively
+  function addIndentation(element, depth, doc) {
+    if (element.nodeType !== Node.ELEMENT_NODE) {
+      return;
     }
-    return obj;
+
+    const indent = '\n' + spacing.repeat(depth);
+    const children = Array.from(element.childNodes);
+    
+    let lastElementChild = null;
+
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        // Add indentation before the element child
+        element.insertBefore(doc.createTextNode(indent + spacing), child);
+        
+        // Recursively indent the child's content
+        addIndentation(child, depth + 1, doc);
+        
+        lastElementChild = child;
+      }
+    }
+
+    // Add indentation before the closing tag if there were element children
+    if (lastElementChild !== null) {
+      element.insertBefore(doc.createTextNode(indent), lastElementChild.nextSibling);
+    }
   }
 
-  // Resolve all references in the main data
-  Object.keys(resolved).forEach(key => {
-    resolved[key] = resolveRefs(resolved[key]);
-  });
+  // Get the document reference
+  const doc = node.ownerDocument;
   
-  // Deduplicate all values arrays in the resolved data
-  const finalResolved = deduplicateValues(resolved);
+  // Clean up any existing whitespace formatting
+  removeWhitespaceNodes(node);
+  
+  // Add proper indentation
+  const rootChildren = Array.from(node.childNodes);
+  let lastProcessedChild = null;
 
-  return finalResolved;
+  for (const child of rootChildren) {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      // Add indent before child elements
+      node.insertBefore(doc.createTextNode('\n' + spacing), child);
+      
+      // Recursively indent the child and its descendants  
+      addIndentation(child, 1, doc);
+      
+      lastProcessedChild = child;
+    } else if (child.nodeType === Node.PROCESSING_INSTRUCTION_NODE || 
+               child.nodeType === Node.COMMENT_NODE) {
+      // Handle processing instructions and comments
+      const nextSibling = child.nextSibling;
+      if (nextSibling && nextSibling.nodeType === Node.ELEMENT_NODE) {
+        if (!(nextSibling.previousSibling && 
+              nextSibling.previousSibling.nodeType === Node.TEXT_NODE && 
+              nextSibling.previousSibling.nodeValue?.includes('\n'))) {
+          node.insertBefore(doc.createTextNode('\n'), nextSibling);
+        }
+      }
+      lastProcessedChild = child;
+    } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue?.trim() !== '') {
+      // Handle non-whitespace text nodes
+      lastProcessedChild = child;
+    }
+  }
+
+  // Add a final newline before the closing tag if there was content
+  const actualLastChild = node.lastChild;
+  if (lastProcessedChild && 
+      !(actualLastChild && 
+        actualLastChild.nodeType === Node.TEXT_NODE && 
+        actualLastChild.nodeValue?.endsWith('\n'))) {
+    node.appendChild(doc.createTextNode('\n'));
+  }
+
+  return node;
+}
+
+/**
+ * Ensures a respStmt exists for the given user, creating one if necessary
+ * @param {Document} xmlDoc - The XML DOM Document object
+ * @param {string} username - The username to check/create respStmt for
+ * @param {string} fullName - The full name of the user
+ * @param {string} [responsibility='editor'] - The responsibility role
+ * @returns {Element} - The existing or newly created respStmt element
+ */
+function ensureRespStmtForUser(xmlDoc, username, fullName, responsibility = 'editor') {
+  try {
+    if (!xmlDoc) {
+      throw new Error('xmlDoc is required');
+    }
+    if (!username) {
+      throw new Error('username is required');
+    }
+    if (!fullName) {
+      throw new Error('fullName is required');
+    }
+    
+    // Check if respStmt already exists
+    const existing = getRespStmtById(xmlDoc, username);
+    if (existing) {
+      return existing;
+    }
+    
+    // Create new respStmt
+    addRespStmt(xmlDoc, {
+      persId: username,
+      persName: fullName,
+      resp: responsibility
+    });
+    
+    // Return the newly created respStmt (should always exist at this point)
+    const created = getRespStmtById(xmlDoc, username);
+    if (!created) {
+      throw new Error(`Failed to create respStmt for user ${username} - addRespStmt succeeded but respStmt not found afterwards`);
+    }
+    return created;
+  } catch (error) {
+    throw new Error(`ensureRespStmtForUser failed for user ${username}: ${error.message}`);
+  }
 }
 
 /**
@@ -48992,7 +49334,7 @@ var prettyPrintXml = {
 /**
  * plugin API
  */
-const api$5 = {
+const api$6 = {
   load: load$1,
   validateXml,
   saveXml,
@@ -49011,11 +49353,11 @@ const api$5 = {
 /**
  * component plugin
  */
-const plugin$9 = {
+const plugin$a = {
   name: "services",
   deps: ['file-selection'],
-  install: install$9,
-  state: { update: update$4 },
+  install: install$a,
+  state: { update: update$5 },
   validation: { inProgress }
 };
 
@@ -49087,8 +49429,8 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 /**
  * @param {ApplicationState} state
  */
-async function install$9(state) {
-  api$e.debug(`Installing plugin "${plugin$9.name}"`);
+async function install$a(state) {
+  api$f.debug(`Installing plugin "${plugin$a.name}"`);
 
   // Add document action buttons to toolbar with medium priority
   documentActionButtons.forEach(buttonGroup => {
@@ -49148,7 +49490,7 @@ async function install$9(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$4(state) {
+async function update$5(state) {
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -49164,7 +49506,7 @@ async function update$4(state) {
     return
   }
 
-  da.deleteAll.disabled = api$7.fileData.length < 2; // at least on PDF must be present
+  da.deleteAll.disabled = api$8.fileData.length < 2; // at least on PDF must be present
   da.deleteAllVersions.disabled = ui$1.toolbar.xml.childElementCount < 2;
   // @ts-ignore
   da.deleteCurrentVersion.disabled = ui$1.toolbar.xml.value === ui$1.toolbar.xml.firstChild?.value;
@@ -49207,7 +49549,7 @@ async function load$1(state, { xml, pdf }) {
   // PDF 
   if (pdf) {
     await updateState(state, { pdf: null, xml: null, diff: null });
-    api$e.info("Loading PDF: " + pdf);
+    api$f.info("Loading PDF: " + pdf);
     // Convert document identifier to static file URL
     const pdfUrl = `/api/files/${pdf}`;
     promises.push(pdfViewer.load(pdfUrl));
@@ -49221,19 +49563,27 @@ async function load$1(state, { xml, pdf }) {
       try {
         ui$1.spinner.show('Loading file, please wait...');
         if (state.xml && !state.editorReadOnly) {
-          await api$8.releaseLock(state.xml);
+          await api$9.releaseLock(state.xml);
         }
-        try {
-          await api$8.acquireLock(xml);
-          api$e.debug(`Acquired lock for file ${xml}`);
-        } catch (error) {
-          if (error instanceof api$8.LockedError) {
-            api$e.debug(`File ${xml} is locked, loading in read-only mode`);
-            notify(`File is being edited by another user, loading in read-only mode`);
-            file_is_locked = true;
-          } else {
-            api$a.error(error.message);
-            throw error
+        // Check access control before attempting to acquire lock
+        const canEdit = api.checkCanEditFile(xml);
+        if (!canEdit) {
+          api$f.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
+          notify(`You don't have permission to edit this document, loading in read-only mode`);
+          file_is_locked = true;
+        } else {
+          try {
+            await api$9.acquireLock(xml);
+            api$f.debug(`Acquired lock for file ${xml}`);
+          } catch (error) {
+            if (error instanceof api$9.LockedError) {
+              api$f.debug(`File ${xml} is locked, loading in read-only mode`);
+              notify(`File is being edited by another user, loading in read-only mode`);
+              file_is_locked = true;
+            } else {
+              api$b.error(error.message);
+              throw error
+            }
           }
         }
       } finally {
@@ -49243,7 +49593,7 @@ async function load$1(state, { xml, pdf }) {
 
     removeMergeView(state);
     await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked });
-    api$e.info("Loading XML: " + xml);
+    api$f.info("Loading XML: " + xml);
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`;
     promises.push(xmlEditor.loadXml(xmlUrl));
@@ -49255,7 +49605,7 @@ async function load$1(state, { xml, pdf }) {
   } catch (error) {
     console.error(error.message);
     if (error.status === 404) {
-      await api$7.reload(state);
+      await api$8.reload(state);
       return
     }
     throw error
@@ -49264,7 +49614,7 @@ async function load$1(state, { xml, pdf }) {
   if (pdf) {
     state.pdf = pdf;
     // update selectboxes in the toolbar
-    await api$7.update(state);
+    await api$8.update(state);
   }
   if (xml) {
     state.xml = xml;
@@ -49278,23 +49628,23 @@ async function load$1(state, { xml, pdf }) {
 async function startAutocomplete() {
   // Load autocomplete data asynchronously after XML is loaded
   try {
-    api$e.debug("Loading autocomplete data for XML document");
+    api$f.debug("Loading autocomplete data for XML document");
     const xmlContent = xmlEditor.getEditorContent();
     if (xmlContent) {
-      const autocompleteData = await api$8.getAutocompleteData(xmlContent);
+      const autocompleteData = await api$9.getAutocompleteData(xmlContent);
       if (autocompleteData && !autocompleteData.error) {
         // Resolve deduplicated references
         const resolvedData = resolveDeduplicated(autocompleteData);
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData);
-        api$e.debug("Autocomplete data loaded and applied");
+        api$f.debug("Autocomplete data loaded and applied");
         notify("Autocomplete is available");
       } else if (autocompleteData && autocompleteData.error) {
-        api$e.debug("No autocomplete data available: " + autocompleteData.error);
+        api$f.debug("No autocomplete data available: " + autocompleteData.error);
       }
     }
   } catch (error) {
-    api$e.warn("Failed to load autocomplete data: " + error.message);
+    api$f.warn("Failed to load autocomplete data: " + error.message);
     // Don't block the loading process if autocomplete fails
   }
 }
@@ -49304,8 +49654,8 @@ async function startAutocomplete() {
  * @returns {Promise<object[]>}
  */
 async function validateXml() {
-  api$e.info("Validating XML...");
-  return await api$9.validate() // todo use endpoint instead
+  api$f.info("Validating XML...");
+  return await api$a.validate() // todo use endpoint instead
 }
 
 /**
@@ -49316,7 +49666,7 @@ async function validateXml() {
  * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
-  api$e.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+  api$f.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
   if (!xmlEditor.getXmlTree()) {
     throw new Error("No XML valid document in the editor")
   }
@@ -49327,10 +49677,10 @@ async function saveXml(filePath, saveAsNewVersion = false) {
         ui$1.xmlEditor.statusbar.add(savingStatusWidget, 'left', 10);
       }
     }
-    return await api$8.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
+    return await api$9.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message);
-    api$a.error(`Could not save XML: ${e.message}`);
+    api$b.error(`Could not save XML: ${e.message}`);
     throw new Error(`Could not save XML: ${e.message}`)
   } finally {
     // clear status message after 1 second 
@@ -49348,7 +49698,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
 async function showMergeView(state, diff) {
-  api$e.info("Loading diff XML: " + diff);
+  api$f.info("Loading diff XML: " + diff);
   ui$1.spinner.show('Computing file differences, please wait...');
   try {
     // Convert document identifier to static file URL
@@ -49356,7 +49706,7 @@ async function showMergeView(state, diff) {
     await xmlEditor.showMergeView(diffUrl);
     updateState(state, { diff: diff });
     // turn validation off as it creates too much visual noise
-    api$9.configure({ mode: "off" });
+    api$a.configure({ mode: "off" });
   } finally {
     ui$1.spinner.hide();
   }
@@ -49369,7 +49719,7 @@ async function showMergeView(state, diff) {
 function removeMergeView(state) {
   xmlEditor.hideMergeView();
   // re-enable validation
-  api$9.configure({ mode: "auto" });
+  api$a.configure({ mode: "auto" });
   UrlHash.remove("diff");
   updateState(state, { diff: null });
 }
@@ -49382,7 +49732,7 @@ function removeMergeView(state) {
 async function deleteCurrentVersion(state) {
   // @ts-ignore
   if (ui$1.toolbar.xml.value.startsWith("/data/tei")) {
-    api$a.error("You cannot delete the gold version");
+    api$b.error("You cannot delete the gold version");
     return
   }
   const filePathsToDelete = [ui$1.toolbar.xml.value];
@@ -49390,18 +49740,18 @@ async function deleteCurrentVersion(state) {
     const versionName = ui$1.toolbar.xml.selectedOptions[0].textContent;
     const msg = `Are you sure you want to delete the current version "${versionName}"?`;
     if (!confirm(msg)) return; // todo use dialog
-    api$5.removeMergeView(state);
+    api$6.removeMergeView(state);
     // delete the file
-    await api$8.deleteFiles(filePathsToDelete);
+    await api$9.deleteFiles(filePathsToDelete);
     try {
       // update the file data
-      await api$7.reload(state);
+      await api$8.reload(state);
       // load the gold version
       // @ts-ignore
       const xml = ui$1.toolbar.xml.firstChild?.value;
       await load$1(state, { xml });
       notify(`Version "${versionName}" has been deleted.`);
-      api.syncFiles(state)
+      api$1.syncFiles(state)
         .then(summary => summary && notify("Synchronized files"))
         .catch(e => console.error(e));
     } catch (error) {
@@ -49423,17 +49773,17 @@ async function deleteAllVersions(state) {
     const msg = "Are you sure you want to delete all versions of this document and leave only the current gold standard version? This cannot be undone.";
     if (!confirm(msg)) return; // todo use dialog
   }
-  api$5.removeMergeView(state);
+  api$6.removeMergeView(state);
   // delete
-  await api$8.deleteFiles(filePathsToDelete);
+  await api$9.deleteFiles(filePathsToDelete);
   try {
 
     // update the file data
-    await api$7.reload(state);
+    await api$8.reload(state);
     // load the gold version
     await load$1(state, { xml: xmlPaths[0] });
     notify("All version have been deleted");
-    api.syncFiles(state)
+    api$1.syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
   } catch (error) {
@@ -49464,13 +49814,13 @@ async function deleteAll(state) {
     if (!confirm(msg)) return; // todo use dialog
   }
 
-  api$5.removeMergeView(state);
-  api$e.debug("Deleting files:" + filePathsToDelete.join(", "));
+  api$6.removeMergeView(state);
+  api$f.debug("Deleting files:" + filePathsToDelete.join(", "));
   
   try {
-    await api$8.deleteFiles(filePathsToDelete);
+    await api$9.deleteFiles(filePathsToDelete);
     notify(`${filePathsToDelete.length} files have been deleted.`);
-    api.syncFiles(state)
+    api$1.syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
   } catch (error) {
@@ -49478,11 +49828,11 @@ async function deleteAll(state) {
     notify(error.message, "warning");
   } finally {
     // update the file data
-    await api$7.reload(state);
+    await api$8.reload(state);
     // load the first PDF and XML file 
     await load$1(state, {
-      pdf: api$7.fileData[0].pdf.hash,
-      xml: api$7.fileData[0].gold?.[0]?.hash || api$7.fileData[0].versions?.[0]?.hash
+      pdf: api$8.fileData[0].pdf.hash,
+      xml: api$8.fileData[0].gold?.[0]?.hash || api$8.fileData[0].versions?.[0]?.hash
     });
   }
 }
@@ -49497,7 +49847,7 @@ async function downloadXml(state) {
     throw new TypeError("State does not contain an xml path")
   }
   let xml = xmlEditor.getXML();
-  if (await api$d.get('xml.encode-entities.server')) {
+  if (await api$e.get('xml.encode-entities.server')) {
     xml = encodeXmlEntities(xml);
   }
   const blob = new Blob([xml], { type: 'application/xml' });
@@ -49515,10 +49865,10 @@ async function downloadXml(state) {
  * @param {ApplicationState} state 
  */
 async function uploadXml(state) {
-  const { filename: tempFilename } = await api$8.uploadFile(undefined, { accept: '.xml' });
+  const { filename: tempFilename } = await api$9.uploadFile(undefined, { accept: '.xml' });
   // @ts-ignore
-  const { path } = await api$8.createVersionFromUpload(tempFilename, state.xml);
-  await api$7.reload(state);
+  const { path } = await api$9.createVersionFromUpload(tempFilename, state.xml);
+  await api$8.reload(state);
   await load$1(state, { xml: path });
   notify("Document was uploaded. You are now editing the new version.");
 }
@@ -49569,24 +49919,6 @@ async function onClickValidateButton() {
   notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`);
 }
 
-
-/**
- * Given a user object, get an id (typically by using the initials)
- * @param {UserData} userData 
- */
-function getIdFromUser(userData) {
-  let names = userData.fullname;
-  if (names && names.trim() !== "") {
-    names = userData.fullname.split(" ");
-  } else {
-    return userData.username
-  }
-  if (names.length > 1) {
-    return names.map(n => n[0]).join("").toLocaleLowerCase()
-  }
-  return names[0].slice(0, 3)
-}
-
 /**
  * Called when the "saveRevision" button is executed
  * @param {ApplicationState} state
@@ -49598,9 +49930,9 @@ async function saveRevision(state) {
   const dialog = document.querySelector('[name="newRevisionChangeDialog"]');
   dialog.changeDesc.value = "Corrections";
   try {
-    const user = api$1.getUser();
+    const user = api$2.getUser();
     if (user) {
-      dialog.persId.value = dialog.persId.value || getIdFromUser(user);
+      dialog.persId.value = dialog.persId.value || user.username;
       dialog.persName.value = dialog.persName.value || user.fullname;
     }
     dialog.show();
@@ -49639,13 +49971,13 @@ async function saveRevision(state) {
     
     // If migration occurred, first reload file data, then update state
     if (result.status === "saved_with_migration") {
-      await api$7.reload(state);
+      await api$8.reload(state);
       state.xml = result.path;
       await updateState(state);
     }
     
     notify("Document was saved.");
-    api.syncFiles(state)
+    api$1.syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
 
@@ -49669,9 +50001,9 @@ async function createNewVersion(state) {
   // @ts-ignore
   const dialog = document.querySelector('[name="newVersionDialog"]');
   try {
-    const user = api$1.getUser();
+    const user = api$2.getUser();
     if (user) {
-      dialog.persId.value = dialog.persId.value || getIdFromUser(user);
+      dialog.persId.value = dialog.persId.value || user.username;
       dialog.persName.value = dialog.persName.value || user.fullname;
     }    
     dialog.show();
@@ -49719,12 +50051,12 @@ async function createNewVersion(state) {
     xmlEditor.markAsClean(); 
 
     // reload the file data to display the new name and inform the user
-    await api$7.reload(state);
+    await api$8.reload(state);
     notify("Document was duplicated. You are now editing the copy.");
     
     // sync the new file to the WebDav server
     if (state.webdavEnabled) {
-      api.syncFiles(state)
+      api$1.syncFiles(state)
       .then(summary => summary && notify("Synchronized files"))
       .catch(e => console.error(e));
     }
@@ -49796,7 +50128,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
     const versionName = edition.title;
     const editionTitleElements = xmlDoc.querySelectorAll('edition > title');
     const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName);
-    const nameExistsInVersions = api$7.fileData.some(file => file.label === versionName);
+    const nameExistsInVersions = api$8.fileData.some(file => file.label === versionName);
     if (nameExistsInDoc || nameExistsInVersions) {
       throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
     }
@@ -49818,7 +50150,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 /**
  * plugin API
  */
-const api$4 = {
+const api$5 = {
   show: () => ui$1.floatingPanel.classList.remove("hidden"),
   hide: () => ui$1.floatingPanel.classList.add("hidden"),
 };
@@ -49826,10 +50158,10 @@ const api$4 = {
 /**
  * component plugin
  */
-const plugin$8 = {
+const plugin$9 = {
   name: "floating-panel",
-  install: install$8,
-  state: { update: update$3 }
+  install: install$9,
+  state: { update: update$4 }
 };
 
 //
@@ -49870,8 +50202,8 @@ const pluginId = "floating-panel";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$8(state) {
-  api$e.debug(`Installing plugin "${plugin$8.name}"`);
+async function install$9(state) {
+  api$f.debug(`Installing plugin "${plugin$9.name}"`);
 
   document.body.append(...floatingPanelControls);
   updateUi();
@@ -49893,7 +50225,7 @@ async function install$8(state) {
   /**
    * @type {{value:string, label:string}[]}
    */
-  const selectBoxData = await api$d.get("navigation.xpath.list");
+  const selectBoxData = await api$e.get("navigation.xpath.list");
   selectBoxData.forEach(item => {
     const option = document.createElement('option');
     option.value = item.value || '';
@@ -49922,11 +50254,11 @@ async function install$8(state) {
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff());
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
     xmlEditor.rejectAllDiffs();
-    api$5.removeMergeView(state);
+    api$6.removeMergeView(state);
   });
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
     xmlEditor.acceptAllDiffs();
-    api$5.removeMergeView(state);
+    api$6.removeMergeView(state);
   });
 
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex); // allow to input node index
@@ -49949,7 +50281,7 @@ async function install$8(state) {
  * Reacts to application state changes
  * @param {ApplicationState} state 
  */
-async function update$3(state) {
+async function update$4(state) {
   //console.warn("update", plugin.name, state)
   // show the xpath selector
   if (state.xpath) {
@@ -50033,7 +50365,7 @@ function onClickSelectionIndex() {
   try {
     xmlEditor.selectByIndex(parseInt(index));
   } catch (error) {
-    api$a.error(error.message);
+    api$b.error(error.message);
   }
 }
 
@@ -50052,7 +50384,7 @@ async function onEditXpath(state) {
   if (!xpath) return
 
   if (!isValidXPath(xpath, xmlDoc, xmlEditor.namespaceResolver)) {
-    api$a.error(`'${xpath} is not a valid XPath expression'`);
+    api$b.error(`'${xpath} is not a valid XPath expression'`);
   }
 
   custom.value = xpath;
@@ -50132,7 +50464,7 @@ function makeDraggable(element) {
 /**
  * plugin API
  */
-const api$3 = {
+const api$4 = {
   open: open$1,
   edit,
   duplicate: duplicateInstructions,
@@ -50145,10 +50477,10 @@ const api$3 = {
 /**
  * Plugin object
  */
-const plugin$7 = {
+const plugin$8 = {
   name: "prompt-editor",
   deps: ['extraction'],
-  install: install$7
+  install: install$8
 };
 
 //
@@ -50184,8 +50516,8 @@ const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$7(state) {
-  api$e.debug(`Installing plugin "${plugin$7.name}"`);
+async function install$8(state) {
+  api$f.debug(`Installing plugin "${plugin$8.name}"`);
   
   // add prompt editor component
   document.body.append(promptEditorDialog);
@@ -50201,7 +50533,7 @@ async function install$7(state) {
 
   // add a button to the command bar to show dialog with prompt editor
   ui$1.toolbar.extractionActions.append(promptEditorButton);
-  promptEditorButton.addEventListener("click", () => api$3.open());
+  promptEditorButton.addEventListener("click", () => api$4.open());
 }
 
 // API
@@ -50222,7 +50554,7 @@ let currentIndex = 0;
 async function open$1() {
   if (!prompts){
     ui$1.promptEditor.labelMenu.childNodes.forEach(node => node.remove());
-    prompts = await api$8.loadInstructions();
+    prompts = await api$9.loadInstructions();
     for (const [idx, prompt] of prompts.entries()) {
       addSlMenuItem(idx, prompt.label);
     }
@@ -50232,7 +50564,7 @@ async function open$1() {
   await populateExtractorSelect();
   
   ui$1.promptEditor.delete.disabled = prompts.length < 2;
-  api$3.edit(currentIndex);
+  api$4.edit(currentIndex);
   ui$1.promptEditor.show();
 }
 
@@ -50244,7 +50576,7 @@ async function populateExtractorSelect() {
   extractorSelect.innerHTML = "";
   
   try {
-    const extractors = await api$8.getExtractorList();
+    const extractors = await api$9.getExtractorList();
     for (const extractor of extractors) {
       const option = Object.assign(new option_default, {
         value: extractor.id,
@@ -50253,7 +50585,7 @@ async function populateExtractorSelect() {
       extractorSelect.appendChild(option);
     }
   } catch (error) {
-    api$e.warn("Could not load extractor list for prompt editor:", error);
+    api$f.warn("Could not load extractor list for prompt editor:", error);
     // Fallback to default extractor
     const option = Object.assign(new option_default, {
       value: "llamore-gemini",
@@ -50303,7 +50635,7 @@ function duplicateInstructions() {
  */
 async function save() {
   saveCurrentPrompt();
-  api$8.saveInstructions(prompts);
+  api$9.saveInstructions(prompts);
 }
 
 /**
@@ -50370,7 +50702,7 @@ function menuOnSelect(event) {
   // @ts-ignore
   ui$1.promptEditor.labelMenu.childNodes[currentIndex].checked = false;
   currentIndex = item.value;
-  api$3.edit(currentIndex);
+  api$4.edit(currentIndex);
 }
 
 /**
@@ -50412,10 +50744,10 @@ const enhancements = [
 
 
 
-const plugin$6 = {
+const plugin$7 = {
   name: "tei-wizard",
-  install: install$6,
-  state: {update: update$2},
+  install: install$7,
+  state: {update: update$3},
   deps: ['services']
 };
 
@@ -50431,8 +50763,8 @@ const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 /**
  * @param {ApplicationState} state 
  */
-async function install$6(state) {
-  api$e.debug(`Installing plugin "${plugin$6.name}"`);
+async function install$7(state) {
+  api$f.debug(`Installing plugin "${plugin$7.name}"`);
 
   // button
   ui$1.toolbar.teiActions.append(teiWizardButton);
@@ -50469,7 +50801,7 @@ async function install$6(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$2(state) {
+async function update$3(state) {
   // @ts-ignore
   teiWizardButton.disabled = state.editorReadOnly;
   //console.warn(plugin.name,"done")
@@ -58898,7 +59230,7 @@ MarkdownIt.prototype.renderInline = function (src, env) {
 /**
  * plugin API
  */
-const api$2 = {
+const api$3 = {
   open,
   load,
   close
@@ -58907,9 +59239,9 @@ const api$2 = {
 /**
  * Plugin object
  */
-const plugin$5 = {
+const plugin$6 = {
   name: "info",
-  install: install$5
+  install: install$6
 };
 
 //
@@ -58962,8 +59294,8 @@ const docsBasePath = "../../docs";
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$5(state) {
-  api$e.debug(`Installing plugin "${plugin$5.name}"`);
+async function install$6(state) {
+  api$f.debug(`Installing plugin "${plugin$6.name}"`);
   // add the component html
   await createHtmlElements(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.hide());
@@ -58972,7 +59304,7 @@ async function install$5(state) {
   const button = (await createHtmlElements(buttonHtml))[0];
   ui$1.toolbar.append(button);
   updateUi();
-  button.addEventListener("click", () => api$2.open());
+  button.addEventListener("click", () => api$3.open());
   
   // configure markdown parser
   const options = {
@@ -58983,7 +59315,7 @@ async function install$5(state) {
   md = MarkdownIt(options);
   
   // @ts-ignore
-  window.appInfo = api$2;
+  window.appInfo = api$3;
   load('index.md');
 }
 
@@ -59010,7 +59342,7 @@ async function load(mdPath){
   try {
     markdown = await (await fetch(`${docsBasePath}/${mdPath}`)).text();
   } catch(error) {
-    api$a.error(error.message);
+    api$b.error(error.message);
     return 
   }
   
@@ -59040,10 +59372,10 @@ function close() {
  */
 
 
-const plugin$4 = {
+const plugin$5 = {
   name: "move-files",
   deps: ['services'],
-  install: install$4
+  install: install$5
 };
 
 //
@@ -59078,8 +59410,8 @@ const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
 /**
  * @param {ApplicationState} state
  */
-async function install$4(state) {
-  api$e.debug(`Installing plugin "${plugin$4.name}"`);
+async function install$5(state) {
+  api$f.debug(`Installing plugin "${plugin$5.name}"`);
 
   // install button & dialog
   ui$1.toolbar.documentActions.append(moveBtn);
@@ -59092,7 +59424,7 @@ async function install$4(state) {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
     if (newCollectionName) {
       if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
-        api$a.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
+        api$b.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
         return;
       }
       const option = Object.assign(document.createElement('sl-option'), {
@@ -59111,7 +59443,7 @@ async function install$4(state) {
 async function showMoveFilesDialog(state) {
   const { xml, pdf } = state;
   if (!xml || !pdf) {
-    api$a.error("Cannot move files, PDF or XML path is missing.");
+    api$b.error("Cannot move files, PDF or XML path is missing.");
     return;
   }
 
@@ -59136,7 +59468,7 @@ async function showMoveFilesDialog(state) {
       moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
-    api$e.warn("User cancelled move files dialog");
+    api$f.warn("User cancelled move files dialog");
     return;
   } finally {
     moveFilesDialog.hide();
@@ -59144,18 +59476,18 @@ async function showMoveFilesDialog(state) {
 
   const destinationCollection = String(collectionSelectBox.value);
   if (!destinationCollection) {
-    api$a.error("No collection selected.");
+    api$b.error("No collection selected.");
     return;
   }
 
   ui$1.spinner.show('Moving files, please wait...');
   try {
-    const { new_pdf_path, new_xml_path } = await api$8.moveFiles(pdf, xml, destinationCollection);
-    await api$7.reload(state);
-    await api$5.load(state, { pdf: new_pdf_path, xml: new_xml_path });
+    const { new_pdf_path, new_xml_path } = await api$9.moveFiles(pdf, xml, destinationCollection);
+    await api$8.reload(state);
+    await api$6.load(state, { pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
-    api$a.error(`Error moving files: ${error.message}`);
+    api$b.error(`Error moving files: ${error.message}`);
   } finally {
     ui$1.spinner.hide();
   }
@@ -59174,10 +59506,10 @@ async function showMoveFilesDialog(state) {
  * Plugin object
  * dependencies are automatically set to all other plugins, so that it is the last one to be installed
  */
-const plugin$3 = {
+const plugin$4 = {
   name: "start",
-  install: install$3,
-  start
+  install: install$4,
+  start: start$1
 };
 
 
@@ -59192,8 +59524,8 @@ let validationStatusWidget = null;
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-async function install$3(state) {
-  api$e.debug(`Installing plugin "${plugin$3.name}"`);
+async function install$4(state) {
+  api$f.debug(`Installing plugin "${plugin$4.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -59212,26 +59544,26 @@ async function install$3(state) {
 * Starts the application, configures plugins and the UI
 * @param {ApplicationState} state
 */
-async function start(state) {
+async function start$1(state) {
 
   // async operations
   try {
 
     // Authenticate user, otherwise we don't proceed further
-    const userData = await api$1.ensureAuthenticated();
-    api$e.info(`${userData.fullname} has logged in.`);
+    const userData = await api$2.ensureAuthenticated();
+    api$f.info(`${userData.fullname} has logged in.`);
     notify(`Welcome back, ${userData.fullname}!`);
     
     // load config data
-    await api$d.load();
+    await api$e.load();
 
     ui$1.spinner.show('Loading documents, please wait...');
 
     // update the file lists
-    await api$7.reload(state);
+    await api$8.reload(state);
 
     // disable regular validation so that we have more control over it
-    api$9.configure({ mode: "off" });
+    api$a.configure({ mode: "off" });
 
     // get document paths from URL hash 
     // @ts-ignore
@@ -59241,9 +59573,9 @@ async function start(state) {
 
     if (pdf !== null) {
       // lod the documents
-      await api$5.load(state, { pdf, xml, diff });
+      await api$6.load(state, { pdf, xml, diff });
     } else {
-      api$a.info("Load a PDF from the dropdown on the top left.");
+      api$b.info("Load a PDF from the dropdown on the top left.");
     }
     
     // two alternative initial states:
@@ -59252,21 +59584,21 @@ async function start(state) {
     if (diff && diff !== xml) {
       // a) load the diff view
       try {
-        await api$5.showMergeView(state, diff);
+        await api$6.showMergeView(state, diff);
       } catch (error) {
-        api$e.warn("Error loading diff view: " + error.message);
+        api$f.warn("Error loading diff view: " + error.message);
       }
     } else {
       // b) validation & xpath selection
 
       // measure how long it takes to validate the document
       const startTime = new Date().getTime();
-      api$5.validateXml().then(() => {
+      api$6.validateXml().then(() => {
         const endTime = new Date().getTime();
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
-        api$e.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
-        api$9.configure({ mode: seconds > 3 ? "off" : "auto" });
+        api$f.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
+        api$a.configure({ mode: seconds > 3 ? "off" : "auto" });
       });
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
@@ -59284,17 +59616,17 @@ async function start(state) {
     configureXmlEditor();
 
     // Heartbeat mechanism for file locking and offline detection
-    configureHeartbeat(state, await api$d.get('heartbeat.interval', 10));
+    configureHeartbeat(state, await api$e.get('heartbeat.interval', 10));
 
     // finish initialization
     ui$1.spinner.hide();
-    api$4.show();
+    api$5.show();
     xmlEditor.setLineWrapping(true);
-    api$e.info("Application ready.");
+    api$f.info("Application ready.");
 
   } catch (error) {
     ui$1.spinner.hide();
-    api$a.error(error.message);
+    api$b.error(error.message);
     throw error
   }
 }
@@ -59307,15 +59639,15 @@ async function saveIfDirty() {
   const filePath = String(ui$1.toolbar.xml.value);
 
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
-    const result = await api$5.saveXml(filePath);
+    const result = await api$6.saveXml(filePath);
     if (result.status == "unchanged") {
-      api$e.debug(`File has not changed`);
+      api$f.debug(`File has not changed`);
     } else if (result.status == "saved_with_migration") {
-      api$e.debug(`Saved file to ${result.path} with migration of old version files`);
+      api$f.debug(`Saved file to ${result.path} with migration of old version files`);
       // Migration occurred, reload file data to show updated version structure
-      await api$7.reload(state);
+      await api$8.reload(state);
     } else {
-      api$e.debug(`Saved file to ${result.path}`);
+      api$f.debug(`Saved file to ${result.path}`);
     }
   }
 }
@@ -59326,12 +59658,12 @@ function configureXmlEditor() {
 
   // manually show diagnostics if validation is disabled
   xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
-    if (api$9.isDisabled()) {
+    if (api$a.isDisabled()) {
       let view = xmlEditor.getView();
       try {
         view.dispatch(setDiagnostics(view.state, diagnostics));
       } catch (error) {
-        api$e.warn("Error setting diagnostics: " + error.message);
+        api$f.warn("Error setting diagnostics: " + error.message);
       }
     }
   });
@@ -59370,7 +59702,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
   if (!Number.isInteger(lockTimeoutSeconds)) {
     throw new Error(`Invalid timeout value: ${lockTimeoutSeconds}`)
   }
-  api$e.debug(`Configuring a heartbeat of ${lockTimeoutSeconds} seconds`);
+  api$f.debug(`Configuring a heartbeat of ${lockTimeoutSeconds} seconds`);
   let heartbeatInterval = null;
   const heartbeatFrequency = lockTimeoutSeconds * 1000;
 
@@ -59381,11 +59713,11 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = null;
-      api$e.debug("Heartbeat stopped.");
+      api$f.debug("Heartbeat stopped.");
     }
     const filePath = ui$1.toolbar.xml.value;
     if (filePath) {
-      api$8.releaseLock(filePath);
+      api$9.releaseLock(filePath);
     }
   };
   window.addEventListener('beforeunload', stopHeartbeat);
@@ -59406,7 +59738,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
       for (const reason in reasonsToSkip) {
         if (reasonsToSkip[reason]) {
-          api$e.debug(`Skipping heartbeat: ${reason}.`);
+          api$f.debug(`Skipping heartbeat: ${reason}.`);
           return;
         }
       }
@@ -59415,21 +59747,21 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
 
         let heartbeatResponse = null;
         if (!state.editorReadOnly) {
-          api$e.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-          heartbeatResponse = await api$8.sendHeartbeat(filePath);
+          api$f.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
+          heartbeatResponse = await api$9.sendHeartbeat(filePath);
         }
 
         // Check if file data cache is dirty and only reload if necessary
         // For read-only editors, check cache status separately since no heartbeat was sent
-        const cacheStatus = heartbeatResponse?.cache_status || await api$8.getCacheStatus();
+        const cacheStatus = heartbeatResponse?.cache_status || await api$9.getCacheStatus();
         if (cacheStatus.dirty) {
-          api$e.debug("File data cache is dirty, reloading file list");
-          await api$7.reload(state, { refresh: true });
+          api$f.debug("File data cache is dirty, reloading file list");
+          await api$8.reload(state, { refresh: true });
         }
 
         // If we are here, the request was successful. Check if we were offline before.
         if (state.offline) {
-          api$e.info("Connection restored.");
+          api$f.info("Connection restored.");
           notify("Connection restored.");
           updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
         }
@@ -59441,35 +59773,35 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           if (state.offline) {
             // we are still offline
             const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`;
-            api$e.warn(message);
+            api$f.warn(message);
             notify(message);
             return
           }
-          api$e.warn("Connection lost.");
+          api$f.warn("Connection lost.");
           notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
           editorReadOnlyState = state.editorReadOnly;
           updateState(state, { offline: true, editorReadOnly: true });
         } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
-          api$e.critical("Lock lost for file: " + filePath);
-          api$a.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+          api$f.critical("Lock lost for file: " + filePath);
+          api$b.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
           updateState(state, { editorReadOnly: true });
         } else if (error.statusCode === 504) {
-          api$e.warn("Temporary connection failure, will try again...");
+          api$f.warn("Temporary connection failure, will try again...");
         } else if (error.statusCode === 403) {
           notify("You have been logged out"); 
-          api$1.logout();
+          api$2.logout();
         } else {
           // Another server-side error occurred
           if (state.webdavEnabled) {
-            api$e.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
-            api$a.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
+            api$f.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
+            api$b.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
             updateState(state, { webdavEnabled: false });
           }
         }
       }
     }, heartbeatFrequency);
-    api$e.info("Heartbeat started.");
+    api$f.info("Heartbeat started.");
   };
   startHeartbeat();
 }
@@ -59483,7 +59815,7 @@ async function searchNodeContents() {
   const node = xmlEditor.selectedNode;
 
   if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
-    await api$5.searchNodeContentsInPdf(node);
+    await api$6.searchNodeContentsInPdf(node);
     lastNode = node;
   }
 }
@@ -59513,7 +59845,7 @@ const buttonElement = (await createHtmlElements('logout-button.html'))[0];
 /**
  * Public API for the authentication plugin
  */
-const api$1 = {
+const api$2 = {
   ensureAuthenticated,
   getUser,
   logout
@@ -59522,11 +59854,11 @@ const api$1 = {
 /**
  * Plugin definition
  */
-const plugin$2 = {
+const plugin$3 = {
   name: "authentication",
   deps: ['client'],
-  install: install$2,
-  state: {update: update$1}
+  install: install$3,
+  state: {update: update$2}
 };
 
 //
@@ -59550,8 +59882,8 @@ let user = null;
  * Installs the plugin.
  * @param {ApplicationState} state
  */
-async function install$2(state) {
-  api$e.debug(`Installing plugin "${plugin$2.name}"`);
+async function install$3(state) {
+  api$f.debug(`Installing plugin "${plugin$3.name}"`);
   state.user = null;
   // @ts-ignore - insertAdjacentElement type issue
   ui$1.toolbar.insertAdjacentElement("beforeend", buttonElement);
@@ -59572,7 +59904,7 @@ async function install$2(state) {
  * Handles state updates, specifically for updating the UI based on user login status.
  * @param {ApplicationState} state
  */
-async function update$1(state) {
+async function update$2(state) {
   if (state.user !== user) {
     user = state.user;
     ui$1.toolbar.logoutButton.disabled = user === null;
@@ -59588,7 +59920,7 @@ async function update$1(state) {
  */
 async function ensureAuthenticated() {
   try {
-    const userData = await api$8.status();
+    const userData = await api$9.status();
     await updateState(state, { user: userData });
     return userData
   } catch (error) {
@@ -59619,7 +59951,7 @@ function _showLoginDialog() {
       dialog.message.textContent = '';
       const passwd_hash = await _hashPassword(password);
       try {
-        const response = await api$8.login(username, passwd_hash);
+        const response = await api$9.login(username, passwd_hash);
         // Server now returns sessionId in response
         const { sessionId, ...userData } = response;
         await updateState(state, { user: userData, sessionId });
@@ -59629,7 +59961,7 @@ function _showLoginDialog() {
         resolve(userData); // Resolve the promise on successful login
       } catch (error) {
         dialog.message.textContent = 'Wrong username or password';
-        api$e.error('Login failed:', error.message);
+        api$f.error('Login failed:', error.message);
       }
     }, {once:true});
     dialog.show();
@@ -59642,13 +59974,13 @@ function _showLoginDialog() {
  */
 async function logout() {
   try {
-    await api$8.logout();
+    await api$9.logout();
     await updateState(state, { user: null, sessionId: null });
     // Remove session from URL hash if present
     UrlHash.remove('sessionId');
     await _showLoginDialog();
   } catch (error) {
-    api$e.error('Logout failed:', error);
+    api$f.error('Logout failed:', error);
   }
 }
 
@@ -59697,9 +60029,9 @@ async function _hashPassword(password) {
 /**
  * plugin object
  */
-const plugin$1 = {
+const plugin$2 = {
   name: "toolbar",
-  install: install$1
+  install: install$2
 };
 
 //
@@ -59710,8 +60042,8 @@ const plugin$1 = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$1(state) {
-  api$e.debug(`Installing plugin "${plugin$1.name}"`);
+async function install$2(state) {
+  api$f.debug(`Installing plugin "${plugin$2.name}"`);
   // Currently, the toolbar is just a static container div.
   // Future implementation will provide dynamic toolbar management similar to StatusBar.
 }
@@ -59724,18 +60056,18 @@ async function install$1(state) {
 /**
  * plugin API
  */
-const api = {
+const api$1 = {
   syncFiles
 };
 
 /**
  * component plugin
  */
-const plugin = {
+const plugin$1 = {
   name: "sync",
   deps: ['services'],
-  install,
-  state: { update }
+  install: install$1,
+  state: { update: update$1 }
 };
 
 //
@@ -59760,8 +60092,8 @@ let syncProgressWidget = null;
 /**
  * @param {ApplicationState} state
  */
-async function install(state) {
-  api$e.debug(`Installing plugin "${plugin.name}"`);
+async function install$1(state) {
+  api$f.debug(`Installing plugin "${plugin$1.name}"`);
 
   // install controls on menubar
   ui$1.toolbar.append(...syncActionButtons);
@@ -59773,7 +60105,7 @@ async function install(state) {
   sa.sync.addEventListener("click", () => onClickSyncBtn(state));
 
   // Set up SSE listeners for sync progress and messages
-  api$b.addEventListener('syncProgress', (event) => {
+  api$c.addEventListener('syncProgress', (event) => {
     const progress = parseInt(event.data);
     // Don't log progress counter to console, only update the progress bar
     if (syncProgressWidget && syncProgressWidget.isConnected) {
@@ -59782,7 +60114,7 @@ async function install(state) {
     }
   });
 
-  api$b.addEventListener('syncMessage', (event) => {
+  api$c.addEventListener('syncMessage', (event) => {
     const message = event.data;
     // Log sync messages to console instead of displaying in widget
     console.log(`Sync: ${message}`);
@@ -59825,7 +60157,7 @@ async function install(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update(state) {
+async function update$1(state) {
   const sa = ui$1.toolbar.syncActions;
 
   sa.childNodes.forEach(el => {
@@ -59847,13 +60179,13 @@ async function update(state) {
  */
 async function syncFiles(state) {
   if (state.webdavEnabled) {
-    api$e.debug("Synchronizing files on the server");
-    const summary = await api$8.syncFiles();
+    api$f.debug("Synchronizing files on the server");
+    const summary = await api$9.syncFiles();
     
     if (summary.skipped) {
-      api$e.debug("Sync skipped - no changes detected");
+      api$f.debug("Sync skipped - no changes detected");
     } else {
-      api$e.debug("Sync completed", summary);
+      api$f.debug("Sync completed", summary);
     }
     
     return summary
@@ -59903,9 +60235,762 @@ async function onClickSyncBtn(state) {
       
       if (hasChanges) {
         // something has changed, reload the file data
-        await api$7.reload(state);
+        await api$8.reload(state);
       }
     }
+  }
+}
+
+/**
+ * Access Control plugin
+ * 
+ * Manages document access permissions and provides UI for changing document status.
+ * Integrates with xmleditor plugin to enforce read-only state based on permissions.
+ */
+
+
+// TEI namespace constant
+const TEI_NS = 'http://www.tei-c.org/ns/1.0';
+
+
+/**
+ * Access control statusbar navigation properties
+ * @typedef {object} accessControlStatusbarPart
+ * @property {HTMLElement} statusDropdown - The status dropdown widget
+ * @property {HTMLElement} permissionInfo - Permission information display
+ */
+
+/**
+ * Access control navigation properties  
+ * @typedef {object} accessControlPart
+ * @property {UIPart<StatusBar, accessControlStatusbarPart>} statusbar - The access control statusbar widgets
+ */
+
+// Status widgets for access control
+let statusDropdownWidget = null;
+let permissionInfoWidget = null;
+let statusSeparator = null;
+
+// Current document permissions cache  
+/** @type {{visibility: string, editability: string, owner: string|null, can_modify: boolean}} */
+let currentPermissions = {
+    visibility: 'public',
+    editability: 'editable', 
+    owner: null,
+    can_modify: false
+};
+
+// Application state reference for internal use
+let pluginState = null;
+
+
+/**
+ * Access control plugin
+ */
+const plugin = {
+  name: "access-control",
+  install,
+  start,
+  state: {
+    update
+  }
+};
+
+/**
+ * Access control API
+ */
+const api = {
+  getDocumentPermissions: () => currentPermissions,
+  canEditDocument,
+  canViewDocument,
+  updateDocumentStatus,
+  checkCanEditFile
+};
+
+/**
+ * Runs when the main app starts so the plugins can register the app components they supply
+ * @param {ApplicationState} state
+ */
+async function install(state) {
+  api$f.debug(`Installing plugin "${plugin.name}"`);
+  
+  // Create permission info widget
+  /** @type {StatusText} */
+  permissionInfoWidget = PanelUtils.createText({
+    text: '',
+    variant: 'neutral'
+  });
+  
+  // Create status dropdown widget 
+  statusDropdownWidget = createStatusDropdown();
+  
+  // Create separator
+  statusSeparator = PanelUtils.createSeparator({
+    variant: 'dotted'
+  });
+  
+  // Add widgets to left side of statusbar (lower priority = more to the left)
+  ui$1.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1);
+  ui$1.xmlEditor.statusbar.add(statusSeparator, 'left', 2); 
+  ui$1.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3);
+  
+  // Initially hide widgets until document is loaded
+  hideAccessControlWidgets();
+}
+
+/**
+ * Runs after all plugins are installed
+ * @param {ApplicationState} state
+ */
+async function start(state) {
+  api$f.debug(`Starting plugin "${plugin.name}"`);
+}
+
+let state_xml_cache; 
+
+/**
+ * Called when application state changes
+ * @param {ApplicationState} state
+ */
+async function update(state) {
+  // Store state reference for internal use
+  pluginState = state;
+  
+  // Only show access control widgets when a document is loaded
+  if (!state.xml) {
+    hideAccessControlWidgets();
+    state_xml_cache = null;
+    return
+  }
+
+  if (state.xml === state_xml_cache) {
+    return
+  }
+  state_xml_cache = state.xml;
+  api$f.debug(`Access control: Updating access control for document: ${state.xml}`);  
+  await computeDocumentPermissions();
+  
+  // Update UI based on permissions
+  api$f.debug("Access control: Update UI");
+  updateAccessControlUI();
+  
+  // Check if document should be read-only based on permissions
+  const shouldBeReadOnly = !canEditDocument(state.user);
+  if (shouldBeReadOnly !== state.editorReadOnly) {
+    // Update application state to reflect access control
+    api$f.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`);
+    // Note: This will trigger xmleditor plugin to update editor state
+    updateState(state, { editorReadOnly: shouldBeReadOnly });
+  }
+  
+  // Update read-only widget context if xmleditor shows read-only status due to access control
+  updateReadOnlyContext(state.editorReadOnly, shouldBeReadOnly);
+}
+
+/**
+ * Creates the status dropdown widget
+ */
+function createStatusDropdown() {
+  const dropdown = document.createElement('sl-dropdown');
+  dropdown.setAttribute('name', 'access-status-dropdown');
+  
+  const trigger = document.createElement('sl-button');
+  trigger.setAttribute('slot', 'trigger');
+  trigger.setAttribute('size', 'small');
+  trigger.setAttribute('variant', 'default');
+  trigger.setAttribute('caret', 'true');
+  trigger.textContent = 'Public';
+  
+  const menu = document.createElement('sl-menu');
+  
+  // Create menu items for different permission combinations
+  const permissionOptions = [
+    { value: 'public-editable', label: 'Public & Editable', visibility: 'public', editability: 'editable' },
+    { value: 'public-protected', label: 'Public & Protected', visibility: 'public', editability: 'protected' },
+    { value: 'private-editable', label: 'Private & Editable', visibility: 'private', editability: 'editable' },
+    { value: 'private-protected', label: 'Private & Protected', visibility: 'private', editability: 'protected' }
+  ];
+  
+  permissionOptions.forEach(option => {
+    const item = document.createElement('sl-menu-item');
+    item.setAttribute('value', option.value);
+    item.setAttribute('type', 'checkbox');
+    item.textContent = option.label;
+    item.dataset.visibility = option.visibility;
+    item.dataset.editability = option.editability;
+    menu.appendChild(item);
+  });
+  
+  dropdown.appendChild(trigger);
+  dropdown.appendChild(menu);
+  
+  // Handle selection changes
+  dropdown.addEventListener('sl-select', handlePermissionChange);
+  
+  return dropdown
+}
+
+/**
+ * Handles status dropdown selection changes
+ * @param {CustomEvent} event
+ */
+async function handlePermissionChange(event) {
+  const selectedItem = event.detail.item;
+  const newVisibility = selectedItem.dataset.visibility;
+  const newEditability = selectedItem.dataset.editability;
+  
+  try {
+    // Determine if we need to set an owner
+    let owner = currentPermissions.owner;
+    
+    // If making document private or protected, ensure current user becomes owner if no owner exists
+    if ((newVisibility === 'private' || newEditability === 'protected') && !owner) {
+      const currentUser = api$2.getUser();
+      if (currentUser) {
+        owner = currentUser.username;
+        api$f.debug(`Setting document owner to current user: ${owner}`);
+      }
+    }
+    
+    await updateDocumentStatus(newVisibility, newEditability, owner || undefined);
+    api$f.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`);
+  } catch (error) {
+    api$f.error(`Failed to update document status: ${error.message}`);
+    // Revert dropdown to previous state
+    updateStatusDropdownDisplay();
+  }
+}
+
+/**
+ * Parses document permissions from current XML DOM tree
+ */
+async function computeDocumentPermissions() {
+  try {
+    const xmlTree = xmlEditor.getXmlTree();
+    if (!xmlTree) {
+      // Use defaults if no XML tree
+      currentPermissions = {
+        visibility: 'public',
+        editability: 'editable', 
+        owner: null,
+        can_modify: true // Default to allowing modifications
+      };
+      return
+    }
+    
+    // Parse permissions from XML DOM tree
+    const permissions = parsePermissionsFromXmlTree(xmlTree);
+    
+    // First set the permissions without can_modify
+    currentPermissions = {
+      ...permissions,
+      can_modify: true // temporary
+    };
+    
+    // Now calculate can_modify using the updated permissions
+    const currentUser = api$2.getUser();
+    currentPermissions.can_modify = canEditDocument(currentUser);
+    
+    api$f.debug('Parsed document permissions:' + JSON.stringify(currentPermissions) );
+  } catch (error) {
+    api$f.error(`Error parsing document permissions: ${error.message}`);
+    // Use defaults on error
+    currentPermissions = {
+      visibility: 'public', 
+      editability: 'editable',
+      owner: null,
+      can_modify: true
+    };
+  }
+}
+
+/**
+ * Parses permissions from XML DOM tree
+ * @param {Document} xmlTree
+ * @returns {object} Permissions object
+ */
+function parsePermissionsFromXmlTree(xmlTree) {
+  try {
+    // Find all change elements using XPath
+    const changes = /** @type {Element[]} */ (xmlEditor.getDomNodesByXpath('//tei:revisionDesc/tei:change'));
+    if (changes.length === 0) {
+      return {
+        visibility: 'public',
+        editability: 'editable',
+        owner: null
+      }
+    }
+    
+    // Find the last change element that contains permission labels
+    let lastPermissionChange = null;
+    for (let i = changes.length - 1; i >= 0; i--) {
+      const change = changes[i];
+      const hasPermissionLabels = change.querySelector('label[type="visibility"], label[type="access"], label[type="owner"]');
+      if (hasPermissionLabels) {
+        lastPermissionChange = change;
+        break
+      }
+    }
+    
+    if (!lastPermissionChange) {
+      return {
+        visibility: 'public',
+        editability: 'editable',
+        owner: null
+      }
+    }
+    
+    // Parse label elements from the last permission change
+    const permissionChange = lastPermissionChange;
+    const visibilityLabel = permissionChange.querySelector('label[type="visibility"]');
+    const accessLabel = permissionChange.querySelector('label[type="access"]');
+    const ownerLabel = permissionChange.querySelector('label[type="owner"]');
+    
+    const visibility = visibilityLabel?.textContent?.trim() || 'public';
+    let editability = accessLabel?.textContent?.trim() || 'editable';
+    
+    // Handle legacy "private" access value
+    if (editability === 'private') {
+      editability = 'protected';
+    }
+    
+    // Parse owner from ana attribute (preferred) or fallback to text content
+    let owner = null;
+    if (ownerLabel) {
+      const anaValue = ownerLabel.getAttribute('ana');
+      if (anaValue && anaValue.startsWith('#')) {
+        owner = anaValue.substring(1); // Remove # prefix
+      } else {
+        owner = ownerLabel.textContent?.trim() || null;
+      }
+    }
+    
+    return {
+      visibility: visibility === 'private' ? 'private' : 'public',
+      editability: editability === 'protected' ? 'protected' : 'editable',
+      owner
+    }
+  } catch (error) {
+    api$f.warn(`Error parsing permissions from XML tree: ${error.message}`);
+    return {
+      visibility: 'public',
+      editability: 'editable',
+      owner: null
+    }
+  }
+}
+
+/**
+ * Updates document status by modifying XML DOM and updating editor
+ * @param {string} visibility - 'public' or 'private'
+ * @param {string} editability - 'editable' or 'protected'
+ * @param {string} [owner] - Optional new owner
+ * @param {string} [description] - Optional change description
+ */
+async function updateDocumentStatus(visibility, editability, owner, description) {
+  try {
+    if (!pluginState?.xml) {
+      throw new Error('No document loaded in application state')
+    }
+    
+    const xmlTree = xmlEditor.getXmlTree();
+    if (!xmlTree) {
+      throw new Error('No XML document loaded')
+    }
+    
+    // Find or create teiHeader
+    let teiHeader = /** @type {Element} */ (xmlEditor.getDomNodeByXpath('//tei:teiHeader'));
+    if (!teiHeader) {
+      throw new Error('No teiHeader found in document')
+    }
+    
+    // Find or create revisionDesc
+    let revisionDesc = /** @type {Element|null} */ (xmlEditor.getDomNodeByXpath('//tei:teiHeader/tei:revisionDesc'));
+    if (!revisionDesc) {
+      revisionDesc = xmlTree.createElementNS(TEI_NS, 'revisionDesc');
+      teiHeader.appendChild(revisionDesc);
+    }
+    
+    // Create new change element
+    const change = xmlTree.createElementNS(TEI_NS, 'change');
+    const timestamp = new Date().toISOString();
+    change.setAttribute('when', timestamp);
+    
+    // Add who attribute to document who made the change
+    const currentUser = api$2.getUser();
+    if (currentUser) {
+      // Ensure respStmt exists for current user
+      api$f.debug(`Ensuring respStmt for current user: ${currentUser.username}, fullname: ${currentUser.fullname}`);
+      ensureRespStmtForUser(xmlTree, currentUser.username, currentUser.fullname || currentUser.username);
+      change.setAttribute('who', `#${currentUser.username}`);
+    }
+    
+    // Add description
+    const desc = xmlTree.createElementNS(TEI_NS, 'desc');
+    desc.textContent = description || 'Access permissions updated';
+    change.appendChild(desc);
+    
+    // Add visibility label
+    const visibilityLabel = xmlTree.createElementNS(TEI_NS, 'label');
+    visibilityLabel.setAttribute('type', 'visibility');
+    visibilityLabel.textContent = visibility;
+    change.appendChild(visibilityLabel);
+    
+    // Add access label (editability)
+    const accessLabel = xmlTree.createElementNS(TEI_NS, 'label');
+    accessLabel.setAttribute('type', 'access');
+    accessLabel.textContent = editability === 'protected' ? 'protected' : 'editable';
+    change.appendChild(accessLabel);
+    
+    // Add owner label only if the document needs an owner (private or protected documents)
+    const needsOwner = visibility === 'private' || editability === 'protected';
+    if (needsOwner) {
+      const finalOwner = owner || currentPermissions.owner || currentUser?.username;
+      
+      if (finalOwner) {
+        // Ensure respStmt exists for owner
+        const ownerUser = api$2.getUser(); // For now, assume current user is the owner
+        if (ownerUser && finalOwner === ownerUser.username) {
+          api$f.debug(`Ensuring respStmt for owner: ${finalOwner}, fullname: ${ownerUser.fullname}`);
+          ensureRespStmtForUser(xmlTree, finalOwner, ownerUser.fullname || ownerUser.username || finalOwner);
+        }
+        
+        const ownerLabel = xmlTree.createElementNS(TEI_NS, 'label');
+        ownerLabel.setAttribute('type', 'owner');
+        ownerLabel.setAttribute('ana', `#${finalOwner}`);
+        
+        // Set text content to full name if available, otherwise username
+        if (ownerUser && finalOwner === ownerUser.username) {
+          ownerLabel.textContent = ownerUser.fullname || ownerUser.username;
+        } else {
+          ownerLabel.textContent = finalOwner || 'Unknown'; // fallback to username
+        }
+        
+        change.appendChild(ownerLabel);
+      }
+    }
+    // Note: For public & editable documents, no owner label is added
+    
+    // Add the change element to revisionDesc
+    revisionDesc.appendChild(change);
+    
+    // Pretty-print the entire TEI header for proper formatting
+    prettyPrintNode(teiHeader);
+    
+    // Update the entire TEI header in the editor to reflect formatting changes
+    await xmlEditor.updateEditorFromNode(teiHeader);
+    
+    // Save the document using services API
+    await api$6.saveXml(pluginState.xml);
+    
+    // Update cached permissions
+    currentPermissions.visibility = visibility;
+    currentPermissions.editability = editability;
+    if (owner) {
+      currentPermissions.owner = owner;
+    }
+    
+    // Update UI
+    updateAccessControlUI();
+    
+    return {
+      visibility,
+      editability,
+      owner: currentPermissions.owner
+    }
+  } catch (error) {
+    api$f.error(`Failed to update document permissions: ${error.message}`);
+    throw error
+  }
+}
+
+/**
+ * Updates the access control UI widgets
+ */
+function updateAccessControlUI() {
+  showAccessControlWidgets();
+  updatePermissionInfoDisplay();
+  updateStatusDropdownDisplay();
+  updateStatusDropdownVisibility();
+}
+
+/**
+ * Updates the permission info text display
+ */
+function updatePermissionInfoDisplay() {
+  if (!permissionInfoWidget) return
+  
+  const { visibility, editability, owner } = currentPermissions;
+  
+  let infoText = '';
+  let variant = 'neutral';
+  
+  if (visibility === 'private') {
+    infoText = owner ? `Private (${owner})` : 'Private';
+    variant = 'warning';
+  } else {
+    infoText = 'Public';
+  }
+  
+  if (editability === 'protected') {
+    infoText += ' • Protected';
+    variant = 'warning';
+  }
+  
+  permissionInfoWidget.text = infoText;
+  permissionInfoWidget.variant = variant;
+}
+
+/**
+ * Updates the status dropdown display
+ */
+function updateStatusDropdownDisplay() {
+  if (!statusDropdownWidget) return
+  
+  const trigger = statusDropdownWidget.querySelector('sl-button');
+  const { visibility, editability } = currentPermissions;
+  
+  // Set button text based on current permissions
+  let buttonText = 'Unknown';
+  if (visibility === 'public' && editability === 'editable') {
+    buttonText = 'Public';
+  } else if (visibility === 'public' && editability === 'protected') {
+    buttonText = 'Public • Protected';  
+  } else if (visibility === 'private' && editability === 'editable') {
+    buttonText = 'Private';
+  } else if (visibility === 'private' && editability === 'protected') {
+    buttonText = 'Private • Protected';
+  }
+  
+  trigger.textContent = buttonText;
+  
+  // Update selected menu item
+  const currentValue = `${visibility}-${editability}`;
+  const menuItems = statusDropdownWidget.querySelectorAll('sl-menu-item');
+  menuItems.forEach(item => {
+    item.checked = item.getAttribute('value') === currentValue;
+  });
+}
+
+/**
+ * Shows or hides the status dropdown based on user permissions
+ */
+function updateStatusDropdownVisibility() {
+  if (!statusDropdownWidget || !permissionInfoWidget) return
+  
+  if (currentPermissions.can_modify) {
+    // User can modify permissions - show dropdown, hide text info
+    statusDropdownWidget.style.display = '';
+    statusSeparator.style.display = '';
+    permissionInfoWidget.style.display = 'none';
+  } else {
+    // User cannot modify permissions - hide dropdown, show text info
+    statusDropdownWidget.style.display = 'none';
+    statusSeparator.style.display = 'none';
+    permissionInfoWidget.style.display = '';
+  }
+}
+
+/**
+ * Shows access control widgets
+ */
+function showAccessControlWidgets() {
+  if (permissionInfoWidget && !permissionInfoWidget.isConnected) {
+    ui$1.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1);
+  }
+  if (statusSeparator && !statusSeparator.isConnected) {
+    ui$1.xmlEditor.statusbar.add(statusSeparator, 'left', 2);
+  }
+  if (statusDropdownWidget && !statusDropdownWidget.isConnected) {
+    ui$1.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3);
+  }
+}
+
+/**
+ * Hides access control widgets
+ */
+function hideAccessControlWidgets() {
+  if (permissionInfoWidget && permissionInfoWidget.isConnected) {
+    ui$1.xmlEditor.statusbar.removeById(permissionInfoWidget.id);
+  }
+  if (statusSeparator && statusSeparator.isConnected) {
+    ui$1.xmlEditor.statusbar.removeById(statusSeparator.id);
+  }
+  if (statusDropdownWidget && statusDropdownWidget.isConnected) {
+    ui$1.xmlEditor.statusbar.removeById(statusDropdownWidget.id);
+  }
+}
+
+/**
+ * Checks if current user can edit the document
+ * @param {Object} user - Current user object
+ * @returns {boolean}
+ */
+function canEditDocument(user) {
+  const { visibility, editability, owner } = currentPermissions;
+  
+  if (!user) {
+    // Anonymous users cannot edit anything
+    return false
+  }
+  
+  // Admin users can edit everything
+  if (user.roles && user.roles.includes('admin')) {
+    return true
+  }
+  
+  // Check visibility permissions
+  if (visibility === 'private' && owner !== user.username) {
+    return false
+  }
+  
+  // Check editability permissions
+  if (editability === 'protected' && owner !== user.username) {
+    return false
+  }
+  
+  return true
+}
+
+/**
+ * Checks if current user can view the document
+ * @param {Object} user - Current user object  
+ * @returns {boolean}
+ */
+function canViewDocument(user) {
+  const { visibility, owner } = currentPermissions;
+  
+  // Admin users can view everything
+  if (user && user.roles && user.roles.includes('admin')) {
+    return true
+  }
+  
+  // Public documents can be viewed by anyone
+  if (visibility === 'public') {
+    return true
+  }
+  
+  // Private documents only viewable by owner
+  if (visibility === 'private') {
+    return user && owner === user.username
+  }
+  
+  return false
+}
+
+/**
+ * Updates the xmleditor's read-only widget with context-specific information
+ * @param {boolean} editorReadOnly - Current editor read-only state
+ * @param {boolean} accessControlReadOnly - Whether read-only is due to access control
+ */
+function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
+  // Only update if editor is read-only and it's due to access control
+  if (!editorReadOnly || !accessControlReadOnly) {
+    return
+  }
+  
+  // Access the xmleditor's read-only status widget and update with context
+  updateReadOnlyWidgetText(ui$1.xmlEditor.statusbar.readOnlyStatus);
+}
+
+/**
+ * Updates the read-only widget text with access control context
+ * @param {StatusText} readOnlyWidget - The read-only status widget
+ */
+function updateReadOnlyWidgetText(readOnlyWidget) {
+  const { visibility, editability, owner } = currentPermissions;
+  const currentUser = api$2.getUser();
+  
+  let contextText = 'Read-only';
+  
+  // Determine the reason for read-only state
+  if (editability === 'protected' && owner && owner !== currentUser?.username) {
+    // Document is protected and user is not the owner
+    contextText = `Read-only (owned by ${owner})`;
+  } else if (visibility === 'private' && owner && owner !== currentUser?.username) {
+    // Document is private and user is not the owner
+    contextText = `Read-only (owned by ${owner})`;
+  } else if (owner) {
+    // Default case with owner information
+    contextText = `Read-only (owned by ${owner})`;
+  }
+  
+  // Update the widget text
+  readOnlyWidget.text = contextText;
+  api$f.debug(`Updated read-only context: ${contextText}`);
+}
+
+/**
+ * Checks if the current user can edit the given file based on access control metadata
+ * @param {string} fileId - The file identifier (hash or path)
+ * @returns {boolean} - True if user can edit, false otherwise
+ */
+function checkCanEditFile(fileId) {
+  try {
+    const currentUser = api$2.getUser();
+    
+    // Find the file metadata in fileselection data
+    const fileData = api$8.fileData;
+    let fileMetadata = null;
+    
+    // Search through all files and their versions for matching ID
+    for (const file of fileData) {
+      // Check gold versions
+      if (file.gold) {
+        for (const version of file.gold) {
+          if (version.hash === fileId || version.path === fileId) {
+            fileMetadata = version;
+            break
+          }
+        }
+      }
+      
+      // Check other versions
+      if (!fileMetadata && file.versions) {
+        for (const version of file.versions) {
+          if (version.hash === fileId || version.path === fileId) {
+            fileMetadata = version;
+            break
+          }
+        }
+      }
+      
+      if (fileMetadata) break
+    }
+    
+    if (!fileMetadata || !fileMetadata.access_control) {
+      // No metadata found or no access control info - default to allow editing
+      api$f.debug('No access control metadata found, allowing edit');
+      return true
+    }
+    
+    const { visibility, editability, owner } = fileMetadata.access_control;
+    
+    if (!currentUser) {
+      // Anonymous users cannot edit anything
+      return false
+    }
+    
+    // Admin users can edit everything
+    if (currentUser.roles && currentUser.roles.includes('admin')) {
+      return true
+    }
+    
+    // Check visibility permissions
+    if (visibility === 'private' && owner !== currentUser.username) {
+      return false
+    }
+    
+    // Check editability permissions
+    if (editability === 'protected' && owner !== currentUser.username) {
+      return false
+    }
+    
+    return true
+  } catch (error) {
+    api$f.warn(`Error checking file access permissions: ${error.message}`);
+    // Default to allowing edit on error to avoid breaking functionality
+    return true
   }
 }
 
@@ -59916,6 +61001,11 @@ async function onClickSyncBtn(state) {
  * @license 
  */
 
+// Check for Safari and block it temporarily
+if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')) {
+  alert('Safari is currently not supported due to compatibility issues. Please use Chrome, Firefox, or Edge.');
+  throw new Error('Safari browser not supported');
+}
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
 /**
@@ -59958,15 +61048,15 @@ let state = {
  */
 
 /** @type {Plugin[]} */
-const plugins = [plugin$k, plugin$i, plugin$c, plugin$j, 
-  plugin$g, plugin$1, plugin$f, plugin$e, plugin$b,
-  plugin$9, plugin, plugin$a, plugin$8, plugin$7,
-  plugin$6, plugin$d, plugin$5, plugin$4, plugin$h,
-  plugin$2,
-  /* must be the last plugin */ plugin$3];
+const plugins = [plugin$l, plugin$j, plugin$d, plugin$k, 
+  plugin$h, plugin$2, plugin$g, plugin$f, plugin$c,
+  plugin$a, plugin$1, plugin$b, plugin$9, plugin$8,
+  plugin$7, plugin$e, plugin$6, plugin$5, plugin$i,
+  plugin$3, plugin,
+  /* must be the last plugin */ plugin$4];
 
 // add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
-plugin$3.deps = plugins.slice(0,-1).map(p => p.name);
+plugin$4.deps = plugins.slice(0,-1).map(p => p.name);
 
 // register plugins
 for (const plugin of plugins) {
@@ -60010,27 +61100,27 @@ await invoke(endpoints.install, state);
 
 // persist the state across reloads in sessionStorage
 const SESSION_STORAGE_ID = 'pdf-tei-editor.state';
-const persistedStateVars = (await api$d.get("state.persist") || []);
+const persistedStateVars = (await api$e.get("state.persist") || []);
 persistedStateVars.push('sessionId'); // the session id is always persisted
 const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID';
 let tmpState;
 try {
   tmpState = JSON.parse(stateInSessionStorage);
-  api$e.info("Loaded state from sessionStorage");
+  api$f.info("Loaded state from sessionStorage");
 } catch(e) {
-  api$e.info("Loading initial state from server");
-  tmpState = await api$8.state();
+  api$f.info("Loading initial state from server");
+  tmpState = await api$9.state();
 }
 updateState(state, tmpState);
 window.addEventListener('beforeunload', evt => {
-  api$e.debug("Saving state in sessionStorage");
+  api$f.debug("Saving state in sessionStorage");
   sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state));
 });
 
 // URL hash params override properties
-await api$c.updateStateFromUrlHash(state);
+await api$d.updateStateFromUrlHash(state);
 
 // start the application 
 await invoke(endpoints.start, state);
 
-export { api$2 as appInfo, api$1 as authentication, api$8 as client, api$d as config, api$a as dialog, endpoints, api$6 as extraction, api$7 as fileselection, api$4 as floatingPanel, invoke, api$e as logger, pdfViewer, pluginManager, plugins, api$3 as promptEditor, api$5 as services, api$b as sse, state, api as sync, updateState, api$c as urlHash, api$9 as validation, xmlEditor };
+export { api as accessControl, api$3 as appInfo, api$2 as authentication, api$9 as client, api$e as config, api$b as dialog, endpoints, api$7 as extraction, api$8 as fileselection, api$5 as floatingPanel, invoke, api$f as logger, pdfViewer, pluginManager, plugins, api$4 as promptEditor, api$6 as services, api$c as sse, state, api$1 as sync, updateState, api$d as urlHash, api$a as validation, xmlEditor };
