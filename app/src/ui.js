@@ -126,3 +126,6 @@ export {
   SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch
 }
 export default ui;
+
+// @ts-ignore
+window.ui = ui; // for debugging

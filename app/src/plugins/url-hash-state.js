@@ -1,6 +1,7 @@
 /**
- * This component sets all string properties of the application state as hash parameters of the URL
- * This might have to be changed later in case we do not want to show all string properties in the app state
+ * This plugin provides an API to save selected properties of the application state in the URL hash
+ * and to update the application state from the URL hash on page load.
+ * This allows sharing links to the current application state and restoring the state when reloading the page
  */
 
 import { logger, config, updateState } from '../app.js'

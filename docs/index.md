@@ -1,24 +1,62 @@
-# PDF-TEI Editor
+# PDF-TEI Editor Documentation
 
-A viewer/editor web app to compare the PDF source and TEI extraction/annotation results.
+A comprehensive viewer/editor web application for comparing PDF sources with TEI extraction and annotation results, specifically designed for creating gold standard datasets of TEI documents from legal and humanities literature.
 
-Authors/Contributors:
-- Christian Boulanger, Max Planck Institute for Legal History and Legal Theory
+## Overview
 
-This repo is part of the ["Legal Theory Knowledge Graph" project](https://www.lhlt.mpg.de/2514927/03-boulanger-legal-theory-graph) at the Max Planck Institute of Legal History and Legal Theory.
+The PDF-TEI Editor is a specialized tool that helps researchers create, validate, and refine TEI (Text Encoding Initiative) documents extracted from PDF files. It features a dual-pane interface with PDF viewer and XML editor, making it easy to compare source documents with their extracted bibliographic data.
 
-## Purpose
+For detailed information about the project background and research context, see [About the PDF-TEI Editor](about.md).
 
-The purpose of this application is to support the creation of a gold standard dataset of TEI documents that contain extracted information from PDF documents. The main target is reference extraction, i.e. the extraction of citation data, or, less technical, the answer to the question which bibliographic references are cited by a given PDF.
+> This documentation has been created using ai tools (Claude Code) and contains many inaccuracies. However, it is better to have some documentation than nothing. It will be corrected and expanded incrementally. Please report any issues on the [GitHub repository](github.com/mpilhlt/pdf-tei-editor/issues).
 
-Highly efficient tools exist for this tasks when dealing with english language literature containing well-structured bibliographies, such as [GROBID](https://grobid.readthedocs.io/). However, these tools perform poorly when faced with literature in law and the humanities, which typically rely on footnotes for providing reference information. The reason is that these references are often incomplete or mixed with additional commentary. This made these type of references difficult to parse for tradional parsing methods based on pattern matching and machine learning. 
+## Table of Contents
 
-Large Lange Models (LLMs), or more recently, Large Vision Models (LVMs) have changed this situation, as they "understand" the textual semantics and outperform the existing tools even without optimizing for the specific use case. However,  results generated using these models cannot be relied on without prior rigorous evaluation and validation. This requires a sufficiently large dataset of labelled data reviewed by human experts. This dataset can then also be used for finetuning models. 
+### Getting Started
+- [Authentication and Login](authentication.md)
+- [Interface Overview](interface-overview.md) 
+- [Loading Documents](loading-documents.md)
 
-Creating this dataset is a time-consuming and often tedious process. This is where tools like the present one come in. This web application is meant to make the manual validation and correction of gold standard files easier and faster. It provides a graphical user interface for the [LLamore](https://github.com/mpilhlt/llamore) library, which provides an adapter to any commercial or open weights model that it can connect to and uses them to extract references from PDFs. 
+### Core Workflows  
+- [PDF Loading and Navigation](pdf-workflow.md)
+- [Data Extraction Process](extraction-workflow.md)
+- [Version Management](version-management.md)
+- [Document Editing](editing-workflow.md)
+- [Validation and Quality Control](validation-workflow.md)
 
-The app features a variety of tools work with, and enhance the extracted data, to compare different version, and to selectively merge diffs between these versions. If the XML document in the editor contains an URL with the location of a XSD schema file, the XML document is automatically validated. When a selection XPath is specified, the editor allows you to navigate between all nodes that match the XPath, which will typically be the nodes that contain the main data records, i.e, the `<tei:biblStruct>` nodes. 
+### Advanced Features
+- [Document Comparison and Merging](comparison-workflow.md)
+- [Access Control and Permissions](access-control.md) 
+- [Collection Management](collection-management.md)
+- [File Synchronization](sync-workflow.md)
+- [Document Revisions](revision-management.md)
 
-More information is in preparation.
+
+## Quick Start
+
+1. **Login**: Access the application at your configured URL and login with your credentials
+2. **Load a PDF**: Select a PDF from the dropdown menu in the top-left toolbar
+3. **Review/Extract**: View existing TEI data or extract new references using AI models
+4. **Edit and Validate**: Use the XML editor to refine the TEI markup and validate against schemas
+5. **Save and Manage**: Create document versions, manage access permissions, and sync with external systems
+
+## Key Features
+
+- **Dual-pane interface** with synchronized PDF viewer and XML editor
+- **AI-powered extraction** supporting multiple extraction engines
+- **Version management** with branching, merging, and comparison tools  
+- **Schema validation** with automatic TEI compliance checking
+- **Access control** with document ownership and permission management
+- **Collection organization** for managing document sets
+- **WebDAV synchronization** for external system integration
+- **Revision tracking** with detailed change documentation
+
+## Target Use Cases
+
+- Creating gold standard datasets for reference extraction research
+- Manual validation and correction of AI-extracted bibliographic data
+- Collaborative annotation of legal and humanities literature
+- Training data preparation for machine learning models
+- Quality assurance for large-scale digitization projects
 
 

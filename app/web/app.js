@@ -648,8 +648,9 @@ function isValidXPath(xpathExpression, xmlDom, namespaceResolver = null) {
 }
 
 /**
- * This component sets all string properties of the application state as hash parameters of the URL
- * This might have to be changed later in case we do not want to show all string properties in the app state
+ * This plugin provides an API to save selected properties of the application state in the URL hash
+ * and to update the application state from the URL hash on page load.
+ * This allows sharing links to the current application state and restoring the state when reloading the page
  */
 
 
@@ -14698,6 +14699,9 @@ function updateUi() {
 
 updateUi();
 var ui$1 = ui;
+
+// @ts-ignore
+window.ui = ui; // for debugging
 
 /**
  * This application plugin implements a dialog registered as the "diaolog" property of the app
@@ -59233,6 +59237,7 @@ MarkdownIt.prototype.renderInline = function (src, env) {
 const api$3 = {
   open,
   load,
+  goBack,
   close
 };
 
@@ -59253,16 +59258,19 @@ const plugin$6 = {
  * @typedef {object} infoDialogPart
  * @property {SlDialog} self
  * @property {HTMLDivElement} content
+ * @property {SlButton} backBtn
  * @property {SlButton} closeBtn
  */
 
 // editor dialog
 const infoHtml = `
 <sl-dialog name="infoDialog" label="Information" class="dialog-big">
-  <div>
-    <div name="content"></div>
-    <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
-  <div>
+  <div name="content"></div>
+  <sl-button name="backBtn" slot="footer" variant="default" disabled>
+    <sl-icon name="arrow-left"></sl-icon>
+    Back
+  </sl-button>
+  <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
 </sl-dialog>
 `;
 
@@ -59291,6 +59299,12 @@ let md;
 const docsBasePath = "../../docs";
 
 /**
+ * Navigation history for the back button
+ * @type {string[]}
+ */
+let navigationHistory = [];
+
+/**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
@@ -59299,8 +59313,9 @@ async function install$6(state) {
   // add the component html
   await createHtmlElements(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.hide());
+  ui$1.infoDialog.backBtn.addEventListener('click', goBack);
 
-  // add a button to the command bar to show dialog with prompt editor
+  // add a button to the command bar to show dialog
   const button = (await createHtmlElements(buttonHtml))[0];
   ui$1.toolbar.append(button);
   updateUi();
@@ -59316,24 +59331,35 @@ async function install$6(state) {
   
   // @ts-ignore
   window.appInfo = api$3;
-  load('index.md');
 }
 
 // API
 
 /**
- * Opens the prompt editor dialog
+ * Opens the info dialog
  * todo this needs to always reload the data since it might have changed on the server
  */
 async function open() {
+  // Reset navigation history when opening the dialog
+  navigationHistory = [];
+  updateBackButton();
   ui$1.infoDialog.show();
+  // Load the index page
+  await load('index.md');
 }
 
 /**
  * Loads markdowm and converts it to HTML, replacing links to local content to calls to this method
  * @param {string} mdPath The local path to the md file, relative to the "docs" dir
+ * @param {boolean} addToHistory Whether to add this page to navigation history (default: true)
  */
-async function load(mdPath){
+async function load(mdPath, addToHistory = true){
+  // Add current page to history if we're navigating to a new page
+  if (addToHistory && navigationHistory.length === 0 || navigationHistory[navigationHistory.length - 1] !== mdPath) {
+    navigationHistory.push(mdPath);
+    updateBackButton();
+  }
+  
   // remove existing content
   ui$1.infoDialog.content.innerHTML = "";
   
@@ -59351,14 +59377,40 @@ async function load(mdPath){
     // replace local links with api calls
     .replaceAll(
       /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#|mailto:|tel:|data:).*?)\2(.*?>)/g, 
-      `$1href="#" onclick="appInfo.load('${docsBasePath}/$3'); return false"$4`
+      `$1href="#" onclick="appInfo.load('$3'); return false"$4`
     )
     // open remote links in new tabs
-    .replaceAll(/(href="http)/g, `target="_blank" $1`);
+    .replaceAll(/(href="http)/g, `target="_blank" $1`)
+    // remove comment tags that mask the <sl-icon> tags in the markdown
+    .replaceAll(/<!--|-->/gs, ''); 
+
 
   await createHtmlElements(html, ui$1.infoDialog.content);
 }
 
+
+/**
+ * Goes back to the previous page in navigation history
+ */
+function goBack() {
+  if (navigationHistory.length > 1) {
+    // Remove current page from history
+    navigationHistory.pop();
+    // Load the previous page without adding to history
+    const previousPage = navigationHistory[navigationHistory.length - 1];
+    navigationHistory.pop(); // Remove it so load() can add it back
+    load(previousPage);
+  }
+}
+
+/**
+ * Updates the back button state based on navigation history
+ */
+function updateBackButton() {
+  if (ui$1.infoDialog && ui$1.infoDialog.backBtn) {
+    ui$1.infoDialog.backBtn.disabled = navigationHistory.length <= 1;
+  }
+}
 
 /**
  * Closes the prompt editor
@@ -60074,16 +60126,10 @@ const plugin$1 = {
 // UI
 //
 
-/**
- * Sync button group navigation properties
- * @typedef {object} syncActionsPart
- * @property {SlButton} sync - Sync files button
- */
-
-const syncActionButtons = await createHtmlElements("sync-action-buttons.html");
-
 // Sync progress widget for XML editor statusbar
 let syncProgressWidget = null;
+let syncContainer = null;
+let syncIcon = null;
 
 //
 // Implementation
@@ -60094,15 +60140,6 @@ let syncProgressWidget = null;
  */
 async function install$1(state) {
   api$f.debug(`Installing plugin "${plugin$1.name}"`);
-
-  // install controls on menubar
-  ui$1.toolbar.append(...syncActionButtons);
-  updateUi();
-
-  const sa = ui$1.toolbar.syncActions;
-
-  // sync
-  sa.sync.addEventListener("click", () => onClickSyncBtn(state));
 
   // Set up SSE listeners for sync progress and messages
   api$c.addEventListener('syncProgress', (event) => {
@@ -60132,7 +60169,7 @@ async function install$1(state) {
   syncProgressWidget.style.maxWidth = '75px';
   
   // Create clickable icon element for the progress widget
-  const syncIcon = document.createElement('sl-icon');
+  syncIcon = document.createElement('sl-icon');
   syncIcon.name = 'arrow-repeat';
   syncIcon.style.marginRight = '4px';
   syncIcon.style.cursor = 'pointer';
@@ -60142,7 +60179,7 @@ async function install$1(state) {
   syncIcon.addEventListener('click', () => onClickSyncBtn(state));
   
   // Create a container that includes the icon and progress bar
-  const syncContainer = document.createElement('div');
+  syncContainer = document.createElement('div');
   syncContainer.style.display = 'flex';
   syncContainer.style.alignItems = 'center';
   syncContainer.appendChild(syncIcon);
@@ -60158,19 +60195,10 @@ async function install$1(state) {
  * @param {ApplicationState} state
  */
 async function update$1(state) {
-  const sa = ui$1.toolbar.syncActions;
-
-  sa.childNodes.forEach(el => {
-    if ('disabled' in el) {
-      el.disabled = state.offline;}
-    }
-  );
-  if (state.offline) {
-    return
-  }
-
   // disable sync if webdav is not enabled
-  sa.sync.disabled = !state.webdavEnabled;
+  syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none';
+  syncIcon.disabled = !state.webdavEnabled || state.editorReadOnly;
+  syncProgressWidget.disabled = !state.webdavEnabled || state.editorReadOnly;
 }
 
 /**
