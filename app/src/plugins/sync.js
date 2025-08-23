@@ -11,7 +11,6 @@ import {
   updateState, client, logger, fileselection, xmlEditor, sse
 } from '../app.js'
 import { createHtmlElements } from '../ui.js'
-import { PanelUtils } from '../modules/panels/index.js'
 import { StatusProgress } from '../modules/panels/widgets/status-progress.js'
 
 /**

@@ -20,7 +20,8 @@
       "mcp__browser-mcp__browser_evaluate",
       "mcp__browser-mcp__browser_click",
       "mcp__browser-mcp__browser_scroll",
-      "mcp__browser-mcp__browser_close"
+      "mcp__browser-mcp__browser_close",
+      "mcp__browser-mcp__browser_press_key"
     ],
     "deny": []
   }
