@@ -26,7 +26,9 @@ import { detectXmlIndentation } from '../modules/codemirror_utils.js'
 /**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
- * @property {HTMLElement} cursorPosition - The cursor position widget
+ * @property {StatusText} readOnlyStatus - The read-only status widget
+ * @property {StatusText} cursorPosition - The cursor position widget
+ * @property {StatusText} indentationStatus - The indentation status widget
  */
 
 /**
@@ -49,6 +51,10 @@ let readOnlyStatusWidget = null
 let cursorPositionWidget = null
 let indentationStatusWidget = null
 let statusSeparator = null
+let teiHeaderToggleWidget = null
+
+// State to track teiHeader visibility (starts folded)
+let teiHeaderVisible = false
 
 /**
  * component plugin
@@ -77,20 +83,34 @@ async function install(state) {
 
   /** @type {StatusText} */
   readOnlyStatusWidget = PanelUtils.createText({
-    text: '🔒 File is read-only',
-    variant: 'warning'
+    text: 'Read-only',
+    icon: 'lock-fill',
+    variant: 'warning',
+    name: 'readOnlyStatus'
   })
 
   /** @type {StatusText} */
   cursorPositionWidget =  PanelUtils.createText({
     text: 'Ln 1, Col 1',
-    variant: 'neutral'
+    variant: 'neutral',
+    name: 'cursorPosition'
   })
 
   /** @type {StatusText} */
   indentationStatusWidget = PanelUtils.createText({
     text: 'Indent: 2 spaces',
-    variant: 'neutral'
+    variant: 'neutral',
+    name: 'indentationStatus'
+  })
+
+  /** @type {StatusText} */
+  // <sl-icon name="person-gear"></sl-icon>
+  // <sl-icon name="person-fill-gear"></sl-icon>
+  teiHeaderToggleWidget = PanelUtils.createText({
+    text: '',
+    icon: 'person-gear',
+    variant: 'neutral',
+    name: 'teiHeaderToggle'
   })
 
   // Create separator between indentation and cursor position
@@ -102,15 +122,18 @@ async function install(state) {
   ui.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1)  // leftmost - indent to left of position  
   ui.xmlEditor.statusbar.add(statusSeparator, 'right', 2)          // separator in middle
   ui.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 3)     // rightmost - position always on far right
+  
+  // Add teiHeader toggle widget to left side of statusbar
+  ui.xmlEditor.statusbar.add(teiHeaderToggleWidget, 'left', 1)
 
   // selection => xpath state
-  xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, data => {
+  xmlEditor.on("selectionChanged", data => {
     xmlEditor.whenReady().then(() => onSelectionChange(state))
     updateCursorPosition()
   });
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
+  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
     if (validation.isDisabled()) {
       let view = xmlEditor.getView()
       try {
@@ -122,17 +145,33 @@ async function install(state) {
   })
   
   // Update cursor position when editor is ready
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_READY, updateCursorPosition)
+  xmlEditor.on("editorReady", updateCursorPosition)
   
   // Update cursor position on editor updates (typing, etc.)
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_UPDATE, updateCursorPosition)
+  xmlEditor.on("editorUpdate", updateCursorPosition)
 
   // Handle indentation detection before loading XML
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_BEFORE_LOAD, (xml) => {
+  xmlEditor.on("editorBeforeLoad", (xml) => {
     const indentUnit = detectXmlIndentation(xml);
     logger.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`)
     xmlEditor.configureIntenation(indentUnit, 4); // default tab size of 4 spaces
     updateIndentationStatus(indentUnit)
+  })
+
+  // Fold teiHeader after document is loaded
+  xmlEditor.on("editorAfterLoad", () => {
+    try {
+      xmlEditor.foldByXpath('//tei:teiHeader')
+      teiHeaderVisible = false // Reset state after document load
+      updateTeiHeaderToggleWidget()
+    } catch (error) {
+      logger.debug(`Error folding teiHeader: ${error.message}`)
+    }
+  })
+
+  // Add click handler for teiHeader toggle widget
+  teiHeaderToggleWidget.addEventListener('click', () => {
+    toggleTeiHeaderVisibility()
   })
 }
 
@@ -255,5 +294,46 @@ function updateIndentationStatus(indentUnit) {
   }
   
   indentationStatusWidget.text = displayText
+}
+
+/**
+ * Toggles the visibility of the teiHeader node
+ */
+function toggleTeiHeaderVisibility() {
+  if (!xmlEditor.isReady()) return
+  
+  try {
+    if (teiHeaderVisible) {
+      // Fold the teiHeader
+      xmlEditor.foldByXpath('//tei:teiHeader')
+      teiHeaderVisible = false
+      logger.debug('Folded teiHeader')
+    } else {
+      // Unfold the teiHeader
+      xmlEditor.unfoldByXpath('//tei:teiHeader')
+      teiHeaderVisible = true
+      logger.debug('Unfolded teiHeader')
+    }
+    updateTeiHeaderToggleWidget()
+  } catch (error) {
+    logger.warn(`Error toggling teiHeader visibility: ${error.message}`)
+  }
+}
+
+/**
+ * Updates the teiHeader toggle widget appearance based on visibility state
+ */
+function updateTeiHeaderToggleWidget() {
+  if (!teiHeaderToggleWidget) return
+  
+  if (teiHeaderVisible) {
+    // teiHeader is visible, show filled icon
+    teiHeaderToggleWidget.icon = 'person-fill-gear'
+    teiHeaderToggleWidget.tooltip = 'Hide teiHeader'
+  } else {
+    // teiHeader is hidden, show outline icon
+    teiHeaderToggleWidget.icon = 'person-gear'
+    teiHeaderToggleWidget.tooltip = 'Show teiHeader'
+  }
 }
 

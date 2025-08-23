@@ -11,7 +11,7 @@
 import ui, { updateUi } from '../ui.js'
 import {
   updateState, client, logger, dialog, config,
-  fileselection, xmlEditor, pdfViewer, services, validation, authentication, sync
+  fileselection, xmlEditor, pdfViewer, services, validation, authentication, sync, accessControl
 } from '../app.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { createHtmlElements } from '../ui.js'
@@ -19,6 +19,7 @@ import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
+import { resolveDeduplicated } from '../modules/codemirror_utils.js'
 import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 
 /**
@@ -258,17 +259,25 @@ async function load(state, { xml, pdf }) {
         if (state.xml && !state.editorReadOnly) {
           await client.releaseLock(state.xml)
         }
-        try {
-          await client.acquireLock(xml);
-          logger.debug(`Acquired lock for file ${xml}`);
-        } catch (error) {
-          if (error instanceof client.LockedError) {
-            logger.debug(`File ${xml} is locked, loading in read-only mode`);
-            notify(`File is being edited by another user, loading in read-only mode`)
-            file_is_locked = true
-          } else {
-            dialog.error(error.message)
-            throw error
+        // Check access control before attempting to acquire lock
+        const canEdit = accessControl.checkCanEditFile(xml)
+        if (!canEdit) {
+          logger.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
+          notify(`You don't have permission to edit this document, loading in read-only mode`)
+          file_is_locked = true
+        } else {
+          try {
+            await client.acquireLock(xml);
+            logger.debug(`Acquired lock for file ${xml}`);
+          } catch (error) {
+            if (error instanceof client.LockedError) {
+              logger.debug(`File ${xml} is locked, loading in read-only mode`);
+              notify(`File is being edited by another user, loading in read-only mode`)
+              file_is_locked = true
+            } else {
+              dialog.error(error.message)
+              throw error
+            }
           }
         }
       } finally {
@@ -319,7 +328,7 @@ async function startAutocomplete() {
       const autocompleteData = await client.getAutocompleteData(xmlContent)
       if (autocompleteData && !autocompleteData.error) {
         // Resolve deduplicated references
-        const resolvedData = tei_utils.resolveDeduplicated(autocompleteData)
+        const resolvedData = resolveDeduplicated(autocompleteData)
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData)
         logger.debug("Autocomplete data loaded and applied")
@@ -635,7 +644,7 @@ async function saveRevision(state) {
   try {
     const user = authentication.getUser()
     if (user) {
-      dialog.persId.value = dialog.persId.value || getIdFromUser(user)
+      dialog.persId.value = dialog.persId.value || user.username
       dialog.persName.value = dialog.persName.value || user.fullname
     }
     dialog.show()
@@ -706,7 +715,7 @@ async function createNewVersion(state) {
   try {
     const user = authentication.getUser()
     if (user) {
-      dialog.persId.value = dialog.persId.value || getIdFromUser(user)
+      dialog.persId.value = dialog.persId.value || user.username
       dialog.persName.value = dialog.persName.value || user.fullname
     }    
     dialog.show()

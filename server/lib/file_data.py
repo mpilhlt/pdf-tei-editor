@@ -62,12 +62,59 @@ def get_tei_metadata(file_path):
         'last_status': 'status'
     }
     
+    # Access control attributes (parsed from last change element)
+    access_control = {
+        'visibility': 'public',      # default
+        'editability': 'editable',   # default
+        'owner': None,
+        'status_values': []
+    }
+    
     change_elements = root.xpath('.//tei:revisionDesc/tei:change[@when]', namespaces=ns)
     if change_elements:
         # Get the most recent change (last in document order)
         last_change = change_elements[-1]
         for result_key, attr_name in change_attr_mapping.items():
             change_attributes[result_key] = last_change.get(attr_name)
+        
+        # Parse access control from label elements in the last change element
+        # Find visibility label
+        visibility_label = last_change.find('./tei:label[@type="visibility"]', ns)
+        if visibility_label is not None and visibility_label.text:
+            visibility_value = visibility_label.text.strip()
+            if visibility_value in ['public', 'private']:
+                access_control['visibility'] = visibility_value
+        
+        # Find access label (maps to editability)
+        access_label = last_change.find('./tei:label[@type="access"]', ns)
+        if access_label is not None and access_label.text:
+            access_value = access_label.text.strip()
+            if access_value == 'protected':
+                access_control['editability'] = 'protected'
+            elif access_value == 'private':
+                # Legacy: "private" in access maps to protected editability
+                access_control['editability'] = 'protected'
+            else:
+                access_control['editability'] = 'editable'
+        
+        # Find owner label
+        owner_label = last_change.find('./tei:label[@type="owner"]', ns)
+        if owner_label is not None:
+            # Check for ana attribute first (preferred format)
+            ana_attr = owner_label.get('ana', '')
+            if ana_attr and ana_attr.startswith('#'):
+                access_control['owner'] = ana_attr[1:]  # Remove # prefix
+            elif owner_label.text:
+                # Fallback to text content for legacy format
+                access_control['owner'] = owner_label.text.strip()
+        
+        # Build status values for compatibility
+        status_values = []
+        if access_control['visibility'] == 'private':
+            status_values.append('private')
+        if access_control['editability'] == 'protected':
+            status_values.append('protected')
+        access_control['status_values'] = status_values
     
     return {
         "author": author.text if author is not None else "",
@@ -76,7 +123,8 @@ def get_tei_metadata(file_path):
         "doi": doi.text if doi is not None else "",
         "fileref": fileref.text if fileref is not None else "",
         "variant_id": variant_id,  # Backward compatible - None if not found
-        **change_attributes  # Include all change attributes
+        **change_attributes,  # Include all change attributes
+        "access_control": access_control  # Include access control metadata
     }
 
 def get_version_name(file_path):
@@ -457,6 +505,9 @@ def _build_entry_with_metadata(file_info, path_from_root, file_id=None, format_l
     
     # Add TEI metadata
     if tei_metadata:
+        # Add the complete metadata object for access control filtering
+        entry['metadata'] = tei_metadata
+        
         # Add change tracking attributes
         for attr in ['variant_id', 'last_update', 'last_updated_by', 'last_status']:
             if tei_metadata.get(attr):

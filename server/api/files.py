@@ -23,6 +23,11 @@ from server.lib.locking import (
 from server.lib.xml_utils import encode_xml_entities
 from server.lib.tei_utils import serialize_tei_with_formatted_header
 from server.api.config import read_config
+from server.lib.auth import get_user_by_session_id
+from server.lib.access_control import (
+    DocumentAccessFilter, AccessControlChecker, 
+    get_document_permissions, check_file_access
+)
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("sync", __name__, url_prefix="/api/files")
@@ -52,6 +57,11 @@ def file_list():
     # Apply variant filtering if specified
     if variant_filter is not None:
         files_data = apply_variant_filtering(files_data, variant_filter)
+    
+    # Apply access control filtering
+    session_id = get_session_id(request)
+    user = get_user_by_session_id(session_id) if session_id else None
+    files_data = DocumentAccessFilter.filter_files_by_access(files_data, user)
 
     return jsonify(files_data)
 
@@ -81,6 +91,11 @@ def save():
     
     # Resolve hash to path if needed
     file_path_rel = resolve_document_identifier(file_path_or_hash)
+    
+    # Check write access permissions
+    user = get_user_by_session_id(session_id)
+    if not check_file_access(file_path_rel, user, 'write'):
+        raise ApiError("Insufficient permissions to modify this document", status_code=403)
     
     # encode xml entities as per configuration
     if read_config().get("xml.encode-entities.server", False) == True:
@@ -279,9 +294,17 @@ def delete():
     if not files or not isinstance(files, list): 
         raise ApiError("Files must be a list of paths")
     
+    session_id = get_session_id(request)
+    user = get_user_by_session_id(session_id)
+    
     for file in files: 
         # Resolve hash to path if needed, then get real file path
         resolved_path = resolve_document_identifier(file)
+        
+        # Check write access permissions for deletion
+        if not check_file_access(resolved_path, user, 'write'):
+            raise ApiError(f"Insufficient permissions to delete {resolved_path}", status_code=403)
+        
         file_path = os.path.join(data_root, safe_file_path(resolved_path))
         # delete the file 
         logger.info(f"Deleting file {file_path}")
@@ -445,6 +468,12 @@ def acquire_lock_route():
         raise ApiError("File path is required.")
     file_path = resolve_document_identifier(file_path_or_hash)
     session_id = get_session_id(request)
+    
+    # Check access control - user must have edit permissions to acquire lock
+    user = get_user_by_session_id(session_id)
+    if not check_file_access(file_path, user, 'edit'):
+        raise ApiError("Access denied: You don't have permission to edit this document", status_code=403)
+    
     if acquire_lock(file_path, session_id):
         return jsonify("OK")
     # could not acquire lock
@@ -516,6 +545,13 @@ def serve_file_by_id(document_id):
         # Resolve the document identifier to a full path
         file_path = resolve_document_identifier(document_id)
         
+        # Check read access permissions
+        session_id = get_session_id(request)
+        user = get_user_by_session_id(session_id) if session_id else None
+        
+        if not check_file_access(file_path, user, 'read'):
+            raise ApiError("Access denied: You don't have permission to view this document", status_code=403)
+        
         # Convert to absolute system path
         data_root = current_app.config["DATA_ROOT"]
         safe_path = safe_file_path(file_path)
@@ -534,5 +570,6 @@ def serve_file_by_id(document_id):
     except Exception as e:
         logger.error(f"Error serving file {document_id}: {e}")
         raise ApiError("Failed to serve file", status_code=500)
+
 
 
