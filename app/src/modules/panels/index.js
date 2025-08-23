@@ -83,11 +83,12 @@ const PanelUtils = {
   /**
    * Create a text widget with the given properties
    * @param {Object} options - Widget options
-   * @param {string} options.text - Text to display
+   * @param {string} [options.text] - Text to display
    * @param {string} [options.icon] - Optional icon name
    * @param {string} [options.tooltip] - Optional tooltip
    * @param {string} [options.variant] - Optional variant (error, warning, success)
    * @param {boolean} [options.clickable] - Whether the widget is clickable
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusText}
    */
   createText(options = {}) {
@@ -103,6 +104,7 @@ const PanelUtils = {
    * @param {string} [options.action] - Action identifier
    * @param {string} [options.variant] - Button variant
    * @param {boolean} [options.disabled] - Whether button is disabled
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusButton}
    */
   createButton(options = {}) {
@@ -117,6 +119,7 @@ const PanelUtils = {
    * @param {string} [options.text] - Progress text
    * @param {boolean} [options.indeterminate] - Whether progress is indeterminate
    * @param {string} [options.variant] - Progress variant
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusProgress}
    */
   createProgress(options = {}) {
@@ -135,6 +138,7 @@ const PanelUtils = {
    * @param {boolean} [options.dot] - Show as dot instead of count
    * @param {boolean} [options.pulse] - Enable pulse animation
    * @param {boolean} [options.hiddenWhenZero] - Hide when count is zero
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusBadge}
    */
   createBadge(options = {}) {
@@ -149,6 +153,7 @@ const PanelUtils = {
    * @param {string} [options.selected] - Selected value
    * @param {Array} [options.items] - Dropdown items
    * @param {boolean} [options.disabled] - Whether dropdown is disabled
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusDropdown}
    */
   createDropdown(options = {}) {
@@ -171,6 +176,7 @@ const PanelUtils = {
    * @param {string} [options.variant] - Separator variant (vertical, horizontal, dotted, space)
    * @param {string} [options.spacing] - Separator spacing (tight, normal, loose)
    * @param {boolean} [options.hideMobile] - Whether to hide on mobile
+   * @param {string} [options.name] - Optional name for UI element lookup
    * @returns {StatusSeparator}
    */
   createSeparator(options = {}) {
@@ -198,7 +204,7 @@ const PanelUtils = {
  * @returns {StatusBar} A new status bar instance
  */
 function createStatusBar() {
-  return document.createElement('status-bar');
+  return /** @type {StatusBar} */ (document.createElement('status-bar'));
 }
 
 /**
@@ -206,7 +212,7 @@ function createStatusBar() {
  * @returns {ToolBar} A new toolbar instance
  */
 function createToolBar() {
-  return document.createElement('tool-bar');
+  return /** @type {ToolBar} */ (document.createElement('tool-bar'));
 }
 
 /**
@@ -214,7 +220,7 @@ function createToolBar() {
  * @returns {MenuBar} A new menubar instance
  */
 function createMenuBar() {
-  return document.createElement('menu-bar');
+  return /** @type {MenuBar} */ (document.createElement('menu-bar'));
 }
 
 // Export all components and utilities

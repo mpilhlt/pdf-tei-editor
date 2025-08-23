@@ -21,6 +21,7 @@
  * @property {null} editorXmlWellFormed - Emitted when XML becomes valid
  * @property {boolean} editorReadOnly - Emitted when read-only state changes
  * @property {string} editorBeforeLoad - Emitted before loading new document
+ * @property {null} editorAfterLoad - Emitted after loading and syncing new document
  */
 
 import { basicSetup } from 'codemirror';
@@ -29,7 +30,7 @@ import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectCh
 import { EditorView, keymap } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { createCompletionSource } from './autocomplete.js';
-import { syntaxTree, syntaxParserRunning, indentUnit } from "@codemirror/language"
+import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldEffect, unfoldEffect } from "@codemirror/language"
 import { indentWithTab } from "@codemirror/commands"
 
 // custom modules
@@ -53,7 +54,7 @@ import { EventEmitter } from './event-emitter.js';
  */
 export class XMLEditor extends EventEmitter {
 
-  // Event name constants
+  // Event name constants, no longer needed with the typed EventEmitter but kept for backwards compatibility
   static EVENT_SELECTION_CHANGED = "selectionChanged";
   static EVENT_EDITOR_READY = "editorReady";
   static EVENT_EDITOR_UPDATE = "editorUpdate"
@@ -62,6 +63,7 @@ export class XMLEditor extends EventEmitter {
   static EVENT_EDITOR_XML_WELL_FORMED = "editorXmlWellFormed"
   static EVENT_EDITOR_READONLY = "editorReadOnly"
   static EVENT_EDITOR_BEFORE_LOAD = "editorBeforeLoad"
+  static EVENT_EDITOR_AFTER_LOAD = "editorAfterLoad"
 
   // private members
 
@@ -313,7 +315,7 @@ export class XMLEditor extends EventEmitter {
     this.#view.dispatch({
       effects: this.#readOnlyCompartment.reconfigure(EditorView.editable.of(!this.#editorIsReadOnly))
     });
-    await this.emit(XMLEditor.EVENT_EDITOR_READONLY, this.#editorIsReadOnly)
+    await this.emit("editorReadOnly", this.#editorIsReadOnly)
   }
 
   /**
@@ -377,6 +379,9 @@ export class XMLEditor extends EventEmitter {
     this.#documentVersion = 0;
     this.#editorIsDirty = false;
     await this.isReadyPromise();
+    
+    // Emit after load event
+    await this.emit("editorAfterLoad", null);
   }
 
   /**
@@ -606,9 +611,12 @@ export class XMLEditor extends EventEmitter {
         // @ts-ignore - node is a ProcessingInstruction when nodeType matches
         const piNode = node;
         processingInstructions.push({
+          // @ts-ignore
           target: piNode.target,
+          // @ts-ignore
           data: piNode.data,
           position: i,
+          // @ts-ignore
           fullText: `<?${piNode.target}${piNode.data ? ' ' + piNode.data : ''}?>`
         });
       }
@@ -642,7 +650,7 @@ export class XMLEditor extends EventEmitter {
   /**
    * Updates the editor from a node in the XML Document. Returns a promise that resolves when
    * the editor is updated
-   * @param {Element} node A XML DOM node
+   * @param {Element | Node} node A XML DOM node
    */
   async updateEditorFromNode(node) {
     const syntaxNode = this.getSyntaxNodeFromDomNode(node)
@@ -680,7 +688,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Given a XML DOM node, return its position in the editor
-   * @param {Element} domNode The node in the XML DOM
+   * @param {Element | Node} domNode The node in the XML DOM
    * @returns {number}
    */
   getDomNodePosition(domNode) {
@@ -689,7 +697,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Given a node in the XML document, return the corresponding syntax tree object
-   * @param {Element} domNode A node in the XML DOM 
+   * @param {Element | Node} domNode A node in the XML DOM 
    * @returns {Object} A SyntaxNode objectz
    */
   getSyntaxNodeFromDomNode(domNode) {
@@ -847,6 +855,87 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
+   * Folds all DOM nodes that match the given XPath expression in the editor.
+   * @param {string} xpath - The XPath expression to match nodes for folding.
+   * @throws {Error} If the XML tree is not loaded.
+   */
+  foldByXpath(xpath) {
+    if (!this.#xmlTree) {
+      throw new Error("XML tree is not loaded.");
+    }
+    if (!xpath) {
+      throw new Error("XPath is not provided.");
+    }
+
+    const domNodes = this.getDomNodesByXpath(xpath);
+    if (domNodes.length === 0) {
+      console.debug(`No nodes found for XPath: ${xpath}`);
+      return;
+    }
+
+    const effects = [];
+    for (const domNode of domNodes) {
+      try {
+        const syntaxNode = this.getSyntaxNodeFromDomNode(domNode);
+        if (syntaxNode) {
+          // Use foldInside to fold only the content inside the element, keeping the tags visible
+          const foldRange = foldInside(syntaxNode);
+          if (foldRange) {
+            effects.push(foldEffect.of(foldRange));
+          }
+        }
+      } catch (error) {
+        console.warn(`Error getting syntax node for DOM node: ${error.message}`);
+      }
+    }
+
+    if (effects.length > 0) {
+      this.#view.dispatch({ effects });
+      console.debug(`Folded content inside ${effects.length} node(s) matching XPath: ${xpath}`);
+    }
+  }
+
+  /**
+   * Unfolds all DOM nodes that match the given XPath expression in the editor.
+   * @param {string} xpath - The XPath expression to match nodes for unfolding.
+   * @throws {Error} If the XML tree is not loaded.
+   */
+  unfoldByXpath(xpath) {
+    if (!this.#xmlTree) {
+      throw new Error("XML tree is not loaded.");
+    }
+    if (!xpath) {
+      throw new Error("XPath is not provided.");
+    }
+
+    const domNodes = this.getDomNodesByXpath(xpath);
+    if (domNodes.length === 0) {
+      console.debug(`No nodes found for XPath: ${xpath}`);
+      return;
+    }
+
+    const effects = [];
+    for (const domNode of domNodes) {
+      try {
+        const syntaxNode = this.getSyntaxNodeFromDomNode(domNode);
+        if (syntaxNode) {
+          // Use foldInside to get the fold range, then create unfold effect
+          const foldRange = foldInside(syntaxNode);
+          if (foldRange) {
+            effects.push(unfoldEffect.of(foldRange));
+          }
+        }
+      } catch (error) {
+        console.warn(`Error getting syntax node for DOM node: ${error.message}`);
+      }
+    }
+
+    if (effects.length > 0) {
+      this.#view.dispatch({ effects });
+    }
+  }
+
+  /**
    * Generates an XPath expression to locate a given XML node within an XML document.
    * @author Gemini 2.0
    *
@@ -926,7 +1015,7 @@ export class XMLEditor extends EventEmitter {
     }
 
     // once we at least tried to synchronize, we can mark the editor as ready
-    await this.emit(XMLEditor.EVENT_EDITOR_READY, null);
+    await this.emit("editorReady", null);
   }
 
   //
@@ -941,7 +1030,7 @@ export class XMLEditor extends EventEmitter {
     this.#isReady = false
     this.#readyPromise = this.#readyPromise ||
       /** @type {Promise<void>} */(new Promise(resolve => {
-      this.once(XMLEditor.EVENT_EDITOR_READY, () => {
+      this.once("editorReady", () => {
         this.#isReady = true
         this.#readyPromise = null
         resolve();
@@ -951,7 +1040,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * serializes the node (or the complete xmlTree if no node is given) to an XML string
-   * @param {Element|Document} node The node to serialize
+   * @param {Element|Document|Node} node The node to serialize
    * @param {boolean} [removeNamespaces=true] Whether to remove the namespace declaration in the output
    */
   #serialize(node, removeNamespaces = true) {
@@ -1020,7 +1109,7 @@ export class XMLEditor extends EventEmitter {
     }
 
     // inform the listeners
-    await this.emit(XMLEditor.EVENT_SELECTION_CHANGED, rangesWithNode)
+    await this.emit("selectionChanged", rangesWithNode)
   }
 
   #updateTimeout = null
@@ -1039,7 +1128,7 @@ export class XMLEditor extends EventEmitter {
     this.#editorIsDirty = true;
 
     // inform the listeners
-    await this.emit(XMLEditor.EVENT_EDITOR_UPDATE, update)
+    await this.emit("editorUpdate", update)
 
     if (this.#updateTimeout) {
       clearTimeout(this.#updateTimeout)
@@ -1063,7 +1152,7 @@ export class XMLEditor extends EventEmitter {
     await this.sync()
 
     // inform the listeners
-    await this.emit(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, update)
+    await this.emit("editorUpdateDelayed", update)
   }
 
 
@@ -1072,7 +1161,7 @@ export class XMLEditor extends EventEmitter {
    * @param {Object} changes The changes to apply to the editor
    */
   async #waitForEditorUpdate(changes) {
-    const promise = new Promise(resolve => this.once(XMLEditor.EVENT_EDITOR_READY, resolve))
+    const promise = new Promise(resolve => this.once("editorReady", resolve))
     this.#view.dispatch({ changes });
     await promise;
   }
@@ -1112,12 +1201,12 @@ export class XMLEditor extends EventEmitter {
       const diagnostic = this.#parseErrorNode(errorNode)
       // @ts-ignore
       console.warn(`Document was updated but is not well-formed: : Line ${diagnostic.line}, column ${diagnostic.column}: ${diagnostic.message}`)
-      await this.emit(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, [diagnostic])
+      await this.emit("editorXmlNotWellFormed", [diagnostic])
       this.#xmlTree = null;
       return false;
     }
     console.log("Document was updated and is well-formed.")
-    await this.emit(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, null)
+    await this.emit("editorXmlWellFormed", null)
     this.#xmlTree = doc;
 
     // Track processing instructions for better synchronization

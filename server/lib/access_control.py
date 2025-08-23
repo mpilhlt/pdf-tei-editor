@@ -33,6 +33,7 @@ class AccessControlParser:
     def parse_document_permissions(xml_content: str) -> DocumentPermissions:
         """
         Parse access control metadata from TEI document XML.
+        Uses <label> elements within <change> elements for permissions.
         
         Args:
             xml_content: Full XML content of TEI document
@@ -58,23 +59,54 @@ class AccessControlParser:
             
             # Get the last change element (most recent)
             last_change = changes[-1]
-            status_attr = last_change.get('status', '')
-            who_attr = last_change.get('who', '')
             when_attr = last_change.get('when', '')
             
-            # Parse status values (space-separated)
-            status_values = status_attr.split() if status_attr else []
+            # Parse label elements for access control
+            visibility = 'public'  # default
+            editability = 'editable'  # default
+            owner = None
             
-            # Determine visibility: private if 'private' in status, otherwise public
-            visibility = 'private' if 'private' in status_values else 'public'
+            # Find visibility label
+            visibility_label = last_change.find('./tei:label[@type="visibility"]', ns)
+            if visibility_label is not None and visibility_label.text:
+                visibility_value = visibility_label.text.strip()
+                if visibility_value in ['public', 'private']:
+                    visibility = visibility_value
             
-            # Determine editability: protected if 'protected' in status, otherwise editable
-            editability = 'protected' if 'protected' in status_values else 'editable'
+            # Find access label (maps to editability)
+            access_label = last_change.find('./tei:label[@type="access"]', ns)
+            if access_label is not None and access_label.text:
+                access_value = access_label.text.strip()
+                if access_value == 'protected':
+                    editability = 'protected'
+                elif access_value == 'private':
+                    # Legacy: "private" in access maps to protected editability
+                    editability = 'protected'
+                else:
+                    editability = 'editable'
+            
+            # Find owner label
+            owner_label = last_change.find('./tei:label[@type="owner"]', ns)
+            if owner_label is not None:
+                # Check for ana attribute first (preferred format)
+                ana_attr = owner_label.get('ana', '')
+                if ana_attr and ana_attr.startswith('#'):
+                    owner = ana_attr[1:]  # Remove # prefix
+                elif owner_label.text:
+                    # Fallback to text content for legacy format
+                    owner = owner_label.text.strip()
+            
+            # Build status values for compatibility
+            status_values = []
+            if visibility == 'private':
+                status_values.append('private')
+            if editability == 'protected':
+                status_values.append('protected')
             
             return DocumentPermissions(
                 visibility=visibility,
                 editability=editability,
-                owner=who_attr if who_attr else None,
+                owner=owner,
                 status_values=status_values,
                 change_timestamp=when_attr if when_attr else None
             )
@@ -179,18 +211,27 @@ class DocumentAccessFilter:
         filtered_files = []
         
         for file_data in files_data:
+            accessible_versions = []
+            accessible_gold = []
+            
+            # Filter versions array
             if 'versions' in file_data:
-                accessible_versions = []
-                
                 for version in file_data['versions']:
                     if DocumentAccessFilter._can_access_version_from_metadata(version, user):
                         accessible_versions.append(version)
-                
-                # Only include file if user has access to at least one version
-                if accessible_versions:
-                    file_data_copy = file_data.copy()
-                    file_data_copy['versions'] = accessible_versions
-                    filtered_files.append(file_data_copy)
+            
+            # Filter gold array
+            if 'gold' in file_data:
+                for gold_entry in file_data['gold']:
+                    if DocumentAccessFilter._can_access_version_from_metadata(gold_entry, user):
+                        accessible_gold.append(gold_entry)
+            
+            # Only include file if user has access to at least one version or gold entry
+            if accessible_versions or accessible_gold:
+                file_data_copy = file_data.copy()
+                file_data_copy['versions'] = accessible_versions
+                file_data_copy['gold'] = accessible_gold
+                filtered_files.append(file_data_copy)
         
         return filtered_files
     
@@ -215,44 +256,20 @@ class DocumentAccessFilter:
         
         return AccessControlChecker.check_document_access(permissions, user, 'read')
     
-    @staticmethod
-    def _can_access_version(version: Dict, user: Optional[Dict]) -> bool:
-        """Check if user can access a specific file version (fallback - re-parses XML)."""
-        # This method is kept as fallback but should rarely be used
-        # since metadata now includes access control information
-        version_path = version['path']
-        if version_path.startswith('/data/'):
-            version_path = version_path[6:]  # Remove /data/ prefix
-        
-        try:
-            full_path = os.path.join(current_app.config["DATA_ROOT"], safe_file_path(version_path))
-            if not os.path.exists(full_path):
-                return False
-                
-            with open(full_path, 'r', encoding='utf-8') as f:
-                xml_content = f.read()
-            
-            permissions = AccessControlParser.parse_document_permissions(xml_content)
-            return AccessControlChecker.check_document_access(permissions, user, 'read')
-            
-        except Exception as e:
-            logger.warning(f"Could not check access for {version_path}: {e}")
-            # Fail-safe: allow access if we can't determine permissions
-            return True
-
 class AccessControlUpdater:
     """Updates document access control by adding new change elements."""
     
     @staticmethod
-    def update_document_permissions(xml_content: str, new_status: str, 
-                                  new_owner: str, user: Dict, 
+    def update_document_permissions(xml_content: str, new_visibility: str, 
+                                  new_editability: str, new_owner: str, user: Dict, 
                                   description: Optional[str] = None) -> str:
         """
-        Update document permissions by adding a new change element.
+        Update document permissions by adding a new change element with label elements.
         
         Args:
             xml_content: Current XML content
-            new_status: New status string (e.g., "private protected")
+            new_visibility: 'public' or 'private'
+            new_editability: 'editable' or 'protected'
             new_owner: New owner username
             user: User making the change (for audit trail)
             description: Optional description of the change
@@ -264,27 +281,47 @@ class AccessControlUpdater:
             root = etree.fromstring(xml_content)
             ns = {"tei": "http://www.tei-c.org/ns/1.0"}
             
+            # TEI namespace for element creation
+            tei_ns = "{http://www.tei-c.org/ns/1.0}"
+            
             # Find or create revisionDesc
             revision_desc = root.find('.//tei:revisionDesc', ns)
             if revision_desc is None:
                 # Create revisionDesc in teiHeader
                 tei_header = root.find('.//tei:teiHeader', ns)
                 if tei_header is not None:
-                    revision_desc = etree.SubElement(tei_header, "{http://www.tei-c.org/ns/1.0}revisionDesc")
+                    revision_desc = etree.SubElement(tei_header, f"{tei_ns}revisionDesc")
             
             if revision_desc is not None:
                 # Create new change element
                 timestamp = datetime.now().isoformat()
-                change = etree.SubElement(revision_desc, "{http://www.tei-c.org/ns/1.0}change")
+                change = etree.SubElement(revision_desc, f"{tei_ns}change")
                 change.set('when', timestamp)
-                change.set('status', new_status)
-                change.set('who', new_owner)
                 
                 # Add description
                 if description is None:
                     description = f"Access permissions updated by {user.get('username', 'unknown')}"
-                desc = etree.SubElement(change, "{http://www.tei-c.org/ns/1.0}desc")
+                desc = etree.SubElement(change, f"{tei_ns}desc")
                 desc.text = description
+                
+                # Add visibility label
+                visibility_label = etree.SubElement(change, f"{tei_ns}label")
+                visibility_label.set('type', 'visibility')
+                visibility_label.text = new_visibility
+                
+                # Add access label (editability)
+                access_label = etree.SubElement(change, f"{tei_ns}label")
+                access_label.set('type', 'access')
+                if new_editability == 'protected':
+                    access_label.text = 'protected'
+                else:
+                    access_label.text = 'editable'
+                
+                # Add owner label
+                if new_owner:
+                    owner_label = etree.SubElement(change, f"{tei_ns}label")
+                    owner_label.set('type', 'owner')
+                    owner_label.text = new_owner
                 
                 # Serialize back to string
                 from server.lib.tei_utils import serialize_tei_with_formatted_header
@@ -301,8 +338,9 @@ def get_document_permissions(file_path: str) -> DocumentPermissions:
     """Get permissions for a document by file path (re-parses XML)."""
     try:
         full_path = os.path.join(current_app.config["DATA_ROOT"], safe_file_path(file_path))
-        with open(full_path, 'r', encoding='utf-8') as f:
-            xml_content = f.read()
+        # Use etree.parse() directly to avoid encoding declaration issues
+        tree = etree.parse(full_path)
+        xml_content = etree.tostring(tree, encoding='unicode')
         return AccessControlParser.parse_document_permissions(xml_content)
     except Exception as e:
         logger.warning(f"Could not get permissions for {file_path}: {e}")
