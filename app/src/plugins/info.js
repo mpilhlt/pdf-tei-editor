@@ -1,5 +1,8 @@
 /**
- * This implements a popup dialog to display information about the applicatioon
+ * This implements a modal window with the end-user documentation taken from the "docs" folder
+ * in the app root. The documentation is written in markdown and converted to HTML using
+ * the markdown-it library. Links to local documentation are intercepted and loaded into the dialog.
+ * Links to external resources are opened in a new browser tab.
  */
 
 /** 
@@ -9,7 +12,6 @@
 import ui, { updateUi } from '../ui.js'
 import { createHtmlElements, SlDialog, SlButton } from '../ui.js'
 import { dialog,logger } from '../app.js'
-
 import markdownit from 'markdown-it'
 
 /**
@@ -38,7 +40,7 @@ export default plugin
 //
 
 /**
- * Help Dialog
+ * Help Window
  * @typedef {object} infoDialogPart
  * @property {SlDialog} self
  * @property {HTMLDivElement} content
@@ -48,12 +50,10 @@ export default plugin
 
 // editor dialog
 const infoHtml = `
-<sl-dialog name="infoDialog" label="Information" class="dialog-big">
-  <div name="content"></div>
+<sl-dialog name="infoDialog" label="User Manual" class="dialog-big">
+  <div name="content" class="markdown-body"></div>
   <sl-button name="backBtn" slot="footer" variant="default" disabled>
-    <sl-icon name="arrow-left"></sl-icon>
-    Back
-  </sl-button>
+    <sl-icon name="arrow-left"></sl-icon>Back</sl-button>
   <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
 </sl-dialog>
 `
@@ -64,7 +64,7 @@ const infoHtml = `
  */
 // button for toolbar
 const buttonHtml = `
-<sl-tooltip content="Information and help">
+<sl-tooltip content="User Manual">
   <sl-button name="editInstructions" size="small">
     <sl-icon name="info-circle"></sl-icon>
   </sl-button>
@@ -160,9 +160,11 @@ async function load(mdPath, addToHistory = true){
   const html = md.render(markdown)
     // replace local links with api calls
     .replaceAll(
-      /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#|mailto:|tel:|data:).*?)\2(.*?>)/g, 
+      /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#).*?)\2(.*?>)/g, 
       `$1href="#" onclick="appInfo.load('$3'); return false"$4`
     )
+    // add prefix to relative image source links
+    .replaceAll(/src="(\.\/)?images\//g, 'src="docs/images/')
     // open remote links in new tabs
     .replaceAll(/(href="http)/g, `target="_blank" $1`)
     // remove comment tags that mask the <sl-icon> tags in the markdown

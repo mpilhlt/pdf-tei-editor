@@ -64,7 +64,7 @@ For each bibliographic entry:
 
 ## Specialized TEI Editing Tools
 
-### TEI Wizard (<!-- <sl-icon name="magic"></sl-icon> -->)
+### TEI Wizard (<sl-icon name="magic"></sl-icon>)
 
 The TEI Wizard helps with common TEI markup tasks. Currently, only one feature is implemented (TEI-specific pretty-printing), but more will be added in the future.
 

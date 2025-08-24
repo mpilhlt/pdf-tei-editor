@@ -18,8 +18,8 @@ Documents can have:
 
 ## Creating New Versions
 
-### Copy Current Version (<!-- <sl-icon name="copy"></sl-icon> -->)
-1. **Click Copy Button**: Use the <!-- <sl-icon name="copy"></sl-icon> --> button in the Document toolbar section
+### Copy Current Version (<sl-icon name="copy"></sl-icon>)
+1. **Click Copy Button**: Use the <sl-icon name="copy"></sl-icon> button in the Document toolbar section
 2. **Version Details Dialog**: Fill in version information:
    - **Version Name**: Descriptive name for the new version
    - **Person Name**: Your name or editor identifier  
@@ -67,8 +67,8 @@ Each version shows:
 ### Merge Process
 When comparing versions, you can:
 1. **Review Changes**: Examine each difference carefully
-2. **Accept Changes**: <!-- <sl-icon name="check"></sl-icon> --> Accept individual changes from the comparison version
-3. **Reject Changes**: <!-- <sl-icon name="x"></sl-icon> --> Reject changes and keep current version content
+2. **Accept Changes**: <sl-icon name="check"></sl-icon> Accept individual changes from the comparison version
+3. **Reject Changes**: <sl-icon name="x"></sl-icon> Reject changes and keep current version content
 4. **Bulk Operations**: Accept or reject all changes at once
 
 ### Merge Strategies

@@ -13,12 +13,11 @@ For detailed information about the project background and research context, see 
 ## Table of Contents
 
 ### Getting Started
-- [Authentication and Login](authentication.md)
+- [Authentication](authentication.md)
 - [Interface Overview](interface-overview.md) 
 - [Loading Documents](loading-documents.md)
 
 ### Core Workflows  
-- [PDF Loading and Navigation](pdf-workflow.md)
 - [Data Extraction Process](extraction-workflow.md)
 - [Version Management](version-management.md)
 - [Document Editing](editing-workflow.md)

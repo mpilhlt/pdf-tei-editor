@@ -36,8 +36,8 @@ Each collection displays:
 
 ## Moving Documents Between Collections
 
-### Move Files Tool (<!-- <sl-icon name="folder-symlink"></sl-icon> -->)
-1. **Access Move Dialog**: Click the <!-- <sl-icon name="folder-symlink"></sl-icon> --> button in the Document toolbar section
+### Move Files Tool (<sl-icon name="folder-symlink"></sl-icon>)
+1. **Access Move Dialog**: Click the <sl-icon name="folder-symlink"></sl-icon> button in the Document toolbar section
 2. **Select Target Collection**: Choose destination collection from dropdown
 3. **Create New Collection**: Option to create a new collection if needed
 4. **Confirm Move**: Documents and related files are moved to the new collection

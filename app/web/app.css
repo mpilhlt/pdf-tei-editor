@@ -3,8 +3,11 @@
   visibility: hidden;
 }
 
-*, *::before, *::after {
-  box-sizing: border-box; /* Apply to all elements */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  /* Apply to all elements */
 }
 
 
@@ -15,12 +18,15 @@ body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  box-sizing: border-box; /* Add this to the body */
+  box-sizing: border-box;
+  /* Add this to the body */
 }
 
 
-h1,h2,h3 {
-  margin:auto
+h1,
+h2,
+h3 {
+  margin: auto
 }
 
 .hidden {
@@ -38,12 +44,12 @@ h1,h2,h3 {
 #container {
   display: flex;
   flex-direction: column;
-  height: 100vh; 
-  width: 100vw; 
+  height: 100vh;
+  width: 100vw;
   padding: 10px;
 }
 
-#toolbar{
+#toolbar {
   height: 55px;
 }
 
@@ -54,13 +60,13 @@ h1,h2,h3 {
 /* special styling of the toolbar to align the labels of the selectboxes and button groups */
 #toolbar sl-button-group[label]:before {
   content: attr(label);
-  position: absolute; 
+  position: absolute;
   top: -8px;
   left: 0;
   color: var(--sl-color-gray-500);
   font-size: smaller;
   white-space: nowrap;
-  display: block; 
+  display: block;
 }
 
 #toolbar sl-select::part(form-control) {
@@ -84,8 +90,8 @@ sl-select::part(form-control-label) {
   margin: 0px;
   gap: 10px;
   width: 100%;
-  height: 100%; 
-  overflow: hidden; 
+  height: 100%;
+  overflow: hidden;
 }
 
 #pdf-viewer {
@@ -101,19 +107,23 @@ iframe {
   width: 100%;
   flex-grow: 1;
   border: none;
-  order: 1; /* Ensure iframe appears before statusbar */
+  order: 1;
+  /* Ensure iframe appears before statusbar */
 }
 
 #xml-editor {
   width: 50%;
   border: 1px solid #ccc;
-  display: flex; /* Use flexbox to manage codemirror-container height */
+  display: flex;
+  /* Use flexbox to manage codemirror-container height */
   flex-direction: column;
 }
 
 #codemirror-container {
-  flex-grow: 1; /* Allow codemirror-container to take up all available height */
-  height: 100%; /*Important, otherwise it won't work.*/
+  flex-grow: 1;
+  /* Allow codemirror-container to take up all available height */
+  height: 100%;
+  /*Important, otherwise it won't work.*/
   overflow: scroll;
 }
 
@@ -133,7 +143,8 @@ status-bar {
   align-items: center;
   padding: 2px 8px;
   font-size: 12px;
-  order: 2; /* Ensure statusbar appears after iframe */
+  order: 2;
+  /* Ensure statusbar appears after iframe */
 }
 
 .dialog-big {
@@ -141,13 +152,13 @@ status-bar {
 }
 
 .dialog-column {
-  display: flex; 
+  display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
 .dialog-row {
-  display: flex block; 
+  display: flex block;
   flex-direction: row;
   gap: 10px;
 }
@@ -161,13 +172,14 @@ sl-select::part(listbox) {
   width: max-content;
 }
 
-sl-option::part(label), 
+sl-option::part(label),
 sl-menu-item::part(label) {
   font-size: smaller;
 }
 
 sl-button-group[label] {
-  position: relative; /* To contain the absolute positioning of the :before pseudo-element */
+  position: relative;
+  /* To contain the absolute positioning of the :before pseudo-element */
 }
 
 .invalid-xml {
@@ -176,4 +188,17 @@ sl-button-group[label] {
 
 .editor-readonly {
   background-color: #f8e8b7ba;
+}
+
+sl-icon.rotating {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }

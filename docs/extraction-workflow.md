@@ -4,20 +4,20 @@ The PDF-TEI Editor provides AI-powered extraction capabilities to automatically 
 
 ## Extraction Methods
 
-### Extract from Current PDF (<!-- <sl-icon name="clipboard2-plus"></sl-icon> -->)
+### Extract from Current PDF (<sl-icon name="clipboard2-plus"></sl-icon>)
 Re-extract references from the currently loaded PDF document:
 
-1. **Click Extract Current**: Click the <!-- <sl-icon name="clipboard2-plus"></sl-icon> --> button in the Extraction toolbar section
+1. **Click Extract Current**: Click the <sl-icon name="clipboard2-plus"></sl-icon> button in the Extraction toolbar section
 2. **Automatic DOI Detection**: The system attempts to:
    - Extract DOI from existing XML header (`//tei:teiHeader//tei:idno[@type='DOI']`)
    - Extract DOI from PDF filename if it follows DOI naming conventions
 3. **Collection Auto-detection**: Determines collection from PDF file path
 4. **Process with Current Settings**: Uses the document's existing metadata and settings
 
-### Extract from New PDF (<!-- <sl-icon name="filetype-pdf"></sl-icon> -->)
+### Extract from New PDF (<sl-icon name="filetype-pdf"></sl-icon>)
 Upload and extract references from a new PDF document:
 
-1. **Click Extract New**: Click the <!-- <sl-icon name="filetype-pdf"></sl-icon> --> button in the Extraction toolbar section  
+1. **Click Extract New**: Click the <sl-icon name="filetype-pdf"></sl-icon> button in the Extraction toolbar section  
 2. **File Upload**: Select a PDF file from your computer
 3. **File Validation**: System verifies the uploaded file is a valid PDF
 4. **Automatic Processing**: Attempts to extract DOI from filename

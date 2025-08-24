@@ -131,7 +131,7 @@ npm run manage user add myusername --password myuserpass --fullname "Full Name" 
 npm run manage user add-role myusername admin
 ```
 
-The roles ("user", "admin") are currently not used, but will be in future releases. 
+Currently, only the roles "user" and "admin" are used. A more fine-grained permission system will be added if necessary later.
 
 ## XML Schema Validation and Autocomplete
 
@@ -191,7 +191,3 @@ Both XSD and RelaxNG schemas are downloaded and cached automatically when first 
 - **For validation + autocomplete**: Use RelaxNG schemas with `xml-model` processing instructions
 - **TEI Projects**: RelaxNG is recommended as it provides the full editing experience with intelligent autocomplete and documentation
 
-## Planned features
- - [ ] Document ownership: lock document version for edits via ownership declaration in the xml until it is removed
- - [ ] Slider to change size of editor window vs. pdf viewer
- - [ ] Real statusbar implementation with permanent sections (such as document info, xpath breadcrumb, etc )
