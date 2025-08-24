@@ -46200,9 +46200,6 @@ class NavXmlEditor extends XMLEditor {
  * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
  */
 
-// the path to the autocompletion data
-// Note: tagDataPath removed - autocomplete data now loaded dynamically per document
-
 /**
  * component is an instance of NavXmlEditor
  * @type {NavXmlEditor}
@@ -46210,11 +46207,16 @@ class NavXmlEditor extends XMLEditor {
 const xmlEditor = new NavXmlEditor('codemirror-container');
 
 // Status widgets for XML editor statusbar
-let readOnlyStatusWidget = null;
-let cursorPositionWidget = null;
-let indentationStatusWidget = null;
-let statusSeparator$1 = null;
-let teiHeaderToggleWidget = null;
+/** @type {StatusText} */
+let readOnlyStatusWidget;
+/** @type {StatusText} */
+let cursorPositionWidget;
+/** @type {StatusText} */
+let indentationStatusWidget;
+/** @type {StatusText} */
+let teiHeaderToggleWidget;
+/** @type {StatusSeparator} */
+let statusSeparator$1;
 
 // State to track teiHeader visibility (starts folded)
 let teiHeaderVisible = false;
@@ -46236,12 +46238,9 @@ const plugin$f = {
  */
 async function install$e(state) {
   api$f.debug(`Installing plugin "${plugin$f.name}"`);
-  // Note: Autocomplete data is now loaded dynamically per document in services.js
-  // The static tagData loading has been removed in favor of schema-specific autocomplete data
 
-  // Create status widgets for XML editor statusbar
-
-  /** @type {StatusText} */
+  // Widgets for the statusbar
+  
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
     icon: 'lock-fill',
@@ -46249,40 +46248,38 @@ async function install$e(state) {
     name: 'readOnlyStatus'
   });
 
-  /** @type {StatusText} */
-  cursorPositionWidget =  PanelUtils.createText({
+  cursorPositionWidget = PanelUtils.createText({
     text: 'Ln 1, Col 1',
     variant: 'neutral',
     name: 'cursorPosition'
   });
 
-  /** @type {StatusText} */
   indentationStatusWidget = PanelUtils.createText({
     text: 'Indent: 2 spaces',
     variant: 'neutral',
     name: 'indentationStatus'
   });
 
-  /** @type {StatusText} */
   // <sl-icon name="person-gear"></sl-icon>
   // <sl-icon name="person-fill-gear"></sl-icon>
   teiHeaderToggleWidget = PanelUtils.createText({
     text: '',
     icon: 'person-gear',
     variant: 'neutral',
-    name: 'teiHeaderToggle'
+    name: 'teiHeaderToggle',
   });
+  teiHeaderToggleWidget.style.display = 'none';
 
   // Create separator between indentation and cursor position
   statusSeparator$1 = PanelUtils.createSeparator({
     variant: 'dotted'
   });
-  
+
   // Add widgets to right side of statusbar (higher priority = more to the right)
   ui$1.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1);  // leftmost - indent to left of position  
   ui$1.xmlEditor.statusbar.add(statusSeparator$1, 'right', 2);          // separator in middle
   ui$1.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 3);     // rightmost - position always on far right
-  
+
   // Add teiHeader toggle widget to left side of statusbar
   ui$1.xmlEditor.statusbar.add(teiHeaderToggleWidget, 'left', 1);
 
@@ -46303,10 +46300,10 @@ async function install$e(state) {
       }
     }
   });
-  
+
   // Update cursor position when editor is ready
   xmlEditor.on("editorReady", updateCursorPosition);
-  
+
   // Update cursor position on editor updates (typing, etc.)
   xmlEditor.on("editorUpdate", updateCursorPosition);
 
@@ -46318,15 +46315,23 @@ async function install$e(state) {
     updateIndentationStatus(indentUnit);
   });
 
-  // Fold teiHeader after document is loaded
+  // Add widget to toggle <teiHeader> visibility
   xmlEditor.on("editorAfterLoad", () => {
-    try {
-      xmlEditor.foldByXpath('//tei:teiHeader');
-      teiHeaderVisible = false; // Reset state after document load
-      updateTeiHeaderToggleWidget();
-    } catch (error) {
-      api$f.debug(`Error folding teiHeader: ${error.message}`);
-    }
+    xmlEditor.whenReady().then(() => {
+      // show only if there is a teiHeader in the document
+      if (xmlEditor.getDomNodeByXpath("//tei:teiHeader")) {
+        teiHeaderToggleWidget.style.display = 'inline-flex';
+        try {
+          xmlEditor.foldByXpath('//tei:teiHeader');
+          teiHeaderVisible = false; // Reset state after document load
+          updateTeiHeaderToggleWidget();
+        } catch (error) {
+          api$f.debug(`Error folding teiHeader: ${error.message}`);
+        }
+      } else {
+        teiHeaderToggleWidget.style.display = 'none';
+      }
+    });
   });
 
   // Add click handler for teiHeader toggle widget
@@ -46343,11 +46348,11 @@ async function update$a(state) {
 
   if (state.xml === null) {
     xmlEditor.clear();
-    return 
+    return
   }
 
+  // update the editor read-only state
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
-    // update the editor read-only state
     xmlEditor.setReadOnly(state.editorReadOnly);
     api$f.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     if (state.editorReadOnly) {
@@ -46379,7 +46384,6 @@ async function update$a(state) {
   }
 }
 
-
 /**
  * Called when the selection in the editor changes to update the cursor xpath
  * @param {ApplicationState} state
@@ -46408,13 +46412,13 @@ async function onSelectionChange(state) {
  */
 function updateCursorPosition() {
   if (!xmlEditor.isReady() || !cursorPositionWidget) return
-  
+
   const view = xmlEditor.getView();
   const selection = view.state.selection.main;
   const line = view.state.doc.lineAt(selection.head);
   const lineNumber = line.number;
   const columnNumber = selection.head - line.from + 1;
-  
+
   cursorPositionWidget.text = `Ln ${lineNumber}, Col ${columnNumber}`;
 }
 
@@ -46424,7 +46428,7 @@ function updateCursorPosition() {
  */
 function updateIndentationStatus(indentUnit) {
   if (!indentationStatusWidget) return
-  
+
   let displayText;
   if (indentUnit === '\t') {
     displayText = 'Indent: Tabs';
@@ -46432,7 +46436,7 @@ function updateIndentationStatus(indentUnit) {
     const spaceCount = indentUnit.length;
     displayText = `Indent: ${spaceCount} spaces`;
   }
-  
+
   indentationStatusWidget.text = displayText;
 }
 
@@ -46441,7 +46445,7 @@ function updateIndentationStatus(indentUnit) {
  */
 function toggleTeiHeaderVisibility() {
   if (!xmlEditor.isReady()) return
-  
+
   try {
     if (teiHeaderVisible) {
       // Fold the teiHeader
@@ -46465,7 +46469,7 @@ function toggleTeiHeaderVisibility() {
  */
 function updateTeiHeaderToggleWidget() {
   if (!teiHeaderToggleWidget) return
-  
+
   if (teiHeaderVisible) {
     // teiHeader is visible, show filled icon
     teiHeaderToggleWidget.icon = 'person-fill-gear';
@@ -59227,7 +59231,10 @@ MarkdownIt.prototype.renderInline = function (src, env) {
 };
 
 /**
- * This implements a popup dialog to display information about the applicatioon
+ * This implements a modal window with the end-user documentation taken from the "docs" folder
+ * in the app root. The documentation is written in markdown and converted to HTML using
+ * the markdown-it library. Links to local documentation are intercepted and loaded into the dialog.
+ * Links to external resources are opened in a new browser tab.
  */
 
 
@@ -59254,7 +59261,7 @@ const plugin$6 = {
 //
 
 /**
- * Help Dialog
+ * Help Window
  * @typedef {object} infoDialogPart
  * @property {SlDialog} self
  * @property {HTMLDivElement} content
@@ -59264,12 +59271,10 @@ const plugin$6 = {
 
 // editor dialog
 const infoHtml = `
-<sl-dialog name="infoDialog" label="Information" class="dialog-big">
-  <div name="content"></div>
+<sl-dialog name="infoDialog" label="User Manual" class="dialog-big">
+  <div name="content" class="markdown-body"></div>
   <sl-button name="backBtn" slot="footer" variant="default" disabled>
-    <sl-icon name="arrow-left"></sl-icon>
-    Back
-  </sl-button>
+    <sl-icon name="arrow-left"></sl-icon>Back</sl-button>
   <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
 </sl-dialog>
 `;
@@ -59280,7 +59285,7 @@ const infoHtml = `
  */
 // button for toolbar
 const buttonHtml = `
-<sl-tooltip content="Information and help">
+<sl-tooltip content="User Manual">
   <sl-button name="editInstructions" size="small">
     <sl-icon name="info-circle"></sl-icon>
   </sl-button>
@@ -59376,9 +59381,11 @@ async function load(mdPath, addToHistory = true){
   const html = md.render(markdown)
     // replace local links with api calls
     .replaceAll(
-      /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#|mailto:|tel:|data:).*?)\2(.*?>)/g, 
+      /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#).*?)\2(.*?>)/g, 
       `$1href="#" onclick="appInfo.load('$3'); return false"$4`
     )
+    // add prefix to relative image source links
+    .replaceAll(/src="(\.\/)?images\//g, 'src="docs/images/')
     // open remote links in new tabs
     .replaceAll(/(href="http)/g, `target="_blank" $1`)
     // remove comment tags that mask the <sl-icon> tags in the markdown
@@ -60127,9 +60134,12 @@ const plugin$1 = {
 //
 
 // Sync progress widget for XML editor statusbar
-let syncProgressWidget = null;
-let syncContainer = null;
-let syncIcon = null;
+/** @type {StatusProgress} */
+let syncProgressWidget;
+/** @type {HTMLDivElement} */
+let syncContainer;
+/**@type {SlIcon} */
+let syncIcon;
 
 //
 // Implementation
@@ -60163,31 +60173,31 @@ async function install$1(state) {
   syncProgressWidget.indeterminate = false;
   syncProgressWidget.value = 0;
   syncProgressWidget.hidePercentage = true;
-  
+
   // Make the progress bar half the default size
   syncProgressWidget.style.minWidth = '40px';
   syncProgressWidget.style.maxWidth = '75px';
-  
+
   // Create clickable icon element for the progress widget
   syncIcon = document.createElement('sl-icon');
   syncIcon.name = 'arrow-repeat';
   syncIcon.style.marginRight = '4px';
   syncIcon.style.cursor = 'pointer';
   syncIcon.title = 'Click to sync files';
-  
+
   // Add click handler to sync icon to start sync
   syncIcon.addEventListener('click', () => onClickSyncBtn(state));
-  
+
   // Create a container that includes the icon and progress bar
   syncContainer = document.createElement('div');
   syncContainer.style.display = 'flex';
   syncContainer.style.alignItems = 'center';
   syncContainer.appendChild(syncIcon);
   syncContainer.appendChild(syncProgressWidget);
-  
+
   // Add the sync widget to the XML editor statusbar permanently
   ui$1.xmlEditor.statusbar.add(syncContainer, 'left', 3);
-  
+
 }
 
 /**
@@ -60195,10 +60205,8 @@ async function install$1(state) {
  * @param {ApplicationState} state
  */
 async function update$1(state) {
-  // disable sync if webdav is not enabled
+  // disable sync if webdav is not enabled or we have a read-only document
   syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none';
-  syncIcon.disabled = !state.webdavEnabled || state.editorReadOnly;
-  syncProgressWidget.disabled = !state.webdavEnabled || state.editorReadOnly;
 }
 
 /**
@@ -60208,15 +60216,28 @@ async function update$1(state) {
 async function syncFiles(state) {
   if (state.webdavEnabled) {
     api$f.debug("Synchronizing files on the server");
-    const summary = await api$9.syncFiles();
-    
-    if (summary.skipped) {
-      api$f.debug("Sync skipped - no changes detected");
-    } else {
-      api$f.debug("Sync completed", summary);
+    syncIcon.classList.add("rotating");
+    // Reset progress widget for new sync
+    if (syncProgressWidget) {
+      syncProgressWidget.indeterminate = true;
+      syncProgressWidget.value = 0;
     }
-    
-    return summary
+    try {
+      const summary = await api$9.syncFiles();
+      if (summary.skipped) {
+        api$f.debug("Sync skipped - no changes detected");
+      } else {
+        api$f.debug("Sync completed", summary);
+      }
+      return summary
+    } finally {
+      syncIcon.classList.remove("rotating");
+      // Reset progress widget to 0% after sync completion
+      if (syncProgressWidget) {
+        syncProgressWidget.indeterminate = false;
+        syncProgressWidget.value = 0;
+      }
+    }
   }
   return false
 }
@@ -60227,46 +60248,22 @@ async function syncFiles(state) {
  */
 async function onClickSyncBtn(state) {
   let summary;
-  
+
   // Store original read-only state to restore later
   const originalReadOnly = state.editorReadOnly;
-  
+
   // Set editor to read-only during sync to prevent conflicts
   updateState(state, { editorReadOnly: true });
-  
-  // Reset progress widget for new sync
-  if (syncProgressWidget) {
-    syncProgressWidget.indeterminate = true;
-    syncProgressWidget.value = 0;
-  }
-  
   try {
     summary = await syncFiles(state);
   } catch (e) {
     throw e
   } finally {
-    // Reset progress widget to 0% after sync completion
-    if (syncProgressWidget) {
-      syncProgressWidget.indeterminate = false;
-      syncProgressWidget.value = 0;
-    }
-    
     // Restore original read-only state
     updateState(state, { editorReadOnly: originalReadOnly });
   }
-  if (summary) {
-    if (!summary.skipped) {
-      // Check if any changes were made and reload file data if needed
-      const hasChanges = Object.entries(summary).some(([action, count]) => 
-        count > 0 && action !== 'skipped' && action !== 'stale_locks_purged'
-      );
-      
-      if (hasChanges) {
-        // something has changed, reload the file data
-        await api$8.reload(state);
-      }
-    }
-  }
+  // manually pressing the sync button should reload file data even if there were no changes
+  await api$8.reload(state);
 }
 
 /**
