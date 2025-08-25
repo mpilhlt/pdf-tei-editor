@@ -46348,8 +46348,6 @@ async function install$e(state) {
  * @param {ApplicationState} state
  */
 async function update$a(state) {
-  //console.warn("update", plugin.name, state)
-
   if (!state.xml) {
     xmlEditor.clear();
     xmlEditor.setReadOnly(true);
@@ -47916,12 +47914,10 @@ async function install$c(state) {
  * @param {ApplicationState} state 
  */
 async function update$7(state) {
-  //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
   ui$1.toolbar.pdf.value = state.pdf || "";
   ui$1.toolbar.xml.value = state.xml || "";
   ui$1.toolbar.diff.value = state.diff || "";
-  //console.warn(plugin.name,"done")
 }
 
 
@@ -48208,7 +48204,27 @@ async function populateSelectboxes(state) {
 async function onChangePdfSelection(state) {
   const selectedFile = fileData.find(file => file.pdf.hash === ui$1.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash;  // Use document identifier
-  const xml = selectedFile.gold?.[0]?.hash;  // Use first gold entry identifier
+  
+  // Find gold file matching current variant selection
+  let xml = null;
+  if (selectedFile.gold) {
+    const { variant } = state;
+    let matchingGold;
+    
+    if (variant === "none") {
+      // Find gold without variant_id
+      matchingGold = selectedFile.gold.find(gold => !gold.variant_id);
+    } else if (variant && variant !== "") {
+      // Find gold with matching variant_id
+      matchingGold = selectedFile.gold.find(gold => gold.variant_id === variant);
+    } else {
+      // No variant filter - use first gold file
+      matchingGold = selectedFile.gold[0];
+    }
+    
+    xml = matchingGold?.hash;
+  }
+  
   const filesToLoad = {};
 
   if (pdf && pdf !== state.pdf) {
@@ -49630,7 +49646,8 @@ async function load$1(state, { xml, pdf }) {
   }
   if (xml) {
     state.xml = xml;
-    startAutocomplete();
+    // call asynchronously, don't block the editor
+    startAutocomplete().then(result => result && notify("Autocomplete is available"));
   }
 
   // notify plugins
@@ -49650,14 +49667,14 @@ async function startAutocomplete() {
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData);
         api$f.debug("Autocomplete data loaded and applied");
-        notify("Autocomplete is available");
       } else if (autocompleteData && autocompleteData.error) {
         api$f.debug("No autocomplete data available: " + autocompleteData.error);
       }
     }
+    return true 
   } catch (error) {
     api$f.warn("Failed to load autocomplete data: " + error.message);
-    // Don't block the loading process if autocomplete fails
+    return false
   }
 }
 
