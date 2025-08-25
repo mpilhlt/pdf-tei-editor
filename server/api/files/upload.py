@@ -14,7 +14,7 @@ except ImportError:
     HAS_MAGIC = False
     print("python-magic is not installed. File type detection will be less accurate.")
 
-bp = Blueprint('upload', __name__, url_prefix='/api/upload')
+bp = Blueprint('upload', __name__, url_prefix='/api/files/upload')
 
 ALLOWED_MIME_TYPES = {'application/pdf', 'application/xml', 'text/xml'}  # Use MIME types
 

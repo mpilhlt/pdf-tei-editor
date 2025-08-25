@@ -7,11 +7,12 @@ from shutil import move
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
     ApiError, make_timestamp, remove_obsolete_marker_if_exists,
-    get_version_full_path, resolve_document_identifier
+    get_version_full_path
 )
 from server.lib.cache_manager import mark_cache_dirty, mark_sync_needed
 from server.extractors.discovery import list_extractors, create_extractor
 from server.lib.debug_utils import log_extraction_response
+from server.lib.server_utils import safe_file_path, resolve_document_identifier
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("extract", __name__, url_prefix="/api/extract")
@@ -32,15 +33,15 @@ def extract():
     """Perform extraction using the specified extractor."""
     data = request.get_json()
     
-    # Get extractor ID (default to llamore-gemini for backward compatibility)
-    extractor_id = data.get("extractor", "llamore-gemini")
+    # Get extractor ID 
+    extractor_id = data.get("extractor", None)
+    if extractor_id is None:
+        raise ApiError("No extractor id given")
     options = data.get("options", {})
-    
-    # Handle legacy PDF filename parameter for backward compatibility
-    pdf_filename = data.get("pdf")
+    pdf_path_or_hash = data.get("pdf")
     xml_content = data.get("xml")
     
-    if not pdf_filename and not xml_content:
+    if not pdf_path_or_hash and not xml_content:
         raise ApiError("Either 'pdf' or 'xml' parameter is required")
     
     # Create extractor instance
@@ -53,8 +54,8 @@ def extract():
     
     # Handle PDF file processing if provided
     pdf_path = None
-    if pdf_filename:
-        pdf_path = _process_pdf_file(pdf_filename, options)
+    if pdf_path_or_hash:
+        pdf_path = _process_uploaded_pdf(pdf_path_or_hash, options)
     
     # Perform extraction
     try:
@@ -84,54 +85,62 @@ def extract():
         raise ApiError(f"Extraction failed: {e}")
     
     # Save the result if we processed a PDF
-    if pdf_filename:
-        result = _save_extraction_result(pdf_filename, tei_xml, options)
+    if pdf_path_or_hash:
+        result = _save_extraction_result(pdf_path, tei_xml, options)
         return jsonify(result)
     else:
         # For XML-only processing, return the result directly
         return jsonify({"xml": tei_xml})
 
 
-def _process_pdf_file(pdf_filename: str, options: dict) -> str:
+def _process_uploaded_pdf(path_or_hash: str, options: dict) -> str:
     """Process uploaded PDF file and return the target path."""
-    if not pdf_filename:
+    if not path_or_hash:
         raise ApiError("Missing PDF file name")
     
-    collection_name = options.get("collection")
-    
-    # get file id from DOI or file name
-    doi = options.get("doi", "")
-    if doi:
-        # if a (file-system-encoded) DOI is given, use it
-        file_id = doi.replace("/", "__")
-    else:
-        # otherwise use filename of the upload
-        file_id = Path(pdf_filename).stem
-    
-    # file paths
     UPLOAD_DIR = current_app.config["UPLOAD_DIR"]
     DATA_ROOT = current_app.config['DATA_ROOT']
+        
+    collection_name = options.get("collection")
+    pdf_exists = False
+    target_pdf_path = None
+
+    pdf_path = resolve_document_identifier(path_or_hash)
+    if pdf_path is not None:
+        target_pdf_path = DATA_ROOT + pdf_path.removeprefix("/data")
+        pdf_exists = os.path.exists(target_pdf_path)
     
-    target_dir = os.path.join(DATA_ROOT, "pdf")
+    if not pdf_exists:
+        # get file id from DOI or file name
+        doi = options.get("doi", None)
+        if doi:
+            # if a DOI is given, use it
+            file_id = safe_file_path(doi)
+        else:
+            # otherwise use filename of the upload
+            file_id = Path(path_or_hash).stem
     
-    if collection_name:
-        target_dir = os.path.join(target_dir, collection_name)
-    os.makedirs(target_dir, exist_ok=True)
-    
-    upload_pdf_path = Path(os.path.join(UPLOAD_DIR, pdf_filename))
-    target_pdf_path = Path(os.path.join(target_dir, file_id + ".pdf"))
-    remove_obsolete_marker_if_exists(target_pdf_path, logger)
-    
-    # check for uploaded file
-    if upload_pdf_path.exists():
-        # rename and move PDF
-        move(upload_pdf_path, target_pdf_path)
-        # Mark cache as dirty since we added a new PDF file
-        mark_cache_dirty()
-        # Mark sync as needed since files were changed
-        mark_sync_needed()
-    elif not target_pdf_path.exists():
-        raise ApiError(f"File {pdf_filename} has not been uploaded.")
+        target_dir = os.path.join(DATA_ROOT, "pdf")
+        
+        if collection_name:
+            target_dir = os.path.join(target_dir, collection_name)
+        
+        upload_pdf_path = Path(os.path.join(UPLOAD_DIR, path_or_hash))
+        target_pdf_path = Path(os.path.join(target_dir, file_id + ".pdf"))
+        
+        os.makedirs(target_dir, exist_ok=True)
+        remove_obsolete_marker_if_exists(target_pdf_path, logger)
+        
+        # check for uploaded file
+        if upload_pdf_path.exists():
+            # rename and move PDF
+            move(upload_pdf_path, target_pdf_path)
+            # Mark cache as dirty since we added a new PDF file
+            mark_cache_dirty()
+            # Mark sync as needed since files were changed
+            mark_sync_needed()
+        elif not target_pdf_path.exists():
+            raise ApiError(f"File {path_or_hash} has not been uploaded.")
     
     return str(target_pdf_path)
 
@@ -139,13 +148,7 @@ def _process_pdf_file(pdf_filename: str, options: dict) -> str:
 def _save_extraction_result(pdf_filename: str, tei_xml: str, options: dict) -> dict:
     """Save extraction result and return file paths."""
     collection_name = options.get("collection")
-    
-    # get file id from DOI or file name
-    doi = options.get("doi", "")
-    if doi:
-        file_id = doi.replace("/", "__")
-    else:
-        file_id = Path(pdf_filename).stem
+    file_id = Path(pdf_filename).stem
     
     DATA_ROOT = current_app.config['DATA_ROOT']
     

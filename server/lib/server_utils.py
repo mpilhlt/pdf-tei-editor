@@ -75,7 +75,7 @@ def _load_hash_lookup():
         current_app.logger.error(f"Failed to load hash lookup table: {e}")
         return {}
 
-def resolve_document_identifier(path_or_hash):
+def resolve_document_identifier(path_or_hash) -> str | None:
     """
     Resolve a document identifier that can be either a file path (starts with /data/) or a hash.
     
@@ -83,7 +83,7 @@ def resolve_document_identifier(path_or_hash):
         path_or_hash (str): Either a file path starting with "/data/" or a hash string
         
     Returns:
-        str: The resolved file path (always starts with "/data/")
+        str: The resolved file path (always starts with "/data/") or None if the hash does not resolve
         
     Raises:
         ApiError: If hash cannot be resolved or identifier is invalid
@@ -102,7 +102,8 @@ def resolve_document_identifier(path_or_hash):
         raise ApiError(f"Hash '{path_or_hash}' not found in lookup table", status_code=404)
     
     resolved_path = lookup_table[path_or_hash]
-    return f"/data/{resolved_path}"
+    
+    return f"/data/{resolved_path}" if resolved_path else None
 
 
 def safe_file_path(file_path):
@@ -237,10 +238,7 @@ def get_old_version_full_path(file_id, data_root, timestamp, file_extension=".xm
     return os.path.join(data_root, rel_path)
 
 
-
-
-
-
+# no longer needed
 def migrate_old_version_files(file_id, data_root, logger, webdav_enabled=False):
     """
     Scans for old version files and migrates them to the new structure if they exist.
