@@ -285,7 +285,7 @@ async function load(state, { xml, pdf }) {
       }
     }
 
-    removeMergeView(state)
+    await removeMergeView(state)
     await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked })
     logger.info("Loading XML: " + xml)
     // Convert document identifier to static file URL
@@ -307,8 +307,6 @@ async function load(state, { xml, pdf }) {
 
   if (pdf) {
     state.pdf = pdf
-    // update selectboxes in the toolbar
-    await fileselection.update(state)
   }
   if (xml) {
     state.xml = xml
@@ -398,7 +396,7 @@ async function showMergeView(state, diff) {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`
     await xmlEditor.showMergeView(diffUrl)
-    updateState(state, { diff: diff })
+    await updateState(state, { diff: diff })
     // turn validation off as it creates too much visual noise
     validation.configure({ mode: "off" })
   } finally {
@@ -410,12 +408,12 @@ async function showMergeView(state, diff) {
  * Removes all remaining diffs
  * @param {ApplicationState} state
  */
-function removeMergeView(state) {
+async function removeMergeView(state) {
   xmlEditor.hideMergeView()
   // re-enable validation
   validation.configure({ mode: "auto" })
   UrlHash.remove("diff")
-  updateState(state, { diff: null })
+  await updateState(state, { diff: null })
 }
 
 /**

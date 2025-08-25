@@ -185,8 +185,9 @@ async function install(state) {
 async function update(state) {
   //console.warn("update", plugin.name, state)
 
-  if (state.xml === null) {
+  if (!state.xml) {
     xmlEditor.clear()
+    xmlEditor.setReadOnly(true)
     return
   }
 
@@ -245,8 +246,6 @@ async function onSelectionChange(state) {
   // todo: use isXPathsubset()
   if (index !== null && cursorParts.tagName === stateParts.tagName && index !== xmlEditor.currentIndex + 1) {
     const xpath = `${normativeXpath}[${index}]`
-    //logger.debug(xpath)
-    //updateState(state, {xpath})
   }
 }
 

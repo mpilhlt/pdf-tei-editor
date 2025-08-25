@@ -132,7 +132,7 @@ async function start(state) {
         state.xpath = ui.floatingPanel.xpath.value
       }
       // update the UI
-      updateState(state)
+      await updateState(state)
     }
 
     // configure the xml editor events
@@ -248,7 +248,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
   /**
    * starts the heartbeat mechanism
    */
-  const startHeartbeat = () => {
+  const startHeartbeat = async () => {
 
     let editorReadOnlyState;
 
@@ -286,7 +286,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
         if (state.offline) {
           logger.info("Connection restored.");
           notify("Connection restored.");
-          updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
+          await updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
         }
       } catch (error) {
         console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
@@ -303,12 +303,12 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           logger.warn("Connection lost.");
           notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
           editorReadOnlyState = state.editorReadOnly
-          updateState(state, { offline: true, editorReadOnly: true });
+          await updateState(state, { offline: true, editorReadOnly: true });
         } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
           logger.critical("Lock lost for file: " + filePath);
           dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-          updateState(state, { editorReadOnly: true });
+          await updateState(state, { editorReadOnly: true });
         } else if (error.statusCode === 504) {
           logger.warn("Temporary connection failure, will try again...")
         } else if (error.statusCode === 403) {
@@ -319,14 +319,13 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           if (state.webdavEnabled) {
             logger.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
             dialog.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
-            updateState(state, { webdavEnabled: false });
+            await updateState(state, { webdavEnabled: false });
           }
         }
       }
     }, heartbeatFrequency);
-    logger.info("Heartbeat started.");
   };
-  startHeartbeat();
+  startHeartbeat().then(() => logger.info("Heartbeat started."));
 }
 
 let lastNode = null;

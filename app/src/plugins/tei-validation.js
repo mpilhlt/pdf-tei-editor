@@ -65,12 +65,14 @@ let modeCache;
  * @param {ApplicationState} state 
  */
 async function update(state) {
-  if (state.offline || state.editorReadOnly) {
+  if (state.offline || state.editorReadOnly || !state.xml ) {
     // if we are offline, disable validation
     configure({ mode: "off" })
+  } else {
+    configure({ mode: "auto" })
   }
   //console.warn(plugin.name,"done") 
-}
+} 
 
 /**
  * Returns true if validation is disabled

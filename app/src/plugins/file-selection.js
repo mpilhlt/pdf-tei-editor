@@ -22,7 +22,6 @@ const fileData = [];
  */
 const api = {
   reload,
-  update,
   fileData
 }
 
@@ -90,7 +89,7 @@ async function install(state) {
 
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
-    select.addEventListener('sl-change', () => handler(state));
+    select.addEventListener('sl-change', async () => await handler(state));
 
     // this works around a problem with the z-index of the select dropdown being bound 
     // to the z-index of the parent toolbar (and therefore being hidden by the editors)
@@ -432,7 +431,7 @@ async function onChangeXmlSelection(state) {
   const xml = ui.toolbar.xml.value
   if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
-      services.removeMergeView(state)
+      await services.removeMergeView(state)
       await services.load(state, { xml })
     } catch (error) {
       console.error(error)
@@ -453,9 +452,9 @@ async function onChangeDiffSelection(state) {
       console.error(error)
     }
   } else {
-    services.removeMergeView(state)
+    await services.removeMergeView(state)
   }
-  updateState(state, { diff: diff })
+  await updateState(state, { diff: diff })
 }
 
 /**
@@ -464,5 +463,5 @@ async function onChangeDiffSelection(state) {
  */
 async function onChangeVariantSelection(state) {
   const variant = ui.toolbar.variant.value
-  updateState(state, { variant })
+  await updateState(state, { variant, xml:null })
 }

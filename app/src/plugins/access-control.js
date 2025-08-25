@@ -154,7 +154,7 @@ async function update(state) {
     // Update application state to reflect access control
     logger.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`)
     // Note: This will trigger xmleditor plugin to update editor state
-    updateState(state, { editorReadOnly: shouldBeReadOnly })
+    await updateState(state, { editorReadOnly: shouldBeReadOnly })
   }
   
   // Update read-only widget context if xmleditor shows read-only status due to access control

@@ -99,13 +99,37 @@ for (const plugin of plugins) {
  * Utility method to invoke plugin endpoints and await the fulfilment of any returned promises
  * @param {string} endpoint 
  * @param {*} param 
+ * @param {object} [options={}] - Invoke options
+ * @param {number} [options.timeout=2000] - Timeout in milliseconds
  * @returns {Promise<*>}
  */
-async function invoke(endpoint, param) {
+async function invoke(endpoint, param, options = {}) {
+  // get all promises (or sync results) from the endpoints
   const promises = pluginManager.invoke(endpoint, param)
-  //console.warn(promises)
-  const result = await Promise.all(promises)
-  return result
+    // Set up a timeout mechanism so that the app doesn't hang if a promise does not resolve quickly or ever
+  const timeout = options.timeout !== undefined ? options.timeout : 2000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
+  
+  try {
+    const result = await Promise.allSettled(promises.map(async (promise) => {
+      try {
+        return await promise;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
+        } else {
+          console.error(`Error in plugin endpoint ${endpoint}:`, error);
+        }
+        throw error;
+      }
+    }));
+    return result;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /**

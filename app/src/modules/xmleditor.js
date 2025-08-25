@@ -1195,6 +1195,10 @@ export class XMLEditor extends EventEmitter {
    */
   async #updateTrees() {
     this.#editorContent = this.#view.state.doc.toString();
+    if (this.#editorContent.trim() === "") {
+      this.#xmlTree = null;
+      return false;
+    }
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {

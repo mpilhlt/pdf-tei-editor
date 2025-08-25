@@ -190,7 +190,7 @@ function updateCounter(xpath, index) {
   try {
     size = xmlEditor.countDomNodesByXpath(xpath)
   } catch (e) {
-    console.error(e)
+    logger.warn('Cannot update counter: ' + e.message)
     size = 0
   }
   index = index || 1
@@ -211,7 +211,7 @@ async function changeNodeIndex(state, delta) {
   if (index < 0) index = size 
   if (index >= size) index = 1
   const xpath = normativeXpath + `[${index}]`
-  updateState(state, { xpath })
+  await updateState(state, { xpath })
 }
 
 
