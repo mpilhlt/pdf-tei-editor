@@ -45671,6 +45671,10 @@ class XMLEditor extends EventEmitter {
    */
   async #updateTrees() {
     this.#editorContent = this.#view.state.doc.toString();
+    if (this.#editorContent.trim() === "") {
+      this.#xmlTree = null;
+      return false;
+    }
     const doc = new DOMParser().parseFromString(this.#editorContent, "application/xml");
     const errorNode = doc.querySelector("parsererror");
     if (errorNode) {
@@ -46346,8 +46350,9 @@ async function install$e(state) {
 async function update$a(state) {
   //console.warn("update", plugin.name, state)
 
-  if (state.xml === null) {
+  if (!state.xml) {
     xmlEditor.clear();
+    xmlEditor.setReadOnly(true);
     return
   }
 
@@ -46539,12 +46544,14 @@ async function install$d(state) {
  * @param {ApplicationState} state 
  */
 async function update$9(state) {
-  if (state.offline || state.editorReadOnly) {
+  if (state.offline || state.editorReadOnly || !state.xml ) {
     // if we are offline, disable validation
     configure({ mode: "off" });
+  } else {
+    configure({ mode: "auto" });
   }
   //console.warn(plugin.name,"done") 
-}
+} 
 
 /**
  * Returns true if validation is disabled
@@ -47826,7 +47833,6 @@ const fileData = [];
  */
 const api$8 = {
   reload,
-  update: update$7,
   fileData
 };
 
@@ -47891,7 +47897,7 @@ async function install$c(state) {
 
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
-    select.addEventListener('sl-change', () => handler(state));
+    select.addEventListener('sl-change', async () => await handler(state));
 
     // this works around a problem with the z-index of the select dropdown being bound 
     // to the z-index of the parent toolbar (and therefore being hidden by the editors)
@@ -48233,7 +48239,7 @@ async function onChangeXmlSelection(state) {
   const xml = ui$1.toolbar.xml.value;
   if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
-      api$6.removeMergeView(state);
+      await api$6.removeMergeView(state);
       await api$6.load(state, { xml });
     } catch (error) {
       console.error(error);
@@ -48254,9 +48260,9 @@ async function onChangeDiffSelection(state) {
       console.error(error);
     }
   } else {
-    api$6.removeMergeView(state);
+    await api$6.removeMergeView(state);
   }
-  updateState(state, { diff: diff });
+  await updateState(state, { diff: diff });
 }
 
 /**
@@ -48265,7 +48271,7 @@ async function onChangeDiffSelection(state) {
  */
 async function onChangeVariantSelection(state) {
   const variant = ui$1.toolbar.variant.value;
-  updateState(state, { variant });
+  await updateState(state, { variant, xml:null });
 }
 
 /**
@@ -49599,7 +49605,7 @@ async function load$1(state, { xml, pdf }) {
       }
     }
 
-    removeMergeView(state);
+    await removeMergeView(state);
     await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked });
     api$f.info("Loading XML: " + xml);
     // Convert document identifier to static file URL
@@ -49621,8 +49627,6 @@ async function load$1(state, { xml, pdf }) {
 
   if (pdf) {
     state.pdf = pdf;
-    // update selectboxes in the toolbar
-    await api$8.update(state);
   }
   if (xml) {
     state.xml = xml;
@@ -49712,7 +49716,7 @@ async function showMergeView(state, diff) {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`;
     await xmlEditor.showMergeView(diffUrl);
-    updateState(state, { diff: diff });
+    await updateState(state, { diff: diff });
     // turn validation off as it creates too much visual noise
     api$a.configure({ mode: "off" });
   } finally {
@@ -49724,12 +49728,12 @@ async function showMergeView(state, diff) {
  * Removes all remaining diffs
  * @param {ApplicationState} state
  */
-function removeMergeView(state) {
+async function removeMergeView(state) {
   xmlEditor.hideMergeView();
   // re-enable validation
   api$a.configure({ mode: "auto" });
   UrlHash.remove("diff");
-  updateState(state, { diff: null });
+  await updateState(state, { diff: null });
 }
 
 /**
@@ -50333,7 +50337,7 @@ function updateCounter(xpath, index) {
   try {
     size = xmlEditor.countDomNodesByXpath(xpath);
   } catch (e) {
-    console.error(e);
+    api$f.warn('Cannot update counter: ' + e.message);
     size = 0;
   }
   index = index || 1;
@@ -50354,7 +50358,7 @@ async function changeNodeIndex(state, delta) {
   if (index < 0) index = size; 
   if (index >= size) index = 1;
   const xpath = normativeXpath + `[${index}]`;
-  updateState(state, { xpath });
+  await updateState(state, { xpath });
 }
 
 
@@ -59668,7 +59672,7 @@ async function start$1(state) {
         state.xpath = ui$1.floatingPanel.xpath.value;
       }
       // update the UI
-      updateState(state);
+      await updateState(state);
     }
 
     // configure the xml editor events
@@ -59784,7 +59788,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
   /**
    * starts the heartbeat mechanism
    */
-  const startHeartbeat = () => {
+  const startHeartbeat = async () => {
 
     let editorReadOnlyState;
 
@@ -59822,7 +59826,7 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
         if (state.offline) {
           api$f.info("Connection restored.");
           notify("Connection restored.");
-          updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
+          await updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
         }
       } catch (error) {
         console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
@@ -59839,12 +59843,12 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           api$f.warn("Connection lost.");
           notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
           editorReadOnlyState = state.editorReadOnly;
-          updateState(state, { offline: true, editorReadOnly: true });
+          await updateState(state, { offline: true, editorReadOnly: true });
         } else if (error.statusCode === 409 || error.statusCode === 423) {
           // Lock was lost or taken by another user
           api$f.critical("Lock lost for file: " + filePath);
           api$b.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-          updateState(state, { editorReadOnly: true });
+          await updateState(state, { editorReadOnly: true });
         } else if (error.statusCode === 504) {
           api$f.warn("Temporary connection failure, will try again...");
         } else if (error.statusCode === 403) {
@@ -59855,14 +59859,13 @@ function configureHeartbeat(state, lockTimeoutSeconds = 60) {
           if (state.webdavEnabled) {
             api$f.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
             api$b.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
-            updateState(state, { webdavEnabled: false });
+            await updateState(state, { webdavEnabled: false });
           }
         }
       }
     }, heartbeatFrequency);
-    api$f.info("Heartbeat started.");
   };
-  startHeartbeat();
+  startHeartbeat().then(() => api$f.info("Heartbeat started."));
 }
 
 let lastNode = null;
@@ -60253,14 +60256,14 @@ async function onClickSyncBtn(state) {
   const originalReadOnly = state.editorReadOnly;
 
   // Set editor to read-only during sync to prevent conflicts
-  updateState(state, { editorReadOnly: true });
+  await updateState(state, { editorReadOnly: true });
   try {
     summary = await syncFiles(state);
   } catch (e) {
     throw e
   } finally {
     // Restore original read-only state
-    updateState(state, { editorReadOnly: originalReadOnly });
+    await updateState(state, { editorReadOnly: originalReadOnly });
   }
   // manually pressing the sync button should reload file data even if there were no changes
   await api$8.reload(state);
@@ -60405,7 +60408,7 @@ async function update(state) {
     // Update application state to reflect access control
     api$f.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`);
     // Note: This will trigger xmleditor plugin to update editor state
-    updateState(state, { editorReadOnly: shouldBeReadOnly });
+    await updateState(state, { editorReadOnly: shouldBeReadOnly });
   }
   
   // Update read-only widget context if xmleditor shows read-only status due to access control
@@ -61093,13 +61096,37 @@ for (const plugin of plugins) {
  * Utility method to invoke plugin endpoints and await the fulfilment of any returned promises
  * @param {string} endpoint 
  * @param {*} param 
+ * @param {object} [options={}] - Invoke options
+ * @param {number} [options.timeout=2000] - Timeout in milliseconds
  * @returns {Promise<*>}
  */
-async function invoke(endpoint, param) {
+async function invoke(endpoint, param, options = {}) {
+  // get all promises (or sync results) from the endpoints
   const promises = pluginManager.invoke(endpoint, param);
-  //console.warn(promises)
-  const result = await Promise.all(promises);
-  return result
+    // Set up a timeout mechanism so that the app doesn't hang if a promise does not resolve quickly or ever
+  const timeout = options.timeout !== undefined ? options.timeout : 2000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
+  
+  try {
+    const result = await Promise.allSettled(promises.map(async (promise) => {
+      try {
+        return await promise;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
+        } else {
+          console.error(`Error in plugin endpoint ${endpoint}:`, error);
+        }
+        throw error;
+      }
+    }));
+    return result;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /**
