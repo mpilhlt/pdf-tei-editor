@@ -183,8 +183,6 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
-  //console.warn("update", plugin.name, state)
-
   if (!state.xml) {
     xmlEditor.clear()
     xmlEditor.setReadOnly(true)

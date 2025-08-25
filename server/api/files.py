@@ -9,7 +9,8 @@ from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
     ApiError, make_timestamp, make_version_timestamp, get_data_file_path, 
     safe_file_path, remove_obsolete_marker_if_exists, get_session_id,
-    get_version_path, migrate_old_version_files, resolve_document_identifier
+    get_version_path, migrate_old_version_files, resolve_document_identifier,
+    strip_version_timestamp_prefix
 )
 from server.lib.file_data import (
     get_file_data, apply_variant_filtering,
@@ -108,8 +109,17 @@ def save():
         xml_root = etree.fromstring(xml_string)
         ns = {"tei": "http://www.tei-c.org/ns/1.0"}
         
-        # Try to get existing file_id from <idno type="fileref">
-        fileref_elem = xml_root.find('.//tei:idno[@type="fileref"]', ns)
+        # Always derive file_id from filename, not from existing XML
+        file_path_safe = safe_file_path(file_path_rel)
+        fallback_file_id = Path(file_path_safe).stem
+        
+        # Handle .tei.xml files where Path.stem only removes .xml but leaves .tei
+        if fallback_file_id.endswith('.tei'):
+            fallback_file_id = fallback_file_id[:-4]  # Remove .tei suffix
+        
+        # Strip timestamp from version files (format: timestamp-file-id)
+        if file_path_rel.startswith('/data/versions/'):
+            fallback_file_id = strip_version_timestamp_prefix(fallback_file_id)
         
         # Extract variant from extractor application metadata
         variant = None
@@ -120,24 +130,24 @@ def save():
                 variant = variant_label.text
                 break  # Use the first variant-id found
         
-        if fileref_elem is not None and fileref_elem.text:
-            file_id = fileref_elem.text
-            logger.debug(f"Found existing file_id in XML: {file_id}, variant: {variant}")
+        # If variant exists in XML, try to strip .variant_id suffix from filename
+        if variant and fallback_file_id.endswith(f'.{variant}'):
+            file_id = fallback_file_id[:-len(f'.{variant}')]
         else:
-            # No fileref found - derive file_id from filename and add it to XML
-            file_path_safe = safe_file_path(file_path_rel)
-            fallback_file_id = Path(file_path_safe).stem
-            
-            # Handle .tei.xml files where Path.stem only removes .xml but leaves .tei
-            if fallback_file_id.endswith('.tei'):
-                fallback_file_id = fallback_file_id[:-4]  # Remove .tei suffix
-            
-            # If variant exists in XML, try to strip .variant_id suffix from filename
-            if variant and fallback_file_id.endswith(f'.{variant}'):
-                file_id = fallback_file_id[:-len(f'.{variant}')]
+            file_id = fallback_file_id
+        
+        # Always update fileref in XML to match derived file_id
+        fileref_elem = xml_root.find('.//tei:idno[@type="fileref"]', ns)
+        if fileref_elem is not None:
+            # Update existing fileref
+            old_fileref = fileref_elem.text
+            if old_fileref != file_id:
+                fileref_elem.text = file_id
+                xml_string = serialize_tei_with_formatted_header(xml_root)
+                logger.debug(f"Updated fileref in XML: {old_fileref} -> {file_id}")
             else:
-                file_id = fallback_file_id
-            
+                logger.debug(f"Fileref already correct in XML: {file_id}, variant: {variant}")
+        else:
             # Add fileref to XML - find or create editionStmt
             edition_stmt = xml_root.find('.//tei:editionStmt', ns)
             if edition_stmt is None:
@@ -168,6 +178,11 @@ def save():
         file_id = Path(file_path_safe).stem
         if file_id.endswith('.tei'):
             file_id = file_id[:-4]
+        
+        # Strip timestamp from version files (format: timestamp-file-id)
+        if file_path_rel.startswith('/data/versions/'):
+            file_id = strip_version_timestamp_prefix(file_id)
+        
         variant = None
     
     # Check if this is a version file that should be promoted to gold

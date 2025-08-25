@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import json
+import re
 from pathlib import Path
 from flask import current_app
 import logging
@@ -27,6 +28,14 @@ def make_timestamp():
 def make_version_timestamp():
     """Create a timestamp formatted for version filenames (safe for filesystem)"""
     return make_timestamp().replace(" ", "_").replace(":", "-")
+
+# Version timestamp format constants - keep these in sync!
+# Format: YYYY-MM-DD_HH-MM-SS (example: 2024-01-01_12-00-00)
+VERSION_TIMESTAMP_REGEX = re.compile(r'^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-')
+
+def strip_version_timestamp_prefix(filename):
+    """Remove version timestamp prefix from filename if present."""
+    return VERSION_TIMESTAMP_REGEX.sub('', filename)
 
 
 def get_data_file_path(path):

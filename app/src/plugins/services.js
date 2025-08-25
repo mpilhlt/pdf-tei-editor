@@ -310,7 +310,8 @@ async function load(state, { xml, pdf }) {
   }
   if (xml) {
     state.xml = xml
-    startAutocomplete()
+    // call asynchronously, don't block the editor
+    startAutocomplete().then(result => result && notify("Autocomplete is available"))
   }
 
   // notify plugins
@@ -330,14 +331,14 @@ async function startAutocomplete() {
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData)
         logger.debug("Autocomplete data loaded and applied")
-        notify("Autocomplete is available")
       } else if (autocompleteData && autocompleteData.error) {
         logger.debug("No autocomplete data available: " + autocompleteData.error)
       }
     }
+    return true 
   } catch (error) {
     logger.warn("Failed to load autocomplete data: " + error.message)
-    // Don't block the loading process if autocomplete fails
+    return false
   }
 }
 

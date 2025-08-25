@@ -108,12 +108,10 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
-  //console.warn("update", plugin.name, state)
   await populateSelectboxes(state);
   ui.toolbar.pdf.value = state.pdf || ""
   ui.toolbar.xml.value = state.xml || ""
   ui.toolbar.diff.value = state.diff || ""
-  //console.warn(plugin.name,"done")
 }
 
 
@@ -400,7 +398,27 @@ async function populateSelectboxes(state) {
 async function onChangePdfSelection(state) {
   const selectedFile = fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash  // Use document identifier
-  const xml = selectedFile.gold?.[0]?.hash  // Use first gold entry identifier
+  
+  // Find gold file matching current variant selection
+  let xml = null;
+  if (selectedFile.gold) {
+    const { variant } = state;
+    let matchingGold;
+    
+    if (variant === "none") {
+      // Find gold without variant_id
+      matchingGold = selectedFile.gold.find(gold => !gold.variant_id);
+    } else if (variant && variant !== "") {
+      // Find gold with matching variant_id
+      matchingGold = selectedFile.gold.find(gold => gold.variant_id === variant);
+    } else {
+      // No variant filter - use first gold file
+      matchingGold = selectedFile.gold[0];
+    }
+    
+    xml = matchingGold?.hash;
+  }
+  
   const filesToLoad = {}
 
   if (pdf && pdf !== state.pdf) {
