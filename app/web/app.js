@@ -48012,6 +48012,9 @@ async function install$c(state) {
  * @param {ApplicationState} state 
  */
 async function update$7(state) {
+  if (!state.pdf) {
+    state.collection = null;
+  }
   await populateSelectboxes(state);
   ui$1.toolbar.pdf.value = state.pdf || "";
   ui$1.toolbar.xml.value = state.xml || "";
@@ -49262,10 +49265,11 @@ async function promptForExtractionOptions(options={}) {
         select.appendChild(option);
       }
       
-      // Set default value - use document metadata if available for variant_id or flavor
-      if (optionKey === 'variant_id' && documentMetadata.variant_id && 
-          optionConfig.options.includes(documentMetadata.variant_id)) {
-        select.value = documentMetadata.variant_id;
+      // Set default value - use document metadata or options if available for variant_id
+      const variantId = documentMetadata.variant_id || options.variant_id;
+      if (optionKey === 'variant_id' && variantId && 
+          optionConfig.options.includes(variantId)) {
+        select.value = variantId;
       } else if (optionKey === 'flavor' && documentMetadata.extractor_flavor && 
                  optionConfig.options.includes(documentMetadata.extractor_flavor)) {
         select.value = documentMetadata.extractor_flavor;
@@ -49395,7 +49399,7 @@ async function promptForExtractionOptions(options={}) {
     formData.doi = null;
   }
 
-  return Object.assign(formData, options)
+  return Object.assign(options, formData)
 }
 
 
