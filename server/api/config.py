@@ -7,7 +7,7 @@ import threading
 import json
 import logging
 
-from server.lib.decorators import handle_api_errors
+from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError
 
 logger = logging.getLogger(__name__)
@@ -46,14 +46,17 @@ def write_config(config_data:dict):
 
 
 @bp.route("/", methods=["GET"])
+
 @handle_api_errors
+#@session_required # TODO disabled because of /app/src/app.js#L160 
 def api_config_route():
     config_data = read_config()
     return jsonify(config_data), 200
 
 
 @bp.route("/get/<key>", methods=["GET"])
-@handle_api_errors 
+@handle_api_errors
+#@session_required # disabled because of /app/src/app.js#L160
 def get_config_value(key):
     """Retrieves a configuration value by key."""
     if not isinstance(key, str) or not key:
@@ -68,7 +71,8 @@ def get_config_value(key):
 
 
 @bp.route("/set", methods=["POST"])
-# @handle_api_errors # Uncomment if you use a decorator
+@handle_api_errors
+@session_required
 def set_config_value():
     """Sets a configuration value for a given key."""
     data = request.get_json()
@@ -88,6 +92,7 @@ def set_config_value():
 
 @bp.route("/instructions", methods=["GET"])
 @handle_api_errors
+@session_required
 def get_instructions():
     if os.path.exists(INSTRUCTION_DATA_PATH):
         with open(INSTRUCTION_DATA_PATH, 'r', encoding='utf-8') as f:
@@ -98,6 +103,7 @@ def get_instructions():
 
 @bp.route("/instructions", methods=["POST"])
 @handle_api_errors
+@session_required
 def save_instructions():
     data = request.get_json()
     with open(INSTRUCTION_DATA_PATH, 'w', encoding='utf-8') as f:

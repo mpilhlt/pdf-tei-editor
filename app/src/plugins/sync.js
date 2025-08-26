@@ -103,6 +103,7 @@ async function install(state) {
   ui.xmlEditor.statusbar.add(syncContainer, 'left', 3)
 
 }
+let webdavEnabled;
 
 /**
  * Invoked on application state change
@@ -110,6 +111,10 @@ async function install(state) {
  */
 async function update(state) {
   // disable sync if webdav is not enabled or we have a read-only document
+  if (webdavEnabled !== state.webdavEnabled) {
+    console.warn("webdav", state.webdavEnabled)
+    webdavEnabled = state.webdavEnabled
+  }
   syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none'
 }
 
