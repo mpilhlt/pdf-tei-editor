@@ -98,7 +98,9 @@ class GrobidTrainingExtractor(BaseExtractor):
         default_variant_id = info["options"]["variant_id"]["options"][0]  # "grobid.training.fulltext"
         
         flavor = options.get("flavor", default_flavor)
-        variant_id = options.get("variant_id", default_variant_id)
+        variant_id = options.get("variant_id")
+        if not variant_id:
+            variant_id = default_variant_id
         
         # Get GROBID server info
         grobid_server_url = os.environ.get("GROBID_SERVER_URL")
