@@ -12,16 +12,16 @@ from webdav4.fsspec import WebdavFileSystem
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError, get_session_id
 from server.lib.locking import purge_stale_locks
-from server.lib.cache_manager import get_last_modified_datetime, get_last_synced_datetime, mark_last_synced, is_sync_needed, get_sync_last_needed_datetime, mark_sync_completed
 from server.lib import auth
 from server.api.sse import send_sse_message
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("files", __name__, url_prefix="/api/files")
 
-# Constants for sync metadata
-SYNC_METADATA_FILENAME = ".sync-metadata.json"
-SYNC_LOCK_FILENAME = ".sync-metadata.lock"
+# Constants for sync versioning
+VERSION_FILENAME = "version.txt"
+VERSION_LOCK_FILENAME = "version.txt.lock"
+LOCAL_VERSION_FILENAME = ".version"
 
 def _send_progress_update(client_id: str, progress: int, logger):
     """Send progress update via SSE"""
@@ -40,15 +40,15 @@ def _get_client_id():
     except:
         return None
 
-def _get_sync_metadata_path(remote_root: str) -> str:
-    """Get the remote path for the sync metadata file."""
-    return f"{remote_root.rstrip('/')}/{SYNC_METADATA_FILENAME}"
+def _get_version_path(remote_root: str) -> str:
+    """Get the remote path for the version file."""
+    return f"{remote_root.rstrip('/')}/{VERSION_FILENAME}"
 
-def _get_sync_lock_path(remote_root: str) -> str:
-    """Get the remote path for the sync lock file."""
-    return f"{remote_root.rstrip('/')}/{SYNC_LOCK_FILENAME}"
+def _get_version_lock_path(remote_root: str) -> str:
+    """Get the remote path for the version lock file."""
+    return f"{remote_root.rstrip('/')}/{VERSION_LOCK_FILENAME}"
 
-def _acquire_sync_lock(fs: WebdavFileSystem, remote_root: str, timeout_seconds: int = 300) -> bool:
+def _acquire_version_lock(fs: WebdavFileSystem, remote_root: str, timeout_seconds: int = 300) -> bool:
     """
     Acquire a sync lock by creating a lock file on the remote server.
     
@@ -60,7 +60,7 @@ def _acquire_sync_lock(fs: WebdavFileSystem, remote_root: str, timeout_seconds: 
     Returns:
         True if lock acquired, False if timeout or error
     """
-    lock_path = _get_sync_lock_path(remote_root)
+    lock_path = _get_version_lock_path(remote_root)
     lock_content = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "pid": os.getpid(),
@@ -106,9 +106,9 @@ def _acquire_sync_lock(fs: WebdavFileSystem, remote_root: str, timeout_seconds: 
     logger.error(f"Failed to acquire sync lock within {timeout_seconds} seconds")
     return False
 
-def _release_sync_lock(fs: WebdavFileSystem, remote_root: str):
+def _release_version_lock(fs: WebdavFileSystem, remote_root: str):
     """Release the sync lock by removing the lock file."""
-    lock_path = _get_sync_lock_path(remote_root)
+    lock_path = _get_version_lock_path(remote_root)
     try:
         if fs.exists(lock_path):
             _retry_operation(fs.rm, lock_path)
@@ -116,133 +116,84 @@ def _release_sync_lock(fs: WebdavFileSystem, remote_root: str):
     except Exception as e:
         logger.warning(f"Failed to release sync lock: {e}")
 
-def _get_sync_metadata(fs: WebdavFileSystem, remote_root: str) -> dict:
+def _get_remote_version(fs: WebdavFileSystem, remote_root: str) -> int:
     """
-    Retrieve sync metadata from the remote server.
-    
-    Returns:
-        Dictionary with sync metadata or empty dict if not found
+    Retrieve the version number from the remote server.
+    If the version file does not exist, it is created with version 1.
     """
-    metadata_path = _get_sync_metadata_path(remote_root)
-    
+    version_path = _get_version_path(remote_root)
     try:
-        if not fs.exists(metadata_path):
-            logger.debug("Sync metadata file does not exist")
-            return {}
+        if not fs.exists(version_path):
+            logger.info("Version file not found on remote. Creating with version 1.")
+            with fs.open(version_path, 'w') as f:
+                f.write("1")
+            return 1
         
-        with fs.open(metadata_path, 'r') as f:
-            metadata = json.load(f)
+        with fs.open(version_path, 'r') as f:
+            version = int(f.read().strip())
         
-        logger.debug(f"Retrieved sync metadata: {metadata}")
-        return metadata
+        logger.debug(f"Retrieved remote version: {version}")
+        return version
         
     except Exception as e:
-        logger.warning(f"Failed to retrieve sync metadata: {e}")
-        return {}
+        logger.error(f"Failed to retrieve or create remote version: {e}")
+        raise ApiError(f"Failed to retrieve or create remote version: {e}")
 
-def _update_sync_metadata(fs: WebdavFileSystem, remote_root: str, local_last_modified: datetime, remote_last_modified: datetime, file_count: int):
+def _increment_remote_version(fs: WebdavFileSystem, remote_root: str) -> int:
     """
-    Update the sync metadata file on the remote server.
-    
-    Args:
-        fs: WebDAV filesystem instance
-        remote_root: Remote root directory
-        local_last_modified: Last modification time of local files
-        remote_last_modified: Last modification time of remote files
-        file_count: Total number of files synced
+    Increment the version number on the remote server.
     """
-    metadata_path = _get_sync_metadata_path(remote_root)
-    
-    # Create a simple checksum based on timestamps and file count
-    checksum_data = f"{local_last_modified.isoformat()}{remote_last_modified.isoformat()}{file_count}"
-    checksum = hashlib.md5(checksum_data.encode()).hexdigest()[:12]
-    
-    metadata = {
-        "last_sync_timestamp": datetime.now(timezone.utc).isoformat(),
-        "local_last_modified": local_last_modified.isoformat() if local_last_modified else None,
-        "remote_last_modified": remote_last_modified.isoformat() if remote_last_modified else None,
-        "file_count": file_count,
-        "checksum": checksum
-    }
-    
+    version_path = _get_version_path(remote_root)
     try:
-        metadata_json = json.dumps(metadata, indent=2)
-        with fs.open(metadata_path, 'w') as f:
-            f.write(metadata_json)
+        # It's crucial that this operation is atomic, which the lock should ensure.
+        current_version = _get_remote_version(fs, remote_root)
+        new_version = current_version + 1
         
-        logger.debug(f"Updated sync metadata: {metadata}")
+        with fs.open(version_path, 'w') as f:
+            f.write(str(new_version))
+            
+        logger.info(f"Incremented remote version to {new_version}")
+        return new_version
         
     except Exception as e:
-        logger.error(f"Failed to update sync metadata: {e}")
-        raise ApiError(f"Failed to update sync metadata: {e}")
+        logger.error(f"Failed to increment remote version: {e}")
+        raise ApiError(f"Failed to increment remote version: {e}")
 
-def _needs_sync(fs: WebdavFileSystem, remote_root: str) -> tuple[bool, dict]:
+def _get_local_version(local_root: str) -> int:
     """
-    Determine if synchronization is needed by comparing timestamps.
-    
-    Returns:
-        Tuple of (needs_sync: bool, metadata: dict)
+    Retrieve the version number from the local cache file.
+    Returns 0 if the file does not exist.
     """
+    local_version_path = os.path.join(local_root, LOCAL_VERSION_FILENAME)
     try:
-        # Get remote sync metadata
-        remote_metadata = _get_sync_metadata(fs, remote_root)
+        if not os.path.exists(local_version_path):
+            return 0
         
-        if not remote_metadata:
-            logger.debug("No remote metadata found, full sync needed")
-            return True, {}
+        with open(local_version_path, 'r') as f:
+            version = int(f.read().strip())
         
-        # Check if sync is needed based on dedicated sync tracking
-        if is_sync_needed():
-            logger.debug("Sync needed - files have been modified")
-            return True, remote_metadata
+        logger.debug(f"Retrieved local version: {version}")
+        return version
         
-        # Also check traditional timestamp comparison as fallback
-        local_last_synced = get_last_synced_datetime()
-        local_sync_last_needed = get_sync_last_needed_datetime()
-        
-        if not local_last_synced:
-            logger.debug("No local sync timestamp, full sync needed")
-            return True, remote_metadata
-        
-        # If sync was marked as needed after our last successful sync
-        if local_sync_last_needed and local_sync_last_needed > local_last_synced:
-            logger.debug("Sync needed - changes detected after last sync")
-            return True, remote_metadata
-        
-        # Parse remote timestamps
-        remote_local_modified = remote_metadata.get("local_last_modified")
-        remote_remote_modified = remote_metadata.get("remote_last_modified")
-        
-        if not remote_local_modified or not remote_remote_modified:
-            logger.debug("Missing timestamp data in metadata, full sync needed")
-            return True, remote_metadata
-        
-        remote_local_dt = datetime.fromisoformat(remote_local_modified)
-        remote_remote_dt = datetime.fromisoformat(remote_remote_modified)
-        
-        # The key insight: if our last sync time is newer than both the remote-recorded
-        # local and remote modification times, then nothing has changed since our last sync
-        if (local_last_synced >= remote_local_dt and local_last_synced >= remote_remote_dt):
-            # Double-check: ensure the remote metadata file itself hasn't been updated
-            # by another client since our last sync
-            try:
-                # Parse the last sync timestamp from the metadata
-                last_sync_remote = remote_metadata.get("last_sync_timestamp")
-                if last_sync_remote:
-                    last_sync_remote_dt = datetime.fromisoformat(last_sync_remote)
-                    if local_last_synced >= last_sync_remote_dt:
-                        logger.info("No sync needed - no changes detected since last sync")
-                        return False, remote_metadata
-                    
-            except Exception as e:
-                logger.warning(f"Could not check metadata timestamps: {e}")
-        
-        logger.debug("Sync needed - changes detected since last sync")
-        return True, remote_metadata
-        
-    except Exception as e:
-        logger.warning(f"Error checking sync necessity: {e}")
-        return True, {}
+    except (IOError, ValueError) as e:
+        logger.warning(f"Could not read local version file, assuming 0: {e}")
+        return 0
+
+def _set_local_version(local_root: str, version: int):
+    """
+    Update the local version cache file.
+    """
+    local_version_path = os.path.join(local_root, LOCAL_VERSION_FILENAME)
+    try:
+        with open(local_version_path, 'w') as f:
+            f.write(str(version))
+        logger.debug(f"Set local version to {version}")
+    except IOError as e:
+        logger.error(f"Failed to update local version file: {e}")
+        # This is not a critical error, but should be logged.
+
+
+
 
 def _retry_operation(operation, *args, max_attempts=3, base_timeout=30, **kwargs):
     """
@@ -597,32 +548,6 @@ def _perform_full_sync(fs: WebdavFileSystem, local_root: str, remote_root: str, 
             logger.error(f"  Remote path: {remote_path}")
             raise ApiError(f"Failed to sync path '{path}': {type(e).__name__}: {e}")
 
-    # Calculate timestamps for metadata update
-    local_last_modified = datetime.now(timezone.utc)
-    remote_last_modified = datetime.now(timezone.utc)
-    
-    # If we have local files, get the latest modification time
-    if local_map:
-        local_times = [info['mtime'] for info in local_map.values() if info['mtime']]
-        if local_times:
-            local_last_modified = max(local_times)
-    
-    # If we have remote files, get the latest modification time
-    if remote_map:
-        remote_times = [info['mtime'] for info in remote_map.values() if info['mtime']]
-        if remote_times:
-            remote_last_modified = max(remote_times)
-    
-    # Update sync metadata
-    _send_progress_update(client_id, 95, logger)
-    _send_sync_message(client_id, "Updating sync metadata...", logger)
-    total_files = len(all_paths)
-    _update_sync_metadata(fs, remote_root, local_last_modified, remote_last_modified, total_files)
-    
-    # Mark when this sync completed successfully
-    mark_last_synced()
-    mark_sync_completed()
-    
     _send_progress_update(client_id, 100, logger)
     _send_sync_message(client_id, "Synchronization completed successfully", logger)
     
@@ -656,16 +581,13 @@ def _download_and_align(fs: WebdavFileSystem, remote_path: str, local_path: str,
 @session_required
 def sync():
     """
-    Performs optimized bidirectional synchronization with quick change detection.
-    Uses remote metadata file and locking to prevent unnecessary syncs and conflicts.
+    Performs optimized bidirectional synchronization using a versioning system.
+    Uses a remote version.txt file and locking to prevent unnecessary syncs and conflicts.
     """
-    
-    
     if os.environ.get('WEBDAV_ENABLED', 0) != "1":
         logger.info("WebDAV sync not enabled")
         return {"error": "WebDAV sync is not enabled."}
-    
-    # Purge stale locks before starting the sync process
+
     purged_count = purge_stale_locks()
     if purged_count > 0:
         logger.info(f"Purged {purged_count} stale lock(s).")
@@ -678,38 +600,57 @@ def sync():
         os.environ['WEBDAV_HOST'],
         auth=(os.environ['WEBDAV_USER'], os.environ['WEBDAV_PASSWORD'])
     )
-    
-    # Quick check: do we need to sync at all?
+
     try:
-        needs_sync, _ = _needs_sync(fs, remote_root)
-        if not needs_sync:
-            logger.info("Sync skipped - no changes detected")
+        local_version = _get_local_version(local_root)
+        remote_version = _get_remote_version(fs, remote_root)
+
+        if local_version >= remote_version:
+            logger.info(f"Sync not needed. Local version: {local_version}, Remote version: {remote_version}")
             return {
                 "skipped": True,
                 "message": "No synchronization needed",
                 "stale_locks_purged": purged_count
             }
+
     except Exception as e:
-        logger.warning(f"Quick sync check failed, proceeding with full sync: {e}")
-    
-    # Acquire sync lock to prevent concurrent syncs
-    if not _acquire_sync_lock(fs, remote_root):
+        logger.warning(f"Could not check versions, proceeding with full sync: {e}")
+
+    if not _acquire_version_lock(fs, remote_root):
         raise ApiError("Could not acquire sync lock - another sync may be in progress")
-    
+
     try:
-        logger.info("Starting full synchronization")
+        # Re-check versions after acquiring lock
+        local_version = _get_local_version(local_root)
+        remote_version = _get_remote_version(fs, remote_root)
+
+        if local_version >= remote_version:
+            logger.info(f"Sync not needed after acquiring lock. Local: {local_version}, Remote: {remote_version}")
+            return {
+                "skipped": True,
+                "message": "No synchronization needed",
+                "stale_locks_purged": purged_count
+            }
+
+        logger.info(f"Starting synchronization. Local version: {local_version}, Remote version: {remote_version}")
         
-        # Get client ID for SSE messages
         client_id = _get_client_id()
         logger.debug(f"Retrieved client_id='{client_id}' for sync operation")
         
-        # Perform the actual synchronization
         summary = _perform_full_sync(fs, local_root, remote_root, keep_deleted_markers, logger, client_id)
         summary["stale_locks_purged"] = purged_count
-        
+
+        remote_changed = summary.get("uploads", 0) > 0 or summary.get("remote_deletes", 0) > 0
+        if remote_changed:
+            logger.info("Remote files changed, incrementing remote version.")
+            new_remote_version = _increment_remote_version(fs, remote_root)
+            _set_local_version(local_root, new_remote_version)
+        else:
+            # No remote changes, so local is just outdated. Set local to remote version.
+            _set_local_version(local_root, remote_version)
+
         logger.info(f"Synchronization complete. Summary: {summary}")
         return summary
-        
+
     finally:
-        # Always release the sync lock
-        _release_sync_lock(fs, remote_root)
+        _release_version_lock(fs, remote_root)
