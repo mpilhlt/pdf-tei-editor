@@ -46059,6 +46059,30 @@ function parseXPath(xpath) {
   };
 }
 
+const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
+
+/**
+ * Extracts a DOI from a string using a regex. Assumes '/' as separator.
+ * @param {string} str The string to extract from.
+ * @returns {string|null}
+ */
+function extractDoi(str) {
+  if (!str) return null;
+  const DOI_EXTRACT_PATTERN = /10.\d{4,9}\/[-._;()\/:A-Z0-9]+/i;
+  const match = str.match(DOI_EXTRACT_PATTERN);
+  return match ? match[0] : null;
+}
+
+/**
+ * Checks if a string is a valid DOI.
+ * @param {string} doi The string to check.
+ * @returns {boolean}
+ */
+function isDoi(doi) {
+  if (!doi) return false;
+  return DOI_REGEX.test(doi);
+}
+
 /**
  * This class adds node navigation to the XML Editor
  */
@@ -49377,33 +49401,22 @@ async function promptForExtractionOptions(options={}) {
 
 
 function getDoiFromFilename(filename) {
-  let doi = null;
   console.debug("Extracting DOI from filename:", filename);
-  if (filename.match(/^10\./)) {
-    // treat as a DOI-like filename
-    // do we have URL-encoded filenames?
-    doi = filename.slice(0, -4);
-    if (decodeURIComponent(doi) !== doi) {
-      // filename is URL-encoded DOI
-      doi = decodeURIComponent(doi);
-    } else {
-      // custom decoding
-      doi = doi.replaceAll(/__/g, '/');
-      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
-    }
-    console.debug("Extracted DOI from filename:", doi);
-    if (isDoi(doi)) {
-      return doi
-    }
-  }
-  return null
-}
+  if (!filename) return null;
 
-
-function isDoi(doi) {
-  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
-  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
-  return Boolean(doi.match(DOI_REGEX))
+  // 1. Sanitize: remove extension, decode URI components
+  let candidate = filename.toLowerCase().split('.pdf')[0];
+  candidate = decodeURIComponent(candidate);
+  
+  // 2. Normalize: handle different separator conventions
+  candidate = candidate.replaceAll(/__/g, '/');
+  candidate = candidate.replace(/10\.(\d+)_(.+)/, '10.$1/$2');
+  
+  // 3. Extract from the normalized string
+  const doi = extractDoi(candidate);
+  console.debug("Extracted DOI from filename:", doi);
+  
+  return doi;
 }
 
 /**
