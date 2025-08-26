@@ -46342,6 +46342,7 @@ async function install$e(state) {
   
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
+    // <sl-icon name="lock-fill"></sl-icon>
     icon: 'lock-fill',
     variant: 'warning',
     name: 'readOnlyStatus'
@@ -60543,8 +60544,7 @@ const TEI_NS = 'http://www.tei-c.org/ns/1.0';
 let statusDropdownWidget;
 /** @type {StatusText} */
 let permissionInfoWidget;
-/** @type {StatusSeparator} */
-let statusSeparator;
+
 
 // Current document permissions cache  
 /** @type {{visibility: string, editability: string, owner: string|null, can_modify: boolean}} */
@@ -60598,14 +60598,8 @@ async function install(state) {
   // Create status dropdown widget 
   statusDropdownWidget = createStatusDropdown();
   
-  // Create separator
-  statusSeparator = PanelUtils.createSeparator({
-    variant: 'dotted'
-  });
-  
   // Add widgets to left side of statusbar (lower priority = more to the left)
   ui$1.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1);
-  ui$1.xmlEditor.statusbar.add(statusSeparator, 'left', 2); 
   ui$1.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3);
   
   // Initially hide widgets until document is loaded
