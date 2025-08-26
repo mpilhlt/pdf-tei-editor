@@ -12,6 +12,7 @@ from webdav4.fsspec import WebdavFileSystem
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError, get_session_id
 from server.lib.locking import purge_stale_locks
+from server.lib.cache_manager import is_sync_needed, mark_sync_completed
 from server.lib import auth
 from server.api.sse import send_sse_message
 
@@ -601,20 +602,24 @@ def sync():
         auth=(os.environ['WEBDAV_USER'], os.environ['WEBDAV_PASSWORD'])
     )
 
-    try:
-        local_version = _get_local_version(local_root)
-        remote_version = _get_remote_version(fs, remote_root)
+    # Check if sync is needed
+    if not is_sync_needed():
+        try:
+            local_version = _get_local_version(local_root)
+            remote_version = _get_remote_version(fs, remote_root)
 
-        if local_version >= remote_version:
-            logger.info(f"Sync not needed. Local version: {local_version}, Remote version: {remote_version}")
-            return {
-                "skipped": True,
-                "message": "No synchronization needed",
-                "stale_locks_purged": purged_count
-            }
+            if local_version >= remote_version:
+                logger.info(f"Sync not needed. Local version: {local_version}, Remote version: {remote_version}")
+                return {
+                    "skipped": True,
+                    "message": "No synchronization needed",
+                    "stale_locks_purged": purged_count
+                }
 
-    except Exception as e:
-        logger.warning(f"Could not check versions, proceeding with full sync: {e}")
+        except Exception as e:
+            logger.warning(f"Could not check versions, proceeding with full sync: {e}")
+    else:
+        logger.info("Sync needed because local files have changed.")
 
     if not _acquire_version_lock(fs, remote_root):
         raise ApiError("Could not acquire sync lock - another sync may be in progress")
@@ -624,7 +629,7 @@ def sync():
         local_version = _get_local_version(local_root)
         remote_version = _get_remote_version(fs, remote_root)
 
-        if local_version >= remote_version:
+        if not is_sync_needed() and local_version >= remote_version:
             logger.info(f"Sync not needed after acquiring lock. Local: {local_version}, Remote: {remote_version}")
             return {
                 "skipped": True,
@@ -649,6 +654,7 @@ def sync():
             # No remote changes, so local is just outdated. Set local to remote version.
             _set_local_version(local_root, remote_version)
 
+        mark_sync_completed()
         logger.info(f"Synchronization complete. Summary: {summary}")
         return summary
 

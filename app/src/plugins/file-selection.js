@@ -109,6 +109,9 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
+  if (!state.pdf) {
+    state.collection = null
+  }
   await populateSelectboxes(state);
   ui.toolbar.pdf.value = state.pdf || ""
   ui.toolbar.xml.value = state.xml || ""
