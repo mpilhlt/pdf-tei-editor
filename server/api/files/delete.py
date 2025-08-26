@@ -30,6 +30,12 @@ def delete():
     user = get_user_by_session_id(session_id)
     
     for file in files: 
+        
+        # sometimes one identifier is empty if a previous delete has failed
+        if not file: 
+            logger.warning(f'Ignoring empty identifier')
+            continue
+        
         # Resolve hash to path if needed, then get real file path
         resolved_path = resolve_document_identifier(file)
         

@@ -445,7 +445,7 @@ async function deleteCurrentVersion(state) {
       await load(state, { xml })
       notify(`Version "${versionName}" has been deleted.`)
       sync.syncFiles(state)
-        .then(summary => summary && notify("Synchronized files"))
+        .then(summary => summary && console.debug(summary))
         .catch(e => console.error(e))
     } catch (error) {
       console.error(error)
@@ -477,12 +477,12 @@ async function deleteAllVersions(state) {
     await load(state, { xml: xmlPaths[0] })
     notify("All version have been deleted")
     sync.syncFiles(state)
-      .then(summary => summary && notify("Synchronized files"))
+      .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
   } catch (error) {
     console.error(error)
     alert(error.message)
-  }
+  } 
 }
 
 /**
@@ -501,9 +501,10 @@ async function deleteAll(state) {
     .concat(Array.from(ui.toolbar.xml.childNodes).map(option => option.value))
     // @ts-ignore
     .concat(Array.from(ui.toolbar.diff.childNodes).map(option => option.value))))
+    .filter(Boolean)
 
   if (filePathsToDelete.length > 0) {
-    const msg = `Are you sure you want to delete the following files: ${filePathsToDelete.join(", ")}? This cannot be undone.`
+    const msg = `Are you sure you want to delete ${filePathsToDelete.length} files? This cannot be undone.`
     if (!confirm(msg)) return; // todo use dialog
   }
 
@@ -514,19 +515,16 @@ async function deleteAll(state) {
     await client.deleteFiles(filePathsToDelete)
     notify(`${filePathsToDelete.length} files have been deleted.`)
     sync.syncFiles(state)
-      .then(summary => summary && notify("Synchronized files"))
+      .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
   } catch (error) {
     console.error(error.message)
     notify(error.message, "warning")
   } finally {
     // update the file data
-    await fileselection.reload(state)
-    // load the first PDF and XML file 
-    await load(state, {
-      pdf: fileselection.fileData[0].pdf.hash,
-      xml: fileselection.fileData[0].gold?.[0]?.hash || fileselection.fileData[0].versions?.[0]?.hash
-    })
+    await fileselection.reload(state, {refresh:true})
+    // remove xml and pdf
+    await updateState(state, {xml: null, pdf: null})
   }
 }
 
@@ -683,13 +681,13 @@ async function saveRevision(state) {
     // If migration occurred, first reload file data, then update state
     if (result.status === "saved_with_migration") {
       await fileselection.reload(state)
-      state.xml = result.path
+      state.xml = result.hash
       await updateState(state)
     }
     
     notify("Document was saved.")
     sync.syncFiles(state)
-      .then(summary => summary && notify("Synchronized files"))
+      .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
 
     // dirty state
@@ -710,73 +708,71 @@ async function createNewVersion(state) {
 
   /** @type {newVersionDialog & SlDialog} */
   // @ts-ignore
-  const dialog = document.querySelector('[name="newVersionDialog"]')
+  const newVersiondialog = document.querySelector('[name="newVersionDialog"]')
   try {
     const user = authentication.getUser()
     if (user) {
-      dialog.persId.value = dialog.persId.value || user.username
-      dialog.persName.value = dialog.persName.value || user.fullname
+      newVersiondialog.persId.value = newVersiondialog.persId.value || user.username
+      newVersiondialog.persName.value = newVersiondialog.persName.value || user.fullname
     }    
-    dialog.show()
+    newVersiondialog.show()
     await new Promise((resolve, reject) => {
-      dialog.submit.addEventListener('click', resolve, { once: true })
-      dialog.cancel.addEventListener('click', reject, { once: true })
-      dialog.addEventListener('sl-hide', reject, { once: true })
+      newVersiondialog.submit.addEventListener('click', resolve, { once: true })
+      newVersiondialog.cancel.addEventListener('click', reject, { once: true })
+      newVersiondialog.addEventListener('sl-hide', reject, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
     return
   } finally {
-    dialog.hide()
+    newVersiondialog.hide()
   }
 
   /** @type {RespStmt} */
   const respStmt = {
-    persId: dialog.persId.value,
-    persName: dialog.persName.value,
+    persId: newVersiondialog.persId.value,
+    persName: newVersiondialog.persName.value,
     resp: "Annotator"
   }
 
   /** @type {Edition} */
   const editionStmt = {
-    title: dialog.versionName.value,
-    note: dialog.editionNote.value
+    title: newVersiondialog.versionName.value,
+    note: newVersiondialog.editionNote.value
   }
 
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     // save new version first
     if (!state.xml) throw new Error('No XML file loaded')
-    let { path } = await saveXml(state.xml, true)
+    let { hash } = await saveXml(state.xml, true)
 
     // update the state to load the new document
-    state.xml = path
-    state.diff = path
-    await updateState(state)
+    await updateState(state, {xml:hash, diff:null})
 
     // now modify the header
     await addTeiHeaderInfo(respStmt, editionStmt)
 
     // save again to the new path
-    await saveXml(path)
+    await saveXml(hash)
     xmlEditor.markAsClean() 
 
     // reload the file data to display the new name and inform the user
-    await fileselection.reload(state)
+    await fileselection.reload(state, {refresh:true})
     notify("Document was duplicated. You are now editing the copy.")
     
     // sync the new file to the WebDav server
     if (state.webdavEnabled) {
       sync.syncFiles(state)
-      .then(summary => summary && notify("Synchronized files"))
+      .then(summary => summary && logger.debug(summary))
       .catch(e => console.error(e))
     }
   } catch (e) {
     console.error(e)
-    alert(e.message)
+    dialog.warn(e.message)
   } finally {
     ui.toolbar.documentActions.saveRevision.disabled = false
-    dialog.hide()
+    newVersiondialog.hide()
   }
 }
 

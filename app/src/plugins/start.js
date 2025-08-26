@@ -12,7 +12,8 @@
 import ui from '../ui.js'
 import {
   updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
-  config, authentication, state
+  config, authentication, state,
+  sync
 } from '../app.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { Spinner, updateUi } from '../ui.js'
@@ -83,7 +84,7 @@ async function start(state) {
     ui.spinner.show('Loading documents, please wait...')
 
     // update the file lists
-    await fileselection.reload(state)
+    await fileselection.reload(state, {refresh:true})
 
     // disable regular validation so that we have more control over it
     validation.configure({ mode: "off" })
@@ -98,7 +99,7 @@ async function start(state) {
       // lod the documents
       await services.load(state, { pdf, xml, diff })
     } else {
-      dialog.info("Load a PDF from the dropdown on the top left.")
+      dialog.info("Load a PDF from the dropdown on the top left or extract from a new PDF.")
     }
     
     // two alternative initial states:
@@ -133,6 +134,14 @@ async function start(state) {
       }
       // update the UI
       await updateState(state)
+      // synchronize in the background
+      sync.syncFiles(state).then(async (summary) => {
+        logger.info(summary)
+        if (summary && !summary.skipped) {
+          await fileselection.reload(state)
+          await updateState(state)
+        }
+      })
     }
 
     // configure the xml editor events

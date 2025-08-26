@@ -53,6 +53,7 @@ import { plugin as accessControlPlugin, api as accessControl } from './plugins/a
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
  * @property {boolean} offline  - Whether the application is in offline mode
  * @property {object|null} user - The currently logged-in user
+ * @property {string|null} collection - The collection the current document is in
  */
 /**
  * @type{ApplicationState}
@@ -67,7 +68,8 @@ let state = {
   editorReadOnly: false,
   offline: false,
   sessionId: null,
-  user: null
+  user: null,
+  collection: null
 }
 
 /**

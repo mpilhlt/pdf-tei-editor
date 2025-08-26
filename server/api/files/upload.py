@@ -14,11 +14,11 @@ except ImportError:
     HAS_MAGIC = False
     print("python-magic is not installed. File type detection will be less accurate.")
 
-bp = Blueprint('upload', __name__, url_prefix='/api/files/upload')
+bp = Blueprint('upload', __name__, url_prefix='/api/files')
 
 ALLOWED_MIME_TYPES = {'application/pdf', 'application/xml', 'text/xml'}  # Use MIME types
 
-@bp.route('', methods=['POST'])
+@bp.route('/upload', methods=['POST'])
 @handle_api_errors
 @session_required
 def upload_file():

@@ -20,6 +20,7 @@ from server.lib.tei_utils import serialize_tei_with_formatted_header
 from server.api.config import read_config
 from server.lib.auth import get_user_by_session_id
 from server.lib.access_control import check_file_access
+from server.lib.hash_utils import add_path_to_lookup
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("files_save", __name__, url_prefix="/api/files")
@@ -234,7 +235,10 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
             logger.info(f"Migrated {migrated_count} old version files during save of {file_id}")
             status = "saved_with_migration"  # Special status to trigger frontend file data reload
 
-    return {'status': status, 'path': "/data/" + final_file_rel}
+    # Add the new path to the lookup table and get its hash
+    file_hash = add_path_to_lookup(final_file_rel)
+    
+    return {'status': status, 'hash': file_hash}
 
 
 @bp.route("/save", methods=["POST"])

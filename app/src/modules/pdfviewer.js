@@ -191,6 +191,70 @@ export class PDFJSViewer {
     this.pdfViewer.currentScaleValue = zoomFactor;
   }
 
+  /**
+   * Properly closes the current PDF document 
+   * @returns {Promise<void>}
+   */
+  async close() {
+    await this.isReady();
+    if (this.PDFViewerApplication) {
+      try {
+        // Load empty PDF to clear the viewer cleanly
+        await this.load('/empty.pdf');
+      } catch (error) {
+        // If empty.pdf doesn't work, try alternative approach
+        this.pdfViewer.setDocument(null);
+        this.pdfLinkService.setDocument(null, null);
+        this.isLoadedFlag = false;
+        this.pdfDoc = null;
+        this.loadPromise = null;
+      }
+    }
+  }
+
+  /**
+   * Resets the viewer to empty state
+   * @returns {Promise<void>}
+   */
+  async reset() {
+    await this.isReady();
+    if (this.PDFViewerApplication) {
+      // Reset viewer state
+      this.pdfViewer.setDocument(null);
+      this.pdfLinkService.setDocument(null, null);
+      this.PDFViewerApplication._setTitleUsingUrl('');
+      this.isLoadedFlag = false;
+      this.pdfDoc = null;
+      this.loadPromise = null;
+    }
+  }
+
+  /**
+   * Clears the viewer completely
+   * @returns {Promise<void>}
+   */
+  async clear() {
+    await this.isReady();
+    if (this.PDFViewerApplication) {
+      // Clear all viewer state
+      this.pdfViewer.setDocument(null);
+      this.pdfLinkService.setDocument(null, null);
+      
+      // Clear any search results
+      if (this.findController) {
+        this.findController.reset();
+      }
+      
+      // Clear best matches
+      this.bestMatches = null;
+      this.matchIndex = 0;
+      
+      this.isLoadedFlag = false;
+      this.pdfDoc = null;
+      this.loadPromise = null;
+    }
+  }
+
 
   /**
    * Searches for a string within the PDF document using the PDF.js Viewer's findController.

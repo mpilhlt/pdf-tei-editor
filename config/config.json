@@ -38,11 +38,13 @@
   ],
   "state.persist": [
     "variant",
-    "xpath"
+    "xpath",
+    "collection"
   ],
   "state.allowSetFromUrl": [
     "variant",
-    "xpath"
+    "xpath",
+    "collection"
   ],
   "server.logging.level": {
     "sse": "info",

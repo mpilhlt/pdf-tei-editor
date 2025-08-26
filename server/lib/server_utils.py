@@ -42,38 +42,6 @@ def get_data_file_path(path):
     data_root = current_app.config["DATA_ROOT"]
     return os.path.join(data_root, safe_file_path(path))
 
-# Global cache for the hash lookup table
-_hash_lookup_cache = None
-_hash_lookup_mtime = None
-
-def _load_hash_lookup():
-    """
-    Load and cache the hash lookup table from disk.
-    Only reloads if the file has been modified since last load.
-    """
-    global _hash_lookup_cache, _hash_lookup_mtime
-    
-    try:
-        db_dir = current_app.config["DB_DIR"]
-        lookup_file = db_dir / 'lookup.json'
-        
-        if not lookup_file.exists():
-            current_app.logger.warning("Hash lookup table not found")
-            return {}
-        
-        # Check if we need to reload (file modified or not cached)
-        current_mtime = lookup_file.stat().st_mtime
-        if _hash_lookup_cache is None or _hash_lookup_mtime != current_mtime:
-            with open(lookup_file, 'r', encoding='utf-8') as f:
-                _hash_lookup_cache = json.load(f)
-            _hash_lookup_mtime = current_mtime
-            current_app.logger.debug(f"Loaded hash lookup table with {len(_hash_lookup_cache)} entries")
-        
-        return _hash_lookup_cache
-        
-    except (OSError, json.JSONDecodeError) as e:
-        current_app.logger.error(f"Failed to load hash lookup table: {e}")
-        return {}
 
 def resolve_document_identifier(path_or_hash) -> str | None:
     """
@@ -88,6 +56,8 @@ def resolve_document_identifier(path_or_hash) -> str | None:
     Raises:
         ApiError: If hash cannot be resolved or identifier is invalid
     """
+    from server.lib.hash_utils import resolve_hash_to_path
+    
     if not path_or_hash:
         raise ApiError("Document identifier is empty", status_code=400)
     
@@ -96,14 +66,11 @@ def resolve_document_identifier(path_or_hash) -> str | None:
         return path_or_hash
     
     # Otherwise, treat it as a hash and resolve it
-    lookup_table = _load_hash_lookup()
-    
-    if path_or_hash not in lookup_table:
+    try:
+        resolved_path = resolve_hash_to_path(path_or_hash)
+        return f"/data/{resolved_path}" if resolved_path else None
+    except KeyError:
         raise ApiError(f"Hash '{path_or_hash}' not found in lookup table", status_code=404)
-    
-    resolved_path = lookup_table[path_or_hash]
-    
-    return f"/data/{resolved_path}" if resolved_path else None
 
 
 def safe_file_path(file_path):

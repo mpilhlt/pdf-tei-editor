@@ -20,26 +20,31 @@ def serve_file_by_id(document_id):
     This allows URLs like /files/abc123 to serve the actual file content.
     """
     try:
-        # Resolve the document identifier to a full path
-        file_path = resolve_document_identifier(document_id)
-        if file_path is None: 
-            raise ApiError(f"File not found for identifier: {document_id}", status_code=404)
-        
-        # Check read access permissions
-        session_id = get_session_id(request)
-        user = get_user_by_session_id(session_id) if session_id else None
-        
-        if not check_file_access(file_path, user, 'read'):
-            raise ApiError("Access denied: You don't have permission to view this document", status_code=403)
-        
-        # Convert to absolute system path
-        data_root = current_app.config["DATA_ROOT"]
-        safe_path = safe_file_path(file_path)
-        absolute_path = os.path.join(data_root, safe_path)
-        
-        # Check if file exists
-        if not os.path.exists(absolute_path):
-            raise ApiError(f"File not found for identifier: {document_id}", status_code=404)
+        if document_id == "empty.pdf":
+            # special case
+            absolute_path = '/app/web/empty.pdf'
+            
+        else: 
+            # Resolve the document identifier to a full path
+            file_path = resolve_document_identifier(document_id)
+            if file_path is None: 
+                raise ApiError(f"File not found for identifier: {document_id}", status_code=404)
+            
+            # Check read access permissions
+            session_id = get_session_id(request)
+            user = get_user_by_session_id(session_id) if session_id else None
+            
+            if not check_file_access(file_path, user, 'read'):
+                raise ApiError("Access denied: You don't have permission to view this document", status_code=403)
+            
+            # Convert to absolute system path
+            data_root = current_app.config["DATA_ROOT"]
+            safe_path = safe_file_path(file_path)
+            absolute_path = os.path.join(data_root, safe_path)
+            
+            # Check if file exists
+            if not os.path.exists(absolute_path):
+                raise ApiError(f"File not found for identifier: {document_id}", status_code=404)
         
         # Serve the file
         return send_file(absolute_path)
