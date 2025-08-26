@@ -748,7 +748,7 @@ async function createNewVersion(state) {
     let { hash } = await saveXml(state.xml, true)
 
     // update the state to load the new document
-    await updateState(state, {xml:hash, diff:null})
+    await load(state, { xml: hash })
 
     // now modify the header
     await addTeiHeaderInfo(respStmt, editionStmt)
