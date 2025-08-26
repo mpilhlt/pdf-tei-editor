@@ -14,7 +14,7 @@
 
 import { updateState, services, authentication, fileselection } from '../app.js'
 import ui from '../ui.js'
-import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import { api as logger } from './logger.js'
 import { api as xmlEditor } from './xmleditor.js'
 import { prettyPrintNode, ensureRespStmtForUser } from '../modules/tei-utils.js'
@@ -554,12 +554,10 @@ function updateStatusDropdownVisibility() {
   if (currentPermissions.can_modify) {
     // User can modify permissions - show dropdown, hide text info
     statusDropdownWidget.style.display = ''
-    statusSeparator.style.display = ''
     permissionInfoWidget.style.display = 'none'
   } else {
     // User cannot modify permissions - hide dropdown, show text info
     statusDropdownWidget.style.display = 'none'
-    statusSeparator.style.display = 'none'
     permissionInfoWidget.style.display = ''
   }
 }
@@ -570,9 +568,6 @@ function updateStatusDropdownVisibility() {
 function showAccessControlWidgets() {
   if (permissionInfoWidget && !permissionInfoWidget.isConnected) {
     ui.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1)
-  }
-  if (statusSeparator && !statusSeparator.isConnected) {
-    ui.xmlEditor.statusbar.add(statusSeparator, 'left', 2)
   }
   if (statusDropdownWidget && !statusDropdownWidget.isConnected) {
     ui.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3)
@@ -585,9 +580,6 @@ function showAccessControlWidgets() {
 function hideAccessControlWidgets() {
   if (permissionInfoWidget && permissionInfoWidget.isConnected) {
     ui.xmlEditor.statusbar.removeById(permissionInfoWidget.id)
-  }
-  if (statusSeparator && statusSeparator.isConnected) {
-    ui.xmlEditor.statusbar.removeById(statusSeparator.id)
   }
   if (statusDropdownWidget && statusDropdownWidget.isConnected) {
     ui.xmlEditor.statusbar.removeById(statusDropdownWidget.id)
