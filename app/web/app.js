@@ -46315,7 +46315,7 @@ let indentationStatusWidget;
 /** @type {StatusText} */
 let teiHeaderToggleWidget;
 /** @type {StatusSeparator} */
-let statusSeparator$1;
+let statusSeparator;
 
 // State to track teiHeader visibility (starts folded)
 let teiHeaderVisible = false;
@@ -46371,13 +46371,13 @@ async function install$e(state) {
   teiHeaderToggleWidget.style.display = 'none';
 
   // Create separator between indentation and cursor position
-  statusSeparator$1 = PanelUtils.createSeparator({
+  statusSeparator = PanelUtils.createSeparator({
     variant: 'dotted'
   });
 
   // Add widgets to right side of statusbar (higher priority = more to the right)
   ui$1.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1);  // leftmost - indent to left of position  
-  ui$1.xmlEditor.statusbar.add(statusSeparator$1, 'right', 2);          // separator in middle
+  ui$1.xmlEditor.statusbar.add(statusSeparator, 'right', 2);          // separator in middle
   ui$1.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 3);     // rightmost - position always on far right
 
   // Add teiHeader toggle widget to left side of statusbar
@@ -61054,12 +61054,10 @@ function updateStatusDropdownVisibility() {
   if (currentPermissions.can_modify) {
     // User can modify permissions - show dropdown, hide text info
     statusDropdownWidget.style.display = '';
-    statusSeparator.style.display = '';
     permissionInfoWidget.style.display = 'none';
   } else {
     // User cannot modify permissions - hide dropdown, show text info
     statusDropdownWidget.style.display = 'none';
-    statusSeparator.style.display = 'none';
     permissionInfoWidget.style.display = '';
   }
 }
@@ -61070,9 +61068,6 @@ function updateStatusDropdownVisibility() {
 function showAccessControlWidgets() {
   if (permissionInfoWidget && !permissionInfoWidget.isConnected) {
     ui$1.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1);
-  }
-  if (statusSeparator && !statusSeparator.isConnected) {
-    ui$1.xmlEditor.statusbar.add(statusSeparator, 'left', 2);
   }
   if (statusDropdownWidget && !statusDropdownWidget.isConnected) {
     ui$1.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3);
@@ -61085,9 +61080,6 @@ function showAccessControlWidgets() {
 function hideAccessControlWidgets() {
   if (permissionInfoWidget && permissionInfoWidget.isConnected) {
     ui$1.xmlEditor.statusbar.removeById(permissionInfoWidget.id);
-  }
-  if (statusSeparator && statusSeparator.isConnected) {
-    ui$1.xmlEditor.statusbar.removeById(statusSeparator.id);
   }
   if (statusDropdownWidget && statusDropdownWidget.isConnected) {
     ui$1.xmlEditor.statusbar.removeById(statusDropdownWidget.id);
