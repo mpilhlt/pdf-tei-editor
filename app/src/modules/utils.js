@@ -378,3 +378,27 @@ function dashToCamelCase(str) {
 
   return camelCaseResult;
 }
+
+export const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
+
+/**
+ * Extracts a DOI from a string using a regex. Assumes '/' as separator.
+ * @param {string} str The string to extract from.
+ * @returns {string|null}
+ */
+export function extractDoi(str) {
+  if (!str) return null;
+  const DOI_EXTRACT_PATTERN = /10.\d{4,9}\/[-._;()\/:A-Z0-9]+/i;
+  const match = str.match(DOI_EXTRACT_PATTERN);
+  return match ? match[0] : null;
+}
+
+/**
+ * Checks if a string is a valid DOI.
+ * @param {string} doi The string to check.
+ * @returns {boolean}
+ */
+export function isDoi(doi) {
+  if (!doi) return false;
+  return DOI_REGEX.test(doi);
+}

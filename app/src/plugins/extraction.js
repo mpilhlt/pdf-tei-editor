@@ -10,6 +10,7 @@ import { client, services, dialog, fileselection, xmlEditor, updateState } from 
 import { SlSelect, SlOption, SlInput, createHtmlElements, updateUi } from '../ui.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
+import { isDoi, extractDoi } from '../modules/utils.js';
 import { UserAbortException } from '../modules/utils.js'
 import { getDocumentMetadata } from '../modules/tei-utils.js'
 
@@ -474,31 +475,20 @@ async function promptForExtractionOptions(options={}) {
 
 
 function getDoiFromFilename(filename) {
-  let doi = null
-  console.debug("Extracting DOI from filename:", filename)
-  if (filename.match(/^10\./)) {
-    // treat as a DOI-like filename
-    // do we have URL-encoded filenames?
-    doi = filename.slice(0, -4)
-    if (decodeURIComponent(doi) !== doi) {
-      // filename is URL-encoded DOI
-      doi = decodeURIComponent(doi)
-    } else {
-      // custom decoding
-      doi = doi.replaceAll(/__/g, '/')
-      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2')
-    }
-    console.debug("Extracted DOI from filename:", doi)
-    if (isDoi(doi)) {
-      return doi
-    }
-  }
-  return null
-}
+  console.debug("Extracting DOI from filename:", filename);
+  if (!filename) return null;
 
-
-function isDoi(doi) {
-  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
-  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i
-  return Boolean(doi.match(DOI_REGEX))
+  // 1. Sanitize: remove extension, decode URI components
+  let candidate = filename.toLowerCase().split('.pdf')[0];
+  candidate = decodeURIComponent(candidate);
+  
+  // 2. Normalize: handle different separator conventions
+  candidate = candidate.replaceAll(/__/g, '/');
+  candidate = candidate.replace(/10\.(\d+)_(.+)/, '10.$1/$2');
+  
+  // 3. Extract from the normalized string
+  const doi = extractDoi(candidate);
+  console.debug("Extracted DOI from filename:", doi);
+  
+  return doi;
 }
