@@ -86,9 +86,14 @@ async function install(state) {
 async function update(state) {
   if (state.pdf !== currentFile) {
     currentFile = state.pdf;
-    //if (state.pdf === null && state.user === null) {
-    //  pdfViewer.load('empty.pdf')
-    //}
+    // Clear PDF viewer when no PDF is loaded
+    if (state.pdf === null) {
+      try {
+        await pdfViewer.clear();
+      } catch (error) {
+        logger.warn("Error clearing PDF viewer:", error.message);
+      }
+    }
   }
 }
 

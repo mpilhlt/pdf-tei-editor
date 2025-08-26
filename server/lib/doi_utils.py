@@ -15,6 +15,69 @@ def validate_doi(doi: str) -> bool:
     return bool(re.match(DOI_REGEX, doi, flags=re.IGNORECASE))
 
 
+# Reversible filesystem encoding map
+FILESYSTEM_ENCODING_MAP = {
+    "/": "$1$",
+    ":": "$2$", 
+    "?": "$3$",
+    "*": "$4$",
+    "|": "$5$",
+    "<": "$6$",
+    ">": "$7$",
+    "\"": "$8$",
+    "\\": "$9$"
+}
+
+# Create reverse map for decoding
+FILESYSTEM_DECODING_MAP = {v: k for k, v in FILESYSTEM_ENCODING_MAP.items()}
+
+
+def doi_to_filename(doi: str) -> str:
+    """
+    Convert a DOI to a filesystem-safe filename using reversible encoding.
+    
+    Args:
+        doi: The DOI string to convert
+        
+    Returns:
+        A filesystem-safe string suitable for use as a filename
+        
+    Example:
+        "10.1111/1467-6478.00040" -> "10.1111$1$1467-6478.00040"
+    """
+    if not doi:
+        raise ValueError("DOI cannot be empty")
+    
+    filename = doi
+    for char, encoded in FILESYSTEM_ENCODING_MAP.items():
+        filename = filename.replace(char, encoded)
+    
+    return filename
+
+
+def filename_to_doi(filename: str) -> str:
+    """
+    Convert a filesystem-safe filename back to a DOI using reversible decoding.
+    
+    Args:
+        filename: The encoded filename to convert
+        
+    Returns:
+        The original DOI string
+        
+    Example:
+        "10.1111$1$1467-6478.00040" -> "10.1111/1467-6478.00040"
+    """
+    if not filename:
+        raise ValueError("Filename cannot be empty")
+    
+    doi = filename
+    for encoded, char in FILESYSTEM_DECODING_MAP.items():
+        doi = doi.replace(encoded, char)
+    
+    return doi
+
+
 def fetch_doi_metadata(doi: str) -> Dict[str, Any]:
     """
     Fetch metadata for DOI from CrossRef or DataCite APIs.

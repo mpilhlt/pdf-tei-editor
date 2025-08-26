@@ -136,22 +136,34 @@ app.message_queues = {}
 
 # Dynamically register blueprints from the 'api' folder
 api_folder = os.path.join(server_root, 'api')
-for filename in os.listdir(api_folder):
-    if filename.endswith('.py') and filename != '__init__.py':
-        module_name = filename[:-3]  # Remove ".py" extension
-        module_path = os.path.join(api_folder, filename)
 
-        # Use importlib to dynamically import the module
-        spec = importlib.util.spec_from_file_location(module_name, module_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+def load_blueprints_from_directory(directory, prefix=""):
+    """Recursively load blueprints from directory and subdirectories"""
+    for item in os.listdir(directory):
+        item_path = os.path.join(directory, item)
+        
+        if os.path.isfile(item_path) and item.endswith('.py') and item != '__init__.py':
+            # Load .py files as modules
+            module_name = f"{prefix}{item[:-3]}" if prefix else item[:-3]  # Remove ".py" extension
+            
+            # Use importlib to dynamically import the module
+            spec = importlib.util.spec_from_file_location(module_name, item_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
 
-        # Dymnically register the blueprint if it exists
-        if hasattr(module, 'bp'):
-            app.register_blueprint(module.bp)
-            logger.info(f"Registered blueprint: {module_name}")  
-        else:
-            logger.warning(f"Warning: No blueprint ('bp' attribute) found in {module_name}")
+            # Dynamically register the blueprint if it exists
+            if hasattr(module, 'bp'):
+                app.register_blueprint(module.bp)
+                logger.debug(f"Registered blueprint: {module_name}")  
+            else:
+                logger.warning(f"Warning: No blueprint ('bp' attribute) found in {module_name}")
+        
+        elif os.path.isdir(item_path) and not item.startswith('__'):
+            # Recursively load from subdirectories
+            new_prefix = f"{prefix}{item}." if prefix else f"{item}."
+            load_blueprints_from_directory(item_path, new_prefix)
+
+load_blueprints_from_directory(api_folder)
 
 # Save the absolute path of the different root paths
 app.config['PROJECT_ROOT'] = str(project_root)

@@ -5,7 +5,6 @@ This module separates the concerns of data collection from the API route handlin
 
 import os
 import json
-import hashlib
 import re
 from pathlib import Path
 from glob import glob
@@ -15,6 +14,7 @@ from lxml import etree
 
 from server.lib.server_utils import get_data_file_path
 from server.lib.cache_manager import mark_cache_clean
+from server.lib.hash_utils import generate_file_hash, create_hash_mapping
 
 # File type mappings
 FILE_TYPES = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
@@ -350,7 +350,7 @@ def _collect_file_metadata(data_root):
         file_info = {
             'path': rel_path.as_posix(),
             'full_path': file_path,
-            'hash': _generate_file_hash(rel_path.as_posix()),
+            'hash': generate_file_hash(rel_path.as_posix()),
             'collection': _extract_collection_from_path(rel_path)
         }
         
@@ -409,9 +409,6 @@ def _extract_collection_from_path(rel_path):
             return find_collection_for_file_id(parts[1], data_root)
     return None
 
-def _generate_file_hash(file_path):
-    """Generate a hash for the file path for use as ID."""
-    return hashlib.md5(file_path.encode('utf-8')).hexdigest()
 
 def _build_file_list(file_id_data):
     """
@@ -727,7 +724,7 @@ def _generate_lookup_table(file_data):
         # Add PDF file
         if 'pdf' in file_entry and 'path' in file_entry['pdf']:
             path = file_entry['pdf']['path'].replace('/data/', '')
-            file_hash = _generate_file_hash(path)
+            file_hash = generate_file_hash(path)
             lookup[file_hash] = path
         
         # Add version files
@@ -782,17 +779,9 @@ def _shorten_hashes(file_data, lookup_table):
     if not all_hashes:
         return file_data, lookup_table
     
-    # Find minimum hash length to avoid collisions
-    hash_length = 5
-    while hash_length <= 32:  # MD5 hashes are 32 characters
-        shortened_hashes = {h[:hash_length] for h in all_hashes}
-        if len(shortened_hashes) == len(all_hashes):
-            # No collisions at this length
-            break
-        hash_length += 1
-    
-    # Create mapping from long hash to short hash
-    hash_mapping = {long_hash: long_hash[:hash_length] for long_hash in all_hashes}
+    # Create mapping from long hash to short hash using utility function
+    hash_mapping = create_hash_mapping(all_hashes)
+    hash_length = len(next(iter(hash_mapping.values()))) if hash_mapping else 5
     
     # Apply hash shortening to file data
     for file_entry in file_data:

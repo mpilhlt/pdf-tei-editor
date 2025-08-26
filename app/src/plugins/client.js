@@ -82,7 +82,7 @@ let sessionId;
 let lastHttpStatus = null;
 
 const api_base_url = '/api';
-const upload_route = '/api/upload'
+const upload_route = api_base_url + '/files/upload'
 
 /**
  * plugin API

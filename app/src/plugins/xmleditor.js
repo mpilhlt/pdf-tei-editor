@@ -157,6 +157,9 @@ async function install(state) {
   // Add widget to toggle <teiHeader> visibility
   xmlEditor.on("editorAfterLoad", () => {
     xmlEditor.whenReady().then(() => {
+      // Restore line wrapping after XML is loaded
+      xmlEditor.setLineWrapping(true)
+      
       // show only if there is a teiHeader in the document
       if (xmlEditor.getDomNodeByXpath("//tei:teiHeader")) {
         teiHeaderToggleWidget.style.display = 'inline-flex'

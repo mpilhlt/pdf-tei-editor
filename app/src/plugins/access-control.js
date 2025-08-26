@@ -8,21 +8,19 @@
 /** 
  * @import { ApplicationState } from '../app.js' 
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
- * @import { UIPart } from '../ui.js'
+ * @import { UIPart, SlDropdown } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  */
 
 import { updateState, services, authentication, fileselection } from '../app.js'
-import ui, { updateUi } from '../ui.js'
-import { PanelUtils } from '../modules/panels/index.js'
+import ui from '../ui.js'
+import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { api as logger } from './logger.js'
-import { api as client } from './client.js'
 import { api as xmlEditor } from './xmleditor.js'
 import { prettyPrintNode, ensureRespStmtForUser } from '../modules/tei-utils.js'
 
 // TEI namespace constant
 const TEI_NS = 'http://www.tei-c.org/ns/1.0'
-
 
 /**
  * Access control statusbar navigation properties
@@ -38,9 +36,13 @@ const TEI_NS = 'http://www.tei-c.org/ns/1.0'
  */
 
 // Status widgets for access control
-let statusDropdownWidget = null
-let permissionInfoWidget = null
-let statusSeparator = null
+
+/** @type {SlDropdown} */
+let statusDropdownWidget;
+/** @type {StatusText} */
+let permissionInfoWidget;
+/** @type {StatusSeparator} */
+let statusSeparator;
 
 // Current document permissions cache  
 /** @type {{visibility: string, editability: string, owner: string|null, can_modify: boolean}} */
@@ -89,7 +91,6 @@ async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
   
   // Create permission info widget
-  /** @type {StatusText} */
   permissionInfoWidget = PanelUtils.createText({
     text: '',
     variant: 'neutral'
@@ -137,9 +138,14 @@ async function update(state) {
     return
   }
 
+  // disable the status dropdown when the editor is read-only
+  statusDropdownWidget.disabled = state.editorReadOnly
+
+  // nothing more to do if the xml doc hasn't changed
   if (state.xml === state_xml_cache) {
     return
   }
+
   state_xml_cache = state.xml
   logger.debug(`Access control: Updating access control for document: ${state.xml}`)  
   await computeDocumentPermissions()

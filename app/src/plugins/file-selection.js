@@ -9,7 +9,8 @@
  */
 import ui from '../ui.js'
 import { SlOption, SlDivider, createHtmlElements, updateUi } from '../ui.js'
-import { logger, client, services, dialog, updateState } from '../app.js'
+import { logger, client, services, dialog, updateState, fileselection } from '../app.js'
+import { notify } from '../modules/sl-utils.js';
 
 /**
  * The data about the pdf and xml files on the server
@@ -398,6 +399,7 @@ async function populateSelectboxes(state) {
 async function onChangePdfSelection(state) {
   const selectedFile = fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash  // Use document identifier
+  const collection = selectedFile.collection
   
   // Find gold file matching current variant selection
   let xml = null;
@@ -431,11 +433,16 @@ async function onChangePdfSelection(state) {
   if (Object.keys(filesToLoad).length > 0) {
     try {
       services.removeMergeView(state)
-      // @ts-ignore
+      state.collection = collection
       await services.load(state, filesToLoad)
     }
     catch (error) {
-      console.error(error)
+      state.collection = null
+      state.pdf = null
+      state.xml = null
+      await updateState(state)
+      await fileselection.reload(state, {refresh:true})
+      logger.warn(error.message)
     }
   }
 }
@@ -452,7 +459,10 @@ async function onChangeXmlSelection(state) {
       await services.removeMergeView(state)
       await services.load(state, { xml })
     } catch (error) {
-      console.error(error)
+      console.error(error.message)
+      await fileselection.reload(state, {refresh:true})
+      await updateState(state, {xml:null})
+      dialog.error(error.message)
     }
   }
 }

@@ -1,3 +1,7 @@
+export class ApiError extends Error {}
+
+export class UserAbortException extends Error {}
+
 export function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[$]/g, '\\$&');
 }
@@ -275,7 +279,6 @@ export function parseXPath(xpath) {
  * set of nodes selected by xpath2, within the context of a specific
  * XML document root node.
  *
- * @author Gemini 2.5 Flash
  * @param {string} xpath1 The XPath expression whose result set is checked for being a subset.
  * @param {string} xpath2 The XPath expression whose result set is checked for being a superset.
  * @param {Document | Element} rootNode The XML document or element node within which to evaluate the XPath expressions.

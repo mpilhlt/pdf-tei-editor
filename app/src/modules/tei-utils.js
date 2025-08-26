@@ -463,3 +463,80 @@ export function ensureRespStmtForUser(xmlDoc, username, fullName, responsibility
     throw new Error(`ensureRespStmtForUser failed for user ${username}: ${error.message}`);
   }
 }
+
+/**
+ * Extract comprehensive document metadata from a TEI XML document using XPath queries.
+ * This function mirrors the metadata extraction performed by the server-side file_data.py module.
+ * 
+ * @param {Document} xmlDoc - The XML Document object to extract metadata from
+ * @returns {object} - Object containing all extracted metadata fields
+ */
+export function getDocumentMetadata(xmlDoc) {
+  if (!xmlDoc || !xmlDoc.evaluate) {
+    throw new Error('Valid XML Document with XPath support is required');
+  }
+
+  const namespaceResolver = (prefix) => {
+    const namespaces = {
+      'tei': 'http://www.tei-c.org/ns/1.0'
+    };
+    return namespaces[prefix] || null;
+  };
+
+  const xpaths = {
+    author: "//tei:teiHeader//tei:author//tei:surname",
+    title: "//tei:teiHeader//tei:title",
+    date: '//tei:teiHeader//tei:date[@type="publication"]',
+    doi: '//tei:teiHeader//tei:idno[@type="DOI"]',
+    fileref: '//tei:teiHeader//tei:idno[@type="fileref"]',
+    variant_id: '//tei:application[@type="extractor"]//tei:label[@type="variant-id"]',
+    last_update: '//tei:revisionDesc/tei:change[@when][last()]/@when',
+    last_updated_by: '//tei:revisionDesc/tei:change[@who][last()]/@who',
+    last_status: '//tei:revisionDesc/tei:change[@status][last()]/@status',
+    // Additional metadata for extraction options
+    extractor_id: '//tei:application[@type="extractor"]/@ident',
+    extractor_version: '//tei:application[@type="extractor"]/@version',
+    extractor_flavor: '//tei:application[@type="extractor"]//tei:label[@type="flavor"]'
+  }
+  
+  const metadata = {}
+  
+  for (const [key, xpath] of Object.entries(xpaths)) {
+    let value = null
+    
+    try {
+      const result = xmlDoc.evaluate(
+        xpath,
+        xmlDoc,
+        namespaceResolver,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      
+      const node = result.singleNodeValue;
+      
+      if (node) {
+        if (node.nodeType === Node.ATTRIBUTE_NODE) {
+          // Attribute node - get the value
+          value = node.value?.trim() || null;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          // Element node - get text content
+          value = node.textContent?.trim() || null;
+        }
+      }
+    } catch (error) {
+      console.warn(`Error evaluating XPath "${xpath}" for key "${key}":`, error);
+      value = null;
+    }
+    
+    metadata[key] = value;
+  }
+  
+  // Post-process extractor ID to match frontend extractor list format
+  if (metadata.extractor_id) {
+    // Convert "GROBID" to lowercase to match extractor IDs
+    metadata.extractor_id = metadata.extractor_id.toLowerCase();
+  }
+  
+  return metadata;
+}
