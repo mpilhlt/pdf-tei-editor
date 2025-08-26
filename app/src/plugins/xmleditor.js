@@ -82,6 +82,7 @@ async function install(state) {
   
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
+    // <sl-icon name="lock-fill"></sl-icon>
     icon: 'lock-fill',
     variant: 'warning',
     name: 'readOnlyStatus'

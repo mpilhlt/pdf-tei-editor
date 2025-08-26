@@ -41,8 +41,7 @@ const TEI_NS = 'http://www.tei-c.org/ns/1.0'
 let statusDropdownWidget;
 /** @type {StatusText} */
 let permissionInfoWidget;
-/** @type {StatusSeparator} */
-let statusSeparator;
+
 
 // Current document permissions cache  
 /** @type {{visibility: string, editability: string, owner: string|null, can_modify: boolean}} */
@@ -99,14 +98,8 @@ async function install(state) {
   // Create status dropdown widget 
   statusDropdownWidget = createStatusDropdown()
   
-  // Create separator
-  statusSeparator = PanelUtils.createSeparator({
-    variant: 'dotted'
-  })
-  
   // Add widgets to left side of statusbar (lower priority = more to the left)
   ui.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1)
-  ui.xmlEditor.statusbar.add(statusSeparator, 'left', 2) 
   ui.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3)
   
   // Initially hide widgets until document is loaded
