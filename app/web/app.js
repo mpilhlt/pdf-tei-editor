@@ -14977,6 +14977,70 @@ class PDFJSViewer {
     this.pdfViewer.currentScaleValue = zoomFactor;
   }
 
+  /**
+   * Properly closes the current PDF document 
+   * @returns {Promise<void>}
+   */
+  async close() {
+    await this.isReady();
+    if (this.PDFViewerApplication) {
+      try {
+        // Load empty PDF to clear the viewer cleanly
+        await this.load('/empty.pdf');
+      } catch (error) {
+        // If empty.pdf doesn't work, try alternative approach
+        this.pdfViewer.setDocument(null);
+        this.pdfLinkService.setDocument(null, null);
+        this.isLoadedFlag = false;
+        this.pdfDoc = null;
+        this.loadPromise = null;
+      }
+    }
+  }
+
+  /**
+   * Resets the viewer to empty state
+   * @returns {Promise<void>}
+   */
+  async reset() {
+    await this.isReady();
+    if (this.PDFViewerApplication) {
+      // Reset viewer state
+      this.pdfViewer.setDocument(null);
+      this.pdfLinkService.setDocument(null, null);
+      this.PDFViewerApplication._setTitleUsingUrl('');
+      this.isLoadedFlag = false;
+      this.pdfDoc = null;
+      this.loadPromise = null;
+    }
+  }
+
+  /**
+   * Clears the viewer completely
+   * @returns {Promise<void>}
+   */
+  async clear() {
+    await this.isReady();
+    if (this.PDFViewerApplication) {
+      // Clear all viewer state
+      this.pdfViewer.setDocument(null);
+      this.pdfLinkService.setDocument(null, null);
+      
+      // Clear any search results
+      if (this.findController) {
+        this.findController.reset();
+      }
+      
+      // Clear best matches
+      this.bestMatches = null;
+      this.matchIndex = 0;
+      
+      this.isLoadedFlag = false;
+      this.pdfDoc = null;
+      this.loadPromise = null;
+    }
+  }
+
 
   /**
    * Searches for a string within the PDF document using the PDF.js Viewer's findController.
@@ -15257,9 +15321,14 @@ async function install$f(state) {
 async function update$b(state) {
   if (state.pdf !== currentFile) {
     currentFile = state.pdf;
-    //if (state.pdf === null && state.user === null) {
-    //  pdfViewer.load('empty.pdf')
-    //}
+    // Clear PDF viewer when no PDF is loaded
+    if (state.pdf === null) {
+      try {
+        await pdfViewer.clear();
+      } catch (error) {
+        api$f.warn("Error clearing PDF viewer:", error.message);
+      }
+    }
   }
 }
 
@@ -45720,6 +45789,8 @@ class XMLEditor extends EventEmitter {
   }
 }
 
+class UserAbortException extends Error {}
+
 /**
  * @typedef {object} ParsedXPathStepPartsSimple
  * @property {string} parentPath - The XPath path expression leading up to this specific step (e.g., '/root/child').
@@ -46322,6 +46393,9 @@ async function install$e(state) {
   // Add widget to toggle <teiHeader> visibility
   xmlEditor.on("editorAfterLoad", () => {
     xmlEditor.whenReady().then(() => {
+      // Restore line wrapping after XML is loaded
+      xmlEditor.setLineWrapping(true);
+      
       // show only if there is a teiHeader in the document
       if (xmlEditor.getDomNodeByXpath("//tei:teiHeader")) {
         teiHeaderToggleWidget.style.display = 'inline-flex';
@@ -48204,6 +48278,7 @@ async function populateSelectboxes(state) {
 async function onChangePdfSelection(state) {
   const selectedFile = fileData.find(file => file.pdf.hash === ui$1.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash;  // Use document identifier
+  const collection = selectedFile.collection;
   
   // Find gold file matching current variant selection
   let xml = null;
@@ -48237,11 +48312,16 @@ async function onChangePdfSelection(state) {
   if (Object.keys(filesToLoad).length > 0) {
     try {
       api$6.removeMergeView(state);
-      // @ts-ignore
+      state.collection = collection;
       await api$6.load(state, filesToLoad);
     }
     catch (error) {
-      console.error(error);
+      state.collection = null;
+      state.pdf = null;
+      state.xml = null;
+      await updateState(state);
+      await api$8.reload(state, {refresh:true});
+      api$f.warn(error.message);
     }
   }
 }
@@ -48258,7 +48338,10 @@ async function onChangeXmlSelection(state) {
       await api$6.removeMergeView(state);
       await api$6.load(state, { xml });
     } catch (error) {
-      console.error(error);
+      console.error(error.message);
+      await api$8.reload(state, {refresh:true});
+      await updateState(state, {xml:null});
+      api$b.error(error.message);
     }
   }
 }
@@ -48288,452 +48371,6 @@ async function onChangeDiffSelection(state) {
 async function onChangeVariantSelection(state) {
   const variant = ui$1.toolbar.variant.value;
   await updateState(state, { variant, xml:null });
-}
-
-/**
- * This implements the UI and the services for extracting references from the current or a new PDF
- */
-
-
-/**
- * plugin API
- */
-const api$7 = {
-  extractFromCurrentPDF,
-  extractFromNewPdf,
-  extractFromPDF
-};
-
-/**
- * plugin object
- */
-const plugin$b = {
-  name: "extraction",
-  deps: ['services'],
-  install: install$b,
-  state: {update: update$6}
-};
-
-//
-// UI
-//
-
-/**
- * Extraction actions button group
- * @typedef {object} extractionActionsPart
- * @property {SlButtonGroup} self
- * @property {SlButton} extractNew 
- * @property {SlButton} extractCurrent
- * @property {SlButton} editInstructions - added by prompt-editor plugin
- */
-/** @type {SlButtonGroup & extractionActionsPart} */
-// @ts-ignore
-const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0];
-
-
-/**
- * Extraction options dialog
- * @typedef {object} extractionOptionsDialog
- * @property {SlDialog} self
- * @property {SlInput} doi 
- * @property {SlSelect} collectionName
- * @property {SlSelect} modelIndex 
- * @property {SlButton} cancel
- * @property {SlButton} submit
- */
-/** @type {extractionOptionsDialog & SlDialog} */
-// @ts-ignore
-const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
-
-/**
- * @typedef {Object} ExtractionOptions
- * @property {string} [doi] 
- * @property {string} [filename]
- * @property {string} [collection]
- */
-
-//
-// Implementation
-//
-
-/**
- * @param {ApplicationState} state
- */
-async function install$b(state) {
-  api$f.debug(`Installing plugin "${plugin$b.name}"`);
-
-  // Add extraction buttons to toolbar with medium priority
-  ui$1.toolbar.add(extractionBtnGroup, 7);
-  document.body.append(optionsDialog);
-  updateUi();
-
-  // add event listeners
-  ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state));
-  ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state));
-}
-
-/**
- * @param {ApplicationState} state
- */
-async function update$6(state) {
-  // @ts-ignore
-  extractionBtnGroup.childNodes.forEach(child => child.disabled = state.offline); 
-  extractionBtnGroup.extractCurrent.disabled = !state.pdf;
-  //console.warn(plugin.name,"done")
-}
-
-/**
- * Extract references from the currently loaded PDF
- * @param {ApplicationState} state
- */
-async function extractFromCurrentPDF(state) {
-  let doi;
-  try {
-    doi = getDoiFromXml();
-  } catch (error) {
-    console.warn("Cannot get DOI from document:", error.message);
-  }
-  try {
-    doi = doi || getDoiFromFilename(state.pdf);
-    if (state.pdf) {
-      const collection = state.pdf.split("/").at(-2);
-      let { xml } = await extractFromPDF(state, { doi, collection });
-      await api$6.showMergeView(state, xml);
-    }
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-/**
- * Upload a new PDF and extract from it
- * @param {ApplicationState} state
- */
-async function extractFromNewPdf(state) {
-  try {
-    const { type, filename, originalFilename } = await api$9.uploadFile();
-    if (type !== "pdf") {
-      api$b.error("Extraction is only possible from PDF files");
-      return
-    }
-
-    const doi = getDoiFromFilename(originalFilename);
-    const { xml, pdf } = await extractFromPDF(state, { doi, filename });
-    await api$6.load(state, { xml, pdf });
-
-  } catch (error) {
-    api$b.error(error.message);
-    console.error(error);
-  }
-}
-
-/**
- * Extracts references from the given PDF file, letting the user choose the extraction options
- * @param {ApplicationState} state
- * @param {ExtractionOptions} [defaultOptions] Optional default option object passed to the extraction service,
- * user will be prompted to choose own ones.
- * @returns {Promise<{xml:string, pdf:string}>} An object with path to the xml and pdf files
- * @throws {Error} If the DOI is not valid or the user aborts the dialog
- */
-async function extractFromPDF(state, defaultOptions={}) {
-  if(!state.pdf) throw new Error("Missing PDF path")
-
-  // get DOI and instructions from user
-  const options = await promptForExtractionOptions(defaultOptions);
-  if (options === null) throw new Error("User abort")
-
-  ui$1.spinner.show('Extracting references, please wait');
-  let result;
-  try {
-    const filename = options.filename || state.pdf;
-    result = await api$9.extractReferences(filename, options);
-    await api$8.reload(state);  // todo uncouple
-    return result
-  } finally {
-    ui$1.spinner.hide();
-  }
-}
-
-// utilities
-
-/**
- * 
- * @param {ExtractionOptions} options Optional default option object
- * @returns {Promise<ExtractionOptions|null>}
- */
-async function promptForExtractionOptions(options={}) {
-
-  // load instructions
-  const instructionsData = await api$9.loadInstructions();
-  const instructions = [];
-
-  // use doi if available
-  if ('doi' in options && options.doi) {
-    optionsDialog.doi.value = options.doi;
-  } else {
-    optionsDialog.doi.value = "";
-  }
-
-  // configure collections selectbox 
-  /** @type {SlSelect|null} */
-  const collectionSelectBox = optionsDialog.collectionName;
-  collectionSelectBox.innerHTML="";
-  const collectionData = ui$1.toolbar.pdf.dataset.collections || '[]';
-  const collections = JSON.parse(collectionData);
-  collections.unshift('__inbox');
-  for (const collection_name of collections){
-    const option = Object.assign(new option_default, {
-      value: collection_name,
-      textContent: collection_name.replaceAll("_", " ").trim()
-    });
-    collectionSelectBox.append(option);
-  } 
-  collectionSelectBox.value = options.collection || "__inbox";
-  // if we have a collection, it cannot be changed
-  collectionSelectBox.disabled = Boolean(options.collection);
-
-  // configure model selectbox with available extractors
-  /** @type {SlSelect|null} */
-  const modelSelectBox = optionsDialog.modelIndex;
-  modelSelectBox.innerHTML = "";
-  
-  // Get extractors and store for dynamic options
-  let availableExtractors = [];
-  try {
-    const extractors = await api$9.getExtractorList();
-    // Filter extractors that support PDF input and TEI document output
-    availableExtractors = extractors.filter(extractor => 
-      extractor.input.includes("pdf") && extractor.output.includes("tei-document")
-    );
-    
-    for (const extractor of availableExtractors) {
-      const option = Object.assign(new option_default, {
-        value: extractor.id,
-        textContent: extractor.name
-      });
-      modelSelectBox.appendChild(option);
-    }
-    
-    // Default to first available extractor
-    if (availableExtractors.length > 0) {
-      modelSelectBox.value = availableExtractors[0].id;
-    }
-  } catch (error) {
-    // No fallback - if we can't load extractors, we can't extract
-    api$b.error("Could not load extraction engines");
-    throw error
-  }
-  
-  // Add event listener to update dynamic options when model changes
-  const updateDynamicOptions = () => {
-    const selectedExtractorId = modelSelectBox.value;
-    if (!selectedExtractorId) return
-    
-    const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId);
-    
-    // Clear existing dynamic options
-    const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]');
-    if (dynamicOptionsContainer) {
-      dynamicOptionsContainer.innerHTML = "";
-    }
-    if (!selectedExtractor || !selectedExtractor.options) return
-    
-    // Generate UI elements for each extractor option (except doi which is handled separately)
-    for (const [optionKey, optionConfig] of Object.entries(selectedExtractor.options)) {
-      if (optionKey === 'doi') continue // DOI is handled separately
-      
-      const element = createOptionElement(optionKey, optionConfig, selectedExtractorId);
-      if (element && dynamicOptionsContainer) {
-        dynamicOptionsContainer.appendChild(element);
-      }
-    }
-  };
-  
-  // Helper function to create form elements for extractor options
-  function createOptionElement(optionKey, optionConfig, extractorId) {
-    if (optionConfig.type === 'string' && optionConfig.options) {
-      // Create select dropdown for predefined options
-      const select = Object.assign(new select_default, {
-        name: optionKey,
-        label: optionConfig.description || optionKey,
-        size: "small"
-      });
-      
-      if (optionConfig.description) {
-        select.setAttribute("help-text", optionConfig.description);
-      }
-      
-      // Add options
-      for (const optionValue of optionConfig.options) {
-        const option = Object.assign(new option_default, {
-          value: optionValue,
-          textContent: optionValue
-        });
-        select.appendChild(option);
-      }
-      
-      // Set default to first option
-      if (optionConfig.options.length > 0) {
-        select.value = optionConfig.options[0];
-      }
-      
-      return select
-    } else if (optionKey === 'instructions' && extractorId && instructionsData) {
-      // Special handling for instructions - use existing instructions data
-      const select = Object.assign(new select_default, {
-        name: "instructions",
-        label: "Instructions",
-        size: "small"
-      });
-      select.setAttribute("help-text", "Choose the instruction set that is added to the prompt");
-      
-      let instructionIndex = 0;
-      for (const [originalIdx, instructionData] of instructionsData.entries()) {
-        const { label, text, extractor = [] } = instructionData;
-        
-        // Check if this instruction supports the selected extractor
-        if (extractor.includes(extractorId)) {
-          const option = Object.assign(new option_default, {
-            value: String(instructionIndex),
-            textContent: label
-          });
-          instructions[instructionIndex] = text.join("\n");
-          select.appendChild(option);
-          instructionIndex++;
-        }
-      }
-      
-      // If no instructions found, show a default option
-      if (instructionIndex === 0) {
-        const option = Object.assign(new option_default, {
-          value: "0",
-          textContent: "No custom instructions"
-        });
-        instructions[0] = "";
-        select.appendChild(option);
-      }
-      
-      select.value = "0";
-      return select
-    } else if (optionConfig.type === 'string') {
-      // Create text input for free-form string fields
-      const input = Object.assign(new input_default, {
-        name: optionKey,
-        label: optionConfig.description || optionKey,
-        size: "small",
-        type: "text"
-      });
-      
-      if (optionConfig.description) {
-        input.setAttribute("help-text", optionConfig.description);
-      }
-      
-      return input
-    }
-    
-    return null
-  }
-  
-  modelSelectBox.addEventListener('sl-change', updateDynamicOptions);
-  
-  // Initial population of dynamic options
-  updateDynamicOptions();
-
-  // display the dialog and await the user's response
-  const result = await new Promise(resolve => {
-    // user cancels
-    function cancel() {
-      resolve(false);
-    }
-    // user submits their input
-    function submit() {
-      resolve(true);
-    }
-
-    // event listeners
-    optionsDialog.addEventListener("sl-request-close", cancel, { once: true });
-    optionsDialog.cancel.addEventListener("click", cancel, { once: true });
-    optionsDialog.submit.addEventListener("click", submit, { once: true });
-
-    optionsDialog.show();
-  });
-  optionsDialog.hide();
-
-  if (result === false) {
-    // user has cancelled the form
-    return null
-  }
-
-  // Collect form data from static and dynamic fields
-  const formData = {
-    'doi': optionsDialog.doi.value,
-    'collection': optionsDialog.collectionName.value,
-    'extractor': optionsDialog.modelIndex.value
-  };
-  
-  // Collect values from dynamic options
-  const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]');
-  // @ts-ignore
-  const dynamicInputs = dynamicOptionsContainer.querySelectorAll('sl-select, sl-input');
-  
-  for (const input of dynamicInputs) {
-    const name = input.name;
-    let value = input.value;
-    
-    // Special handling for instructions - convert to actual instruction text
-    if (name === 'instructions' && instructions[parseInt(value)]) {
-      value = instructions[parseInt(value)];
-    }
-    
-    formData[name] = value;
-  }
-  
-  // Validate DOI only if one is provided
-  if (formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
-    api$b.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
-    return null
-  }
-  
-  // If DOI is empty, set it to null for the request
-  if (!formData.doi || formData.doi === "") {
-    formData.doi = null;
-  }
-
-  return Object.assign(formData, options)
-}
-
-function getDoiFromXml() {
-  return xmlEditor.getDomNodeByXpath("//tei:teiHeader//tei:idno[@type='DOI']")?.textContent
-}
-
-function getDoiFromFilename(filename) {
-  let doi = null;
-  console.debug("Extracting DOI from filename:", filename);
-  if (filename.match(/^10\./)) {
-    // treat as a DOI-like filename
-    // do we have URL-encoded filenames?
-    doi = filename.slice(0, -4);
-    if (decodeURIComponent(doi) !== doi) {
-      // filename is URL-encoded DOI
-      doi = decodeURIComponent(doi);
-    } else {
-      // custom decoding
-      doi = doi.replaceAll(/__/g, '/');
-      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
-    }
-    console.debug("Extracted DOI from filename:", doi);
-    if (isDoi(doi)) {
-      return doi
-    }
-  }
-  return null
-}
-
-
-function isDoi(doi) {
-  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
-  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
-  return Boolean(doi.match(DOI_REGEX))
 }
 
 const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
@@ -49198,6 +48835,575 @@ function ensureRespStmtForUser(xmlDoc, username, fullName, responsibility = 'edi
   } catch (error) {
     throw new Error(`ensureRespStmtForUser failed for user ${username}: ${error.message}`);
   }
+}
+
+/**
+ * Extract comprehensive document metadata from a TEI XML document using XPath queries.
+ * This function mirrors the metadata extraction performed by the server-side file_data.py module.
+ * 
+ * @param {Document} xmlDoc - The XML Document object to extract metadata from
+ * @returns {object} - Object containing all extracted metadata fields
+ */
+function getDocumentMetadata(xmlDoc) {
+  if (!xmlDoc || !xmlDoc.evaluate) {
+    throw new Error('Valid XML Document with XPath support is required');
+  }
+
+  const namespaceResolver = (prefix) => {
+    const namespaces = {
+      'tei': 'http://www.tei-c.org/ns/1.0'
+    };
+    return namespaces[prefix] || null;
+  };
+
+  const xpaths = {
+    author: "//tei:teiHeader//tei:author//tei:surname",
+    title: "//tei:teiHeader//tei:title",
+    date: '//tei:teiHeader//tei:date[@type="publication"]',
+    doi: '//tei:teiHeader//tei:idno[@type="DOI"]',
+    fileref: '//tei:teiHeader//tei:idno[@type="fileref"]',
+    variant_id: '//tei:application[@type="extractor"]//tei:label[@type="variant-id"]',
+    last_update: '//tei:revisionDesc/tei:change[@when][last()]/@when',
+    last_updated_by: '//tei:revisionDesc/tei:change[@who][last()]/@who',
+    last_status: '//tei:revisionDesc/tei:change[@status][last()]/@status',
+    // Additional metadata for extraction options
+    extractor_id: '//tei:application[@type="extractor"]/@ident',
+    extractor_version: '//tei:application[@type="extractor"]/@version',
+    extractor_flavor: '//tei:application[@type="extractor"]//tei:label[@type="flavor"]'
+  };
+  
+  const metadata = {};
+  
+  for (const [key, xpath] of Object.entries(xpaths)) {
+    let value = null;
+    
+    try {
+      const result = xmlDoc.evaluate(
+        xpath,
+        xmlDoc,
+        namespaceResolver,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      
+      const node = result.singleNodeValue;
+      
+      if (node) {
+        if (node.nodeType === Node.ATTRIBUTE_NODE) {
+          // Attribute node - get the value
+          value = node.value?.trim() || null;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          // Element node - get text content
+          value = node.textContent?.trim() || null;
+        }
+      }
+    } catch (error) {
+      console.warn(`Error evaluating XPath "${xpath}" for key "${key}":`, error);
+      value = null;
+    }
+    
+    metadata[key] = value;
+  }
+  
+  // Post-process extractor ID to match frontend extractor list format
+  if (metadata.extractor_id) {
+    // Convert "GROBID" to lowercase to match extractor IDs
+    metadata.extractor_id = metadata.extractor_id.toLowerCase();
+  }
+  
+  return metadata;
+}
+
+/**
+ * This implements the UI and the services for extracting references from the current or a new PDF
+ */
+
+
+/**
+ * plugin API
+ */
+const api$7 = {
+  extractFromCurrentPDF,
+  extractFromNewPdf,
+  extractFromPDF
+};
+
+/**
+ * plugin object
+ */
+const plugin$b = {
+  name: "extraction",
+  deps: ['services'],
+  install: install$b,
+  state: {update: update$6}
+};
+
+//
+// UI
+//
+
+/**
+ * Extraction actions button group
+ * @typedef {object} extractionActionsPart
+ * @property {SlButtonGroup} self
+ * @property {SlButton} extractNew 
+ * @property {SlButton} extractCurrent
+ * @property {SlButton} editInstructions - added by prompt-editor plugin
+ */
+/** @type {SlButtonGroup & extractionActionsPart} */
+// @ts-ignore
+const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0];
+
+
+/**
+ * Extraction options dialog
+ * @typedef {object} extractionOptionsDialog
+ * @property {SlDialog} self
+ * @property {SlInput} doi 
+ * @property {SlSelect} collectionName
+ * @property {SlSelect} modelIndex 
+ * @property {SlButton} cancel
+ * @property {SlButton} submit
+ */
+/** @type {extractionOptionsDialog & SlDialog} */
+// @ts-ignore
+const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
+
+/**
+ * @typedef {Object} ExtractionOptions
+ * @property {string} [doi] 
+ * @property {string} [filename]
+ * @property {string} [collection]
+ */
+
+//
+// Implementation
+//
+
+/**
+ * @param {ApplicationState} state
+ */
+async function install$b(state) {
+  api$f.debug(`Installing plugin "${plugin$b.name}"`);
+
+  // Add extraction buttons to toolbar with medium priority
+  ui$1.toolbar.add(extractionBtnGroup, 7);
+  document.body.append(optionsDialog);
+  updateUi();
+
+  // add event listeners
+  ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state));
+  ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state));
+}
+
+/**
+ * @param {ApplicationState} state
+ */
+async function update$6(state) {
+  // @ts-ignore
+  extractionBtnGroup.childNodes.forEach(child => child.disabled = state.offline); 
+  extractionBtnGroup.extractCurrent.disabled = !state.pdf;
+  //console.warn(plugin.name,"done")
+}
+
+/**
+ * Extract references from the currently loaded PDF
+ * @param {ApplicationState} state
+ */
+async function extractFromCurrentPDF(state) {
+  await extractFromPDF(state);
+}
+
+/**
+ * Upload a new PDF and extract from it
+ * @param {ApplicationState} state
+ */
+async function extractFromNewPdf(state) {
+  const { type, filename, originalFilename } = await api$9.uploadFile();
+  if (type !== "pdf") {
+    api$b.error("Extraction is only possible from PDF files");
+    return
+  }
+
+  const doi = getDoiFromFilename(originalFilename);
+  await extractFromPDF(state, { doi, filename });
+}
+
+/**
+ * Extracts references from the given PDF file, letting the user choose the extraction options
+ * @param {ApplicationState} state
+ * @param {ExtractionOptions} [defaultOptions] Optional default option object passed to the extraction service,
+ * user will be prompted to choose own ones.
+ * @throws {UserAbortException} If the user cancels the form
+ * @throws {Error} For all other errors
+ */
+async function extractFromPDF(state, defaultOptions={}) {
+  try {
+    // Check if we have either a PDF in state or a filename in options
+    if(!state.pdf && !defaultOptions.filename) throw new Error("Missing PDF path")
+
+    // Extract DOI from document metadata or filename if not provided
+    let doi = defaultOptions.doi;
+    if (!doi) {
+      try {
+        const xmlDoc = xmlEditor.getXmlTree();
+        if (xmlDoc) {
+          const metadata = getDocumentMetadata(xmlDoc);
+          doi = metadata.doi;
+        }
+      } catch (error) {
+        console.warn("Cannot get DOI from document:", error.message);
+      }
+      
+      // Fallback to extracting DOI from filename (use state.pdf or uploaded filename)
+      const filenameForDoi = state.pdf || defaultOptions.filename;
+      if (filenameForDoi) {
+        doi = doi || getDoiFromFilename(filenameForDoi);
+      }
+    }
+    
+    // Add collection, DOI, and variant to options
+    const enhancedOptions = {
+      collection: state.collection,
+      variant_id: state.variant,
+      doi,
+      ...defaultOptions
+    };
+
+    // get DOI and instructions from user
+    const options = await promptForExtractionOptions(enhancedOptions);
+
+    ui$1.spinner.show('Extracting references, please wait');
+    let result;
+    try {
+      const filename = options.filename || state.pdf;
+      result = await api$9.extractReferences(filename, options);
+      
+      // Force reload of file list since server has updated cache
+      await api$8.reload(state, {refresh:true});
+      
+      // Load the extracted result (server now returns hashes)
+      await api$6.load(state, result);
+      
+    } finally {
+      ui$1.spinner.hide();
+    }
+    
+  } catch (error) {
+    console.error(error.message);
+    if (error instanceof UserAbortException) {
+      return // do nothing
+    }
+    api$b.error(error.message);
+  }
+}
+
+/**
+ * 
+ * @param {ExtractionOptions} options Optional default option object
+ * @returns {Promise<ExtractionOptions|null>}
+ */
+async function promptForExtractionOptions(options={}) {
+
+  // load instructions
+  const instructionsData = await api$9.loadInstructions();
+  const instructions = [];
+
+  // Get document metadata to pre-fill form with current document values
+  let documentMetadata = {};
+  try {
+    const xmlDoc = xmlEditor.getXmlTree();
+    if (xmlDoc) {
+      documentMetadata = getDocumentMetadata(xmlDoc);
+    }
+  } catch (error) {
+    console.warn("Could not extract document metadata:", error.message);
+  }
+
+  // use doi if available - prioritize options parameter, then document metadata
+  const doiValue = options.doi || documentMetadata.doi || "";
+  optionsDialog.doi.value = doiValue;
+
+  // configure collections selectbox 
+  /** @type {SlSelect|null} */
+  const collectionSelectBox = optionsDialog.collectionName;
+  collectionSelectBox.innerHTML="";
+  const collectionData = ui$1.toolbar.pdf.dataset.collections || '[]';
+  const collections = JSON.parse(collectionData);
+  collections.unshift('__inbox');
+  for (const collection_name of collections){
+    const option = Object.assign(new option_default, {
+      value: collection_name,
+      textContent: collection_name.replaceAll("_", " ").trim()
+    });
+    collectionSelectBox.append(option);
+  }
+  // Set collection value - prioritize options parameter, then first available collection
+  const collectionValue = options.collection || (collections.length > 0 ? collections[0] : "");
+  collectionSelectBox.value = collectionValue;
+  // if we have a collection, it cannot be changed
+  collectionSelectBox.disabled = Boolean(options.collection);
+
+  // configure model selectbox with available extractors
+  /** @type {SlSelect|null} */
+  const modelSelectBox = optionsDialog.modelIndex;
+  modelSelectBox.innerHTML = "";
+  
+  // Get extractors and store for dynamic options
+  let availableExtractors = [];
+  try {
+    const extractors = await api$9.getExtractorList();
+    // Filter extractors that support PDF input and TEI document output
+    availableExtractors = extractors.filter(extractor => 
+      extractor.input.includes("pdf") && extractor.output.includes("tei-document")
+    );
+    
+    for (const extractor of availableExtractors) {
+      const option = Object.assign(new option_default, {
+        value: extractor.id,
+        textContent: extractor.name
+      });
+      modelSelectBox.appendChild(option);
+    }
+    
+    // Default to extractor that supports the document's variant, or first available extractor
+    if (availableExtractors.length > 0) {
+      let defaultExtractor = availableExtractors[0].id;
+      
+      // If we have a variant_id from the document or options, find the extractor that supports it
+      const variantId = documentMetadata.variant_id || options.variant_id;
+      if (variantId) {
+        const extractorForVariant = availableExtractors.find(extractor => {
+          const variantOptions = extractor.options?.variant_id?.options;
+          return Array.isArray(variantOptions) && variantOptions.includes(variantId);
+        });
+        
+        if (extractorForVariant) {
+          defaultExtractor = extractorForVariant.id;
+        }
+      }
+      
+      modelSelectBox.value = defaultExtractor;
+    }
+  } catch (error) {
+    // No fallback - if we can't load extractors, we can't extract
+    throw new Error("Could not load extraction engines:" + error.message)
+  }
+  
+  // Add event listener to update dynamic options when model changes
+  const updateDynamicOptions = () => {
+    const selectedExtractorId = modelSelectBox.value;
+    if (!selectedExtractorId) return
+    
+    const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId);
+    
+    // Clear existing dynamic options
+    const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]');
+    if (dynamicOptionsContainer) {
+      dynamicOptionsContainer.innerHTML = "";
+    }
+    if (!selectedExtractor || !selectedExtractor.options) return
+    
+    // Generate UI elements for each extractor option (except doi which is handled separately)
+    for (const [optionKey, optionConfig] of Object.entries(selectedExtractor.options)) {
+      if (optionKey === 'doi') continue // DOI is handled separately
+      
+      const element = createOptionElement(optionKey, optionConfig, selectedExtractorId);
+      if (element && dynamicOptionsContainer) {
+        dynamicOptionsContainer.appendChild(element);
+      }
+    }
+  };
+  
+  // Helper function to create form elements for extractor options
+  function createOptionElement(optionKey, optionConfig, extractorId) {
+    if (optionConfig.type === 'string' && optionConfig.options) {
+      // Create select dropdown for predefined options
+      const select = Object.assign(new select_default, {
+        name: optionKey,
+        label: optionConfig.description || optionKey,
+        size: "small"
+      });
+      
+      if (optionConfig.description) {
+        select.setAttribute("help-text", optionConfig.description);
+      }
+      
+      // Add options
+      for (const optionValue of optionConfig.options) {
+        const option = Object.assign(new option_default, {
+          value: optionValue,
+          textContent: optionValue
+        });
+        select.appendChild(option);
+      }
+      
+      // Set default value - use document metadata if available for variant_id or flavor
+      if (optionKey === 'variant_id' && documentMetadata.variant_id && 
+          optionConfig.options.includes(documentMetadata.variant_id)) {
+        select.value = documentMetadata.variant_id;
+      } else if (optionKey === 'flavor' && documentMetadata.extractor_flavor && 
+                 optionConfig.options.includes(documentMetadata.extractor_flavor)) {
+        select.value = documentMetadata.extractor_flavor;
+      } else if (optionConfig.options.length > 0) {
+        select.value = optionConfig.options[0];
+      }
+      
+      return select
+    } else if (optionKey === 'instructions' && extractorId && instructionsData) {
+      // Special handling for instructions - use existing instructions data
+      const select = Object.assign(new select_default, {
+        name: "instructions",
+        label: "Instructions",
+        size: "small"
+      });
+      select.setAttribute("help-text", "Choose the instruction set that is added to the prompt");
+      
+      let instructionIndex = 0;
+      for (const instructionData of instructionsData) {
+        const { label, text, extractor = [] } = instructionData;
+        
+        // Check if this instruction supports the selected extractor
+        if (extractor.includes(extractorId)) {
+          const option = Object.assign(new option_default, {
+            value: String(instructionIndex),
+            textContent: label
+          });
+          instructions[instructionIndex] = text.join("\n");
+          select.appendChild(option);
+          instructionIndex++;
+        }
+      }
+      
+      // If no instructions found, show a default option
+      if (instructionIndex === 0) {
+        const option = Object.assign(new option_default, {
+          value: "0",
+          textContent: "No custom instructions"
+        });
+        instructions[0] = "";
+        select.appendChild(option);
+      }
+      
+      select.value = "0";
+      return select
+    } else if (optionConfig.type === 'string') {
+      // Create text input for free-form string fields
+      const input = Object.assign(new input_default, {
+        name: optionKey,
+        label: optionConfig.description || optionKey,
+        size: "small",
+        type: "text"
+      });
+      
+      if (optionConfig.description) {
+        input.setAttribute("help-text", optionConfig.description);
+      }
+      
+      return input
+    }
+    
+    return null
+  }
+  
+  modelSelectBox.addEventListener('sl-change', updateDynamicOptions);
+  
+  // Initial population of dynamic options
+  updateDynamicOptions();
+
+  // display the dialog and await the user's response
+  const result = await new Promise(resolve => {
+    // user cancels
+    function cancel() {
+      resolve(false);
+    }
+    // user submits their input
+    function submit() {
+      resolve(true);
+    }
+
+    // event listeners
+    optionsDialog.addEventListener("sl-request-close", cancel, { once: true });
+    optionsDialog.cancel.addEventListener("click", cancel, { once: true });
+    optionsDialog.submit.addEventListener("click", submit, { once: true });
+
+    optionsDialog.show();
+  });
+  optionsDialog.hide();
+
+  if (result === false) {
+    // user has cancelled the form
+    throw new UserAbortException("User cancelled the dialog")
+  }
+
+  // Collect form data from static and dynamic fields
+  const formData = {
+    'doi': optionsDialog.doi.value,
+    'collection': optionsDialog.collectionName.value,
+    'extractor': optionsDialog.modelIndex.value
+  };
+  
+  // Collect values from dynamic options
+  const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]');
+  // @ts-ignore
+  const dynamicInputs = dynamicOptionsContainer.querySelectorAll('sl-select, sl-input');
+  
+  for (const input of dynamicInputs) {
+    const name = input.name;
+    let value = input.value;
+    
+    // Special handling for instructions - convert to actual instruction text
+    if (name === 'instructions' && instructions[parseInt(value)]) {
+      value = instructions[parseInt(value)];
+    }
+    
+    formData[name] = value;
+  }
+  
+  // Validate DOI only if one is provided
+  if (formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
+    api$b.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
+    return null
+  }
+  
+  // If DOI is empty, set it to null for the request
+  if (!formData.doi || formData.doi === "") {
+    formData.doi = null;
+  }
+
+  return Object.assign(formData, options)
+}
+
+
+
+function getDoiFromFilename(filename) {
+  let doi = null;
+  console.debug("Extracting DOI from filename:", filename);
+  if (filename.match(/^10\./)) {
+    // treat as a DOI-like filename
+    // do we have URL-encoded filenames?
+    doi = filename.slice(0, -4);
+    if (decodeURIComponent(doi) !== doi) {
+      // filename is URL-encoded DOI
+      doi = decodeURIComponent(doi);
+    } else {
+      // custom decoding
+      doi = doi.replaceAll(/__/g, '/');
+      doi = doi.replace(/10\.(\d+)_(.+)/g, '10.$1/$2');
+    }
+    console.debug("Extracted DOI from filename:", doi);
+    if (isDoi(doi)) {
+      return doi
+    }
+  }
+  return null
+}
+
+
+function isDoi(doi) {
+  // from https://www.crossref.org/blog/dois-and-matching-regular-expressions/
+  const DOI_REGEX = /^10.\d{4,9}\/[-._;()\/:A-Z0-9]+$/i;
+  return Boolean(doi.match(DOI_REGEX))
 }
 
 /**
@@ -49781,7 +49987,7 @@ async function deleteCurrentVersion(state) {
       await load$1(state, { xml });
       notify(`Version "${versionName}" has been deleted.`);
       api$1.syncFiles(state)
-        .then(summary => summary && notify("Synchronized files"))
+        .then(summary => summary && console.debug(summary))
         .catch(e => console.error(e));
     } catch (error) {
       console.error(error);
@@ -49813,12 +50019,12 @@ async function deleteAllVersions(state) {
     await load$1(state, { xml: xmlPaths[0] });
     notify("All version have been deleted");
     api$1.syncFiles(state)
-      .then(summary => summary && notify("Synchronized files"))
+      .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e));
   } catch (error) {
     console.error(error);
     alert(error.message);
-  }
+  } 
 }
 
 /**
@@ -49836,10 +50042,11 @@ async function deleteAll(state) {
     // @ts-ignore
     .concat(Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value))
     // @ts-ignore
-    .concat(Array.from(ui$1.toolbar.diff.childNodes).map(option => option.value))));
+    .concat(Array.from(ui$1.toolbar.diff.childNodes).map(option => option.value))))
+    .filter(Boolean);
 
   if (filePathsToDelete.length > 0) {
-    const msg = `Are you sure you want to delete the following files: ${filePathsToDelete.join(", ")}? This cannot be undone.`;
+    const msg = `Are you sure you want to delete ${filePathsToDelete.length} files? This cannot be undone.`;
     if (!confirm(msg)) return; // todo use dialog
   }
 
@@ -49850,19 +50057,16 @@ async function deleteAll(state) {
     await api$9.deleteFiles(filePathsToDelete);
     notify(`${filePathsToDelete.length} files have been deleted.`);
     api$1.syncFiles(state)
-      .then(summary => summary && notify("Synchronized files"))
+      .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e));
   } catch (error) {
     console.error(error.message);
     notify(error.message, "warning");
   } finally {
     // update the file data
-    await api$8.reload(state);
-    // load the first PDF and XML file 
-    await load$1(state, {
-      pdf: api$8.fileData[0].pdf.hash,
-      xml: api$8.fileData[0].gold?.[0]?.hash || api$8.fileData[0].versions?.[0]?.hash
-    });
+    await api$8.reload(state, {refresh:true});
+    // remove xml and pdf
+    await updateState(state, {xml: null, pdf: null});
   }
 }
 
@@ -50001,13 +50205,13 @@ async function saveRevision(state) {
     // If migration occurred, first reload file data, then update state
     if (result.status === "saved_with_migration") {
       await api$8.reload(state);
-      state.xml = result.path;
+      state.xml = result.hash;
       await updateState(state);
     }
     
     notify("Document was saved.");
     api$1.syncFiles(state)
-      .then(summary => summary && notify("Synchronized files"))
+      .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e));
 
     // dirty state
@@ -50028,73 +50232,71 @@ async function createNewVersion(state) {
 
   /** @type {newVersionDialog & SlDialog} */
   // @ts-ignore
-  const dialog = document.querySelector('[name="newVersionDialog"]');
+  const newVersiondialog = document.querySelector('[name="newVersionDialog"]');
   try {
     const user = api$2.getUser();
     if (user) {
-      dialog.persId.value = dialog.persId.value || user.username;
-      dialog.persName.value = dialog.persName.value || user.fullname;
+      newVersiondialog.persId.value = newVersiondialog.persId.value || user.username;
+      newVersiondialog.persName.value = newVersiondialog.persName.value || user.fullname;
     }    
-    dialog.show();
+    newVersiondialog.show();
     await new Promise((resolve, reject) => {
-      dialog.submit.addEventListener('click', resolve, { once: true });
-      dialog.cancel.addEventListener('click', reject, { once: true });
-      dialog.addEventListener('sl-hide', reject, { once: true });
+      newVersiondialog.submit.addEventListener('click', resolve, { once: true });
+      newVersiondialog.cancel.addEventListener('click', reject, { once: true });
+      newVersiondialog.addEventListener('sl-hide', reject, { once: true });
     });
   } catch (e) {
     console.warn("User cancelled");
     return
   } finally {
-    dialog.hide();
+    newVersiondialog.hide();
   }
 
   /** @type {RespStmt} */
   const respStmt = {
-    persId: dialog.persId.value,
-    persName: dialog.persName.value,
+    persId: newVersiondialog.persId.value,
+    persName: newVersiondialog.persName.value,
     resp: "Annotator"
   };
 
   /** @type {Edition} */
   const editionStmt = {
-    title: dialog.versionName.value,
-    note: dialog.editionNote.value
+    title: newVersiondialog.versionName.value,
+    note: newVersiondialog.editionNote.value
   };
 
   ui$1.toolbar.documentActions.saveRevision.disabled = true;
   try {
     // save new version first
     if (!state.xml) throw new Error('No XML file loaded')
-    let { path } = await saveXml(state.xml, true);
+    let { hash } = await saveXml(state.xml, true);
 
     // update the state to load the new document
-    state.xml = path;
-    state.diff = path;
-    await updateState(state);
+    await updateState(state, {xml:hash, diff:null});
 
     // now modify the header
     await addTeiHeaderInfo(respStmt, editionStmt);
 
     // save again to the new path
-    await saveXml(path);
+    await saveXml(hash);
     xmlEditor.markAsClean(); 
 
     // reload the file data to display the new name and inform the user
-    await api$8.reload(state);
+    await api$8.reload(state, {refresh:true});
     notify("Document was duplicated. You are now editing the copy.");
     
     // sync the new file to the WebDav server
     if (state.webdavEnabled) {
       api$1.syncFiles(state)
-      .then(summary => summary && notify("Synchronized files"))
+      .then(summary => summary && api$f.debug(summary))
       .catch(e => console.error(e));
     }
   } catch (e) {
     console.error(e);
-    alert(e.message);
+    api$b.warn(e.message);
   } finally {
     ui$1.toolbar.documentActions.saveRevision.disabled = false;
-    dialog.hide();
+    newVersiondialog.hide();
   }
 }
 
@@ -59640,7 +59842,7 @@ async function start$1(state) {
     ui$1.spinner.show('Loading documents, please wait...');
 
     // update the file lists
-    await api$8.reload(state);
+    await api$8.reload(state, {refresh:true});
 
     // disable regular validation so that we have more control over it
     api$a.configure({ mode: "off" });
@@ -59655,7 +59857,7 @@ async function start$1(state) {
       // lod the documents
       await api$6.load(state, { pdf, xml, diff });
     } else {
-      api$b.info("Load a PDF from the dropdown on the top left.");
+      api$b.info("Load a PDF from the dropdown on the top left or extract from a new PDF.");
     }
     
     // two alternative initial states:
@@ -59690,6 +59892,14 @@ async function start$1(state) {
       }
       // update the UI
       await updateState(state);
+      // synchronize in the background
+      api$1.syncFiles(state).then(async (summary) => {
+        api$f.info(summary);
+        if (summary && !summary.skipped) {
+          await api$8.reload(state);
+          await updateState(state);
+        }
+      });
     }
 
     // configure the xml editor events
@@ -61074,6 +61284,7 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
  * @property {boolean} offline  - Whether the application is in offline mode
  * @property {object|null} user - The currently logged-in user
+ * @property {string|null} collection - The collection the current document is in
  */
 /**
  * @type{ApplicationState}
@@ -61088,7 +61299,8 @@ let state = {
   editorReadOnly: false,
   offline: false,
   sessionId: null,
-  user: null
+  user: null,
+  collection: null
 };
 
 /**
