@@ -219,6 +219,58 @@ const endpoints = {
 };
 
 /**
+ * Utility functions for plugin management and state handling
+ */
+
+
+/**
+ * Invoke an endpoint on all registered plugins with timeout support
+ * @param {string} endpoint - The endpoint string to invoke
+ * @param {any} param - Parameter to pass to the endpoint
+ * @param {Object} options - Options object with timeout
+ * @returns {Promise<any[]>} Array of settled results from all plugins
+ */
+async function invoke(endpoint, param, options = {}) {
+  // get all promises (or sync results) from the endpoints
+  const promises = pluginManager.invoke(endpoint, param);
+    // Set up a timeout mechanism so that the app doesn't hang if a promise does not resolve quickly or ever
+  const timeout = options.timeout !== undefined ? options.timeout : 2000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
+  
+  try {
+    const result = await Promise.allSettled(promises.map(async (promise) => {
+      try {
+        return await promise;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
+        } else {
+          console.error(`Error in plugin endpoint ${endpoint}:`, error);
+        }
+        throw error;
+      }
+    }));
+    return result;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
+ * @param {Object} state The application state object
+ * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
+ * @returns {Promise<Array>} Returns an array of return values of the plugin's `update` methods
+ */
+async function updateState(state, changes={}) {
+  Object.assign(state, changes);
+  return await invoke(endpoints.state.update, state)
+}
+
+/**
  * This plugin provides logging endpoints and an API to invoke them. The implementation uses
  * console.* methods
  */
@@ -46447,6 +46499,11 @@ async function install$e(state) {
  * @param {ApplicationState} state
  */
 async function update$a(state) {
+
+  [readOnlyStatusWidget, cursorPositionWidget, 
+    indentationStatusWidget, teiHeaderToggleWidget]
+    .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none');
+
   if (!state.xml) {
     xmlEditor.clear();
     xmlEditor.setReadOnly(true);
@@ -59915,7 +59972,7 @@ async function start$1(state) {
       api$1.syncFiles(state).then(async (summary) => {
         api$f.info(summary);
         if (summary && !summary.skipped) {
-          await api$8.reload(state);
+          await api$8.reload(state, {refresh:true});
           await updateState(state);
         }
       });
@@ -59963,10 +60020,10 @@ async function saveIfDirty() {
 
 function configureXmlEditor() {
   // Find the currently selected node's contents in the PDF
-  xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents);
+  xmlEditor.on("selectionChanged", searchNodeContents);
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
+  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
     if (api$a.isDisabled()) {
       let view = xmlEditor.getView();
       try {
@@ -59978,10 +60035,10 @@ function configureXmlEditor() {
   });
 
   // save dirty editor content after an update
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty());
+  xmlEditor.on("editorUpdateDelayed", () => saveIfDirty());
 
   // xml vaidation events
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
+  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
     console.warn("XML is not well-formed", diagnostics);
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
     // Show validation error in statusbar
@@ -59991,7 +60048,7 @@ function configureXmlEditor() {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
   });
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, data => {
+  xmlEditor.on("editorXmlWellFormed", data => {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
@@ -60448,18 +60505,13 @@ async function install$1(state) {
   ui$1.xmlEditor.statusbar.add(syncContainer, 'left', 3);
 
 }
-let webdavEnabled;
 
 /**
  * Invoked on application state change
  * @param {ApplicationState} state
  */
 async function update$1(state) {
-  // disable sync if webdav is not enabled or we have a read-only document
-  if (webdavEnabled !== state.webdavEnabled) {
-    console.warn("webdav", state.webdavEnabled);
-    webdavEnabled = state.webdavEnabled;
-  }
+  // TODO implement `hidden` property on widgets
   syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none';
 }
 
@@ -60517,7 +60569,7 @@ async function onClickSyncBtn(state) {
     await updateState(state, { editorReadOnly: originalReadOnly });
   }
   // manually pressing the sync button should reload file data even if there were no changes
-  await api$8.reload(state);
+  await api$8.reload(state, {refresh:true});
 }
 
 /**
@@ -61345,45 +61397,6 @@ for (const plugin of plugins) {
  * @param {number} [options.timeout=2000] - Timeout in milliseconds
  * @returns {Promise<*>}
  */
-async function invoke(endpoint, param, options = {}) {
-  // get all promises (or sync results) from the endpoints
-  const promises = pluginManager.invoke(endpoint, param);
-    // Set up a timeout mechanism so that the app doesn't hang if a promise does not resolve quickly or ever
-  const timeout = options.timeout !== undefined ? options.timeout : 2000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, timeout);
-  
-  try {
-    const result = await Promise.allSettled(promises.map(async (promise) => {
-      try {
-        return await promise;
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
-        } else {
-          console.error(`Error in plugin endpoint ${endpoint}:`, error);
-        }
-        throw error;
-      }
-    }));
-    return result;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-/**
- * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
- * @param {ApplicationState} state The application state object
- * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<Array>} Returns an array of return values of the plugin's `update` methods
- */
-async function updateState(state, changes={}) {
-  Object.assign(state, changes);
-  return await invoke(endpoints.state.update, state)
-}
 
 // 
 // Application bootstrapping
@@ -61395,20 +61408,28 @@ await invoke(endpoints.log.setLogLevel, {level: logLevel.DEBUG});
 // let the plugins install their components
 await invoke(endpoints.install, state);
 
+//
 // persist the state across reloads in sessionStorage
+//
 const SESSION_STORAGE_ID = 'pdf-tei-editor.state';
 const persistedStateVars = (await api$e.get("state.persist") || []);
 persistedStateVars.push('sessionId'); // the session id is always persisted
 const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID';
+let serverState = await api$9.state();
 let tmpState;
 try {
   tmpState = JSON.parse(stateInSessionStorage);
   api$f.info("Loaded state from sessionStorage");
 } catch(e) {
   api$f.info("Loading initial state from server");
-  tmpState = await api$9.state();
+  tmpState = serverState;
 }
+// special case where server state overrides saved state on reload
+// this is a workaround to be fixed
+tmpState.webdavEnabled = serverState.webdavEnabled;
+// update the state in all plugins
 updateState(state, tmpState);
+// save the state in the session storage befor leaving the page
 window.addEventListener('beforeunload', evt => {
   api$f.debug("Saving state in sessionStorage");
   sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state));
