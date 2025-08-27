@@ -138,7 +138,7 @@ async function start(state) {
       sync.syncFiles(state).then(async (summary) => {
         logger.info(summary)
         if (summary && !summary.skipped) {
-          await fileselection.reload(state)
+          await fileselection.reload(state, {refresh:true})
           await updateState(state)
         }
       })
@@ -186,10 +186,10 @@ async function saveIfDirty() {
 
 function configureXmlEditor() {
   // Find the currently selected node's contents in the PDF
-  xmlEditor.on(XMLEditor.EVENT_SELECTION_CHANGED, searchNodeContents)
+  xmlEditor.on("selectionChanged", searchNodeContents)
 
   // manually show diagnostics if validation is disabled
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
+  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
     if (validation.isDisabled()) {
       let view = xmlEditor.getView()
       try {
@@ -201,10 +201,10 @@ function configureXmlEditor() {
   })
 
   // save dirty editor content after an update
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => saveIfDirty())
+  xmlEditor.on("editorUpdateDelayed", () => saveIfDirty())
 
   // xml vaidation events
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_NOT_WELL_FORMED, diagnostics => {
+  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
     console.warn("XML is not well-formed", diagnostics)
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
     // Show validation error in statusbar
@@ -214,7 +214,7 @@ function configureXmlEditor() {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
   })
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, data => {
+  xmlEditor.on("editorXmlWellFormed", data => {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
     xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))

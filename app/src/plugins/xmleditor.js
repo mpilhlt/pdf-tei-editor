@@ -187,6 +187,11 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
+
+  [readOnlyStatusWidget, cursorPositionWidget, 
+    indentationStatusWidget, teiHeaderToggleWidget]
+    .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
+
   if (!state.xml) {
     xmlEditor.clear()
     xmlEditor.setReadOnly(true)

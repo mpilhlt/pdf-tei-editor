@@ -10,7 +10,6 @@ import ui, { updateUi } from '../ui.js'
 import {
   updateState, client, logger, fileselection, xmlEditor, sse
 } from '../app.js'
-import { createHtmlElements } from '../ui.js'
 import { StatusProgress } from '../modules/panels/widgets/status-progress.js'
 
 /**
@@ -103,18 +102,13 @@ async function install(state) {
   ui.xmlEditor.statusbar.add(syncContainer, 'left', 3)
 
 }
-let webdavEnabled;
 
 /**
  * Invoked on application state change
  * @param {ApplicationState} state
  */
 async function update(state) {
-  // disable sync if webdav is not enabled or we have a read-only document
-  if (webdavEnabled !== state.webdavEnabled) {
-    console.warn("webdav", state.webdavEnabled)
-    webdavEnabled = state.webdavEnabled
-  }
+  // TODO implement `hidden` property on widgets
   syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none'
 }
 
@@ -172,5 +166,5 @@ async function onClickSyncBtn(state) {
     await updateState(state, { editorReadOnly: originalReadOnly })
   }
   // manually pressing the sync button should reload file data even if there were no changes
-  await fileselection.reload(state)
+  await fileselection.reload(state, {refresh:true})
 }

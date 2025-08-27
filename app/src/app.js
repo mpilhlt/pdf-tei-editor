@@ -12,7 +12,8 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
 }
 
 import pluginManager from "./modules/plugin.js"
-import ep from './endpoints.js' 
+import ep from './endpoints.js'
+import { invoke, updateState } from './modules/plugin-utils.js' 
 
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
@@ -105,45 +106,6 @@ for (const plugin of plugins) {
  * @param {number} [options.timeout=2000] - Timeout in milliseconds
  * @returns {Promise<*>}
  */
-async function invoke(endpoint, param, options = {}) {
-  // get all promises (or sync results) from the endpoints
-  const promises = pluginManager.invoke(endpoint, param)
-    // Set up a timeout mechanism so that the app doesn't hang if a promise does not resolve quickly or ever
-  const timeout = options.timeout !== undefined ? options.timeout : 2000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, timeout);
-  
-  try {
-    const result = await Promise.allSettled(promises.map(async (promise) => {
-      try {
-        return await promise;
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
-        } else {
-          console.error(`Error in plugin endpoint ${endpoint}:`, error);
-        }
-        throw error;
-      }
-    }));
-    return result;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-/**
- * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
- * @param {ApplicationState} state The application state object
- * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<Array>} Returns an array of return values of the plugin's `update` methods
- */
-async function updateState(state, changes={}) {
-  Object.assign(state, changes)
-  return await invoke(ep.state.update, state)
-}
 
 // 
 // Application bootstrapping
@@ -155,20 +117,28 @@ await invoke(ep.log.setLogLevel, {level: logLevel.DEBUG})
 // let the plugins install their components
 await invoke(ep.install, state)
 
+//
 // persist the state across reloads in sessionStorage
+//
 const SESSION_STORAGE_ID = 'pdf-tei-editor.state'
 const persistedStateVars = (await config.get("state.persist") || [])
 persistedStateVars.push('sessionId') // the session id is always persisted
 const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID'
-let tmpState
+let serverState = await client.state()
+let tmpState;
 try {
   tmpState = JSON.parse(stateInSessionStorage)
   logger.info("Loaded state from sessionStorage")
 } catch(e) {
   logger.info("Loading initial state from server")
-  tmpState = await client.state()
+  tmpState = serverState
 }
+// special case where server state overrides saved state on reload
+// this is a workaround to be fixed
+tmpState.webdavEnabled = serverState.webdavEnabled
+// update the state in all plugins
 updateState(state, tmpState)
+// save the state in the session storage befor leaving the page
 window.addEventListener('beforeunload', evt => {
   logger.debug("Saving state in sessionStorage")
   sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state))

@@ -18,12 +18,7 @@ Information for end users [can be found here](./docs/index.md)
 
 ## Installation
 
-Install uv and nodejs/npm
-
-```bash
-uv sync
-npm install
-```
+See the dedicated page on [installation](docs/install.md).
 
 ## Start the server
 
@@ -65,33 +60,6 @@ For production deployments, use the production server and a reverse proxy:
 npm run start:prod           # Start production waitress server
 # or directly:
 ./bin/start-prod 127.0.0.1 3001
-```
-
-### Reverse proxy setup (nginx example)
-```nginx
-server {
-    listen 443 ssl;
-    server_name your-domain.com;
-    
-    location / {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_redirect off;
-    }
-    
-    # Special handling for Server-Sent Events
-    location /sse/ {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 300;
-    }
-    
-    # SSL configuration...
-}
 ```
 
 ### Security considerations
