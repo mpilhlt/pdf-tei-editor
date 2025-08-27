@@ -21,7 +21,8 @@
       "mcp__browser-mcp__browser_click",
       "mcp__browser-mcp__browser_scroll",
       "mcp__browser-mcp__browser_close",
-      "mcp__browser-mcp__browser_press_key"
+      "mcp__browser-mcp__browser_press_key",
+      "WebFetch(domain:pdf-tei-editor.panya.de)"
     ],
     "deny": []
   }
