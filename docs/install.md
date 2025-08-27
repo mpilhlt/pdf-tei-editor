@@ -42,14 +42,14 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Forwarded-Host $host;
         proxy_redirect off;
     }
 
     # Special handling for Server-Sent Events
     location /sse/ {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:8000;
         proxy_buffering off;
         proxy_cache off;
         proxy_read_timeout 300;
@@ -93,7 +93,7 @@ Type=simple
 User=cloud
 WorkingDirectory=/path/to/pdf-tei-editor
 Environment=PATH=/path/to/pdf-tei-editor/.venv/bin
-ExecStart=/path/to/pdf-tei-editor/.venv/bin/waitress-serve --host=127.0.0.1 --port=8000 server.flask_app:app
+ExecStart=/path/to/pdf-tei-editor/.venv/bin/python /path/to/pdf-tei-editor/bin/start-prod
 Restart=always
 
 [Install]
@@ -116,3 +116,8 @@ sudo systemctl status pdf-tei-editor
 sudo journalctl -u pdf-tei-editor -f
 ```
 
+After updating the codebase, you need to run 
+
+```shell
+sudo systemctl restart pdf-tei-editor
+```

@@ -63,6 +63,9 @@ class HTTPSMiddleware:
 # Apply the middleware
 app.wsgi_app = HTTPSMiddleware(app.wsgi_app)
 
+# Configure Flask to prefer HTTPS when behind a reverse proxy
+app.config['PREFERRED_URL_SCHEME'] = 'https'
+
 def configure_logger_with_colors(target_logger, level=logging.DEBUG):
     """Configure a logger with colorized output for development and file logging"""
     # Always configure for development since we're using this in dev mode
