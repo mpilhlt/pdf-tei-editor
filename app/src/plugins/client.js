@@ -427,10 +427,10 @@ async function moveFiles(pdf, xml, destinationCollection) {
 
 /**
  * Returns all server-side configuration values for this application
- * @returns {Object} 
+ * @returns {Promise<Object>} 
  */
 async function getConfigData() {
-  return await callApi('/config', 'GET')
+  return await callApi('/config/list', 'GET')
 }
 
 /**

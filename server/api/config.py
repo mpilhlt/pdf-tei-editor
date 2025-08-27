@@ -45,8 +45,7 @@ def write_config(config_data:dict):
             raise e
 
 
-@bp.route("/", methods=["GET"])
-
+@bp.route("/list", methods=["GET"])
 @handle_api_errors
 #@session_required # TODO disabled because of /app/src/app.js#L160 
 def api_config_route():
