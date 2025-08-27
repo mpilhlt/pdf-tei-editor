@@ -215,28 +215,24 @@ def log_session_id():
         current_app.logger.debug(f"Session {session_id}")
     current_app.logger.debug(f"===========================================")
 
-# Serve from node_modules during development
+# Helper function to check if we're in development mode
+def is_development_mode():
+    return config_db.get("application.mode", "development") == "development"
+
+# Serve from node_modules during development only
 @app.route('/node_modules/<path:path>')
 def serve_node_modules(path):
+    if not is_development_mode():
+        return jsonify({"error": "Not found"}), 404
     return send_from_directory(node_modules_root, path)
 
-# Serve from /app/src during development
+# Serve from /app/src during development only
 @app.route('/src/<path:path>')
 def serve_src(path):
+    if not is_development_mode():
+        return jsonify({"error": "Not found"}), 404
     return send_from_directory(src_root, path)
 
-# Serve data files
-@app.route('/data/<path:path>')
-def serve_static(path):
-    return send_from_directory(data_root, path)
-
-# Serve config files - todo: this needs to be converted into real api routes!
-@app.route('/config/<path:path>')
-def serve_config(path):
-    # selectively allow access
-    if path in ["tei.json"]:
-        return send_from_directory(app_db_dir, path)
-    return jsonify({"error": "Access denied"}), 403
 
 # Serve documentation
 @app.route('/docs/<path:path>')

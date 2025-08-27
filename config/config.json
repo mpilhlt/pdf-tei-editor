@@ -49,5 +49,10 @@
   "server.logging.level": {
     "sse": "info",
     "sync": "info"
-  }
+  },
+  "application.mode": "development",
+  "application.mode.values": [
+    "development",
+    "production"
+  ]
 }
