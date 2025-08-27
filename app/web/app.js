@@ -61396,8 +61396,6 @@ await invoke(endpoints.install, state);
 
 // persist the state across reloads in sessionStorage
 const SESSION_STORAGE_ID = 'pdf-tei-editor.state';
-const persistedStateVars = (await api$e.get("state.persist") || []);
-persistedStateVars.push('sessionId'); // the session id is always persisted
 const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID';
 let tmpState;
 try {
@@ -61408,6 +61406,14 @@ try {
   tmpState = await api$9.state();
 }
 updateState(state, tmpState);
+
+// start the application 
+await invoke(endpoints.start, state);
+
+// Load configuration after plugins are fully initialized
+const persistedStateVars = (await api$e.get("state.persist") || []);
+persistedStateVars.push('sessionId'); // the session id is always persisted
+
 window.addEventListener('beforeunload', evt => {
   api$f.debug("Saving state in sessionStorage");
   sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state));
@@ -61415,8 +61421,5 @@ window.addEventListener('beforeunload', evt => {
 
 // URL hash params override properties
 await api$d.updateStateFromUrlHash(state);
-
-// start the application 
-await invoke(endpoints.start, state);
 
 export { api as accessControl, api$3 as appInfo, api$2 as authentication, api$9 as client, api$e as config, api$b as dialog, endpoints, api$7 as extraction, api$8 as fileselection, api$5 as floatingPanel, invoke, api$f as logger, pdfViewer, pluginManager, plugins, api$4 as promptEditor, api$6 as services, api$c as sse, state, api$1 as sync, updateState, api$d as urlHash, api$a as validation, xmlEditor };
