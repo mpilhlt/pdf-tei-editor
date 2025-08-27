@@ -22,6 +22,7 @@ const api = {
  */
 const plugin = {
   name: "floating-panel",
+  deps: ['config'],
   install,
   state: { update }
 }
