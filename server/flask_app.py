@@ -49,6 +49,20 @@ config_dir = project_root / 'config'
 app = Flask(__name__, static_folder=str(project_root))
 logger = logging.getLogger(__name__)
 
+# Middleware to handle HTTPS properly when behind a reverse proxy
+class HTTPSMiddleware:
+    def __init__(self, app):
+        self.app = app
+    
+    def __call__(self, environ, start_response):
+        # Check if we're behind a reverse proxy with HTTPS
+        if environ.get('HTTP_X_FORWARDED_PROTO') == 'https':
+            environ['wsgi.url_scheme'] = 'https'
+        return self.app(environ, start_response)
+
+# Apply the middleware
+app.wsgi_app = HTTPSMiddleware(app.wsgi_app)
+
 def configure_logger_with_colors(target_logger, level=logging.DEBUG):
     """Configure a logger with colorized output for development and file logging"""
     # Always configure for development since we're using this in dev mode

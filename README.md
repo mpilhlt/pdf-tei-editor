@@ -1,4 +1,4 @@
-# PDF-TEI Editor (working title)
+# PDF-TEI Editor
 
 A viewer/editor web app to compare the PDF source and TEI extraction/annotation results
 
@@ -25,13 +25,20 @@ uv sync
 npm install
 ```
 
-## Start the development server
+## Start the server
 
+### Development server
 ```bash
-npm run start
+npm run start        # or npm run start:dev
 ```
-
+Uses Flask's development server with hot-reloading and debug mode.
 Then open <http://localhost:3001>
+
+### Production server
+```bash
+npm run start:prod
+```
+Uses waitress WSGI server optimized for production with multiple threads.
 
 ## Build the application
 
@@ -44,18 +51,52 @@ npm run build
 - **Update import map**: `npm run update-importmap`
 - **User management**: `npm run manage <command>`
 - **Run tests**: `npm test`
-- **Run sync algorithm tests**: `npm run test:sync`
 
 ## Using the LLamore extraction engine
 
 To extract references from PDF, the [LLamore library](https://github.com/mpilhlt/llamore) is used. For LLamore to work, you currently need a Gemini API Key (got to <https://aistudio.google.com> to get one). Rename `.env.dist` to `.env` and add the key.
 
-## Public deployments
+## Production deployment
 
-For public deployments, the current approach using a development server is inadequate.
+For production deployments, use the production server and a reverse proxy:
 
-- You need to put a real http server in front of the flask server.
-- File uploads should be checked using the libmagic package to prevent malicious file content. This package depends on the native libmagic library, which is available on Linux via package manager. On Intel MacOS and Windows, use `uv add python-magic-bin`, on Apple Silicon Macs, use Homebrew and `brew install libmagic`. If the bindings are not available, the backend will only check for the correct file extension.
+### Backend server
+```bash
+npm run start:prod           # Start production waitress server
+# or directly:
+./bin/start-prod 127.0.0.1 3001
+```
+
+### Reverse proxy setup (nginx example)
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+    
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_redirect off;
+    }
+    
+    # Special handling for Server-Sent Events
+    location /sse/ {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300;
+    }
+    
+    # SSL configuration...
+}
+```
+
+### Security considerations
+- File uploads are checked using the libmagic package to prevent malicious file content. This package depends on the native libmagic library, which is available on Linux via package manager. On Intel MacOS and Windows, use `uv add python-magic-bin`, on Apple Silicon Macs, use Homebrew and `brew install libmagic`. If the bindings are not available, the backend will only check for the correct file extension.
+- The application includes HTTPS middleware that properly handles X-Forwarded-Proto headers from reverse proxies.
 
 ## Development
 
