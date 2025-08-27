@@ -1,6 +1,21 @@
-# Installing pdf-tei-editor on a vanilla Ubuntu server
+# Installation
 
-This is a recipe to install the application on a Ubuntu server, with a waitress WSGI server and a nginx https reverse proxy for https. Other contexts / platforms might need adaptations. 
+## Local test-drive or development
+
+```shell
+# requires uv and node/npm
+git clone https://github.com/mpilhlt/pdf-tei-editor.git
+cd pdf-tei-editor
+uv sync
+source .venv/bin/activate
+npm install
+npm start # this starts the development server on port 3001
+# or: npm run start-prod # starts the production server based on waitress on port 8000
+```
+
+## Production: Installation a vanilla Ubuntu server
+
+This is a recipe to install the application on a Ubuntu server, with a waitress WSGI server and a nginx https reverse proxy for https.
 
 ## install uv
 ```shell
