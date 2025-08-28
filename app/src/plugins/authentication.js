@@ -21,6 +21,7 @@ import { UrlHash } from '../modules/browser-utils.js';
  *  username: SlInput,
  *  password: SlInput,
  *  submit: SlButton,
+ *  aboutBtn?: SlButton,
  *  message: HTMLDivElement
  * }} loginDialog
  */
@@ -79,6 +80,18 @@ async function install(state) {
   ui.toolbar.logoutButton.addEventListener("click", logout)
   // prevent dialog from closing
   ui.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault())
+  
+  // Add Enter key handling for login
+  ui.loginDialog.username.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      ui.loginDialog.password.focus()
+    }
+  })
+  ui.loginDialog.password.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      ui.loginDialog.submit.click()
+    }
+  })
   
   // Add beforeunload handler to save session to URL hash
   window.addEventListener('beforeunload', () => {
