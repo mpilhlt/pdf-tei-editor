@@ -44975,8 +44975,11 @@ class XMLEditor extends EventEmitter {
       selection: EditorSelection.cursor(0)
     });
     this.#documentVersion = 0;
-    this.#editorIsDirty = false;
     await this.isReadyPromise();
+    
+    // Mark as clean AFTER the editor is ready and all update handlers have run
+    // This prevents auto-save from being triggered during initial load
+    this.#editorIsDirty = false;
     
     // Emit after load event
     await this.emit("editorAfterLoad", null);
