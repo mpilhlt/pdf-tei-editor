@@ -106,8 +106,11 @@ def validate_with_timeout(schema_file, validation_xml_bytes, namespace_type, tim
     
     try:
         # Run validation in subprocess with timeout
+        # Use the Python executable directly instead of 'uv run python' 
+        # to avoid dependency on uv being in PATH (e.g., in production systemd service)
+        import sys
         result = subprocess.run([
-            'uv', 'run', 'python', script_path, schema_file, xml_path, namespace_type
+            sys.executable, script_path, schema_file, xml_path, namespace_type
         ], 
         capture_output=True, 
         text=True, 
