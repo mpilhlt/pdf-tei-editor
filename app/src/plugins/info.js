@@ -21,6 +21,8 @@ const api = {
   open,
   load,
   goBack,
+  goHome,
+  goForward,
   close
 }
 
@@ -46,31 +48,16 @@ export default plugin
  * @property {SlDialog} self
  * @property {HTMLDivElement} content
  * @property {SlButton} backBtn
+ * @property {SlButton} homeBtn
+ * @property {SlButton} forwardBtn
+ * @property {SlButton} editGitHubBtn
  * @property {SlButton} closeBtn
  */
-
-// editor dialog
-const infoHtml = `
-<sl-dialog name="infoDialog" label="User Manual" class="dialog-big">
-  <div name="content" class="markdown-body"></div>
-  <sl-button name="backBtn" slot="footer" variant="default" disabled>
-    <sl-icon name="arrow-left"></sl-icon>Back</sl-button>
-  <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
-</sl-dialog>
-`
 
 /**
  * @typedef {object} toolbarInfoBtn
  * @property {SlButton} self
  */
-// button for toolbar
-const buttonHtml = `
-<sl-tooltip content="User Manual">
-  <sl-button name="editInstructions" size="small">
-    <sl-icon name="info-circle"></sl-icon>
-  </sl-button>
-</sl-tooltip>
-`
 //
 // Implementation
 //
@@ -83,6 +70,7 @@ const buttonHtml = `
 let md; 
 const localDocsBasePath = "../../docs"
 const remoteDocsBasePath = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/docs"
+const githubEditBasePath = "https://github.com/mpilhlt/pdf-tei-editor/edit/main/docs"
 
 /**
  * Checks if online connectivity is available with a short timeout
@@ -114,15 +102,33 @@ async function checkOnlineConnectivity(timeout = 3000) {
 let navigationHistory = []
 
 /**
+ * Forward history for the forward button
+ * @type {string[]}
+ */
+let forwardHistory = []
+
+/**
+ * Currently displayed page for GitHub editing
+ * @type {string}
+ */
+let currentPage = 'index.md'
+
+/**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
   // add the component html
-  await createHtmlElements(infoHtml, document.body)
+  await createHtmlElements('info-dialog.html', document.body)
   ui.infoDialog.closeBtn.addEventListener('click', () => ui.infoDialog.hide());
   ui.infoDialog.backBtn.addEventListener('click', goBack);
+  ui.infoDialog.homeBtn.addEventListener('click', goHome);
+  ui.infoDialog.forwardBtn.addEventListener('click', goForward);
+  ui.infoDialog.editGitHubBtn.addEventListener('click', () => {
+    const githubUrl = `${githubEditBasePath}/${currentPage}`
+    window.open(githubUrl, '_blank')
+  });
 
   // add About button to login dialog footer (left side)
   const aboutButton = document.createElement('sl-button')
@@ -137,7 +143,7 @@ async function install(state) {
   updateUi()
 
   // add a button to the command bar to show dialog
-  const button = (await createHtmlElements(buttonHtml))[0]
+  const button = (await createHtmlElements('info-toolbar-button.html'))[0]
   ui.toolbar.append(button)
   updateUi()
   button.addEventListener("click", () => api.open())
@@ -163,7 +169,8 @@ async function install(state) {
 async function open() {
   // Reset navigation history when opening the dialog
   navigationHistory = []
-  updateBackButton()
+  forwardHistory = []
+  updateNavigationButtons()
   ui.infoDialog.show()
   // Load the index page
   await load('index.md')
@@ -176,10 +183,15 @@ async function open() {
  */
 async function load(mdPath, addToHistory = true){
   // Add current page to history if we're navigating to a new page
-  if (addToHistory && navigationHistory.length === 0 || navigationHistory[navigationHistory.length - 1] !== mdPath) {
+  if (addToHistory && (navigationHistory.length === 0 || navigationHistory[navigationHistory.length - 1] !== mdPath)) {
     navigationHistory.push(mdPath)
-    updateBackButton()
+    // Clear forward history when navigating to a new page
+    forwardHistory = []
+    updateNavigationButtons()
   }
+  
+  // Update current page for GitHub editing
+  currentPage = mdPath
   
   // remove existing content
   ui.infoDialog.content.innerHTML = ""
@@ -234,21 +246,43 @@ async function load(mdPath, addToHistory = true){
  */
 function goBack() {
   if (navigationHistory.length > 1) {
-    // Remove current page from history
-    navigationHistory.pop()
+    // Add current page to forward history
+    const currentPage = navigationHistory.pop()
+    forwardHistory.push(currentPage)
     // Load the previous page without adding to history
     const previousPage = navigationHistory[navigationHistory.length - 1]
-    navigationHistory.pop() // Remove it so load() can add it back
-    load(previousPage)
+    load(previousPage, false)
+    updateNavigationButtons()
   }
 }
 
 /**
- * Updates the back button state based on navigation history
+ * Goes to the home page (index.md)
  */
-function updateBackButton() {
-  if (ui.infoDialog && ui.infoDialog.backBtn) {
+function goHome() {
+  load('index.md')
+}
+
+/**
+ * Goes forward to the next page in forward history
+ */
+function goForward() {
+  if (forwardHistory.length > 0) {
+    // Get the next page from forward history
+    const nextPage = forwardHistory.pop()
+    // Load the next page and add to history
+    load(nextPage, true)
+    updateNavigationButtons()
+  }
+}
+
+/**
+ * Updates the navigation button states based on history
+ */
+function updateNavigationButtons() {
+  if (ui.infoDialog && ui.infoDialog.backBtn && ui.infoDialog.forwardBtn) {
     ui.infoDialog.backBtn.disabled = navigationHistory.length <= 1
+    ui.infoDialog.forwardBtn.disabled = forwardHistory.length === 0
   }
 }
 

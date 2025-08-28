@@ -157,7 +157,7 @@ ui.dialog.message.innerHTML = text  // Access child element
 - For the moment, do not add API methods to the `@typedef` definitions used for documenting the named html elements hierarchy.
 
 ### Frontend Development
-- **Shoelace Icon Resources**: When using Shoelace icons programmatically (via `icon` attribute or StatusText widget), add a comment with the HTML literal to ensure the build system includes the icon resource: `// <sl-icon name="icon-name"></sl-icon>`
+- **Shoelace Icon Resources**: When using Shoelace icons programmatically (via `icon` attribute or StatusText widget) where the literal `<sl-icon name="icon-name"></sl-icon>` is not present in the codebase, add a comment with the HTML literal to ensure the build system includes the icon resource: `// <sl-icon name="icon-name"></sl-icon>`. This is not needed when the icon tag already exists verbatim in templates or HTML.
 
 ## Browser Automation and Testing
 
