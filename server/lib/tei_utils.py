@@ -311,5 +311,17 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
             for element_xml in non_header_elements:
                 header_lines.insert(closing_tei_idx, f"  {element_xml}")
                 closing_tei_idx += 1  # Update index for next insertion
+        else:
+            # If no closing TEI tag found, this might be a self-closing tag or malformed XML
+            # In this case, we need to reconstruct the document properly
+            # Remove any self-closing TEI tags and rebuild
+            header_lines = [line for line in header_lines if not line.strip().endswith('/>')]
+            
+            # Add the non-header elements
+            for element_xml in non_header_elements:
+                header_lines.append(f"  {element_xml}")
+            
+            # Add the closing TEI tag
+            header_lines.append('</TEI>')
     
     return '\n'.join(header_lines)
