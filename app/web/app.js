@@ -59654,11 +59654,7 @@ async function install$6(state) {
   });
 
   // add About button to login dialog footer (left side)
-  const aboutButton = document.createElement('sl-button');
-  aboutButton.setAttribute('slot', 'footer');
-  aboutButton.setAttribute('variant', 'default');
-  aboutButton.setAttribute('name', 'aboutBtn');
-  aboutButton.textContent = 'About';
+  const aboutButton = (await createHtmlElements('about-button.html'))[0];
   aboutButton.addEventListener('click', () => api$3.open());
   
   // Insert the About button before the Login button
