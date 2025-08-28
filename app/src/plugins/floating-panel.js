@@ -3,8 +3,8 @@
  * @import { Switch } from '../modules/switch.js'
  * @import { UIPart } from '../ui.js'
  */
-import { updateState, client, logger, services, dialog, xmlEditor, config } from '../app.js'
-import { $$, isValidXPath } from '../modules/browser-utils.js'
+import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
+import { $$ } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
 import { createHtmlElements, updateUi } from '../ui.js'
 import ui from '../ui.js'
@@ -63,6 +63,10 @@ const floatingPanelControls = await createHtmlElements('floating-panel.html')
 
 const pluginId = "floating-panel"
 
+let currentVariant = null
+let currentUser = null
+let cachedExtractors = null
+
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
@@ -80,33 +84,18 @@ async function install(state) {
   // make navigation draggable
   makeDraggable(ui.floatingPanel)
 
-  // populate the xpath selectbox
-  const xp = ui.floatingPanel.xpath
+  // populate the xpath selectbox (will be empty until user logs in)
+  await populateXpathSelectbox(state);
 
-  // Clear existing options
-  xp.innerHTML = '';
-
-  // Populate select box with options
-
-  /**
-   * @type {{value:string, label:string}[]}
-   */
-  const selectBoxData = await config.get("navigation.xpath.list")
-  selectBoxData.forEach(item => {
-    const option = document.createElement('option');
-    option.value = item.value || ''
-    option.text = item.label
-    option.disabled = item.value === null
-    xp.appendChild(option);
-  });
+  // define shorthand for xpath selectbox
+  const xp = ui.floatingPanel.xpath;
 
   // listen for changes in the selectbox
   xp.addEventListener('change', async () => {
     await updateState(state, { xpath: xp.value })
   });
 
-  // button to edit the xpath manually
-  ui.floatingPanel.editXpath.addEventListener('click', () => onEditXpath(state))
+  // Edit XPath button functionality removed for now
 
   // setup event handlers
   const fp = ui.floatingPanel
@@ -149,6 +138,27 @@ async function install(state) {
  */
 async function update(state) {
   //console.warn("update", plugin.name, state)
+  
+  // Cache extractor list when user logs in
+  let extractorsJustCached = false
+  if (currentUser !== state.user && state.user !== null) {
+    currentUser = state.user
+    try {
+      cachedExtractors = await client.getExtractorList()
+      extractorsJustCached = true
+      logger.debug('Cached extractor list for floating panel:', cachedExtractors)
+    } catch (error) {
+      logger.error('Failed to load extractor list:', error)
+      cachedExtractors = []
+    }
+  }
+  
+  // Check if variant has changed or extractors were just cached, repopulate xpath selectbox
+  if (currentVariant !== state.variant || extractorsJustCached) {
+    currentVariant = state.variant
+    await populateXpathSelectbox(state)
+  }
+  
   // show the xpath selector
   if (state.xpath) {
     let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)
@@ -160,11 +170,8 @@ async function update(state) {
       // this sets the xpath selectbox to one of the existing values
       ui.floatingPanel.xpath.selectedIndex = foundAtIndex
     } else {
-      // the value does not exist, save it to the last option
-      let lastIdx = ui.floatingPanel.xpath.options.length - 1
-      ui.floatingPanel.xpath.options[lastIdx].value = state.xpath
-      ui.floatingPanel.xpath.options[lastIdx].text = `Custom: ${state.xpath}`
-      ui.floatingPanel.xpath.options[lastIdx].disabled = false
+      // the value does not exist in predefined options, select none
+      ui.floatingPanel.xpath.selectedIndex = -1
     }
     // update counter with index and size
     xmlEditor.whenReady().then(() => updateCounter(nonIndexedPath, index))
@@ -203,8 +210,9 @@ async function changeNodeIndex(state, delta) {
   if (isNaN(delta)) {
     throw new TypeError("Second argument must be a number")
   }
-  const normativeXpath = ui.floatingPanel.xpath.value
-  let { index } = parseXPath(state.xpath)
+  // Use the actual xpath from state, parse out the base path
+  let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath)
+  const normativeXpath = pathBeforePredicates + nonIndexPredicates
   const size = xmlEditor.countDomNodesByXpath(normativeXpath)
   if (size < 2) return
   if (index === null) index = 1
@@ -215,6 +223,73 @@ async function changeNodeIndex(state, delta) {
   await updateState(state, { xpath })
 }
 
+
+/**
+ * Populates the xpath selectbox based on the current variant
+ * @param {ApplicationState} state
+ */
+async function populateXpathSelectbox(state) {
+  const xp = ui.floatingPanel.xpath
+
+  // Clear existing options
+  xp.innerHTML = '';
+
+  const variantId = state.variant
+  logger.debug('populateXpathSelectbox called with variant:', variantId, 'cachedExtractors:', cachedExtractors)
+
+  if (!variantId) {
+    // No variant selected, show empty selectbox
+    const option = document.createElement('option');
+    option.value = ''
+    option.text = 'No variant selected'
+    option.disabled = true
+    xp.appendChild(option);
+    return
+  }
+
+  // Use cached extractor list to find navigation xpath data
+  if (!cachedExtractors) {
+    // Show error fallback
+    const option = document.createElement('option');
+    option.value = ''
+    option.text = 'Error loading navigation paths'
+    option.disabled = true
+    xp.appendChild(option);
+    return
+  }
+  
+  // Find the extractor that contains this variant
+  let navigationXpathList = null
+  for (const extractor of cachedExtractors) {
+    logger.debug('Checking extractor:', extractor.id, 'for variant:', variantId, 'navigation_xpath:', extractor.navigation_xpath)
+    const navigationXpath = extractor.navigation_xpath?.[variantId]
+    if (navigationXpath) {
+      navigationXpathList = navigationXpath
+      logger.debug('Found navigation xpath list:', navigationXpathList)
+      break
+    }
+  }
+
+  if (!navigationXpathList) {
+    // Variant not found in any extractor, show fallback
+    const option = document.createElement('option');
+    option.value = ''
+    option.text = `No navigation paths for variant: ${variantId}`
+    option.disabled = true
+    xp.appendChild(option);
+    return
+  }
+
+  // Populate select box with options from extractor (skip null values)
+  navigationXpathList.forEach(item => {
+    if (item.value !== null) {
+      const option = document.createElement('option');
+      option.value = item.value
+      option.text = item.label
+      xp.appendChild(option);
+    }
+  });
+}
 
 //
 // Event handlers
@@ -235,30 +310,7 @@ function onClickSelectionIndex() {
   }
 }
 
-/**
- * Called when the custom Xpath button has been clicked on
- * @param {ApplicationState} state 
- */
-async function onEditXpath(state) {
-  const xmlDoc = xmlEditor.getXmlTree()
-  if (xmlDoc === null) {
-    return
-  }
-  const xp = ui.floatingPanel.xpath
-  const custom = xp.options[xp.length - 1]
-  const xpath = prompt("Enter custom xpath", custom.value)
-  if (!xpath) return
-
-  if (!isValidXPath(xpath, xmlDoc, xmlEditor.namespaceResolver)) {
-    dialog.error(`'${xpath} is not a valid XPath expression'`)
-  }
-
-  custom.value = xpath
-  custom.text = `Custom: ${xpath}`
-  xp.selectedIndex = xp.length - 1
-  xp.options[xp.length - 1].disabled = false
-  await updateState(state, { xpath })
-}
+// Custom XPath editing functionality removed for now
 
 //
 // helper functions

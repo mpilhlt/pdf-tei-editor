@@ -59,6 +59,26 @@ class GrobidTrainingExtractor(BaseExtractor):
                         "article/dh-law-footnotes"
                     ]
                 }
+            },
+            "navigation_xpath": {
+                "grobid.training.segmentation": [
+                    {
+                        "value": "//tei:listBibl",
+                        "label": "<listBibl>"
+                    }
+                ],
+                "grobid.training.references.referenceSegmenter": [
+                    {
+                        "value": "//tei:listBibl",
+                        "label": "<listBibl>"
+                    }
+                ],                
+                "grobid.training.citation": [
+                    {
+                        "value": "//tei:listBibl",
+                        "label": "<listBibl>"
+                    }
+                ]
             }
         }
     
