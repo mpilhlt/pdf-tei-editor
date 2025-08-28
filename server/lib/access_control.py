@@ -337,6 +337,12 @@ class AccessControlUpdater:
 def get_document_permissions(file_path: str) -> DocumentPermissions:
     """Get permissions for a document by file path (re-parses XML)."""
     try:
+        # Only attempt to parse XML/TEI files - PDF files don't have XML permissions
+        if not (file_path.endswith('.xml') or file_path.endswith('.tei.xml')):
+            # Non-XML files default to public/editable (no access control metadata)
+            logger.debug(f"Skipping XML parsing for non-XML file: {file_path}")
+            return DocumentPermissions('public', 'editable', None, [], None)
+            
         full_path = os.path.join(current_app.config["DATA_ROOT"], safe_file_path(file_path))
         # Use etree.parse() directly to avoid encoding declaration issues
         tree = etree.parse(full_path)

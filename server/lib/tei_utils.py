@@ -5,7 +5,6 @@ TEI document creation and manipulation utilities
 import datetime
 from typing import Dict, Any, List, Optional
 from lxml import etree
-import xml.dom.minidom
 
 
 def create_tei_document(schema_type: str = "relaxng", 
@@ -221,9 +220,8 @@ def serialize_tei_xml(tei_doc: etree.Element) -> str:
         # Create the processing instruction
         pi_content = f'href="{relaxng_schema}" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"'
         
-        # Serialize the element
-        tei_xml = etree.tostring(tei_doc, pretty_print=False, encoding="UTF-8").decode()
-        tei_xml = xml.dom.minidom.parseString(tei_xml).toprettyxml(indent="  ", encoding="utf-8").decode()
+        # Serialize the element with lxml pretty printing
+        tei_xml = etree.tostring(tei_doc, pretty_print=True, encoding="unicode", method="xml")
         
         # Remove xml declaration and add the processing instruction
         lines = tei_xml.split("\n")[1:]  # Remove XML declaration
@@ -231,11 +229,14 @@ def serialize_tei_xml(tei_doc: etree.Element) -> str:
         lines.insert(0, f'<?xml-model {pi_content}?>')
         tei_xml = "\n".join(lines)
     else:
-        # Standard serialization
-        tei_xml = etree.tostring(tei_doc, pretty_print=False, encoding="UTF-8").decode()
-        tei_xml = xml.dom.minidom.parseString(tei_xml).toprettyxml(indent="  ", encoding="utf-8").decode()
+        # Standard serialization with lxml pretty printing
+        tei_xml = etree.tostring(tei_doc, pretty_print=True, encoding="unicode", method="xml")
         # remove xml declaration
-        tei_xml = "\n".join(tei_xml.split("\n")[1:])
+        lines = tei_xml.split("\n")
+        if lines and lines[0].startswith('<?xml'):
+            tei_xml = "\n".join(lines[1:])
+        else:
+            tei_xml = "\n".join(lines)
     
     return tei_xml
 
@@ -256,7 +257,6 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
     - Pretty-print the teiHeader for readability
     - Preserve exact formatting of all other elements (text, facsimile, etc.)
     """
-    import xml.dom.minidom
     import re
     
     # Extract and temporarily remove all non-header elements to preserve their formatting
@@ -276,33 +276,36 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
     for element in elements_to_remove:
         tei_doc.remove(element)
     
-    # Serialize with pretty-print to get formatted XML for minidom to work with
+    # Force conversion of self-closing TEI tags to open/close tags
+    # Add temporary content to prevent self-closing behavior
+    if len(tei_doc) == 0 or (len(tei_doc) == 1 and tei_doc[0].tag.endswith('teiHeader')):
+        # Add temporary comment to prevent self-closing
+        temp_comment = etree.Comment("TEMPORARY_CONTENT_TO_PREVENT_SELF_CLOSING")
+        tei_doc.append(temp_comment)
+        added_temp_content = True
+    else:
+        added_temp_content = False
+    
+    # Use lxml's pretty printing which preserves case
     header_xml = etree.tostring(tei_doc, encoding='unicode', method='xml', pretty_print=True)
     
-    # Force conversion of self-closing TEI tags to open/close tags BEFORE minidom parsing
-    # Add temporary content to prevent minidom from making it self-closing again
-    header_xml = re.sub(
-        r'<TEI([^>]*?)\s*/>', 
-        r'<TEI\1><!-- TEMPORARY_CONTENT_TO_PREVENT_SELF_CLOSING --></TEI>', 
-        header_xml
-    )
-    
-    # Parse and pretty-print with minidom
-    dom = xml.dom.minidom.parseString(header_xml)
-    pretty_header = dom.toprettyxml(indent="  ")
-    
-    # Remove the temporary content
-    pretty_header = pretty_header.replace('<!-- TEMPORARY_CONTENT_TO_PREVENT_SELF_CLOSING -->', '')
+    # Remove temporary content if we added it
+    if added_temp_content:
+        header_xml = header_xml.replace('<!--TEMPORARY_CONTENT_TO_PREVENT_SELF_CLOSING-->', '')
+        header_xml = header_xml.replace('<!-- TEMPORARY_CONTENT_TO_PREVENT_SELF_CLOSING -->', '')
+        # Also remove from the actual tree for consistency
+        if len(tei_doc) > 0 and hasattr(tei_doc[-1], 'tag') and tei_doc[-1].tag is etree.Comment:
+            tei_doc.remove(tei_doc[-1])
     
     # Clean up the pretty-printed header (remove xml declaration and empty lines)
-    header_lines = [line for line in pretty_header.split('\n') if line.strip() and not line.startswith('<?xml')]
+    header_lines = [line for line in header_xml.split('\n') if line.strip() and not line.startswith('<?xml')]
     
     # Handle TEI closing tag properly
     if non_header_elements:
-        # Find the closing TEI tag and insert the elements before it
+        # Find the closing TEI tag (case-insensitive) and insert the elements before it
         closing_tei_idx = None
         for i, line in enumerate(header_lines):
-            if '</TEI>' in line:
+            if '</TEI>' in line or '</tei>' in line:
                 closing_tei_idx = i
                 break
         
