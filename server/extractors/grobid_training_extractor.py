@@ -61,12 +61,6 @@ class GrobidTrainingExtractor(BaseExtractor):
                 }
             },
             "navigation_xpath": {
-                "grobid.training.fulltext": [
-                    {
-                        "value": "//tei:biblStruct",
-                        "label": "<biblStruct>"
-                    }
-                ],
                 "grobid.training.segmentation": [
                     {
                         "value": "//tei:listBibl",
@@ -75,8 +69,14 @@ class GrobidTrainingExtractor(BaseExtractor):
                 ],
                 "grobid.training.references.referenceSegmenter": [
                     {
-                        "value": "//tei:biblStruct",
-                        "label": "<biblStruct>"
+                        "value": "//tei:listBibl",
+                        "label": "<listBibl>"
+                    }
+                ],                
+                "grobid.training.citation": [
+                    {
+                        "value": "//tei:listBibl",
+                        "label": "<listBibl>"
                     }
                 ]
             }
