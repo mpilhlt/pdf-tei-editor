@@ -50507,6 +50507,8 @@ const floatingPanelControls = await createHtmlElements('floating-panel.html');
 
 const pluginId = "floating-panel";
 
+let currentVariant = null;
+
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
@@ -50525,24 +50527,7 @@ async function install$9(state) {
   makeDraggable(ui$1.floatingPanel);
 
   // populate the xpath selectbox
-  const xp = ui$1.floatingPanel.xpath;
-
-  // Clear existing options
-  xp.innerHTML = '';
-
-  // Populate select box with options
-
-  /**
-   * @type {{value:string, label:string}[]}
-   */
-  const selectBoxData = await api$e.get("navigation.xpath.list");
-  selectBoxData.forEach(item => {
-    const option = document.createElement('option');
-    option.value = item.value || '';
-    option.text = item.label;
-    option.disabled = item.value === null;
-    xp.appendChild(option);
-  });
+  await populateXpathSelectbox(state);
 
   // listen for changes in the selectbox
   xp.addEventListener('change', async () => {
@@ -50593,6 +50578,13 @@ async function install$9(state) {
  */
 async function update$4(state) {
   //console.warn("update", plugin.name, state)
+  
+  // Check if variant has changed and repopulate xpath selectbox
+  if (currentVariant !== state.variant) {
+    currentVariant = state.variant;
+    await populateXpathSelectbox(state);
+  }
+  
   // show the xpath selector
   if (state.xpath) {
     let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath);
@@ -50659,6 +50651,73 @@ async function changeNodeIndex(state, delta) {
   await updateState(state, { xpath });
 }
 
+
+/**
+ * Populates the xpath selectbox based on the current variant
+ * @param {ApplicationState} state
+ */
+async function populateXpathSelectbox(state) {
+  const xp = ui$1.floatingPanel.xpath;
+
+  // Clear existing options
+  xp.innerHTML = '';
+
+  const variantId = state.variant;
+
+  if (!variantId) {
+    // No variant selected, show empty selectbox
+    const option = document.createElement('option');
+    option.value = '';
+    option.text = 'No variant selected';
+    option.disabled = true;
+    xp.appendChild(option);
+    return
+  }
+
+  // Get extractor list to find navigation xpath data
+  try {
+    const extractors = await api$9.getExtractorList();
+    
+    // Find the extractor that contains this variant
+    let navigationXpathList = null;
+    for (const extractor of extractors) {
+      const navigationXpath = extractor.navigation_xpath?.[variantId];
+      if (navigationXpath) {
+        navigationXpathList = navigationXpath;
+        break
+      }
+    }
+
+    if (!navigationXpathList) {
+      // Variant not found in any extractor, show fallback
+      const option = document.createElement('option');
+      option.value = '';
+      option.text = `No navigation paths for variant: ${variantId}`;
+      option.disabled = true;
+      xp.appendChild(option);
+      return
+    }
+
+    // Populate select box with options from extractor
+    navigationXpathList.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.value || '';
+      option.text = item.label;
+      option.disabled = item.value === null;
+      xp.appendChild(option);
+    });
+
+  } catch (error) {
+    api$f.error('Failed to load extractor data for xpath selectbox:', error);
+    
+    // Show error fallback
+    const option = document.createElement('option');
+    option.value = '';
+    option.text = 'Error loading navigation paths';
+    option.disabled = true;
+    xp.appendChild(option);
+  }
+}
 
 //
 // Event handlers
