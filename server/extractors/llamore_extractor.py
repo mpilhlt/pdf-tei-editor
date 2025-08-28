@@ -75,10 +75,6 @@ class LLamoreExtractor(BaseExtractor):
                     {
                         "value": "//tei:biblStruct[@status='unresolved']",
                         "label": "Unresolved <biblStruct>"
-                    },
-                    {
-                        "value": null,
-                        "label": "Custom XPath"
                     }
                 ]
             }

@@ -65,30 +65,18 @@ class GrobidTrainingExtractor(BaseExtractor):
                     {
                         "value": "//tei:biblStruct",
                         "label": "<biblStruct>"
-                    },
-                    {
-                        "value": null,
-                        "label": "Custom XPath"
                     }
                 ],
                 "grobid.training.segmentation": [
                     {
                         "value": "//tei:listBibl",
                         "label": "<listBibl>"
-                    },
-                    {
-                        "value": null,
-                        "label": "Custom XPath"
                     }
                 ],
                 "grobid.training.references.referenceSegmenter": [
                     {
                         "value": "//tei:biblStruct",
                         "label": "<biblStruct>"
-                    },
-                    {
-                        "value": null,
-                        "label": "Custom XPath"
                     }
                 ]
             }
