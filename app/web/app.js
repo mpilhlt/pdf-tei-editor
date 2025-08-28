@@ -59555,6 +59555,7 @@ const api$3 = {
  */
 const plugin$6 = {
   name: "info",
+  deps: ['authentication'],
   install: install$6
 };
 
@@ -59603,7 +59604,31 @@ const buttonHtml = `
  * @type {MarkdownIt}
  */
 let md; 
-const docsBasePath = "../../docs";
+const localDocsBasePath = "../../docs";
+const remoteDocsBasePath = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/docs";
+
+/**
+ * Checks if online connectivity is available with a short timeout
+ * @param {number} timeout - Timeout in milliseconds (default: 3000)
+ * @returns {Promise<boolean>}
+ */
+async function checkOnlineConnectivity(timeout = 3000) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    const response = await fetch(`${remoteDocsBasePath}/index.md`, {
+      method: 'HEAD',
+      signal: controller.signal,
+      cache: 'no-cache'
+    });
+    
+    clearTimeout(timeoutId);
+    return response.ok
+  } catch (error) {
+    return false
+  }
+}
 
 /**
  * Navigation history for the back button
@@ -59621,6 +59646,18 @@ async function install$6(state) {
   await createHtmlElements(infoHtml, document.body);
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.hide());
   ui$1.infoDialog.backBtn.addEventListener('click', goBack);
+
+  // add About button to login dialog footer (left side)
+  const aboutButton = document.createElement('sl-button');
+  aboutButton.setAttribute('slot', 'footer');
+  aboutButton.setAttribute('variant', 'default');
+  aboutButton.setAttribute('name', 'aboutBtn');
+  aboutButton.textContent = 'About';
+  aboutButton.addEventListener('click', () => api$3.open());
+  
+  // Insert the About button before the Login button
+  ui$1.loginDialog.insertBefore(aboutButton, ui$1.loginDialog.submit);
+  updateUi();
 
   // add a button to the command bar to show dialog
   const button = (await createHtmlElements(buttonHtml))[0];
@@ -59672,11 +59709,26 @@ async function load(mdPath, addToHistory = true){
   
   // load markdown 
   let markdown;
+  let isOnline = false;
+  
   try {
-    markdown = await (await fetch(`${docsBasePath}/${mdPath}`)).text();
+    // First, try to load from remote if online
+    isOnline = await checkOnlineConnectivity();
+    if (isOnline) {
+      api$f.debug(`Loading documentation from remote: ${mdPath}`);
+      markdown = await (await fetch(`${remoteDocsBasePath}/${mdPath}`)).text();
+    } else {
+      throw new Error("No online connectivity")
+    }
   } catch(error) {
-    api$b.error(error.message);
-    return 
+    // Fallback to local filesystem
+    try {
+      api$f.debug(`Falling back to local documentation: ${mdPath}`);
+      markdown = await (await fetch(`${localDocsBasePath}/${mdPath}`)).text();
+    } catch(localError) {
+      api$b.error(`Failed to load documentation: ${localError.message}`);
+      return 
+    }
   }
   
   // convert to html
@@ -59686,8 +59738,10 @@ async function load(mdPath, addToHistory = true){
       /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#).*?)\2(.*?>)/g, 
       `$1href="#" onclick="appInfo.load('$3'); return false"$4`
     )
-    // add prefix to relative image source links
-    .replaceAll(/src="(\.\/)?images\//g, 'src="docs/images/')
+    // add prefix to relative image source links - use remote or local based on connectivity
+    .replaceAll(/src="(\.\/)?images\//g, isOnline ? 
+      `src="${remoteDocsBasePath}/images/` : 
+      'src="docs/images/')
     // open remote links in new tabs
     .replaceAll(/(href="http)/g, `target="_blank" $1`)
     // remove comment tags that mask the <sl-icon> tags in the markdown
@@ -60203,6 +60257,7 @@ async function searchNodeContents() {
  *  username: SlInput,
  *  password: SlInput,
  *  submit: SlButton,
+ *  aboutBtn?: SlButton,
  *  message: HTMLDivElement
  * }} loginDialog
  */
@@ -60259,6 +60314,18 @@ async function install$3(state) {
   ui$1.toolbar.logoutButton.addEventListener("click", logout);
   // prevent dialog from closing
   ui$1.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
+  
+  // Add Enter key handling for login
+  ui$1.loginDialog.username.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      ui$1.loginDialog.password.focus();
+    }
+  });
+  ui$1.loginDialog.password.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      ui$1.loginDialog.submit.click();
+    }
+  });
   
   // Add beforeunload handler to save session to URL hash
   window.addEventListener('beforeunload', () => {
