@@ -5,9 +5,41 @@ This module centralizes all hashing logic to ensure consistency across the appli
 
 import hashlib
 import json
-import fcntl
+import sys
 from pathlib import Path
 from flask import current_app
+
+# Platform-specific imports for file locking
+if sys.platform == 'win32':
+    import msvcrt
+else:
+    import fcntl
+
+
+def _lock_file(file_handle):
+    """Cross-platform file locking"""
+    if sys.platform == 'win32':
+        # On Windows, msvcrt.locking locks the entire file
+        # LK_NBLCK for non-blocking lock, but we want blocking behavior like fcntl
+        try:
+            msvcrt.locking(file_handle.fileno(), msvcrt.LK_LOCK, 1)
+        except OSError:
+            # If locking fails, continue anyway (Windows file locking is advisory)
+            pass
+    else:
+        fcntl.flock(file_handle, fcntl.LOCK_EX)
+
+
+def _unlock_file(file_handle):
+    """Cross-platform file unlocking"""
+    if sys.platform == 'win32':
+        try:
+            msvcrt.locking(file_handle.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            # If unlocking fails, it might already be unlocked
+            pass
+    else:
+        fcntl.flock(file_handle, fcntl.LOCK_UN)
 
 
 # Global cache for hash lookup table
@@ -150,7 +182,7 @@ def add_path_to_lookup(file_path: str) -> str:
     # File lock to handle concurrency
     # Use 'r+' to read and write, 'w+' for creation if not exists
     with open(lookup_file, 'r+' if lookup_file.exists() else 'w+') as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        _lock_file(f)
 
         f.seek(0)
         try:
@@ -168,7 +200,7 @@ def add_path_to_lookup(file_path: str) -> str:
 
         reverse_lookup = {v: k for k, v in lookup_table.items()}
         if file_path in reverse_lookup:
-            fcntl.flock(f, fcntl.LOCK_UN)
+            _unlock_file(f)
             return reverse_lookup[file_path]
 
         # --- It's a new path, add it ---
@@ -212,7 +244,7 @@ def add_path_to_lookup(file_path: str) -> str:
         f.truncate()
         json.dump(lookup_table, f, indent=2)
 
-        fcntl.flock(f, fcntl.LOCK_UN)
+        _unlock_file(f)
 
         # Invalidate cache again after modification
         invalidate_hash_lookup_cache()
