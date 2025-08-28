@@ -2,14 +2,14 @@
   <div name="content" class="markdown-body"></div>
   <div slot="footer" style="display: flex; width: 100%; justify-content: space-between; align-items: center;">
     <sl-button name="editGitHubBtn" variant="default">
-      <sl-icon name="github"></sl-icon>Edit on GitHub</sl-button>
+      <sl-icon name="github" slot="prefix"></sl-icon>Edit on GitHub</sl-button>
     <div style="display: flex; gap: 8px;">
       <sl-button name="backBtn" variant="default" disabled>
-        <sl-icon name="arrow-left"></sl-icon>Back</sl-button>
+        <sl-icon name="arrow-left" slot="prefix"></sl-icon>Back</sl-button>
       <sl-button name="homeBtn" variant="default">
-        <sl-icon name="house"></sl-icon>Home</sl-button>
+        <sl-icon name="house" slot="prefix"></sl-icon>Home</sl-button>
       <sl-button name="forwardBtn" variant="default" disabled>
-        <sl-icon name="arrow-right"></sl-icon>Forward</sl-button>
+        <sl-icon name="arrow-right" slot="prefix"></sl-icon>Forward</sl-button>
       <sl-button name="closeBtn" variant="primary">Close</sl-button>
     </div>
   </div>

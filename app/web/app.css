@@ -202,8 +202,3 @@ sl-icon.rotating {
     transform: rotate(360deg);
   }
 }
-
-/* Add gap between icon and text in buttons */
-sl-button sl-icon {
-  margin-right: 5px;
-}
