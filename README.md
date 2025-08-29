@@ -102,6 +102,42 @@ For example, a toolbar part might be defined as:
 
 This documentation system ensures type safety and provides comprehensive autocompletion support throughout the JavaScript codebase without requiring TypeScript compilation.
 
+### Template Registration System
+
+The application uses a modern template registration system that optimizes performance for both development and production:
+
+**Key Features:**
+- **Development Mode** (`?dev`): Templates loaded dynamically from files for fast iteration
+- **Production Mode**: Templates pre-bundled into `templates.json` for optimal performance  
+- **Parameter Substitution**: Templates support `${param}` syntax for dynamic content
+- **Type Safety**: Synchronous template creation with proper TypeScript support
+
+**Basic Usage:**
+```javascript
+// Register templates at module level
+import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js';
+
+await registerTemplate('dialog-template', 'dialog.html');
+await registerTemplate('button-template', 'button.html');
+
+// Create elements synchronously in install functions
+async function install(state) {
+  // Create single element (no [0] suffix needed)
+  const button = createSingleFromTemplate('button-template');
+  
+  // Create with parameters
+  const customButton = createSingleFromTemplate('button-template', null, {
+    text: 'Save Document',
+    variant: 'primary'
+  });
+}
+```
+
+**Build Integration:**
+- Templates are automatically analyzed and bundled during `npm run build`
+- Build script `bin/bundle-templates.js` scans for `registerTemplate()` calls
+- Development mode uses live template files, production uses bundled JSON
+
 ## Dev environment
 
 During development, it is often easier to work with the NPM source files rather than the compiled bundle. You can load the application in this mode by attaching `?dev` to the URL, for example, `http://localhost:3001?dev`.

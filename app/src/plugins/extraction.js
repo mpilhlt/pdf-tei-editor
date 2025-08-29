@@ -7,7 +7,8 @@
  * @import { SlButton, SlButtonGroup, SlDialog } from '../ui.js'
  */
 import { client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
-import { SlSelect, SlOption, SlInput, createHtmlElements, updateUi } from '../ui.js'
+import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
 import { isDoi, extractDoi } from '../modules/utils.js';
@@ -43,29 +44,13 @@ export default plugin
 /**
  * Extraction actions button group
  * @typedef {object} extractionActionsPart
- * @property {SlButtonGroup} self
  * @property {SlButton} extractNew 
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
-/** @type {SlButtonGroup & extractionActionsPart} */
-// @ts-ignore
-const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0]
-
-
-/**
- * Extraction options dialog
- * @typedef {object} extractionOptionsDialog
- * @property {SlDialog} self
- * @property {SlInput} doi 
- * @property {SlSelect} collectionName
- * @property {SlSelect} modelIndex 
- * @property {SlButton} cancel
- * @property {SlButton} submit
- */
-/** @type {extractionOptionsDialog & SlDialog} */
-// @ts-ignore
-const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0]
+// Register templates
+await registerTemplate('extraction-buttons', 'extraction-buttons.html');
+await registerTemplate('extraction-dialog', 'extraction-dialog.html');
 
 /**
  * @typedef {Object} ExtractionOptions
@@ -84,9 +69,12 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0]
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
+  // Create UI elements
+  const extractionBtnGroup = createSingleFromTemplate('extraction-buttons');
+  const optionsDialog = createSingleFromTemplate('extraction-dialog', document.body);
+
   // Add extraction buttons to toolbar with medium priority
   ui.toolbar.add(extractionBtnGroup, 7);
-  document.body.append(optionsDialog)
   updateUi()
 
   // add event listeners
@@ -99,8 +87,8 @@ async function install(state) {
  */
 async function update(state) {
   // @ts-ignore
-  extractionBtnGroup.childNodes.forEach(child => child.disabled = state.offline) 
-  extractionBtnGroup.extractCurrent.disabled = !state.pdf
+  ui.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline) 
+  ui.toolbar.extractionActions.extractCurrent.disabled = !state.pdf
   //console.warn(plugin.name,"done")
 }
 
@@ -225,11 +213,11 @@ async function promptForExtractionOptions(options={}) {
 
   // use doi if available - prioritize options parameter, then document metadata
   const doiValue = options.doi || documentMetadata.doi || "";
-  optionsDialog.doi.value = doiValue;
+  ui.extractionOptions.doi.value = doiValue;
 
   // configure collections selectbox 
   /** @type {SlSelect|null} */
-  const collectionSelectBox = optionsDialog.collectionName
+  const collectionSelectBox = ui.extractionOptions.collectionName
   collectionSelectBox.innerHTML=""
   const collectionData = ui.toolbar.pdf.dataset.collections || '[]'
   const collections = JSON.parse(collectionData)
@@ -249,7 +237,7 @@ async function promptForExtractionOptions(options={}) {
 
   // configure model selectbox with available extractors
   /** @type {SlSelect|null} */
-  const modelSelectBox = optionsDialog.modelIndex
+  const modelSelectBox = ui.extractionOptions.modelIndex
   modelSelectBox.innerHTML = ""
   
   // Get extractors and store for dynamic options
@@ -304,7 +292,7 @@ async function promptForExtractionOptions(options={}) {
     const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId)
     
     // Clear existing dynamic options
-    const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]')
+    const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
     if (dynamicOptionsContainer) {
       dynamicOptionsContainer.innerHTML = ""
     }
@@ -327,7 +315,7 @@ async function promptForExtractionOptions(options={}) {
       // Create select dropdown for predefined options
       const select = Object.assign(new SlSelect, {
         name: optionKey,
-        label: optionConfig.description || optionKey,
+        label: optionConfig.label || optionKey,
         size: "small"
       })
       
@@ -398,7 +386,7 @@ async function promptForExtractionOptions(options={}) {
       // Create text input for free-form string fields
       const input = Object.assign(new SlInput, {
         name: optionKey,
-        label: optionConfig.description || optionKey,
+        label: optionConfig.label || optionKey,
         size: "small",
         type: "text"
       })
@@ -430,13 +418,13 @@ async function promptForExtractionOptions(options={}) {
     }
 
     // event listeners
-    optionsDialog.addEventListener("sl-request-close", cancel, { once: true })
-    optionsDialog.cancel.addEventListener("click", cancel, { once: true })
-    optionsDialog.submit.addEventListener("click", submit, { once: true })
+    ui.extractionOptions.addEventListener("sl-request-close", cancel, { once: true })
+    ui.extractionOptions.cancel.addEventListener("click", cancel, { once: true })
+    ui.extractionOptions.submit.addEventListener("click", submit, { once: true })
 
-    optionsDialog.show()
+    ui.extractionOptions.show()
   })
-  optionsDialog.hide()
+  ui.extractionOptions.hide()
 
   if (result === false) {
     // user has cancelled the form
@@ -445,13 +433,13 @@ async function promptForExtractionOptions(options={}) {
 
   // Collect form data from static and dynamic fields
   const formData = {
-    'doi': optionsDialog.doi.value,
-    'collection': optionsDialog.collectionName.value,
-    'extractor': optionsDialog.modelIndex.value
+    'doi': ui.extractionOptions.doi.value,
+    'collection': ui.extractionOptions.collectionName.value,
+    'extractor': ui.extractionOptions.modelIndex.value
   }
   
   // Collect values from dynamic options
-  const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]')
+  const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
   // @ts-ignore
   const dynamicInputs = dynamicOptionsContainer.querySelectorAll('sl-select, sl-input')
   

@@ -6,7 +6,7 @@
 /** @import { ApplicationState } from '../app.js' */
 import ui from '../ui.js'
 import { logger, client } from '../app.js'
-import { createHtmlElements, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput, SlSelect, SlOption } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput, SlSelect, SlOption } from '../ui.js'
 
 
 /**
@@ -41,7 +41,6 @@ export default plugin
 /**
  * Prompt editor
  * @typedef {object} promptEditorPart
- * @property {SlDialog} self
  * @property {SlInput} label
  * @property {SlMenu} labelMenu
  * @property {SlSelect} extractorSelect
@@ -52,12 +51,9 @@ export default plugin
  * @property {SlButton} submit
  */
 
-// editor dialog
-/** @type {promptEditorPart} */
-const promptEditorDialog = (await createHtmlElements("prompt-editor.html"))[0]
-
-// button, documented in services.js
-const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'))[0]
+// Register templates
+await registerTemplate('prompt-editor', 'prompt-editor.html');
+await registerTemplate('prompt-editor-button', 'prompt-editor-button.html');
 
 //
 // Implementation
@@ -70,9 +66,9 @@ const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
   
-  // add prompt editor component
-  document.body.append(promptEditorDialog)
-  updateUi()
+  // Create UI elements
+  createSingleFromTemplate('prompt-editor', document.body);
+  const promptEditorButton = createSingleFromTemplate('prompt-editor-button');
 
   const pe = ui.promptEditor
   pe.addEventListener("sl-request-close", dialogOnRequestClose)

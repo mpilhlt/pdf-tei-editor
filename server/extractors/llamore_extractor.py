@@ -41,16 +41,19 @@ class LLamoreExtractor(BaseExtractor):
             "options": {
                 "doi": {
                     "type": "string",
+                    "label": "DOI",
                     "description": "DOI of the document for metadata enrichment",
                     "required": False
                 },
                 "instructions": {
-                    "type": "string", 
+                    "type": "string",
+                    "label": "Instructions",
                     "description": "Additional instructions for the extraction process",
                     "required": False
                 },
                 "variant_id": {
                     "type": "string",
+                    "label": "Variant identifier", 
                     "description": "Variant identifier for the LLamore extraction",
                     "required": False,
                     "options": [

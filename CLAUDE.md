@@ -128,6 +128,90 @@ ui.dialog.show()                    // Call DOM method directly
 ui.dialog.message.innerHTML = text  // Access child element
 ```
 
+### Template Registration System
+The application uses a modern template registration system that supports both development and production modes:
+
+#### Overview
+- **Development Mode** (`?dev` parameter): Templates loaded dynamically from files for fast iteration
+- **Production Mode**: Templates bundled into `templates.json` for optimal performance
+- **Synchronous Creation**: Templates pre-loaded during registration, creation is fast and synchronous
+- **Parameter Substitution**: Support for `${param}` syntax in templates
+
+#### Basic Usage
+```javascript
+// In plugin files - register templates at module level
+import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js';
+
+// Register templates (async, happens at module load)
+await registerTemplate('dialog-template', 'dialog.html');
+await registerTemplate('button-template', 'button.html');
+
+// Create elements in install() function (synchronous)
+async function install(state) {
+  // Create multiple elements
+  const elements = createFromTemplate('dialog-template', document.body);
+  
+  // Create single element (no [0] suffix needed)
+  const button = createSingleFromTemplate('button-template');
+  
+  // Parameter substitution
+  const customButton = createSingleFromTemplate('button-template', null, {
+    text: 'Save Document',
+    variant: 'primary'
+  });
+}
+```
+
+#### Template Registration Rules
+1. **Import from ui.js**: Always import template functions from `../ui.js` (not ui-system.js directly)
+2. **Register at module level**: Use `await registerTemplate()` at the top level of plugin files
+3. **Synchronous creation**: Use `createFromTemplate()` or `createSingleFromTemplate()` in install functions
+4. **Call updateUi() when needed**: If elements aren't automatically added to DOM with parent node
+
+#### Template Functions
+- **`registerTemplate(id, path)`**: Pre-loads template content (async)
+- **`createFromTemplate(id, parent?, params?)`**: Creates array of elements (sync)
+- **`createSingleFromTemplate(id, parent?, params?)`**: Creates single element (sync)
+- **`createHtmlElements()`**: Legacy function, still supported
+
+#### Parameter Substitution
+Templates support `${param}` syntax for dynamic content:
+
+```html
+<!-- Template file: button.html -->
+<sl-button variant="${variant}" size="${size}">${text}</sl-button>
+```
+
+```javascript
+// Usage with parameters
+const saveBtn = createSingleFromTemplate('button', null, {
+  variant: 'primary',
+  size: 'small',
+  text: 'Save Document'
+});
+```
+
+#### Build System Integration
+- **Development**: Templates loaded via fetch from `app/src/templates/`
+- **Production**: `bin/bundle-templates.js` analyzes code and generates `templates.json`
+- **Build process**: Template bundling runs automatically during `npm run build`
+
+#### Migration from Legacy System
+When converting existing plugins:
+
+1. Replace `createHtmlElements` imports with template registration functions
+2. Add `await registerTemplate()` calls at module level
+3. Replace `(await createHtmlElements())[0]` with `createSingleFromTemplate()`
+4. Update typedefs to remove `self` properties
+5. Ensure `updateUi()` is called when needed
+
+#### Best Practices
+- Use descriptive template IDs that match their purpose
+- Keep templates in `app/src/templates/` directory
+- Use `createSingleFromTemplate()` when you know template produces one element
+- Always await template registration before using templates
+- Import all UI functions from `ui.js` for consistency
+
 ### Development Workflow
 1. Frontend changes: Edit files in `app/src/`, test with `?dev` URL parameter
 2. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode

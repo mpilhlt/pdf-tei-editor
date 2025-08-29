@@ -24,7 +24,7 @@
  */
 import ui from '../ui.js';
 import { xmlEditor, logger } from '../app.js';
-import { createHtmlElements, updateUi } from '../ui.js';
+import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
 import enhancements from './tei-wizard/enhancements.js';
 import { notify } from '../modules/sl-utils.js'
 
@@ -43,9 +43,11 @@ export default plugin
 // UI
 //
 
-const teiWizardButton = (await createHtmlElements("tei-wizard-button.html"))[0];
+// Register templates
+await registerTemplate('tei-wizard-button', 'tei-wizard-button.html');
+await registerTemplate('tei-wizard-dialog', 'tei-wizard-dialog.html');
 
-const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
+let teiWizardButton;
 
 
 /**
@@ -54,9 +56,11 @@ const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // button
-  ui.toolbar.teiActions.append(teiWizardButton)
-  document.body.append(teiWizardDialog)
+  // Create UI elements
+  teiWizardButton = createSingleFromTemplate('tei-wizard-button');
+  const teiWizardDialog = createSingleFromTemplate('tei-wizard-dialog', document.body);
+  
+  ui.toolbar.teiActions.append(teiWizardButton);
   updateUi()
 
   ui.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard)
@@ -65,13 +69,13 @@ async function install(state) {
   const dialog = /** @type {any} */(ui.teiWizardDialog);
 
   // Populate enhancement list
-  enhancements.forEach(async enhancement => {
+  enhancements.forEach(enhancement => {
     const checkboxHtml = `
     <sl-tooltip content="${enhancement.description}" hoist placement="right">
       <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
     </sl-tooltip>
     <br />`;
-    await createHtmlElements(checkboxHtml, dialog.enhancementList);
+    dialog.enhancementList.insertAdjacentHTML('beforeend', checkboxHtml);
   });
 
   // Select all and none buttons

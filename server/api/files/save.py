@@ -47,7 +47,7 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
     # Extract file_id and variant from XML content and ensure file_id is stored
     try:
         # Parse XML to extract file_id and variant
-        xml_root = etree.fromstring(xml_string)
+        xml_root = etree.fromstring(xml_string.encode('utf-8'))
         ns = {"tei": "http://www.tei-c.org/ns/1.0"}
         
         # Always derive file_id from filename, not from existing XML
@@ -158,51 +158,53 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
         final_file_rel = f"tei/{promotion_collection}/{variant_filename}"
         status = "promoted_to_gold"
     elif save_as_new_version:
-        # Check if we have a variant and no existing gold variant file
-        if variant:
-            # Construct expected gold variant path
-            file_path_safe = safe_file_path(file_path_rel)
-            original_dir = Path(file_path_safe).parent
-            variant_filename = construct_variant_filename(file_id, variant)
-            expected_gold_variant_path = os.path.join(current_app.config["DATA_ROOT"], 
-                                                    (original_dir / variant_filename).as_posix())
-            
-            # If no gold variant file exists, create it as gold instead of version
-            if not os.path.exists(expected_gold_variant_path):
-                logger.info(f"No existing gold variant file found at {expected_gold_variant_path}, creating as gold file")
-                final_file_rel = (original_dir / variant_filename).as_posix()
-                status = "new_gold_variant"
-            else:
-                # Gold variant exists, create as version with variant suffix
-                timestamp = make_version_timestamp()
-                if variant:
-                    # Directory named after base file_id, filename includes variant
-                    variant_basename = construct_variant_filename(file_id, variant, "")  # Get just the file-id.variant-id part
-                    final_file_rel = f"versions/{file_id}/{timestamp}-{variant_basename}.xml"
-                else:
-                    final_file_rel = get_version_path(file_id, timestamp, ".xml")
-                status = "new"
-        else:
-            # No variant, create as version
+        # Find the collection for this file_id to properly construct gold path
+        collection = find_collection_for_file_id(file_id, current_app.config["DATA_ROOT"])
+        
+        # Construct the expected gold file path based on variant
+        variant_filename = construct_variant_filename(file_id, variant)
+        expected_gold_path = os.path.join(current_app.config["DATA_ROOT"], f"tei/{collection}/{variant_filename}")
+        
+        # Check if gold file exists with matching file_id and variant
+        if os.path.exists(expected_gold_path):
+            # Gold file exists - create version in versions directory
             timestamp = make_version_timestamp()
-            final_file_rel = get_version_path(file_id, timestamp, ".xml")
+            if variant:
+                # Directory named after base file_id, filename includes variant
+                variant_basename = construct_variant_filename(file_id, variant, "")  # Get just the file-id.variant-id part
+                final_file_rel = f"versions/{file_id}/{timestamp}-{variant_basename}.xml"
+            else:
+                final_file_rel = get_version_path(file_id, timestamp, ".xml")
             status = "new"
-    else:
-        # For regular saves, construct path based on variant
-        if variant:
-            # Construct variant filename: file-id.variant-id.tei.xml
-            variant_filename = construct_variant_filename(file_id, variant)
-            # Keep the directory structure from original path
-            file_path_safe = safe_file_path(file_path_rel)
-            original_dir = Path(file_path_safe).parent
-            final_file_rel = (original_dir / variant_filename).as_posix()
+            logger.info(f"Gold file exists at {expected_gold_path}, creating version: {final_file_rel}")
         else:
-            # No variant - use original path or construct gold path
-            file_path_safe = safe_file_path(file_path_rel)
-            original_dir = Path(file_path_safe).parent
-            gold_filename = construct_variant_filename(file_id, None)  # file-id.tei.xml
-            final_file_rel = (original_dir / gold_filename).as_posix()
-        status = "saved"
+            # No gold file exists - ignore "new version" instruction and create gold file without timestamp
+            final_file_rel = f"tei/{collection}/{variant_filename}"
+            status = "new_gold"
+            logger.info(f"No gold file found at {expected_gold_path}, creating as gold file: {final_file_rel}")
+    else:
+        # For regular saves, preserve original path for timestamped version files
+        if file_path_rel.startswith('/data/versions/') and '-' in Path(file_path_rel).name:
+            # This is a timestamped version file - preserve the original path
+            final_file_rel = file_path_rel[6:]  # Remove '/data/' prefix
+            status = "saved"
+            logger.debug(f"Preserving timestamped version file path: {final_file_rel}")
+        else:
+            # For regular saves, construct path based on variant
+            if variant:
+                # Construct variant filename: file-id.variant-id.tei.xml
+                variant_filename = construct_variant_filename(file_id, variant)
+                # Keep the directory structure from original path
+                file_path_safe = safe_file_path(file_path_rel)
+                original_dir = Path(file_path_safe).parent
+                final_file_rel = (original_dir / variant_filename).as_posix()
+            else:
+                # No variant - use original path or construct gold path
+                file_path_safe = safe_file_path(file_path_rel)
+                original_dir = Path(file_path_safe).parent
+                gold_filename = construct_variant_filename(file_id, None)  # file-id.tei.xml
+                final_file_rel = (original_dir / gold_filename).as_posix()
+            status = "saved"
 
     # Get a file lock for this path
     lock_file_path = '/data/' + final_file_rel
@@ -254,7 +256,7 @@ def save():
     
     # Validate that XML is well-formed before saving
     try:
-        etree.fromstring(xml_string)
+        etree.fromstring(xml_string.encode('utf-8'))
     except etree.XMLSyntaxError as e:
         raise ApiError(f"Invalid XML: {str(e)}", status_code=400)
     

@@ -1,4 +1,4 @@
-<sl-dialog name="extractionOptions" label="Extract references">
+<sl-dialog name="extractionOptions" label="Extraction options">
   <div class="dialog-column">
     <sl-input name="doi" label="DOI" size="small" help-text="Please enter the DOI of the document to add document metadata"></sl-input>
     <div>
@@ -8,7 +8,7 @@
     <sl-select name="modelIndex" label="Model" size="small" help-text="Choose the model configuration used for the extraction" value="llamore">
       <sl-option value="llamore">Llamore</sl-option>
     </sl-select>
-    <div name="dynamicOptions">
+    <div name="dynamicOptions" class="dialog-column">
       <!-- Dynamic extractor-specific options will be inserted here -->
     </div>
   </div>

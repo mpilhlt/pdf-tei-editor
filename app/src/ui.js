@@ -7,7 +7,7 @@
  * properties and allow autocompletion in IDEs that support JSDoc.   
  */
 
-import { createNavigableElement } from './modules/browser-utils.js';
+import { createNavigableElement, createHtmlElements, registerTemplate, createFromTemplate, createSingleFromTemplate } from './modules/ui-system.js';
 
 import { Spinner } from './modules/spinner.js'
 import SlDialog from '@shoelace-style/shoelace/dist/components/dialog/dialog.js'
@@ -77,39 +77,6 @@ import './modules/panels/index.js';
  */
 let ui = /** @type {namedElementsTree} */(/** @type {unknown} */(null));
 
-/**
- * Generates UI elements from templates in the 'app/src/templates' folder or from
- * literal hmtl strings, which must start with "<". If a parentNode is given,
- * the elements are appended to it and the `ui` object is updated automatically.
- * If no parentNode is given, the generated nodes are returned as an array, and you
- * need to call `updateUi()` manually to update the `ui` object.
- * @param {string} htmlOrFile A literal html string or the name of a file in the 'app/src/templates/' folder
- * @param {Element|Document|null} [parentNode] 
- *    If given, appends the generated nodes as children to the parentNode. 
- * @returns {Promise<ChildNode[]>} All the created nodes in an array
- */
-async function createHtmlElements(htmlOrFile, parentNode=null){
-  let html
-  if (htmlOrFile.trim()[0]==='<') {
-    // interpret as literal html
-    html = htmlOrFile.trim()
-  } else {
-    // treat as path
-    const path = '/src/templates/' + htmlOrFile
-    console.log('Loading HTML from', path)
-    html = await (await fetch(path)).text()
-  }
-  const div = document.createElement('div')
-  div.innerHTML = html.trim()
-  const nodes = Array.from(div.childNodes)
-  // if a parent node has been given, add nodes to it and update the `ui` object
-  if (parentNode instanceof Element) {
-    parentNode.append(...nodes)
-    updateUi()
-  } 
-  // return the nodes as an array
-  return nodes
-}
 
 /**
  * Updates the UI structure
@@ -121,7 +88,7 @@ function updateUi() {
 updateUi()
 
 export {
-  updateUi, createHtmlElements,
+  updateUi, createHtmlElements, registerTemplate, createFromTemplate, createSingleFromTemplate,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
   SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch
 }

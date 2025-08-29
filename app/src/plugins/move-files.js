@@ -8,7 +8,7 @@
  */
 import { client, services, dialog, fileselection, updateState, logger } from '../app.js'
 import { notify } from '../modules/sl-utils.js'
-import { createHtmlElements, updateUi } from '../ui.js'
+import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js'
 import ui from '../ui.js'
 
 const plugin = {
@@ -33,16 +33,14 @@ const moveBtn = Object.assign(document.createElement('sl-button'), {
 
 /**
  * @typedef {object} MoveFilesDialog
- * @property {SlDialog} self
  * @property {SlSelect} collectionName
  * @property {SlButton} newCollectionBtn
  * @property {SlButton} cancel
  * @property {SlButton} submit
  */
 
-/** @type {SlDialog & MoveFilesDialog} */
-// @ts-ignore
-const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
+// Register template
+await registerTemplate('move-files-dialog', 'move-files-dialog.html');
 
 
 //
@@ -55,14 +53,14 @@ const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // install button & dialog
+  // Create dialog and add button & dialog to UI
+  const moveFilesDialog = createSingleFromTemplate('move-files-dialog', document.body);
   ui.toolbar.documentActions.append(moveBtn)
-  document.body.append(moveFilesDialog)
-  updateUi()
+  updateUi() // Update UI so moveFilesDialog navigation is available
 
   // add event listener
   moveBtn.addEventListener('click', () => showMoveFilesDialog(state))
-  moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
+  ui.moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
     if (newCollectionName) {
       if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
@@ -73,8 +71,8 @@ async function install(state) {
         value: newCollectionName,
         textContent: newCollectionName.replaceAll("_", " ").trim()
       });
-      moveFilesDialog.collectionName.append(option);
-      moveFilesDialog.collectionName.value = newCollectionName;
+      ui.moveFilesDialog.collectionName.append(option);
+      ui.moveFilesDialog.collectionName.value = newCollectionName;
     }
   });
 }
@@ -91,7 +89,7 @@ async function showMoveFilesDialog(state) {
 
   const currentCollection = pdf.split('/')[3];
 
-  const collectionSelectBox = moveFilesDialog.collectionName;
+  const collectionSelectBox = ui.moveFilesDialog.collectionName;
   collectionSelectBox.innerHTML = "";
   const collections = JSON.parse(ui.toolbar.pdf.dataset.collections || '[]').filter(c => c !== currentCollection);
   for (const collection_name of collections) {
@@ -103,17 +101,17 @@ async function showMoveFilesDialog(state) {
   }
 
   try {
-    moveFilesDialog.show();
+    ui.moveFilesDialog.show();
     await new Promise((resolve, reject) => {
-      moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
-      moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
-      moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
+      ui.moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
+      ui.moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
+      ui.moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
     logger.warn("User cancelled move files dialog");
     return;
   } finally {
-    moveFilesDialog.hide();
+    ui.moveFilesDialog.hide();
   }
 
   const destinationCollection = String(collectionSelectBox.value);

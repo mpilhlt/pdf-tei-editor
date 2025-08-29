@@ -10,7 +10,8 @@
  * @import MarkdownIt from 'markdown-it'
  */
 import ui, { updateUi } from '../ui.js'
-import { createHtmlElements, SlDialog, SlButton } from '../ui.js'
+import { SlDialog, SlButton } from '../ui.js'
+import { registerTemplate, createFromTemplate, createSingleFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import { dialog,logger } from '../app.js'
 import markdownit from 'markdown-it'
 
@@ -45,7 +46,6 @@ export default plugin
 /**
  * Help Window
  * @typedef {object} infoDialogPart
- * @property {SlDialog} self
  * @property {HTMLDivElement} content
  * @property {SlButton} backBtn
  * @property {SlButton} homeBtn
@@ -54,10 +54,11 @@ export default plugin
  * @property {SlButton} closeBtn
  */
 
-/**
- * @typedef {object} toolbarInfoBtn
- * @property {SlButton} self
- */
+// Register templates
+await registerTemplate('info-dialog', 'info-dialog.html');
+await registerTemplate('about-button', 'about-button.html');
+await registerTemplate('info-toolbar-button', 'info-toolbar-button.html');
+
 //
 // Implementation
 //
@@ -119,8 +120,13 @@ let currentPage = 'index.md'
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-  // add the component html
-  await createHtmlElements('info-dialog.html', document.body)
+  
+  // Create UI elements
+  createFromTemplate('info-dialog', document.body);
+  const aboutButton = createSingleFromTemplate('about-button');
+  const button = createSingleFromTemplate('info-toolbar-button');
+  
+  // Set up info dialog event listeners
   ui.infoDialog.closeBtn.addEventListener('click', () => ui.infoDialog.hide());
   ui.infoDialog.backBtn.addEventListener('click', goBack);
   ui.infoDialog.homeBtn.addEventListener('click', goHome);
@@ -131,7 +137,6 @@ async function install(state) {
   });
 
   // add About button to login dialog footer (left side)
-  const aboutButton = (await createHtmlElements('about-button.html'))[0]
   aboutButton.addEventListener('click', () => api.open())
   
   // Insert the About button before the Login button
@@ -139,8 +144,7 @@ async function install(state) {
   updateUi()
 
   // add a button to the command bar to show dialog
-  const button = (await createHtmlElements('info-toolbar-button.html'))[0]
-  ui.toolbar.append(button)
+  ui.toolbar.add(button, 1) // Low priority for info button
   updateUi()
   button.addEventListener("click", () => api.open())
   

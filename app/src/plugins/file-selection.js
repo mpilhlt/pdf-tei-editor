@@ -8,7 +8,8 @@
  * @import { SlSelect } from '../ui.js'
  */
 import ui from '../ui.js'
-import { SlOption, SlDivider, createHtmlElements, updateUi } from '../ui.js'
+import { SlOption, SlDivider, updateUi } from '../ui.js'
+import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import { logger, client, services, dialog, updateState, fileselection } from '../app.js'
 import { notify } from '../modules/sl-utils.js';
 
@@ -45,8 +46,8 @@ export default plugin
 // UI
 //
 
-// see ui.js for @typedef 
-const fileSelectionControls = await createHtmlElements('file-selection.html')
+// Register templates
+await registerTemplate('file-selection', 'file-selection.html');
 
 //
 // Implementation
@@ -61,6 +62,9 @@ const fileSelectionControls = await createHtmlElements('file-selection.html')
 async function install(state) {
 
   logger.debug(`Installing plugin "${plugin.name}"`);
+  
+  // Create file selection controls
+  const fileSelectionControls = createFromTemplate('file-selection');
   
   // Add file selection controls to toolbar with specified priorities
   const controlPriorities = {

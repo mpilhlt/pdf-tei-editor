@@ -6,5 +6,8 @@ node bin/generate-importmap.js
 echo "Compiling the app icons..."
 python bin/compile-sl-icons.py
 
+echo "Bundling templates..."
+node bin/bundle-templates.js
+
 echo "Bundling application..."
 node_modules/.bin/rollup app/src/app.js -f es -o app/web/app.js -p @rollup/plugin-node-resolve

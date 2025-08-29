@@ -14,7 +14,7 @@ import {
   fileselection, xmlEditor, pdfViewer, services, validation, authentication, sync, accessControl
 } from '../app.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import { createHtmlElements } from '../ui.js'
+import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
@@ -82,13 +82,9 @@ let savingStatusWidget = null
  * @property {SlButton} teiWizard - TEI Wizard button (added by tei-wizard plugin)
  */
 
-// todo align template with definition
-const documentActionButtons = await createHtmlElements("document-action-buttons.html")
-
 /**
  * Dialog for creating a new version
  * @typedef {object} newVersionDialog
- * @property {SlDialog} self
  * @property {SlInput} versionName 
  * @property {SlInput} persName 
  * @property {SlInput} persId 
@@ -96,10 +92,6 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
  * @property {SlButton} submit
  * @property {SlButton} cancel 
  */
-
-/** @type {newVersionDialog & SlDialog} */
-// @ts-ignore
-const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0]
 
 /**
  * Dialog for documenting a revision navigation properties
@@ -111,9 +103,10 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
  * @property {SlButton} cancel - Cancel button
  */
 
-/** @type {newRevisionChangeDialogPart & SlDialog} */
-// @ts-ignore
-const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0]
+// Register templates
+await registerTemplate('document-action-buttons', 'document-action-buttons.html');
+await registerTemplate('new-version-dialog', 'new-version-dialog.html');
+await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
 
 
 //
@@ -126,6 +119,11 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
+  // Create UI elements
+  const documentActionButtons = createFromTemplate('document-action-buttons');
+  createSingleFromTemplate('new-version-dialog', document.body);
+  createSingleFromTemplate('save-revision-dialog', document.body);
+
   // Add document action buttons to toolbar with medium priority
   documentActionButtons.forEach(buttonGroup => {
     // Ensure we're working with HTMLElement
@@ -134,9 +132,7 @@ async function install(state) {
       ui.toolbar.add(buttonGroup, 8);
     }
   });
-  document.body.append(newVersionDialog)
-  document.body.append(saveRevisionDialog)
-  updateUi()
+  updateUi() // Update UI so navigation objects are available
   
   // Create saving status widget
   // <sl-icon name="floppy"></sl-icon>
@@ -705,9 +701,7 @@ function getIdFromUser(userData) {
  */
 async function saveRevision(state) {
 
-  /** @type {newRevisionChangeDialogPart & SlDialog} */
-  // @ts-ignore
-  const dialog = document.querySelector('[name="newRevisionChangeDialog"]')
+  const dialog = ui.newRevisionChangeDialog;
   dialog.changeDesc.value = "Corrections"
   try {
     const user = authentication.getUser()
@@ -756,7 +750,6 @@ async function saveRevision(state) {
       await updateState(state)
     }
     
-    notify("Document was saved.")
     sync.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
@@ -777,9 +770,7 @@ async function saveRevision(state) {
  */
 async function createNewVersion(state) {
 
-  /** @type {newVersionDialog & SlDialog} */
-  // @ts-ignore
-  const newVersiondialog = document.querySelector('[name="newVersionDialog"]')
+  const newVersiondialog = ui.newVersionDialog;
   try {
     const user = authentication.getUser()
     if (user) {
@@ -824,8 +815,8 @@ async function createNewVersion(state) {
     // now modify the header
     await addTeiHeaderInfo(respStmt, editionStmt)
 
-    // save again to the new path
-    await saveXml(hash)
+    // save the modified content back to the same timestamped version file
+    await saveXml(hash, false)
     xmlEditor.markAsClean() 
 
     // reload the file data to display the new name and inform the user

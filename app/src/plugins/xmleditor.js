@@ -9,7 +9,7 @@
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  */
 
-import ui, { updateUi } from '../ui.js'
+import ui from '../ui.js'
 import { validation, services, state, updateState } from '../app.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'

@@ -7,7 +7,8 @@
  * @import { SlButton, SlInput } from '../ui.js'
  */
 
-import ui, { createHtmlElements, SlDialog, updateUi } from '../ui.js';
+import ui, { SlDialog, updateUi } from '../ui.js';
+import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 import { updateState, logger, client, state } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
 
@@ -16,18 +17,18 @@ import { UrlHash } from '../modules/browser-utils.js';
 //
 
 /**
- * @typedef {SlDialog & {
- *  form: HTMLFormElement,
- *  username: SlInput,
- *  password: SlInput,
- *  submit: SlButton,
- *  aboutBtn?: SlButton,
- *  message: HTMLDivElement
- * }} loginDialog
+ * @typedef {object} loginDialog
+ * @property {HTMLFormElement} form
+ * @property {SlInput} username
+ * @property {SlInput} password
+ * @property {SlButton} submit
+ * @property {SlButton} [aboutBtn]
+ * @property {HTMLDivElement} message
  */
 
-await createHtmlElements('login-dialog.html', document.body)
-const buttonElement = (await createHtmlElements('logout-button.html'))[0]
+// Register templates
+await registerTemplate('login-dialog', 'login-dialog.html');
+await registerTemplate('logout-button', 'logout-button.html');
 
 /**
  * Public API for the authentication plugin
@@ -74,6 +75,11 @@ let user = null;
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`);
   state.user = null;
+  
+  // Create UI elements
+  createFromTemplate('login-dialog', document.body);
+  const buttonElement = createSingleFromTemplate('logout-button');
+  
   // @ts-ignore - insertAdjacentElement type issue
   ui.toolbar.insertAdjacentElement("beforeend", buttonElement)
   updateUi()
@@ -176,7 +182,13 @@ function _showLoginDialog() {
 async function logout() {
   try {
     await client.logout();
-    await updateState(state, { user: null, sessionId: null });
+    await updateState(state, { 
+      user: null, 
+      sessionId: null,
+      xml: null,
+      pdf: null,
+      diff: null
+    });
     // Remove session from URL hash if present
     UrlHash.remove('sessionId')
     await _showLoginDialog();

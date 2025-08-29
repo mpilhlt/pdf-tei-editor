@@ -37,11 +37,13 @@ class GrobidTrainingExtractor(BaseExtractor):
             "options": {
                 "doi": {
                     "type": "string",
+                    "label": "DOI",
                     "description": "DOI of the document for metadata enrichment",
                     "required": False
                 },
                 "variant_id": {
                     "type": "string",
+                    "label": "Variant identifier",
                     "description": "Variant identifier for the training data type",
                     "required": False,
                     "options": [
@@ -52,7 +54,8 @@ class GrobidTrainingExtractor(BaseExtractor):
                 },
                 "flavor": {
                     "type": "string",
-                    "description": "GROBID processing flavor",
+                    "label": "GROBID processing flavor",
+                    "description": "Processing flavor that determines how GROBID analyzes the document structure",
                     "required": False,
                     "options": [
                         "default",

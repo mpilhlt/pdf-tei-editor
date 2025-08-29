@@ -218,68 +218,6 @@ export function escapeHtml(text) {
   return div.innerHTML;
 }
 
-/**
- * Finds all descendants of a given node that have a "name" attribute,
- * but does not recurse into those nodes.  This means descendants of the
- * named nodes are excluded.  If duplicate names are found, the first
- * occurrence is used.
- *
- * @param {Element|Document} node The starting node to search from.
- * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
- */
-function findNamedDescendants(node) {
-  const results = {};
-
-  /**
-   * Recursive function that adds to the results object
-   * @param {Element|Document} currentNode 
-   * @returns {void}
-   */
-  function traverse(currentNode) {
-    if (!currentNode || !currentNode.childNodes) {
-      return;
-    }
-
-    for (let i = 0; i < currentNode.childNodes.length; i++) {
-      /** @type {Element} */
-      const childNode = /** @type {Element} */(currentNode.childNodes[i]);
-      // Check if it's an element (important to avoid text nodes)
-      if (childNode.nodeType === Node.ELEMENT_NODE) {
-
-        const nameAttribute = childNode.getAttribute("name");
-
-        if (nameAttribute && !results.hasOwnProperty(nameAttribute)) {
-          results[nameAttribute] = childNode;
-        } else {
-          // Only recurse if the current node doesn't have a name attribute
-          // or if the name is already in the results.  This prevents
-          // recursion into named nodes.
-          traverse(childNode);
-        }
-      }
-    }
-  }
-  traverse(node);
-  return /** @type {{ [x: string]: Element }} */(results);
-}
-
-/**
- * Creates a navigable element by adding named descendant elements as properties.
- * Each property gives direct access to the DOM element (which is also the navigation object).
- * You must be careful to use names that do not override existing properties.
- *
- * @template {Element|Document} T
- * @param {T} node The element to enhance with navigation
- * @returns {T & Record<string, any>} The element with added navigation properties
- */
-export function createNavigableElement(node) {
-  const namedDescendants = findNamedDescendants(node)
-  for (let name in namedDescendants) {
-    namedDescendants[name] = createNavigableElement(namedDescendants[name])
-  }
-  const modifiedObj = Object.assign(node, namedDescendants)
-  return modifiedObj
-}
 
 // Function to serialize the XML DOM back to a string (for demonstration)
 export function serializeXmlToString(xmlDoc) {

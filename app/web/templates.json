@@ -1,0 +1,4 @@
+{
+  "login-dialog": "<sl-dialog label=\"Login\" class=\"login-dialog\" name=\"loginDialog\">\n  <div>\n    <sl-input name=\"username\" label=\"Username\" required></sl-input>\n    <br>\n    <sl-input type=\"password\" name=\"password\" label=\"Password\" required></sl-input>\n    <div name=\"message\" class=\"error-message\" style=\"color: red; margin-top: 10px;\"></div>\n  </div>\n  <sl-button type=\"submit\" name=\"submit\" slot=\"footer\" variant=\"primary\">Login</sl-button>\n</sl-dialog>",
+  "logout-button": "<sl-tooltip content=\"Log out\">\n  <sl-button name=\"logoutButton\" size=\"small\">\n    <sl-icon name=\"power\"></sl-icon>\n  </sl-button>\n</sl-tooltip>"
+}

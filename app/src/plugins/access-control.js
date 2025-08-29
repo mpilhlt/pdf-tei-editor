@@ -663,6 +663,11 @@ function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
  * @param {StatusText} readOnlyWidget - The read-only status widget
  */
 function updateReadOnlyWidgetText(readOnlyWidget) {
+  if (!readOnlyWidget) {
+    logger.debug('Read-only widget not available, skipping context update')
+    return
+  }
+  
   const { visibility, editability, owner } = currentPermissions
   const currentUser = authentication.getUser()
   
