@@ -46168,12 +46168,23 @@ class NavXmlEditor extends XMLEditor {
     // wait for any editor operations to finish
     await this.whenReady();
         
-    if (ranges.length === 0 || !this.getXmlTree() || !this.parentPath) {
+    if (ranges.length === 0 || !this.getXmlTree()) {
       let msg = ['Cannot update selection node & xpath:'];
       ranges.length || msg.push("Selection is empty");
       this.getXmlTree() || msg.push("XML Tree not ready");
-      this.parentPath || msg.push("No parent path");
       console.warn(msg.join("; "));
+      return
+    }
+    
+    // If no parent path is set, we can still update the selected node but skip xpath navigation
+    if (!this.parentPath) {
+      // No parent path set, skip xpath navigation but allow selection update
+      // Just update the selected node without xpath navigation
+      const range = ranges[0];
+      if (range.node && range.node !== this.selectedNode) {
+        this.selectedNode = range.node;
+        this.selectedXpath = this.getXPathForNode(range.node);
+      }
       return
     }
 
@@ -46416,9 +46427,19 @@ async function install$e(state) {
     if (api$a.isDisabled()) {
       let view = xmlEditor.getView();
       try {
-        view.dispatch(setDiagnostics(view.state, diagnostics));
+        // Validate diagnostic positions before setting
+        const validDiagnostics = diagnostics.filter(d => {
+          return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
+        });
+        view.dispatch(setDiagnostics(view.state, validDiagnostics));
       } catch (error) {
         api$f.warn("Error setting diagnostics: " + error.message);
+        // Clear diagnostics on error
+        try {
+          view.dispatch(setDiagnostics(view.state, []));
+        } catch (clearError) {
+          api$f.warn("Error clearing diagnostics: " + clearError.message);
+        }
       }
     }
   });
@@ -46435,6 +46456,11 @@ async function install$e(state) {
     api$f.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
     xmlEditor.configureIntenation(indentUnit, 4); // default tab size of 4 spaces
     updateIndentationStatus(indentUnit);
+  });
+
+  // Save automatically when XML becomes well-formed again
+  xmlEditor.on("editorXmlWellFormed", () => {
+    saveIfDirty$1();
   });
 
   // Add widget to toggle <teiHeader> visibility
@@ -46534,6 +46560,25 @@ async function onSelectionChange(state) {
 
   // todo: use isXPathsubset()
   if (index !== null && cursorParts.tagName === stateParts.tagName && index !== xmlEditor.currentIndex + 1) ;
+}
+
+/**
+ * Save the current XML file if the editor is "dirty"
+ */
+async function saveIfDirty$1() {
+  const filePath = String(ui$1.toolbar.xml.value);
+
+  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
+    const result = await api$6.saveXml(filePath);
+    if (result.status == "unchanged") {
+      api$f.debug(`File has not changed`);
+    } else {
+      api$f.debug(`Saved file ${result.hash}`);
+      // Update state to use new hash from server
+      state.xml = result.hash;
+      await updateState(state);
+    }
+  }
 }
 
 /**
@@ -46758,17 +46803,24 @@ async function lintSource(view) {
             // Ensure line number is valid (1-based from validation, but doc.line expects 1-based)
             const lineNum = Math.max(1, Math.min(error.line, doc.lines));
             try {
-              ({ from, to } = doc.line(lineNum));
+              const line = doc.line(lineNum);
+              from = line.from;
+              to = line.to;
               // Ensure column is valid (0-based column position)
-              const columnOffset = Math.max(0, error.column);
-              from = Math.max(0, from + columnOffset);
-              // Ensure 'to' position is not beyond the line end
-              to = Math.min(to, from + 1);
+              const columnOffset = Math.max(0, Math.min(error.column, line.length));
+              from = Math.max(0, Math.min(from + columnOffset, doc.length - 1));
+              // Ensure 'to' position is valid and not beyond document end
+              to = Math.min(Math.max(from + 1, to), doc.length);
+              // Ensure from <= to and both are within document bounds
+              if (from >= to || from >= doc.length) {
+                from = Math.max(0, Math.min(line.from, doc.length - 1));
+                to = Math.min(from + 1, doc.length);
+              }
             } catch (e) {
               console.warn(`Invalid line/column in validation error:`, error, e);
               // Fallback to document start if line/column calculation fails
               from = 0;
-              to = 1;
+              to = Math.min(1, doc.length);
             }
           } else {
             throw new Error("Invalid response from remote validation:", error)
@@ -46909,12 +46961,22 @@ function removeDiagnosticsInChangedRanges(update) {
   const changedRangeValues = Object.values(update.changedRanges[0]); 
   const minRange = Math.min(...changedRangeValues);
   const maxRange = Math.max(...changedRangeValues);
-  forEachDiagnostic(viewState, (d, from, to) => {
+  forEachDiagnostic(viewState, (d) => {
     if (d.from > maxRange || d.to < minRange) {
       // only keep diagnostics that are outside the changed range
-      d.from = from;
-      d.to = to;
-      diagnostics.push(d);
+      // Validate diagnostic positions before adding
+      const docLength = viewState.doc.length;
+      const validFrom = Math.max(0, Math.min(d.from, docLength - 1));
+      const validTo = Math.min(Math.max(validFrom + 1, d.to), docLength);
+      
+      if (validFrom < validTo && validFrom < docLength) {
+        diagnostics.push({
+          from: validFrom,
+          to: validTo,
+          severity: d.severity,
+          message: d.message
+        });
+      }
     } else {
       api$f.debug("Removing diagnostic " + JSON.stringify(d));
     }
@@ -46922,8 +46984,15 @@ function removeDiagnosticsInChangedRanges(update) {
 
   lastDiagnostics = diagnostics;
 
-  // remove the diagnostics from the editor
-  xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
+  // remove the diagnostics from the editor - add safety check
+  try {
+    xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
+  } catch (error) {
+    api$f.warn("Error setting diagnostics after range change:", error);
+    // Clear all diagnostics if there's an error
+    xmlEditor.getView().dispatch(setDiagnostics(viewState, []));
+    lastDiagnostics = [];
+  }
 }
 
 // src/components/alert/alert.styles.ts
@@ -49257,8 +49326,11 @@ async function promptForExtractionOptions(options={}) {
       modelSelectBox.value = defaultExtractor;
     }
   } catch (error) {
-    // No fallback - if we can't load extractors, we can't extract
-    throw new Error("Could not load extraction engines:" + error.message)
+    // Handle extractor list loading gracefully
+    api$f.warn("Could not load extraction engines:", error.message);
+    // Disable extraction functionality when extractors can't be loaded
+    modelSelectBox.disabled = true;
+    availableExtractors = [];
   }
   
   // Add event listener to update dynamic options when model changes
@@ -50637,17 +50709,22 @@ async function install$9(state) {
 async function update$4(state) {
   //console.warn("update", plugin.name, state)
   
-  // Cache extractor list when user logs in
+  // Cache extractor list when user actually changes (not just stale initialization)
   let extractorsJustCached = false;
   if (currentUser !== state.user && state.user !== null) {
+    const previousUser = currentUser;
     currentUser = state.user;
-    try {
-      cachedExtractors = await api$9.getExtractorList();
-      extractorsJustCached = true;
-      api$f.debug('Cached extractor list for floating panel:', cachedExtractors);
-    } catch (error) {
-      api$f.error('Failed to load extractor list:', error);
-      cachedExtractors = [];
+    
+    // Only fetch extractors if we don't have them cached or this is a real user change
+    if (!cachedExtractors || (previousUser !== null && previousUser !== state.user)) {
+      try {
+        cachedExtractors = await api$9.getExtractorList();
+        extractorsJustCached = true;
+        api$f.debug('Cached extractor list for floating panel:', cachedExtractors);
+      } catch (error) {
+        api$f.warn('Failed to load extractor list:', error.message || error);
+        cachedExtractors = [];
+      }
     }
   }
   
@@ -60196,18 +60273,40 @@ async function start$1(state) {
  */
 async function saveIfDirty() {
   const filePath = String(ui$1.toolbar.xml.value);
+  const hasXmlTree = !!xmlEditor.getXmlTree();
+  const isDirty = xmlEditor.isDirty();
+  
+  if (!filePath || filePath === "undefined") {
+    return
+  }
+  
+  if (!hasXmlTree) {
+    return
+  }
+  
+  if (!isDirty) {
+    return
+  }
 
-  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
+  try {
     const result = await api$6.saveXml(filePath);
     if (result.status == "unchanged") {
       api$f.debug(`File has not changed`);
     } else if (result.status == "saved_with_migration") {
-      api$f.debug(`Saved file to ${result.path} with migration of old version files`);
+      api$f.debug(`Saved file ${result.hash} with migration of old version files`);
       // Migration occurred, reload file data to show updated version structure
       await api$8.reload(state);
+      // Update state to use new hash
+      state.xml = result.hash;
+      await updateState(state);
     } else {
-      api$f.debug(`Saved file to ${result.path}`);
+      api$f.debug(`Saved file ${result.hash}`);
+      // Update state to use new hash
+      state.xml = result.hash;
+      await updateState(state);
     }
+  } catch (error) {
+    api$f.warn(`Save failed: ${error.message}`);
   }
 }
 
@@ -60220,9 +60319,19 @@ function configureXmlEditor() {
     if (api$a.isDisabled()) {
       let view = xmlEditor.getView();
       try {
-        view.dispatch(setDiagnostics(view.state, diagnostics));
+        // Validate diagnostic positions before setting
+        const validDiagnostics = diagnostics.filter(d => {
+          return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
+        });
+        view.dispatch(setDiagnostics(view.state, validDiagnostics));
       } catch (error) {
         api$f.warn("Error setting diagnostics: " + error.message);
+        // Clear diagnostics on error
+        try {
+          view.dispatch(setDiagnostics(view.state, []));
+        } catch (clearError) {
+          api$f.warn("Error clearing diagnostics: " + clearError.message);
+        }
       }
     }
   });
@@ -60233,7 +60342,16 @@ function configureXmlEditor() {
   // xml vaidation events
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
     console.warn("XML is not well-formed", diagnostics);
-    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics));
+    try {
+      // Validate diagnostic positions before setting
+      const view = xmlEditor.getView();
+      const validDiagnostics = diagnostics.filter(d => {
+        return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
+      });
+      view.dispatch(setDiagnostics(view.state, validDiagnostics));
+    } catch (error) {
+      api$f.warn("Error setting XML not well-formed diagnostics: " + error.message);
+    }
     // Show validation error in statusbar
     if (validationStatusWidget && !validationStatusWidget.isConnected) {
       ui$1.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5);
@@ -60241,14 +60359,20 @@ function configureXmlEditor() {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
   });
-  xmlEditor.on("editorXmlWellFormed", data => {
+  xmlEditor.on("editorXmlWellFormed", () => {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
-    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
+    try {
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
+    } catch (error) {
+      api$f.warn("Error clearing diagnostics on well-formed XML: " + error.message);
+    }
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
       ui$1.xmlEditor.statusbar.removeById(validationStatusWidget.id);
     }
+    // Save if dirty now that XML is valid again
+    saveIfDirty();
   });
 }
 
