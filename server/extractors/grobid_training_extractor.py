@@ -69,14 +69,14 @@ class GrobidTrainingExtractor(BaseExtractor):
                 ],
                 "grobid.training.references.referenceSegmenter": [
                     {
-                        "value": "//tei:listBibl",
-                        "label": "<listBibl>"
+                        "value": "//tei:bibl",
+                        "label": "<bibl>"
                     }
                 ],                
-                "grobid.training.citation": [
+                "grobid.training.references": [
                     {
-                        "value": "//tei:listBibl",
-                        "label": "<listBibl>"
+                        "value": "//tei:bibl",
+                        "label": "<bibl>"
                     }
                 ]
             }
