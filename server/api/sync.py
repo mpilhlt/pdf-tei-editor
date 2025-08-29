@@ -608,7 +608,7 @@ def sync():
             local_version = _get_local_version(local_root)
             remote_version = _get_remote_version(fs, remote_root)
 
-            if local_version >= remote_version:
+            if local_version == remote_version:
                 logger.info(f"Sync not needed. Local version: {local_version}, Remote version: {remote_version}")
                 return {
                     "skipped": True,
@@ -629,7 +629,7 @@ def sync():
         local_version = _get_local_version(local_root)
         remote_version = _get_remote_version(fs, remote_root)
 
-        if not is_sync_needed() and local_version >= remote_version:
+        if not is_sync_needed() and local_version == remote_version:
             logger.info(f"Sync not needed after acquiring lock. Local: {local_version}, Remote: {remote_version}")
             return {
                 "skipped": True,
