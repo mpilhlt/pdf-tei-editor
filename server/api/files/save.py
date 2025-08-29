@@ -9,7 +9,7 @@ from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
     ApiError, make_version_timestamp, get_data_file_path,
     safe_file_path, remove_obsolete_marker_if_exists, get_session_id,
-    get_version_path, migrate_old_version_files, resolve_document_identifier,
+    get_version_path, resolve_document_identifier,
     strip_version_timestamp_prefix
 )
 from server.lib.file_data import find_collection_for_file_id, construct_variant_filename
@@ -173,9 +173,14 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
                 final_file_rel = (original_dir / variant_filename).as_posix()
                 status = "new_gold_variant"
             else:
-                # Gold variant exists, create as version
+                # Gold variant exists, create as version with variant suffix
                 timestamp = make_version_timestamp()
-                final_file_rel = get_version_path(file_id, timestamp, ".xml")
+                if variant:
+                    # Directory named after base file_id, filename includes variant
+                    variant_basename = construct_variant_filename(file_id, variant, "")  # Get just the file-id.variant-id part
+                    final_file_rel = f"versions/{file_id}/{timestamp}-{variant_basename}.xml"
+                else:
+                    final_file_rel = get_version_path(file_id, timestamp, ".xml")
                 status = "new"
         else:
             # No variant, create as version
@@ -223,17 +228,7 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
     # Mark sync as needed since files were changed
     mark_sync_needed()
 
-    # Migration: For regular saves, migrate any existing old version files for this file_id
-    if not save_as_new_version:
-        migrated_count = migrate_old_version_files(
-            file_id, 
-            data_root, 
-            current_app.logger, 
-            current_app.config.get('WEBDAV_ENABLED', False)
-        )
-        if migrated_count > 0:
-            logger.info(f"Migrated {migrated_count} old version files during save of {file_id}")
-            status = "saved_with_migration"  # Special status to trigger frontend file data reload
+    # Migration logic removed - should be done once via migration script, not on every save
 
     # Add the new path to the lookup table and get its hash
     file_hash = add_path_to_lookup(final_file_rel)
