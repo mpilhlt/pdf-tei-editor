@@ -158,6 +158,7 @@ ui.dialog.message.innerHTML = text  // Access child element
 
 ### Frontend Development
 - **Shoelace Icon Resources**: When using Shoelace icons programmatically (via `icon` attribute or StatusText widget) where the literal `<sl-icon name="icon-name"></sl-icon>` is not present in the codebase, add a comment with the HTML literal to ensure the build system includes the icon resource: `// <sl-icon name="icon-name"></sl-icon>`. This is not needed when the icon tag already exists verbatim in templates or HTML.
+- **Debug Logging**: When adding temporary debug statements with `console.debug()`, always prefix the message with "DEBUG" to make them easily searchable and removable. Example: `console.debug("DEBUG Collection in options:", options.collection);`. This allows easy filtering with browser dev tools and quick cleanup using search/replace.
 
 ## Browser Automation and Testing
 

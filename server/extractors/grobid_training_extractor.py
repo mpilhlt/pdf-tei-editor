@@ -101,6 +101,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         Returns:
             Complete TEI document as XML string
         """
+        
         # xml_content parameter required by interface but not used by this extractor
         _ = xml_content
         if not pdf_path:
@@ -146,7 +147,22 @@ class GrobidTrainingExtractor(BaseExtractor):
         except etree.XMLSyntaxError as e:
             # Log the XML that failed to parse
             log_xml_parsing_error("grobid", pdf_path, training_tei_content, str(e))
-            raise RuntimeError(f"XML parsing failed: {e}") from e
+            
+            # Create a minimal document structure with error info instead of failing
+            # We'll use string manipulation to ensure proper CDATA formatting with unescaped XML
+            import html
+            escaped_error = html.escape(str(e))
+            error_xml = f'''<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <note type="error-message">{escaped_error}</note>
+    <note type="invalid-xml"><![CDATA[
+{training_tei_content}
+]]></note>
+  </text>
+</TEI>'''
+            
+            # Parse this properly constructed XML
+            grobid_doc = etree.fromstring(error_xml.encode('utf-8'))
         
         # Create new TEI document with proper namespace (no schema validation)
         tei_doc = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})
@@ -232,18 +248,62 @@ class GrobidTrainingExtractor(BaseExtractor):
         tei_doc.append(tei_header)
         
         # Extract and add the text content from GROBID output
+        # Handle both with and without namespace
         grobid_text = grobid_doc.find("text")
+        if grobid_text is None:
+            # Try with TEI namespace (for error XML)
+            grobid_text = grobid_doc.find("{http://www.tei-c.org/ns/1.0}text")
+        
+        print(f"DEBUG: grobid_doc root tag: {grobid_doc.tag}")
+        print(f"DEBUG: grobid_doc children: {[child.tag for child in grobid_doc]}")
+        print(f"DEBUG: Found grobid_text: {grobid_text is not None}")
+        
         if grobid_text is not None:
-            # Copy the text element with all its content
+            # Check if this is an error text element (contains error notes)
+            error_message_note = grobid_text.find("{http://www.tei-c.org/ns/1.0}note[@type='error-message']")
+            invalid_xml_note = grobid_text.find("{http://www.tei-c.org/ns/1.0}note[@type='invalid-xml']")
+            
+            if error_message_note is not None and invalid_xml_note is not None:
+                # This is an error case - recreate with proper CDATA
+                new_text = etree.SubElement(tei_doc, "text")
+                new_text.text = "\n    "  # Add indentation before first child
+                
+                # Add error message note
+                error_note = etree.SubElement(new_text, "note", type="error-message")
+                error_note.text = error_message_note.text
+                error_note.tail = "\n    "  # Add indentation after this element
+                
+                # Add invalid XML note - we'll replace this with CDATA after serialization
+                invalid_note = etree.SubElement(new_text, "note", type="invalid-xml")
+                # Use a placeholder that we'll replace with CDATA
+                invalid_note.text = "CDATA_PLACEHOLDER_FOR_INVALID_XML"
+                invalid_note.tail = "\n  "  # Add indentation to close the text element
+            else:
+                # Normal case - copy the text element with all its content
+                new_text = etree.SubElement(tei_doc, "text")
+                new_text.attrib.update(grobid_text.attrib)
+                new_text.text = grobid_text.text
+                new_text.tail = grobid_text.tail
+                for child in grobid_text:
+                    new_text.append(child)
+        else:
+            # Fallback: create minimal text element if none found
             new_text = etree.SubElement(tei_doc, "text")
-            new_text.attrib.update(grobid_text.attrib)
-            new_text.text = grobid_text.text
-            new_text.tail = grobid_text.tail
-            for child in grobid_text:
-                new_text.append(child)
+            body_elem = etree.SubElement(new_text, "body")
+            div_elem = etree.SubElement(body_elem, "div")
+            div_elem.set("type", "empty")
+            p_elem = etree.SubElement(div_elem, "p")
+            p_elem.text = "No text content available."
         
         # Serialize with selective formatting: pretty-print header but preserve text content
-        return serialize_tei_with_formatted_header(tei_doc)
+        result_xml = serialize_tei_with_formatted_header(tei_doc)
+        
+        # Replace CDATA placeholder with actual CDATA section containing unescaped XML
+        if "CDATA_PLACEHOLDER_FOR_INVALID_XML" in result_xml:
+            cdata_content = f"<![CDATA[\n{training_tei_content}\n]]>"
+            result_xml = result_xml.replace("CDATA_PLACEHOLDER_FOR_INVALID_XML", cdata_content)
+        
+        return result_xml
     
     
     def _clean_invalid_xml_attributes(self, xml_content: str) -> str:

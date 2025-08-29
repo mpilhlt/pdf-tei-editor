@@ -15,6 +15,8 @@ def create_debug_log_dir() -> Path:
     log_dir.mkdir(exist_ok=True)
     return log_dir
 
+def write_comment(f, comment, prefix = "# ", suffix = ""):
+    f.write(f'{prefix}{comment}{suffix}')
 
 def log_extraction_response(
     extractor_name: str,
@@ -48,15 +50,22 @@ def log_extraction_response(
     log_filename = f"{timestamp}_{extractor_name}_{pdf_name}{file_suffix}"
     log_file_path = log_dir / log_filename
     
+    # define comment prefix/suffix according to file suffix
+    prefix = suffix = None # defaults to "# "
+    if file_suffix == ".xml":
+        # create a valid xml file by putting comments into <!-- ... -->
+        prefix = "<!-- "
+        suffix = " -->"
+    
     # Write content to log file
     with open(log_file_path, 'w', encoding='utf-8') as f:
-        f.write(f"# Debug log for {extractor_name} extraction\n")
-        f.write(f"# PDF: {pdf_path}\n")
-        f.write(f"# Timestamp: {datetime.datetime.now().isoformat()}\n")
+        write_comment(f, f"Debug log for {extractor_name} extraction\n", prefix, suffix)
+        write_comment(f, f"PDF: {pdf_path}\n", prefix, suffix)
+        write_comment(f, f"Timestamp: {datetime.datetime.now().isoformat()}\n", prefix, suffix)
         if error:
-            f.write(f"# Error: {error}\n")
-        f.write(f"# Content length: {len(response_content)} characters\n")
-        f.write("# " + "="*70 + "\n\n")
+            write_comment(f, f"Error: {error}\n", prefix, suffix)
+        write_comment(f, f"Content length: {len(response_content)} characters\n", prefix, suffix)
+        write_comment(f, "="*70 + "\n\n", prefix, suffix)
         f.write(response_content)
     
     print(f"DEBUG: Logged {extractor_name} response to {log_file_path}")

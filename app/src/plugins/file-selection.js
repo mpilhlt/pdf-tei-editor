@@ -459,6 +459,17 @@ async function onChangeXmlSelection(state) {
   const xml = ui.toolbar.xml.value
   if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
+      // Find the collection for this XML file by searching fileData
+      for (const file of fileData) {
+        const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
+        const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
+        
+        if (hasGoldMatch || hasVersionMatch) {
+          state.collection = file.collection;
+          break;
+        }
+      }
+      
       await services.removeMergeView(state)
       await services.load(state, { xml })
     } catch (error) {

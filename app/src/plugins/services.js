@@ -314,6 +314,26 @@ async function load(state, { xml, pdf }) {
     startAutocomplete().then(result => result && notify("Autocomplete is available"))
   }
 
+  // Set collection based on loaded documents if not already set
+  if ((pdf || xml) && !state.collection) {
+    for (const file of fileselection.fileData) {
+      // Check PDF hash
+      if (pdf && file.pdf && file.pdf.hash === pdf) {
+        state.collection = file.collection;
+        break;
+      }
+      // Check XML hash in gold or versions
+      if (xml) {
+        const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
+        const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
+        if (hasGoldMatch || hasVersionMatch) {
+          state.collection = file.collection;
+          break;
+        }
+      }
+    }
+  }
+
   // notify plugins
   await updateState(state)
 }
@@ -437,6 +457,8 @@ async function deleteCurrentVersion(state) {
     // delete the file
     await client.deleteFiles(filePathsToDelete)
     try {
+      // Clear current XML state after successful deletion
+      await updateState(state, { xml: null })
       // update the file data
       await fileselection.reload(state)
       // load the gold version
@@ -456,26 +478,75 @@ async function deleteCurrentVersion(state) {
 
 /**
  * Deletes all versions of the document, leaving only the gold standard version
+ * Only deletes versions that match the current variant filter
  * @param {ApplicationState} state
  */
 async function deleteAllVersions(state) {
-  // @ts-ignore
-  const xmlPaths = Array.from(ui.toolbar.xml.childNodes).map(option => option.value)
-  const filePathsToDelete = xmlPaths.slice(1) // skip the first option, which is the gold standard version  
+  // Get the current PDF to find all its versions
+  const currentPdf = ui.toolbar.pdf.value;
+  const selectedFile = fileselection.fileData.find(file => file.pdf.hash === currentPdf);
+  
+  if (!selectedFile || !selectedFile.versions) {
+    return; // No versions to delete
+  }
+  
+  // Filter versions based on current variant selection (same logic as file-selection.js)
+  let versionsToDelete = selectedFile.versions;
+  const { variant } = state;
+  
+  if (variant === "none") {
+    // Delete only versions without variant_id
+    versionsToDelete = selectedFile.versions.filter(version => !version.variant_id);
+  } else if (variant && variant !== "") {
+    // Delete only versions with the selected variant_id
+    versionsToDelete = selectedFile.versions.filter(version => version.variant_id === variant);
+  }
+  // If variant is "" (All), delete all versions
+  
+  const filePathsToDelete = versionsToDelete.map(version => version.hash);
+  
   if (filePathsToDelete.length > 0) {
-    const msg = "Are you sure you want to delete all versions of this document and leave only the current gold standard version? This cannot be undone."
+    const variantText = variant === "none" ? "without variant" : 
+                      variant && variant !== "" ? `with variant "${variant}"` : "";
+    const msg = `Are you sure you want to delete ${filePathsToDelete.length} version(s) ${variantText}? This cannot be undone.`
     if (!confirm(msg)) return; // todo use dialog
+  } else {
+    // No versions match the current variant filter
+    const variantText = variant === "none" ? "without variant" : `with variant "${variant}"`;
+    notify(`No versions ${variantText} found to delete.`);
+    return;
   }
   services.removeMergeView(state)
   // delete
   await client.deleteFiles(filePathsToDelete)
   try {
-
+    // Clear current XML state after successful deletion
+    await updateState(state, { xml: null })
     // update the file data
     await fileselection.reload(state)
-    // load the gold version
-    await load(state, { xml: xmlPaths[0] })
-    notify("All version have been deleted")
+    
+    // Find and load the appropriate gold version for the current variant
+    let goldToLoad = null;
+    if (selectedFile.gold) {
+      if (variant === "none") {
+        // Load gold version without variant_id
+        goldToLoad = selectedFile.gold.find(gold => !gold.variant_id);
+      } else if (variant && variant !== "") {
+        // Load gold version with matching variant_id
+        goldToLoad = selectedFile.gold.find(gold => gold.variant_id === variant);
+      } else {
+        // Load first available gold version
+        goldToLoad = selectedFile.gold[0];
+      }
+    }
+    
+    if (goldToLoad) {
+      await load(state, { xml: goldToLoad.hash });
+    }
+    
+    const variantText = variant === "none" ? "without variant" : 
+                      variant && variant !== "" ? `with variant "${variant}"` : "";
+    notify(`All versions ${variantText} have been deleted`)
     sync.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))

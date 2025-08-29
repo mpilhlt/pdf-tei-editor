@@ -101,6 +101,20 @@ app.logger.setLevel(logger.level)
 # Configure separate access logging for HTTP requests
 log_dir = project_root / 'log'
 log_dir.mkdir(exist_ok=True)
+
+# Purge non-.log files from log directory on startup
+def purge_non_log_files():
+    """Remove all files from log directory that don't end with .log"""
+    try:
+        for file_path in log_dir.iterdir():
+            if file_path.is_file() and not file_path.name.endswith('.log'):
+                file_path.unlink()
+                logger.info(f"Purged non-log file: {file_path.name}")
+    except Exception as e:
+        logger.warning(f"Failed to purge non-log files: {e}")
+
+purge_non_log_files()
+
 access_log_file = log_dir / 'access.log'
 
 # Create access logger that only handles HTTP requests

@@ -152,6 +152,14 @@ def acquire_lock(file_path, session_id):
     
     current_app.logger.debug(f"Acquiring lock for {file_path}")
     storage = get_lock_storage()
+    
+    # Ensure locks directory exists
+    try:
+        storage.mkdir()
+    except Exception as e:
+        current_app.logger.error(f"Could not create locks directory: {e}")
+        raise RuntimeError(f"Could not create locks directory: {e}")
+    
     lock_path = get_lock_path(file_path)
     
     def write_lock(overwrite=True):
@@ -189,6 +197,14 @@ def acquire_lock(file_path, session_id):
 def release_lock(file_path, session_id):
     """Releases the lock for a given file if it is held by the current session."""
     storage = get_lock_storage()
+    
+    # Ensure locks directory exists
+    try:
+        storage.mkdir()
+    except Exception as e:
+        current_app.logger.error(f"Could not create locks directory: {e}")
+        raise RuntimeError(f"Could not create locks directory: {e}")
+    
     lock_path = get_lock_path(file_path)
 
     try:
@@ -272,6 +288,15 @@ def get_all_active_locks():
 
 def check_lock(file_path, session_id):
     """Checks if a single file is locked by another session."""
+    storage = get_lock_storage()
+    
+    # Ensure locks directory exists
+    try:
+        storage.mkdir()
+    except Exception as e:
+        current_app.logger.error(f"Could not create locks directory: {e}")
+        return { "is_locked": False }  # Assume not locked if we can't check
+    
     active_locks = get_all_active_locks()
     
     if file_path in active_locks and active_locks[file_path] != session_id:

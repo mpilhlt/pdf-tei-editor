@@ -171,7 +171,7 @@ async function extractFromPDF(state, defaultOptions={}) {
     // get DOI and instructions from user
     const options = await promptForExtractionOptions(enhancedOptions)
 
-    ui.spinner.show('Extracting references, please wait')
+    ui.spinner.show('Extracting, please wait')
     let result
     try {
       const filename = options.filename || state.pdf
@@ -179,6 +179,11 @@ async function extractFromPDF(state, defaultOptions={}) {
       
       // Force reload of file list since server has updated cache
       await fileselection.reload(state, {refresh:true})
+      
+      // Update state.variant with the variant_id that was used for extraction
+      if (options.variant_id) {
+        await updateState({ variant: options.variant_id })
+      }
       
       // Load the extracted result (server now returns hashes)
       await services.load(state, result)

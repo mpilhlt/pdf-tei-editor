@@ -210,4 +210,24 @@ class LLamoreExtractor(BaseExtractor):
         extractor = GeminiExtractor(api_key=gemini_api_key, prompter=CustomPrompter(), model=GEMINI_MODEL)
         references = extractor(pdf_path)
         parser = TeiBiblStruct()
-        return etree.fromstring(parser.to_xml(references))
+        
+        # Generate XML and handle parsing errors
+        xml_content = parser.to_xml(references)
+        try:
+            return etree.fromstring(xml_content)
+        except etree.XMLSyntaxError as e:
+            # Log the XML that failed to parse
+            log_xml_parsing_error("llamore", pdf_path, xml_content, str(e))
+            
+            # Create a minimal document structure with error info instead of failing
+            import html
+            escaped_error = html.escape(str(e))
+            error_xml = f'''<listBibl xmlns="http://www.tei-c.org/ns/1.0">
+    <note type="error-message">{escaped_error}</note>
+    <note type="invalid-xml"><![CDATA[
+{xml_content}
+]]></note>
+</listBibl>'''
+            
+            # Parse this properly constructed XML
+            return etree.fromstring(error_xml.encode('utf-8'))
