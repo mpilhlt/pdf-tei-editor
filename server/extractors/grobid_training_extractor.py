@@ -45,9 +45,9 @@ class GrobidTrainingExtractor(BaseExtractor):
                     "description": "Variant identifier for the training data type",
                     "required": False,
                     "options": [
-                        "grobid.training.fulltext",
                         "grobid.training.segmentation", 
-                        "grobid.training.references.referenceSegmenter"
+                        "grobid.training.references.referenceSegmenter",
+                        "grobid.training.citation"
                     ]
                 },
                 "flavor": {
