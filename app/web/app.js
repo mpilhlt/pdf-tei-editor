@@ -48390,6 +48390,17 @@ async function onChangeXmlSelection(state) {
   const xml = ui$1.toolbar.xml.value;
   if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
+      // Find the collection for this XML file by searching fileData
+      for (const file of fileData) {
+        const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
+        const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
+        
+        if (hasGoldMatch || hasVersionMatch) {
+          state.collection = file.collection;
+          break;
+        }
+      }
+      
       await api$6.removeMergeView(state);
       await api$6.load(state, { xml });
     } catch (error) {
@@ -49128,7 +49139,7 @@ async function extractFromPDF(state, defaultOptions={}) {
     // get DOI and instructions from user
     const options = await promptForExtractionOptions(enhancedOptions);
 
-    ui$1.spinner.show('Extracting references, please wait');
+    ui$1.spinner.show('Extracting, please wait');
     let result;
     try {
       const filename = options.filename || state.pdf;
@@ -49136,6 +49147,11 @@ async function extractFromPDF(state, defaultOptions={}) {
       
       // Force reload of file list since server has updated cache
       await api$8.reload(state, {refresh:true});
+      
+      // Update state.variant with the variant_id that was used for extraction
+      if (options.variant_id) {
+        await updateState({ variant: options.variant_id });
+      }
       
       // Load the extracted result (server now returns hashes)
       await api$6.load(state, result);
@@ -49901,6 +49917,26 @@ async function load$1(state, { xml, pdf }) {
     startAutocomplete().then(result => result && notify("Autocomplete is available"));
   }
 
+  // Set collection based on loaded documents if not already set
+  if ((pdf || xml) && !state.collection) {
+    for (const file of api$8.fileData) {
+      // Check PDF hash
+      if (pdf && file.pdf && file.pdf.hash === pdf) {
+        state.collection = file.collection;
+        break;
+      }
+      // Check XML hash in gold or versions
+      if (xml) {
+        const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
+        const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
+        if (hasGoldMatch || hasVersionMatch) {
+          state.collection = file.collection;
+          break;
+        }
+      }
+    }
+  }
+
   // notify plugins
   await updateState(state);
 }
@@ -50024,6 +50060,8 @@ async function deleteCurrentVersion(state) {
     // delete the file
     await api$9.deleteFiles(filePathsToDelete);
     try {
+      // Clear current XML state after successful deletion
+      await updateState(state, { xml: null });
       // update the file data
       await api$8.reload(state);
       // load the gold version
@@ -50043,26 +50081,75 @@ async function deleteCurrentVersion(state) {
 
 /**
  * Deletes all versions of the document, leaving only the gold standard version
+ * Only deletes versions that match the current variant filter
  * @param {ApplicationState} state
  */
 async function deleteAllVersions(state) {
-  // @ts-ignore
-  const xmlPaths = Array.from(ui$1.toolbar.xml.childNodes).map(option => option.value);
-  const filePathsToDelete = xmlPaths.slice(1); // skip the first option, which is the gold standard version  
+  // Get the current PDF to find all its versions
+  const currentPdf = ui$1.toolbar.pdf.value;
+  const selectedFile = api$8.fileData.find(file => file.pdf.hash === currentPdf);
+  
+  if (!selectedFile || !selectedFile.versions) {
+    return; // No versions to delete
+  }
+  
+  // Filter versions based on current variant selection (same logic as file-selection.js)
+  let versionsToDelete = selectedFile.versions;
+  const { variant } = state;
+  
+  if (variant === "none") {
+    // Delete only versions without variant_id
+    versionsToDelete = selectedFile.versions.filter(version => !version.variant_id);
+  } else if (variant && variant !== "") {
+    // Delete only versions with the selected variant_id
+    versionsToDelete = selectedFile.versions.filter(version => version.variant_id === variant);
+  }
+  // If variant is "" (All), delete all versions
+  
+  const filePathsToDelete = versionsToDelete.map(version => version.hash);
+  
   if (filePathsToDelete.length > 0) {
-    const msg = "Are you sure you want to delete all versions of this document and leave only the current gold standard version? This cannot be undone.";
+    const variantText = variant === "none" ? "without variant" : 
+                      variant && variant !== "" ? `with variant "${variant}"` : "";
+    const msg = `Are you sure you want to delete ${filePathsToDelete.length} version(s) ${variantText}? This cannot be undone.`;
     if (!confirm(msg)) return; // todo use dialog
+  } else {
+    // No versions match the current variant filter
+    const variantText = variant === "none" ? "without variant" : `with variant "${variant}"`;
+    notify(`No versions ${variantText} found to delete.`);
+    return;
   }
   api$6.removeMergeView(state);
   // delete
   await api$9.deleteFiles(filePathsToDelete);
   try {
-
+    // Clear current XML state after successful deletion
+    await updateState(state, { xml: null });
     // update the file data
     await api$8.reload(state);
-    // load the gold version
-    await load$1(state, { xml: xmlPaths[0] });
-    notify("All version have been deleted");
+    
+    // Find and load the appropriate gold version for the current variant
+    let goldToLoad = null;
+    if (selectedFile.gold) {
+      if (variant === "none") {
+        // Load gold version without variant_id
+        goldToLoad = selectedFile.gold.find(gold => !gold.variant_id);
+      } else if (variant && variant !== "") {
+        // Load gold version with matching variant_id
+        goldToLoad = selectedFile.gold.find(gold => gold.variant_id === variant);
+      } else {
+        // Load first available gold version
+        goldToLoad = selectedFile.gold[0];
+      }
+    }
+    
+    if (goldToLoad) {
+      await load$1(state, { xml: goldToLoad.hash });
+    }
+    
+    const variantText = variant === "none" ? "without variant" : 
+                      variant && variant !== "" ? `with variant "${variant}"` : "";
+    notify(`All versions ${variantText} have been deleted`);
     api$1.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e));
