@@ -604,69 +604,6 @@ function escapeHtml$1(text) {
 }
 
 /**
- * Finds all descendants of a given node that have a "name" attribute,
- * but does not recurse into those nodes.  This means descendants of the
- * named nodes are excluded.  If duplicate names are found, the first
- * occurrence is used.
- *
- * @param {Element|Document} node The starting node to search from.
- * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
- */
-function findNamedDescendants(node) {
-  const results = {};
-
-  /**
-   * Recursive function that adds to the results object
-   * @param {Element|Document} currentNode 
-   * @returns {void}
-   */
-  function traverse(currentNode) {
-    if (!currentNode || !currentNode.childNodes) {
-      return;
-    }
-
-    for (let i = 0; i < currentNode.childNodes.length; i++) {
-      /** @type {Element} */
-      const childNode = /** @type {Element} */(currentNode.childNodes[i]);
-      // Check if it's an element (important to avoid text nodes)
-      if (childNode.nodeType === Node.ELEMENT_NODE) {
-
-        const nameAttribute = childNode.getAttribute("name");
-
-        if (nameAttribute && !results.hasOwnProperty(nameAttribute)) {
-          results[nameAttribute] = childNode;
-        } else {
-          // Only recurse if the current node doesn't have a name attribute
-          // or if the name is already in the results.  This prevents
-          // recursion into named nodes.
-          traverse(childNode);
-        }
-      }
-    }
-  }
-  traverse(node);
-  return /** @type {{ [x: string]: Element }} */(results);
-}
-
-/**
- * Creates a navigable element by adding named descendant elements as properties.
- * Each property gives direct access to the DOM element (which is also the navigation object).
- * You must be careful to use names that do not override existing properties.
- *
- * @template {Element|Document} T
- * @param {T} node The element to enhance with navigation
- * @returns {T & Record<string, any>} The element with added navigation properties
- */
-function createNavigableElement(node) {
-  const namedDescendants = findNamedDescendants(node);
-  for (let name in namedDescendants) {
-    namedDescendants[name] = createNavigableElement(namedDescendants[name]);
-  }
-  const modifiedObj = Object.assign(node, namedDescendants);
-  return modifiedObj
-}
-
-/**
  * This plugin provides an API to save selected properties of the application state in the URL hash
  * and to update the application state from the URL hash on page load.
  * This allows sharing links to the current application state and restoring the state when reloading the page
@@ -965,6 +902,294 @@ function cleanupConnection() {
   reconnectAttempts = 0;
   
   api$f.debug('SSE connection cleaned up');
+}
+
+/**
+ * UI System - Template registration and DOM element utilities
+ * 
+ * This module provides a lightweight template registration system that supports
+ * both development and production modes:
+ * - In development (?dev mode): Templates are loaded dynamically from files
+ * - In production: Templates are bundled into templates.json for performance
+ */
+
+
+
+// Template registry for caching
+const templateRegistry = new Map();
+const isDev = new URLSearchParams(window.location.search).has('dev');
+let templatesJson = null;
+
+/**
+ * Registers a template with the system. In development mode, this loads
+ * and caches the template immediately. In production mode, this loads
+ * from the bundled JSON.
+ * 
+ * @param {string} id - Unique template identifier
+ * @param {string} pathOrHtml - Template file path (dev) or HTML content
+ * @returns {Promise<void>}
+ */
+async function registerTemplate(id, pathOrHtml) {
+  if (templateRegistry.has(id)) {
+    console.warn(`Template '${id}' is already registered, overwriting`);
+  }
+  
+  const template = {
+    id,
+    pathOrHtml,
+    cached: false,
+    html: null
+  };
+  
+  // Pre-load the HTML content
+  template.html = await getTemplateHtml(id, template);
+  template.cached = true;
+  
+  templateRegistry.set(id, template);
+}
+
+/**
+ * Loads templates.json in production mode
+ * @returns {Promise<Object>} The templates object
+ */
+async function loadTemplatesJson() {
+  if (!templatesJson) {
+    try {
+      templatesJson = await import('../../../../../../web/templates.json');
+    } catch (error) {
+      console.error('Failed to load templates.json, falling back to development mode:', error);
+      templatesJson = {};
+    }
+  }
+  return templatesJson.default || templatesJson;
+}
+
+/**
+ * Gets HTML content for a template, handling both dev and production modes
+ * 
+ * @param {string} id - Template identifier
+ * @param {object} [template] - Template object (if not provided, looks up in registry)
+ * @returns {Promise<string>} The HTML content
+ */
+async function getTemplateHtml(id, template = null) {
+  if (!template) {
+    template = templateRegistry.get(id);
+  }
+  
+  if (!template) {
+    throw new Error(`Template '${id}' is not registered. Available templates: ${Array.from(templateRegistry.keys()).join(', ')}`);
+  }
+  
+  // Return cached HTML if available
+  if (template.cached && template.html) {
+    return template.html;
+  }
+  
+  let html;
+  
+  if (isDev) {
+    // Development mode: load from file system
+    if (template.pathOrHtml.trim()[0] === '<') {
+      // Literal HTML
+      html = template.pathOrHtml.trim();
+    } else {
+      // File path - add /src/templates/ prefix if not absolute
+      const path = template.pathOrHtml.startsWith('/') 
+        ? template.pathOrHtml 
+        : '/src/templates/' + template.pathOrHtml;
+      
+      console.log('Loading template from', path);
+      const response = await fetch(path);
+      if (!response.ok) {
+        throw new Error(`Failed to load template '${id}' from '${path}': ${response.status} ${response.statusText}`);
+      }
+      html = await response.text();
+    }
+  } else {
+    // Production mode: load from bundled JSON
+    const templates = await loadTemplatesJson();
+    html = templates[id];
+    
+    if (!html) {
+      throw new Error(`Template '${id}' not found in templates.json. Available templates: ${Object.keys(templates).join(', ')}`);
+    }
+  }
+  
+  return html.trim();
+}
+
+/**
+ * Replaces template parameters in HTML content using ${param} syntax
+ * 
+ * @param {string} html - HTML content with parameters
+ * @param {Object} params - Parameter values to substitute
+ * @returns {string} HTML with parameters replaced
+ */
+function replaceTemplateParameters(html, params = {}) {
+  if (!params || Object.keys(params).length === 0) {
+    return html;
+  }
+  
+  return html.replace(/\$\{(\w+)\}/g, (match, paramName) => {
+    if (params.hasOwnProperty(paramName)) {
+      return String(params[paramName]);
+    }
+    console.warn(`Template parameter '${paramName}' not provided, leaving as-is`);
+    return match;
+  });
+}
+
+/**
+ * Creates DOM elements from a registered template with optional parameter substitution.
+ * Template must be registered first with registerTemplate(). If a parentNode is given, 
+ * the elements are appended to it. If no parentNode is given, the generated nodes are 
+ * returned as an array.
+ * 
+ * @param {string} id - Template identifier
+ * @param {Element|Document|null} [parentNode] - If given, appends generated nodes as children
+ * @param {Object} [params] - Parameters for template substitution (e.g., {name: 'icon-name'})
+ * @returns {ChildNode[]} All the created nodes in an array
+ */
+function createFromTemplate(id, parentNode = null, params = {}) {
+  const template = templateRegistry.get(id);
+  
+  if (!template) {
+    throw new Error(`Template '${id}' is not registered. Available templates: ${Array.from(templateRegistry.keys()).join(', ')}`);
+  }
+  
+  if (!template.cached || !template.html) {
+    throw new Error(`Template '${id}' is not loaded. Make sure to await registerTemplate() before using createFromTemplate().`);
+  }
+  
+  const processedHtml = replaceTemplateParameters(template.html, params);
+  
+  const div = document.createElement('div');
+  div.innerHTML = processedHtml;
+  const nodes = Array.from(div.childNodes);
+  
+  // If a parent node has been given, add nodes to it and update UI
+  if (parentNode instanceof Element) {
+    parentNode.append(...nodes);
+    updateUi();
+  }
+  
+  return nodes;
+}
+
+/**
+ * Creates a single DOM element from a registered template with optional parameter substitution.
+ * Template must be registered first with registerTemplate(). If the template produces multiple
+ * elements, returns the first one. If a parentNode is given, the element is appended to it. 
+ * 
+ * @param {string} id - Template identifier
+ * @param {Element|Document|null} [parentNode] - If given, appends generated element as child
+ * @param {Object} [params] - Parameters for template substitution (e.g., {name: 'icon-name'})
+ * @returns {ChildNode} The first created element
+ * @throws {Error} If template produces no elements
+ */
+function createSingleFromTemplate(id, parentNode = null, params = {}) {
+  const nodes = createFromTemplate(id, parentNode, params);
+  
+  if (nodes.length === 0) {
+    throw new Error(`Template '${id}' produced no elements.`);
+  }
+  
+  return nodes[0];
+}
+
+/**
+ * Legacy function - creates HTML elements from templates or literal HTML strings.
+ * 
+ * @deprecated Use registerTemplate() + createFromTemplate() instead
+ * @param {string} htmlOrFile A literal html string or the name of a file in the 'app/src/templates/' folder  
+ * @param {Element|Document|null} [parentNode] If given, appends the generated nodes as children to the parentNode
+ * @returns {Promise<ChildNode[]>} All the created nodes in an array
+ */
+async function createHtmlElements(htmlOrFile, parentNode = null) {
+  let html;
+  if (htmlOrFile.trim()[0] === '<') {
+    // interpret as literal html
+    html = htmlOrFile.trim();
+  } else {
+    // treat as path
+    const path = '/src/templates/' + htmlOrFile;
+    console.log('Loading HTML from', path);
+    html = await (await fetch(path)).text();
+  }
+  
+  const div = document.createElement('div');
+  div.innerHTML = html.trim();
+  const nodes = Array.from(div.childNodes);
+  
+  // if a parent node has been given, add nodes to it
+  if (parentNode instanceof Element) {
+    parentNode.append(...nodes);
+  }
+  
+  return nodes;
+}
+
+/**
+ * Finds all descendants of a given node that have a "name" attribute,
+ * but does not recurse into those nodes. This means descendants of the
+ * named nodes are excluded. If duplicate names are found, the first
+ * occurrence is used.
+ *
+ * @param {Element|Document} node The starting node to search from.
+ * @returns {Object<string, Element>} An object mapping name attribute values to their respective nodes.
+ */
+function findNamedDescendants(node) {
+  const results = {};
+
+  /**
+   * Recursive function that adds to the results object
+   * @param {Element|Document} currentNode 
+   * @returns {void}
+   */
+  function traverse(currentNode) {
+    if (!currentNode || !currentNode.childNodes) {
+      return;
+    }
+
+    for (let i = 0; i < currentNode.childNodes.length; i++) {
+      /** @type {Element} */
+      const childNode = /** @type {Element} */(currentNode.childNodes[i]);
+      // Check if it's an element (important to avoid text nodes)
+      if (childNode.nodeType === Node.ELEMENT_NODE) {
+
+        const nameAttribute = childNode.getAttribute("name");
+
+        if (nameAttribute && !results.hasOwnProperty(nameAttribute)) {
+          results[nameAttribute] = childNode;
+        } else {
+          // Only recurse if the current node doesn't have a name attribute
+          // or if the name is already in the results. This prevents
+          // recursion into named nodes.
+          traverse(childNode);
+        }
+      }
+    }
+  }
+  traverse(node);
+  return /** @type {{ [x: string]: Element }} */(results);
+}
+
+/**
+ * Creates a navigable element by adding named descendant elements as properties.
+ * Each property gives direct access to the DOM element (which is also the navigation object).
+ * You must be careful to use names that do not override existing properties.
+ *
+ * @template {Element|Document} T
+ * @param {T} node The element to enhance with navigation
+ * @returns {T & Record<string, any>} The element with added navigation properties
+ */
+function createNavigableElement(node) {
+  const namedDescendants = findNamedDescendants(node);
+  for (let name in namedDescendants) {
+    namedDescendants[name] = createNavigableElement(namedDescendants[name]);
+  }
+  const modifiedObj = Object.assign(node, namedDescendants);
+  return modifiedObj;
 }
 
 /**
@@ -14675,39 +14900,6 @@ const PanelUtils = {
  */
 let ui = /** @type {namedElementsTree} */(/** @type {unknown} */(null));
 
-/**
- * Generates UI elements from templates in the 'app/src/templates' folder or from
- * literal hmtl strings, which must start with "<". If a parentNode is given,
- * the elements are appended to it and the `ui` object is updated automatically.
- * If no parentNode is given, the generated nodes are returned as an array, and you
- * need to call `updateUi()` manually to update the `ui` object.
- * @param {string} htmlOrFile A literal html string or the name of a file in the 'app/src/templates/' folder
- * @param {Element|Document|null} [parentNode] 
- *    If given, appends the generated nodes as children to the parentNode. 
- * @returns {Promise<ChildNode[]>} All the created nodes in an array
- */
-async function createHtmlElements(htmlOrFile, parentNode=null){
-  let html;
-  if (htmlOrFile.trim()[0]==='<') {
-    // interpret as literal html
-    html = htmlOrFile.trim();
-  } else {
-    // treat as path
-    const path = '/src/templates/' + htmlOrFile;
-    console.log('Loading HTML from', path);
-    html = await (await fetch(path)).text();
-  }
-  const div = document.createElement('div');
-  div.innerHTML = html.trim();
-  const nodes = Array.from(div.childNodes);
-  // if a parent node has been given, add nodes to it and update the `ui` object
-  if (parentNode instanceof Element) {
-    parentNode.append(...nodes);
-    updateUi();
-  } 
-  // return the nodes as an array
-  return nodes
-}
 
 /**
  * Updates the UI structure
@@ -48045,8 +48237,8 @@ const plugin$c = {
 // UI
 //
 
-// see ui.js for @typedef 
-const fileSelectionControls = await createHtmlElements('file-selection.html');
+// Register templates
+await registerTemplate('file-selection', 'file-selection.html');
 
 //
 // Implementation
@@ -48061,6 +48253,9 @@ const fileSelectionControls = await createHtmlElements('file-selection.html');
 async function install$c(state) {
 
   api$f.debug(`Installing plugin "${plugin$c.name}"`);
+  
+  // Create file selection controls
+  const fileSelectionControls = createFromTemplate('file-selection');
   
   // Add file selection controls to toolbar with specified priorities
   const controlPriorities = {
@@ -49080,29 +49275,13 @@ const plugin$b = {
 /**
  * Extraction actions button group
  * @typedef {object} extractionActionsPart
- * @property {SlButtonGroup} self
  * @property {SlButton} extractNew 
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
  */
-/** @type {SlButtonGroup & extractionActionsPart} */
-// @ts-ignore
-const extractionBtnGroup = (await createHtmlElements('extraction-buttons.html'))[0];
-
-
-/**
- * Extraction options dialog
- * @typedef {object} extractionOptionsDialog
- * @property {SlDialog} self
- * @property {SlInput} doi 
- * @property {SlSelect} collectionName
- * @property {SlSelect} modelIndex 
- * @property {SlButton} cancel
- * @property {SlButton} submit
- */
-/** @type {extractionOptionsDialog & SlDialog} */
-// @ts-ignore
-const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
+// Register templates
+await registerTemplate('extraction-buttons', 'extraction-buttons.html');
+await registerTemplate('extraction-dialog', 'extraction-dialog.html');
 
 /**
  * @typedef {Object} ExtractionOptions
@@ -49121,9 +49300,12 @@ const optionsDialog = (await createHtmlElements('extraction-dialog.html'))[0];
 async function install$b(state) {
   api$f.debug(`Installing plugin "${plugin$b.name}"`);
 
+  // Create UI elements
+  const extractionBtnGroup = createSingleFromTemplate('extraction-buttons');
+  createSingleFromTemplate('extraction-dialog', document.body);
+
   // Add extraction buttons to toolbar with medium priority
   ui$1.toolbar.add(extractionBtnGroup, 7);
-  document.body.append(optionsDialog);
   updateUi();
 
   // add event listeners
@@ -49136,8 +49318,8 @@ async function install$b(state) {
  */
 async function update$6(state) {
   // @ts-ignore
-  extractionBtnGroup.childNodes.forEach(child => child.disabled = state.offline); 
-  extractionBtnGroup.extractCurrent.disabled = !state.pdf;
+  ui$1.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline); 
+  ui$1.toolbar.extractionActions.extractCurrent.disabled = !state.pdf;
   //console.warn(plugin.name,"done")
 }
 
@@ -49262,11 +49444,11 @@ async function promptForExtractionOptions(options={}) {
 
   // use doi if available - prioritize options parameter, then document metadata
   const doiValue = options.doi || documentMetadata.doi || "";
-  optionsDialog.doi.value = doiValue;
+  ui$1.extractionOptions.doi.value = doiValue;
 
   // configure collections selectbox 
   /** @type {SlSelect|null} */
-  const collectionSelectBox = optionsDialog.collectionName;
+  const collectionSelectBox = ui$1.extractionOptions.collectionName;
   collectionSelectBox.innerHTML="";
   const collectionData = ui$1.toolbar.pdf.dataset.collections || '[]';
   const collections = JSON.parse(collectionData);
@@ -49286,7 +49468,7 @@ async function promptForExtractionOptions(options={}) {
 
   // configure model selectbox with available extractors
   /** @type {SlSelect|null} */
-  const modelSelectBox = optionsDialog.modelIndex;
+  const modelSelectBox = ui$1.extractionOptions.modelIndex;
   modelSelectBox.innerHTML = "";
   
   // Get extractors and store for dynamic options
@@ -49341,7 +49523,7 @@ async function promptForExtractionOptions(options={}) {
     const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId);
     
     // Clear existing dynamic options
-    const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]');
+    const dynamicOptionsContainer = ui$1.extractionOptions.querySelector('[name="dynamicOptions"]');
     if (dynamicOptionsContainer) {
       dynamicOptionsContainer.innerHTML = "";
     }
@@ -49364,7 +49546,7 @@ async function promptForExtractionOptions(options={}) {
       // Create select dropdown for predefined options
       const select = Object.assign(new select_default, {
         name: optionKey,
-        label: optionConfig.description || optionKey,
+        label: optionConfig.label || optionKey,
         size: "small"
       });
       
@@ -49435,7 +49617,7 @@ async function promptForExtractionOptions(options={}) {
       // Create text input for free-form string fields
       const input = Object.assign(new input_default, {
         name: optionKey,
-        label: optionConfig.description || optionKey,
+        label: optionConfig.label || optionKey,
         size: "small",
         type: "text"
       });
@@ -49467,13 +49649,13 @@ async function promptForExtractionOptions(options={}) {
     }
 
     // event listeners
-    optionsDialog.addEventListener("sl-request-close", cancel, { once: true });
-    optionsDialog.cancel.addEventListener("click", cancel, { once: true });
-    optionsDialog.submit.addEventListener("click", submit, { once: true });
+    ui$1.extractionOptions.addEventListener("sl-request-close", cancel, { once: true });
+    ui$1.extractionOptions.cancel.addEventListener("click", cancel, { once: true });
+    ui$1.extractionOptions.submit.addEventListener("click", submit, { once: true });
 
-    optionsDialog.show();
+    ui$1.extractionOptions.show();
   });
-  optionsDialog.hide();
+  ui$1.extractionOptions.hide();
 
   if (result === false) {
     // user has cancelled the form
@@ -49482,13 +49664,13 @@ async function promptForExtractionOptions(options={}) {
 
   // Collect form data from static and dynamic fields
   const formData = {
-    'doi': optionsDialog.doi.value,
-    'collection': optionsDialog.collectionName.value,
-    'extractor': optionsDialog.modelIndex.value
+    'doi': ui$1.extractionOptions.doi.value,
+    'collection': ui$1.extractionOptions.collectionName.value,
+    'extractor': ui$1.extractionOptions.modelIndex.value
   };
   
   // Collect values from dynamic options
-  const dynamicOptionsContainer = optionsDialog.querySelector('[name="dynamicOptions"]');
+  const dynamicOptionsContainer = ui$1.extractionOptions.querySelector('[name="dynamicOptions"]');
   // @ts-ignore
   const dynamicInputs = dynamicOptionsContainer.querySelectorAll('sl-select, sl-input');
   
@@ -49757,13 +49939,9 @@ let savingStatusWidget = null;
  * @property {SlButton} teiWizard - TEI Wizard button (added by tei-wizard plugin)
  */
 
-// todo align template with definition
-const documentActionButtons = await createHtmlElements("document-action-buttons.html");
-
 /**
  * Dialog for creating a new version
  * @typedef {object} newVersionDialog
- * @property {SlDialog} self
  * @property {SlInput} versionName 
  * @property {SlInput} persName 
  * @property {SlInput} persId 
@@ -49771,10 +49949,6 @@ const documentActionButtons = await createHtmlElements("document-action-buttons.
  * @property {SlButton} submit
  * @property {SlButton} cancel 
  */
-
-/** @type {newVersionDialog & SlDialog} */
-// @ts-ignore
-const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0];
 
 /**
  * Dialog for documenting a revision navigation properties
@@ -49786,9 +49960,10 @@ const newVersionDialog = (await createHtmlElements("new-version-dialog.html"))[0
  * @property {SlButton} cancel - Cancel button
  */
 
-/** @type {newRevisionChangeDialogPart & SlDialog} */
-// @ts-ignore
-const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"))[0];
+// Register templates
+await registerTemplate('document-action-buttons', 'document-action-buttons.html');
+await registerTemplate('new-version-dialog', 'new-version-dialog.html');
+await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
 
 
 //
@@ -49801,6 +49976,11 @@ const saveRevisionDialog = (await createHtmlElements("save-revision-dialog.html"
 async function install$a(state) {
   api$f.debug(`Installing plugin "${plugin$a.name}"`);
 
+  // Create UI elements
+  const documentActionButtons = createFromTemplate('document-action-buttons');
+  createSingleFromTemplate('new-version-dialog', document.body);
+  createSingleFromTemplate('save-revision-dialog', document.body);
+
   // Add document action buttons to toolbar with medium priority
   documentActionButtons.forEach(buttonGroup => {
     // Ensure we're working with HTMLElement
@@ -49809,9 +49989,7 @@ async function install$a(state) {
       ui$1.toolbar.add(buttonGroup, 8);
     }
   });
-  document.body.append(newVersionDialog);
-  document.body.append(saveRevisionDialog);
-  updateUi();
+  updateUi(); // Update UI so navigation objects are available
   
   // Create saving status widget
   // <sl-icon name="floppy"></sl-icon>
@@ -50362,9 +50540,7 @@ async function onClickValidateButton() {
  */
 async function saveRevision(state) {
 
-  /** @type {newRevisionChangeDialogPart & SlDialog} */
-  // @ts-ignore
-  const dialog = document.querySelector('[name="newRevisionChangeDialog"]');
+  const dialog = ui$1.newRevisionChangeDialog;
   dialog.changeDesc.value = "Corrections";
   try {
     const user = api$2.getUser();
@@ -50413,7 +50589,6 @@ async function saveRevision(state) {
       await updateState(state);
     }
     
-    notify("Document was saved.");
     api$1.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e));
@@ -50434,9 +50609,7 @@ async function saveRevision(state) {
  */
 async function createNewVersion(state) {
 
-  /** @type {newVersionDialog & SlDialog} */
-  // @ts-ignore
-  const newVersiondialog = document.querySelector('[name="newVersionDialog"]');
+  const newVersiondialog = ui$1.newVersionDialog;
   try {
     const user = api$2.getUser();
     if (user) {
@@ -50481,8 +50654,8 @@ async function createNewVersion(state) {
     // now modify the header
     await addTeiHeaderInfo(respStmt, editionStmt);
 
-    // save again to the new path
-    await saveXml(hash);
+    // save the modified content back to the same timestamped version file
+    await saveXml(hash, false);
     xmlEditor.markAsClean(); 
 
     // reload the file data to display the new name and inform the user
@@ -50983,7 +51156,6 @@ const plugin$8 = {
 /**
  * Prompt editor
  * @typedef {object} promptEditorPart
- * @property {SlDialog} self
  * @property {SlInput} label
  * @property {SlMenu} labelMenu
  * @property {SlSelect} extractorSelect
@@ -50994,12 +51166,9 @@ const plugin$8 = {
  * @property {SlButton} submit
  */
 
-// editor dialog
-/** @type {promptEditorPart} */
-const promptEditorDialog = (await createHtmlElements("prompt-editor.html"))[0];
-
-// button, documented in services.js
-const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'))[0];
+// Register templates
+await registerTemplate('prompt-editor', 'prompt-editor.html');
+await registerTemplate('prompt-editor-button', 'prompt-editor-button.html');
 
 //
 // Implementation
@@ -51012,9 +51181,9 @@ const promptEditorButton = (await createHtmlElements('prompt-editor-button.html'
 async function install$8(state) {
   api$f.debug(`Installing plugin "${plugin$8.name}"`);
   
-  // add prompt editor component
-  document.body.append(promptEditorDialog);
-  updateUi();
+  // Create UI elements
+  createSingleFromTemplate('prompt-editor', document.body);
+  const promptEditorButton = createSingleFromTemplate('prompt-editor-button');
 
   const pe = ui$1.promptEditor;
   pe.addEventListener("sl-request-close", dialogOnRequestClose);
@@ -51248,9 +51417,11 @@ const plugin$7 = {
 // UI
 //
 
-const teiWizardButton = (await createHtmlElements("tei-wizard-button.html"))[0];
+// Register templates
+await registerTemplate('tei-wizard-button', 'tei-wizard-button.html');
+await registerTemplate('tei-wizard-dialog', 'tei-wizard-dialog.html');
 
-const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
+let teiWizardButton;
 
 
 /**
@@ -51259,9 +51430,11 @@ const teiWizardDialog = (await createHtmlElements("tei-wizard-dialog.html"))[0];
 async function install$7(state) {
   api$f.debug(`Installing plugin "${plugin$7.name}"`);
 
-  // button
+  // Create UI elements
+  teiWizardButton = createSingleFromTemplate('tei-wizard-button');
+  createSingleFromTemplate('tei-wizard-dialog', document.body);
+  
   ui$1.toolbar.teiActions.append(teiWizardButton);
-  document.body.append(teiWizardDialog);
   updateUi();
 
   ui$1.toolbar.teiActions.teiWizard.addEventListener("click", runTeiWizard);
@@ -51270,13 +51443,13 @@ async function install$7(state) {
   const dialog = /** @type {any} */(ui$1.teiWizardDialog);
 
   // Populate enhancement list
-  enhancements.forEach(async enhancement => {
+  enhancements.forEach(enhancement => {
     const checkboxHtml = `
     <sl-tooltip content="${enhancement.description}" hoist placement="right">
       <sl-checkbox data-enhancement="${enhancement.name}" size="medium">${enhancement.name}</sl-checkbox>
     </sl-tooltip>
     <br />`;
-    await createHtmlElements(checkboxHtml, dialog.enhancementList);
+    dialog.enhancementList.insertAdjacentHTML('beforeend', checkboxHtml);
   });
 
   // Select all and none buttons
@@ -59751,7 +59924,6 @@ const plugin$6 = {
 /**
  * Help Window
  * @typedef {object} infoDialogPart
- * @property {SlDialog} self
  * @property {HTMLDivElement} content
  * @property {SlButton} backBtn
  * @property {SlButton} homeBtn
@@ -59760,10 +59932,11 @@ const plugin$6 = {
  * @property {SlButton} closeBtn
  */
 
-/**
- * @typedef {object} toolbarInfoBtn
- * @property {SlButton} self
- */
+// Register templates
+await registerTemplate('info-dialog', 'info-dialog.html');
+await registerTemplate('about-button', 'about-button.html');
+await registerTemplate('info-toolbar-button', 'info-toolbar-button.html');
+
 //
 // Implementation
 //
@@ -59825,8 +59998,13 @@ let currentPage = 'index.md';
  */
 async function install$6(state) {
   api$f.debug(`Installing plugin "${plugin$6.name}"`);
-  // add the component html
-  await createHtmlElements('info-dialog.html', document.body);
+  
+  // Create UI elements
+  createFromTemplate('info-dialog', document.body);
+  const aboutButton = createSingleFromTemplate('about-button');
+  const button = createSingleFromTemplate('info-toolbar-button');
+  
+  // Set up info dialog event listeners
   ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.hide());
   ui$1.infoDialog.backBtn.addEventListener('click', goBack);
   ui$1.infoDialog.homeBtn.addEventListener('click', goHome);
@@ -59837,7 +60015,6 @@ async function install$6(state) {
   });
 
   // add About button to login dialog footer (left side)
-  const aboutButton = (await createHtmlElements('about-button.html'))[0];
   aboutButton.addEventListener('click', () => api$3.open());
   
   // Insert the About button before the Login button
@@ -59845,8 +60022,7 @@ async function install$6(state) {
   updateUi();
 
   // add a button to the command bar to show dialog
-  const button = (await createHtmlElements('info-toolbar-button.html'))[0];
-  ui$1.toolbar.append(button);
+  ui$1.toolbar.add(button, 1); // Low priority for info button
   updateUi();
   button.addEventListener("click", () => api$3.open());
   
@@ -60019,16 +60195,14 @@ const moveBtn = Object.assign(document.createElement('sl-button'), {
 
 /**
  * @typedef {object} MoveFilesDialog
- * @property {SlDialog} self
  * @property {SlSelect} collectionName
  * @property {SlButton} newCollectionBtn
  * @property {SlButton} cancel
  * @property {SlButton} submit
  */
 
-/** @type {SlDialog & MoveFilesDialog} */
-// @ts-ignore
-const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
+// Register template
+await registerTemplate('move-files-dialog', 'move-files-dialog.html');
 
 
 //
@@ -60041,14 +60215,14 @@ const moveFilesDialog = (await createHtmlElements('move-files-dialog.html'))[0];
 async function install$5(state) {
   api$f.debug(`Installing plugin "${plugin$5.name}"`);
 
-  // install button & dialog
+  // Create dialog and add button & dialog to UI
+  createSingleFromTemplate('move-files-dialog', document.body);
   ui$1.toolbar.documentActions.append(moveBtn);
-  document.body.append(moveFilesDialog);
-  updateUi();
+  updateUi(); // Update UI so moveFilesDialog navigation is available
 
   // add event listener
   moveBtn.addEventListener('click', () => showMoveFilesDialog(state));
-  moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
+  ui$1.moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
     if (newCollectionName) {
       if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
@@ -60059,8 +60233,8 @@ async function install$5(state) {
         value: newCollectionName,
         textContent: newCollectionName.replaceAll("_", " ").trim()
       });
-      moveFilesDialog.collectionName.append(option);
-      moveFilesDialog.collectionName.value = newCollectionName;
+      ui$1.moveFilesDialog.collectionName.append(option);
+      ui$1.moveFilesDialog.collectionName.value = newCollectionName;
     }
   });
 }
@@ -60077,7 +60251,7 @@ async function showMoveFilesDialog(state) {
 
   const currentCollection = pdf.split('/')[3];
 
-  const collectionSelectBox = moveFilesDialog.collectionName;
+  const collectionSelectBox = ui$1.moveFilesDialog.collectionName;
   collectionSelectBox.innerHTML = "";
   const collections = JSON.parse(ui$1.toolbar.pdf.dataset.collections || '[]').filter(c => c !== currentCollection);
   for (const collection_name of collections) {
@@ -60089,17 +60263,17 @@ async function showMoveFilesDialog(state) {
   }
 
   try {
-    moveFilesDialog.show();
+    ui$1.moveFilesDialog.show();
     await new Promise((resolve, reject) => {
-      moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
-      moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
-      moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
+      ui$1.moveFilesDialog.submit.addEventListener('click', resolve, { once: true });
+      ui$1.moveFilesDialog.cancel.addEventListener('click', reject, { once: true });
+      ui$1.moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
     api$f.warn("User cancelled move files dialog");
     return;
   } finally {
-    moveFilesDialog.hide();
+    ui$1.moveFilesDialog.hide();
   }
 
   const destinationCollection = String(collectionSelectBox.value);
@@ -60512,18 +60686,18 @@ async function searchNodeContents() {
 //
 
 /**
- * @typedef {SlDialog & {
- *  form: HTMLFormElement,
- *  username: SlInput,
- *  password: SlInput,
- *  submit: SlButton,
- *  aboutBtn?: SlButton,
- *  message: HTMLDivElement
- * }} loginDialog
+ * @typedef {object} loginDialog
+ * @property {HTMLFormElement} form
+ * @property {SlInput} username
+ * @property {SlInput} password
+ * @property {SlButton} submit
+ * @property {SlButton} [aboutBtn]
+ * @property {HTMLDivElement} message
  */
 
-await createHtmlElements('login-dialog.html', document.body);
-const buttonElement = (await createHtmlElements('logout-button.html'))[0];
+// Register templates
+await registerTemplate('login-dialog', 'login-dialog.html');
+await registerTemplate('logout-button', 'logout-button.html');
 
 /**
  * Public API for the authentication plugin
@@ -60568,6 +60742,11 @@ let user = null;
 async function install$3(state) {
   api$f.debug(`Installing plugin "${plugin$3.name}"`);
   state.user = null;
+  
+  // Create UI elements
+  createFromTemplate('login-dialog', document.body);
+  const buttonElement = createSingleFromTemplate('logout-button');
+  
   // @ts-ignore - insertAdjacentElement type issue
   ui$1.toolbar.insertAdjacentElement("beforeend", buttonElement);
   updateUi();
@@ -60670,7 +60849,13 @@ function _showLoginDialog() {
 async function logout() {
   try {
     await api$9.logout();
-    await updateState(state, { user: null, sessionId: null });
+    await updateState(state, { 
+      user: null, 
+      sessionId: null,
+      xml: null,
+      pdf: null,
+      diff: null
+    });
     // Remove session from URL hash if present
     UrlHash.remove('sessionId');
     await _showLoginDialog();
@@ -61551,6 +61736,11 @@ function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
  * @param {StatusText} readOnlyWidget - The read-only status widget
  */
 function updateReadOnlyWidgetText(readOnlyWidget) {
+  if (!readOnlyWidget) {
+    api$f.debug('Read-only widget not available, skipping context update');
+    return
+  }
+  
   const { visibility, editability, owner } = currentPermissions;
   const currentUser = api$2.getUser();
   
