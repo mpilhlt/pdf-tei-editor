@@ -50,13 +50,17 @@ export async function registerTemplate(id, pathOrHtml) {
 async function loadTemplatesJson() {
   if (!templatesJson) {
     try {
-      templatesJson = await import('/web/templates.json', { type: 'json' });
+      const response = await fetch('templates.json');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      templatesJson = await response.json();
     } catch (error) {
       console.error('Failed to load templates.json, falling back to development mode:', error);
       templatesJson = {};
     }
   }
-  return templatesJson.default || templatesJson;
+  return templatesJson;
 }
 
 /**

@@ -7,7 +7,7 @@
     "start:dev": "uv run python bin/start-dev",
     "start:prod": "uv run python bin/start-prod",
     "update-importmap": "node bin/generate-importmap.js",
-    "build": "node bin/generate-importmap.js && uv run python bin/compile-sl-icons.py && npx rollup app/src/app.js -f es -o app/web/app.js -p @rollup/plugin-node-resolve",
+    "build": "bin/build",
     "manage": "node bin/manage.js",
     "prepare": "husky",
     "test": "node --test tests/*.test.js",
