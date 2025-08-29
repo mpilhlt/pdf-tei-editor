@@ -26,11 +26,13 @@ LOCAL_VERSION_FILENAME = ".version"
 
 def _send_progress_update(client_id: str, progress: int, logger):
     """Send progress update via SSE"""
-    send_sse_message(client_id, "syncProgress", str(progress))
+    if client_id:
+        send_sse_message(client_id, "syncProgress", str(progress))
 
 def _send_sync_message(client_id: str, message: str, logger):
     """Send sync message via SSE"""
-    send_sse_message(client_id, "syncMessage", message)
+    if client_id:
+        send_sse_message(client_id, "syncMessage", message)
 
 def _get_client_id():
     """Get the current client ID from the session"""

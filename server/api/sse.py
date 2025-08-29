@@ -80,8 +80,9 @@ def send_sse_message(client_id, event_type, data):
         logger.info(f"Sent event of type {event_type} with data '{data}' to client with id '{client_id}'")
         return True
     else:
-        logger.warning(f"Client ID '{client_id}' not found in message queues")
-        logger.warning(f"Looking for client_id='{client_id}' but have: {list(message_queues.keys())}")
+        # Client not connected to SSE - this is normal, just debug log it
+        logger.debug(f"Client ID '{client_id}' not found in message queues (client not connected to SSE)")
+        logger.debug(f"Available message queues: {list(message_queues.keys())}")
         return False
 
 @bp.route('/subscribe')
