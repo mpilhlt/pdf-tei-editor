@@ -169,18 +169,40 @@ async function start(state) {
  */
 async function saveIfDirty() {
   const filePath = String(ui.toolbar.xml.value)
+  const hasXmlTree = !!xmlEditor.getXmlTree()
+  const isDirty = xmlEditor.isDirty()
+  
+  if (!filePath || filePath === "undefined") {
+    return
+  }
+  
+  if (!hasXmlTree) {
+    return
+  }
+  
+  if (!isDirty) {
+    return
+  }
 
-  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
+  try {
     const result = await services.saveXml(filePath)
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
     } else if (result.status == "saved_with_migration") {
-      logger.debug(`Saved file to ${result.path} with migration of old version files`)
+      logger.debug(`Saved file ${result.hash} with migration of old version files`)
       // Migration occurred, reload file data to show updated version structure
       await fileselection.reload(state)
+      // Update state to use new hash
+      state.xml = result.hash
+      await updateState(state)
     } else {
-      logger.debug(`Saved file to ${result.path}`)
+      logger.debug(`Saved file ${result.hash}`)
+      // Update state to use new hash
+      state.xml = result.hash
+      await updateState(state)
     }
+  } catch (error) {
+    logger.warn(`Save failed: ${error.message}`)
   }
 }
 
@@ -193,9 +215,19 @@ function configureXmlEditor() {
     if (validation.isDisabled()) {
       let view = xmlEditor.getView()
       try {
-        view.dispatch(setDiagnostics(view.state, diagnostics))
+        // Validate diagnostic positions before setting
+        const validDiagnostics = diagnostics.filter(d => {
+          return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
+        })
+        view.dispatch(setDiagnostics(view.state, validDiagnostics))
       } catch (error) {
         logger.warn("Error setting diagnostics: " + error.message)
+        // Clear diagnostics on error
+        try {
+          view.dispatch(setDiagnostics(view.state, []))
+        } catch (clearError) {
+          logger.warn("Error clearing diagnostics: " + clearError.message)
+        }
       }
     }
   })
@@ -206,7 +238,16 @@ function configureXmlEditor() {
   // xml vaidation events
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
     console.warn("XML is not well-formed", diagnostics)
-    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, diagnostics))
+    try {
+      // Validate diagnostic positions before setting
+      const view = xmlEditor.getView()
+      const validDiagnostics = diagnostics.filter(d => {
+        return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
+      })
+      view.dispatch(setDiagnostics(view.state, validDiagnostics))
+    } catch (error) {
+      logger.warn("Error setting XML not well-formed diagnostics: " + error.message)
+    }
     // Show validation error in statusbar
     if (validationStatusWidget && !validationStatusWidget.isConnected) {
       ui.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5)
@@ -214,14 +255,20 @@ function configureXmlEditor() {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
   })
-  xmlEditor.on("editorXmlWellFormed", data => {
+  xmlEditor.on("editorXmlWellFormed", () => {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
-    xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
+    try {
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
+    } catch (error) {
+      logger.warn("Error clearing diagnostics on well-formed XML: " + error.message)
+    }
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
       ui.xmlEditor.statusbar.removeById(validationStatusWidget.id)
     }
+    // Save if dirty now that XML is valid again
+    saveIfDirty()
   })
 }
 

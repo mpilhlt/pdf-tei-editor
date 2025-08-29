@@ -66,12 +66,23 @@ export class NavXmlEditor extends XMLEditor {
     // wait for any editor operations to finish
     await this.whenReady()
         
-    if (ranges.length === 0 || !this.getXmlTree() || !this.parentPath) {
+    if (ranges.length === 0 || !this.getXmlTree()) {
       let msg = ['Cannot update selection node & xpath:']
       ranges.length || msg.push("Selection is empty")
       this.getXmlTree() || msg.push("XML Tree not ready")
-      this.parentPath || msg.push("No parent path")
       console.warn(msg.join("; "))
+      return
+    }
+    
+    // If no parent path is set, we can still update the selected node but skip xpath navigation
+    if (!this.parentPath) {
+      // No parent path set, skip xpath navigation but allow selection update
+      // Just update the selected node without xpath navigation
+      const range = ranges[0]
+      if (range.node && range.node !== this.selectedNode) {
+        this.selectedNode = range.node
+        this.selectedXpath = this.getXPathForNode(range.node)
+      }
       return
     }
 

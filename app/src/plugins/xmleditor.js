@@ -10,7 +10,7 @@
  */
 
 import ui, { updateUi } from '../ui.js'
-import { validation, services } from '../app.js'
+import { validation, services, state, updateState } from '../app.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
@@ -134,9 +134,19 @@ async function install(state) {
     if (validation.isDisabled()) {
       let view = xmlEditor.getView()
       try {
-        view.dispatch(setDiagnostics(view.state, diagnostics))
+        // Validate diagnostic positions before setting
+        const validDiagnostics = diagnostics.filter(d => {
+          return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
+        })
+        view.dispatch(setDiagnostics(view.state, validDiagnostics))
       } catch (error) {
         logger.warn("Error setting diagnostics: " + error.message)
+        // Clear diagnostics on error
+        try {
+          view.dispatch(setDiagnostics(view.state, []))
+        } catch (clearError) {
+          logger.warn("Error clearing diagnostics: " + clearError.message)
+        }
       }
     }
   })
@@ -153,6 +163,11 @@ async function install(state) {
     logger.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`)
     xmlEditor.configureIntenation(indentUnit, 4); // default tab size of 4 spaces
     updateIndentationStatus(indentUnit)
+  })
+
+  // Save automatically when XML becomes well-formed again
+  xmlEditor.on("editorXmlWellFormed", () => {
+    saveIfDirty()
   })
 
   // Add widget to toggle <teiHeader> visibility
@@ -267,7 +282,10 @@ async function saveIfDirty() {
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
     } else {
-      logger.debug(`Saved file to ${result.path}`)
+      logger.debug(`Saved file ${result.hash}`)
+      // Update state to use new hash from server
+      state.xml = result.hash
+      await updateState(state)
     }
   }
 }

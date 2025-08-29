@@ -139,17 +139,22 @@ async function install(state) {
 async function update(state) {
   //console.warn("update", plugin.name, state)
   
-  // Cache extractor list when user logs in
+  // Cache extractor list when user actually changes (not just stale initialization)
   let extractorsJustCached = false
   if (currentUser !== state.user && state.user !== null) {
+    const previousUser = currentUser
     currentUser = state.user
-    try {
-      cachedExtractors = await client.getExtractorList()
-      extractorsJustCached = true
-      logger.debug('Cached extractor list for floating panel:', cachedExtractors)
-    } catch (error) {
-      logger.error('Failed to load extractor list:', error)
-      cachedExtractors = []
+    
+    // Only fetch extractors if we don't have them cached or this is a real user change
+    if (!cachedExtractors || (previousUser !== null && previousUser !== state.user)) {
+      try {
+        cachedExtractors = await client.getExtractorList()
+        extractorsJustCached = true
+        logger.debug('Cached extractor list for floating panel:', cachedExtractors)
+      } catch (error) {
+        logger.warn('Failed to load extractor list:', error.message || error)
+        cachedExtractors = []
+      }
     }
   }
   

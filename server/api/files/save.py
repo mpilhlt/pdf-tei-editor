@@ -257,6 +257,12 @@ def save():
     if not xml_string or not file_path_or_hash:
         raise ApiError("XML content and file path are required.")
     
+    # Validate that XML is well-formed before saving
+    try:
+        etree.fromstring(xml_string)
+    except etree.XMLSyntaxError as e:
+        raise ApiError(f"Invalid XML: {str(e)}", status_code=400)
+    
     result = _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, session_id)
     return jsonify(result)
 

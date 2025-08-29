@@ -155,17 +155,24 @@ async function lintSource(view) {
             // Ensure line number is valid (1-based from validation, but doc.line expects 1-based)
             const lineNum = Math.max(1, Math.min(error.line, doc.lines));
             try {
-              ({ from, to } = doc.line(lineNum));
+              const line = doc.line(lineNum);
+              from = line.from;
+              to = line.to;
               // Ensure column is valid (0-based column position)
-              const columnOffset = Math.max(0, error.column);
-              from = Math.max(0, from + columnOffset);
-              // Ensure 'to' position is not beyond the line end
-              to = Math.min(to, from + 1);
+              const columnOffset = Math.max(0, Math.min(error.column, line.length));
+              from = Math.max(0, Math.min(from + columnOffset, doc.length - 1));
+              // Ensure 'to' position is valid and not beyond document end
+              to = Math.min(Math.max(from + 1, to), doc.length);
+              // Ensure from <= to and both are within document bounds
+              if (from >= to || from >= doc.length) {
+                from = Math.max(0, Math.min(line.from, doc.length - 1));
+                to = Math.min(from + 1, doc.length);
+              }
             } catch (e) {
               console.warn(`Invalid line/column in validation error:`, error, e);
               // Fallback to document start if line/column calculation fails
               from = 0;
-              to = 1;
+              to = Math.min(1, doc.length);
             }
           } else {
             throw new Error("Invalid response from remote validation:", error)
@@ -307,12 +314,22 @@ function removeDiagnosticsInChangedRanges(update) {
   const changedRangeValues = Object.values(update.changedRanges[0]) 
   const minRange = Math.min(...changedRangeValues)
   const maxRange = Math.max(...changedRangeValues)
-  forEachDiagnostic(viewState, (d, from, to) => {
+  forEachDiagnostic(viewState, (d) => {
     if (d.from > maxRange || d.to < minRange) {
       // only keep diagnostics that are outside the changed range
-      d.from = from;
-      d.to = to;
-      diagnostics.push(d);
+      // Validate diagnostic positions before adding
+      const docLength = viewState.doc.length;
+      const validFrom = Math.max(0, Math.min(d.from, docLength - 1));
+      const validTo = Math.min(Math.max(validFrom + 1, d.to), docLength);
+      
+      if (validFrom < validTo && validFrom < docLength) {
+        diagnostics.push({
+          from: validFrom,
+          to: validTo,
+          severity: d.severity,
+          message: d.message
+        });
+      }
     } else {
       logger.debug("Removing diagnostic " + JSON.stringify(d))
     }
@@ -320,6 +337,13 @@ function removeDiagnosticsInChangedRanges(update) {
 
   lastDiagnostics = diagnostics;
 
-  // remove the diagnostics from the editor
-  xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
+  // remove the diagnostics from the editor - add safety check
+  try {
+    xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
+  } catch (error) {
+    logger.warn("Error setting diagnostics after range change:", error);
+    // Clear all diagnostics if there's an error
+    xmlEditor.getView().dispatch(setDiagnostics(viewState, []));
+    lastDiagnostics = [];
+  }
 }

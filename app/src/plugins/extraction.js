@@ -289,8 +289,11 @@ async function promptForExtractionOptions(options={}) {
       modelSelectBox.value = defaultExtractor;
     }
   } catch (error) {
-    // No fallback - if we can't load extractors, we can't extract
-    throw new Error("Could not load extraction engines:" + error.message)
+    // Handle extractor list loading gracefully
+    logger.warn("Could not load extraction engines:", error.message)
+    // Disable extraction functionality when extractors can't be loaded
+    modelSelectBox.disabled = true
+    availableExtractors = []
   }
   
   // Add event listener to update dynamic options when model changes

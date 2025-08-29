@@ -47,7 +47,7 @@ class GrobidTrainingExtractor(BaseExtractor):
                     "options": [
                         "grobid.training.segmentation", 
                         "grobid.training.references.referenceSegmenter",
-                        "grobid.training.citation"
+                        "grobid.training.references"
                     ]
                 },
                 "flavor": {
