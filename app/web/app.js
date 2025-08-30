@@ -1,4 +1,72 @@
 /**
+ * The extension endpoints that the plugins can implement
+ */
+const endpoints = {
+  /**
+   * This endpoint serves to install plugins. Plugins can modify the application state.
+   * Function signature: (state: ApplicationState) => ApplicationState
+   */
+  install: "install",
+
+  /**
+   * Invoked when the program starts. Plugins can modify the application state.
+   * Function signature: (state: ApplicationState) => ApplicationState
+   */
+  start: "start",
+
+  /**
+   * Logging endpoints
+   */
+  log: {
+    /** Function signature: ({level: Number}) => void */
+    setLogLevel: "log.setLogLevel",
+
+    /** Function signature: ({message: string}) => void */
+    debug: "log.debug",
+    
+    /** Function signature: ({message: string}) => void */
+    info: "log.info",
+    
+    /** Function signature: ({message: string}) => void */
+    warn: "log.warn",
+    
+    /** Function signature: ({message: string}) => void */
+    critical: "log.critical"
+  },
+  state: {
+    /**
+     * This endpoint allows all plugins to react to application state changes
+     * Function signature: (state: ApplicationState) => ApplicationState
+     */
+    update: "state.update"
+  },
+  validation: {
+    /**
+     * Enpoint that triggers validation 
+     * Function signature: ({type:string, text:string}) => Diagnostic. Currently, only `type` "xml" is supportet
+     */
+    validate: "validation.validate",
+    /**
+     * Endpoint to configure validation
+     * Function signature: ({mode:string=auto}) => void . Supported modes: "auto", "manual". 
+     */
+    configure:"validation.configure",
+    /**
+     * Endpoint to inform implementing plugins that a validation is in progress and that they must wait for it to
+     * end to perform certain actions
+     * Function signature: (promise:Promise<Diagnostics[]>) => void - Invoked with a promise that resolves when validation is done
+     */
+    inProgress: "validation.inProgress",
+
+    /**
+     * Endpoint that will be invoked with the diagnostics of the completed validation
+     * Function signature: (diagnostics: Diagnostics[]) => Promise<void> 
+     */
+    result: "validation.result"
+  }
+};
+
+/**
  * patched version of https://www.npmjs.com/package/js-plugin
  */
 
@@ -151,74 +219,6 @@ var pluginManager = {
 };
 
 /**
- * The extension endpoints that the plugins can implement
- */
-const endpoints = {
-  /**
-   * This endpoint serves to install plugins. Plugins can modify the application state.
-   * Function signature: (state: ApplicationState) => ApplicationState
-   */
-  install: "install",
-
-  /**
-   * Invoked when the program starts. Plugins can modify the application state.
-   * Function signature: (state: ApplicationState) => ApplicationState
-   */
-  start: "start",
-
-  /**
-   * Logging endpoints
-   */
-  log: {
-    /** Function signature: ({level: Number}) => void */
-    setLogLevel: "log.setLogLevel",
-
-    /** Function signature: ({message: string}) => void */
-    debug: "log.debug",
-    
-    /** Function signature: ({message: string}) => void */
-    info: "log.info",
-    
-    /** Function signature: ({message: string}) => void */
-    warn: "log.warn",
-    
-    /** Function signature: ({message: string}) => void */
-    critical: "log.critical"
-  },
-  state: {
-    /**
-     * This endpoint allows all plugins to react to application state changes
-     * Function signature: (state: ApplicationState) => ApplicationState
-     */
-    update: "state.update"
-  },
-  validation: {
-    /**
-     * Enpoint that triggers validation 
-     * Function signature: ({type:string, text:string}) => Diagnostic. Currently, only `type` "xml" is supportet
-     */
-    validate: "validation.validate",
-    /**
-     * Endpoint to configure validation
-     * Function signature: ({mode:string=auto}) => void . Supported modes: "auto", "manual". 
-     */
-    configure:"validation.configure",
-    /**
-     * Endpoint to inform implementing plugins that a validation is in progress and that they must wait for it to
-     * end to perform certain actions
-     * Function signature: (promise:Promise<Diagnostics[]>) => void - Invoked with a promise that resolves when validation is done
-     */
-    inProgress: "validation.inProgress",
-
-    /**
-     * Endpoint that will be invoked with the diagnostics of the completed validation
-     * Function signature: (diagnostics: Diagnostics[]) => Promise<void> 
-     */
-    result: "validation.result"
-  }
-};
-
-/**
  * Utility functions for plugin management and state handling
  */
 
@@ -260,13 +260,22 @@ async function invoke(endpoint, param, options = {}) {
 }
 
 /**
- * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
+ * Utility method which updates the state object and invokes the "state.update" endpoint to propagate the change 
+ * to the other plugins. Before invoking the endpoint with the state, any key-value pair in `changes` will be 
+ * applied to the state. In addition, for each key in `changes`, the endpoint "state.changeKey" is individually
+ * invoked with its value. For example, the {foo:"bar"} will invoke "state.changeFoo" with "bar".
+ * 
  * @param {Object} state The application state object
  * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<Array>} Returns an array of return values of the plugin's `update` methods
+ * @returns {Promise<Array>} Returns an array of return values of the plugin's update methods
  */
 async function updateState(state, changes={}) {
-  Object.assign(state, changes);
+  Object.entries(changes).forEach(async ([key, value]) => {
+    if (state[key] !== value) {
+      state[key] = value;
+      await invoke(`state.change${key[0].toUpperCase()}${key.slice(1)}`, value);  
+    }
+  });
   return await invoke(endpoints.state.update, state)
 }
 
