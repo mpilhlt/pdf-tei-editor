@@ -11,9 +11,8 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
   throw new Error('Safari browser not supported');
 }
 
-import pluginManager from "./modules/plugin.js"
 import ep from './endpoints.js'
-import { invoke, updateState } from './modules/plugin-utils.js' 
+import { invoke, updateState, pluginManager } from './modules/plugin-utils.js' 
 
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'

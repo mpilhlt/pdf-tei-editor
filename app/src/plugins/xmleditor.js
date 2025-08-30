@@ -10,11 +10,10 @@
  */
 
 import ui from '../ui.js'
-import { validation, services, state, updateState } from '../app.js'
+import { validation, services, state, updateState, logger } from '../app.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
-import { api as logger } from './logger.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
 

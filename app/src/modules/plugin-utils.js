@@ -5,6 +5,8 @@
 import pluginManager from "./plugin.js"
 import ep from '../endpoints.js'
 
+export {pluginManager}
+
 /**
  * Invoke an endpoint on all registered plugins with timeout support
  * @param {string} endpoint - The endpoint string to invoke
@@ -42,12 +44,21 @@ export async function invoke(endpoint, param, options = {}) {
 }
 
 /**
- * Utility method which updates the state object and invokes the endpoint to propagate the change through the other plugins
+ * Utility method which updates the state object and invokes the "state.update" endpoint to propagate the change 
+ * to the other plugins. Before invoking the endpoint with the state, any key-value pair in `changes` will be 
+ * applied to the state. In addition, for each key in `changes`, the endpoint "state.changeKey" is individually
+ * invoked with its value. For example, the {foo:"bar"} will invoke "state.changeFoo" with "bar".
+ * 
  * @param {Object} state The application state object
  * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<Array>} Returns an array of return values of the plugin's `update` methods
+ * @returns {Promise<Array>} Returns an array of return values of the plugin's update methods
  */
 export async function updateState(state, changes={}) {
-  Object.assign(state, changes)
+  Object.entries(changes).forEach(async ([key, value]) => {
+    if (state[key] !== value) {
+      state[key] = value
+      await invoke(`state.change${key[0].toUpperCase()}${key.slice(1)}`, value)  
+    }
+  })
   return await invoke(ep.state.update, state)
 }
