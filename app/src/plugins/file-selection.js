@@ -10,14 +10,13 @@
 import ui from '../ui.js'
 import { SlOption, SlDivider, updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
-import { logger, client, services, dialog, updateState, fileselection } from '../app.js'
-import { notify } from '../modules/sl-utils.js';
+import { logger, services, dialog, updateState, reloadFileData } from '../app.js'
 
 /**
  * The data about the pdf and xml files on the server
  * @type {Array<object>}
  */
-const fileData = [];
+let fileData = [];
 
 /**
  * plugin API
@@ -35,7 +34,10 @@ const plugin = {
 
   install,
   state: {
-    update
+    update,
+    changeFileData: data => {
+      fileData = data;
+    }
   }
 }
 
@@ -116,7 +118,18 @@ async function update(state) {
   if (!state.pdf) {
     state.collection = null
   }
-  await populateSelectboxes(state);
+  
+  // check if state has changed (moved from populateSelectboxes)
+  const { xml, pdf, diff, variant } = state
+  const jsonState = JSON.stringify({ xml, pdf, diff, variant })
+  const stateChanged = jsonState !== stateCache
+  
+  if (stateChanged) {
+    stateCache = jsonState
+    await populateSelectboxes(state);
+  }
+  
+  // Always update selected values
   ui.toolbar.pdf.value = state.pdf || ""
   ui.toolbar.xml.value = state.xml || ""
   ui.toolbar.diff.value = state.diff || ""
@@ -131,28 +144,10 @@ async function update(state) {
  */
 async function reload(state, options = {}) {
   await reloadFileData(state, options);
+  stateCache = null; // Reset cache to force repopulation
   await populateSelectboxes(state);
 }
 
-/**
- * Reloads the file data from the server
- * @param {ApplicationState} state
- * @param {Object} options - Options for reloading
- * @param {boolean} [options.refresh] - Whether to force refresh of server cache
- */
-async function reloadFileData(state, options = {}) {
-  logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""))
-  // Always get all files, don't filter on server side
-  let data = await client.getFileList(null, options.refresh);
-  if (!data || data.length === 0) {
-    dialog.error("No files found")
-  }
-  // update the fileData variable
-  fileData.length = 0; // clear the array
-  fileData.push(...data);
-  stateCache = null;
-  return fileData;
-}
 
 let stateCache
 let variants
@@ -163,12 +158,16 @@ let collections
  * @param {ApplicationState} state
  */
 async function populateVariantSelectbox(state) {
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
+
   // Clear existing options
   ui.toolbar.variant.innerHTML = "";
 
   // Get unique variants from fileData and store in closure variable
   variants = new Set();
-  fileData.forEach(file => {
+  state.fileData.forEach(file => {
     // Add variant_id from gold entries
     if (file.gold) {
       file.gold.forEach(gold => {
@@ -222,22 +221,17 @@ async function populateVariantSelectbox(state) {
  * @param {ApplicationState} state
  */
 async function populateSelectboxes(state) {
-
-  // check if state has changed
-  const { xml, pdf, diff, variant } = state
-  const jsonState = JSON.stringify({ xml, pdf, diff, variant })
-  if (jsonState === stateCache) {
-    //logger.debug("Not repopulating selectboxes as state hasn't changed")
-    return
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
   }
-  stateCache = jsonState
-
   logger.debug("Populating selectboxes")
 
   // Only reload if fileData is completely empty (initial load)
-  if (fileData.length === 0) {
+  if (!state.fileData || state.fileData.length === 0) {
     await reloadFileData(state)
   }
+  
+  const fileData = state.fileData;
 
   // Populate variant selectbox first
   await populateVariantSelectbox(state);
@@ -249,6 +243,7 @@ async function populateSelectboxes(state) {
 
   // Filter files by variant selection
   let filteredFileData = fileData;
+  const variant = state.variant;
   
   if (variant === "none") {
     // Show only files without variant_id in gold or versions
@@ -390,10 +385,6 @@ async function populateSelectboxes(state) {
   }
 
 
-  // update selection
-  ui.toolbar.pdf.value = state.pdf || ''
-  ui.toolbar.xml.value = state.xml || ''
-  ui.toolbar.diff.value = state.diff || ''
 
 }
 
@@ -404,7 +395,10 @@ async function populateSelectboxes(state) {
  * @param {ApplicationState} state
  */
 async function onChangePdfSelection(state) {
-  const selectedFile = fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
+  const selectedFile = state.fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash  // Use document identifier
   const collection = selectedFile.collection
   
@@ -448,7 +442,7 @@ async function onChangePdfSelection(state) {
       state.pdf = null
       state.xml = null
       await updateState(state)
-      await fileselection.reload(state, {refresh:true})
+      await reload(state, {refresh:true})
       logger.warn(error.message)
     }
   }
@@ -460,11 +454,14 @@ async function onChangePdfSelection(state) {
  * @param {ApplicationState} state
  */
 async function onChangeXmlSelection(state) {
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
   const xml = ui.toolbar.xml.value
   if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
       // Find the collection for this XML file by searching fileData
-      for (const file of fileData) {
+      for (const file of state.fileData) {
         const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
         
@@ -478,7 +475,7 @@ async function onChangeXmlSelection(state) {
       await services.load(state, { xml })
     } catch (error) {
       console.error(error.message)
-      await fileselection.reload(state, {refresh:true})
+      await reload(state, {refresh:true})
       await updateState(state, {xml:null})
       dialog.error(error.message)
     }

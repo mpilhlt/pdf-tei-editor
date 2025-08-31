@@ -80,12 +80,7 @@ async function parseTemplateRegistrations(filePath) {
  * @param {string} appSrcDir - Base app/src directory
  * @returns {string} Resolved file path
  */
-function resolveTemplatePath(templatePath, appSrcDir) {
-  // If it's a literal HTML string (starts with <), return as-is
-  if (templatePath.trim().startsWith('<')) {
-    return null; // Will be handled as literal HTML
-  }
-  
+function resolveTemplatePath(templatePath, appSrcDir) {  
   // If it's an absolute path starting with /, resolve relative to app/src
   if (templatePath.startsWith('/')) {
     return join(appSrcDir, templatePath.substring(1));

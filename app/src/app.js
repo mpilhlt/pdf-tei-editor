@@ -54,6 +54,7 @@ import { plugin as accessControlPlugin, api as accessControl } from './plugins/a
  * @property {boolean} offline  - Whether the application is in offline mode
  * @property {object|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
+ * @property {Array<object>|null} fileData - The file data loaded from the server
  */
 /**
  * @type{ApplicationState}
@@ -69,7 +70,8 @@ let state = {
   offline: false,
   sessionId: null,
   user: null,
-  collection: null
+  collection: null,
+  fileData: null
 }
 
 /**
@@ -141,8 +143,29 @@ await urlHash.updateStateFromUrlHash(state)
 await invoke(ep.start, state)
 
 //
+// Utility functions
+//
+
+/**
+ * Reloads the file data from the server
+ * @param {ApplicationState} state
+ * @param {Object} options - Options for reloading
+ * @param {boolean} [options.refresh] - Whether to force refresh of server cache
+ * @returns {Promise} 
+ */
+async function reloadFileData(state, options = {}) {
+  logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""))
+  let data = await client.getFileList(null, options.refresh);
+  if (!data || data.length === 0) {
+    dialog.error("No files found")
+  }
+  // Store fileData in state and propagate it
+  updateState(state, {fileData:data})
+}
+
+//
 // Exports
 // 
-export { state, ep as endpoints, invoke, updateState, pluginManager, plugins }
+export { state, ep as endpoints, invoke, updateState, pluginManager, plugins, reloadFileData }
 export { logger, dialog, pdfViewer, xmlEditor, client, config, validation, fileselection, extraction,
   services, sync, floatingPanel, promptEditor, urlHash, appInfo, sse, authentication, accessControl }

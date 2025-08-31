@@ -48224,7 +48224,7 @@ async function uploadFile(uploadUrl = upload_route, options = {}) {
  * The data about the pdf and xml files on the server
  * @type {Array<object>}
  */
-const fileData = [];
+let fileData = [];
 
 /**
  * plugin API
@@ -48242,7 +48242,10 @@ const plugin$c = {
 
   install: install$c,
   state: {
-    update: update$7
+    update: update$7,
+    changeFileData: data => {
+      fileData = data;
+    }
   }
 };
 
@@ -48320,7 +48323,18 @@ async function update$7(state) {
   if (!state.pdf) {
     state.collection = null;
   }
-  await populateSelectboxes(state);
+  
+  // check if state has changed (moved from populateSelectboxes)
+  const { xml, pdf, diff, variant } = state;
+  const jsonState = JSON.stringify({ xml, pdf, diff, variant });
+  const stateChanged = jsonState !== stateCache;
+  
+  if (stateChanged) {
+    stateCache = jsonState;
+    await populateSelectboxes(state);
+  }
+  
+  // Always update selected values
   ui$1.toolbar.pdf.value = state.pdf || "";
   ui$1.toolbar.xml.value = state.xml || "";
   ui$1.toolbar.diff.value = state.diff || "";
@@ -48335,28 +48349,10 @@ async function update$7(state) {
  */
 async function reload(state, options = {}) {
   await reloadFileData(state, options);
+  stateCache = null; // Reset cache to force repopulation
   await populateSelectboxes(state);
 }
 
-/**
- * Reloads the file data from the server
- * @param {ApplicationState} state
- * @param {Object} options - Options for reloading
- * @param {boolean} [options.refresh] - Whether to force refresh of server cache
- */
-async function reloadFileData(state, options = {}) {
-  api$f.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
-  // Always get all files, don't filter on server side
-  let data = await api$9.getFileList(null, options.refresh);
-  if (!data || data.length === 0) {
-    api$b.error("No files found");
-  }
-  // update the fileData variable
-  fileData.length = 0; // clear the array
-  fileData.push(...data);
-  stateCache = null;
-  return fileData;
-}
 
 let stateCache;
 let variants;
@@ -48367,12 +48363,16 @@ let collections;
  * @param {ApplicationState} state
  */
 async function populateVariantSelectbox(state) {
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
+
   // Clear existing options
   ui$1.toolbar.variant.innerHTML = "";
 
   // Get unique variants from fileData and store in closure variable
   variants = new Set();
-  fileData.forEach(file => {
+  state.fileData.forEach(file => {
     // Add variant_id from gold entries
     if (file.gold) {
       file.gold.forEach(gold => {
@@ -48426,22 +48426,17 @@ async function populateVariantSelectbox(state) {
  * @param {ApplicationState} state
  */
 async function populateSelectboxes(state) {
-
-  // check if state has changed
-  const { xml, pdf, diff, variant } = state;
-  const jsonState = JSON.stringify({ xml, pdf, diff, variant });
-  if (jsonState === stateCache) {
-    //logger.debug("Not repopulating selectboxes as state hasn't changed")
-    return
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
   }
-  stateCache = jsonState;
-
   api$f.debug("Populating selectboxes");
 
   // Only reload if fileData is completely empty (initial load)
-  if (fileData.length === 0) {
-    await reloadFileData();
+  if (!state.fileData || state.fileData.length === 0) {
+    await reloadFileData(state);
   }
+  
+  const fileData = state.fileData;
 
   // Populate variant selectbox first
   await populateVariantSelectbox(state);
@@ -48453,6 +48448,7 @@ async function populateSelectboxes(state) {
 
   // Filter files by variant selection
   let filteredFileData = fileData;
+  const variant = state.variant;
   
   if (variant === "none") {
     // Show only files without variant_id in gold or versions
@@ -48594,10 +48590,6 @@ async function populateSelectboxes(state) {
   }
 
 
-  // update selection
-  ui$1.toolbar.pdf.value = state.pdf || '';
-  ui$1.toolbar.xml.value = state.xml || '';
-  ui$1.toolbar.diff.value = state.diff || '';
 
 }
 
@@ -48608,7 +48600,10 @@ async function populateSelectboxes(state) {
  * @param {ApplicationState} state
  */
 async function onChangePdfSelection(state) {
-  const selectedFile = fileData.find(file => file.pdf.hash === ui$1.toolbar.pdf.value);
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
+  const selectedFile = state.fileData.find(file => file.pdf.hash === ui$1.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash;  // Use document identifier
   const collection = selectedFile.collection;
   
@@ -48652,7 +48647,7 @@ async function onChangePdfSelection(state) {
       state.pdf = null;
       state.xml = null;
       await updateState(state);
-      await api$8.reload(state, {refresh:true});
+      await reload(state, {refresh:true});
       api$f.warn(error.message);
     }
   }
@@ -48664,11 +48659,14 @@ async function onChangePdfSelection(state) {
  * @param {ApplicationState} state
  */
 async function onChangeXmlSelection(state) {
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
   const xml = ui$1.toolbar.xml.value;
   if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
       // Find the collection for this XML file by searching fileData
-      for (const file of fileData) {
+      for (const file of state.fileData) {
         const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
         
@@ -48682,7 +48680,7 @@ async function onChangeXmlSelection(state) {
       await api$6.load(state, { xml });
     } catch (error) {
       console.error(error.message);
-      await api$8.reload(state, {refresh:true});
+      await reload(state, {refresh:true});
       await updateState(state, {xml:null});
       api$b.error(error.message);
     }
@@ -61879,6 +61877,7 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
  * @property {boolean} offline  - Whether the application is in offline mode
  * @property {object|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
+ * @property {Array<object>|null} fileData - The file data loaded from the server
  */
 /**
  * @type{ApplicationState}
@@ -61894,7 +61893,8 @@ let state = {
   offline: false,
   sessionId: null,
   user: null,
-  collection: null
+  collection: null,
+  fileData: null
 };
 
 /**
@@ -61965,4 +61965,25 @@ await api$d.updateStateFromUrlHash(state);
 // start the application 
 await invoke(endpoints.start, state);
 
-export { api as accessControl, api$3 as appInfo, api$2 as authentication, api$9 as client, api$e as config, api$b as dialog, endpoints, api$7 as extraction, api$8 as fileselection, api$5 as floatingPanel, invoke, api$f as logger, pdfViewer, pluginManager, plugins, api$4 as promptEditor, api$6 as services, api$c as sse, state, api$1 as sync, updateState, api$d as urlHash, api$a as validation, xmlEditor };
+//
+// Utility functions
+//
+
+/**
+ * Reloads the file data from the server
+ * @param {ApplicationState} state
+ * @param {Object} options - Options for reloading
+ * @param {boolean} [options.refresh] - Whether to force refresh of server cache
+ * @returns {Promise} 
+ */
+async function reloadFileData(state, options = {}) {
+  api$f.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
+  let data = await api$9.getFileList(null, options.refresh);
+  if (!data || data.length === 0) {
+    api$b.error("No files found");
+  }
+  // Store fileData in state and propagate it
+  updateState(state, {fileData:data});
+}
+
+export { api as accessControl, api$3 as appInfo, api$2 as authentication, api$9 as client, api$e as config, api$b as dialog, endpoints, api$7 as extraction, api$8 as fileselection, api$5 as floatingPanel, invoke, api$f as logger, pdfViewer, pluginManager, plugins, api$4 as promptEditor, reloadFileData, api$6 as services, api$c as sse, state, api$1 as sync, updateState, api$d as urlHash, api$a as validation, xmlEditor };
