@@ -50241,7 +50241,7 @@ async function validateXml() {
  * Saves the current XML content to the server, optionally as a new version
  * @param {string} filePath The path to the XML file on the server
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
- * @returns {Promise<{path:string, status:string}>} An object with a path property, containing the path to the saved version
+ * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
  * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
@@ -61921,15 +61921,6 @@ for (const plugin of plugins) {
   console.log(`Registering plugin '${plugin.name}'...`);
   pluginManager.register(plugin);
 }
-
-/**
- * Utility method to invoke plugin endpoints and await the fulfilment of any returned promises
- * @param {string} endpoint 
- * @param {*} param 
- * @param {object} [options={}] - Invoke options
- * @param {number} [options.timeout=2000] - Timeout in milliseconds
- * @returns {Promise<*>}
- */
 
 // 
 // Application bootstrapping
