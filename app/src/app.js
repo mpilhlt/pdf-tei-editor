@@ -25,6 +25,7 @@ import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor
 import { plugin as validationPlugin, api as validation } from './plugins/tei-validation.js'
 import { plugin as clientPlugin, api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
+import { plugin as fileSelectionDrawerPlugin, api as fileSelectionDrawer } from './plugins/file-selection-drawer.js'
 import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
 import { plugin as servicesPlugin, api as services } from './plugins/services.js'
 import { plugin as floatingPanelPlugin, api as floatingPanel } from './plugins/floating-panel.js'
@@ -85,7 +86,7 @@ let state = {
 /** @type {Plugin[]} */
 const plugins = [loggerPlugin, urlHashStatePlugin, clientPlugin, configPlugin, 
   dialogPlugin, toolbarPlugin, pdfViewerPlugin, xmlEditorPlugin, fileselectionPlugin,
-  servicesPlugin, syncPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
+  fileSelectionDrawerPlugin, servicesPlugin, syncPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
   teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, ssePlugin,
   authenticationPlugin, accessControlPlugin,
   /* must be the last plugin */ startPlugin]
@@ -167,5 +168,5 @@ async function reloadFileData(state, options = {}) {
 // Exports
 // 
 export { state, ep as endpoints, invoke, updateState, pluginManager, plugins, reloadFileData }
-export { logger, dialog, pdfViewer, xmlEditor, client, config, validation, fileselection, extraction,
+export { logger, dialog, pdfViewer, xmlEditor, client, config, validation, fileselection, fileSelectionDrawer, extraction,
   services, sync, floatingPanel, promptEditor, urlHash, appInfo, sse, authentication, accessControl }

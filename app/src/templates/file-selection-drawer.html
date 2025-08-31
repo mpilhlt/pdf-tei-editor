@@ -1,0 +1,40 @@
+<!-- File selection drawer -->
+<sl-drawer name="fileDrawer" label="Select Files" placement="start" style="--size: 400px;">
+  <div name="drawerContent" style="padding: 1rem;">
+    
+    <!-- Variant selection at top -->
+    <div style="margin-bottom: 1rem;">
+      <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Variant:</label>
+      <sl-select name="variantSelect" placeholder="Select variant..." size="small">
+        <!-- Placeholder options - will be populated dynamically -->
+        <sl-option value="">All</sl-option>
+        <sl-option value="none">None</sl-option>
+      </sl-select>
+    </div>
+    
+    <!-- File tree placeholder -->
+    <div style="margin-bottom: 1rem;">
+      <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Files:</label>
+      <sl-tree name="fileTree">
+        <!-- Placeholder tree items - will be populated dynamically -->
+        <sl-tree-item>
+          Collection 1
+          <sl-tree-item>Document 1.pdf</sl-tree-item>
+          <sl-tree-item>Document 2.pdf</sl-tree-item>
+        </sl-tree-item>
+        <sl-tree-item>
+          Collection 2  
+          <sl-tree-item>Document 3.pdf</sl-tree-item>
+        </sl-tree-item>
+      </sl-tree>
+    </div>
+    
+  </div>
+  
+  <!-- Footer with close button -->
+  <div slot="footer" style="display: flex; justify-content: flex-end; padding: 1rem;">
+    <sl-button name="closeDrawer" variant="default" size="small">
+      Close
+    </sl-button>
+  </div>
+</sl-drawer>
