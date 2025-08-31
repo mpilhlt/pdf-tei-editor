@@ -371,7 +371,7 @@ async function validateXml() {
  * Saves the current XML content to the server, optionally as a new version
  * @param {string} filePath The path to the XML file on the server
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
- * @returns {Promise<{path:string, status:string}>} An object with a path property, containing the path to the saved version
+ * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
  * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {

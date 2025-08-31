@@ -97,15 +97,6 @@ for (const plugin of plugins) {
   pluginManager.register(plugin)
 }
 
-/**
- * Utility method to invoke plugin endpoints and await the fulfilment of any returned promises
- * @param {string} endpoint 
- * @param {*} param 
- * @param {object} [options={}] - Invoke options
- * @param {number} [options.timeout=2000] - Timeout in milliseconds
- * @returns {Promise<*>}
- */
-
 // 
 // Application bootstrapping
 //
