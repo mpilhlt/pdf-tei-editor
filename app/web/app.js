@@ -12879,8 +12879,10 @@ class BasePanel extends HTMLElement {
     const widgets = [];
     
     // Get all slotted elements from the main slot
+    // @ts-ignore
     const mainSlot = this.shadowRoot.querySelector('slot:not([name])');
     if (mainSlot) {
+      // @ts-ignore
       const slottedElements = mainSlot.assignedElements();
       slottedElements.forEach(widget => {
         // Skip the overflow container itself
@@ -13007,17 +13009,27 @@ class BasePanel extends HTMLElement {
   }
 
   /**
-   * Add a widget to the panel
+   * Internal method to add a widget to the panel
    * @param {HTMLElement} widget - The widget element
-   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {number} priority - Higher priority widgets stay visible longer
+   * @param {InsertPosition|null} where - Position for insertAdjacentElement
+   * @param {HTMLElement|null} referenceElement - Reference element for positioning
+   * @returns {string} The widget ID
    */
-  add(widget, priority = 0) {
-    const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  _addWidget(widget, priority, where = null, referenceElement = null) {
+    const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     widget.id = widgetId;
     widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, priority });
-    this.appendChild(widget);
+    
+    if (where && referenceElement) {
+      referenceElement.insertAdjacentElement(where, widget);
+    } else if (where) {
+      this.insertAdjacentElement(where, widget);
+    } else {
+      this.appendChild(widget);
+    }
     
     // Reapply flex layout if in flex mode (for ToolBar)
     if (this.tagName === 'TOOL-BAR' && this.getAttribute('smart-overflow') === 'off') {
@@ -13044,6 +13056,36 @@ class BasePanel extends HTMLElement {
     setTimeout(() => this.checkAndResolveOverflow(), 200);
     
     return widgetId;
+  }
+
+  /**
+   * Add a widget to the panel
+   * @param {HTMLElement} widget - The widget element
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {InsertPosition} [where] - Position for insertAdjacentElement ('beforebegin', 'afterbegin', 'beforeend', 'afterend'). Defaults to "beforeEnd"
+   */
+  add(widget, priority = 0, where = "beforeend") {
+    return this._addWidget(widget, priority, where);
+  }
+
+  /**
+   * Add a widget before another widget
+   * @param {HTMLElement} widget - The widget element to add
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {HTMLElement} siblingWidget - The sibling widget to add before
+   */
+  addBefore(widget, priority = 0, siblingWidget) {
+    return this._addWidget(widget, priority, 'beforebegin', siblingWidget);
+  }
+
+  /**
+   * Add a widget after another widget
+   * @param {HTMLElement} widget - The widget element to add
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {HTMLElement} siblingWidget - The sibling widget to add after
+   */
+  addAfter(widget, priority = 0, siblingWidget) {
+    return this._addWidget(widget, priority, 'afterend', siblingWidget);
   }
 
   /**
@@ -50014,7 +50056,7 @@ async function install$c(state) {
   
   // Create and add trigger button to toolbar
   const triggerButton = createSingleFromTemplate('file-drawer-button');
-  ui$1.toolbar.add(triggerButton, 100); // Highest priority to appear first
+  ui$1.toolbar.add(triggerButton, 10, "afterbegin"); 
   
   // Create and add drawer to document body
   const drawer = createSingleFromTemplate('file-selection-drawer', document.body);
@@ -50075,7 +50117,7 @@ async function update$7(state) {
   }
   
   // TODO: Update file tree based on selected files in state
-  api$g.debug("File selection drawer state updated", {
+  console.log("File selection drawer state updated", {
     pdf: state.pdf,
     xml: state.xml,
     variant: state.variant
@@ -50088,7 +50130,7 @@ async function update$7(state) {
  */
 function onVariantChange(state) {
   const variant = ui$1.fileDrawer?.variantSelect?.value;
-  api$g.debug("Variant selection changed:", variant);
+  console.log("Variant selection changed:", variant);
   
   // TODO: Update file tree based on variant selection
   // TODO: Update application state with new variant
@@ -50100,6 +50142,7 @@ function onVariantChange(state) {
  * @param {ApplicationState} state
  */
 function onFileTreeSelection(event, state) {
+  // @ts-ignore
   api$g.debug("File tree selection changed:", event.detail);
   
   // TODO: Handle file selection from tree
