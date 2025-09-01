@@ -124,7 +124,7 @@ async function update(state) {
   const jsonState = JSON.stringify({ xml, pdf, diff, variant })
   const stateChanged = jsonState !== stateCache
   
-  if (stateChanged) {
+  if (stateChanged && state.fileData) {
     stateCache = jsonState
     await populateSelectboxes(state);
   }

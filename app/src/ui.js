@@ -26,6 +26,8 @@ import SlMenuItem from '@shoelace-style/shoelace/dist/components/menu-item/menu-
 import SlCheckbox  from '@shoelace-style/shoelace/dist/components/checkbox/checkbox.js';
 import SlDivider from '@shoelace-style/shoelace/dist/components/divider/divider.js';
 import SlSwitch from '@shoelace-style/shoelace/dist/components/switch/switch.js';
+import SlDrawer from '@shoelace-style/shoelace/dist/components/drawer/drawer.js';
+import SlTree from '@shoelace-style/shoelace/dist/components/tree/tree.js';
 
 // Import panels components early so web components are defined
 import './modules/panels/index.js';
@@ -45,6 +47,7 @@ import './modules/panels/index.js';
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
  * @import {toolbarPart} from './plugins/toolbar.js'
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
+ * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
  */
 
 /**
@@ -68,6 +71,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, infoDialogPart>} infoDialog - A dialog to display information and help
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
+ * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  */
 
 /**
@@ -90,7 +94,7 @@ updateUi()
 export {
   updateUi, createHtmlElements, registerTemplate, createFromTemplate, createSingleFromTemplate,
   SlDialog, SlButton, SlButtonGroup, SlTextarea, SlInput, SlOption, SlIcon, SlTooltip, SlMenu,
-  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch
+  SlMenuItem, SlSelect, SlDropdown, SlPopup, SlCheckbox, Spinner, SlDivider, SlSwitch, SlDrawer, SlTree
 }
 export default ui;
 

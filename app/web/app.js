@@ -1712,20 +1712,20 @@ function scrollIntoView$2(element, container, direction = "vertical", behavior =
  * Copyright 2019 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const t$3=globalThis,e$9=t$3.ShadowRoot&&(void 0===t$3.ShadyCSS||t$3.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,s$3=Symbol(),o$9=new WeakMap;let n$6 = class n{constructor(t,e,o){if(this._$cssResult$=true,o!==s$3)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=t,this.t=e;}get styleSheet(){let t=this.o;const s=this.t;if(e$9&&void 0===t){const e=void 0!==s&&1===s.length;e&&(t=o$9.get(s)),void 0===t&&((this.o=t=new CSSStyleSheet).replaceSync(this.cssText),e&&o$9.set(s,t));}return t}toString(){return this.cssText}};const r$5=t=>new n$6("string"==typeof t?t:t+"",void 0,s$3),i$6=(t,...e)=>{const o=1===t.length?t[0]:e.reduce(((e,s,o)=>e+(t=>{if(true===t._$cssResult$)return t.cssText;if("number"==typeof t)return t;throw Error("Value passed to 'css' function must be a 'css' function result: "+t+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(s)+t[o+1]),t[0]);return new n$6(o,t,s$3)},S$1=(s,o)=>{if(e$9)s.adoptedStyleSheets=o.map((t=>t instanceof CSSStyleSheet?t:t.styleSheet));else for(const e of o){const o=document.createElement("style"),n=t$3.litNonce;void 0!==n&&o.setAttribute("nonce",n),o.textContent=e.cssText,s.appendChild(o);}},c$3=e$9?t=>t:t=>t instanceof CSSStyleSheet?(t=>{let e="";for(const s of t.cssRules)e+=s.cssText;return r$5(e)})(t):t;
+const t$3=globalThis,e$9=t$3.ShadowRoot&&(void 0===t$3.ShadyCSS||t$3.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,s$3=Symbol(),o$9=new WeakMap;let n$7 = class n{constructor(t,e,o){if(this._$cssResult$=true,o!==s$3)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=t,this.t=e;}get styleSheet(){let t=this.o;const s=this.t;if(e$9&&void 0===t){const e=void 0!==s&&1===s.length;e&&(t=o$9.get(s)),void 0===t&&((this.o=t=new CSSStyleSheet).replaceSync(this.cssText),e&&o$9.set(s,t));}return t}toString(){return this.cssText}};const r$5=t=>new n$7("string"==typeof t?t:t+"",void 0,s$3),i$6=(t,...e)=>{const o=1===t.length?t[0]:e.reduce(((e,s,o)=>e+(t=>{if(true===t._$cssResult$)return t.cssText;if("number"==typeof t)return t;throw Error("Value passed to 'css' function must be a 'css' function result: "+t+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(s)+t[o+1]),t[0]);return new n$7(o,t,s$3)},S$1=(s,o)=>{if(e$9)s.adoptedStyleSheets=o.map((t=>t instanceof CSSStyleSheet?t:t.styleSheet));else for(const e of o){const o=document.createElement("style"),n=t$3.litNonce;void 0!==n&&o.setAttribute("nonce",n),o.textContent=e.cssText,s.appendChild(o);}},c$3=e$9?t=>t:t=>t instanceof CSSStyleSheet?(t=>{let e="";for(const s of t.cssRules)e+=s.cssText;return r$5(e)})(t):t;
 
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const{is:i$5,defineProperty:e$8,getOwnPropertyDescriptor:h$3,getOwnPropertyNames:r$4,getOwnPropertySymbols:o$8,getPrototypeOf:n$5}=Object,a$2=globalThis,c$2=a$2.trustedTypes,l$3=c$2?c$2.emptyScript:"",p$1=a$2.reactiveElementPolyfillSupport,d$1=(t,s)=>t,u$3={toAttribute(t,s){switch(s){case Boolean:t=t?l$3:null;break;case Object:case Array:t=null==t?t:JSON.stringify(t);}return t},fromAttribute(t,s){let i=t;switch(s){case Boolean:i=null!==t;break;case Number:i=null===t?null:Number(t);break;case Object:case Array:try{i=JSON.parse(t);}catch(t){i=null;}}return i}},f$3=(t,s)=>!i$5(t,s),b={attribute:true,type:String,converter:u$3,reflect:false,useDefault:false,hasChanged:f$3};Symbol.metadata??=Symbol("metadata"),a$2.litPropertyMetadata??=new WeakMap;let y$1 = class y extends HTMLElement{static addInitializer(t){this._$Ei(),(this.l??=[]).push(t);}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(t,s=b){if(s.state&&(s.attribute=false),this._$Ei(),this.prototype.hasOwnProperty(t)&&((s=Object.create(s)).wrapped=true),this.elementProperties.set(t,s),!s.noAccessor){const i=Symbol(),h=this.getPropertyDescriptor(t,i,s);void 0!==h&&e$8(this.prototype,t,h);}}static getPropertyDescriptor(t,s,i){const{get:e,set:r}=h$3(this.prototype,t)??{get(){return this[s]},set(t){this[s]=t;}};return {get:e,set(s){const h=e?.call(this);r?.call(this,s),this.requestUpdate(t,h,i);},configurable:true,enumerable:true}}static getPropertyOptions(t){return this.elementProperties.get(t)??b}static _$Ei(){if(this.hasOwnProperty(d$1("elementProperties")))return;const t=n$5(this);t.finalize(),void 0!==t.l&&(this.l=[...t.l]),this.elementProperties=new Map(t.elementProperties);}static finalize(){if(this.hasOwnProperty(d$1("finalized")))return;if(this.finalized=true,this._$Ei(),this.hasOwnProperty(d$1("properties"))){const t=this.properties,s=[...r$4(t),...o$8(t)];for(const i of s)this.createProperty(i,t[i]);}const t=this[Symbol.metadata];if(null!==t){const s=litPropertyMetadata.get(t);if(void 0!==s)for(const[t,i]of s)this.elementProperties.set(t,i);}this._$Eh=new Map;for(const[t,s]of this.elementProperties){const i=this._$Eu(t,s);void 0!==i&&this._$Eh.set(i,t);}this.elementStyles=this.finalizeStyles(this.styles);}static finalizeStyles(s){const i=[];if(Array.isArray(s)){const e=new Set(s.flat(1/0).reverse());for(const s of e)i.unshift(c$3(s));}else void 0!==s&&i.push(c$3(s));return i}static _$Eu(t,s){const i=s.attribute;return  false===i?void 0:"string"==typeof i?i:"string"==typeof t?t.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=false,this.hasUpdated=false,this._$Em=null,this._$Ev();}_$Ev(){this._$ES=new Promise((t=>this.enableUpdating=t)),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach((t=>t(this)));}addController(t){(this._$EO??=new Set).add(t),void 0!==this.renderRoot&&this.isConnected&&t.hostConnected?.();}removeController(t){this._$EO?.delete(t);}_$E_(){const t=new Map,s=this.constructor.elementProperties;for(const i of s.keys())this.hasOwnProperty(i)&&(t.set(i,this[i]),delete this[i]);t.size>0&&(this._$Ep=t);}createRenderRoot(){const t=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return S$1(t,this.constructor.elementStyles),t}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(true),this._$EO?.forEach((t=>t.hostConnected?.()));}enableUpdating(t){}disconnectedCallback(){this._$EO?.forEach((t=>t.hostDisconnected?.()));}attributeChangedCallback(t,s,i){this._$AK(t,i);}_$ET(t,s){const i=this.constructor.elementProperties.get(t),e=this.constructor._$Eu(t,i);if(void 0!==e&&true===i.reflect){const h=(void 0!==i.converter?.toAttribute?i.converter:u$3).toAttribute(s,i.type);this._$Em=t,null==h?this.removeAttribute(e):this.setAttribute(e,h),this._$Em=null;}}_$AK(t,s){const i=this.constructor,e=i._$Eh.get(t);if(void 0!==e&&this._$Em!==e){const t=i.getPropertyOptions(e),h="function"==typeof t.converter?{fromAttribute:t.converter}:void 0!==t.converter?.fromAttribute?t.converter:u$3;this._$Em=e,this[e]=h.fromAttribute(s,t.type)??this._$Ej?.get(e)??null,this._$Em=null;}}requestUpdate(t,s,i){if(void 0!==t){const e=this.constructor,h=this[t];if(i??=e.getPropertyOptions(t),!((i.hasChanged??f$3)(h,s)||i.useDefault&&i.reflect&&h===this._$Ej?.get(t)&&!this.hasAttribute(e._$Eu(t,i))))return;this.C(t,s,i);} false===this.isUpdatePending&&(this._$ES=this._$EP());}C(t,s,{useDefault:i,reflect:e,wrapped:h},r){i&&!(this._$Ej??=new Map).has(t)&&(this._$Ej.set(t,r??s??this[t]),true!==h||void 0!==r)||(this._$AL.has(t)||(this.hasUpdated||i||(s=void 0),this._$AL.set(t,s)),true===e&&this._$Em!==t&&(this._$Eq??=new Set).add(t));}async _$EP(){this.isUpdatePending=true;try{await this._$ES;}catch(t){Promise.reject(t);}const t=this.scheduleUpdate();return null!=t&&await t,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(const[t,s]of this._$Ep)this[t]=s;this._$Ep=void 0;}const t=this.constructor.elementProperties;if(t.size>0)for(const[s,i]of t){const{wrapped:t}=i,e=this[s];true!==t||this._$AL.has(s)||void 0===e||this.C(s,void 0,i,e);}}let t=false;const s=this._$AL;try{t=this.shouldUpdate(s),t?(this.willUpdate(s),this._$EO?.forEach((t=>t.hostUpdate?.())),this.update(s)):this._$EM();}catch(s){throw t=false,this._$EM(),s}t&&this._$AE(s);}willUpdate(t){}_$AE(t){this._$EO?.forEach((t=>t.hostUpdated?.())),this.hasUpdated||(this.hasUpdated=true,this.firstUpdated(t)),this.updated(t);}_$EM(){this._$AL=new Map,this.isUpdatePending=false;}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(t){return  true}update(t){this._$Eq&&=this._$Eq.forEach((t=>this._$ET(t,this[t]))),this._$EM();}updated(t){}firstUpdated(t){}};y$1.elementStyles=[],y$1.shadowRootOptions={mode:"open"},y$1[d$1("elementProperties")]=new Map,y$1[d$1("finalized")]=new Map,p$1?.({ReactiveElement:y$1}),(a$2.reactiveElementVersions??=[]).push("2.1.0");
+ */const{is:i$5,defineProperty:e$8,getOwnPropertyDescriptor:h$3,getOwnPropertyNames:r$4,getOwnPropertySymbols:o$8,getPrototypeOf:n$6}=Object,a$2=globalThis,c$2=a$2.trustedTypes,l$3=c$2?c$2.emptyScript:"",p$1=a$2.reactiveElementPolyfillSupport,d$1=(t,s)=>t,u$3={toAttribute(t,s){switch(s){case Boolean:t=t?l$3:null;break;case Object:case Array:t=null==t?t:JSON.stringify(t);}return t},fromAttribute(t,s){let i=t;switch(s){case Boolean:i=null!==t;break;case Number:i=null===t?null:Number(t);break;case Object:case Array:try{i=JSON.parse(t);}catch(t){i=null;}}return i}},f$3=(t,s)=>!i$5(t,s),b={attribute:true,type:String,converter:u$3,reflect:false,useDefault:false,hasChanged:f$3};Symbol.metadata??=Symbol("metadata"),a$2.litPropertyMetadata??=new WeakMap;let y$1 = class y extends HTMLElement{static addInitializer(t){this._$Ei(),(this.l??=[]).push(t);}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(t,s=b){if(s.state&&(s.attribute=false),this._$Ei(),this.prototype.hasOwnProperty(t)&&((s=Object.create(s)).wrapped=true),this.elementProperties.set(t,s),!s.noAccessor){const i=Symbol(),h=this.getPropertyDescriptor(t,i,s);void 0!==h&&e$8(this.prototype,t,h);}}static getPropertyDescriptor(t,s,i){const{get:e,set:r}=h$3(this.prototype,t)??{get(){return this[s]},set(t){this[s]=t;}};return {get:e,set(s){const h=e?.call(this);r?.call(this,s),this.requestUpdate(t,h,i);},configurable:true,enumerable:true}}static getPropertyOptions(t){return this.elementProperties.get(t)??b}static _$Ei(){if(this.hasOwnProperty(d$1("elementProperties")))return;const t=n$6(this);t.finalize(),void 0!==t.l&&(this.l=[...t.l]),this.elementProperties=new Map(t.elementProperties);}static finalize(){if(this.hasOwnProperty(d$1("finalized")))return;if(this.finalized=true,this._$Ei(),this.hasOwnProperty(d$1("properties"))){const t=this.properties,s=[...r$4(t),...o$8(t)];for(const i of s)this.createProperty(i,t[i]);}const t=this[Symbol.metadata];if(null!==t){const s=litPropertyMetadata.get(t);if(void 0!==s)for(const[t,i]of s)this.elementProperties.set(t,i);}this._$Eh=new Map;for(const[t,s]of this.elementProperties){const i=this._$Eu(t,s);void 0!==i&&this._$Eh.set(i,t);}this.elementStyles=this.finalizeStyles(this.styles);}static finalizeStyles(s){const i=[];if(Array.isArray(s)){const e=new Set(s.flat(1/0).reverse());for(const s of e)i.unshift(c$3(s));}else void 0!==s&&i.push(c$3(s));return i}static _$Eu(t,s){const i=s.attribute;return  false===i?void 0:"string"==typeof i?i:"string"==typeof t?t.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=false,this.hasUpdated=false,this._$Em=null,this._$Ev();}_$Ev(){this._$ES=new Promise((t=>this.enableUpdating=t)),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach((t=>t(this)));}addController(t){(this._$EO??=new Set).add(t),void 0!==this.renderRoot&&this.isConnected&&t.hostConnected?.();}removeController(t){this._$EO?.delete(t);}_$E_(){const t=new Map,s=this.constructor.elementProperties;for(const i of s.keys())this.hasOwnProperty(i)&&(t.set(i,this[i]),delete this[i]);t.size>0&&(this._$Ep=t);}createRenderRoot(){const t=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return S$1(t,this.constructor.elementStyles),t}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(true),this._$EO?.forEach((t=>t.hostConnected?.()));}enableUpdating(t){}disconnectedCallback(){this._$EO?.forEach((t=>t.hostDisconnected?.()));}attributeChangedCallback(t,s,i){this._$AK(t,i);}_$ET(t,s){const i=this.constructor.elementProperties.get(t),e=this.constructor._$Eu(t,i);if(void 0!==e&&true===i.reflect){const h=(void 0!==i.converter?.toAttribute?i.converter:u$3).toAttribute(s,i.type);this._$Em=t,null==h?this.removeAttribute(e):this.setAttribute(e,h),this._$Em=null;}}_$AK(t,s){const i=this.constructor,e=i._$Eh.get(t);if(void 0!==e&&this._$Em!==e){const t=i.getPropertyOptions(e),h="function"==typeof t.converter?{fromAttribute:t.converter}:void 0!==t.converter?.fromAttribute?t.converter:u$3;this._$Em=e,this[e]=h.fromAttribute(s,t.type)??this._$Ej?.get(e)??null,this._$Em=null;}}requestUpdate(t,s,i){if(void 0!==t){const e=this.constructor,h=this[t];if(i??=e.getPropertyOptions(t),!((i.hasChanged??f$3)(h,s)||i.useDefault&&i.reflect&&h===this._$Ej?.get(t)&&!this.hasAttribute(e._$Eu(t,i))))return;this.C(t,s,i);} false===this.isUpdatePending&&(this._$ES=this._$EP());}C(t,s,{useDefault:i,reflect:e,wrapped:h},r){i&&!(this._$Ej??=new Map).has(t)&&(this._$Ej.set(t,r??s??this[t]),true!==h||void 0!==r)||(this._$AL.has(t)||(this.hasUpdated||i||(s=void 0),this._$AL.set(t,s)),true===e&&this._$Em!==t&&(this._$Eq??=new Set).add(t));}async _$EP(){this.isUpdatePending=true;try{await this._$ES;}catch(t){Promise.reject(t);}const t=this.scheduleUpdate();return null!=t&&await t,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(const[t,s]of this._$Ep)this[t]=s;this._$Ep=void 0;}const t=this.constructor.elementProperties;if(t.size>0)for(const[s,i]of t){const{wrapped:t}=i,e=this[s];true!==t||this._$AL.has(s)||void 0===e||this.C(s,void 0,i,e);}}let t=false;const s=this._$AL;try{t=this.shouldUpdate(s),t?(this.willUpdate(s),this._$EO?.forEach((t=>t.hostUpdate?.())),this.update(s)):this._$EM();}catch(s){throw t=false,this._$EM(),s}t&&this._$AE(s);}willUpdate(t){}_$AE(t){this._$EO?.forEach((t=>t.hostUpdated?.())),this.hasUpdated||(this.hasUpdated=true,this.firstUpdated(t)),this.updated(t);}_$EM(){this._$AL=new Map,this.isUpdatePending=false;}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(t){return  true}update(t){this._$Eq&&=this._$Eq.forEach((t=>this._$ET(t,this[t]))),this._$EM();}updated(t){}firstUpdated(t){}};y$1.elementStyles=[],y$1.shadowRootOptions={mode:"open"},y$1[d$1("elementProperties")]=new Map,y$1[d$1("finalized")]=new Map,p$1?.({ReactiveElement:y$1}),(a$2.reactiveElementVersions??=[]).push("2.1.0");
 
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const t$2=globalThis,i$4=t$2.trustedTypes,s$2=i$4?i$4.createPolicy("lit-html",{createHTML:t=>t}):void 0,e$7="$lit$",h$2=`lit$${Math.random().toFixed(9).slice(2)}$`,o$7="?"+h$2,n$4=`<${o$7}>`,r$3=document,l$2=()=>r$3.createComment(""),c$1=t=>null===t||"object"!=typeof t&&"function"!=typeof t,a$1=Array.isArray,u$2=t=>a$1(t)||"function"==typeof t?.[Symbol.iterator],d="[ \t\n\f\r]",f$2=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,v=/-->/g,_=/>/g,m$1=RegExp(`>|${d}(?:([^\\s"'>=/]+)(${d}*=${d}*(?:[^ \t\n\f\r"'\`<>=]|("|')|))|$)`,"g"),p=/'/g,g=/"/g,$=/^(?:script|style|textarea|title)$/i,y=t=>(i,...s)=>({_$litType$:t,strings:i,values:s}),x=y(1),T=Symbol.for("lit-noChange"),E=Symbol.for("lit-nothing"),A=new WeakMap,C$1=r$3.createTreeWalker(r$3,129);function P$1(t,i){if(!a$1(t)||!t.hasOwnProperty("raw"))throw Error("invalid template strings array");return void 0!==s$2?s$2.createHTML(i):i}const V=(t,i)=>{const s=t.length-1,o=[];let r,l=2===i?"<svg>":3===i?"<math>":"",c=f$2;for(let i=0;i<s;i++){const s=t[i];let a,u,d=-1,y=0;for(;y<s.length&&(c.lastIndex=y,u=c.exec(s),null!==u);)y=c.lastIndex,c===f$2?"!--"===u[1]?c=v:void 0!==u[1]?c=_:void 0!==u[2]?($.test(u[2])&&(r=RegExp("</"+u[2],"g")),c=m$1):void 0!==u[3]&&(c=m$1):c===m$1?">"===u[0]?(c=r??f$2,d=-1):void 0===u[1]?d=-2:(d=c.lastIndex-u[2].length,a=u[1],c=void 0===u[3]?m$1:'"'===u[3]?g:p):c===g||c===p?c=m$1:c===v||c===_?c=f$2:(c=m$1,r=void 0);const x=c===m$1&&t[i+1].startsWith("/>")?" ":"";l+=c===f$2?s+n$4:d>=0?(o.push(a),s.slice(0,d)+e$7+s.slice(d)+h$2+x):s+h$2+(-2===d?i:x);}return [P$1(t,l+(t[s]||"<?>")+(2===i?"</svg>":3===i?"</math>":"")),o]};class N{constructor({strings:t,_$litType$:s},n){let r;this.parts=[];let c=0,a=0;const u=t.length-1,d=this.parts,[f,v]=V(t,s);if(this.el=N.createElement(f,n),C$1.currentNode=this.el.content,2===s||3===s){const t=this.el.content.firstChild;t.replaceWith(...t.childNodes);}for(;null!==(r=C$1.nextNode())&&d.length<u;){if(1===r.nodeType){if(r.hasAttributes())for(const t of r.getAttributeNames())if(t.endsWith(e$7)){const i=v[a++],s=r.getAttribute(t).split(h$2),e=/([.?@])?(.*)/.exec(i);d.push({type:1,index:c,name:e[2],strings:s,ctor:"."===e[1]?H:"?"===e[1]?I:"@"===e[1]?L:k}),r.removeAttribute(t);}else t.startsWith(h$2)&&(d.push({type:6,index:c}),r.removeAttribute(t));if($.test(r.tagName)){const t=r.textContent.split(h$2),s=t.length-1;if(s>0){r.textContent=i$4?i$4.emptyScript:"";for(let i=0;i<s;i++)r.append(t[i],l$2()),C$1.nextNode(),d.push({type:2,index:++c});r.append(t[s],l$2());}}}else if(8===r.nodeType)if(r.data===o$7)d.push({type:2,index:c});else {let t=-1;for(;-1!==(t=r.data.indexOf(h$2,t+1));)d.push({type:7,index:c}),t+=h$2.length-1;}c++;}}static createElement(t,i){const s=r$3.createElement("template");return s.innerHTML=t,s}}function S(t,i,s=t,e){if(i===T)return i;let h=void 0!==e?s._$Co?.[e]:s._$Cl;const o=c$1(i)?void 0:i._$litDirective$;return h?.constructor!==o&&(h?._$AO?.(false),void 0===o?h=void 0:(h=new o(t),h._$AT(t,s,e)),void 0!==e?(s._$Co??=[])[e]=h:s._$Cl=h),void 0!==h&&(i=S(t,h._$AS(t,i.values),h,e)),i}class M{constructor(t,i){this._$AV=[],this._$AN=void 0,this._$AD=t,this._$AM=i;}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(t){const{el:{content:i},parts:s}=this._$AD,e=(t?.creationScope??r$3).importNode(i,true);C$1.currentNode=e;let h=C$1.nextNode(),o=0,n=0,l=s[0];for(;void 0!==l;){if(o===l.index){let i;2===l.type?i=new R(h,h.nextSibling,this,t):1===l.type?i=new l.ctor(h,l.name,l.strings,this,t):6===l.type&&(i=new z(h,this,t)),this._$AV.push(i),l=s[++n];}o!==l?.index&&(h=C$1.nextNode(),o++);}return C$1.currentNode=r$3,e}p(t){let i=0;for(const s of this._$AV) void 0!==s&&(void 0!==s.strings?(s._$AI(t,s,i),i+=s.strings.length-2):s._$AI(t[i])),i++;}}class R{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(t,i,s,e){this.type=2,this._$AH=E,this._$AN=void 0,this._$AA=t,this._$AB=i,this._$AM=s,this.options=e,this._$Cv=e?.isConnected??true;}get parentNode(){let t=this._$AA.parentNode;const i=this._$AM;return void 0!==i&&11===t?.nodeType&&(t=i.parentNode),t}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(t,i=this){t=S(this,t,i),c$1(t)?t===E||null==t||""===t?(this._$AH!==E&&this._$AR(),this._$AH=E):t!==this._$AH&&t!==T&&this._(t):void 0!==t._$litType$?this.$(t):void 0!==t.nodeType?this.T(t):u$2(t)?this.k(t):this._(t);}O(t){return this._$AA.parentNode.insertBefore(t,this._$AB)}T(t){this._$AH!==t&&(this._$AR(),this._$AH=this.O(t));}_(t){this._$AH!==E&&c$1(this._$AH)?this._$AA.nextSibling.data=t:this.T(r$3.createTextNode(t)),this._$AH=t;}$(t){const{values:i,_$litType$:s}=t,e="number"==typeof s?this._$AC(t):(void 0===s.el&&(s.el=N.createElement(P$1(s.h,s.h[0]),this.options)),s);if(this._$AH?._$AD===e)this._$AH.p(i);else {const t=new M(e,this),s=t.u(this.options);t.p(i),this.T(s),this._$AH=t;}}_$AC(t){let i=A.get(t.strings);return void 0===i&&A.set(t.strings,i=new N(t)),i}k(t){a$1(this._$AH)||(this._$AH=[],this._$AR());const i=this._$AH;let s,e=0;for(const h of t)e===i.length?i.push(s=new R(this.O(l$2()),this.O(l$2()),this,this.options)):s=i[e],s._$AI(h),e++;e<i.length&&(this._$AR(s&&s._$AB.nextSibling,e),i.length=e);}_$AR(t=this._$AA.nextSibling,i){for(this._$AP?.(false,true,i);t&&t!==this._$AB;){const i=t.nextSibling;t.remove(),t=i;}}setConnected(t){ void 0===this._$AM&&(this._$Cv=t,this._$AP?.(t));}}class k{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(t,i,s,e,h){this.type=1,this._$AH=E,this._$AN=void 0,this.element=t,this.name=i,this._$AM=e,this.options=h,s.length>2||""!==s[0]||""!==s[1]?(this._$AH=Array(s.length-1).fill(new String),this.strings=s):this._$AH=E;}_$AI(t,i=this,s,e){const h=this.strings;let o=false;if(void 0===h)t=S(this,t,i,0),o=!c$1(t)||t!==this._$AH&&t!==T,o&&(this._$AH=t);else {const e=t;let n,r;for(t=h[0],n=0;n<h.length-1;n++)r=S(this,e[s+n],i,n),r===T&&(r=this._$AH[n]),o||=!c$1(r)||r!==this._$AH[n],r===E?t=E:t!==E&&(t+=(r??"")+h[n+1]),this._$AH[n]=r;}o&&!e&&this.j(t);}j(t){t===E?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,t??"");}}class H extends k{constructor(){super(...arguments),this.type=3;}j(t){this.element[this.name]=t===E?void 0:t;}}class I extends k{constructor(){super(...arguments),this.type=4;}j(t){this.element.toggleAttribute(this.name,!!t&&t!==E);}}class L extends k{constructor(t,i,s,e,h){super(t,i,s,e,h),this.type=5;}_$AI(t,i=this){if((t=S(this,t,i,0)??E)===T)return;const s=this._$AH,e=t===E&&s!==E||t.capture!==s.capture||t.once!==s.once||t.passive!==s.passive,h=t!==E&&(s===E||e);e&&this.element.removeEventListener(this.name,this,s),h&&this.element.addEventListener(this.name,this,t),this._$AH=t;}handleEvent(t){"function"==typeof this._$AH?this._$AH.call(this.options?.host??this.element,t):this._$AH.handleEvent(t);}}class z{constructor(t,i,s){this.element=t,this.type=6,this._$AN=void 0,this._$AM=i,this.options=s;}get _$AU(){return this._$AM._$AU}_$AI(t){S(this,t);}}const j=t$2.litHtmlPolyfillSupport;j?.(N,R),(t$2.litHtmlVersions??=[]).push("3.3.0");const B=(t,i,s)=>{const e=s?.renderBefore??i;let h=e._$litPart$;if(void 0===h){const t=s?.renderBefore??null;e._$litPart$=h=new R(i.insertBefore(l$2(),t),t,void 0,s??{});}return h._$AI(t),h};
+const t$2=globalThis,i$4=t$2.trustedTypes,s$2=i$4?i$4.createPolicy("lit-html",{createHTML:t=>t}):void 0,e$7="$lit$",h$2=`lit$${Math.random().toFixed(9).slice(2)}$`,o$7="?"+h$2,n$5=`<${o$7}>`,r$3=document,l$2=()=>r$3.createComment(""),c$1=t=>null===t||"object"!=typeof t&&"function"!=typeof t,a$1=Array.isArray,u$2=t=>a$1(t)||"function"==typeof t?.[Symbol.iterator],d="[ \t\n\f\r]",f$2=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,v=/-->/g,_=/>/g,m$1=RegExp(`>|${d}(?:([^\\s"'>=/]+)(${d}*=${d}*(?:[^ \t\n\f\r"'\`<>=]|("|')|))|$)`,"g"),p=/'/g,g=/"/g,$=/^(?:script|style|textarea|title)$/i,y=t=>(i,...s)=>({_$litType$:t,strings:i,values:s}),x=y(1),T=Symbol.for("lit-noChange"),E=Symbol.for("lit-nothing"),A=new WeakMap,C$1=r$3.createTreeWalker(r$3,129);function P$1(t,i){if(!a$1(t)||!t.hasOwnProperty("raw"))throw Error("invalid template strings array");return void 0!==s$2?s$2.createHTML(i):i}const V=(t,i)=>{const s=t.length-1,o=[];let r,l=2===i?"<svg>":3===i?"<math>":"",c=f$2;for(let i=0;i<s;i++){const s=t[i];let a,u,d=-1,y=0;for(;y<s.length&&(c.lastIndex=y,u=c.exec(s),null!==u);)y=c.lastIndex,c===f$2?"!--"===u[1]?c=v:void 0!==u[1]?c=_:void 0!==u[2]?($.test(u[2])&&(r=RegExp("</"+u[2],"g")),c=m$1):void 0!==u[3]&&(c=m$1):c===m$1?">"===u[0]?(c=r??f$2,d=-1):void 0===u[1]?d=-2:(d=c.lastIndex-u[2].length,a=u[1],c=void 0===u[3]?m$1:'"'===u[3]?g:p):c===g||c===p?c=m$1:c===v||c===_?c=f$2:(c=m$1,r=void 0);const x=c===m$1&&t[i+1].startsWith("/>")?" ":"";l+=c===f$2?s+n$5:d>=0?(o.push(a),s.slice(0,d)+e$7+s.slice(d)+h$2+x):s+h$2+(-2===d?i:x);}return [P$1(t,l+(t[s]||"<?>")+(2===i?"</svg>":3===i?"</math>":"")),o]};class N{constructor({strings:t,_$litType$:s},n){let r;this.parts=[];let c=0,a=0;const u=t.length-1,d=this.parts,[f,v]=V(t,s);if(this.el=N.createElement(f,n),C$1.currentNode=this.el.content,2===s||3===s){const t=this.el.content.firstChild;t.replaceWith(...t.childNodes);}for(;null!==(r=C$1.nextNode())&&d.length<u;){if(1===r.nodeType){if(r.hasAttributes())for(const t of r.getAttributeNames())if(t.endsWith(e$7)){const i=v[a++],s=r.getAttribute(t).split(h$2),e=/([.?@])?(.*)/.exec(i);d.push({type:1,index:c,name:e[2],strings:s,ctor:"."===e[1]?H:"?"===e[1]?I:"@"===e[1]?L:k}),r.removeAttribute(t);}else t.startsWith(h$2)&&(d.push({type:6,index:c}),r.removeAttribute(t));if($.test(r.tagName)){const t=r.textContent.split(h$2),s=t.length-1;if(s>0){r.textContent=i$4?i$4.emptyScript:"";for(let i=0;i<s;i++)r.append(t[i],l$2()),C$1.nextNode(),d.push({type:2,index:++c});r.append(t[s],l$2());}}}else if(8===r.nodeType)if(r.data===o$7)d.push({type:2,index:c});else {let t=-1;for(;-1!==(t=r.data.indexOf(h$2,t+1));)d.push({type:7,index:c}),t+=h$2.length-1;}c++;}}static createElement(t,i){const s=r$3.createElement("template");return s.innerHTML=t,s}}function S(t,i,s=t,e){if(i===T)return i;let h=void 0!==e?s._$Co?.[e]:s._$Cl;const o=c$1(i)?void 0:i._$litDirective$;return h?.constructor!==o&&(h?._$AO?.(false),void 0===o?h=void 0:(h=new o(t),h._$AT(t,s,e)),void 0!==e?(s._$Co??=[])[e]=h:s._$Cl=h),void 0!==h&&(i=S(t,h._$AS(t,i.values),h,e)),i}class M{constructor(t,i){this._$AV=[],this._$AN=void 0,this._$AD=t,this._$AM=i;}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(t){const{el:{content:i},parts:s}=this._$AD,e=(t?.creationScope??r$3).importNode(i,true);C$1.currentNode=e;let h=C$1.nextNode(),o=0,n=0,l=s[0];for(;void 0!==l;){if(o===l.index){let i;2===l.type?i=new R(h,h.nextSibling,this,t):1===l.type?i=new l.ctor(h,l.name,l.strings,this,t):6===l.type&&(i=new z(h,this,t)),this._$AV.push(i),l=s[++n];}o!==l?.index&&(h=C$1.nextNode(),o++);}return C$1.currentNode=r$3,e}p(t){let i=0;for(const s of this._$AV) void 0!==s&&(void 0!==s.strings?(s._$AI(t,s,i),i+=s.strings.length-2):s._$AI(t[i])),i++;}}class R{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(t,i,s,e){this.type=2,this._$AH=E,this._$AN=void 0,this._$AA=t,this._$AB=i,this._$AM=s,this.options=e,this._$Cv=e?.isConnected??true;}get parentNode(){let t=this._$AA.parentNode;const i=this._$AM;return void 0!==i&&11===t?.nodeType&&(t=i.parentNode),t}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(t,i=this){t=S(this,t,i),c$1(t)?t===E||null==t||""===t?(this._$AH!==E&&this._$AR(),this._$AH=E):t!==this._$AH&&t!==T&&this._(t):void 0!==t._$litType$?this.$(t):void 0!==t.nodeType?this.T(t):u$2(t)?this.k(t):this._(t);}O(t){return this._$AA.parentNode.insertBefore(t,this._$AB)}T(t){this._$AH!==t&&(this._$AR(),this._$AH=this.O(t));}_(t){this._$AH!==E&&c$1(this._$AH)?this._$AA.nextSibling.data=t:this.T(r$3.createTextNode(t)),this._$AH=t;}$(t){const{values:i,_$litType$:s}=t,e="number"==typeof s?this._$AC(t):(void 0===s.el&&(s.el=N.createElement(P$1(s.h,s.h[0]),this.options)),s);if(this._$AH?._$AD===e)this._$AH.p(i);else {const t=new M(e,this),s=t.u(this.options);t.p(i),this.T(s),this._$AH=t;}}_$AC(t){let i=A.get(t.strings);return void 0===i&&A.set(t.strings,i=new N(t)),i}k(t){a$1(this._$AH)||(this._$AH=[],this._$AR());const i=this._$AH;let s,e=0;for(const h of t)e===i.length?i.push(s=new R(this.O(l$2()),this.O(l$2()),this,this.options)):s=i[e],s._$AI(h),e++;e<i.length&&(this._$AR(s&&s._$AB.nextSibling,e),i.length=e);}_$AR(t=this._$AA.nextSibling,i){for(this._$AP?.(false,true,i);t&&t!==this._$AB;){const i=t.nextSibling;t.remove(),t=i;}}setConnected(t){ void 0===this._$AM&&(this._$Cv=t,this._$AP?.(t));}}class k{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(t,i,s,e,h){this.type=1,this._$AH=E,this._$AN=void 0,this.element=t,this.name=i,this._$AM=e,this.options=h,s.length>2||""!==s[0]||""!==s[1]?(this._$AH=Array(s.length-1).fill(new String),this.strings=s):this._$AH=E;}_$AI(t,i=this,s,e){const h=this.strings;let o=false;if(void 0===h)t=S(this,t,i,0),o=!c$1(t)||t!==this._$AH&&t!==T,o&&(this._$AH=t);else {const e=t;let n,r;for(t=h[0],n=0;n<h.length-1;n++)r=S(this,e[s+n],i,n),r===T&&(r=this._$AH[n]),o||=!c$1(r)||r!==this._$AH[n],r===E?t=E:t!==E&&(t+=(r??"")+h[n+1]),this._$AH[n]=r;}o&&!e&&this.j(t);}j(t){t===E?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,t??"");}}class H extends k{constructor(){super(...arguments),this.type=3;}j(t){this.element[this.name]=t===E?void 0:t;}}class I extends k{constructor(){super(...arguments),this.type=4;}j(t){this.element.toggleAttribute(this.name,!!t&&t!==E);}}class L extends k{constructor(t,i,s,e,h){super(t,i,s,e,h),this.type=5;}_$AI(t,i=this){if((t=S(this,t,i,0)??E)===T)return;const s=this._$AH,e=t===E&&s!==E||t.capture!==s.capture||t.once!==s.once||t.passive!==s.passive,h=t!==E&&(s===E||e);e&&this.element.removeEventListener(this.name,this,s),h&&this.element.addEventListener(this.name,this,t),this._$AH=t;}handleEvent(t){"function"==typeof this._$AH?this._$AH.call(this.options?.host??this.element,t):this._$AH.handleEvent(t);}}class z{constructor(t,i,s){this.element=t,this.type=6,this._$AN=void 0,this._$AM=i,this.options=s;}get _$AU(){return this._$AM._$AU}_$AI(t){S(this,t);}}const j=t$2.litHtmlPolyfillSupport;j?.(N,R),(t$2.litHtmlVersions??=[]).push("3.3.0");const B=(t,i,s)=>{const e=s?.renderBefore??i;let h=e._$litPart$;if(void 0===h){const t=s?.renderBefore??null;e._$litPart$=h=new R(i.insertBefore(l$2(),t),t,void 0,s??{});}return h._$AI(t),h};
 
 /**
  * @license
@@ -2144,13 +2144,13 @@ var component_styles_default = i$6`
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const o$5={attribute:true,type:String,converter:u$3,reflect:false,hasChanged:f$3},r$2=(t=o$5,e,r)=>{const{kind:n,metadata:i}=r;let s=globalThis.litPropertyMetadata.get(i);if(void 0===s&&globalThis.litPropertyMetadata.set(i,s=new Map),"setter"===n&&((t=Object.create(t)).wrapped=true),s.set(r.name,t),"accessor"===n){const{name:o}=r;return {set(r){const n=e.get.call(this);e.set.call(this,r),this.requestUpdate(o,n,t);},init(e){return void 0!==e&&this.C(o,void 0,t,e),e}}}if("setter"===n){const{name:o}=r;return function(r){const n=this[o];e.call(this,r),this.requestUpdate(o,n,t);}}throw Error("Unsupported decorator location: "+n)};function n$3(t){return (e,o)=>"object"==typeof o?r$2(t,e,o):((t,e,o)=>{const r=e.hasOwnProperty(o);return e.constructor.createProperty(o,t),r?Object.getOwnPropertyDescriptor(e,o):void 0})(t,e,o)}
+ */const o$5={attribute:true,type:String,converter:u$3,reflect:false,hasChanged:f$3},r$2=(t=o$5,e,r)=>{const{kind:n,metadata:i}=r;let s=globalThis.litPropertyMetadata.get(i);if(void 0===s&&globalThis.litPropertyMetadata.set(i,s=new Map),"setter"===n&&((t=Object.create(t)).wrapped=true),s.set(r.name,t),"accessor"===n){const{name:o}=r;return {set(r){const n=e.get.call(this);e.set.call(this,r),this.requestUpdate(o,n,t);},init(e){return void 0!==e&&this.C(o,void 0,t,e),e}}}if("setter"===n){const{name:o}=r;return function(r){const n=this[o];e.call(this,r),this.requestUpdate(o,n,t);}}throw Error("Unsupported decorator location: "+n)};function n$4(t){return (e,o)=>"object"==typeof o?r$2(t,e,o):((t,e,o)=>{const r=e.hasOwnProperty(o);return e.constructor.createProperty(o,t),r?Object.getOwnPropertyDescriptor(e,o):void 0})(t,e,o)}
 
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */function r$1(r){return n$3({...r,state:true,attribute:false})}
+ */function r$1(r){return n$4({...r,state:true,attribute:false})}
 
 /**
  * @license
@@ -2241,10 +2241,10 @@ _hasRecordedInitialProperties = new WeakMap();
 ShoelaceElement.version = "2.20.1";
 ShoelaceElement.dependencies = {};
 __decorateClass([
-  n$3()
+  n$4()
 ], ShoelaceElement.prototype, "dir", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], ShoelaceElement.prototype, "lang", 2);
 
 /**
@@ -2388,16 +2388,16 @@ __decorateClass([
   r$1()
 ], SlIcon.prototype, "svg", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlIcon.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIcon.prototype, "src", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIcon.prototype, "label", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlIcon.prototype, "library", 2);
 __decorateClass([
   watch("label")
@@ -2424,7 +2424,7 @@ const t$1={ATTRIBUTE:1,CHILD:2,PROPERTY:3,BOOLEAN_ATTRIBUTE:4},e$3=t=>(...e)=>({
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const a=Symbol.for(""),o$4=t=>{if(t?.r===a)return t?._$litStatic$},i$1=(t,...r)=>({_$litStatic$:r.reduce(((r,e,a)=>r+(t=>{if(void 0!==t._$litStatic$)return t._$litStatic$;throw Error(`Value passed to 'literal' function must be a 'literal' result: ${t}. Use 'unsafeStatic' to pass non-literal values, but\n            take care to ensure page security.`)})(e)+t[a+1]),t[0]),r:a}),l$1=new Map,n$2=t=>(r,...e)=>{const a=e.length;let s,i;const n=[],u=[];let c,$=0,f=false;for(;$<a;){for(c=r[$];$<a&&void 0!==(i=e[$],s=o$4(i));)c+=s+r[++$],f=true;$!==a&&u.push(i),n.push(c),$++;}if($===a&&n.push(r[a]),f){const t=n.join("$$lit$$");void 0===(r=l$1.get(t))&&(n.raw=n,l$1.set(t,r=n)),e=u;}return t(r,...e)},u=n$2(x);
+const a=Symbol.for(""),o$4=t=>{if(t?.r===a)return t?._$litStatic$},i$1=(t,...r)=>({_$litStatic$:r.reduce(((r,e,a)=>r+(t=>{if(void 0!==t._$litStatic$)return t._$litStatic$;throw Error(`Value passed to 'literal' function must be a 'literal' result: ${t}. Use 'unsafeStatic' to pass non-literal values, but\n            take care to ensure page security.`)})(e)+t[a+1]),t[0]),r:a}),l$1=new Map,n$3=t=>(r,...e)=>{const a=e.length;let s,i;const n=[],u=[];let c,$=0,f=false;for(;$<a;){for(c=r[$];$<a&&void 0!==(i=e[$],s=o$4(i));)c+=s+r[++$],f=true;$!==a&&u.push(i),n.push(c),$++;}if($===a&&n.push(r[a]),f){const t=n.join("$$lit$$");void 0===(r=l$1.get(t))&&(n.raw=n,l$1.set(t,r=n)),e=u;}return t(r,...e)},u=n$3(x);
 
 /**
  * @license
@@ -2510,28 +2510,28 @@ __decorateClass([
   r$1()
 ], SlIconButton.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "library", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "src", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "href", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "target", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "download", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "label", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlIconButton.prototype, "disabled", 2);
 
 // src/utilities/animation-registry.ts
@@ -2616,6 +2616,11 @@ function stopAnimations(el) {
       });
     })
   );
+}
+function shimKeyframesHeightAuto(keyframes, calculatedHeight) {
+  return keyframes.map((keyframe) => __spreadProps(__spreadValues({}, keyframe), {
+    height: keyframe.height === "auto" ? `${calculatedHeight}px` : keyframe.height
+  }));
 }
 
 // src/internal/slot.ts
@@ -3026,13 +3031,13 @@ __decorateClass([
   e$5(".dialog__overlay")
 ], SlDialog.prototype, "overlay", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlDialog.prototype, "open", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlDialog.prototype, "label", 2);
 __decorateClass([
-  n$3({ attribute: "no-header", type: Boolean, reflect: true })
+  n$4({ attribute: "no-header", type: Boolean, reflect: true })
 ], SlDialog.prototype, "noHeader", 2);
 __decorateClass([
   watch("open", { waitUntilFirstUpdate: true })
@@ -4212,70 +4217,70 @@ __decorateClass([
   r$1()
 ], SlButton.prototype, "invalid", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "title", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlButton.prototype, "variant", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlButton.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "caret", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "loading", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "outline", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "pill", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "circle", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "type", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "value", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "href", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "target", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "rel", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "download", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "form", 2);
 __decorateClass([
-  n$3({ attribute: "formaction" })
+  n$4({ attribute: "formaction" })
 ], SlButton.prototype, "formAction", 2);
 __decorateClass([
-  n$3({ attribute: "formenctype" })
+  n$4({ attribute: "formenctype" })
 ], SlButton.prototype, "formEnctype", 2);
 __decorateClass([
-  n$3({ attribute: "formmethod" })
+  n$4({ attribute: "formmethod" })
 ], SlButton.prototype, "formMethod", 2);
 __decorateClass([
-  n$3({ attribute: "formnovalidate", type: Boolean })
+  n$4({ attribute: "formnovalidate", type: Boolean })
 ], SlButton.prototype, "formNoValidate", 2);
 __decorateClass([
-  n$3({ attribute: "formtarget" })
+  n$4({ attribute: "formtarget" })
 ], SlButton.prototype, "formTarget", 2);
 __decorateClass([
   watch("disabled", { waitUntilFirstUpdate: true })
@@ -4359,7 +4364,7 @@ __decorateClass([
   r$1()
 ], SlButtonGroup.prototype, "disableRole", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButtonGroup.prototype, "label", 2);
 function findButton(el) {
   var _a;
@@ -4878,70 +4883,70 @@ __decorateClass([
   r$1()
 ], SlTextarea.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "title", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "value", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlTextarea.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTextarea.prototype, "filled", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "label", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlTextarea.prototype, "helpText", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "placeholder", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTextarea.prototype, "rows", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "resize", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTextarea.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTextarea.prototype, "readonly", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlTextarea.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTextarea.prototype, "required", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTextarea.prototype, "minlength", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTextarea.prototype, "maxlength", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "autocapitalize", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "autocorrect", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "autocomplete", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlTextarea.prototype, "autofocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "enterkeyhint", 2);
 __decorateClass([
-  n$3({
+  n$4({
     type: Boolean,
     converter: {
       // Allow "true|false" attribute values but keep the property boolean
@@ -4951,7 +4956,7 @@ __decorateClass([
   })
 ], SlTextarea.prototype, "spellcheck", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "inputmode", 2);
 __decorateClass([
   defaultValue()
@@ -5593,97 +5598,97 @@ __decorateClass([
   r$1()
 ], SlInput.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "title", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlInput.prototype, "type", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "value", 2);
 __decorateClass([
   defaultValue()
 ], SlInput.prototype, "defaultValue", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlInput.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "filled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "pill", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "label", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlInput.prototype, "helpText", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlInput.prototype, "clearable", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "disabled", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "placeholder", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "readonly", 2);
 __decorateClass([
-  n$3({ attribute: "password-toggle", type: Boolean })
+  n$4({ attribute: "password-toggle", type: Boolean })
 ], SlInput.prototype, "passwordToggle", 2);
 __decorateClass([
-  n$3({ attribute: "password-visible", type: Boolean })
+  n$4({ attribute: "password-visible", type: Boolean })
 ], SlInput.prototype, "passwordVisible", 2);
 __decorateClass([
-  n$3({ attribute: "no-spin-buttons", type: Boolean })
+  n$4({ attribute: "no-spin-buttons", type: Boolean })
 ], SlInput.prototype, "noSpinButtons", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlInput.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "required", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "pattern", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlInput.prototype, "minlength", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlInput.prototype, "maxlength", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "min", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "max", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "step", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "autocapitalize", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "autocorrect", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "autocomplete", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlInput.prototype, "autofocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "enterkeyhint", 2);
 __decorateClass([
-  n$3({
+  n$4({
     type: Boolean,
     converter: {
       // Allow "true|false" attribute values but keep the property boolean
@@ -5693,7 +5698,7 @@ __decorateClass([
   })
 ], SlInput.prototype, "spellcheck", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "inputmode", 2);
 __decorateClass([
   watch("disabled", { waitUntilFirstUpdate: true })
@@ -5880,16 +5885,16 @@ var SlTag = class extends ShoelaceElement {
 SlTag.styles = [component_styles_default, tag_styles_default];
 SlTag.dependencies = { "sl-icon-button": SlIconButton };
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlTag.prototype, "variant", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlTag.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTag.prototype, "pill", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlTag.prototype, "removable", 2);
 
 // src/components/select/select.styles.ts
@@ -6321,7 +6326,7 @@ const oppositeAlignmentMap = {
   start: 'end',
   end: 'start'
 };
-function clamp(start, value, end) {
+function clamp$1(start, value, end) {
   return max(start, min(value, end));
 }
 function evaluate(value, param) {
@@ -6704,7 +6709,7 @@ const arrow$1 = options => ({
     const min$1 = minPadding;
     const max = clientSize - arrowDimensions[length] - maxPadding;
     const center = clientSize / 2 - arrowDimensions[length] / 2 + centerToReference;
-    const offset = clamp(min$1, center, max);
+    const offset = clamp$1(min$1, center, max);
 
     // If the reference is small enough that the arrow's padding causes it to
     // to point to nothing for an aligned placement, adjust the offset of the
@@ -6985,14 +6990,14 @@ const shift$2 = function (options) {
         const maxSide = mainAxis === 'y' ? 'bottom' : 'right';
         const min = mainAxisCoord + overflow[minSide];
         const max = mainAxisCoord - overflow[maxSide];
-        mainAxisCoord = clamp(min, mainAxisCoord, max);
+        mainAxisCoord = clamp$1(min, mainAxisCoord, max);
       }
       if (checkCrossAxis) {
         const minSide = crossAxis === 'y' ? 'top' : 'left';
         const maxSide = crossAxis === 'y' ? 'bottom' : 'right';
         const min = crossAxisCoord + overflow[minSide];
         const max = crossAxisCoord - overflow[maxSide];
-        crossAxisCoord = clamp(min, crossAxisCoord, max);
+        crossAxisCoord = clamp$1(min, crossAxisCoord, max);
       }
       const limitedCoords = limiter.fn({
         ...state,
@@ -8315,37 +8320,37 @@ __decorateClass([
   e$5(".popup__arrow")
 ], SlPopup.prototype, "arrowEl", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlPopup.prototype, "anchor", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlPopup.prototype, "active", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlPopup.prototype, "placement", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlPopup.prototype, "strategy", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlPopup.prototype, "distance", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlPopup.prototype, "skidding", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlPopup.prototype, "arrow", 2);
 __decorateClass([
-  n$3({ attribute: "arrow-placement" })
+  n$4({ attribute: "arrow-placement" })
 ], SlPopup.prototype, "arrowPlacement", 2);
 __decorateClass([
-  n$3({ attribute: "arrow-padding", type: Number })
+  n$4({ attribute: "arrow-padding", type: Number })
 ], SlPopup.prototype, "arrowPadding", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlPopup.prototype, "flip", 2);
 __decorateClass([
-  n$3({
+  n$4({
     attribute: "flip-fallback-placements",
     converter: {
       fromAttribute: (value) => {
@@ -8358,37 +8363,37 @@ __decorateClass([
   })
 ], SlPopup.prototype, "flipFallbackPlacements", 2);
 __decorateClass([
-  n$3({ attribute: "flip-fallback-strategy" })
+  n$4({ attribute: "flip-fallback-strategy" })
 ], SlPopup.prototype, "flipFallbackStrategy", 2);
 __decorateClass([
-  n$3({ type: Object })
+  n$4({ type: Object })
 ], SlPopup.prototype, "flipBoundary", 2);
 __decorateClass([
-  n$3({ attribute: "flip-padding", type: Number })
+  n$4({ attribute: "flip-padding", type: Number })
 ], SlPopup.prototype, "flipPadding", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlPopup.prototype, "shift", 2);
 __decorateClass([
-  n$3({ type: Object })
+  n$4({ type: Object })
 ], SlPopup.prototype, "shiftBoundary", 2);
 __decorateClass([
-  n$3({ attribute: "shift-padding", type: Number })
+  n$4({ attribute: "shift-padding", type: Number })
 ], SlPopup.prototype, "shiftPadding", 2);
 __decorateClass([
-  n$3({ attribute: "auto-size" })
+  n$4({ attribute: "auto-size" })
 ], SlPopup.prototype, "autoSize", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlPopup.prototype, "sync", 2);
 __decorateClass([
-  n$3({ type: Object })
+  n$4({ type: Object })
 ], SlPopup.prototype, "autoSizeBoundary", 2);
 __decorateClass([
-  n$3({ attribute: "auto-size-padding", type: Number })
+  n$4({ attribute: "auto-size-padding", type: Number })
 ], SlPopup.prototype, "autoSizePadding", 2);
 __decorateClass([
-  n$3({ attribute: "hover-bridge", type: Boolean })
+  n$4({ attribute: "hover-bridge", type: Boolean })
 ], SlPopup.prototype, "hoverBridge", 2);
 
 /**
@@ -9071,61 +9076,61 @@ __decorateClass([
   r$1()
 ], SlSelect.prototype, "valueHasChanged", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSelect.prototype, "name", 2);
 __decorateClass([
   r$1()
 ], SlSelect.prototype, "value", 1);
 __decorateClass([
-  n$3({ attribute: "value" })
+  n$4({ attribute: "value" })
 ], SlSelect.prototype, "defaultValue", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSelect.prototype, "size", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSelect.prototype, "placeholder", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "multiple", 2);
 __decorateClass([
-  n$3({ attribute: "max-options-visible", type: Number })
+  n$4({ attribute: "max-options-visible", type: Number })
 ], SlSelect.prototype, "maxOptionsVisible", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlSelect.prototype, "clearable", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "open", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlSelect.prototype, "hoist", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "filled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "pill", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSelect.prototype, "label", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSelect.prototype, "placement", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlSelect.prototype, "helpText", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSelect.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "required", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSelect.prototype, "getTag", 2);
 __decorateClass([
   watch("disabled", { waitUntilFirstUpdate: true })
@@ -9345,10 +9350,10 @@ __decorateClass([
   r$1()
 ], SlOption.prototype, "hasHover", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlOption.prototype, "value", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlOption.prototype, "disabled", 2);
 __decorateClass([
   watch("disabled")
@@ -9607,28 +9612,28 @@ __decorateClass([
   e$5("sl-popup")
 ], SlTooltip.prototype, "popup", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTooltip.prototype, "content", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTooltip.prototype, "placement", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTooltip.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTooltip.prototype, "distance", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTooltip.prototype, "open", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTooltip.prototype, "skidding", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTooltip.prototype, "trigger", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlTooltip.prototype, "hoist", 2);
 __decorateClass([
   watch("open", { waitUntilFirstUpdate: true })
@@ -10004,31 +10009,31 @@ __decorateClass([
   e$5(".dropdown__panel")
 ], SlDropdown.prototype, "panel", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlDropdown.prototype, "open", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlDropdown.prototype, "placement", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlDropdown.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ attribute: "stay-open-on-select", type: Boolean, reflect: true })
+  n$4({ attribute: "stay-open-on-select", type: Boolean, reflect: true })
 ], SlDropdown.prototype, "stayOpenOnSelect", 2);
 __decorateClass([
-  n$3({ attribute: false })
+  n$4({ attribute: false })
 ], SlDropdown.prototype, "containingElement", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlDropdown.prototype, "distance", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlDropdown.prototype, "skidding", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlDropdown.prototype, "hoist", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlDropdown.prototype, "sync", 2);
 __decorateClass([
   watch("open", { waitUntilFirstUpdate: true })
@@ -10345,13 +10350,13 @@ var menu_item_styles_default = i$6`
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const s=(i,t)=>{const e=i._$AN;if(void 0===e)return  false;for(const i of e)i._$AO?.(t,false),s(i,t);return  true},o$1=i=>{let t,e;do{if(void 0===(t=i._$AM))break;e=t._$AN,e.delete(i),i=t;}while(0===e?.size)},r=i=>{for(let t;t=i._$AM;i=t){let e=t._$AN;if(void 0===e)t._$AN=e=new Set;else if(e.has(i))break;e.add(i),c(t);}};function h$1(i){ void 0!==this._$AN?(o$1(this),this._$AM=i,r(this)):this._$AM=i;}function n$1(i,t=false,e=0){const r=this._$AH,h=this._$AN;if(void 0!==h&&0!==h.size)if(t)if(Array.isArray(r))for(let i=e;i<r.length;i++)s(r[i],false),o$1(r[i]);else null!=r&&(s(r,false),o$1(r));else s(this,i);}const c=i=>{i.type==t$1.CHILD&&(i._$AP??=n$1,i._$AQ??=h$1);};class f extends i$2{constructor(){super(...arguments),this._$AN=void 0;}_$AT(i,t,e){super._$AT(i,t,e),r(this),this.isConnected=i._$AU;}_$AO(i,t=true){i!==this.isConnected&&(this.isConnected=i,i?this.reconnected?.():this.disconnected?.()),t&&(s(this,i),o$1(this));}setValue(t){if(f$1(this._$Ct))this._$Ct._$AI(t,this);else {const i=[...this._$Ct._$AH];i[this._$Ci]=t,this._$Ct._$AI(i,this,0);}}disconnected(){}reconnected(){}}
+ */const s=(i,t)=>{const e=i._$AN;if(void 0===e)return  false;for(const i of e)i._$AO?.(t,false),s(i,t);return  true},o$1=i=>{let t,e;do{if(void 0===(t=i._$AM))break;e=t._$AN,e.delete(i),i=t;}while(0===e?.size)},r=i=>{for(let t;t=i._$AM;i=t){let e=t._$AN;if(void 0===e)t._$AN=e=new Set;else if(e.has(i))break;e.add(i),c(t);}};function h$1(i){ void 0!==this._$AN?(o$1(this),this._$AM=i,r(this)):this._$AM=i;}function n$2(i,t=false,e=0){const r=this._$AH,h=this._$AN;if(void 0!==h&&0!==h.size)if(t)if(Array.isArray(r))for(let i=e;i<r.length;i++)s(r[i],false),o$1(r[i]);else null!=r&&(s(r,false),o$1(r));else s(this,i);}const c=i=>{i.type==t$1.CHILD&&(i._$AP??=n$2,i._$AQ??=h$1);};class f extends i$2{constructor(){super(...arguments),this._$AN=void 0;}_$AT(i,t,e){super._$AT(i,t,e),r(this),this.isConnected=i._$AU;}_$AO(i,t=true){i!==this.isConnected&&(this.isConnected=i,i?this.reconnected?.():this.disconnected?.()),t&&(s(this,i),o$1(this));}setValue(t){if(f$1(this._$Ct))this._$Ct._$AI(t,this);else {const i=[...this._$Ct._$AH];i[this._$Ci]=t,this._$Ct._$AI(i,this,0);}}disconnected(){}reconnected(){}}
 
 /**
  * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const e=()=>new h;class h{}const o=new WeakMap,n=e$3(class extends f{render(i){return E}update(i,[s]){const e=s!==this.G;return e&&void 0!==this.G&&this.rt(void 0),(e||this.lt!==this.ct)&&(this.G=s,this.ht=i.options?.host,this.rt(this.ct=i.element)),E}rt(t){if(this.isConnected||(t=void 0),"function"==typeof this.G){const i=this.ht??globalThis;let s=o.get(i);void 0===s&&(s=new WeakMap,o.set(i,s)),void 0!==s.get(this.G)&&this.G.call(this.ht,void 0),s.set(this.G,t),void 0!==t&&this.G.call(this.ht,t);}else this.G.value=t;}get lt(){return "function"==typeof this.G?o.get(this.ht??globalThis)?.get(this.G):this.G?.value}disconnected(){this.lt===this.ct&&this.rt(void 0);}reconnected(){this.rt(this.ct);}});
+ */const e=()=>new h;class h{}const o=new WeakMap,n$1=e$3(class extends f{render(i){return E}update(i,[s]){const e=s!==this.G;return e&&void 0!==this.G&&this.rt(void 0),(e||this.lt!==this.ct)&&(this.G=s,this.ht=i.options?.host,this.rt(this.ct=i.element)),E}rt(t){if(this.isConnected||(t=void 0),"function"==typeof this.G){const i=this.ht??globalThis;let s=o.get(i);void 0===s&&(s=new WeakMap,o.set(i,s)),void 0!==s.get(this.G)&&this.G.call(this.ht,void 0),s.set(this.G,t),void 0!==t&&this.G.call(this.ht,t);}else this.G.value=t;}get lt(){return "function"==typeof this.G?o.get(this.ht??globalThis)?.get(this.G):this.G?.value}disconnected(){this.lt===this.ct&&this.rt(void 0);}reconnected(){this.rt(this.ct);}});
 
 // src/components/menu-item/submenu-controller.ts
 var SubmenuController = class {
@@ -10570,7 +10575,7 @@ var SubmenuController = class {
     }
     return x`
       <sl-popup
-        ${n(this.popupRef)}
+        ${n$1(this.popupRef)}
         placement=${isRtl ? "left-start" : "right-start"}
         anchor="anchor"
         flip
@@ -10712,19 +10717,19 @@ __decorateClass([
   e$5(".menu-item")
 ], SlMenuItem.prototype, "menuItem", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlMenuItem.prototype, "type", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlMenuItem.prototype, "checked", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlMenuItem.prototype, "value", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlMenuItem.prototype, "loading", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlMenuItem.prototype, "disabled", 2);
 __decorateClass([
   watch("checked")
@@ -11041,37 +11046,37 @@ __decorateClass([
   r$1()
 ], SlCheckbox.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlCheckbox.prototype, "title", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlCheckbox.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlCheckbox.prototype, "value", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlCheckbox.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlCheckbox.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlCheckbox.prototype, "checked", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlCheckbox.prototype, "indeterminate", 2);
 __decorateClass([
   defaultValue("checked")
 ], SlCheckbox.prototype, "defaultChecked", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlCheckbox.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlCheckbox.prototype, "required", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlCheckbox.prototype, "helpText", 2);
 __decorateClass([
   watch("disabled", { waitUntilFirstUpdate: true })
@@ -11119,7 +11124,7 @@ var SlDivider = class extends ShoelaceElement {
 };
 SlDivider.styles = [component_styles_default, divider_styles_default];
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlDivider.prototype, "vertical", 2);
 __decorateClass([
   watch("vertical")
@@ -11471,34 +11476,34 @@ __decorateClass([
   r$1()
 ], SlSwitch.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSwitch.prototype, "title", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSwitch.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSwitch.prototype, "value", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSwitch.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSwitch.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSwitch.prototype, "checked", 2);
 __decorateClass([
   defaultValue("checked")
 ], SlSwitch.prototype, "defaultChecked", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSwitch.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSwitch.prototype, "required", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlSwitch.prototype, "helpText", 2);
 __decorateClass([
   watch("checked", { waitUntilFirstUpdate: true })
@@ -11508,6 +11513,1253 @@ __decorateClass([
 ], SlSwitch.prototype, "handleDisabledChange", 1);
 
 SlSwitch.define("sl-switch");
+
+// src/components/drawer/drawer.styles.ts
+var drawer_styles_default = i$6`
+  :host {
+    --size: 25rem;
+    --header-spacing: var(--sl-spacing-large);
+    --body-spacing: var(--sl-spacing-large);
+    --footer-spacing: var(--sl-spacing-large);
+
+    display: contents;
+  }
+
+  .drawer {
+    top: 0;
+    inset-inline-start: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .drawer--contained {
+    position: absolute;
+    z-index: initial;
+  }
+
+  .drawer--fixed {
+    position: fixed;
+    z-index: var(--sl-z-index-drawer);
+  }
+
+  .drawer__panel {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    z-index: 2;
+    max-width: 100%;
+    max-height: 100%;
+    background-color: var(--sl-panel-background-color);
+    box-shadow: var(--sl-shadow-x-large);
+    overflow: auto;
+    pointer-events: all;
+  }
+
+  .drawer__panel:focus {
+    outline: none;
+  }
+
+  .drawer--top .drawer__panel {
+    top: 0;
+    inset-inline-end: auto;
+    bottom: auto;
+    inset-inline-start: 0;
+    width: 100%;
+    height: var(--size);
+  }
+
+  .drawer--end .drawer__panel {
+    top: 0;
+    inset-inline-end: 0;
+    bottom: auto;
+    inset-inline-start: auto;
+    width: var(--size);
+    height: 100%;
+  }
+
+  .drawer--bottom .drawer__panel {
+    top: auto;
+    inset-inline-end: auto;
+    bottom: 0;
+    inset-inline-start: 0;
+    width: 100%;
+    height: var(--size);
+  }
+
+  .drawer--start .drawer__panel {
+    top: 0;
+    inset-inline-end: auto;
+    bottom: auto;
+    inset-inline-start: 0;
+    width: var(--size);
+    height: 100%;
+  }
+
+  .drawer__header {
+    display: flex;
+  }
+
+  .drawer__title {
+    flex: 1 1 auto;
+    font: inherit;
+    font-size: var(--sl-font-size-large);
+    line-height: var(--sl-line-height-dense);
+    padding: var(--header-spacing);
+    margin: 0;
+  }
+
+  .drawer__header-actions {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: end;
+    gap: var(--sl-spacing-2x-small);
+    padding: 0 var(--header-spacing);
+  }
+
+  .drawer__header-actions sl-icon-button,
+  .drawer__header-actions ::slotted(sl-icon-button) {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    font-size: var(--sl-font-size-medium);
+  }
+
+  .drawer__body {
+    flex: 1 1 auto;
+    display: block;
+    padding: var(--body-spacing);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .drawer__footer {
+    text-align: right;
+    padding: var(--footer-spacing);
+  }
+
+  .drawer__footer ::slotted(sl-button:not(:last-of-type)) {
+    margin-inline-end: var(--sl-spacing-x-small);
+  }
+
+  .drawer:not(.drawer--has-footer) .drawer__footer {
+    display: none;
+  }
+
+  .drawer__overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-color: var(--sl-overlay-background-color);
+    pointer-events: all;
+  }
+
+  .drawer--contained .drawer__overlay {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    .drawer__panel {
+      border: solid 1px var(--sl-color-neutral-0);
+    }
+  }
+`;
+
+// src/internal/string.ts
+function uppercaseFirstLetter(string) {
+  return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+// src/components/drawer/drawer.component.ts
+var SlDrawer = class extends ShoelaceElement {
+  constructor() {
+    super(...arguments);
+    this.hasSlotController = new HasSlotController(this, "footer");
+    this.localize = new LocalizeController(this);
+    this.modal = new Modal(this);
+    this.open = false;
+    this.label = "";
+    this.placement = "end";
+    this.contained = false;
+    this.noHeader = false;
+    this.handleDocumentKeyDown = (event) => {
+      if (this.contained) {
+        return;
+      }
+      if (event.key === "Escape" && this.modal.isActive() && this.open) {
+        event.stopImmediatePropagation();
+        this.requestClose("keyboard");
+      }
+    };
+  }
+  firstUpdated() {
+    this.drawer.hidden = !this.open;
+    if (this.open) {
+      this.addOpenListeners();
+      if (!this.contained) {
+        this.modal.activate();
+        lockBodyScrolling(this);
+      }
+    }
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    unlockBodyScrolling(this);
+    this.removeOpenListeners();
+  }
+  requestClose(source) {
+    const slRequestClose = this.emit("sl-request-close", {
+      cancelable: true,
+      detail: { source }
+    });
+    if (slRequestClose.defaultPrevented) {
+      const animation = getAnimation(this, "drawer.denyClose", { dir: this.localize.dir() });
+      animateTo(this.panel, animation.keyframes, animation.options);
+      return;
+    }
+    this.hide();
+  }
+  addOpenListeners() {
+    var _a;
+    if ("CloseWatcher" in window) {
+      (_a = this.closeWatcher) == null ? void 0 : _a.destroy();
+      if (!this.contained) {
+        this.closeWatcher = new CloseWatcher();
+        this.closeWatcher.onclose = () => this.requestClose("keyboard");
+      }
+    } else {
+      document.addEventListener("keydown", this.handleDocumentKeyDown);
+    }
+  }
+  removeOpenListeners() {
+    var _a;
+    document.removeEventListener("keydown", this.handleDocumentKeyDown);
+    (_a = this.closeWatcher) == null ? void 0 : _a.destroy();
+  }
+  async handleOpenChange() {
+    if (this.open) {
+      this.emit("sl-show");
+      this.addOpenListeners();
+      this.originalTrigger = document.activeElement;
+      if (!this.contained) {
+        this.modal.activate();
+        lockBodyScrolling(this);
+      }
+      const autoFocusTarget = this.querySelector("[autofocus]");
+      if (autoFocusTarget) {
+        autoFocusTarget.removeAttribute("autofocus");
+      }
+      await Promise.all([stopAnimations(this.drawer), stopAnimations(this.overlay)]);
+      this.drawer.hidden = false;
+      requestAnimationFrame(() => {
+        const slInitialFocus = this.emit("sl-initial-focus", { cancelable: true });
+        if (!slInitialFocus.defaultPrevented) {
+          if (autoFocusTarget) {
+            autoFocusTarget.focus({ preventScroll: true });
+          } else {
+            this.panel.focus({ preventScroll: true });
+          }
+        }
+        if (autoFocusTarget) {
+          autoFocusTarget.setAttribute("autofocus", "");
+        }
+      });
+      const panelAnimation = getAnimation(this, `drawer.show${uppercaseFirstLetter(this.placement)}`, {
+        dir: this.localize.dir()
+      });
+      const overlayAnimation = getAnimation(this, "drawer.overlay.show", { dir: this.localize.dir() });
+      await Promise.all([
+        animateTo(this.panel, panelAnimation.keyframes, panelAnimation.options),
+        animateTo(this.overlay, overlayAnimation.keyframes, overlayAnimation.options)
+      ]);
+      this.emit("sl-after-show");
+    } else {
+      blurActiveElement(this);
+      this.emit("sl-hide");
+      this.removeOpenListeners();
+      if (!this.contained) {
+        this.modal.deactivate();
+        unlockBodyScrolling(this);
+      }
+      await Promise.all([stopAnimations(this.drawer), stopAnimations(this.overlay)]);
+      const panelAnimation = getAnimation(this, `drawer.hide${uppercaseFirstLetter(this.placement)}`, {
+        dir: this.localize.dir()
+      });
+      const overlayAnimation = getAnimation(this, "drawer.overlay.hide", { dir: this.localize.dir() });
+      await Promise.all([
+        animateTo(this.overlay, overlayAnimation.keyframes, overlayAnimation.options).then(() => {
+          this.overlay.hidden = true;
+        }),
+        animateTo(this.panel, panelAnimation.keyframes, panelAnimation.options).then(() => {
+          this.panel.hidden = true;
+        })
+      ]);
+      this.drawer.hidden = true;
+      this.overlay.hidden = false;
+      this.panel.hidden = false;
+      const trigger = this.originalTrigger;
+      if (typeof (trigger == null ? void 0 : trigger.focus) === "function") {
+        setTimeout(() => trigger.focus());
+      }
+      this.emit("sl-after-hide");
+    }
+  }
+  handleNoModalChange() {
+    if (this.open && !this.contained) {
+      this.modal.activate();
+      lockBodyScrolling(this);
+    }
+    if (this.open && this.contained) {
+      this.modal.deactivate();
+      unlockBodyScrolling(this);
+    }
+  }
+  /** Shows the drawer. */
+  async show() {
+    if (this.open) {
+      return void 0;
+    }
+    this.open = true;
+    return waitForEvent(this, "sl-after-show");
+  }
+  /** Hides the drawer */
+  async hide() {
+    if (!this.open) {
+      return void 0;
+    }
+    this.open = false;
+    return waitForEvent(this, "sl-after-hide");
+  }
+  render() {
+    return x`
+      <div
+        part="base"
+        class=${e$2({
+      drawer: true,
+      "drawer--open": this.open,
+      "drawer--top": this.placement === "top",
+      "drawer--end": this.placement === "end",
+      "drawer--bottom": this.placement === "bottom",
+      "drawer--start": this.placement === "start",
+      "drawer--contained": this.contained,
+      "drawer--fixed": !this.contained,
+      "drawer--rtl": this.localize.dir() === "rtl",
+      "drawer--has-footer": this.hasSlotController.test("footer")
+    })}
+      >
+        <div part="overlay" class="drawer__overlay" @click=${() => this.requestClose("overlay")} tabindex="-1"></div>
+
+        <div
+          part="panel"
+          class="drawer__panel"
+          role="dialog"
+          aria-modal="true"
+          aria-hidden=${this.open ? "false" : "true"}
+          aria-label=${o$3(this.noHeader ? this.label : void 0)}
+          aria-labelledby=${o$3(!this.noHeader ? "title" : void 0)}
+          tabindex="0"
+        >
+          ${!this.noHeader ? x`
+                <header part="header" class="drawer__header">
+                  <h2 part="title" class="drawer__title" id="title">
+                    <!-- If there's no label, use an invisible character to prevent the header from collapsing -->
+                    <slot name="label"> ${this.label.length > 0 ? this.label : String.fromCharCode(65279)} </slot>
+                  </h2>
+                  <div part="header-actions" class="drawer__header-actions">
+                    <slot name="header-actions"></slot>
+                    <sl-icon-button
+                      part="close-button"
+                      exportparts="base:close-button__base"
+                      class="drawer__close"
+                      name="x-lg"
+                      label=${this.localize.term("close")}
+                      library="system"
+                      @click=${() => this.requestClose("close-button")}
+                    ></sl-icon-button>
+                  </div>
+                </header>
+              ` : ""}
+
+          <slot part="body" class="drawer__body"></slot>
+
+          <footer part="footer" class="drawer__footer">
+            <slot name="footer"></slot>
+          </footer>
+        </div>
+      </div>
+    `;
+  }
+};
+SlDrawer.styles = [component_styles_default, drawer_styles_default];
+SlDrawer.dependencies = { "sl-icon-button": SlIconButton };
+__decorateClass([
+  e$5(".drawer")
+], SlDrawer.prototype, "drawer", 2);
+__decorateClass([
+  e$5(".drawer__panel")
+], SlDrawer.prototype, "panel", 2);
+__decorateClass([
+  e$5(".drawer__overlay")
+], SlDrawer.prototype, "overlay", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], SlDrawer.prototype, "open", 2);
+__decorateClass([
+  n$4({ reflect: true })
+], SlDrawer.prototype, "label", 2);
+__decorateClass([
+  n$4({ reflect: true })
+], SlDrawer.prototype, "placement", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], SlDrawer.prototype, "contained", 2);
+__decorateClass([
+  n$4({ attribute: "no-header", type: Boolean, reflect: true })
+], SlDrawer.prototype, "noHeader", 2);
+__decorateClass([
+  watch("open", { waitUntilFirstUpdate: true })
+], SlDrawer.prototype, "handleOpenChange", 1);
+__decorateClass([
+  watch("contained", { waitUntilFirstUpdate: true })
+], SlDrawer.prototype, "handleNoModalChange", 1);
+setDefaultAnimation("drawer.showTop", {
+  keyframes: [
+    { opacity: 0, translate: "0 -100%" },
+    { opacity: 1, translate: "0 0" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.hideTop", {
+  keyframes: [
+    { opacity: 1, translate: "0 0" },
+    { opacity: 0, translate: "0 -100%" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.showEnd", {
+  keyframes: [
+    { opacity: 0, translate: "100%" },
+    { opacity: 1, translate: "0" }
+  ],
+  rtlKeyframes: [
+    { opacity: 0, translate: "-100%" },
+    { opacity: 1, translate: "0" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.hideEnd", {
+  keyframes: [
+    { opacity: 1, translate: "0" },
+    { opacity: 0, translate: "100%" }
+  ],
+  rtlKeyframes: [
+    { opacity: 1, translate: "0" },
+    { opacity: 0, translate: "-100%" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.showBottom", {
+  keyframes: [
+    { opacity: 0, translate: "0 100%" },
+    { opacity: 1, translate: "0 0" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.hideBottom", {
+  keyframes: [
+    { opacity: 1, translate: "0 0" },
+    { opacity: 0, translate: "0 100%" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.showStart", {
+  keyframes: [
+    { opacity: 0, translate: "-100%" },
+    { opacity: 1, translate: "0" }
+  ],
+  rtlKeyframes: [
+    { opacity: 0, translate: "100%" },
+    { opacity: 1, translate: "0" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.hideStart", {
+  keyframes: [
+    { opacity: 1, translate: "0" },
+    { opacity: 0, translate: "-100%" }
+  ],
+  rtlKeyframes: [
+    { opacity: 1, translate: "0" },
+    { opacity: 0, translate: "100%" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.denyClose", {
+  keyframes: [{ scale: 1 }, { scale: 1.01 }, { scale: 1 }],
+  options: { duration: 250 }
+});
+setDefaultAnimation("drawer.overlay.show", {
+  keyframes: [{ opacity: 0 }, { opacity: 1 }],
+  options: { duration: 250 }
+});
+setDefaultAnimation("drawer.overlay.hide", {
+  keyframes: [{ opacity: 1 }, { opacity: 0 }],
+  options: { duration: 250 }
+});
+
+SlDrawer.define("sl-drawer");
+
+// src/components/tree-item/tree-item.styles.ts
+var tree_item_styles_default = i$6`
+  :host {
+    display: block;
+    outline: 0;
+    z-index: 0;
+  }
+
+  :host(:focus) {
+    outline: none;
+  }
+
+  slot:not([name])::slotted(sl-icon) {
+    margin-inline-end: var(--sl-spacing-x-small);
+  }
+
+  .tree-item {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    color: var(--sl-color-neutral-700);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .tree-item__checkbox {
+    pointer-events: none;
+  }
+
+  .tree-item__expand-button,
+  .tree-item__checkbox,
+  .tree-item__label {
+    font-family: var(--sl-font-sans);
+    font-size: var(--sl-font-size-medium);
+    font-weight: var(--sl-font-weight-normal);
+    line-height: var(--sl-line-height-dense);
+    letter-spacing: var(--sl-letter-spacing-normal);
+  }
+
+  .tree-item__checkbox::part(base) {
+    display: flex;
+    align-items: center;
+  }
+
+  .tree-item__indentation {
+    display: block;
+    width: 1em;
+    flex-shrink: 0;
+  }
+
+  .tree-item__expand-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: content-box;
+    color: var(--sl-color-neutral-500);
+    padding: var(--sl-spacing-x-small);
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .tree-item__expand-button {
+    transition: var(--sl-transition-medium) rotate ease;
+  }
+
+  .tree-item--expanded .tree-item__expand-button {
+    rotate: 90deg;
+  }
+
+  .tree-item--expanded.tree-item--rtl .tree-item__expand-button {
+    rotate: -90deg;
+  }
+
+  .tree-item--expanded slot[name='expand-icon'],
+  .tree-item:not(.tree-item--expanded) slot[name='collapse-icon'] {
+    display: none;
+  }
+
+  .tree-item:not(.tree-item--has-expand-button) .tree-item__expand-icon-slot {
+    display: none;
+  }
+
+  .tree-item__expand-button--visible {
+    cursor: pointer;
+  }
+
+  .tree-item__item {
+    display: flex;
+    align-items: center;
+    border-inline-start: solid 3px transparent;
+  }
+
+  .tree-item--disabled .tree-item__item {
+    opacity: 0.5;
+    outline: none;
+    cursor: not-allowed;
+  }
+
+  :host(:focus-visible) .tree-item__item {
+    outline: var(--sl-focus-ring);
+    outline-offset: var(--sl-focus-ring-offset);
+    z-index: 2;
+  }
+
+  :host(:not([aria-disabled='true'])) .tree-item--selected .tree-item__item {
+    background-color: var(--sl-color-neutral-100);
+    border-inline-start-color: var(--sl-color-primary-600);
+  }
+
+  :host(:not([aria-disabled='true'])) .tree-item__expand-button {
+    color: var(--sl-color-neutral-600);
+  }
+
+  .tree-item__label {
+    display: flex;
+    align-items: center;
+    transition: var(--sl-transition-fast) color;
+  }
+
+  .tree-item__children {
+    display: block;
+    font-size: calc(1em + var(--indent-size, var(--sl-spacing-medium)));
+  }
+
+  /* Indentation lines */
+  .tree-item__children {
+    position: relative;
+  }
+
+  .tree-item__children::before {
+    content: '';
+    position: absolute;
+    top: var(--indent-guide-offset);
+    bottom: var(--indent-guide-offset);
+    left: calc(1em - (var(--indent-guide-width) / 2) - 1px);
+    border-inline-end: var(--indent-guide-width) var(--indent-guide-style) var(--indent-guide-color);
+    z-index: 1;
+  }
+
+  .tree-item--rtl .tree-item__children::before {
+    left: auto;
+    right: 1em;
+  }
+
+  @media (forced-colors: active) {
+    :host(:not([aria-disabled='true'])) .tree-item--selected .tree-item__item {
+      outline: dashed 1px SelectedItem;
+    }
+  }
+`;
+
+/**
+ * @license
+ * Copyright 2021 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+function n(n,r,t){return n?r(n):t?.(n)}
+
+var _SlTreeItem = class _SlTreeItem extends ShoelaceElement {
+  constructor() {
+    super(...arguments);
+    this.localize = new LocalizeController(this);
+    this.indeterminate = false;
+    this.isLeaf = false;
+    this.loading = false;
+    this.selectable = false;
+    this.expanded = false;
+    this.selected = false;
+    this.disabled = false;
+    this.lazy = false;
+  }
+  static isTreeItem(node) {
+    return node instanceof Element && node.getAttribute("role") === "treeitem";
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this.setAttribute("role", "treeitem");
+    this.setAttribute("tabindex", "-1");
+    if (this.isNestedItem()) {
+      this.slot = "children";
+    }
+  }
+  firstUpdated() {
+    this.childrenContainer.hidden = !this.expanded;
+    this.childrenContainer.style.height = this.expanded ? "auto" : "0";
+    this.isLeaf = !this.lazy && this.getChildrenItems().length === 0;
+    this.handleExpandedChange();
+  }
+  async animateCollapse() {
+    this.emit("sl-collapse");
+    await stopAnimations(this.childrenContainer);
+    const { keyframes, options } = getAnimation(this, "tree-item.collapse", { dir: this.localize.dir() });
+    await animateTo(
+      this.childrenContainer,
+      shimKeyframesHeightAuto(keyframes, this.childrenContainer.scrollHeight),
+      options
+    );
+    this.childrenContainer.hidden = true;
+    this.emit("sl-after-collapse");
+  }
+  // Checks whether the item is nested into an item
+  isNestedItem() {
+    const parent = this.parentElement;
+    return !!parent && _SlTreeItem.isTreeItem(parent);
+  }
+  handleChildrenSlotChange() {
+    this.loading = false;
+    this.isLeaf = !this.lazy && this.getChildrenItems().length === 0;
+  }
+  willUpdate(changedProperties) {
+    if (changedProperties.has("selected") && !changedProperties.has("indeterminate")) {
+      this.indeterminate = false;
+    }
+  }
+  async animateExpand() {
+    this.emit("sl-expand");
+    await stopAnimations(this.childrenContainer);
+    this.childrenContainer.hidden = false;
+    const { keyframes, options } = getAnimation(this, "tree-item.expand", { dir: this.localize.dir() });
+    await animateTo(
+      this.childrenContainer,
+      shimKeyframesHeightAuto(keyframes, this.childrenContainer.scrollHeight),
+      options
+    );
+    this.childrenContainer.style.height = "auto";
+    this.emit("sl-after-expand");
+  }
+  handleLoadingChange() {
+    this.setAttribute("aria-busy", this.loading ? "true" : "false");
+    if (!this.loading) {
+      this.animateExpand();
+    }
+  }
+  handleDisabledChange() {
+    this.setAttribute("aria-disabled", this.disabled ? "true" : "false");
+  }
+  handleSelectedChange() {
+    this.setAttribute("aria-selected", this.selected ? "true" : "false");
+  }
+  handleExpandedChange() {
+    if (!this.isLeaf) {
+      this.setAttribute("aria-expanded", this.expanded ? "true" : "false");
+    } else {
+      this.removeAttribute("aria-expanded");
+    }
+  }
+  handleExpandAnimation() {
+    if (this.expanded) {
+      if (this.lazy) {
+        this.loading = true;
+        this.emit("sl-lazy-load");
+      } else {
+        this.animateExpand();
+      }
+    } else {
+      this.animateCollapse();
+    }
+  }
+  handleLazyChange() {
+    this.emit("sl-lazy-change");
+  }
+  /** Gets all the nested tree items in this node. */
+  getChildrenItems({ includeDisabled = true } = {}) {
+    return this.childrenSlot ? [...this.childrenSlot.assignedElements({ flatten: true })].filter(
+      (item) => _SlTreeItem.isTreeItem(item) && (includeDisabled || !item.disabled)
+    ) : [];
+  }
+  render() {
+    const isRtl = this.localize.dir() === "rtl";
+    const showExpandButton = !this.loading && (!this.isLeaf || this.lazy);
+    return x`
+      <div
+        part="base"
+        class="${e$2({
+      "tree-item": true,
+      "tree-item--expanded": this.expanded,
+      "tree-item--selected": this.selected,
+      "tree-item--disabled": this.disabled,
+      "tree-item--leaf": this.isLeaf,
+      "tree-item--has-expand-button": showExpandButton,
+      "tree-item--rtl": this.localize.dir() === "rtl"
+    })}"
+      >
+        <div
+          class="tree-item__item"
+          part="
+            item
+            ${this.disabled ? "item--disabled" : ""}
+            ${this.expanded ? "item--expanded" : ""}
+            ${this.indeterminate ? "item--indeterminate" : ""}
+            ${this.selected ? "item--selected" : ""}
+          "
+        >
+          <div class="tree-item__indentation" part="indentation"></div>
+
+          <div
+            part="expand-button"
+            class=${e$2({
+      "tree-item__expand-button": true,
+      "tree-item__expand-button--visible": showExpandButton
+    })}
+            aria-hidden="true"
+          >
+            ${n(
+      this.loading,
+      () => x` <sl-spinner part="spinner" exportparts="base:spinner__base"></sl-spinner> `
+    )}
+            <slot class="tree-item__expand-icon-slot" name="expand-icon">
+              <sl-icon library="system" name=${isRtl ? "chevron-left" : "chevron-right"}></sl-icon>
+            </slot>
+            <slot class="tree-item__expand-icon-slot" name="collapse-icon">
+              <sl-icon library="system" name=${isRtl ? "chevron-left" : "chevron-right"}></sl-icon>
+            </slot>
+          </div>
+
+          ${n(
+      this.selectable,
+      () => x`
+              <sl-checkbox
+                part="checkbox"
+                exportparts="
+                    base:checkbox__base,
+                    control:checkbox__control,
+                    control--checked:checkbox__control--checked,
+                    control--indeterminate:checkbox__control--indeterminate,
+                    checked-icon:checkbox__checked-icon,
+                    indeterminate-icon:checkbox__indeterminate-icon,
+                    label:checkbox__label
+                  "
+                class="tree-item__checkbox"
+                ?disabled="${this.disabled}"
+                ?checked="${l(this.selected)}"
+                ?indeterminate="${this.indeterminate}"
+                tabindex="-1"
+              ></sl-checkbox>
+            `
+    )}
+
+          <slot class="tree-item__label" part="label"></slot>
+        </div>
+
+        <div class="tree-item__children" part="children" role="group">
+          <slot name="children" @slotchange="${this.handleChildrenSlotChange}"></slot>
+        </div>
+      </div>
+    `;
+  }
+};
+_SlTreeItem.styles = [component_styles_default, tree_item_styles_default];
+_SlTreeItem.dependencies = {
+  "sl-checkbox": SlCheckbox,
+  "sl-icon": SlIcon,
+  "sl-spinner": SlSpinner
+};
+__decorateClass([
+  r$1()
+], _SlTreeItem.prototype, "indeterminate", 2);
+__decorateClass([
+  r$1()
+], _SlTreeItem.prototype, "isLeaf", 2);
+__decorateClass([
+  r$1()
+], _SlTreeItem.prototype, "loading", 2);
+__decorateClass([
+  r$1()
+], _SlTreeItem.prototype, "selectable", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], _SlTreeItem.prototype, "expanded", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], _SlTreeItem.prototype, "selected", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], _SlTreeItem.prototype, "disabled", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], _SlTreeItem.prototype, "lazy", 2);
+__decorateClass([
+  e$5("slot:not([name])")
+], _SlTreeItem.prototype, "defaultSlot", 2);
+__decorateClass([
+  e$5("slot[name=children]")
+], _SlTreeItem.prototype, "childrenSlot", 2);
+__decorateClass([
+  e$5(".tree-item__item")
+], _SlTreeItem.prototype, "itemElement", 2);
+__decorateClass([
+  e$5(".tree-item__children")
+], _SlTreeItem.prototype, "childrenContainer", 2);
+__decorateClass([
+  e$5(".tree-item__expand-button slot")
+], _SlTreeItem.prototype, "expandButtonSlot", 2);
+__decorateClass([
+  watch("loading", { waitUntilFirstUpdate: true })
+], _SlTreeItem.prototype, "handleLoadingChange", 1);
+__decorateClass([
+  watch("disabled")
+], _SlTreeItem.prototype, "handleDisabledChange", 1);
+__decorateClass([
+  watch("selected")
+], _SlTreeItem.prototype, "handleSelectedChange", 1);
+__decorateClass([
+  watch("expanded", { waitUntilFirstUpdate: true })
+], _SlTreeItem.prototype, "handleExpandedChange", 1);
+__decorateClass([
+  watch("expanded", { waitUntilFirstUpdate: true })
+], _SlTreeItem.prototype, "handleExpandAnimation", 1);
+__decorateClass([
+  watch("lazy", { waitUntilFirstUpdate: true })
+], _SlTreeItem.prototype, "handleLazyChange", 1);
+var SlTreeItem = _SlTreeItem;
+setDefaultAnimation("tree-item.expand", {
+  keyframes: [
+    { height: "0", opacity: "0", overflow: "hidden" },
+    { height: "auto", opacity: "1", overflow: "hidden" }
+  ],
+  options: { duration: 250, easing: "cubic-bezier(0.4, 0.0, 0.2, 1)" }
+});
+setDefaultAnimation("tree-item.collapse", {
+  keyframes: [
+    { height: "auto", opacity: "1", overflow: "hidden" },
+    { height: "0", opacity: "0", overflow: "hidden" }
+  ],
+  options: { duration: 200, easing: "cubic-bezier(0.4, 0.0, 0.2, 1)" }
+});
+
+// src/components/tree/tree.styles.ts
+var tree_styles_default = i$6`
+  :host {
+    /*
+     * These are actually used by tree item, but we define them here so they can more easily be set and all tree items
+     * stay consistent.
+     */
+    --indent-guide-color: var(--sl-color-neutral-200);
+    --indent-guide-offset: 0;
+    --indent-guide-style: solid;
+    --indent-guide-width: 0;
+    --indent-size: var(--sl-spacing-large);
+
+    display: block;
+
+    /*
+     * Tree item indentation uses the "em" unit to increment its width on each level, so setting the font size to zero
+     * here removes the indentation for all the nodes on the first level.
+     */
+    font-size: 0;
+  }
+`;
+
+// src/internal/math.ts
+function clamp(value, min, max) {
+  const noNegativeZero = (n) => Object.is(n, -0) ? 0 : n;
+  if (value < min) {
+    return noNegativeZero(min);
+  }
+  if (value > max) {
+    return noNegativeZero(max);
+  }
+  return noNegativeZero(value);
+}
+
+function syncCheckboxes(changedTreeItem, initialSync = false) {
+  function syncParentItem(treeItem) {
+    const children = treeItem.getChildrenItems({ includeDisabled: false });
+    if (children.length) {
+      const allChecked = children.every((item) => item.selected);
+      const allUnchecked = children.every((item) => !item.selected && !item.indeterminate);
+      treeItem.selected = allChecked;
+      treeItem.indeterminate = !allChecked && !allUnchecked;
+    }
+  }
+  function syncAncestors(treeItem) {
+    const parentItem = treeItem.parentElement;
+    if (SlTreeItem.isTreeItem(parentItem)) {
+      syncParentItem(parentItem);
+      syncAncestors(parentItem);
+    }
+  }
+  function syncDescendants(treeItem) {
+    for (const childItem of treeItem.getChildrenItems()) {
+      childItem.selected = initialSync ? treeItem.selected || childItem.selected : !childItem.disabled && treeItem.selected;
+      syncDescendants(childItem);
+    }
+    if (initialSync) {
+      syncParentItem(treeItem);
+    }
+  }
+  syncDescendants(changedTreeItem);
+  syncAncestors(changedTreeItem);
+}
+var SlTree = class extends ShoelaceElement {
+  constructor() {
+    super();
+    this.selection = "single";
+    this.clickTarget = null;
+    this.localize = new LocalizeController(this);
+    // Initializes new items by setting the `selectable` property and the expanded/collapsed icons if any
+    this.initTreeItem = (item) => {
+      item.selectable = this.selection === "multiple";
+      ["expand", "collapse"].filter((status) => !!this.querySelector(`[slot="${status}-icon"]`)).forEach((status) => {
+        const existingIcon = item.querySelector(`[slot="${status}-icon"]`);
+        const expandButtonIcon = this.getExpandButtonIcon(status);
+        if (!expandButtonIcon) return;
+        if (existingIcon === null) {
+          item.append(expandButtonIcon);
+        } else if (existingIcon.hasAttribute("data-default")) {
+          existingIcon.replaceWith(expandButtonIcon);
+        } else ;
+      });
+    };
+    this.handleTreeChanged = (mutations) => {
+      for (const mutation of mutations) {
+        const addedNodes = [...mutation.addedNodes].filter(SlTreeItem.isTreeItem);
+        const removedNodes = [...mutation.removedNodes].filter(SlTreeItem.isTreeItem);
+        addedNodes.forEach(this.initTreeItem);
+        if (this.lastFocusedItem && removedNodes.includes(this.lastFocusedItem)) {
+          this.lastFocusedItem = null;
+        }
+      }
+    };
+    this.handleFocusOut = (event) => {
+      const relatedTarget = event.relatedTarget;
+      if (!relatedTarget || !this.contains(relatedTarget)) {
+        this.tabIndex = 0;
+      }
+    };
+    this.handleFocusIn = (event) => {
+      const target = event.target;
+      if (event.target === this) {
+        this.focusItem(this.lastFocusedItem || this.getAllTreeItems()[0]);
+      }
+      if (SlTreeItem.isTreeItem(target) && !target.disabled) {
+        if (this.lastFocusedItem) {
+          this.lastFocusedItem.tabIndex = -1;
+        }
+        this.lastFocusedItem = target;
+        this.tabIndex = -1;
+        target.tabIndex = 0;
+      }
+    };
+    this.addEventListener("focusin", this.handleFocusIn);
+    this.addEventListener("focusout", this.handleFocusOut);
+    this.addEventListener("sl-lazy-change", this.handleSlotChange);
+  }
+  async connectedCallback() {
+    super.connectedCallback();
+    this.setAttribute("role", "tree");
+    this.setAttribute("tabindex", "0");
+    await this.updateComplete;
+    this.mutationObserver = new MutationObserver(this.handleTreeChanged);
+    this.mutationObserver.observe(this, { childList: true, subtree: true });
+  }
+  disconnectedCallback() {
+    var _a;
+    super.disconnectedCallback();
+    (_a = this.mutationObserver) == null ? void 0 : _a.disconnect();
+  }
+  // Generates a clone of the expand icon element to use for each tree item
+  getExpandButtonIcon(status) {
+    const slot = status === "expand" ? this.expandedIconSlot : this.collapsedIconSlot;
+    const icon = slot.assignedElements({ flatten: true })[0];
+    if (icon) {
+      const clone = icon.cloneNode(true);
+      [clone, ...clone.querySelectorAll("[id]")].forEach((el) => el.removeAttribute("id"));
+      clone.setAttribute("data-default", "");
+      clone.slot = `${status}-icon`;
+      return clone;
+    }
+    return null;
+  }
+  selectItem(selectedItem) {
+    const previousSelection = [...this.selectedItems];
+    if (this.selection === "multiple") {
+      selectedItem.selected = !selectedItem.selected;
+      if (selectedItem.lazy) {
+        selectedItem.expanded = true;
+      }
+      syncCheckboxes(selectedItem);
+    } else if (this.selection === "single" || selectedItem.isLeaf) {
+      const items = this.getAllTreeItems();
+      for (const item of items) {
+        item.selected = item === selectedItem;
+      }
+    } else if (this.selection === "leaf") {
+      selectedItem.expanded = !selectedItem.expanded;
+    }
+    const nextSelection = this.selectedItems;
+    if (previousSelection.length !== nextSelection.length || nextSelection.some((item) => !previousSelection.includes(item))) {
+      Promise.all(nextSelection.map((el) => el.updateComplete)).then(() => {
+        this.emit("sl-selection-change", { detail: { selection: nextSelection } });
+      });
+    }
+  }
+  getAllTreeItems() {
+    return [...this.querySelectorAll("sl-tree-item")];
+  }
+  focusItem(item) {
+    item == null ? void 0 : item.focus();
+  }
+  handleKeyDown(event) {
+    if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End", "Enter", " "].includes(event.key)) {
+      return;
+    }
+    if (event.composedPath().some((el) => {
+      var _a;
+      return ["input", "textarea"].includes((_a = el == null ? void 0 : el.tagName) == null ? void 0 : _a.toLowerCase());
+    })) {
+      return;
+    }
+    const items = this.getFocusableItems();
+    const isLtr = this.localize.dir() === "ltr";
+    const isRtl = this.localize.dir() === "rtl";
+    if (items.length > 0) {
+      event.preventDefault();
+      const activeItemIndex = items.findIndex((item) => item.matches(":focus"));
+      const activeItem = items[activeItemIndex];
+      const focusItemAt = (index) => {
+        const item = items[clamp(index, 0, items.length - 1)];
+        this.focusItem(item);
+      };
+      const toggleExpand = (expanded) => {
+        activeItem.expanded = expanded;
+      };
+      if (event.key === "ArrowDown") {
+        focusItemAt(activeItemIndex + 1);
+      } else if (event.key === "ArrowUp") {
+        focusItemAt(activeItemIndex - 1);
+      } else if (isLtr && event.key === "ArrowRight" || isRtl && event.key === "ArrowLeft") {
+        if (!activeItem || activeItem.disabled || activeItem.expanded || activeItem.isLeaf && !activeItem.lazy) {
+          focusItemAt(activeItemIndex + 1);
+        } else {
+          toggleExpand(true);
+        }
+      } else if (isLtr && event.key === "ArrowLeft" || isRtl && event.key === "ArrowRight") {
+        if (!activeItem || activeItem.disabled || activeItem.isLeaf || !activeItem.expanded) {
+          focusItemAt(activeItemIndex - 1);
+        } else {
+          toggleExpand(false);
+        }
+      } else if (event.key === "Home") {
+        focusItemAt(0);
+      } else if (event.key === "End") {
+        focusItemAt(items.length - 1);
+      } else if (event.key === "Enter" || event.key === " ") {
+        if (!activeItem.disabled) {
+          this.selectItem(activeItem);
+        }
+      }
+    }
+  }
+  handleClick(event) {
+    const target = event.target;
+    const treeItem = target.closest("sl-tree-item");
+    const isExpandButton = event.composedPath().some((el) => {
+      var _a;
+      return (_a = el == null ? void 0 : el.classList) == null ? void 0 : _a.contains("tree-item__expand-button");
+    });
+    if (!treeItem || treeItem.disabled || target !== this.clickTarget) {
+      return;
+    }
+    if (isExpandButton) {
+      treeItem.expanded = !treeItem.expanded;
+    } else {
+      this.selectItem(treeItem);
+    }
+  }
+  handleMouseDown(event) {
+    this.clickTarget = event.target;
+  }
+  handleSlotChange() {
+    const items = this.getAllTreeItems();
+    items.forEach(this.initTreeItem);
+  }
+  async handleSelectionChange() {
+    const isSelectionMultiple = this.selection === "multiple";
+    const items = this.getAllTreeItems();
+    this.setAttribute("aria-multiselectable", isSelectionMultiple ? "true" : "false");
+    for (const item of items) {
+      item.selectable = isSelectionMultiple;
+    }
+    if (isSelectionMultiple) {
+      await this.updateComplete;
+      [...this.querySelectorAll(":scope > sl-tree-item")].forEach(
+        (treeItem) => syncCheckboxes(treeItem, true)
+      );
+    }
+  }
+  /** @internal Returns the list of tree items that are selected in the tree. */
+  get selectedItems() {
+    const items = this.getAllTreeItems();
+    const isSelected = (item) => item.selected;
+    return items.filter(isSelected);
+  }
+  /** @internal Gets focusable tree items in the tree. */
+  getFocusableItems() {
+    const items = this.getAllTreeItems();
+    const collapsedItems = /* @__PURE__ */ new Set();
+    return items.filter((item) => {
+      var _a;
+      if (item.disabled) return false;
+      const parent = (_a = item.parentElement) == null ? void 0 : _a.closest("[role=treeitem]");
+      if (parent && (!parent.expanded || parent.loading || collapsedItems.has(parent))) {
+        collapsedItems.add(item);
+      }
+      return !collapsedItems.has(item);
+    });
+  }
+  render() {
+    return x`
+      <div
+        part="base"
+        class="tree"
+        @click=${this.handleClick}
+        @keydown=${this.handleKeyDown}
+        @mousedown=${this.handleMouseDown}
+      >
+        <slot @slotchange=${this.handleSlotChange}></slot>
+        <span hidden aria-hidden="true"><slot name="expand-icon"></slot></span>
+        <span hidden aria-hidden="true"><slot name="collapse-icon"></slot></span>
+      </div>
+    `;
+  }
+};
+SlTree.styles = [component_styles_default, tree_styles_default];
+__decorateClass([
+  e$5("slot:not([name])")
+], SlTree.prototype, "defaultSlot", 2);
+__decorateClass([
+  e$5("slot[name=expand-icon]")
+], SlTree.prototype, "expandedIconSlot", 2);
+__decorateClass([
+  e$5("slot[name=collapse-icon]")
+], SlTree.prototype, "collapsedIconSlot", 2);
+__decorateClass([
+  n$4()
+], SlTree.prototype, "selection", 2);
+__decorateClass([
+  watch("selection")
+], SlTree.prototype, "handleSelectionChange", 1);
+
+SlTree.define("sl-tree");
 
 /**
  * Base horizontal panel component with priority-based overflow management
@@ -14881,6 +16133,7 @@ const PanelUtils = {
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
  * @import {toolbarPart} from './plugins/toolbar.js'
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
+ * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
  */
 
 /**
@@ -14904,6 +16157,7 @@ const PanelUtils = {
  * @property {UIPart<SlDialog, infoDialogPart>} infoDialog - A dialog to display information and help
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
+ * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  */
 
 /**
@@ -47544,19 +48798,19 @@ __decorateClass([
   e$5(".alert__countdown-elapsed")
 ], _SlAlert.prototype, "countdownElement", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], _SlAlert.prototype, "open", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], _SlAlert.prototype, "closable", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], _SlAlert.prototype, "variant", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], _SlAlert.prototype, "duration", 2);
 __decorateClass([
-  n$3({ type: String, reflect: true })
+  n$4({ type: String, reflect: true })
 ], _SlAlert.prototype, "countdown", 2);
 __decorateClass([
   r$1()
@@ -48768,36 +50022,27 @@ async function install$c(state) {
   updateUi();
   
   // Wire up event handlers - now the UI elements exist
-  setupEventHandlers();
-}
-
-/**
- * Sets up event handlers for drawer interactions
- * @param {ApplicationState} state
- */
-function setupEventHandlers(state) {
-  // Open drawer when hamburger button is clicked
-  ui$1.fileDrawerTrigger?.addEventListener('click', () => {
+  triggerButton.addEventListener('click', () => {
     open$2();
   });
   
   // Close drawer when close button is clicked
-  ui$1.fileDrawer?.closeDrawer?.addEventListener('click', () => {
+  drawer.closeDrawer.addEventListener('click', () => {
     close$2();
   });
   
   // Close drawer when clicking outside or pressing escape (built into SlDrawer)
-  ui$1.fileDrawer?.addEventListener('sl-request-close', () => {
+  drawer.addEventListener('sl-request-close', () => {
     close$2();
   });
   
   // Handle variant selection changes
-  ui$1.fileDrawer?.variantSelect?.addEventListener('sl-change', () => {
+  drawer.variantSelect.addEventListener('sl-change', () => {
     onVariantChange();
   });
   
   // Handle tree selection changes
-  ui$1.fileDrawer?.fileTree?.addEventListener('sl-selection-change', (event) => {
+  drawer.addEventListener('sl-selection-change', (event) => {
     onFileTreeSelection(event);
   });
 }
@@ -61061,6 +62306,7 @@ async function _hashPassword(password) {
  * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
  * @property {UIPart<SlButtonGroup, syncActionsPart>} syncActions - Sync action buttons (added by sync plugin)
  * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
+ * @property {UIPart<SlButton, fileDrawerTriggerPart>} fileDrawerTrigger - File drawer trigger button (added by file-selection-drawer plugin)
  */
 
 /**

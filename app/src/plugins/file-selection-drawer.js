@@ -6,6 +6,18 @@
 /** 
  * @import { ApplicationState } from '../app.js' 
  */
+
+/**
+ * @typedef {object} fileDrawerTriggerPart
+ */
+
+/**
+ * @typedef {object} fileDrawerPart  
+ * @property {HTMLDivElement} drawerContent
+ * @property {SlSelect} variantSelect
+ * @property {SlTree} fileTree
+ * @property {SlButton} closeDrawer
+ */
 import ui, { updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
 import { logger } from '../app.js'
@@ -49,48 +61,36 @@ async function install(state) {
   
   // Create and add trigger button to toolbar
   const triggerButton = createSingleFromTemplate('file-drawer-button');
-  if (triggerButton instanceof HTMLElement) {
-    ui.toolbar.add(triggerButton, 100); // Highest priority to appear first
-  }
+  ui.toolbar.add(triggerButton, 100); // Highest priority to appear first
   
   // Create and add drawer to document body
-  const drawer = createSingleFromTemplate('file-selection-drawer');
-  document.body.appendChild(drawer);
+  const drawer = createSingleFromTemplate('file-selection-drawer', document.body);
   
   // Update UI to register new elements
   updateUi();
   
   // Wire up event handlers - now the UI elements exist
-  setupEventHandlers(state);
-}
-
-/**
- * Sets up event handlers for drawer interactions
- * @param {ApplicationState} state
- */
-function setupEventHandlers(state) {
-  // Open drawer when hamburger button is clicked
-  ui.fileDrawerTrigger?.addEventListener('click', () => {
+  triggerButton.addEventListener('click', () => {
     open();
   });
   
   // Close drawer when close button is clicked
-  ui.fileDrawer?.closeDrawer?.addEventListener('click', () => {
+  ui.fileDrawer.closeDrawer.addEventListener('click', () => {
     close();
   });
   
   // Close drawer when clicking outside or pressing escape (built into SlDrawer)
-  ui.fileDrawer?.addEventListener('sl-request-close', () => {
+  drawer.addEventListener('sl-request-close', () => {
     close();
   });
   
   // Handle variant selection changes
-  ui.fileDrawer?.variantSelect?.addEventListener('sl-change', () => {
+  ui.fileDrawer.variantSelect.addEventListener('sl-change', () => {
     onVariantChange(state);
   });
   
   // Handle tree selection changes
-  ui.fileDrawer?.fileTree?.addEventListener('sl-selection-change', (event) => {
+  drawer.addEventListener('sl-selection-change', (event) => {
     onFileTreeSelection(event, state);
   });
 }
