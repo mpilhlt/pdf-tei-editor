@@ -112,8 +112,10 @@ class BasePanel extends HTMLElement {
     const widgets = [];
     
     // Get all slotted elements from the main slot
+    // @ts-ignore
     const mainSlot = this.shadowRoot.querySelector('slot:not([name])');
     if (mainSlot) {
+      // @ts-ignore
       const slottedElements = mainSlot.assignedElements();
       slottedElements.forEach(widget => {
         // Skip the overflow container itself
@@ -240,17 +242,27 @@ class BasePanel extends HTMLElement {
   }
 
   /**
-   * Add a widget to the panel
+   * Internal method to add a widget to the panel
    * @param {HTMLElement} widget - The widget element
-   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {number} priority - Higher priority widgets stay visible longer
+   * @param {InsertPosition|null} where - Position for insertAdjacentElement
+   * @param {HTMLElement|null} referenceElement - Reference element for positioning
+   * @returns {string} The widget ID
    */
-  add(widget, priority = 0) {
-    const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  _addWidget(widget, priority, where = null, referenceElement = null) {
+    const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     widget.id = widgetId;
     widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, priority });
-    this.appendChild(widget);
+    
+    if (where && referenceElement) {
+      referenceElement.insertAdjacentElement(where, widget);
+    } else if (where) {
+      this.insertAdjacentElement(where, widget);
+    } else {
+      this.appendChild(widget);
+    }
     
     // Reapply flex layout if in flex mode (for ToolBar)
     if (this.tagName === 'TOOL-BAR' && this.getAttribute('smart-overflow') === 'off') {
@@ -277,6 +289,36 @@ class BasePanel extends HTMLElement {
     setTimeout(() => this.checkAndResolveOverflow(), 200);
     
     return widgetId;
+  }
+
+  /**
+   * Add a widget to the panel
+   * @param {HTMLElement} widget - The widget element
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {InsertPosition} [where] - Position for insertAdjacentElement ('beforebegin', 'afterbegin', 'beforeend', 'afterend'). Defaults to "beforeEnd"
+   */
+  add(widget, priority = 0, where = "beforeend") {
+    return this._addWidget(widget, priority, where);
+  }
+
+  /**
+   * Add a widget before another widget
+   * @param {HTMLElement} widget - The widget element to add
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {HTMLElement} siblingWidget - The sibling widget to add before
+   */
+  addBefore(widget, priority = 0, siblingWidget) {
+    return this._addWidget(widget, priority, 'beforebegin', siblingWidget);
+  }
+
+  /**
+   * Add a widget after another widget
+   * @param {HTMLElement} widget - The widget element to add
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {HTMLElement} siblingWidget - The sibling widget to add after
+   */
+  addAfter(widget, priority = 0, siblingWidget) {
+    return this._addWidget(widget, priority, 'afterend', siblingWidget);
   }
 
   /**

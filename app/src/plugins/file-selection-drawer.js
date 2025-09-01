@@ -5,6 +5,7 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
+ * @import { SlSelect, SlTree, SlButton } from '../ui.js'
  */
 
 /**
@@ -61,7 +62,7 @@ async function install(state) {
   
   // Create and add trigger button to toolbar
   const triggerButton = createSingleFromTemplate('file-drawer-button');
-  ui.toolbar.add(triggerButton, 100); // Highest priority to appear first
+  ui.toolbar.add(triggerButton, 10, "afterbegin"); 
   
   // Create and add drawer to document body
   const drawer = createSingleFromTemplate('file-selection-drawer', document.body);
@@ -122,7 +123,7 @@ async function update(state) {
   }
   
   // TODO: Update file tree based on selected files in state
-  logger.debug("File selection drawer state updated", {
+  console.log("File selection drawer state updated", {
     pdf: state.pdf,
     xml: state.xml,
     variant: state.variant
@@ -135,7 +136,7 @@ async function update(state) {
  */
 function onVariantChange(state) {
   const variant = ui.fileDrawer?.variantSelect?.value;
-  logger.debug("Variant selection changed:", variant);
+  console.log("Variant selection changed:", variant);
   
   // TODO: Update file tree based on variant selection
   // TODO: Update application state with new variant
@@ -147,6 +148,7 @@ function onVariantChange(state) {
  * @param {ApplicationState} state
  */
 function onFileTreeSelection(event, state) {
+  // @ts-ignore
   logger.debug("File tree selection changed:", event.detail);
   
   // TODO: Handle file selection from tree
