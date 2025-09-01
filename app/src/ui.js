@@ -41,8 +41,8 @@ import './modules/panels/index.js';
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {floatingPanelPart} from './plugins/floating-panel.js'
  * @import {documentActionsPart, teiServicesPart} from './plugins/services.js'
- * @import {extractionActionsPart, extractionOptionsDialog} from './plugins/extraction.js'
- * @import {infoDialogPart} from './plugins/info.js'
+ * @import {extractionActionsPart} from './plugins/extraction.js' 
+ * @import {infoDrawerPart} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
@@ -68,8 +68,8 @@ import './modules/panels/index.js';
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
  * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
- * @property {UIPart<SlDialog, extractionOptionsDialog>} extractionOptions - A dialog to choose extraction options
- * @property {UIPart<SlDialog, infoDialogPart>} infoDialog - A dialog to display information and help
+ * @property {UIPart<SlDialog, extractionActionsPart>} extractionOptions - A dialog to choose extraction options
+ * @property {UIPart<SlDrawer, infoDrawerPart>} infoDrawer - A drawer component to display information and help
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)

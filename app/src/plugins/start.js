@@ -18,7 +18,6 @@ import {
 import { PanelUtils } from '../modules/panels/index.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
-import { XMLEditor } from './xmleditor.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { notify } from '../modules/sl-utils.js'
 import { findCorrespondingPdf } from '../modules/file-data-utils.js'
@@ -340,16 +339,15 @@ async function onXmlChange(state) {
     logger.debug("No XML specified, skipping load");
     return;
   }
+
+  if (!state.fileData) {
+    logger.debug("File data not available - cannot load xml with id " + state.xml);
+    return
+  }
   
   try {
-    // Remove merge view if it exists
-    await services.removeMergeView(state);
-    
+
     // Find the corresponding PDF for this XML
-    if (!state.fileData) {
-      throw new Error("File data not available");
-    }
-    
     const pdfMatch = findCorrespondingPdf(state.fileData, state.xml);
     if (!pdfMatch) {
       throw new Error(`Could not find corresponding PDF for XML: ${state.xml}`);

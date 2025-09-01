@@ -3,11 +3,10 @@
  */
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState, Plugin } from '../app.js' 
  */
-
-import { logger, client, updateState, fileselection, dialog, authentication } from '../app.js'
 import ui from '../ui.js'
+import { logger, client, updateState, fileselection, dialog, authentication } from '../app.js'
 import { notify } from '../modules/sl-utils.js'
 
 /**
@@ -20,9 +19,11 @@ const api = {
 
 /**
  * Component plugin
+ * @type {Plugin}
  */
 const plugin = {
   name: "heartbeat",
+  deps: ["logger", "client", "updateState", "fileselection", "dialog", "authentication"],
   install
 }
 

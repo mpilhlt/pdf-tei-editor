@@ -1,5 +1,7 @@
-<sl-dialog name="infoDialog" label="User Manual" class="dialog-big">
-  <div name="content" class="markdown-body"></div>
+<sl-drawer name="infoDrawer" label="User Manual" style="--size: 80ch;">
+  <div name="content" class="markdown-body">
+    <!-- content will be dynamically updated-->
+  </div>
   <div slot="footer" style="display: flex; width: 100%; justify-content: space-between; align-items: center;">
     <sl-button name="editGitHubBtn" variant="default">
       <sl-icon name="github" slot="prefix"></sl-icon>Edit on GitHub</sl-button>
@@ -13,4 +15,4 @@
       <sl-button name="closeBtn" variant="primary">Close</sl-button>
     </div>
   </div>
-</sl-dialog>
+</sl-drawer>

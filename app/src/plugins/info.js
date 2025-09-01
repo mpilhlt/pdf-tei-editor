@@ -10,8 +10,8 @@
  * @import MarkdownIt from 'markdown-it'
  */
 import ui, { updateUi } from '../ui.js'
-import { SlDialog, SlButton } from '../ui.js'
-import { registerTemplate, createFromTemplate, createSingleFromTemplate, createHtmlElements } from '../modules/ui-system.js'
+import { SlButton } from '../ui.js'
+import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { dialog,logger } from '../app.js'
 import markdownit from 'markdown-it'
 
@@ -45,7 +45,7 @@ export default plugin
 
 /**
  * Help Window
- * @typedef {object} infoDialogPart
+ * @typedef {object} infoDrawerPart
  * @property {HTMLDivElement} content
  * @property {SlButton} backBtn
  * @property {SlButton} homeBtn
@@ -55,7 +55,7 @@ export default plugin
  */
 
 // Register templates
-await registerTemplate('info-dialog', 'info-dialog.html');
+await registerTemplate('info-dialog', 'info-drawer.html');
 await registerTemplate('about-button', 'about-button.html');
 await registerTemplate('info-toolbar-button', 'info-toolbar-button.html');
 
@@ -127,11 +127,11 @@ async function install(state) {
   const button = createSingleFromTemplate('info-toolbar-button');
   
   // Set up info dialog event listeners
-  ui.infoDialog.closeBtn.addEventListener('click', () => ui.infoDialog.hide());
-  ui.infoDialog.backBtn.addEventListener('click', goBack);
-  ui.infoDialog.homeBtn.addEventListener('click', goHome);
-  ui.infoDialog.forwardBtn.addEventListener('click', goForward);
-  ui.infoDialog.editGitHubBtn.addEventListener('click', () => {
+  ui.infoDrawer.closeBtn.addEventListener('click', () => ui.infoDrawer.hide());
+  ui.infoDrawer.backBtn.addEventListener('click', goBack);
+  ui.infoDrawer.homeBtn.addEventListener('click', goHome);
+  ui.infoDrawer.forwardBtn.addEventListener('click', goForward);
+  ui.infoDrawer.editGitHubBtn.addEventListener('click', () => {
     const githubUrl = `${githubEditBasePath}/${currentPage}`
     window.open(githubUrl, '_blank')
   });
@@ -167,13 +167,12 @@ async function install(state) {
  * todo this needs to always reload the data since it might have changed on the server
  */
 async function open() {
-  // Reset navigation history when opening the dialog
-  navigationHistory = []
-  forwardHistory = []
   updateNavigationButtons()
-  ui.infoDialog.show()
-  // Load the index page
-  await load('index.md')
+  ui.infoDrawer.show()
+  // Load the index page if this is the first time
+  if (navigationHistory.length === 0) {
+    await load('index.md')
+  }
 }
 
 /**
@@ -194,7 +193,7 @@ async function load(mdPath, addToHistory = true){
   currentPage = mdPath
   
   // remove existing content
-  ui.infoDialog.content.innerHTML = ""
+  ui.infoDrawer.content.innerHTML = ""
   
   // load markdown 
   let markdown
@@ -237,7 +236,7 @@ async function load(mdPath, addToHistory = true){
     .replaceAll(/<!--|-->/gs, '') 
 
 
-  await createHtmlElements(html, ui.infoDialog.content)
+  ui.infoDrawer.content.innerHTML = html
 }
 
 
@@ -248,7 +247,9 @@ function goBack() {
   if (navigationHistory.length > 1) {
     // Add current page to forward history
     const currentPage = navigationHistory.pop()
-    forwardHistory.push(currentPage)
+    if (currentPage) {
+      forwardHistory.push(currentPage)
+    }
     // Load the previous page without adding to history
     const previousPage = navigationHistory[navigationHistory.length - 1]
     load(previousPage, false)
@@ -270,9 +271,11 @@ function goForward() {
   if (forwardHistory.length > 0) {
     // Get the next page from forward history
     const nextPage = forwardHistory.pop()
-    // Load the next page and add to history
-    load(nextPage, true)
-    updateNavigationButtons()
+    if (nextPage) {
+      // Load the next page and add to history
+      load(nextPage, true)
+      updateNavigationButtons()
+    }
   }
 }
 
@@ -280,9 +283,9 @@ function goForward() {
  * Updates the navigation button states based on history
  */
 function updateNavigationButtons() {
-  if (ui.infoDialog && ui.infoDialog.backBtn && ui.infoDialog.forwardBtn) {
-    ui.infoDialog.backBtn.disabled = navigationHistory.length <= 1
-    ui.infoDialog.forwardBtn.disabled = forwardHistory.length === 0
+  if (ui.infoDrawer && ui.infoDrawer.backBtn && ui.infoDrawer.forwardBtn) {
+    ui.infoDrawer.backBtn.disabled = navigationHistory.length <= 1
+    ui.infoDrawer.forwardBtn.disabled = forwardHistory.length === 0
   }
 }
 
@@ -290,6 +293,6 @@ function updateNavigationButtons() {
  * Closes the prompt editor
  */
 function close() {
-  ui.promptEditor.hide()
+  ui.infoDrawer.hide()
 }
 

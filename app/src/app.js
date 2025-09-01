@@ -81,7 +81,6 @@ let state = {
  * @property {string} name - The name of the plugin
  * @property {string[]} [deps] - The names of the plugins this plugin depends on
  * @property {function(ApplicationState):Promise<*>} [install] - The function to install the plugin
- * @property {function(ApplicationState):Promise<*>} [update] - The function to respond to state updates
  */
 
 /** @type {Plugin[]} */
