@@ -241,6 +241,7 @@ When converting existing plugins:
 - For the moment, do not add API methods to the `@typedef` definitions used for documenting the named html elements hierarchy.
 
 ### Frontend Development
+- **Shoelace Component Registration**: When using new Shoelace components, ensure they are properly imported and exported in `app/src/ui.js`. Components not properly registered will have `visibility: hidden` due to the `:not(:defined)` CSS rule. Example: if using `sl-tree-item`, import `SlTreeItem` from `@shoelace-style/shoelace/dist/components/tree-item/tree-item.js` and add it to the export list. This is critical for proper component rendering.
 - **Shoelace Icon Resources**: When using Shoelace icons programmatically (via `icon` attribute or StatusText widget) where the literal `<sl-icon name="icon-name"></sl-icon>` is not present in the codebase, add a comment with the HTML literal to ensure the build system includes the icon resource: `// <sl-icon name="icon-name"></sl-icon>`. This is not needed when the icon tag already exists verbatim in templates or HTML.
 - **Debug Logging**: When adding temporary debug statements, use `console.log("DEBUG ...")` instead of `logger.debug()`. Always prefix the message with "DEBUG" to make them easily searchable and removable. Example: `console.log("DEBUG Collection in options:", options.collection);`. This allows easy filtering with browser dev tools and quick cleanup using search/replace.
 

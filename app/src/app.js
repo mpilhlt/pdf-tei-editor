@@ -38,6 +38,7 @@ import { plugin as authenticationPlugin, api as authentication } from './plugins
 import { plugin as toolbarPlugin } from './plugins/toolbar.js'
 import { plugin as syncPlugin, api as sync } from './plugins/sync.js'
 import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
+import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
 //import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
 
 /**
@@ -88,7 +89,7 @@ const plugins = [loggerPlugin, urlHashStatePlugin, clientPlugin, configPlugin,
   dialogPlugin, toolbarPlugin, pdfViewerPlugin, xmlEditorPlugin, fileselectionPlugin,
   fileSelectionDrawerPlugin, servicesPlugin, syncPlugin, extractionPlugin, floatingPanelPlugin, promptEditorPlugin,
   teiWizardPlugin, validationPlugin, infoPlugin, moveFilesPlugin, ssePlugin,
-  authenticationPlugin, accessControlPlugin,
+  authenticationPlugin, accessControlPlugin, heartbeatPlugin,
   /* must be the last plugin */ startPlugin]
 
 // add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
@@ -169,4 +170,4 @@ async function reloadFileData(state, options = {}) {
 // 
 export { state, ep as endpoints, invoke, updateState, pluginManager, plugins, reloadFileData }
 export { logger, dialog, pdfViewer, xmlEditor, client, config, validation, fileselection, fileSelectionDrawer, extraction,
-  services, sync, floatingPanel, promptEditor, urlHash, appInfo, sse, authentication, accessControl }
+  services, sync, floatingPanel, promptEditor, urlHash, appInfo, sse, authentication, accessControl, heartbeat }

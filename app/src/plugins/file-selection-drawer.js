@@ -5,7 +5,7 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlSelect, SlTree, SlButton } from '../ui.js'
+ * @import { SlSelect, SlTree, SlButton, SlInput } from '../ui.js'
  */
 
 /**
@@ -14,14 +14,23 @@
 
 /**
  * @typedef {object} fileDrawerPart  
- * @property {HTMLDivElement} drawerContent
  * @property {SlSelect} variantSelect
+ * @property {SlInput} labelFilter
  * @property {SlTree} fileTree
  * @property {SlButton} closeDrawer
  */
-import ui, { updateUi } from '../ui.js'
+import ui, { updateUi, SlOption } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import { logger } from '../app.js'
+import { logger, updateState } from '../app.js'
+import {
+  extractVariants,
+  filterFileDataByVariant,
+  filterFileDataByLabel,
+  groupFilesByCollection,
+  filterFileContentByVariant,
+  findMatchingGold,
+  findFileByPdfHash
+} from '../modules/file-data-utils.js'
 
 /**
  * plugin API
@@ -48,6 +57,17 @@ export default plugin
 // Register templates
 await registerTemplate('file-selection-drawer', 'file-selection-drawer.html');
 await registerTemplate('file-drawer-button', 'file-drawer-button.html');
+
+// Icon resource requirements
+// <sl-icon name="list"></sl-icon>
+// <sl-icon name="search"></sl-icon>
+// <sl-icon name="folder"></sl-icon>
+// <sl-icon name="award"></sl-icon>
+// <sl-icon name="file-earmark-diff"></sl-icon>
+
+// Internal state
+let currentLabelFilter = '';
+let stateCache = null;
 
 //
 // Implementation
@@ -90,6 +110,11 @@ async function install(state) {
     onVariantChange(state);
   });
   
+  // Handle label filter changes
+  ui.fileDrawer.labelFilter.addEventListener('sl-input', () => {
+    onLabelFilterChange(state);
+  });
+  
   // Handle tree selection changes
   drawer.addEventListener('sl-selection-change', (event) => {
     onFileTreeSelection(event, state);
@@ -117,40 +142,267 @@ function close() {
  * @param {ApplicationState} state
  */
 async function update(state) {
-  // Update variant selection and file tree based on state
+  // Check if state has changed
+  const { xml, pdf, variant } = state;
+  const jsonState = JSON.stringify({ xml, pdf, variant, fileData: !!state.fileData });
+  const stateChanged = jsonState !== stateCache;
+  
+  if (stateChanged && state.fileData) {
+    stateCache = jsonState;
+    await populateVariantSelect(state);
+    await populateFileTree(state);
+  }
+  
+  // Always update selected values
   if (ui.fileDrawer?.variantSelect) {
     ui.fileDrawer.variantSelect.value = state.variant || "";
   }
-  
-  // TODO: Update file tree based on selected files in state
-  console.log("File selection drawer state updated", {
-    pdf: state.pdf,
-    xml: state.xml,
-    variant: state.variant
-  });
 }
+
+/**
+ * Populates the variant selectbox with unique variants from fileData
+ * @param {ApplicationState} state
+ */
+async function populateVariantSelect(state) {
+  if (!state.fileData) return;
+  
+  const variantSelect = ui.fileDrawer?.variantSelect;
+  if (!variantSelect) return;
+  
+  // Clear existing options
+  variantSelect.innerHTML = "";
+  
+  // Get unique variants
+  const variants = extractVariants(state.fileData);
+  
+  // Add "All" option
+  const allOption = new SlOption();
+  allOption.value = "";
+  allOption.textContent = "All";
+  // @ts-ignore - size property not in SlOption type definition
+  allOption.size = "small";
+  variantSelect.appendChild(allOption);
+  
+  // Add "None" option for files without variants
+  const noneOption = new SlOption();
+  noneOption.value = "none";
+  noneOption.textContent = "None";
+  // @ts-ignore - size property not in SlOption type definition
+  noneOption.size = "small";
+  variantSelect.appendChild(noneOption);
+  
+  // Add variant options
+  [...variants].sort().forEach(variant => {
+    const option = new SlOption();
+    option.value = variant;
+    option.textContent = variant;
+    // @ts-ignore - size property not in SlOption type definition
+    option.size = "small";
+    variantSelect.appendChild(option);
+  });
+  
+  // Set current selection
+  variantSelect.value = state.variant || "";
+}
+
+/**
+ * Populates the file tree with hierarchical structure
+ * @param {ApplicationState} state
+ */
+async function populateFileTree(state) {
+  if (!state.fileData) return;
+  
+  const fileTree = ui.fileDrawer?.fileTree;
+  if (!fileTree) return;
+  
+  // Apply filters
+  let filteredData = filterFileDataByVariant(state.fileData, state.variant);
+  filteredData = filterFileDataByLabel(filteredData, currentLabelFilter);
+  
+  // Group by collection
+  const groupedFiles = groupFilesByCollection(filteredData);
+  const collections = Object.keys(groupedFiles).sort();
+  
+  // Clear existing tree
+  fileTree.innerHTML = '';
+  
+  // Build tree structure programmatically
+  for (const collectionName of collections) {
+    const collectionDisplayName = collectionName.replaceAll("_", " ").trim();
+    
+    // Create collection item
+    const collectionItem = document.createElement('sl-tree-item');
+    collectionItem.expanded = true;
+    collectionItem.className = 'collection-item';
+    collectionItem.textContent = collectionDisplayName;
+    
+    // Add folder icon
+    const folderIcon = document.createElement('sl-icon');
+    folderIcon.name = 'folder';
+    folderIcon.slot = 'prefix';
+    collectionItem.appendChild(folderIcon);
+    
+    const files = groupedFiles[collectionName]
+      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0);
+    
+    for (const file of files) {
+      // Get filtered content for this file
+      const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
+      
+      // Create PDF document item
+      const pdfItem = document.createElement('sl-tree-item');
+      pdfItem.expanded = true;
+      pdfItem.className = 'pdf-item';
+      pdfItem.dataset.type = 'pdf';
+      pdfItem.dataset.hash = file.pdf.hash;
+      pdfItem.dataset.collection = file.collection;
+      pdfItem.textContent = file.label;
+      
+      // Add Gold section if there are gold entries
+      if (goldToShow.length > 0) {
+        const goldSection = document.createElement('sl-tree-item');
+        goldSection.expanded = true;
+        goldSection.className = 'gold-section';
+        goldSection.dataset.type = 'section';
+        goldSection.textContent = 'Gold';
+        
+        // Add award icon
+        const awardIcon = document.createElement('sl-icon');
+        awardIcon.name = 'award';
+        awardIcon.slot = 'prefix';
+        goldSection.appendChild(awardIcon);
+        
+        goldToShow.forEach(gold => {
+          const goldItem = document.createElement('sl-tree-item');
+          goldItem.className = 'gold-item';
+          goldItem.dataset.type = 'gold';
+          goldItem.dataset.hash = gold.hash;
+          goldItem.dataset.pdfHash = file.pdf.hash;
+          goldItem.dataset.collection = file.collection;
+          goldItem.textContent = gold.label;
+          goldSection.appendChild(goldItem);
+        });
+        pdfItem.appendChild(goldSection);
+      }
+      
+      // Add Versions section if there are versions
+      if (versionsToShow.length > 0) {
+        const versionsSection = document.createElement('sl-tree-item');
+        versionsSection.expanded = true;
+        versionsSection.className = 'versions-section';
+        versionsSection.dataset.type = 'section';
+        versionsSection.textContent = 'Versions';
+        
+        // Add file-earmark-diff icon
+        const diffIcon = document.createElement('sl-icon');
+        diffIcon.name = 'file-earmark-diff';
+        diffIcon.slot = 'prefix';
+        versionsSection.appendChild(diffIcon);
+        
+        versionsToShow.forEach(version => {
+          const versionItem = document.createElement('sl-tree-item');
+          versionItem.className = 'version-item';
+          versionItem.dataset.type = 'version';
+          versionItem.dataset.hash = version.hash;
+          versionItem.dataset.pdfHash = file.pdf.hash;
+          versionItem.dataset.collection = file.collection;
+          if (version.is_locked) {
+            versionItem.disabled = true;
+            versionItem.textContent = `🔒 ${version.label}`;
+          } else {
+            versionItem.textContent = version.label;
+          }
+          versionsSection.appendChild(versionItem);
+        });
+        pdfItem.appendChild(versionsSection);
+      }
+      
+      collectionItem.appendChild(pdfItem);
+    }
+    
+    fileTree.appendChild(collectionItem);
+  }
+}
+
+//
+// Event Handlers
+//
 
 /**
  * Handles variant selection changes
  * @param {ApplicationState} state
  */
-function onVariantChange(state) {
+async function onVariantChange(state) {
   const variant = ui.fileDrawer?.variantSelect?.value;
-  console.log("Variant selection changed:", variant);
   
-  // TODO: Update file tree based on variant selection
-  // TODO: Update application state with new variant
+  // Update application state with new variant - clear XML to force reload
+  await updateState(state, { variant, xml: null });
 }
 
 /**
- * Handles file tree selection changes
+ * Handles label filter input changes
+ * @param {ApplicationState} state
+ */
+async function onLabelFilterChange(state) {
+  currentLabelFilter = ui.fileDrawer?.labelFilter?.value || '';
+  
+  // Repopulate tree with new filter
+  await populateFileTree(state);
+}
+
+/**
+ * Handles file tree selection changes - only updates state
  * @param {Event} event
  * @param {ApplicationState} state
  */
-function onFileTreeSelection(event, state) {
-  // @ts-ignore
-  logger.debug("File tree selection changed:", event.detail);
+async function onFileTreeSelection(event, state) {
+  // @ts-ignore - detail property exists on custom events
+  const selectedItems = event.detail.selection;
+  if (selectedItems.length === 0) return;
   
-  // TODO: Handle file selection from tree
-  // TODO: Load selected PDF/XML files
+  const selectedItem = selectedItems[0];
+  const type = selectedItem.dataset.type;
+  const hash = selectedItem.dataset.hash;
+  const pdfHash = selectedItem.dataset.pdfHash;
+  const collection = selectedItem.dataset.collection;
+  
+  // Don't handle section clicks
+  if (type === 'section') return;
+  
+  // Prepare state updates
+  const stateUpdates = {};
+  
+  if (type === 'pdf') {
+    // User selected a PDF document
+    stateUpdates.pdf = hash;
+    stateUpdates.collection = collection;
+    
+    // Find matching gold file for this PDF and variant
+    if (state.fileData) {
+      const selectedFile = findFileByPdfHash(state.fileData, hash);
+      if (selectedFile) {
+        const matchingGold = findMatchingGold(selectedFile, state.variant);
+        if (matchingGold) {
+          stateUpdates.xml = matchingGold.hash;
+        } else {
+          stateUpdates.xml = null;
+        }
+      }
+    }
+  } else if (type === 'gold' || type === 'version') {
+    // User selected an XML file (gold or version)
+    stateUpdates.xml = hash;
+    stateUpdates.collection = collection;
+    
+    // Ensure the corresponding PDF is loaded
+    if (pdfHash && pdfHash !== state.pdf) {
+      stateUpdates.pdf = pdfHash;
+    }
+  }
+  
+  // Update state - let other plugins handle the loading
+  await updateState(state, stateUpdates);
+  
+  // Close drawer after selection
+  close();
 }

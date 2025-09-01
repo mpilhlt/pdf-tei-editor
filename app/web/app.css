@@ -202,3 +202,58 @@ sl-icon.rotating {
     transform: rotate(360deg);
   }
 }
+
+/* File Selection Drawer Tree Styling */
+
+/* Collection items - bold with light blue background */
+sl-tree-item.collection-item {
+  font-weight: bold;
+}
+sl-tree-item.collection-item::part(item) {
+  background-color: var(--sl-color-blue-50);
+  border-radius: var(--sl-border-radius-small);
+  margin-bottom: 2px;
+}
+
+/* Gold section - light yellow/gold background */
+sl-tree-item.gold-section {
+  font-weight: 600;
+}
+sl-tree-item.gold-section::part(item) {
+  background-color: var(--sl-color-amber-50);
+  border-radius: var(--sl-border-radius-small);
+  margin-bottom: 1px;
+}
+
+/* Versions section - light gray background */
+sl-tree-item.versions-section {
+  font-weight: 600;
+}
+sl-tree-item.versions-section::part(item) {
+  background-color: var(--sl-color-neutral-100);
+  border-radius: var(--sl-border-radius-small);
+  margin-bottom: 1px;
+}
+
+/* PDF items - subtle green background */
+sl-tree-item.pdf-item::part(item) {
+  background-color: var(--sl-color-green-50);
+  border-radius: var(--sl-border-radius-small);
+  margin-bottom: 1px;
+}
+
+/* Gold and version items - normal styling with hover */
+sl-tree-item.gold-item::part(item):hover,
+sl-tree-item.version-item::part(item):hover {
+  background-color: var(--sl-color-neutral-200);
+}
+
+/* Spacing between tree items */
+sl-tree-item {
+  margin-bottom: 2px;
+}
+
+/* Icon spacing */
+sl-tree-item sl-icon[slot="prefix"] {
+  margin-right: 0.5rem;
+}
