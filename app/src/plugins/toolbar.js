@@ -12,6 +12,7 @@
  * @import { documentActionsPart, teiServicesPart } from './services.js'
  * @import { extractionActionsPart } from './extraction.js'
  * @import { syncActionsPart } from './sync.js'
+ * @import { fileDrawerTriggerPart } from './file-selection-drawer.js'
  */
 
 import { logger } from '../app.js'
@@ -33,6 +34,7 @@ import { logger } from '../app.js'
  * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
  * @property {UIPart<SlButtonGroup, syncActionsPart>} syncActions - Sync action buttons (added by sync plugin)
  * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
+ * @property {UIPart<SlButton, fileDrawerTriggerPart>} fileDrawerTrigger - File drawer trigger button (added by file-selection-drawer plugin)
  */
 
 /**

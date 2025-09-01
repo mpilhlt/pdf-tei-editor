@@ -38,7 +38,19 @@ const endpoints = {
      * This endpoint allows all plugins to react to application state changes
      * Function signature: (state: ApplicationState) => ApplicationState
      */
-    update: "state.update"
+    update: "state.update",
+    
+    /**
+     * This endpoint is triggered when the PDF in the application state changes
+     * Function signature: (state: ApplicationState) => Promise<void>
+     */
+    changePdf: "state.changePdf",
+    
+    /**
+     * This endpoint is triggered when the XML in the application state changes  
+     * Function signature: (state: ApplicationState) => Promise<void>
+     */
+    changeXml: "state.changeXml"
   },
   validation: {
     /**

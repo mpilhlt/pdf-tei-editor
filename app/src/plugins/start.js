@@ -12,7 +12,7 @@
 import ui from '../ui.js'
 import {
   updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
-  config, authentication, state,
+  config, authentication, state, heartbeat,
   sync
 } from '../app.js'
 import { PanelUtils } from '../modules/panels/index.js'
@@ -21,6 +21,7 @@ import { UrlHash } from '../modules/browser-utils.js'
 import { XMLEditor } from './xmleditor.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { notify } from '../modules/sl-utils.js'
+import { findCorrespondingPdf } from '../modules/file-data-utils.js'
 
 
 /**
@@ -30,7 +31,11 @@ import { notify } from '../modules/sl-utils.js'
 const plugin = {
   name: "start",
   install,
-  start
+  start,
+  state: {
+    changePdf: onPdfChange,
+    changeXml: onXmlChange
+  }
 }
 
 export { plugin }
@@ -98,8 +103,6 @@ async function start(state) {
     if (pdf !== null) {
       // lod the documents
       await services.load(state, { pdf, xml, diff })
-    } else {
-      dialog.info("Load a PDF from the dropdown on the top left or extract from a new PDF.")
     }
     
     // two alternative initial states:
@@ -148,7 +151,7 @@ async function start(state) {
     configureXmlEditor()
 
     // Heartbeat mechanism for file locking and offline detection
-    configureHeartbeat(state, await config.get('heartbeat.interval', 10));
+    heartbeat.start(state, await config.get('heartbeat.interval', 10));
 
     // finish initialization
     ui.spinner.hide()
@@ -163,49 +166,10 @@ async function start(state) {
   }
 }
 
-
 /**
- * Save the current XML file if the editor is "dirty"
+ * Configure the xmleditor's behavior by responding to 
+ * events
  */
-async function saveIfDirty() {
-  const filePath = String(ui.toolbar.xml.value)
-  const hasXmlTree = !!xmlEditor.getXmlTree()
-  const isDirty = xmlEditor.isDirty()
-  
-  if (!filePath || filePath === "undefined") {
-    return
-  }
-  
-  if (!hasXmlTree) {
-    return
-  }
-  
-  if (!isDirty) {
-    return
-  }
-
-  try {
-    const result = await services.saveXml(filePath)
-    if (result.status == "unchanged") {
-      logger.debug(`File has not changed`)
-    } else if (result.status == "saved_with_migration") {
-      logger.debug(`Saved file ${result.hash} with migration of old version files`)
-      // Migration occurred, reload file data to show updated version structure
-      await fileselection.reload(state)
-      // Update state to use new hash
-      state.xml = result.hash
-      await updateState(state)
-    } else {
-      logger.debug(`Saved file ${result.hash}`)
-      // Update state to use new hash
-      state.xml = result.hash
-      await updateState(state)
-    }
-  } catch (error) {
-    logger.warn(`Save failed: ${error.message}`)
-  }
-}
-
 function configureXmlEditor() {
   // Find the currently selected node's contents in the PDF
   xmlEditor.on("selectionChanged", searchNodeContents)
@@ -273,117 +237,44 @@ function configureXmlEditor() {
 }
 
 /**
- * Configures the heartbeat mechanism for file locking and offline detection.
- * @param {ApplicationState} state 
- * @param {number} [lockTimeoutSeconds=60]
+ * Save the current XML file if the editor is "dirty"
  */
-function configureHeartbeat(state, lockTimeoutSeconds = 60) {
-  if (!Number.isInteger(lockTimeoutSeconds)) {
-    throw new Error(`Invalid timeout value: ${lockTimeoutSeconds}`)
+async function saveIfDirty() {
+  const filePath = String(ui.toolbar.xml.value)
+  const hasXmlTree = !!xmlEditor.getXmlTree()
+  const isDirty = xmlEditor.isDirty()
+  
+  if (!filePath || filePath === "undefined" || !hasXmlTree || !isDirty) {
+    return
   }
-  logger.debug(`Configuring a heartbeat of ${lockTimeoutSeconds} seconds`)
-  let heartbeatInterval = null;
-  const heartbeatFrequency = lockTimeoutSeconds * 1000;
 
-  /**
-   * stops the heartbeat mechanism 
-   */
-  const stopHeartbeat = () => {
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-      logger.debug("Heartbeat stopped.");
+  try {
+    const result = await services.saveXml(filePath)
+    if (result.status == "unchanged") {
+      logger.debug(`File has not changed`)
+    } else if (result.status == "saved_with_migration") {
+      logger.debug(`Saved file ${result.hash} with migration of old version files`)
+      // Migration occurred, reload file data to show updated version structure
+      await fileselection.reload(state)
+      // Update state to use new hash
+      state.xml = result.hash
+      await updateState(state)
+    } else {
+      logger.debug(`Saved file ${result.hash}`)
+      // Update state to use new hash
+      state.xml = result.hash
+      await updateState(state)
     }
-    const filePath = ui.toolbar.xml.value;
-    if (filePath) {
-      client.releaseLock(filePath);
-    }
+  } catch (error) {
+    logger.warn(`Save failed: ${error.message}`)
   }
-  window.addEventListener('beforeunload', stopHeartbeat);
-
-  /**
-   * starts the heartbeat mechanism
-   */
-  const startHeartbeat = async () => {
-
-    let editorReadOnlyState;
-
-    heartbeatInterval = setInterval(async () => {
-      const filePath = String(ui.toolbar.xml.value);
-      const reasonsToSkip = {
-        "No user is logged in": state.user === null,
-        "No file path specified": !filePath
-      };
-
-      for (const reason in reasonsToSkip) {
-        if (reasonsToSkip[reason]) {
-          logger.debug(`Skipping heartbeat: ${reason}.`);
-          return;
-        }
-      }
-
-      try {
-
-        let heartbeatResponse = null;
-        if (!state.editorReadOnly) {
-          logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-          heartbeatResponse = await client.sendHeartbeat(filePath);
-        }
-
-        // Check if file data cache is dirty and only reload if necessary
-        // For read-only editors, check cache status separately since no heartbeat was sent
-        const cacheStatus = heartbeatResponse?.cache_status || await client.getCacheStatus();
-        if (cacheStatus.dirty) {
-          logger.debug("File data cache is dirty, reloading file list");
-          await fileselection.reload(state, { refresh: true });
-        }
-
-        // If we are here, the request was successful. Check if we were offline before.
-        if (state.offline) {
-          logger.info("Connection restored.");
-          notify("Connection restored.");
-          await updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
-        }
-      } catch (error) {
-        console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
-        // Handle different types of errors
-        if (error instanceof TypeError) {
-          // This is likely a network error (client is offline)
-          if (state.offline) {
-            // we are still offline
-            const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`
-            logger.warn(message)
-            notify(message)
-            return
-          }
-          logger.warn("Connection lost.");
-          notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
-          editorReadOnlyState = state.editorReadOnly
-          await updateState(state, { offline: true, editorReadOnly: true });
-        } else if (error.statusCode === 409 || error.statusCode === 423) {
-          // Lock was lost or taken by another user
-          logger.critical("Lock lost for file: " + filePath);
-          dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-          await updateState(state, { editorReadOnly: true });
-        } else if (error.statusCode === 504) {
-          logger.warn("Temporary connection failure, will try again...")
-        } else if (error.statusCode === 403) {
-          notify("You have been logged out") 
-          authentication.logout()
-        } else {
-          // Another server-side error occurred
-          if (state.webdavEnabled) {
-            logger.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
-            dialog.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
-            await updateState(state, { webdavEnabled: false });
-          }
-        }
-      }
-    }, heartbeatFrequency);
-  };
-  startHeartbeat().then(() => logger.info("Heartbeat started."));
 }
 
+/**
+ * Called when the selection changes in the xmleditor
+ * so that the content of the selected node is searched
+ * in the PDF viewer
+ */
 let lastNode = null;
 async function searchNodeContents() {
   // workaround for the node selection not being updated immediately
@@ -395,5 +286,99 @@ async function searchNodeContents() {
   if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
     await services.searchNodeContentsInPdf(node)
     lastNode = node
+  }
+}
+
+//
+// State Change Handlers
+//
+
+/**
+ * Handles PDF state changes by loading the new PDF document
+ * @param {ApplicationState} state
+ */
+async function onPdfChange(state) {
+  logger.debug("PDF state changed, loading new PDF:"+ state.pdf);
+  
+  if (!state.pdf) {
+    logger.debug("No PDF specified, skipping load");
+    return;
+  }
+  
+  try {
+    // Remove merge view if it exists
+    await services.removeMergeView(state);
+    
+    // Load the PDF (and XML if specified)
+    const filesToLoad = { pdf: state.pdf };
+    if (state.xml) {
+      filesToLoad.xml = state.xml;
+    }
+    
+    await services.load(state, filesToLoad);
+    logger.debug("PDF loaded successfully");
+    
+  } catch (error) {
+    logger.warn("Error loading PDF:"+ error.message);
+    // Reset PDF state on error
+    state.pdf = null;
+    state.collection = null;
+    await updateState(state);
+    throw error;
+  }
+}
+
+/**
+ * Handles XML state changes by loading the new XML document
+ * Ensures the corresponding PDF is also loaded
+ * @param {ApplicationState} state
+ */
+async function onXmlChange(state) {
+  logger.debug("XML state changed, loading new XML:" + state.xml);
+  
+  if (!state.xml) {
+    logger.debug("No XML specified, skipping load");
+    return;
+  }
+  
+  try {
+    // Remove merge view if it exists
+    await services.removeMergeView(state);
+    
+    // Find the corresponding PDF for this XML
+    if (!state.fileData) {
+      throw new Error("File data not available");
+    }
+    
+    const pdfMatch = findCorrespondingPdf(state.fileData, state.xml);
+    if (!pdfMatch) {
+      throw new Error(`Could not find corresponding PDF for XML: ${state.xml}`);
+    }
+    
+    // Always load both PDF and XML together
+    const filesToLoad = { 
+      pdf: pdfMatch.pdfHash,
+      xml: state.xml 
+    };
+    
+    // Update state with the correct PDF and collection if they changed
+    if (state.pdf !== pdfMatch.pdfHash) {
+      state.pdf = pdfMatch.pdfHash;
+      logger.debug(`Loading corresponding PDF ${pdfMatch.pdfHash} for XML ${state.xml}`);
+    }
+    
+    if (state.collection !== pdfMatch.collection) {
+      state.collection = pdfMatch.collection;
+    }
+    
+    await services.load(state, filesToLoad);
+    logger.debug("XML and corresponding PDF loaded successfully");
+    
+  } catch (error) {
+    logger.warn("Error loading XML:" + error.message);
+    // Reset XML state on error
+    state.xml = null;
+    await updateState(state);
+    throw error;
   }
 }

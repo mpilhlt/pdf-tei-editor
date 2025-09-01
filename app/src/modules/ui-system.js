@@ -33,7 +33,7 @@ export async function registerTemplate(id, pathOrHtml) {
     id,
     pathOrHtml,
     cached: false,
-    html: null
+    html: ''
   };
   
   // Pre-load the HTML content
@@ -183,7 +183,7 @@ export function createFromTemplate(id, parentNode = null, params = {}) {
  * @param {string} id - Template identifier
  * @param {Element|Document|null} [parentNode] - If given, appends generated element as child
  * @param {Object} [params] - Parameters for template substitution (e.g., {name: 'icon-name'})
- * @returns {ChildNode} The first created element
+ * @returns {HTMLElement} The first created element
  * @throws {Error} If template produces no elements
  */
 export function createSingleFromTemplate(id, parentNode = null, params = {}) {
@@ -192,8 +192,12 @@ export function createSingleFromTemplate(id, parentNode = null, params = {}) {
   if (nodes.length === 0) {
     throw new Error(`Template '${id}' produced no elements.`);
   }
-  
-  return nodes[0];
+ 
+  let element = Array.from(nodes).find(elem => elem instanceof HTMLElement);
+  if (element) {
+    return element
+  }
+  throw new Error(`Could not find an html element in the template with id ${id}.`)
 }
 
 /**

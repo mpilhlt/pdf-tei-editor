@@ -1,0 +1,41 @@
+<!-- File selection drawer -->
+<sl-drawer name="fileDrawer" label="Select Document" placement="start" style="--size: 400px;">
+  <div style="display: flex; flex-direction: column; height: 100%;">
+    
+    <!-- Filter area at top -->
+    <div style="padding: 1rem; border-bottom: 1px solid var(--sl-color-neutral-200); flex-shrink: 0;">
+      
+      <!-- Variant selection -->
+      <div style="margin-bottom: 1rem;">
+        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Variant:</label>
+        <sl-select name="variantSelect" placeholder="Select variant..." size="small" hoist>
+          <!-- Will be populated dynamically -->
+        </sl-select>
+      </div>
+      
+      <!-- Label filter input -->
+      <div>
+        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Filter by label:</label>
+        <sl-input name="labelFilter" placeholder="Search documents..." size="small" clearable>
+          <sl-icon name="search" slot="prefix"></sl-icon>
+        </sl-input>
+      </div>
+      
+    </div>
+    
+    <!-- Tree area - fills remaining space -->
+    <div style="flex: 1; padding: 1rem; overflow-y: auto; min-height: 0; display: block; width: 100%;">
+      <sl-tree name="fileTree" selection="leaf" style="width: 100%; min-height: 200px; display: block;">
+        <!-- Will be populated dynamically -->
+      </sl-tree>
+    </div>
+    
+  </div>
+  
+  <!-- Footer with close button -->
+  <div slot="footer" style="display: flex; justify-content: flex-end; padding: 1rem; border-top: 1px solid var(--sl-color-neutral-200);">
+    <sl-button name="closeDrawer" variant="default" size="small">
+      Close
+    </sl-button>
+  </div>
+</sl-drawer>

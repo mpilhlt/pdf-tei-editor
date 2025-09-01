@@ -38,7 +38,19 @@ const endpoints = {
      * This endpoint allows all plugins to react to application state changes
      * Function signature: (state: ApplicationState) => ApplicationState
      */
-    update: "state.update"
+    update: "state.update",
+    
+    /**
+     * This endpoint is triggered when the PDF in the application state changes
+     * Function signature: (state: ApplicationState) => Promise<void>
+     */
+    changePdf: "state.changePdf",
+    
+    /**
+     * This endpoint is triggered when the XML in the application state changes  
+     * Function signature: (state: ApplicationState) => Promise<void>
+     */
+    changeXml: "state.changeXml"
   },
   validation: {
     /**
@@ -263,7 +275,7 @@ async function invoke(endpoint, param, options = {}) {
  * Utility method which updates the state object and invokes the "state.update" endpoint to propagate the change 
  * to the other plugins. Before invoking the endpoint with the state, any key-value pair in `changes` will be 
  * applied to the state. In addition, for each key in `changes`, the endpoint "state.changeKey" is individually
- * invoked with its value. For example, the {foo:"bar"} will invoke "state.changeFoo" with "bar".
+ * invoked with the state. For example, the {foo:"bar"} will invoke "state.changeFoo" with the state var.
  * 
  * @param {Object} state The application state object
  * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
@@ -273,7 +285,7 @@ async function updateState(state, changes={}) {
   Object.entries(changes).forEach(async ([key, value]) => {
     if (state[key] !== value) {
       state[key] = value;
-      await invoke(`state.change${key[0].toUpperCase()}${key.slice(1)}`, value);  
+      await invoke(`state.change${key[0].toUpperCase()}${key.slice(1)}`, state);  
     }
   });
   return await invoke(endpoints.state.update, state)
@@ -307,7 +319,7 @@ let currentLogLevel = logLevel.INFO;
 /**
  * Easy to use logging API which will  send log events to all registered log plugins 
  */
-const api$f = {
+const api$h = {
   /**
    * Sets the log level {@see logLevel}
    * @param {Number} level The log level
@@ -345,14 +357,14 @@ const api$f = {
   critical: message => pluginManager.invoke(endpoints.log.critical, {message})
 };
 
-api$f.error = api$f.critical; // alias for critical
+api$h.error = api$h.critical; // alias for critical
 
 /**
  * component plugin
  */
-const plugin$l = {
+const plugin$n = {
   name: name$1,
-  install: install$j,
+  install: install$l,
   log: {
     setLogLevel,
     debug,
@@ -366,8 +378,8 @@ const plugin$l = {
 // implementation
 //
 
-async function install$j(state) {
-  console.log(`Installing plugin "${plugin$l.name}"`);
+async function install$l(state) {
+  console.log(`Installing plugin "${plugin$n.name}"`);
 }
 
 
@@ -447,7 +459,7 @@ function critical({message}) {
  * The public API of the config plugin.
  * @namespace
  */
-const api$e = {
+const api$g = {
   get,
   set,
   load: updateConfigData
@@ -457,7 +469,7 @@ const api$e = {
  * The configuration plugin definition.
  * @type {Plugin}
  */
-const plugin$k = {
+const plugin$m = {
   name: "config",
   deps: ['client']
 };
@@ -474,8 +486,8 @@ let configMap;
  * @returns {Promise<void>} A promise that resolves when the configuration is updated.
  */
 async function updateConfigData () {
-  api$f.debug('Updating configuration data.');
-  configMap = await api$9.getConfigData();
+  api$h.debug('Updating configuration data.');
+  configMap = await api$b.getConfigData();
 }
 
 /**
@@ -524,7 +536,7 @@ async function get(key, defaultValue, updateFirst=false) {
  */
 async function set(key, value) {
   await _get(key); // this checks the key 
-  await api$9.setConfigValue(key, value);
+  await api$b.setConfigValue(key, value);
 }
 
 /**
@@ -627,7 +639,7 @@ function escapeHtml$1(text) {
 let showInUrl;
 let allowSetFromUrl;
 
-const api$d = {
+const api$f = {
   updateUrlHashfromState,
   updateStateFromUrlHash
 };
@@ -635,12 +647,12 @@ const api$d = {
 /**
  * component plugin
  */
-const plugin$j = {
+const plugin$l = {
   name: "url-hash-state",
   deps: ['config'],
-  install: install$i,
+  install: install$k,
   state: {
-    update: update$e
+    update: update$f
   }
 };
 
@@ -651,16 +663,16 @@ const plugin$j = {
 /** 
  * @param {ApplicationState} state 
  */
-async function install$i(state) {
-  api$f.debug(`Installing plugin "${plugin$j.name}"`);
-  showInUrl = await api$e.get("state.showInUrl") || [];
-  allowSetFromUrl = await api$e.get("state.allowSetFromUrl") || [];
+async function install$k(state) {
+  api$h.debug(`Installing plugin "${plugin$l.name}"`);
+  showInUrl = await api$g.get("state.showInUrl") || [];
+  allowSetFromUrl = await api$g.get("state.allowSetFromUrl") || [];
 }
 
 /** 
  * @param {ApplicationState} state 
  */
-async function update$e(state) {
+async function update$f(state) {
   updateUrlHashfromState(state);
 }
 
@@ -702,7 +714,7 @@ async function updateStateFromUrlHash(state) {
       UrlHash.remove(key, false);
     }
   }
-  api$f.info("Setting state properties from URL hash:" + Object.keys(tmpState).join(", "));
+  api$h.info("Setting state properties from URL hash:" + Object.keys(tmpState).join(", "));
   return await updateState(state, tmpState)
 }
 
@@ -714,7 +726,7 @@ async function updateStateFromUrlHash(state) {
 /**
  * plugin API
  */
-const api$c = {
+const api$e = {
   /**
    * @param {string} type
    * @param {(event: MessageEvent) => void} listener
@@ -753,11 +765,11 @@ const api$c = {
    */
   reconnect() {
     if (cachedSessionId) {
-      api$f.info('Manual reconnection requested');
+      api$h.info('Manual reconnection requested');
       cleanupConnection();
       establishConnection(cachedSessionId);
     } else {
-      api$f.warn('Cannot reconnect: no cached session ID');
+      api$h.warn('Cannot reconnect: no cached session ID');
     }
   }
 };
@@ -765,11 +777,11 @@ const api$c = {
 /**
  * component plugin
  */
-const plugin$i = {
+const plugin$k = {
   name: "sse",
-  install: install$h,
+  install: install$j,
   state: {
-    update: update$d
+    update: update$e
   }
 };
 
@@ -784,19 +796,19 @@ const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
 /** 
  * @param {ApplicationState} state 
  */
-async function install$h(state){
-  api$f.debug(`Installing plugin "${plugin$i.name}"`);
+async function install$j(state){
+  api$h.debug(`Installing plugin "${plugin$k.name}"`);
 }
 
 /**
  * @param {ApplicationState} state 
  */
-async function update$d(state) {
+async function update$e(state) {
   const { user, sessionId } = state;
 
   // Close existing connection if the session ID has changed or user logged out
   if (eventSource && (sessionId !== cachedSessionId || !user)) {
-    api$f.debug('Closing SSE connection due to session change or logout.');
+    api$h.debug('Closing SSE connection due to session change or logout.');
     cleanupConnection();
   }
 
@@ -811,14 +823,14 @@ async function update$d(state) {
  * @param {string} sessionId 
  */
 function establishConnection(sessionId) {
-  api$f.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
+  api$h.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
   
   const url = `/sse/subscribe?session_id=${sessionId}`;
   eventSource = new EventSource(url);
   cachedSessionId = sessionId;
 
   eventSource.onopen = () => {
-    api$f.info('SSE connection established successfully');
+    api$h.info('SSE connection established successfully');
     reconnectAttempts = 0; // Reset reconnection attempts on successful connection
     
     // Clear any pending reconnection timeout
@@ -841,11 +853,11 @@ function establishConnection(sessionId) {
     
     // Provide more detailed error information
     if (readyState === EventSource.CONNECTING) {
-      api$f.warn(`${errorMsg} - Connection attempt failed`);
+      api$h.warn(`${errorMsg} - Connection attempt failed`);
     } else if (readyState === EventSource.CLOSED) {
-      api$f.warn(`${errorMsg} - Connection was closed`);
+      api$h.warn(`${errorMsg} - Connection was closed`);
     } else {
-      api$f.error(`${errorMsg} - Unexpected error`);
+      api$h.error(`${errorMsg} - Unexpected error`);
     }
 
     // Close the connection
@@ -859,7 +871,7 @@ function establishConnection(sessionId) {
       const delay = RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts); // Exponential backoff
       reconnectAttempts++;
       
-      api$f.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+      api$h.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
       
       reconnectTimeout = setTimeout(() => {
         if (cachedSessionId) { // Only reconnect if we still have a session
@@ -867,7 +879,7 @@ function establishConnection(sessionId) {
         }
       }, delay);
     } else {
-      api$f.error(`Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) exceeded. SSE connection abandoned.`);
+      api$h.error(`Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) exceeded. SSE connection abandoned.`);
       cachedSessionId = null;
       reconnectAttempts = 0;
     }
@@ -880,13 +892,13 @@ function establishConnection(sessionId) {
   // Re-add listeners for reconnections
   Object.keys(currentQueuedListeners).forEach(type => {
     currentQueuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
-      api$c.addEventListener(type, listener);
+      api$e.addEventListener(type, listener);
     });
   });
 
   // Standard message channels
   eventSource.addEventListener('updateStatus', /** @param {MessageEvent} evt */ evt => {
-    api$f.info('SSE Status Update:' + evt.data);
+    api$h.info('SSE Status Update:' + evt.data);
   });
 }
 
@@ -910,7 +922,7 @@ function cleanupConnection() {
   cachedSessionId = null;
   reconnectAttempts = 0;
   
-  api$f.debug('SSE connection cleaned up');
+  api$h.debug('SSE connection cleaned up');
 }
 
 /**
@@ -947,7 +959,7 @@ async function registerTemplate(id, pathOrHtml) {
     id,
     pathOrHtml,
     cached: false,
-    html: null
+    html: ''
   };
   
   // Pre-load the HTML content
@@ -1097,7 +1109,7 @@ function createFromTemplate(id, parentNode = null, params = {}) {
  * @param {string} id - Template identifier
  * @param {Element|Document|null} [parentNode] - If given, appends generated element as child
  * @param {Object} [params] - Parameters for template substitution (e.g., {name: 'icon-name'})
- * @returns {ChildNode} The first created element
+ * @returns {HTMLElement} The first created element
  * @throws {Error} If template produces no elements
  */
 function createSingleFromTemplate(id, parentNode = null, params = {}) {
@@ -1106,8 +1118,12 @@ function createSingleFromTemplate(id, parentNode = null, params = {}) {
   if (nodes.length === 0) {
     throw new Error(`Template '${id}' produced no elements.`);
   }
-  
-  return nodes[0];
+ 
+  let element = Array.from(nodes).find(elem => elem instanceof HTMLElement);
+  if (element) {
+    return element
+  }
+  throw new Error(`Could not find an html element in the template with id ${id}.`)
 }
 
 /**
@@ -1712,20 +1728,20 @@ function scrollIntoView$2(element, container, direction = "vertical", behavior =
  * Copyright 2019 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const t$3=globalThis,e$9=t$3.ShadowRoot&&(void 0===t$3.ShadyCSS||t$3.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,s$3=Symbol(),o$9=new WeakMap;let n$6 = class n{constructor(t,e,o){if(this._$cssResult$=true,o!==s$3)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=t,this.t=e;}get styleSheet(){let t=this.o;const s=this.t;if(e$9&&void 0===t){const e=void 0!==s&&1===s.length;e&&(t=o$9.get(s)),void 0===t&&((this.o=t=new CSSStyleSheet).replaceSync(this.cssText),e&&o$9.set(s,t));}return t}toString(){return this.cssText}};const r$5=t=>new n$6("string"==typeof t?t:t+"",void 0,s$3),i$6=(t,...e)=>{const o=1===t.length?t[0]:e.reduce(((e,s,o)=>e+(t=>{if(true===t._$cssResult$)return t.cssText;if("number"==typeof t)return t;throw Error("Value passed to 'css' function must be a 'css' function result: "+t+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(s)+t[o+1]),t[0]);return new n$6(o,t,s$3)},S$1=(s,o)=>{if(e$9)s.adoptedStyleSheets=o.map((t=>t instanceof CSSStyleSheet?t:t.styleSheet));else for(const e of o){const o=document.createElement("style"),n=t$3.litNonce;void 0!==n&&o.setAttribute("nonce",n),o.textContent=e.cssText,s.appendChild(o);}},c$3=e$9?t=>t:t=>t instanceof CSSStyleSheet?(t=>{let e="";for(const s of t.cssRules)e+=s.cssText;return r$5(e)})(t):t;
+const t$3=globalThis,e$9=t$3.ShadowRoot&&(void 0===t$3.ShadyCSS||t$3.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,s$3=Symbol(),o$9=new WeakMap;let n$7 = class n{constructor(t,e,o){if(this._$cssResult$=true,o!==s$3)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=t,this.t=e;}get styleSheet(){let t=this.o;const s=this.t;if(e$9&&void 0===t){const e=void 0!==s&&1===s.length;e&&(t=o$9.get(s)),void 0===t&&((this.o=t=new CSSStyleSheet).replaceSync(this.cssText),e&&o$9.set(s,t));}return t}toString(){return this.cssText}};const r$5=t=>new n$7("string"==typeof t?t:t+"",void 0,s$3),i$6=(t,...e)=>{const o=1===t.length?t[0]:e.reduce(((e,s,o)=>e+(t=>{if(true===t._$cssResult$)return t.cssText;if("number"==typeof t)return t;throw Error("Value passed to 'css' function must be a 'css' function result: "+t+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(s)+t[o+1]),t[0]);return new n$7(o,t,s$3)},S$1=(s,o)=>{if(e$9)s.adoptedStyleSheets=o.map((t=>t instanceof CSSStyleSheet?t:t.styleSheet));else for(const e of o){const o=document.createElement("style"),n=t$3.litNonce;void 0!==n&&o.setAttribute("nonce",n),o.textContent=e.cssText,s.appendChild(o);}},c$3=e$9?t=>t:t=>t instanceof CSSStyleSheet?(t=>{let e="";for(const s of t.cssRules)e+=s.cssText;return r$5(e)})(t):t;
 
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const{is:i$5,defineProperty:e$8,getOwnPropertyDescriptor:h$3,getOwnPropertyNames:r$4,getOwnPropertySymbols:o$8,getPrototypeOf:n$5}=Object,a$2=globalThis,c$2=a$2.trustedTypes,l$3=c$2?c$2.emptyScript:"",p$1=a$2.reactiveElementPolyfillSupport,d$1=(t,s)=>t,u$3={toAttribute(t,s){switch(s){case Boolean:t=t?l$3:null;break;case Object:case Array:t=null==t?t:JSON.stringify(t);}return t},fromAttribute(t,s){let i=t;switch(s){case Boolean:i=null!==t;break;case Number:i=null===t?null:Number(t);break;case Object:case Array:try{i=JSON.parse(t);}catch(t){i=null;}}return i}},f$3=(t,s)=>!i$5(t,s),b={attribute:true,type:String,converter:u$3,reflect:false,useDefault:false,hasChanged:f$3};Symbol.metadata??=Symbol("metadata"),a$2.litPropertyMetadata??=new WeakMap;let y$1 = class y extends HTMLElement{static addInitializer(t){this._$Ei(),(this.l??=[]).push(t);}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(t,s=b){if(s.state&&(s.attribute=false),this._$Ei(),this.prototype.hasOwnProperty(t)&&((s=Object.create(s)).wrapped=true),this.elementProperties.set(t,s),!s.noAccessor){const i=Symbol(),h=this.getPropertyDescriptor(t,i,s);void 0!==h&&e$8(this.prototype,t,h);}}static getPropertyDescriptor(t,s,i){const{get:e,set:r}=h$3(this.prototype,t)??{get(){return this[s]},set(t){this[s]=t;}};return {get:e,set(s){const h=e?.call(this);r?.call(this,s),this.requestUpdate(t,h,i);},configurable:true,enumerable:true}}static getPropertyOptions(t){return this.elementProperties.get(t)??b}static _$Ei(){if(this.hasOwnProperty(d$1("elementProperties")))return;const t=n$5(this);t.finalize(),void 0!==t.l&&(this.l=[...t.l]),this.elementProperties=new Map(t.elementProperties);}static finalize(){if(this.hasOwnProperty(d$1("finalized")))return;if(this.finalized=true,this._$Ei(),this.hasOwnProperty(d$1("properties"))){const t=this.properties,s=[...r$4(t),...o$8(t)];for(const i of s)this.createProperty(i,t[i]);}const t=this[Symbol.metadata];if(null!==t){const s=litPropertyMetadata.get(t);if(void 0!==s)for(const[t,i]of s)this.elementProperties.set(t,i);}this._$Eh=new Map;for(const[t,s]of this.elementProperties){const i=this._$Eu(t,s);void 0!==i&&this._$Eh.set(i,t);}this.elementStyles=this.finalizeStyles(this.styles);}static finalizeStyles(s){const i=[];if(Array.isArray(s)){const e=new Set(s.flat(1/0).reverse());for(const s of e)i.unshift(c$3(s));}else void 0!==s&&i.push(c$3(s));return i}static _$Eu(t,s){const i=s.attribute;return  false===i?void 0:"string"==typeof i?i:"string"==typeof t?t.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=false,this.hasUpdated=false,this._$Em=null,this._$Ev();}_$Ev(){this._$ES=new Promise((t=>this.enableUpdating=t)),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach((t=>t(this)));}addController(t){(this._$EO??=new Set).add(t),void 0!==this.renderRoot&&this.isConnected&&t.hostConnected?.();}removeController(t){this._$EO?.delete(t);}_$E_(){const t=new Map,s=this.constructor.elementProperties;for(const i of s.keys())this.hasOwnProperty(i)&&(t.set(i,this[i]),delete this[i]);t.size>0&&(this._$Ep=t);}createRenderRoot(){const t=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return S$1(t,this.constructor.elementStyles),t}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(true),this._$EO?.forEach((t=>t.hostConnected?.()));}enableUpdating(t){}disconnectedCallback(){this._$EO?.forEach((t=>t.hostDisconnected?.()));}attributeChangedCallback(t,s,i){this._$AK(t,i);}_$ET(t,s){const i=this.constructor.elementProperties.get(t),e=this.constructor._$Eu(t,i);if(void 0!==e&&true===i.reflect){const h=(void 0!==i.converter?.toAttribute?i.converter:u$3).toAttribute(s,i.type);this._$Em=t,null==h?this.removeAttribute(e):this.setAttribute(e,h),this._$Em=null;}}_$AK(t,s){const i=this.constructor,e=i._$Eh.get(t);if(void 0!==e&&this._$Em!==e){const t=i.getPropertyOptions(e),h="function"==typeof t.converter?{fromAttribute:t.converter}:void 0!==t.converter?.fromAttribute?t.converter:u$3;this._$Em=e,this[e]=h.fromAttribute(s,t.type)??this._$Ej?.get(e)??null,this._$Em=null;}}requestUpdate(t,s,i){if(void 0!==t){const e=this.constructor,h=this[t];if(i??=e.getPropertyOptions(t),!((i.hasChanged??f$3)(h,s)||i.useDefault&&i.reflect&&h===this._$Ej?.get(t)&&!this.hasAttribute(e._$Eu(t,i))))return;this.C(t,s,i);} false===this.isUpdatePending&&(this._$ES=this._$EP());}C(t,s,{useDefault:i,reflect:e,wrapped:h},r){i&&!(this._$Ej??=new Map).has(t)&&(this._$Ej.set(t,r??s??this[t]),true!==h||void 0!==r)||(this._$AL.has(t)||(this.hasUpdated||i||(s=void 0),this._$AL.set(t,s)),true===e&&this._$Em!==t&&(this._$Eq??=new Set).add(t));}async _$EP(){this.isUpdatePending=true;try{await this._$ES;}catch(t){Promise.reject(t);}const t=this.scheduleUpdate();return null!=t&&await t,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(const[t,s]of this._$Ep)this[t]=s;this._$Ep=void 0;}const t=this.constructor.elementProperties;if(t.size>0)for(const[s,i]of t){const{wrapped:t}=i,e=this[s];true!==t||this._$AL.has(s)||void 0===e||this.C(s,void 0,i,e);}}let t=false;const s=this._$AL;try{t=this.shouldUpdate(s),t?(this.willUpdate(s),this._$EO?.forEach((t=>t.hostUpdate?.())),this.update(s)):this._$EM();}catch(s){throw t=false,this._$EM(),s}t&&this._$AE(s);}willUpdate(t){}_$AE(t){this._$EO?.forEach((t=>t.hostUpdated?.())),this.hasUpdated||(this.hasUpdated=true,this.firstUpdated(t)),this.updated(t);}_$EM(){this._$AL=new Map,this.isUpdatePending=false;}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(t){return  true}update(t){this._$Eq&&=this._$Eq.forEach((t=>this._$ET(t,this[t]))),this._$EM();}updated(t){}firstUpdated(t){}};y$1.elementStyles=[],y$1.shadowRootOptions={mode:"open"},y$1[d$1("elementProperties")]=new Map,y$1[d$1("finalized")]=new Map,p$1?.({ReactiveElement:y$1}),(a$2.reactiveElementVersions??=[]).push("2.1.0");
+ */const{is:i$5,defineProperty:e$8,getOwnPropertyDescriptor:h$3,getOwnPropertyNames:r$4,getOwnPropertySymbols:o$8,getPrototypeOf:n$6}=Object,a$2=globalThis,c$2=a$2.trustedTypes,l$3=c$2?c$2.emptyScript:"",p$1=a$2.reactiveElementPolyfillSupport,d$1=(t,s)=>t,u$3={toAttribute(t,s){switch(s){case Boolean:t=t?l$3:null;break;case Object:case Array:t=null==t?t:JSON.stringify(t);}return t},fromAttribute(t,s){let i=t;switch(s){case Boolean:i=null!==t;break;case Number:i=null===t?null:Number(t);break;case Object:case Array:try{i=JSON.parse(t);}catch(t){i=null;}}return i}},f$3=(t,s)=>!i$5(t,s),b={attribute:true,type:String,converter:u$3,reflect:false,useDefault:false,hasChanged:f$3};Symbol.metadata??=Symbol("metadata"),a$2.litPropertyMetadata??=new WeakMap;let y$1 = class y extends HTMLElement{static addInitializer(t){this._$Ei(),(this.l??=[]).push(t);}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(t,s=b){if(s.state&&(s.attribute=false),this._$Ei(),this.prototype.hasOwnProperty(t)&&((s=Object.create(s)).wrapped=true),this.elementProperties.set(t,s),!s.noAccessor){const i=Symbol(),h=this.getPropertyDescriptor(t,i,s);void 0!==h&&e$8(this.prototype,t,h);}}static getPropertyDescriptor(t,s,i){const{get:e,set:r}=h$3(this.prototype,t)??{get(){return this[s]},set(t){this[s]=t;}};return {get:e,set(s){const h=e?.call(this);r?.call(this,s),this.requestUpdate(t,h,i);},configurable:true,enumerable:true}}static getPropertyOptions(t){return this.elementProperties.get(t)??b}static _$Ei(){if(this.hasOwnProperty(d$1("elementProperties")))return;const t=n$6(this);t.finalize(),void 0!==t.l&&(this.l=[...t.l]),this.elementProperties=new Map(t.elementProperties);}static finalize(){if(this.hasOwnProperty(d$1("finalized")))return;if(this.finalized=true,this._$Ei(),this.hasOwnProperty(d$1("properties"))){const t=this.properties,s=[...r$4(t),...o$8(t)];for(const i of s)this.createProperty(i,t[i]);}const t=this[Symbol.metadata];if(null!==t){const s=litPropertyMetadata.get(t);if(void 0!==s)for(const[t,i]of s)this.elementProperties.set(t,i);}this._$Eh=new Map;for(const[t,s]of this.elementProperties){const i=this._$Eu(t,s);void 0!==i&&this._$Eh.set(i,t);}this.elementStyles=this.finalizeStyles(this.styles);}static finalizeStyles(s){const i=[];if(Array.isArray(s)){const e=new Set(s.flat(1/0).reverse());for(const s of e)i.unshift(c$3(s));}else void 0!==s&&i.push(c$3(s));return i}static _$Eu(t,s){const i=s.attribute;return  false===i?void 0:"string"==typeof i?i:"string"==typeof t?t.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=false,this.hasUpdated=false,this._$Em=null,this._$Ev();}_$Ev(){this._$ES=new Promise((t=>this.enableUpdating=t)),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach((t=>t(this)));}addController(t){(this._$EO??=new Set).add(t),void 0!==this.renderRoot&&this.isConnected&&t.hostConnected?.();}removeController(t){this._$EO?.delete(t);}_$E_(){const t=new Map,s=this.constructor.elementProperties;for(const i of s.keys())this.hasOwnProperty(i)&&(t.set(i,this[i]),delete this[i]);t.size>0&&(this._$Ep=t);}createRenderRoot(){const t=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return S$1(t,this.constructor.elementStyles),t}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(true),this._$EO?.forEach((t=>t.hostConnected?.()));}enableUpdating(t){}disconnectedCallback(){this._$EO?.forEach((t=>t.hostDisconnected?.()));}attributeChangedCallback(t,s,i){this._$AK(t,i);}_$ET(t,s){const i=this.constructor.elementProperties.get(t),e=this.constructor._$Eu(t,i);if(void 0!==e&&true===i.reflect){const h=(void 0!==i.converter?.toAttribute?i.converter:u$3).toAttribute(s,i.type);this._$Em=t,null==h?this.removeAttribute(e):this.setAttribute(e,h),this._$Em=null;}}_$AK(t,s){const i=this.constructor,e=i._$Eh.get(t);if(void 0!==e&&this._$Em!==e){const t=i.getPropertyOptions(e),h="function"==typeof t.converter?{fromAttribute:t.converter}:void 0!==t.converter?.fromAttribute?t.converter:u$3;this._$Em=e,this[e]=h.fromAttribute(s,t.type)??this._$Ej?.get(e)??null,this._$Em=null;}}requestUpdate(t,s,i){if(void 0!==t){const e=this.constructor,h=this[t];if(i??=e.getPropertyOptions(t),!((i.hasChanged??f$3)(h,s)||i.useDefault&&i.reflect&&h===this._$Ej?.get(t)&&!this.hasAttribute(e._$Eu(t,i))))return;this.C(t,s,i);} false===this.isUpdatePending&&(this._$ES=this._$EP());}C(t,s,{useDefault:i,reflect:e,wrapped:h},r){i&&!(this._$Ej??=new Map).has(t)&&(this._$Ej.set(t,r??s??this[t]),true!==h||void 0!==r)||(this._$AL.has(t)||(this.hasUpdated||i||(s=void 0),this._$AL.set(t,s)),true===e&&this._$Em!==t&&(this._$Eq??=new Set).add(t));}async _$EP(){this.isUpdatePending=true;try{await this._$ES;}catch(t){Promise.reject(t);}const t=this.scheduleUpdate();return null!=t&&await t,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(const[t,s]of this._$Ep)this[t]=s;this._$Ep=void 0;}const t=this.constructor.elementProperties;if(t.size>0)for(const[s,i]of t){const{wrapped:t}=i,e=this[s];true!==t||this._$AL.has(s)||void 0===e||this.C(s,void 0,i,e);}}let t=false;const s=this._$AL;try{t=this.shouldUpdate(s),t?(this.willUpdate(s),this._$EO?.forEach((t=>t.hostUpdate?.())),this.update(s)):this._$EM();}catch(s){throw t=false,this._$EM(),s}t&&this._$AE(s);}willUpdate(t){}_$AE(t){this._$EO?.forEach((t=>t.hostUpdated?.())),this.hasUpdated||(this.hasUpdated=true,this.firstUpdated(t)),this.updated(t);}_$EM(){this._$AL=new Map,this.isUpdatePending=false;}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(t){return  true}update(t){this._$Eq&&=this._$Eq.forEach((t=>this._$ET(t,this[t]))),this._$EM();}updated(t){}firstUpdated(t){}};y$1.elementStyles=[],y$1.shadowRootOptions={mode:"open"},y$1[d$1("elementProperties")]=new Map,y$1[d$1("finalized")]=new Map,p$1?.({ReactiveElement:y$1}),(a$2.reactiveElementVersions??=[]).push("2.1.0");
 
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const t$2=globalThis,i$4=t$2.trustedTypes,s$2=i$4?i$4.createPolicy("lit-html",{createHTML:t=>t}):void 0,e$7="$lit$",h$2=`lit$${Math.random().toFixed(9).slice(2)}$`,o$7="?"+h$2,n$4=`<${o$7}>`,r$3=document,l$2=()=>r$3.createComment(""),c$1=t=>null===t||"object"!=typeof t&&"function"!=typeof t,a$1=Array.isArray,u$2=t=>a$1(t)||"function"==typeof t?.[Symbol.iterator],d="[ \t\n\f\r]",f$2=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,v=/-->/g,_=/>/g,m$1=RegExp(`>|${d}(?:([^\\s"'>=/]+)(${d}*=${d}*(?:[^ \t\n\f\r"'\`<>=]|("|')|))|$)`,"g"),p=/'/g,g=/"/g,$=/^(?:script|style|textarea|title)$/i,y=t=>(i,...s)=>({_$litType$:t,strings:i,values:s}),x=y(1),T=Symbol.for("lit-noChange"),E=Symbol.for("lit-nothing"),A=new WeakMap,C$1=r$3.createTreeWalker(r$3,129);function P$1(t,i){if(!a$1(t)||!t.hasOwnProperty("raw"))throw Error("invalid template strings array");return void 0!==s$2?s$2.createHTML(i):i}const V=(t,i)=>{const s=t.length-1,o=[];let r,l=2===i?"<svg>":3===i?"<math>":"",c=f$2;for(let i=0;i<s;i++){const s=t[i];let a,u,d=-1,y=0;for(;y<s.length&&(c.lastIndex=y,u=c.exec(s),null!==u);)y=c.lastIndex,c===f$2?"!--"===u[1]?c=v:void 0!==u[1]?c=_:void 0!==u[2]?($.test(u[2])&&(r=RegExp("</"+u[2],"g")),c=m$1):void 0!==u[3]&&(c=m$1):c===m$1?">"===u[0]?(c=r??f$2,d=-1):void 0===u[1]?d=-2:(d=c.lastIndex-u[2].length,a=u[1],c=void 0===u[3]?m$1:'"'===u[3]?g:p):c===g||c===p?c=m$1:c===v||c===_?c=f$2:(c=m$1,r=void 0);const x=c===m$1&&t[i+1].startsWith("/>")?" ":"";l+=c===f$2?s+n$4:d>=0?(o.push(a),s.slice(0,d)+e$7+s.slice(d)+h$2+x):s+h$2+(-2===d?i:x);}return [P$1(t,l+(t[s]||"<?>")+(2===i?"</svg>":3===i?"</math>":"")),o]};class N{constructor({strings:t,_$litType$:s},n){let r;this.parts=[];let c=0,a=0;const u=t.length-1,d=this.parts,[f,v]=V(t,s);if(this.el=N.createElement(f,n),C$1.currentNode=this.el.content,2===s||3===s){const t=this.el.content.firstChild;t.replaceWith(...t.childNodes);}for(;null!==(r=C$1.nextNode())&&d.length<u;){if(1===r.nodeType){if(r.hasAttributes())for(const t of r.getAttributeNames())if(t.endsWith(e$7)){const i=v[a++],s=r.getAttribute(t).split(h$2),e=/([.?@])?(.*)/.exec(i);d.push({type:1,index:c,name:e[2],strings:s,ctor:"."===e[1]?H:"?"===e[1]?I:"@"===e[1]?L:k}),r.removeAttribute(t);}else t.startsWith(h$2)&&(d.push({type:6,index:c}),r.removeAttribute(t));if($.test(r.tagName)){const t=r.textContent.split(h$2),s=t.length-1;if(s>0){r.textContent=i$4?i$4.emptyScript:"";for(let i=0;i<s;i++)r.append(t[i],l$2()),C$1.nextNode(),d.push({type:2,index:++c});r.append(t[s],l$2());}}}else if(8===r.nodeType)if(r.data===o$7)d.push({type:2,index:c});else {let t=-1;for(;-1!==(t=r.data.indexOf(h$2,t+1));)d.push({type:7,index:c}),t+=h$2.length-1;}c++;}}static createElement(t,i){const s=r$3.createElement("template");return s.innerHTML=t,s}}function S(t,i,s=t,e){if(i===T)return i;let h=void 0!==e?s._$Co?.[e]:s._$Cl;const o=c$1(i)?void 0:i._$litDirective$;return h?.constructor!==o&&(h?._$AO?.(false),void 0===o?h=void 0:(h=new o(t),h._$AT(t,s,e)),void 0!==e?(s._$Co??=[])[e]=h:s._$Cl=h),void 0!==h&&(i=S(t,h._$AS(t,i.values),h,e)),i}class M{constructor(t,i){this._$AV=[],this._$AN=void 0,this._$AD=t,this._$AM=i;}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(t){const{el:{content:i},parts:s}=this._$AD,e=(t?.creationScope??r$3).importNode(i,true);C$1.currentNode=e;let h=C$1.nextNode(),o=0,n=0,l=s[0];for(;void 0!==l;){if(o===l.index){let i;2===l.type?i=new R(h,h.nextSibling,this,t):1===l.type?i=new l.ctor(h,l.name,l.strings,this,t):6===l.type&&(i=new z(h,this,t)),this._$AV.push(i),l=s[++n];}o!==l?.index&&(h=C$1.nextNode(),o++);}return C$1.currentNode=r$3,e}p(t){let i=0;for(const s of this._$AV) void 0!==s&&(void 0!==s.strings?(s._$AI(t,s,i),i+=s.strings.length-2):s._$AI(t[i])),i++;}}class R{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(t,i,s,e){this.type=2,this._$AH=E,this._$AN=void 0,this._$AA=t,this._$AB=i,this._$AM=s,this.options=e,this._$Cv=e?.isConnected??true;}get parentNode(){let t=this._$AA.parentNode;const i=this._$AM;return void 0!==i&&11===t?.nodeType&&(t=i.parentNode),t}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(t,i=this){t=S(this,t,i),c$1(t)?t===E||null==t||""===t?(this._$AH!==E&&this._$AR(),this._$AH=E):t!==this._$AH&&t!==T&&this._(t):void 0!==t._$litType$?this.$(t):void 0!==t.nodeType?this.T(t):u$2(t)?this.k(t):this._(t);}O(t){return this._$AA.parentNode.insertBefore(t,this._$AB)}T(t){this._$AH!==t&&(this._$AR(),this._$AH=this.O(t));}_(t){this._$AH!==E&&c$1(this._$AH)?this._$AA.nextSibling.data=t:this.T(r$3.createTextNode(t)),this._$AH=t;}$(t){const{values:i,_$litType$:s}=t,e="number"==typeof s?this._$AC(t):(void 0===s.el&&(s.el=N.createElement(P$1(s.h,s.h[0]),this.options)),s);if(this._$AH?._$AD===e)this._$AH.p(i);else {const t=new M(e,this),s=t.u(this.options);t.p(i),this.T(s),this._$AH=t;}}_$AC(t){let i=A.get(t.strings);return void 0===i&&A.set(t.strings,i=new N(t)),i}k(t){a$1(this._$AH)||(this._$AH=[],this._$AR());const i=this._$AH;let s,e=0;for(const h of t)e===i.length?i.push(s=new R(this.O(l$2()),this.O(l$2()),this,this.options)):s=i[e],s._$AI(h),e++;e<i.length&&(this._$AR(s&&s._$AB.nextSibling,e),i.length=e);}_$AR(t=this._$AA.nextSibling,i){for(this._$AP?.(false,true,i);t&&t!==this._$AB;){const i=t.nextSibling;t.remove(),t=i;}}setConnected(t){ void 0===this._$AM&&(this._$Cv=t,this._$AP?.(t));}}class k{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(t,i,s,e,h){this.type=1,this._$AH=E,this._$AN=void 0,this.element=t,this.name=i,this._$AM=e,this.options=h,s.length>2||""!==s[0]||""!==s[1]?(this._$AH=Array(s.length-1).fill(new String),this.strings=s):this._$AH=E;}_$AI(t,i=this,s,e){const h=this.strings;let o=false;if(void 0===h)t=S(this,t,i,0),o=!c$1(t)||t!==this._$AH&&t!==T,o&&(this._$AH=t);else {const e=t;let n,r;for(t=h[0],n=0;n<h.length-1;n++)r=S(this,e[s+n],i,n),r===T&&(r=this._$AH[n]),o||=!c$1(r)||r!==this._$AH[n],r===E?t=E:t!==E&&(t+=(r??"")+h[n+1]),this._$AH[n]=r;}o&&!e&&this.j(t);}j(t){t===E?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,t??"");}}class H extends k{constructor(){super(...arguments),this.type=3;}j(t){this.element[this.name]=t===E?void 0:t;}}class I extends k{constructor(){super(...arguments),this.type=4;}j(t){this.element.toggleAttribute(this.name,!!t&&t!==E);}}class L extends k{constructor(t,i,s,e,h){super(t,i,s,e,h),this.type=5;}_$AI(t,i=this){if((t=S(this,t,i,0)??E)===T)return;const s=this._$AH,e=t===E&&s!==E||t.capture!==s.capture||t.once!==s.once||t.passive!==s.passive,h=t!==E&&(s===E||e);e&&this.element.removeEventListener(this.name,this,s),h&&this.element.addEventListener(this.name,this,t),this._$AH=t;}handleEvent(t){"function"==typeof this._$AH?this._$AH.call(this.options?.host??this.element,t):this._$AH.handleEvent(t);}}class z{constructor(t,i,s){this.element=t,this.type=6,this._$AN=void 0,this._$AM=i,this.options=s;}get _$AU(){return this._$AM._$AU}_$AI(t){S(this,t);}}const j=t$2.litHtmlPolyfillSupport;j?.(N,R),(t$2.litHtmlVersions??=[]).push("3.3.0");const B=(t,i,s)=>{const e=s?.renderBefore??i;let h=e._$litPart$;if(void 0===h){const t=s?.renderBefore??null;e._$litPart$=h=new R(i.insertBefore(l$2(),t),t,void 0,s??{});}return h._$AI(t),h};
+const t$2=globalThis,i$4=t$2.trustedTypes,s$2=i$4?i$4.createPolicy("lit-html",{createHTML:t=>t}):void 0,e$7="$lit$",h$2=`lit$${Math.random().toFixed(9).slice(2)}$`,o$7="?"+h$2,n$5=`<${o$7}>`,r$3=document,l$2=()=>r$3.createComment(""),c$1=t=>null===t||"object"!=typeof t&&"function"!=typeof t,a$1=Array.isArray,u$2=t=>a$1(t)||"function"==typeof t?.[Symbol.iterator],d="[ \t\n\f\r]",f$2=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,v=/-->/g,_=/>/g,m$1=RegExp(`>|${d}(?:([^\\s"'>=/]+)(${d}*=${d}*(?:[^ \t\n\f\r"'\`<>=]|("|')|))|$)`,"g"),p=/'/g,g=/"/g,$=/^(?:script|style|textarea|title)$/i,y=t=>(i,...s)=>({_$litType$:t,strings:i,values:s}),x=y(1),T=Symbol.for("lit-noChange"),E=Symbol.for("lit-nothing"),A=new WeakMap,C$1=r$3.createTreeWalker(r$3,129);function P$1(t,i){if(!a$1(t)||!t.hasOwnProperty("raw"))throw Error("invalid template strings array");return void 0!==s$2?s$2.createHTML(i):i}const V=(t,i)=>{const s=t.length-1,o=[];let r,l=2===i?"<svg>":3===i?"<math>":"",c=f$2;for(let i=0;i<s;i++){const s=t[i];let a,u,d=-1,y=0;for(;y<s.length&&(c.lastIndex=y,u=c.exec(s),null!==u);)y=c.lastIndex,c===f$2?"!--"===u[1]?c=v:void 0!==u[1]?c=_:void 0!==u[2]?($.test(u[2])&&(r=RegExp("</"+u[2],"g")),c=m$1):void 0!==u[3]&&(c=m$1):c===m$1?">"===u[0]?(c=r??f$2,d=-1):void 0===u[1]?d=-2:(d=c.lastIndex-u[2].length,a=u[1],c=void 0===u[3]?m$1:'"'===u[3]?g:p):c===g||c===p?c=m$1:c===v||c===_?c=f$2:(c=m$1,r=void 0);const x=c===m$1&&t[i+1].startsWith("/>")?" ":"";l+=c===f$2?s+n$5:d>=0?(o.push(a),s.slice(0,d)+e$7+s.slice(d)+h$2+x):s+h$2+(-2===d?i:x);}return [P$1(t,l+(t[s]||"<?>")+(2===i?"</svg>":3===i?"</math>":"")),o]};class N{constructor({strings:t,_$litType$:s},n){let r;this.parts=[];let c=0,a=0;const u=t.length-1,d=this.parts,[f,v]=V(t,s);if(this.el=N.createElement(f,n),C$1.currentNode=this.el.content,2===s||3===s){const t=this.el.content.firstChild;t.replaceWith(...t.childNodes);}for(;null!==(r=C$1.nextNode())&&d.length<u;){if(1===r.nodeType){if(r.hasAttributes())for(const t of r.getAttributeNames())if(t.endsWith(e$7)){const i=v[a++],s=r.getAttribute(t).split(h$2),e=/([.?@])?(.*)/.exec(i);d.push({type:1,index:c,name:e[2],strings:s,ctor:"."===e[1]?H:"?"===e[1]?I:"@"===e[1]?L:k}),r.removeAttribute(t);}else t.startsWith(h$2)&&(d.push({type:6,index:c}),r.removeAttribute(t));if($.test(r.tagName)){const t=r.textContent.split(h$2),s=t.length-1;if(s>0){r.textContent=i$4?i$4.emptyScript:"";for(let i=0;i<s;i++)r.append(t[i],l$2()),C$1.nextNode(),d.push({type:2,index:++c});r.append(t[s],l$2());}}}else if(8===r.nodeType)if(r.data===o$7)d.push({type:2,index:c});else {let t=-1;for(;-1!==(t=r.data.indexOf(h$2,t+1));)d.push({type:7,index:c}),t+=h$2.length-1;}c++;}}static createElement(t,i){const s=r$3.createElement("template");return s.innerHTML=t,s}}function S(t,i,s=t,e){if(i===T)return i;let h=void 0!==e?s._$Co?.[e]:s._$Cl;const o=c$1(i)?void 0:i._$litDirective$;return h?.constructor!==o&&(h?._$AO?.(false),void 0===o?h=void 0:(h=new o(t),h._$AT(t,s,e)),void 0!==e?(s._$Co??=[])[e]=h:s._$Cl=h),void 0!==h&&(i=S(t,h._$AS(t,i.values),h,e)),i}class M{constructor(t,i){this._$AV=[],this._$AN=void 0,this._$AD=t,this._$AM=i;}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(t){const{el:{content:i},parts:s}=this._$AD,e=(t?.creationScope??r$3).importNode(i,true);C$1.currentNode=e;let h=C$1.nextNode(),o=0,n=0,l=s[0];for(;void 0!==l;){if(o===l.index){let i;2===l.type?i=new R(h,h.nextSibling,this,t):1===l.type?i=new l.ctor(h,l.name,l.strings,this,t):6===l.type&&(i=new z(h,this,t)),this._$AV.push(i),l=s[++n];}o!==l?.index&&(h=C$1.nextNode(),o++);}return C$1.currentNode=r$3,e}p(t){let i=0;for(const s of this._$AV) void 0!==s&&(void 0!==s.strings?(s._$AI(t,s,i),i+=s.strings.length-2):s._$AI(t[i])),i++;}}class R{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(t,i,s,e){this.type=2,this._$AH=E,this._$AN=void 0,this._$AA=t,this._$AB=i,this._$AM=s,this.options=e,this._$Cv=e?.isConnected??true;}get parentNode(){let t=this._$AA.parentNode;const i=this._$AM;return void 0!==i&&11===t?.nodeType&&(t=i.parentNode),t}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(t,i=this){t=S(this,t,i),c$1(t)?t===E||null==t||""===t?(this._$AH!==E&&this._$AR(),this._$AH=E):t!==this._$AH&&t!==T&&this._(t):void 0!==t._$litType$?this.$(t):void 0!==t.nodeType?this.T(t):u$2(t)?this.k(t):this._(t);}O(t){return this._$AA.parentNode.insertBefore(t,this._$AB)}T(t){this._$AH!==t&&(this._$AR(),this._$AH=this.O(t));}_(t){this._$AH!==E&&c$1(this._$AH)?this._$AA.nextSibling.data=t:this.T(r$3.createTextNode(t)),this._$AH=t;}$(t){const{values:i,_$litType$:s}=t,e="number"==typeof s?this._$AC(t):(void 0===s.el&&(s.el=N.createElement(P$1(s.h,s.h[0]),this.options)),s);if(this._$AH?._$AD===e)this._$AH.p(i);else {const t=new M(e,this),s=t.u(this.options);t.p(i),this.T(s),this._$AH=t;}}_$AC(t){let i=A.get(t.strings);return void 0===i&&A.set(t.strings,i=new N(t)),i}k(t){a$1(this._$AH)||(this._$AH=[],this._$AR());const i=this._$AH;let s,e=0;for(const h of t)e===i.length?i.push(s=new R(this.O(l$2()),this.O(l$2()),this,this.options)):s=i[e],s._$AI(h),e++;e<i.length&&(this._$AR(s&&s._$AB.nextSibling,e),i.length=e);}_$AR(t=this._$AA.nextSibling,i){for(this._$AP?.(false,true,i);t&&t!==this._$AB;){const i=t.nextSibling;t.remove(),t=i;}}setConnected(t){ void 0===this._$AM&&(this._$Cv=t,this._$AP?.(t));}}class k{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(t,i,s,e,h){this.type=1,this._$AH=E,this._$AN=void 0,this.element=t,this.name=i,this._$AM=e,this.options=h,s.length>2||""!==s[0]||""!==s[1]?(this._$AH=Array(s.length-1).fill(new String),this.strings=s):this._$AH=E;}_$AI(t,i=this,s,e){const h=this.strings;let o=false;if(void 0===h)t=S(this,t,i,0),o=!c$1(t)||t!==this._$AH&&t!==T,o&&(this._$AH=t);else {const e=t;let n,r;for(t=h[0],n=0;n<h.length-1;n++)r=S(this,e[s+n],i,n),r===T&&(r=this._$AH[n]),o||=!c$1(r)||r!==this._$AH[n],r===E?t=E:t!==E&&(t+=(r??"")+h[n+1]),this._$AH[n]=r;}o&&!e&&this.j(t);}j(t){t===E?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,t??"");}}class H extends k{constructor(){super(...arguments),this.type=3;}j(t){this.element[this.name]=t===E?void 0:t;}}class I extends k{constructor(){super(...arguments),this.type=4;}j(t){this.element.toggleAttribute(this.name,!!t&&t!==E);}}class L extends k{constructor(t,i,s,e,h){super(t,i,s,e,h),this.type=5;}_$AI(t,i=this){if((t=S(this,t,i,0)??E)===T)return;const s=this._$AH,e=t===E&&s!==E||t.capture!==s.capture||t.once!==s.once||t.passive!==s.passive,h=t!==E&&(s===E||e);e&&this.element.removeEventListener(this.name,this,s),h&&this.element.addEventListener(this.name,this,t),this._$AH=t;}handleEvent(t){"function"==typeof this._$AH?this._$AH.call(this.options?.host??this.element,t):this._$AH.handleEvent(t);}}class z{constructor(t,i,s){this.element=t,this.type=6,this._$AN=void 0,this._$AM=i,this.options=s;}get _$AU(){return this._$AM._$AU}_$AI(t){S(this,t);}}const j=t$2.litHtmlPolyfillSupport;j?.(N,R),(t$2.litHtmlVersions??=[]).push("3.3.0");const B=(t,i,s)=>{const e=s?.renderBefore??i;let h=e._$litPart$;if(void 0===h){const t=s?.renderBefore??null;e._$litPart$=h=new R(i.insertBefore(l$2(),t),t,void 0,s??{});}return h._$AI(t),h};
 
 /**
  * @license
@@ -2144,13 +2160,13 @@ var component_styles_default = i$6`
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const o$5={attribute:true,type:String,converter:u$3,reflect:false,hasChanged:f$3},r$2=(t=o$5,e,r)=>{const{kind:n,metadata:i}=r;let s=globalThis.litPropertyMetadata.get(i);if(void 0===s&&globalThis.litPropertyMetadata.set(i,s=new Map),"setter"===n&&((t=Object.create(t)).wrapped=true),s.set(r.name,t),"accessor"===n){const{name:o}=r;return {set(r){const n=e.get.call(this);e.set.call(this,r),this.requestUpdate(o,n,t);},init(e){return void 0!==e&&this.C(o,void 0,t,e),e}}}if("setter"===n){const{name:o}=r;return function(r){const n=this[o];e.call(this,r),this.requestUpdate(o,n,t);}}throw Error("Unsupported decorator location: "+n)};function n$3(t){return (e,o)=>"object"==typeof o?r$2(t,e,o):((t,e,o)=>{const r=e.hasOwnProperty(o);return e.constructor.createProperty(o,t),r?Object.getOwnPropertyDescriptor(e,o):void 0})(t,e,o)}
+ */const o$5={attribute:true,type:String,converter:u$3,reflect:false,hasChanged:f$3},r$2=(t=o$5,e,r)=>{const{kind:n,metadata:i}=r;let s=globalThis.litPropertyMetadata.get(i);if(void 0===s&&globalThis.litPropertyMetadata.set(i,s=new Map),"setter"===n&&((t=Object.create(t)).wrapped=true),s.set(r.name,t),"accessor"===n){const{name:o}=r;return {set(r){const n=e.get.call(this);e.set.call(this,r),this.requestUpdate(o,n,t);},init(e){return void 0!==e&&this.C(o,void 0,t,e),e}}}if("setter"===n){const{name:o}=r;return function(r){const n=this[o];e.call(this,r),this.requestUpdate(o,n,t);}}throw Error("Unsupported decorator location: "+n)};function n$4(t){return (e,o)=>"object"==typeof o?r$2(t,e,o):((t,e,o)=>{const r=e.hasOwnProperty(o);return e.constructor.createProperty(o,t),r?Object.getOwnPropertyDescriptor(e,o):void 0})(t,e,o)}
 
 /**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */function r$1(r){return n$3({...r,state:true,attribute:false})}
+ */function r$1(r){return n$4({...r,state:true,attribute:false})}
 
 /**
  * @license
@@ -2241,10 +2257,10 @@ _hasRecordedInitialProperties = new WeakMap();
 ShoelaceElement.version = "2.20.1";
 ShoelaceElement.dependencies = {};
 __decorateClass([
-  n$3()
+  n$4()
 ], ShoelaceElement.prototype, "dir", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], ShoelaceElement.prototype, "lang", 2);
 
 /**
@@ -2388,16 +2404,16 @@ __decorateClass([
   r$1()
 ], SlIcon.prototype, "svg", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlIcon.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIcon.prototype, "src", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIcon.prototype, "label", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlIcon.prototype, "library", 2);
 __decorateClass([
   watch("label")
@@ -2424,7 +2440,7 @@ const t$1={ATTRIBUTE:1,CHILD:2,PROPERTY:3,BOOLEAN_ATTRIBUTE:4},e$3=t=>(...e)=>({
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
  */
-const a=Symbol.for(""),o$4=t=>{if(t?.r===a)return t?._$litStatic$},i$1=(t,...r)=>({_$litStatic$:r.reduce(((r,e,a)=>r+(t=>{if(void 0!==t._$litStatic$)return t._$litStatic$;throw Error(`Value passed to 'literal' function must be a 'literal' result: ${t}. Use 'unsafeStatic' to pass non-literal values, but\n            take care to ensure page security.`)})(e)+t[a+1]),t[0]),r:a}),l$1=new Map,n$2=t=>(r,...e)=>{const a=e.length;let s,i;const n=[],u=[];let c,$=0,f=false;for(;$<a;){for(c=r[$];$<a&&void 0!==(i=e[$],s=o$4(i));)c+=s+r[++$],f=true;$!==a&&u.push(i),n.push(c),$++;}if($===a&&n.push(r[a]),f){const t=n.join("$$lit$$");void 0===(r=l$1.get(t))&&(n.raw=n,l$1.set(t,r=n)),e=u;}return t(r,...e)},u=n$2(x);
+const a=Symbol.for(""),o$4=t=>{if(t?.r===a)return t?._$litStatic$},i$1=(t,...r)=>({_$litStatic$:r.reduce(((r,e,a)=>r+(t=>{if(void 0!==t._$litStatic$)return t._$litStatic$;throw Error(`Value passed to 'literal' function must be a 'literal' result: ${t}. Use 'unsafeStatic' to pass non-literal values, but\n            take care to ensure page security.`)})(e)+t[a+1]),t[0]),r:a}),l$1=new Map,n$3=t=>(r,...e)=>{const a=e.length;let s,i;const n=[],u=[];let c,$=0,f=false;for(;$<a;){for(c=r[$];$<a&&void 0!==(i=e[$],s=o$4(i));)c+=s+r[++$],f=true;$!==a&&u.push(i),n.push(c),$++;}if($===a&&n.push(r[a]),f){const t=n.join("$$lit$$");void 0===(r=l$1.get(t))&&(n.raw=n,l$1.set(t,r=n)),e=u;}return t(r,...e)},u=n$3(x);
 
 /**
  * @license
@@ -2510,28 +2526,28 @@ __decorateClass([
   r$1()
 ], SlIconButton.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "library", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "src", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "href", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "target", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "download", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlIconButton.prototype, "label", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlIconButton.prototype, "disabled", 2);
 
 // src/utilities/animation-registry.ts
@@ -2617,6 +2633,11 @@ function stopAnimations(el) {
     })
   );
 }
+function shimKeyframesHeightAuto(keyframes, calculatedHeight) {
+  return keyframes.map((keyframe) => __spreadProps(__spreadValues({}, keyframe), {
+    height: keyframe.height === "auto" ? `${calculatedHeight}px` : keyframe.height
+  }));
+}
 
 // src/internal/slot.ts
 var HasSlotController = class {
@@ -2683,7 +2704,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$c);
+    const documentElementObserver = new MutationObserver(update$d);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2704,9 +2725,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$c();
+    update$d();
 }
-function update$c() {
+function update$d() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -3026,13 +3047,13 @@ __decorateClass([
   e$5(".dialog__overlay")
 ], SlDialog.prototype, "overlay", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlDialog.prototype, "open", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlDialog.prototype, "label", 2);
 __decorateClass([
-  n$3({ attribute: "no-header", type: Boolean, reflect: true })
+  n$4({ attribute: "no-header", type: Boolean, reflect: true })
 ], SlDialog.prototype, "noHeader", 2);
 __decorateClass([
   watch("open", { waitUntilFirstUpdate: true })
@@ -4212,70 +4233,70 @@ __decorateClass([
   r$1()
 ], SlButton.prototype, "invalid", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "title", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlButton.prototype, "variant", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlButton.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "caret", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "loading", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "outline", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "pill", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlButton.prototype, "circle", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "type", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "value", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "href", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "target", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "rel", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "download", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButton.prototype, "form", 2);
 __decorateClass([
-  n$3({ attribute: "formaction" })
+  n$4({ attribute: "formaction" })
 ], SlButton.prototype, "formAction", 2);
 __decorateClass([
-  n$3({ attribute: "formenctype" })
+  n$4({ attribute: "formenctype" })
 ], SlButton.prototype, "formEnctype", 2);
 __decorateClass([
-  n$3({ attribute: "formmethod" })
+  n$4({ attribute: "formmethod" })
 ], SlButton.prototype, "formMethod", 2);
 __decorateClass([
-  n$3({ attribute: "formnovalidate", type: Boolean })
+  n$4({ attribute: "formnovalidate", type: Boolean })
 ], SlButton.prototype, "formNoValidate", 2);
 __decorateClass([
-  n$3({ attribute: "formtarget" })
+  n$4({ attribute: "formtarget" })
 ], SlButton.prototype, "formTarget", 2);
 __decorateClass([
   watch("disabled", { waitUntilFirstUpdate: true })
@@ -4359,7 +4380,7 @@ __decorateClass([
   r$1()
 ], SlButtonGroup.prototype, "disableRole", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlButtonGroup.prototype, "label", 2);
 function findButton(el) {
   var _a;
@@ -4878,70 +4899,70 @@ __decorateClass([
   r$1()
 ], SlTextarea.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "title", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "value", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlTextarea.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTextarea.prototype, "filled", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "label", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlTextarea.prototype, "helpText", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "placeholder", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTextarea.prototype, "rows", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "resize", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTextarea.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTextarea.prototype, "readonly", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlTextarea.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTextarea.prototype, "required", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTextarea.prototype, "minlength", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTextarea.prototype, "maxlength", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "autocapitalize", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "autocorrect", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "autocomplete", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlTextarea.prototype, "autofocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "enterkeyhint", 2);
 __decorateClass([
-  n$3({
+  n$4({
     type: Boolean,
     converter: {
       // Allow "true|false" attribute values but keep the property boolean
@@ -4951,7 +4972,7 @@ __decorateClass([
   })
 ], SlTextarea.prototype, "spellcheck", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTextarea.prototype, "inputmode", 2);
 __decorateClass([
   defaultValue()
@@ -5593,97 +5614,97 @@ __decorateClass([
   r$1()
 ], SlInput.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "title", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlInput.prototype, "type", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "value", 2);
 __decorateClass([
   defaultValue()
 ], SlInput.prototype, "defaultValue", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlInput.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "filled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "pill", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "label", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlInput.prototype, "helpText", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlInput.prototype, "clearable", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "disabled", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "placeholder", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "readonly", 2);
 __decorateClass([
-  n$3({ attribute: "password-toggle", type: Boolean })
+  n$4({ attribute: "password-toggle", type: Boolean })
 ], SlInput.prototype, "passwordToggle", 2);
 __decorateClass([
-  n$3({ attribute: "password-visible", type: Boolean })
+  n$4({ attribute: "password-visible", type: Boolean })
 ], SlInput.prototype, "passwordVisible", 2);
 __decorateClass([
-  n$3({ attribute: "no-spin-buttons", type: Boolean })
+  n$4({ attribute: "no-spin-buttons", type: Boolean })
 ], SlInput.prototype, "noSpinButtons", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlInput.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlInput.prototype, "required", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "pattern", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlInput.prototype, "minlength", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlInput.prototype, "maxlength", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "min", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "max", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "step", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "autocapitalize", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "autocorrect", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "autocomplete", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlInput.prototype, "autofocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "enterkeyhint", 2);
 __decorateClass([
-  n$3({
+  n$4({
     type: Boolean,
     converter: {
       // Allow "true|false" attribute values but keep the property boolean
@@ -5693,7 +5714,7 @@ __decorateClass([
   })
 ], SlInput.prototype, "spellcheck", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlInput.prototype, "inputmode", 2);
 __decorateClass([
   watch("disabled", { waitUntilFirstUpdate: true })
@@ -5880,16 +5901,16 @@ var SlTag = class extends ShoelaceElement {
 SlTag.styles = [component_styles_default, tag_styles_default];
 SlTag.dependencies = { "sl-icon-button": SlIconButton };
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlTag.prototype, "variant", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlTag.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTag.prototype, "pill", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlTag.prototype, "removable", 2);
 
 // src/components/select/select.styles.ts
@@ -6321,7 +6342,7 @@ const oppositeAlignmentMap = {
   start: 'end',
   end: 'start'
 };
-function clamp(start, value, end) {
+function clamp$1(start, value, end) {
   return max(start, min(value, end));
 }
 function evaluate(value, param) {
@@ -6704,7 +6725,7 @@ const arrow$1 = options => ({
     const min$1 = minPadding;
     const max = clientSize - arrowDimensions[length] - maxPadding;
     const center = clientSize / 2 - arrowDimensions[length] / 2 + centerToReference;
-    const offset = clamp(min$1, center, max);
+    const offset = clamp$1(min$1, center, max);
 
     // If the reference is small enough that the arrow's padding causes it to
     // to point to nothing for an aligned placement, adjust the offset of the
@@ -6985,14 +7006,14 @@ const shift$2 = function (options) {
         const maxSide = mainAxis === 'y' ? 'bottom' : 'right';
         const min = mainAxisCoord + overflow[minSide];
         const max = mainAxisCoord - overflow[maxSide];
-        mainAxisCoord = clamp(min, mainAxisCoord, max);
+        mainAxisCoord = clamp$1(min, mainAxisCoord, max);
       }
       if (checkCrossAxis) {
         const minSide = crossAxis === 'y' ? 'top' : 'left';
         const maxSide = crossAxis === 'y' ? 'bottom' : 'right';
         const min = crossAxisCoord + overflow[minSide];
         const max = crossAxisCoord - overflow[maxSide];
-        crossAxisCoord = clamp(min, crossAxisCoord, max);
+        crossAxisCoord = clamp$1(min, crossAxisCoord, max);
       }
       const limitedCoords = limiter.fn({
         ...state,
@@ -8315,37 +8336,37 @@ __decorateClass([
   e$5(".popup__arrow")
 ], SlPopup.prototype, "arrowEl", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlPopup.prototype, "anchor", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlPopup.prototype, "active", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlPopup.prototype, "placement", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlPopup.prototype, "strategy", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlPopup.prototype, "distance", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlPopup.prototype, "skidding", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlPopup.prototype, "arrow", 2);
 __decorateClass([
-  n$3({ attribute: "arrow-placement" })
+  n$4({ attribute: "arrow-placement" })
 ], SlPopup.prototype, "arrowPlacement", 2);
 __decorateClass([
-  n$3({ attribute: "arrow-padding", type: Number })
+  n$4({ attribute: "arrow-padding", type: Number })
 ], SlPopup.prototype, "arrowPadding", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlPopup.prototype, "flip", 2);
 __decorateClass([
-  n$3({
+  n$4({
     attribute: "flip-fallback-placements",
     converter: {
       fromAttribute: (value) => {
@@ -8358,37 +8379,37 @@ __decorateClass([
   })
 ], SlPopup.prototype, "flipFallbackPlacements", 2);
 __decorateClass([
-  n$3({ attribute: "flip-fallback-strategy" })
+  n$4({ attribute: "flip-fallback-strategy" })
 ], SlPopup.prototype, "flipFallbackStrategy", 2);
 __decorateClass([
-  n$3({ type: Object })
+  n$4({ type: Object })
 ], SlPopup.prototype, "flipBoundary", 2);
 __decorateClass([
-  n$3({ attribute: "flip-padding", type: Number })
+  n$4({ attribute: "flip-padding", type: Number })
 ], SlPopup.prototype, "flipPadding", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlPopup.prototype, "shift", 2);
 __decorateClass([
-  n$3({ type: Object })
+  n$4({ type: Object })
 ], SlPopup.prototype, "shiftBoundary", 2);
 __decorateClass([
-  n$3({ attribute: "shift-padding", type: Number })
+  n$4({ attribute: "shift-padding", type: Number })
 ], SlPopup.prototype, "shiftPadding", 2);
 __decorateClass([
-  n$3({ attribute: "auto-size" })
+  n$4({ attribute: "auto-size" })
 ], SlPopup.prototype, "autoSize", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlPopup.prototype, "sync", 2);
 __decorateClass([
-  n$3({ type: Object })
+  n$4({ type: Object })
 ], SlPopup.prototype, "autoSizeBoundary", 2);
 __decorateClass([
-  n$3({ attribute: "auto-size-padding", type: Number })
+  n$4({ attribute: "auto-size-padding", type: Number })
 ], SlPopup.prototype, "autoSizePadding", 2);
 __decorateClass([
-  n$3({ attribute: "hover-bridge", type: Boolean })
+  n$4({ attribute: "hover-bridge", type: Boolean })
 ], SlPopup.prototype, "hoverBridge", 2);
 
 /**
@@ -9071,61 +9092,61 @@ __decorateClass([
   r$1()
 ], SlSelect.prototype, "valueHasChanged", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSelect.prototype, "name", 2);
 __decorateClass([
   r$1()
 ], SlSelect.prototype, "value", 1);
 __decorateClass([
-  n$3({ attribute: "value" })
+  n$4({ attribute: "value" })
 ], SlSelect.prototype, "defaultValue", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSelect.prototype, "size", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSelect.prototype, "placeholder", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "multiple", 2);
 __decorateClass([
-  n$3({ attribute: "max-options-visible", type: Number })
+  n$4({ attribute: "max-options-visible", type: Number })
 ], SlSelect.prototype, "maxOptionsVisible", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlSelect.prototype, "clearable", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "open", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlSelect.prototype, "hoist", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "filled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "pill", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSelect.prototype, "label", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSelect.prototype, "placement", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlSelect.prototype, "helpText", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSelect.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSelect.prototype, "required", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSelect.prototype, "getTag", 2);
 __decorateClass([
   watch("disabled", { waitUntilFirstUpdate: true })
@@ -9345,10 +9366,10 @@ __decorateClass([
   r$1()
 ], SlOption.prototype, "hasHover", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlOption.prototype, "value", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlOption.prototype, "disabled", 2);
 __decorateClass([
   watch("disabled")
@@ -9607,28 +9628,28 @@ __decorateClass([
   e$5("sl-popup")
 ], SlTooltip.prototype, "popup", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTooltip.prototype, "content", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTooltip.prototype, "placement", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTooltip.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTooltip.prototype, "distance", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlTooltip.prototype, "open", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlTooltip.prototype, "skidding", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlTooltip.prototype, "trigger", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlTooltip.prototype, "hoist", 2);
 __decorateClass([
   watch("open", { waitUntilFirstUpdate: true })
@@ -10004,31 +10025,31 @@ __decorateClass([
   e$5(".dropdown__panel")
 ], SlDropdown.prototype, "panel", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlDropdown.prototype, "open", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlDropdown.prototype, "placement", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlDropdown.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ attribute: "stay-open-on-select", type: Boolean, reflect: true })
+  n$4({ attribute: "stay-open-on-select", type: Boolean, reflect: true })
 ], SlDropdown.prototype, "stayOpenOnSelect", 2);
 __decorateClass([
-  n$3({ attribute: false })
+  n$4({ attribute: false })
 ], SlDropdown.prototype, "containingElement", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlDropdown.prototype, "distance", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], SlDropdown.prototype, "skidding", 2);
 __decorateClass([
-  n$3({ type: Boolean })
+  n$4({ type: Boolean })
 ], SlDropdown.prototype, "hoist", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlDropdown.prototype, "sync", 2);
 __decorateClass([
   watch("open", { waitUntilFirstUpdate: true })
@@ -10345,13 +10366,13 @@ var menu_item_styles_default = i$6`
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const s=(i,t)=>{const e=i._$AN;if(void 0===e)return  false;for(const i of e)i._$AO?.(t,false),s(i,t);return  true},o$1=i=>{let t,e;do{if(void 0===(t=i._$AM))break;e=t._$AN,e.delete(i),i=t;}while(0===e?.size)},r=i=>{for(let t;t=i._$AM;i=t){let e=t._$AN;if(void 0===e)t._$AN=e=new Set;else if(e.has(i))break;e.add(i),c(t);}};function h$1(i){ void 0!==this._$AN?(o$1(this),this._$AM=i,r(this)):this._$AM=i;}function n$1(i,t=false,e=0){const r=this._$AH,h=this._$AN;if(void 0!==h&&0!==h.size)if(t)if(Array.isArray(r))for(let i=e;i<r.length;i++)s(r[i],false),o$1(r[i]);else null!=r&&(s(r,false),o$1(r));else s(this,i);}const c=i=>{i.type==t$1.CHILD&&(i._$AP??=n$1,i._$AQ??=h$1);};class f extends i$2{constructor(){super(...arguments),this._$AN=void 0;}_$AT(i,t,e){super._$AT(i,t,e),r(this),this.isConnected=i._$AU;}_$AO(i,t=true){i!==this.isConnected&&(this.isConnected=i,i?this.reconnected?.():this.disconnected?.()),t&&(s(this,i),o$1(this));}setValue(t){if(f$1(this._$Ct))this._$Ct._$AI(t,this);else {const i=[...this._$Ct._$AH];i[this._$Ci]=t,this._$Ct._$AI(i,this,0);}}disconnected(){}reconnected(){}}
+ */const s=(i,t)=>{const e=i._$AN;if(void 0===e)return  false;for(const i of e)i._$AO?.(t,false),s(i,t);return  true},o$1=i=>{let t,e;do{if(void 0===(t=i._$AM))break;e=t._$AN,e.delete(i),i=t;}while(0===e?.size)},r=i=>{for(let t;t=i._$AM;i=t){let e=t._$AN;if(void 0===e)t._$AN=e=new Set;else if(e.has(i))break;e.add(i),c(t);}};function h$1(i){ void 0!==this._$AN?(o$1(this),this._$AM=i,r(this)):this._$AM=i;}function n$2(i,t=false,e=0){const r=this._$AH,h=this._$AN;if(void 0!==h&&0!==h.size)if(t)if(Array.isArray(r))for(let i=e;i<r.length;i++)s(r[i],false),o$1(r[i]);else null!=r&&(s(r,false),o$1(r));else s(this,i);}const c=i=>{i.type==t$1.CHILD&&(i._$AP??=n$2,i._$AQ??=h$1);};class f extends i$2{constructor(){super(...arguments),this._$AN=void 0;}_$AT(i,t,e){super._$AT(i,t,e),r(this),this.isConnected=i._$AU;}_$AO(i,t=true){i!==this.isConnected&&(this.isConnected=i,i?this.reconnected?.():this.disconnected?.()),t&&(s(this,i),o$1(this));}setValue(t){if(f$1(this._$Ct))this._$Ct._$AI(t,this);else {const i=[...this._$Ct._$AH];i[this._$Ci]=t,this._$Ct._$AI(i,this,0);}}disconnected(){}reconnected(){}}
 
 /**
  * @license
  * Copyright 2020 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const e=()=>new h;class h{}const o=new WeakMap,n=e$3(class extends f{render(i){return E}update(i,[s]){const e=s!==this.G;return e&&void 0!==this.G&&this.rt(void 0),(e||this.lt!==this.ct)&&(this.G=s,this.ht=i.options?.host,this.rt(this.ct=i.element)),E}rt(t){if(this.isConnected||(t=void 0),"function"==typeof this.G){const i=this.ht??globalThis;let s=o.get(i);void 0===s&&(s=new WeakMap,o.set(i,s)),void 0!==s.get(this.G)&&this.G.call(this.ht,void 0),s.set(this.G,t),void 0!==t&&this.G.call(this.ht,t);}else this.G.value=t;}get lt(){return "function"==typeof this.G?o.get(this.ht??globalThis)?.get(this.G):this.G?.value}disconnected(){this.lt===this.ct&&this.rt(void 0);}reconnected(){this.rt(this.ct);}});
+ */const e=()=>new h;class h{}const o=new WeakMap,n$1=e$3(class extends f{render(i){return E}update(i,[s]){const e=s!==this.G;return e&&void 0!==this.G&&this.rt(void 0),(e||this.lt!==this.ct)&&(this.G=s,this.ht=i.options?.host,this.rt(this.ct=i.element)),E}rt(t){if(this.isConnected||(t=void 0),"function"==typeof this.G){const i=this.ht??globalThis;let s=o.get(i);void 0===s&&(s=new WeakMap,o.set(i,s)),void 0!==s.get(this.G)&&this.G.call(this.ht,void 0),s.set(this.G,t),void 0!==t&&this.G.call(this.ht,t);}else this.G.value=t;}get lt(){return "function"==typeof this.G?o.get(this.ht??globalThis)?.get(this.G):this.G?.value}disconnected(){this.lt===this.ct&&this.rt(void 0);}reconnected(){this.rt(this.ct);}});
 
 // src/components/menu-item/submenu-controller.ts
 var SubmenuController = class {
@@ -10570,7 +10591,7 @@ var SubmenuController = class {
     }
     return x`
       <sl-popup
-        ${n(this.popupRef)}
+        ${n$1(this.popupRef)}
         placement=${isRtl ? "left-start" : "right-start"}
         anchor="anchor"
         flip
@@ -10712,19 +10733,19 @@ __decorateClass([
   e$5(".menu-item")
 ], SlMenuItem.prototype, "menuItem", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlMenuItem.prototype, "type", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlMenuItem.prototype, "checked", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlMenuItem.prototype, "value", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlMenuItem.prototype, "loading", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlMenuItem.prototype, "disabled", 2);
 __decorateClass([
   watch("checked")
@@ -11041,37 +11062,37 @@ __decorateClass([
   r$1()
 ], SlCheckbox.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlCheckbox.prototype, "title", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlCheckbox.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlCheckbox.prototype, "value", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlCheckbox.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlCheckbox.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlCheckbox.prototype, "checked", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlCheckbox.prototype, "indeterminate", 2);
 __decorateClass([
   defaultValue("checked")
 ], SlCheckbox.prototype, "defaultChecked", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlCheckbox.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlCheckbox.prototype, "required", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlCheckbox.prototype, "helpText", 2);
 __decorateClass([
   watch("disabled", { waitUntilFirstUpdate: true })
@@ -11119,7 +11140,7 @@ var SlDivider = class extends ShoelaceElement {
 };
 SlDivider.styles = [component_styles_default, divider_styles_default];
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlDivider.prototype, "vertical", 2);
 __decorateClass([
   watch("vertical")
@@ -11471,34 +11492,34 @@ __decorateClass([
   r$1()
 ], SlSwitch.prototype, "hasFocus", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSwitch.prototype, "title", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSwitch.prototype, "name", 2);
 __decorateClass([
-  n$3()
+  n$4()
 ], SlSwitch.prototype, "value", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSwitch.prototype, "size", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSwitch.prototype, "disabled", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSwitch.prototype, "checked", 2);
 __decorateClass([
   defaultValue("checked")
 ], SlSwitch.prototype, "defaultChecked", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], SlSwitch.prototype, "form", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], SlSwitch.prototype, "required", 2);
 __decorateClass([
-  n$3({ attribute: "help-text" })
+  n$4({ attribute: "help-text" })
 ], SlSwitch.prototype, "helpText", 2);
 __decorateClass([
   watch("checked", { waitUntilFirstUpdate: true })
@@ -11508,6 +11529,1255 @@ __decorateClass([
 ], SlSwitch.prototype, "handleDisabledChange", 1);
 
 SlSwitch.define("sl-switch");
+
+// src/components/drawer/drawer.styles.ts
+var drawer_styles_default = i$6`
+  :host {
+    --size: 25rem;
+    --header-spacing: var(--sl-spacing-large);
+    --body-spacing: var(--sl-spacing-large);
+    --footer-spacing: var(--sl-spacing-large);
+
+    display: contents;
+  }
+
+  .drawer {
+    top: 0;
+    inset-inline-start: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .drawer--contained {
+    position: absolute;
+    z-index: initial;
+  }
+
+  .drawer--fixed {
+    position: fixed;
+    z-index: var(--sl-z-index-drawer);
+  }
+
+  .drawer__panel {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    z-index: 2;
+    max-width: 100%;
+    max-height: 100%;
+    background-color: var(--sl-panel-background-color);
+    box-shadow: var(--sl-shadow-x-large);
+    overflow: auto;
+    pointer-events: all;
+  }
+
+  .drawer__panel:focus {
+    outline: none;
+  }
+
+  .drawer--top .drawer__panel {
+    top: 0;
+    inset-inline-end: auto;
+    bottom: auto;
+    inset-inline-start: 0;
+    width: 100%;
+    height: var(--size);
+  }
+
+  .drawer--end .drawer__panel {
+    top: 0;
+    inset-inline-end: 0;
+    bottom: auto;
+    inset-inline-start: auto;
+    width: var(--size);
+    height: 100%;
+  }
+
+  .drawer--bottom .drawer__panel {
+    top: auto;
+    inset-inline-end: auto;
+    bottom: 0;
+    inset-inline-start: 0;
+    width: 100%;
+    height: var(--size);
+  }
+
+  .drawer--start .drawer__panel {
+    top: 0;
+    inset-inline-end: auto;
+    bottom: auto;
+    inset-inline-start: 0;
+    width: var(--size);
+    height: 100%;
+  }
+
+  .drawer__header {
+    display: flex;
+  }
+
+  .drawer__title {
+    flex: 1 1 auto;
+    font: inherit;
+    font-size: var(--sl-font-size-large);
+    line-height: var(--sl-line-height-dense);
+    padding: var(--header-spacing);
+    margin: 0;
+  }
+
+  .drawer__header-actions {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: end;
+    gap: var(--sl-spacing-2x-small);
+    padding: 0 var(--header-spacing);
+  }
+
+  .drawer__header-actions sl-icon-button,
+  .drawer__header-actions ::slotted(sl-icon-button) {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    font-size: var(--sl-font-size-medium);
+  }
+
+  .drawer__body {
+    flex: 1 1 auto;
+    display: block;
+    padding: var(--body-spacing);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .drawer__footer {
+    text-align: right;
+    padding: var(--footer-spacing);
+  }
+
+  .drawer__footer ::slotted(sl-button:not(:last-of-type)) {
+    margin-inline-end: var(--sl-spacing-x-small);
+  }
+
+  .drawer:not(.drawer--has-footer) .drawer__footer {
+    display: none;
+  }
+
+  .drawer__overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-color: var(--sl-overlay-background-color);
+    pointer-events: all;
+  }
+
+  .drawer--contained .drawer__overlay {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    .drawer__panel {
+      border: solid 1px var(--sl-color-neutral-0);
+    }
+  }
+`;
+
+// src/internal/string.ts
+function uppercaseFirstLetter(string) {
+  return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+// src/components/drawer/drawer.component.ts
+var SlDrawer = class extends ShoelaceElement {
+  constructor() {
+    super(...arguments);
+    this.hasSlotController = new HasSlotController(this, "footer");
+    this.localize = new LocalizeController(this);
+    this.modal = new Modal(this);
+    this.open = false;
+    this.label = "";
+    this.placement = "end";
+    this.contained = false;
+    this.noHeader = false;
+    this.handleDocumentKeyDown = (event) => {
+      if (this.contained) {
+        return;
+      }
+      if (event.key === "Escape" && this.modal.isActive() && this.open) {
+        event.stopImmediatePropagation();
+        this.requestClose("keyboard");
+      }
+    };
+  }
+  firstUpdated() {
+    this.drawer.hidden = !this.open;
+    if (this.open) {
+      this.addOpenListeners();
+      if (!this.contained) {
+        this.modal.activate();
+        lockBodyScrolling(this);
+      }
+    }
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    unlockBodyScrolling(this);
+    this.removeOpenListeners();
+  }
+  requestClose(source) {
+    const slRequestClose = this.emit("sl-request-close", {
+      cancelable: true,
+      detail: { source }
+    });
+    if (slRequestClose.defaultPrevented) {
+      const animation = getAnimation(this, "drawer.denyClose", { dir: this.localize.dir() });
+      animateTo(this.panel, animation.keyframes, animation.options);
+      return;
+    }
+    this.hide();
+  }
+  addOpenListeners() {
+    var _a;
+    if ("CloseWatcher" in window) {
+      (_a = this.closeWatcher) == null ? void 0 : _a.destroy();
+      if (!this.contained) {
+        this.closeWatcher = new CloseWatcher();
+        this.closeWatcher.onclose = () => this.requestClose("keyboard");
+      }
+    } else {
+      document.addEventListener("keydown", this.handleDocumentKeyDown);
+    }
+  }
+  removeOpenListeners() {
+    var _a;
+    document.removeEventListener("keydown", this.handleDocumentKeyDown);
+    (_a = this.closeWatcher) == null ? void 0 : _a.destroy();
+  }
+  async handleOpenChange() {
+    if (this.open) {
+      this.emit("sl-show");
+      this.addOpenListeners();
+      this.originalTrigger = document.activeElement;
+      if (!this.contained) {
+        this.modal.activate();
+        lockBodyScrolling(this);
+      }
+      const autoFocusTarget = this.querySelector("[autofocus]");
+      if (autoFocusTarget) {
+        autoFocusTarget.removeAttribute("autofocus");
+      }
+      await Promise.all([stopAnimations(this.drawer), stopAnimations(this.overlay)]);
+      this.drawer.hidden = false;
+      requestAnimationFrame(() => {
+        const slInitialFocus = this.emit("sl-initial-focus", { cancelable: true });
+        if (!slInitialFocus.defaultPrevented) {
+          if (autoFocusTarget) {
+            autoFocusTarget.focus({ preventScroll: true });
+          } else {
+            this.panel.focus({ preventScroll: true });
+          }
+        }
+        if (autoFocusTarget) {
+          autoFocusTarget.setAttribute("autofocus", "");
+        }
+      });
+      const panelAnimation = getAnimation(this, `drawer.show${uppercaseFirstLetter(this.placement)}`, {
+        dir: this.localize.dir()
+      });
+      const overlayAnimation = getAnimation(this, "drawer.overlay.show", { dir: this.localize.dir() });
+      await Promise.all([
+        animateTo(this.panel, panelAnimation.keyframes, panelAnimation.options),
+        animateTo(this.overlay, overlayAnimation.keyframes, overlayAnimation.options)
+      ]);
+      this.emit("sl-after-show");
+    } else {
+      blurActiveElement(this);
+      this.emit("sl-hide");
+      this.removeOpenListeners();
+      if (!this.contained) {
+        this.modal.deactivate();
+        unlockBodyScrolling(this);
+      }
+      await Promise.all([stopAnimations(this.drawer), stopAnimations(this.overlay)]);
+      const panelAnimation = getAnimation(this, `drawer.hide${uppercaseFirstLetter(this.placement)}`, {
+        dir: this.localize.dir()
+      });
+      const overlayAnimation = getAnimation(this, "drawer.overlay.hide", { dir: this.localize.dir() });
+      await Promise.all([
+        animateTo(this.overlay, overlayAnimation.keyframes, overlayAnimation.options).then(() => {
+          this.overlay.hidden = true;
+        }),
+        animateTo(this.panel, panelAnimation.keyframes, panelAnimation.options).then(() => {
+          this.panel.hidden = true;
+        })
+      ]);
+      this.drawer.hidden = true;
+      this.overlay.hidden = false;
+      this.panel.hidden = false;
+      const trigger = this.originalTrigger;
+      if (typeof (trigger == null ? void 0 : trigger.focus) === "function") {
+        setTimeout(() => trigger.focus());
+      }
+      this.emit("sl-after-hide");
+    }
+  }
+  handleNoModalChange() {
+    if (this.open && !this.contained) {
+      this.modal.activate();
+      lockBodyScrolling(this);
+    }
+    if (this.open && this.contained) {
+      this.modal.deactivate();
+      unlockBodyScrolling(this);
+    }
+  }
+  /** Shows the drawer. */
+  async show() {
+    if (this.open) {
+      return void 0;
+    }
+    this.open = true;
+    return waitForEvent(this, "sl-after-show");
+  }
+  /** Hides the drawer */
+  async hide() {
+    if (!this.open) {
+      return void 0;
+    }
+    this.open = false;
+    return waitForEvent(this, "sl-after-hide");
+  }
+  render() {
+    return x`
+      <div
+        part="base"
+        class=${e$2({
+      drawer: true,
+      "drawer--open": this.open,
+      "drawer--top": this.placement === "top",
+      "drawer--end": this.placement === "end",
+      "drawer--bottom": this.placement === "bottom",
+      "drawer--start": this.placement === "start",
+      "drawer--contained": this.contained,
+      "drawer--fixed": !this.contained,
+      "drawer--rtl": this.localize.dir() === "rtl",
+      "drawer--has-footer": this.hasSlotController.test("footer")
+    })}
+      >
+        <div part="overlay" class="drawer__overlay" @click=${() => this.requestClose("overlay")} tabindex="-1"></div>
+
+        <div
+          part="panel"
+          class="drawer__panel"
+          role="dialog"
+          aria-modal="true"
+          aria-hidden=${this.open ? "false" : "true"}
+          aria-label=${o$3(this.noHeader ? this.label : void 0)}
+          aria-labelledby=${o$3(!this.noHeader ? "title" : void 0)}
+          tabindex="0"
+        >
+          ${!this.noHeader ? x`
+                <header part="header" class="drawer__header">
+                  <h2 part="title" class="drawer__title" id="title">
+                    <!-- If there's no label, use an invisible character to prevent the header from collapsing -->
+                    <slot name="label"> ${this.label.length > 0 ? this.label : String.fromCharCode(65279)} </slot>
+                  </h2>
+                  <div part="header-actions" class="drawer__header-actions">
+                    <slot name="header-actions"></slot>
+                    <sl-icon-button
+                      part="close-button"
+                      exportparts="base:close-button__base"
+                      class="drawer__close"
+                      name="x-lg"
+                      label=${this.localize.term("close")}
+                      library="system"
+                      @click=${() => this.requestClose("close-button")}
+                    ></sl-icon-button>
+                  </div>
+                </header>
+              ` : ""}
+
+          <slot part="body" class="drawer__body"></slot>
+
+          <footer part="footer" class="drawer__footer">
+            <slot name="footer"></slot>
+          </footer>
+        </div>
+      </div>
+    `;
+  }
+};
+SlDrawer.styles = [component_styles_default, drawer_styles_default];
+SlDrawer.dependencies = { "sl-icon-button": SlIconButton };
+__decorateClass([
+  e$5(".drawer")
+], SlDrawer.prototype, "drawer", 2);
+__decorateClass([
+  e$5(".drawer__panel")
+], SlDrawer.prototype, "panel", 2);
+__decorateClass([
+  e$5(".drawer__overlay")
+], SlDrawer.prototype, "overlay", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], SlDrawer.prototype, "open", 2);
+__decorateClass([
+  n$4({ reflect: true })
+], SlDrawer.prototype, "label", 2);
+__decorateClass([
+  n$4({ reflect: true })
+], SlDrawer.prototype, "placement", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], SlDrawer.prototype, "contained", 2);
+__decorateClass([
+  n$4({ attribute: "no-header", type: Boolean, reflect: true })
+], SlDrawer.prototype, "noHeader", 2);
+__decorateClass([
+  watch("open", { waitUntilFirstUpdate: true })
+], SlDrawer.prototype, "handleOpenChange", 1);
+__decorateClass([
+  watch("contained", { waitUntilFirstUpdate: true })
+], SlDrawer.prototype, "handleNoModalChange", 1);
+setDefaultAnimation("drawer.showTop", {
+  keyframes: [
+    { opacity: 0, translate: "0 -100%" },
+    { opacity: 1, translate: "0 0" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.hideTop", {
+  keyframes: [
+    { opacity: 1, translate: "0 0" },
+    { opacity: 0, translate: "0 -100%" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.showEnd", {
+  keyframes: [
+    { opacity: 0, translate: "100%" },
+    { opacity: 1, translate: "0" }
+  ],
+  rtlKeyframes: [
+    { opacity: 0, translate: "-100%" },
+    { opacity: 1, translate: "0" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.hideEnd", {
+  keyframes: [
+    { opacity: 1, translate: "0" },
+    { opacity: 0, translate: "100%" }
+  ],
+  rtlKeyframes: [
+    { opacity: 1, translate: "0" },
+    { opacity: 0, translate: "-100%" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.showBottom", {
+  keyframes: [
+    { opacity: 0, translate: "0 100%" },
+    { opacity: 1, translate: "0 0" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.hideBottom", {
+  keyframes: [
+    { opacity: 1, translate: "0 0" },
+    { opacity: 0, translate: "0 100%" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.showStart", {
+  keyframes: [
+    { opacity: 0, translate: "-100%" },
+    { opacity: 1, translate: "0" }
+  ],
+  rtlKeyframes: [
+    { opacity: 0, translate: "100%" },
+    { opacity: 1, translate: "0" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.hideStart", {
+  keyframes: [
+    { opacity: 1, translate: "0" },
+    { opacity: 0, translate: "-100%" }
+  ],
+  rtlKeyframes: [
+    { opacity: 1, translate: "0" },
+    { opacity: 0, translate: "100%" }
+  ],
+  options: { duration: 250, easing: "ease" }
+});
+setDefaultAnimation("drawer.denyClose", {
+  keyframes: [{ scale: 1 }, { scale: 1.01 }, { scale: 1 }],
+  options: { duration: 250 }
+});
+setDefaultAnimation("drawer.overlay.show", {
+  keyframes: [{ opacity: 0 }, { opacity: 1 }],
+  options: { duration: 250 }
+});
+setDefaultAnimation("drawer.overlay.hide", {
+  keyframes: [{ opacity: 1 }, { opacity: 0 }],
+  options: { duration: 250 }
+});
+
+SlDrawer.define("sl-drawer");
+
+// src/components/tree-item/tree-item.styles.ts
+var tree_item_styles_default = i$6`
+  :host {
+    display: block;
+    outline: 0;
+    z-index: 0;
+  }
+
+  :host(:focus) {
+    outline: none;
+  }
+
+  slot:not([name])::slotted(sl-icon) {
+    margin-inline-end: var(--sl-spacing-x-small);
+  }
+
+  .tree-item {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    color: var(--sl-color-neutral-700);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .tree-item__checkbox {
+    pointer-events: none;
+  }
+
+  .tree-item__expand-button,
+  .tree-item__checkbox,
+  .tree-item__label {
+    font-family: var(--sl-font-sans);
+    font-size: var(--sl-font-size-medium);
+    font-weight: var(--sl-font-weight-normal);
+    line-height: var(--sl-line-height-dense);
+    letter-spacing: var(--sl-letter-spacing-normal);
+  }
+
+  .tree-item__checkbox::part(base) {
+    display: flex;
+    align-items: center;
+  }
+
+  .tree-item__indentation {
+    display: block;
+    width: 1em;
+    flex-shrink: 0;
+  }
+
+  .tree-item__expand-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: content-box;
+    color: var(--sl-color-neutral-500);
+    padding: var(--sl-spacing-x-small);
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .tree-item__expand-button {
+    transition: var(--sl-transition-medium) rotate ease;
+  }
+
+  .tree-item--expanded .tree-item__expand-button {
+    rotate: 90deg;
+  }
+
+  .tree-item--expanded.tree-item--rtl .tree-item__expand-button {
+    rotate: -90deg;
+  }
+
+  .tree-item--expanded slot[name='expand-icon'],
+  .tree-item:not(.tree-item--expanded) slot[name='collapse-icon'] {
+    display: none;
+  }
+
+  .tree-item:not(.tree-item--has-expand-button) .tree-item__expand-icon-slot {
+    display: none;
+  }
+
+  .tree-item__expand-button--visible {
+    cursor: pointer;
+  }
+
+  .tree-item__item {
+    display: flex;
+    align-items: center;
+    border-inline-start: solid 3px transparent;
+  }
+
+  .tree-item--disabled .tree-item__item {
+    opacity: 0.5;
+    outline: none;
+    cursor: not-allowed;
+  }
+
+  :host(:focus-visible) .tree-item__item {
+    outline: var(--sl-focus-ring);
+    outline-offset: var(--sl-focus-ring-offset);
+    z-index: 2;
+  }
+
+  :host(:not([aria-disabled='true'])) .tree-item--selected .tree-item__item {
+    background-color: var(--sl-color-neutral-100);
+    border-inline-start-color: var(--sl-color-primary-600);
+  }
+
+  :host(:not([aria-disabled='true'])) .tree-item__expand-button {
+    color: var(--sl-color-neutral-600);
+  }
+
+  .tree-item__label {
+    display: flex;
+    align-items: center;
+    transition: var(--sl-transition-fast) color;
+  }
+
+  .tree-item__children {
+    display: block;
+    font-size: calc(1em + var(--indent-size, var(--sl-spacing-medium)));
+  }
+
+  /* Indentation lines */
+  .tree-item__children {
+    position: relative;
+  }
+
+  .tree-item__children::before {
+    content: '';
+    position: absolute;
+    top: var(--indent-guide-offset);
+    bottom: var(--indent-guide-offset);
+    left: calc(1em - (var(--indent-guide-width) / 2) - 1px);
+    border-inline-end: var(--indent-guide-width) var(--indent-guide-style) var(--indent-guide-color);
+    z-index: 1;
+  }
+
+  .tree-item--rtl .tree-item__children::before {
+    left: auto;
+    right: 1em;
+  }
+
+  @media (forced-colors: active) {
+    :host(:not([aria-disabled='true'])) .tree-item--selected .tree-item__item {
+      outline: dashed 1px SelectedItem;
+    }
+  }
+`;
+
+/**
+ * @license
+ * Copyright 2021 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+function n(n,r,t){return n?r(n):t?.(n)}
+
+var _SlTreeItem = class _SlTreeItem extends ShoelaceElement {
+  constructor() {
+    super(...arguments);
+    this.localize = new LocalizeController(this);
+    this.indeterminate = false;
+    this.isLeaf = false;
+    this.loading = false;
+    this.selectable = false;
+    this.expanded = false;
+    this.selected = false;
+    this.disabled = false;
+    this.lazy = false;
+  }
+  static isTreeItem(node) {
+    return node instanceof Element && node.getAttribute("role") === "treeitem";
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this.setAttribute("role", "treeitem");
+    this.setAttribute("tabindex", "-1");
+    if (this.isNestedItem()) {
+      this.slot = "children";
+    }
+  }
+  firstUpdated() {
+    this.childrenContainer.hidden = !this.expanded;
+    this.childrenContainer.style.height = this.expanded ? "auto" : "0";
+    this.isLeaf = !this.lazy && this.getChildrenItems().length === 0;
+    this.handleExpandedChange();
+  }
+  async animateCollapse() {
+    this.emit("sl-collapse");
+    await stopAnimations(this.childrenContainer);
+    const { keyframes, options } = getAnimation(this, "tree-item.collapse", { dir: this.localize.dir() });
+    await animateTo(
+      this.childrenContainer,
+      shimKeyframesHeightAuto(keyframes, this.childrenContainer.scrollHeight),
+      options
+    );
+    this.childrenContainer.hidden = true;
+    this.emit("sl-after-collapse");
+  }
+  // Checks whether the item is nested into an item
+  isNestedItem() {
+    const parent = this.parentElement;
+    return !!parent && _SlTreeItem.isTreeItem(parent);
+  }
+  handleChildrenSlotChange() {
+    this.loading = false;
+    this.isLeaf = !this.lazy && this.getChildrenItems().length === 0;
+  }
+  willUpdate(changedProperties) {
+    if (changedProperties.has("selected") && !changedProperties.has("indeterminate")) {
+      this.indeterminate = false;
+    }
+  }
+  async animateExpand() {
+    this.emit("sl-expand");
+    await stopAnimations(this.childrenContainer);
+    this.childrenContainer.hidden = false;
+    const { keyframes, options } = getAnimation(this, "tree-item.expand", { dir: this.localize.dir() });
+    await animateTo(
+      this.childrenContainer,
+      shimKeyframesHeightAuto(keyframes, this.childrenContainer.scrollHeight),
+      options
+    );
+    this.childrenContainer.style.height = "auto";
+    this.emit("sl-after-expand");
+  }
+  handleLoadingChange() {
+    this.setAttribute("aria-busy", this.loading ? "true" : "false");
+    if (!this.loading) {
+      this.animateExpand();
+    }
+  }
+  handleDisabledChange() {
+    this.setAttribute("aria-disabled", this.disabled ? "true" : "false");
+  }
+  handleSelectedChange() {
+    this.setAttribute("aria-selected", this.selected ? "true" : "false");
+  }
+  handleExpandedChange() {
+    if (!this.isLeaf) {
+      this.setAttribute("aria-expanded", this.expanded ? "true" : "false");
+    } else {
+      this.removeAttribute("aria-expanded");
+    }
+  }
+  handleExpandAnimation() {
+    if (this.expanded) {
+      if (this.lazy) {
+        this.loading = true;
+        this.emit("sl-lazy-load");
+      } else {
+        this.animateExpand();
+      }
+    } else {
+      this.animateCollapse();
+    }
+  }
+  handleLazyChange() {
+    this.emit("sl-lazy-change");
+  }
+  /** Gets all the nested tree items in this node. */
+  getChildrenItems({ includeDisabled = true } = {}) {
+    return this.childrenSlot ? [...this.childrenSlot.assignedElements({ flatten: true })].filter(
+      (item) => _SlTreeItem.isTreeItem(item) && (includeDisabled || !item.disabled)
+    ) : [];
+  }
+  render() {
+    const isRtl = this.localize.dir() === "rtl";
+    const showExpandButton = !this.loading && (!this.isLeaf || this.lazy);
+    return x`
+      <div
+        part="base"
+        class="${e$2({
+      "tree-item": true,
+      "tree-item--expanded": this.expanded,
+      "tree-item--selected": this.selected,
+      "tree-item--disabled": this.disabled,
+      "tree-item--leaf": this.isLeaf,
+      "tree-item--has-expand-button": showExpandButton,
+      "tree-item--rtl": this.localize.dir() === "rtl"
+    })}"
+      >
+        <div
+          class="tree-item__item"
+          part="
+            item
+            ${this.disabled ? "item--disabled" : ""}
+            ${this.expanded ? "item--expanded" : ""}
+            ${this.indeterminate ? "item--indeterminate" : ""}
+            ${this.selected ? "item--selected" : ""}
+          "
+        >
+          <div class="tree-item__indentation" part="indentation"></div>
+
+          <div
+            part="expand-button"
+            class=${e$2({
+      "tree-item__expand-button": true,
+      "tree-item__expand-button--visible": showExpandButton
+    })}
+            aria-hidden="true"
+          >
+            ${n(
+      this.loading,
+      () => x` <sl-spinner part="spinner" exportparts="base:spinner__base"></sl-spinner> `
+    )}
+            <slot class="tree-item__expand-icon-slot" name="expand-icon">
+              <sl-icon library="system" name=${isRtl ? "chevron-left" : "chevron-right"}></sl-icon>
+            </slot>
+            <slot class="tree-item__expand-icon-slot" name="collapse-icon">
+              <sl-icon library="system" name=${isRtl ? "chevron-left" : "chevron-right"}></sl-icon>
+            </slot>
+          </div>
+
+          ${n(
+      this.selectable,
+      () => x`
+              <sl-checkbox
+                part="checkbox"
+                exportparts="
+                    base:checkbox__base,
+                    control:checkbox__control,
+                    control--checked:checkbox__control--checked,
+                    control--indeterminate:checkbox__control--indeterminate,
+                    checked-icon:checkbox__checked-icon,
+                    indeterminate-icon:checkbox__indeterminate-icon,
+                    label:checkbox__label
+                  "
+                class="tree-item__checkbox"
+                ?disabled="${this.disabled}"
+                ?checked="${l(this.selected)}"
+                ?indeterminate="${this.indeterminate}"
+                tabindex="-1"
+              ></sl-checkbox>
+            `
+    )}
+
+          <slot class="tree-item__label" part="label"></slot>
+        </div>
+
+        <div class="tree-item__children" part="children" role="group">
+          <slot name="children" @slotchange="${this.handleChildrenSlotChange}"></slot>
+        </div>
+      </div>
+    `;
+  }
+};
+_SlTreeItem.styles = [component_styles_default, tree_item_styles_default];
+_SlTreeItem.dependencies = {
+  "sl-checkbox": SlCheckbox,
+  "sl-icon": SlIcon,
+  "sl-spinner": SlSpinner
+};
+__decorateClass([
+  r$1()
+], _SlTreeItem.prototype, "indeterminate", 2);
+__decorateClass([
+  r$1()
+], _SlTreeItem.prototype, "isLeaf", 2);
+__decorateClass([
+  r$1()
+], _SlTreeItem.prototype, "loading", 2);
+__decorateClass([
+  r$1()
+], _SlTreeItem.prototype, "selectable", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], _SlTreeItem.prototype, "expanded", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], _SlTreeItem.prototype, "selected", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], _SlTreeItem.prototype, "disabled", 2);
+__decorateClass([
+  n$4({ type: Boolean, reflect: true })
+], _SlTreeItem.prototype, "lazy", 2);
+__decorateClass([
+  e$5("slot:not([name])")
+], _SlTreeItem.prototype, "defaultSlot", 2);
+__decorateClass([
+  e$5("slot[name=children]")
+], _SlTreeItem.prototype, "childrenSlot", 2);
+__decorateClass([
+  e$5(".tree-item__item")
+], _SlTreeItem.prototype, "itemElement", 2);
+__decorateClass([
+  e$5(".tree-item__children")
+], _SlTreeItem.prototype, "childrenContainer", 2);
+__decorateClass([
+  e$5(".tree-item__expand-button slot")
+], _SlTreeItem.prototype, "expandButtonSlot", 2);
+__decorateClass([
+  watch("loading", { waitUntilFirstUpdate: true })
+], _SlTreeItem.prototype, "handleLoadingChange", 1);
+__decorateClass([
+  watch("disabled")
+], _SlTreeItem.prototype, "handleDisabledChange", 1);
+__decorateClass([
+  watch("selected")
+], _SlTreeItem.prototype, "handleSelectedChange", 1);
+__decorateClass([
+  watch("expanded", { waitUntilFirstUpdate: true })
+], _SlTreeItem.prototype, "handleExpandedChange", 1);
+__decorateClass([
+  watch("expanded", { waitUntilFirstUpdate: true })
+], _SlTreeItem.prototype, "handleExpandAnimation", 1);
+__decorateClass([
+  watch("lazy", { waitUntilFirstUpdate: true })
+], _SlTreeItem.prototype, "handleLazyChange", 1);
+var SlTreeItem = _SlTreeItem;
+setDefaultAnimation("tree-item.expand", {
+  keyframes: [
+    { height: "0", opacity: "0", overflow: "hidden" },
+    { height: "auto", opacity: "1", overflow: "hidden" }
+  ],
+  options: { duration: 250, easing: "cubic-bezier(0.4, 0.0, 0.2, 1)" }
+});
+setDefaultAnimation("tree-item.collapse", {
+  keyframes: [
+    { height: "auto", opacity: "1", overflow: "hidden" },
+    { height: "0", opacity: "0", overflow: "hidden" }
+  ],
+  options: { duration: 200, easing: "cubic-bezier(0.4, 0.0, 0.2, 1)" }
+});
+
+// src/components/tree/tree.styles.ts
+var tree_styles_default = i$6`
+  :host {
+    /*
+     * These are actually used by tree item, but we define them here so they can more easily be set and all tree items
+     * stay consistent.
+     */
+    --indent-guide-color: var(--sl-color-neutral-200);
+    --indent-guide-offset: 0;
+    --indent-guide-style: solid;
+    --indent-guide-width: 0;
+    --indent-size: var(--sl-spacing-large);
+
+    display: block;
+
+    /*
+     * Tree item indentation uses the "em" unit to increment its width on each level, so setting the font size to zero
+     * here removes the indentation for all the nodes on the first level.
+     */
+    font-size: 0;
+  }
+`;
+
+// src/internal/math.ts
+function clamp(value, min, max) {
+  const noNegativeZero = (n) => Object.is(n, -0) ? 0 : n;
+  if (value < min) {
+    return noNegativeZero(min);
+  }
+  if (value > max) {
+    return noNegativeZero(max);
+  }
+  return noNegativeZero(value);
+}
+
+function syncCheckboxes(changedTreeItem, initialSync = false) {
+  function syncParentItem(treeItem) {
+    const children = treeItem.getChildrenItems({ includeDisabled: false });
+    if (children.length) {
+      const allChecked = children.every((item) => item.selected);
+      const allUnchecked = children.every((item) => !item.selected && !item.indeterminate);
+      treeItem.selected = allChecked;
+      treeItem.indeterminate = !allChecked && !allUnchecked;
+    }
+  }
+  function syncAncestors(treeItem) {
+    const parentItem = treeItem.parentElement;
+    if (SlTreeItem.isTreeItem(parentItem)) {
+      syncParentItem(parentItem);
+      syncAncestors(parentItem);
+    }
+  }
+  function syncDescendants(treeItem) {
+    for (const childItem of treeItem.getChildrenItems()) {
+      childItem.selected = initialSync ? treeItem.selected || childItem.selected : !childItem.disabled && treeItem.selected;
+      syncDescendants(childItem);
+    }
+    if (initialSync) {
+      syncParentItem(treeItem);
+    }
+  }
+  syncDescendants(changedTreeItem);
+  syncAncestors(changedTreeItem);
+}
+var SlTree = class extends ShoelaceElement {
+  constructor() {
+    super();
+    this.selection = "single";
+    this.clickTarget = null;
+    this.localize = new LocalizeController(this);
+    // Initializes new items by setting the `selectable` property and the expanded/collapsed icons if any
+    this.initTreeItem = (item) => {
+      item.selectable = this.selection === "multiple";
+      ["expand", "collapse"].filter((status) => !!this.querySelector(`[slot="${status}-icon"]`)).forEach((status) => {
+        const existingIcon = item.querySelector(`[slot="${status}-icon"]`);
+        const expandButtonIcon = this.getExpandButtonIcon(status);
+        if (!expandButtonIcon) return;
+        if (existingIcon === null) {
+          item.append(expandButtonIcon);
+        } else if (existingIcon.hasAttribute("data-default")) {
+          existingIcon.replaceWith(expandButtonIcon);
+        } else ;
+      });
+    };
+    this.handleTreeChanged = (mutations) => {
+      for (const mutation of mutations) {
+        const addedNodes = [...mutation.addedNodes].filter(SlTreeItem.isTreeItem);
+        const removedNodes = [...mutation.removedNodes].filter(SlTreeItem.isTreeItem);
+        addedNodes.forEach(this.initTreeItem);
+        if (this.lastFocusedItem && removedNodes.includes(this.lastFocusedItem)) {
+          this.lastFocusedItem = null;
+        }
+      }
+    };
+    this.handleFocusOut = (event) => {
+      const relatedTarget = event.relatedTarget;
+      if (!relatedTarget || !this.contains(relatedTarget)) {
+        this.tabIndex = 0;
+      }
+    };
+    this.handleFocusIn = (event) => {
+      const target = event.target;
+      if (event.target === this) {
+        this.focusItem(this.lastFocusedItem || this.getAllTreeItems()[0]);
+      }
+      if (SlTreeItem.isTreeItem(target) && !target.disabled) {
+        if (this.lastFocusedItem) {
+          this.lastFocusedItem.tabIndex = -1;
+        }
+        this.lastFocusedItem = target;
+        this.tabIndex = -1;
+        target.tabIndex = 0;
+      }
+    };
+    this.addEventListener("focusin", this.handleFocusIn);
+    this.addEventListener("focusout", this.handleFocusOut);
+    this.addEventListener("sl-lazy-change", this.handleSlotChange);
+  }
+  async connectedCallback() {
+    super.connectedCallback();
+    this.setAttribute("role", "tree");
+    this.setAttribute("tabindex", "0");
+    await this.updateComplete;
+    this.mutationObserver = new MutationObserver(this.handleTreeChanged);
+    this.mutationObserver.observe(this, { childList: true, subtree: true });
+  }
+  disconnectedCallback() {
+    var _a;
+    super.disconnectedCallback();
+    (_a = this.mutationObserver) == null ? void 0 : _a.disconnect();
+  }
+  // Generates a clone of the expand icon element to use for each tree item
+  getExpandButtonIcon(status) {
+    const slot = status === "expand" ? this.expandedIconSlot : this.collapsedIconSlot;
+    const icon = slot.assignedElements({ flatten: true })[0];
+    if (icon) {
+      const clone = icon.cloneNode(true);
+      [clone, ...clone.querySelectorAll("[id]")].forEach((el) => el.removeAttribute("id"));
+      clone.setAttribute("data-default", "");
+      clone.slot = `${status}-icon`;
+      return clone;
+    }
+    return null;
+  }
+  selectItem(selectedItem) {
+    const previousSelection = [...this.selectedItems];
+    if (this.selection === "multiple") {
+      selectedItem.selected = !selectedItem.selected;
+      if (selectedItem.lazy) {
+        selectedItem.expanded = true;
+      }
+      syncCheckboxes(selectedItem);
+    } else if (this.selection === "single" || selectedItem.isLeaf) {
+      const items = this.getAllTreeItems();
+      for (const item of items) {
+        item.selected = item === selectedItem;
+      }
+    } else if (this.selection === "leaf") {
+      selectedItem.expanded = !selectedItem.expanded;
+    }
+    const nextSelection = this.selectedItems;
+    if (previousSelection.length !== nextSelection.length || nextSelection.some((item) => !previousSelection.includes(item))) {
+      Promise.all(nextSelection.map((el) => el.updateComplete)).then(() => {
+        this.emit("sl-selection-change", { detail: { selection: nextSelection } });
+      });
+    }
+  }
+  getAllTreeItems() {
+    return [...this.querySelectorAll("sl-tree-item")];
+  }
+  focusItem(item) {
+    item == null ? void 0 : item.focus();
+  }
+  handleKeyDown(event) {
+    if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End", "Enter", " "].includes(event.key)) {
+      return;
+    }
+    if (event.composedPath().some((el) => {
+      var _a;
+      return ["input", "textarea"].includes((_a = el == null ? void 0 : el.tagName) == null ? void 0 : _a.toLowerCase());
+    })) {
+      return;
+    }
+    const items = this.getFocusableItems();
+    const isLtr = this.localize.dir() === "ltr";
+    const isRtl = this.localize.dir() === "rtl";
+    if (items.length > 0) {
+      event.preventDefault();
+      const activeItemIndex = items.findIndex((item) => item.matches(":focus"));
+      const activeItem = items[activeItemIndex];
+      const focusItemAt = (index) => {
+        const item = items[clamp(index, 0, items.length - 1)];
+        this.focusItem(item);
+      };
+      const toggleExpand = (expanded) => {
+        activeItem.expanded = expanded;
+      };
+      if (event.key === "ArrowDown") {
+        focusItemAt(activeItemIndex + 1);
+      } else if (event.key === "ArrowUp") {
+        focusItemAt(activeItemIndex - 1);
+      } else if (isLtr && event.key === "ArrowRight" || isRtl && event.key === "ArrowLeft") {
+        if (!activeItem || activeItem.disabled || activeItem.expanded || activeItem.isLeaf && !activeItem.lazy) {
+          focusItemAt(activeItemIndex + 1);
+        } else {
+          toggleExpand(true);
+        }
+      } else if (isLtr && event.key === "ArrowLeft" || isRtl && event.key === "ArrowRight") {
+        if (!activeItem || activeItem.disabled || activeItem.isLeaf || !activeItem.expanded) {
+          focusItemAt(activeItemIndex - 1);
+        } else {
+          toggleExpand(false);
+        }
+      } else if (event.key === "Home") {
+        focusItemAt(0);
+      } else if (event.key === "End") {
+        focusItemAt(items.length - 1);
+      } else if (event.key === "Enter" || event.key === " ") {
+        if (!activeItem.disabled) {
+          this.selectItem(activeItem);
+        }
+      }
+    }
+  }
+  handleClick(event) {
+    const target = event.target;
+    const treeItem = target.closest("sl-tree-item");
+    const isExpandButton = event.composedPath().some((el) => {
+      var _a;
+      return (_a = el == null ? void 0 : el.classList) == null ? void 0 : _a.contains("tree-item__expand-button");
+    });
+    if (!treeItem || treeItem.disabled || target !== this.clickTarget) {
+      return;
+    }
+    if (isExpandButton) {
+      treeItem.expanded = !treeItem.expanded;
+    } else {
+      this.selectItem(treeItem);
+    }
+  }
+  handleMouseDown(event) {
+    this.clickTarget = event.target;
+  }
+  handleSlotChange() {
+    const items = this.getAllTreeItems();
+    items.forEach(this.initTreeItem);
+  }
+  async handleSelectionChange() {
+    const isSelectionMultiple = this.selection === "multiple";
+    const items = this.getAllTreeItems();
+    this.setAttribute("aria-multiselectable", isSelectionMultiple ? "true" : "false");
+    for (const item of items) {
+      item.selectable = isSelectionMultiple;
+    }
+    if (isSelectionMultiple) {
+      await this.updateComplete;
+      [...this.querySelectorAll(":scope > sl-tree-item")].forEach(
+        (treeItem) => syncCheckboxes(treeItem, true)
+      );
+    }
+  }
+  /** @internal Returns the list of tree items that are selected in the tree. */
+  get selectedItems() {
+    const items = this.getAllTreeItems();
+    const isSelected = (item) => item.selected;
+    return items.filter(isSelected);
+  }
+  /** @internal Gets focusable tree items in the tree. */
+  getFocusableItems() {
+    const items = this.getAllTreeItems();
+    const collapsedItems = /* @__PURE__ */ new Set();
+    return items.filter((item) => {
+      var _a;
+      if (item.disabled) return false;
+      const parent = (_a = item.parentElement) == null ? void 0 : _a.closest("[role=treeitem]");
+      if (parent && (!parent.expanded || parent.loading || collapsedItems.has(parent))) {
+        collapsedItems.add(item);
+      }
+      return !collapsedItems.has(item);
+    });
+  }
+  render() {
+    return x`
+      <div
+        part="base"
+        class="tree"
+        @click=${this.handleClick}
+        @keydown=${this.handleKeyDown}
+        @mousedown=${this.handleMouseDown}
+      >
+        <slot @slotchange=${this.handleSlotChange}></slot>
+        <span hidden aria-hidden="true"><slot name="expand-icon"></slot></span>
+        <span hidden aria-hidden="true"><slot name="collapse-icon"></slot></span>
+      </div>
+    `;
+  }
+};
+SlTree.styles = [component_styles_default, tree_styles_default];
+__decorateClass([
+  e$5("slot:not([name])")
+], SlTree.prototype, "defaultSlot", 2);
+__decorateClass([
+  e$5("slot[name=expand-icon]")
+], SlTree.prototype, "expandedIconSlot", 2);
+__decorateClass([
+  e$5("slot[name=collapse-icon]")
+], SlTree.prototype, "collapsedIconSlot", 2);
+__decorateClass([
+  n$4()
+], SlTree.prototype, "selection", 2);
+__decorateClass([
+  watch("selection")
+], SlTree.prototype, "handleSelectionChange", 1);
+
+SlTree.define("sl-tree");
+
+SlTreeItem.define("sl-tree-item");
 
 /**
  * Base horizontal panel component with priority-based overflow management
@@ -11623,8 +12893,10 @@ class BasePanel extends HTMLElement {
     const widgets = [];
     
     // Get all slotted elements from the main slot
+    // @ts-ignore
     const mainSlot = this.shadowRoot.querySelector('slot:not([name])');
     if (mainSlot) {
+      // @ts-ignore
       const slottedElements = mainSlot.assignedElements();
       slottedElements.forEach(widget => {
         // Skip the overflow container itself
@@ -11751,17 +13023,27 @@ class BasePanel extends HTMLElement {
   }
 
   /**
-   * Add a widget to the panel
+   * Internal method to add a widget to the panel
    * @param {HTMLElement} widget - The widget element
-   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {number} priority - Higher priority widgets stay visible longer
+   * @param {InsertPosition|null} where - Position for insertAdjacentElement
+   * @param {HTMLElement|null} referenceElement - Reference element for positioning
+   * @returns {string} The widget ID
    */
-  add(widget, priority = 0) {
-    const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  _addWidget(widget, priority, where = null, referenceElement = null) {
+    const widgetId = widget.id || `widget-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     widget.id = widgetId;
     widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, priority });
-    this.appendChild(widget);
+    
+    if (where && referenceElement) {
+      referenceElement.insertAdjacentElement(where, widget);
+    } else if (where) {
+      this.insertAdjacentElement(where, widget);
+    } else {
+      this.appendChild(widget);
+    }
     
     // Reapply flex layout if in flex mode (for ToolBar)
     if (this.tagName === 'TOOL-BAR' && this.getAttribute('smart-overflow') === 'off') {
@@ -11788,6 +13070,36 @@ class BasePanel extends HTMLElement {
     setTimeout(() => this.checkAndResolveOverflow(), 200);
     
     return widgetId;
+  }
+
+  /**
+   * Add a widget to the panel
+   * @param {HTMLElement} widget - The widget element
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {InsertPosition} [where] - Position for insertAdjacentElement ('beforebegin', 'afterbegin', 'beforeend', 'afterend'). Defaults to "beforeEnd"
+   */
+  add(widget, priority = 0, where = "beforeend") {
+    return this._addWidget(widget, priority, where);
+  }
+
+  /**
+   * Add a widget before another widget
+   * @param {HTMLElement} widget - The widget element to add
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {HTMLElement} siblingWidget - The sibling widget to add before
+   */
+  addBefore(widget, priority = 0, siblingWidget) {
+    return this._addWidget(widget, priority, 'beforebegin', siblingWidget);
+  }
+
+  /**
+   * Add a widget after another widget
+   * @param {HTMLElement} widget - The widget element to add
+   * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
+   * @param {HTMLElement} siblingWidget - The sibling widget to add after
+   */
+  addAfter(widget, priority = 0, siblingWidget) {
+    return this._addWidget(widget, priority, 'afterend', siblingWidget);
   }
 
   /**
@@ -14881,6 +16193,7 @@ const PanelUtils = {
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
  * @import {toolbarPart} from './plugins/toolbar.js'
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
+ * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
  */
 
 /**
@@ -14904,6 +16217,7 @@ const PanelUtils = {
  * @property {UIPart<SlDialog, infoDialogPart>} infoDialog - A dialog to display information and help
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
+ * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  */
 
 /**
@@ -14935,16 +16249,16 @@ window.ui = ui; // for debugging
 /** @import { ApplicationState } from '../app.js' */
 
 // Plugin API
-const api$b = {
+const api$d = {
   info,
   error: error$1,
   success
 };
 
 // Plugin object
-const plugin$h = {
+const plugin$j = {
   name: "dialog",
-  install: install$g
+  install: install$i
 };
 
 //
@@ -14968,8 +16282,8 @@ const plugin$h = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-async function install$g(app) {
-  api$f.debug(`Installing plugin "${plugin$h.name}"`);
+async function install$i(app) {
+  api$h.debug(`Installing plugin "${plugin$j.name}"`);
   await createHtmlElements("dialog.html", document.body);
   updateUi();
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.hide());
@@ -15502,10 +16816,10 @@ let currentFile;
 /**
  * plugin object
  */
-const plugin$g = {
+const plugin$i = {
   name: "pdfviewer",
-  install: install$f,
-  state: { update: update$b }
+  install: install$h,
+  state: { update: update$c }
 };
 
 //
@@ -15516,10 +16830,10 @@ const plugin$g = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$f(state) {
-  api$f.debug(`Installing plugin "${plugin$g.name}"`);
+async function install$h(state) {
+  api$h.debug(`Installing plugin "${plugin$i.name}"`);
   await pdfViewer.isReady();
-  api$f.info("PDF Viewer ready.");
+  api$h.info("PDF Viewer ready.");
   pdfViewer.show();
   
   // Add autosearch switch to PDF viewer statusbar
@@ -15542,7 +16856,7 @@ async function install$f(state) {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$b(state) {
+async function update$c(state) {
   if (state.pdf !== currentFile) {
     currentFile = state.pdf;
     // Clear PDF viewer when no PDF is loaded
@@ -15550,7 +16864,7 @@ async function update$b(state) {
       try {
         await pdfViewer.clear();
       } catch (error) {
-        api$f.warn("Error clearing PDF viewer:", error.message);
+        api$h.warn("Error clearing PDF viewer:", error.message);
       }
     }
   }
@@ -15571,9 +16885,9 @@ async function onAutoSearchSwitchChange(evt) {
     autoSearchSwitch.setAttribute('help-text', newHelpText);
   }
   
-  api$f.info(`Auto search is: ${checked}`);
+  api$h.info(`Auto search is: ${checked}`);
   if (checked && xmlEditor.selectedNode) {
-    await api$6.searchNodeContentsInPdf(xmlEditor.selectedNode);
+    await api$7.searchNodeContentsInPdf(xmlEditor.selectedNode);
   }
 }
 
@@ -46561,11 +47875,11 @@ let teiHeaderVisible = false;
 /**
  * component plugin
  */
-const plugin$f = {
+const plugin$h = {
   name: "xmleditor",
-  install: install$e,
+  install: install$g,
   state: {
-    update: update$a
+    update: update$b
   }
 };
 
@@ -46573,8 +47887,8 @@ const plugin$f = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$e(state) {
-  api$f.debug(`Installing plugin "${plugin$f.name}"`);
+async function install$g(state) {
+  api$h.debug(`Installing plugin "${plugin$h.name}"`);
 
   // Widgets for the statusbar
   
@@ -46629,7 +47943,7 @@ async function install$e(state) {
 
   // manually show diagnostics if validation is disabled
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    if (api$a.isDisabled()) {
+    if (api$c.isDisabled()) {
       let view = xmlEditor.getView();
       try {
         // Validate diagnostic positions before setting
@@ -46638,12 +47952,12 @@ async function install$e(state) {
         });
         view.dispatch(setDiagnostics(view.state, validDiagnostics));
       } catch (error) {
-        api$f.warn("Error setting diagnostics: " + error.message);
+        api$h.warn("Error setting diagnostics: " + error.message);
         // Clear diagnostics on error
         try {
           view.dispatch(setDiagnostics(view.state, []));
         } catch (clearError) {
-          api$f.warn("Error clearing diagnostics: " + clearError.message);
+          api$h.warn("Error clearing diagnostics: " + clearError.message);
         }
       }
     }
@@ -46658,7 +47972,7 @@ async function install$e(state) {
   // Handle indentation detection before loading XML
   xmlEditor.on("editorBeforeLoad", (xml) => {
     const indentUnit = detectXmlIndentation(xml);
-    api$f.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
+    api$h.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
     xmlEditor.configureIntenation(indentUnit, 4); // default tab size of 4 spaces
     updateIndentationStatus(indentUnit);
   });
@@ -46682,7 +47996,7 @@ async function install$e(state) {
           teiHeaderVisible = false; // Reset state after document load
           updateTeiHeaderToggleWidget();
         } catch (error) {
-          api$f.debug(`Error folding teiHeader: ${error.message}`);
+          api$h.debug(`Error folding teiHeader: ${error.message}`);
         }
       } else {
         teiHeaderToggleWidget.style.display = 'none';
@@ -46699,7 +48013,7 @@ async function install$e(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$a(state) {
+async function update$b(state) {
 
   [readOnlyStatusWidget, cursorPositionWidget, 
     indentationStatusWidget, teiHeaderToggleWidget]
@@ -46714,7 +48028,7 @@ async function update$a(state) {
   // update the editor read-only state
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
     xmlEditor.setReadOnly(state.editorReadOnly);
-    api$f.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
+    api$h.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     if (state.editorReadOnly) {
       ui$1.xmlEditor.classList.add("editor-readonly");
       if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
@@ -46774,11 +48088,11 @@ async function saveIfDirty$1() {
   const filePath = String(ui$1.toolbar.xml.value);
 
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
-    const result = await api$6.saveXml(filePath);
+    const result = await api$7.saveXml(filePath);
     if (result.status == "unchanged") {
-      api$f.debug(`File has not changed`);
+      api$h.debug(`File has not changed`);
     } else {
-      api$f.debug(`Saved file ${result.hash}`);
+      api$h.debug(`Saved file ${result.hash}`);
       // Update state to use new hash from server
       state.xml = result.hash;
       await updateState(state);
@@ -46830,16 +48144,16 @@ function toggleTeiHeaderVisibility() {
       // Fold the teiHeader
       xmlEditor.foldByXpath('//tei:teiHeader');
       teiHeaderVisible = false;
-      api$f.debug('Folded teiHeader');
+      api$h.debug('Folded teiHeader');
     } else {
       // Unfold the teiHeader
       xmlEditor.unfoldByXpath('//tei:teiHeader');
       teiHeaderVisible = true;
-      api$f.debug('Unfolded teiHeader');
+      api$h.debug('Unfolded teiHeader');
     }
     updateTeiHeaderToggleWidget();
   } catch (error) {
-    api$f.warn(`Error toggling teiHeader visibility: ${error.message}`);
+    api$h.warn(`Error toggling teiHeader visibility: ${error.message}`);
   }
 }
 
@@ -46866,18 +48180,18 @@ function updateTeiHeaderToggleWidget() {
  */
 
 
-const api$a = {
+const api$c = {
   configure,
   validate,
   isValidDocument,
   isDisabled
 };
 
-const plugin$e = {
+const plugin$g = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
-  install: install$d,
-  state: {update: update$9},
+  install: install$f,
+  state: {update: update$a},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -46898,8 +48212,8 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-async function install$d(state) {
-  api$f.debug(`Installing plugin "${plugin$e.name}"`);
+async function install$f(state) {
+  api$h.debug(`Installing plugin "${plugin$g.name}"`);
   // add the linter to the editor
   xmlEditor.addLinter([
     linter(lintSource, { 
@@ -46917,7 +48231,7 @@ async function install$d(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$9(state) {
+async function update$a(state) {
   if (state.offline || state.editorReadOnly || !state.xml ) {
     // if we are offline, disable validation
     configure({ mode: "off" });
@@ -46965,19 +48279,19 @@ async function lintSource(view) {
   const doc = view.state.doc;
   const xml = doc.toString();
   if (xml == "") {
-    api$f.debug("Nothing to validate.");
+    api$h.debug("Nothing to validate.");
     return [];
   }
 
   // don't validate if disabled and use last diagnostics
   if (_isDisabled) {
-    api$f.debug("Ignoring validation request: Validation is disabled");
+    api$h.debug("Ignoring validation request: Validation is disabled");
     return lastDiagnostics;
   }
 
   // if this is called while another validation is ongoing, return the last diagnostics
   if (validationInProgress) {
-    api$f.debug("Ignoring validation request: Validation is ongoing.");
+    api$h.debug("Ignoring validation request: Validation is ongoing.");
     return lastDiagnostics;
   }
 
@@ -46987,19 +48301,19 @@ async function lintSource(view) {
     let validationErrors;
     while (true) {
       validatedVersion = xmlEditor.getDocumentVersion(); // rewrite this!
-      api$f.debug(`Requesting validation for document version ${validatedVersion}...`);
+      api$h.debug(`Requesting validation for document version ${validatedVersion}...`);
       // inform other plugins
       invoke(endpoints.validation.inProgress, validationPromise);
       // send request to server
       try {
-        validationErrors = await api$9.validateXml(xml);
+        validationErrors = await api$b.validateXml(xml);
       } catch (error) {
         return reject(error);
       }
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`);
       // check if document has changed in the meantime
       if (validatedVersion != xmlEditor.getDocumentVersion()) {
-        api$f.debug("Document has changed, restarting validation...");
+        api$h.debug("Document has changed, restarting validation...");
       } else {
         // convert xmllint errors to Diagnostic objects
         const diagnostics = validationErrors.map(/** @type {object} */ error => {
@@ -47043,8 +48357,8 @@ async function lintSource(view) {
     diagnostics = await validationPromise;
   } catch (error) {
     // stop querying
-    if (api$9.lastHttpStatus >= 400) {
-      console.debug("Disabling validation because of server error " + api$9.lastHttpStatus);
+    if (api$b.lastHttpStatus >= 400) {
+      console.debug("Disabling validation because of server error " + api$b.lastHttpStatus);
       configure({mode: "off"});
     }
     return lastDiagnostics
@@ -47070,11 +48384,11 @@ function configure({ mode = "auto" }) {
   switch (mode) {
     case "auto":
       _isDisabled = false;
-      api$f.info("Validation is enabled");
+      api$h.info("Validation is enabled");
       break
     case "off":
       _isDisabled = true;
-      api$f.info("Validation is disabled");
+      api$h.info("Validation is disabled");
       break
     default:
       throw new Error("Invalid mode parameter")
@@ -47089,7 +48403,7 @@ function configure({ mode = "auto" }) {
 async function validate() {
   if (isValidating()) {
     // if a validation is ongoing, we can wait for it to finish and use the result
-    api$f.debug("Validation is ongoing, waiting for it to finish");
+    api$h.debug("Validation is ongoing, waiting for it to finish");
     return await anyCurrentValidation()
   }
 
@@ -47183,7 +48497,7 @@ function removeDiagnosticsInChangedRanges(update) {
         });
       }
     } else {
-      api$f.debug("Removing diagnostic " + JSON.stringify(d));
+      api$h.debug("Removing diagnostic " + JSON.stringify(d));
     }
   });
 
@@ -47193,7 +48507,7 @@ function removeDiagnosticsInChangedRanges(update) {
   try {
     xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
   } catch (error) {
-    api$f.warn("Error setting diagnostics after range change:", error);
+    api$h.warn("Error setting diagnostics after range change:", error);
     // Clear all diagnostics if there's an error
     xmlEditor.getView().dispatch(setDiagnostics(viewState, []));
     lastDiagnostics = [];
@@ -47544,19 +48858,19 @@ __decorateClass([
   e$5(".alert__countdown-elapsed")
 ], _SlAlert.prototype, "countdownElement", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], _SlAlert.prototype, "open", 2);
 __decorateClass([
-  n$3({ type: Boolean, reflect: true })
+  n$4({ type: Boolean, reflect: true })
 ], _SlAlert.prototype, "closable", 2);
 __decorateClass([
-  n$3({ reflect: true })
+  n$4({ reflect: true })
 ], _SlAlert.prototype, "variant", 2);
 __decorateClass([
-  n$3({ type: Number })
+  n$4({ type: Number })
 ], _SlAlert.prototype, "duration", 2);
 __decorateClass([
-  n$3({ type: String, reflect: true })
+  n$4({ type: String, reflect: true })
 ], _SlAlert.prototype, "countdown", 2);
 __decorateClass([
   r$1()
@@ -47686,7 +49000,7 @@ const upload_route = api_base_url + '/files/upload';
 /**
  * plugin API
  */
-const api$9 = {
+const api$b = {
   get lastHttpStatus() {
     return lastHttpStatus
   },
@@ -47726,10 +49040,10 @@ const api$9 = {
 /**
  * component plugin
  */
-const plugin$d = {
+const plugin$f = {
   name: "client",
   state: {
-    update: update$8
+    update: update$9
   }
 };
 
@@ -47737,10 +49051,10 @@ const plugin$d = {
  * 
  * @param {ApplicationState} state 
  */
-async function update$8(state) {
+async function update$9(state) {
   if (sessionId !== state.sessionId) {
     sessionId = state.sessionId;
-    api$f.debug(`Setting session id to ${sessionId}`);
+    api$h.debug(`Setting session id to ${sessionId}`);
   }
   //console.warn(plugin.name,"done")
   return sessionId
@@ -47825,7 +49139,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       error = e;
       if (error instanceof ConnectionError) {
         // retry in case of ConnectionError
-        api$f.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
+        api$h.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
@@ -47836,7 +49150,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
-  api$f.warn([error.statusCode, error.name, error.message].toString());
+  api$h.warn([error.statusCode, error.name, error.message].toString());
   if (!(error instanceof LockedError)) {
     notify(error.message, 'error');
   }
@@ -48224,12 +49538,12 @@ async function uploadFile(uploadUrl = upload_route, options = {}) {
  * The data about the pdf and xml files on the server
  * @type {Array<object>}
  */
-const fileData = [];
+let fileData = [];
 
 /**
  * plugin API
  */
-const api$8 = {
+const api$a = {
   reload,
   fileData
 };
@@ -48237,12 +49551,15 @@ const api$8 = {
 /**
  * component plugin
  */
-const plugin$c = {
+const plugin$e = {
   name: "file-selection",
 
-  install: install$c,
+  install: install$e,
   state: {
-    update: update$7
+    update: update$8,
+    changeFileData: data => {
+      fileData = data;
+    }
   }
 };
 
@@ -48263,9 +49580,9 @@ await registerTemplate('file-selection', 'file-selection.html');
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$c(state) {
+async function install$e(state) {
 
-  api$f.debug(`Installing plugin "${plugin$c.name}"`);
+  api$h.debug(`Installing plugin "${plugin$e.name}"`);
   
   // Create file selection controls
   const fileSelectionControls = createFromTemplate('file-selection');
@@ -48316,11 +49633,22 @@ async function install$c(state) {
  * 
  * @param {ApplicationState} state 
  */
-async function update$7(state) {
+async function update$8(state) {
   if (!state.pdf) {
     state.collection = null;
   }
-  await populateSelectboxes(state);
+  
+  // check if state has changed (moved from populateSelectboxes)
+  const { xml, pdf, diff, variant } = state;
+  const jsonState = JSON.stringify({ xml, pdf, diff, variant });
+  const stateChanged = jsonState !== stateCache$1;
+  
+  if (stateChanged && state.fileData) {
+    stateCache$1 = jsonState;
+    await populateSelectboxes(state);
+  }
+  
+  // Always update selected values
   ui$1.toolbar.pdf.value = state.pdf || "";
   ui$1.toolbar.xml.value = state.xml || "";
   ui$1.toolbar.diff.value = state.diff || "";
@@ -48335,30 +49663,12 @@ async function update$7(state) {
  */
 async function reload(state, options = {}) {
   await reloadFileData(state, options);
+  stateCache$1 = null; // Reset cache to force repopulation
   await populateSelectboxes(state);
 }
 
-/**
- * Reloads the file data from the server
- * @param {ApplicationState} state
- * @param {Object} options - Options for reloading
- * @param {boolean} [options.refresh] - Whether to force refresh of server cache
- */
-async function reloadFileData(state, options = {}) {
-  api$f.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
-  // Always get all files, don't filter on server side
-  let data = await api$9.getFileList(null, options.refresh);
-  if (!data || data.length === 0) {
-    api$b.error("No files found");
-  }
-  // update the fileData variable
-  fileData.length = 0; // clear the array
-  fileData.push(...data);
-  stateCache = null;
-  return fileData;
-}
 
-let stateCache;
+let stateCache$1;
 let variants;
 let collections;
 
@@ -48367,12 +49677,16 @@ let collections;
  * @param {ApplicationState} state
  */
 async function populateVariantSelectbox(state) {
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
+
   // Clear existing options
   ui$1.toolbar.variant.innerHTML = "";
 
   // Get unique variants from fileData and store in closure variable
   variants = new Set();
-  fileData.forEach(file => {
+  state.fileData.forEach(file => {
     // Add variant_id from gold entries
     if (file.gold) {
       file.gold.forEach(gold => {
@@ -48426,22 +49740,17 @@ async function populateVariantSelectbox(state) {
  * @param {ApplicationState} state
  */
 async function populateSelectboxes(state) {
-
-  // check if state has changed
-  const { xml, pdf, diff, variant } = state;
-  const jsonState = JSON.stringify({ xml, pdf, diff, variant });
-  if (jsonState === stateCache) {
-    //logger.debug("Not repopulating selectboxes as state hasn't changed")
-    return
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
   }
-  stateCache = jsonState;
-
-  api$f.debug("Populating selectboxes");
+  api$h.debug("Populating selectboxes");
 
   // Only reload if fileData is completely empty (initial load)
-  if (fileData.length === 0) {
-    await reloadFileData();
+  if (!state.fileData || state.fileData.length === 0) {
+    await reloadFileData(state);
   }
+  
+  const fileData = state.fileData;
 
   // Populate variant selectbox first
   await populateVariantSelectbox(state);
@@ -48453,6 +49762,7 @@ async function populateSelectboxes(state) {
 
   // Filter files by variant selection
   let filteredFileData = fileData;
+  const variant = state.variant;
   
   if (variant === "none") {
     // Show only files without variant_id in gold or versions
@@ -48594,10 +49904,6 @@ async function populateSelectboxes(state) {
   }
 
 
-  // update selection
-  ui$1.toolbar.pdf.value = state.pdf || '';
-  ui$1.toolbar.xml.value = state.xml || '';
-  ui$1.toolbar.diff.value = state.diff || '';
 
 }
 
@@ -48608,7 +49914,10 @@ async function populateSelectboxes(state) {
  * @param {ApplicationState} state
  */
 async function onChangePdfSelection(state) {
-  const selectedFile = fileData.find(file => file.pdf.hash === ui$1.toolbar.pdf.value);
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
+  const selectedFile = state.fileData.find(file => file.pdf.hash === ui$1.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash;  // Use document identifier
   const collection = selectedFile.collection;
   
@@ -48643,17 +49952,17 @@ async function onChangePdfSelection(state) {
 
   if (Object.keys(filesToLoad).length > 0) {
     try {
-      api$6.removeMergeView(state);
+      api$7.removeMergeView(state);
       state.collection = collection;
-      await api$6.load(state, filesToLoad);
+      await api$7.load(state, filesToLoad);
     }
     catch (error) {
       state.collection = null;
       state.pdf = null;
       state.xml = null;
       await updateState(state);
-      await api$8.reload(state, {refresh:true});
-      api$f.warn(error.message);
+      await reload(state, {refresh:true});
+      api$h.warn(error.message);
     }
   }
 }
@@ -48664,11 +49973,14 @@ async function onChangePdfSelection(state) {
  * @param {ApplicationState} state
  */
 async function onChangeXmlSelection(state) {
+  if (!state.fileData) {
+    throw new Error("fileData hasn't been loaded yet")
+  }
   const xml = ui$1.toolbar.xml.value;
   if (xml && typeof xml == "string" && xml !== state.xml) {
     try {
       // Find the collection for this XML file by searching fileData
-      for (const file of fileData) {
+      for (const file of state.fileData) {
         const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
         
@@ -48678,13 +49990,13 @@ async function onChangeXmlSelection(state) {
         }
       }
       
-      await api$6.removeMergeView(state);
-      await api$6.load(state, { xml });
+      await api$7.removeMergeView(state);
+      await api$7.load(state, { xml });
     } catch (error) {
       console.error(error.message);
-      await api$8.reload(state, {refresh:true});
+      await reload(state, {refresh:true});
       await updateState(state, {xml:null});
-      api$b.error(error.message);
+      api$d.error(error.message);
     }
   }
 }
@@ -48697,12 +50009,12 @@ async function onChangeDiffSelection(state) {
   const diff = ui$1.toolbar.diff.value;
   if (diff && typeof diff == "string" && diff !== ui$1.toolbar.xml.value) {
     try {
-      await api$6.showMergeView(state, diff);
+      await api$7.showMergeView(state, diff);
     } catch (error) {
       console.error(error);
     }
   } else {
-    await api$6.removeMergeView(state);
+    await api$7.removeMergeView(state);
   }
   await updateState(state, { diff: diff });
 }
@@ -48714,6 +50026,557 @@ async function onChangeDiffSelection(state) {
 async function onChangeVariantSelection(state) {
   const variant = ui$1.toolbar.variant.value;
   await updateState(state, { variant, xml:null });
+}
+
+/**
+ * Utility functions for processing file data across different file selection components
+ * This module provides reusable functionality for filtering, grouping, and processing fileData
+ */
+
+/**
+ * @import { ApplicationState } from '../app.js'
+ */
+
+/**
+ * Extracts all unique variants from file data
+ * @param {Array} fileData - The file data array
+ * @returns {Set<string>} Set of unique variant IDs
+ */
+function extractVariants(fileData) {
+  const variants = new Set();
+  
+  fileData.forEach(file => {
+    // Add variant_id from gold entries
+    if (file.gold) {
+      file.gold.forEach(gold => {
+        if (gold.variant_id) {
+          variants.add(gold.variant_id);
+        }
+      });
+    }
+    // Add variant_id from versions
+    if (file.versions) {
+      file.versions.forEach(version => {
+        if (version.variant_id) {
+          variants.add(version.variant_id);
+        }
+      });
+    }
+  });
+  
+  return variants;
+}
+
+/**
+ * Filters file data by variant selection
+ * @param {Array} fileData - The file data array
+ * @param {string|null} variant - Selected variant ("", "none", or variant ID)
+ * @returns {Array} Filtered file data
+ */
+function filterFileDataByVariant(fileData, variant) {
+  if (variant === "none") {
+    // Show only files without variant_id in gold or versions
+    return fileData.filter(file => {
+      const hasGoldVariant = file.gold && file.gold.some(g => !!g.variant_id);
+      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
+      return !hasGoldVariant && !hasVersionVariant;
+    });
+  } else if (variant && variant !== "") {
+    // Show only files with the selected variant_id (in gold or versions)
+    return fileData.filter(file => {
+      const matchesGold = file.gold && file.gold.some(g => g.variant_id === variant);
+      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
+      return matchesGold || matchesVersion;
+    });
+  }
+  // If variant is "" (All), show all files
+  return fileData;
+}
+
+/**
+ * Filters file data by label text search
+ * @param {Array} fileData - The file data array
+ * @param {string} searchText - Text to search for in labels
+ * @returns {Array} Filtered file data
+ */
+function filterFileDataByLabel(fileData, searchText) {
+  if (!searchText || searchText.trim() === '') {
+    return fileData;
+  }
+  
+  const search = searchText.toLowerCase();
+  return fileData.filter(file => 
+    file.label && file.label.toLowerCase().includes(search)
+  );
+}
+
+/**
+ * Groups file data by collection
+ * @param {Array} fileData - The file data array
+ * @returns {Object} Grouped files by collection name
+ */
+function groupFilesByCollection(fileData) {
+  return fileData.reduce((groups, file) => {
+    const collection_name = file.collection;
+    (groups[collection_name] = groups[collection_name] || []).push(file);
+    return groups;
+  }, {});
+}
+
+/**
+ * Filters versions and gold entries by variant
+ * @param {Object} file - File object containing versions and gold
+ * @param {string|null} variant - Selected variant
+ * @returns {Object} Object with filtered versions and gold arrays
+ */
+function filterFileContentByVariant(file, variant) {
+  let versionsToShow = file.versions || [];
+  let goldToShow = file.gold || [];
+  
+  if (variant === "none") {
+    // Show only entries without variant_id
+    versionsToShow = file.versions ? file.versions.filter(version => !version.variant_id) : [];
+    goldToShow = file.gold ? file.gold.filter(gold => !gold.variant_id) : [];
+  } else if (variant && variant !== "") {
+    // Show only entries with the selected variant_id
+    versionsToShow = file.versions ? file.versions.filter(version => version.variant_id === variant) : [];
+    goldToShow = file.gold ? file.gold.filter(gold => gold.variant_id === variant) : [];
+  }
+  // If variant is "" (All), show all entries (already assigned above)
+  
+  return { versionsToShow, goldToShow };
+}
+
+/**
+ * Finds a matching gold file based on variant selection
+ * @param {Object} file - File object containing gold entries
+ * @param {string|null} variant - Selected variant
+ * @returns {Object|null} Matching gold entry or null
+ */
+function findMatchingGold(file, variant) {
+  if (!file.gold) return null;
+  
+  if (variant === "none") {
+    // Find gold without variant_id
+    return file.gold.find(gold => !gold.variant_id) || null;
+  } else if (variant && variant !== "") {
+    // Find gold with matching variant_id
+    return file.gold.find(gold => gold.variant_id === variant) || null;
+  } else {
+    // No variant filter - use first gold file
+    return file.gold[0] || null;
+  }
+}
+
+/**
+ * Finds a file object by PDF hash
+ * @param {Array} fileData - The file data array  
+ * @param {string} pdfHash - Hash of the PDF file
+ * @returns {Object|null} File object or null if not found
+ */
+function findFileByPdfHash(fileData, pdfHash) {
+  return fileData.find(file => file.pdf.hash === pdfHash) || null;
+}
+
+/**
+ * Finds the corresponding PDF hash and collection for a given XML hash
+ * @param {Array} fileData - The file data array
+ * @param {string} xmlHash - Hash of the XML file (gold or version)
+ * @returns {Object|null} Object with {pdfHash, collection} or null if not found
+ */
+function findCorrespondingPdf(fileData, xmlHash) {
+  for (const file of fileData) {
+    // Check if this XML is in the gold entries
+    const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xmlHash);
+    // Check if this XML is in the versions
+    const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xmlHash);
+    
+    if (hasGoldMatch || hasVersionMatch) {
+      return {
+        pdfHash: file.pdf.hash,
+        collection: file.collection
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * File selection drawer plugin - replacement for selectbox-based file selection
+ * Uses a SlDrawer with SlTree for hierarchical file selection
+ */
+
+
+/**
+ * plugin API
+ */
+const api$9 = {
+  open: open$2,
+  close: close$2
+};
+
+/**
+ * component plugin
+ */
+const plugin$d = {
+  name: "file-selection-drawer",
+  install: install$d,
+  state: {
+    update: update$7
+  }
+};
+
+// Register templates
+await registerTemplate('file-selection-drawer', 'file-selection-drawer.html');
+await registerTemplate('file-drawer-button', 'file-drawer-button.html');
+
+// Icon resource requirements
+// <sl-icon name="list"></sl-icon>
+// <sl-icon name="search"></sl-icon>
+// <sl-icon name="folder"></sl-icon>
+// <sl-icon name="award"></sl-icon>
+// <sl-icon name="file-earmark-diff"></sl-icon>
+
+// Internal state
+let currentLabelFilter = '';
+let stateCache = null;
+
+//
+// Implementation
+//
+
+/**
+ * Runs when the main app starts so the plugins can register the app components they supply
+ * @param {ApplicationState} state
+ */
+async function install$d(state) {
+  api$h.debug(`Installing plugin "${plugin$d.name}"`);
+  
+  // Create and add trigger button to toolbar
+  const triggerButton = createSingleFromTemplate('file-drawer-button');
+  ui$1.toolbar.add(triggerButton, 10, "afterbegin"); 
+  
+  // Create and add drawer to document body
+  const drawer = createSingleFromTemplate('file-selection-drawer', document.body);
+  
+  // Update UI to register new elements
+  updateUi();
+  
+  // Wire up event handlers - now the UI elements exist
+  triggerButton.addEventListener('click', () => {
+    open$2();
+  });
+  
+  // Close drawer when close button is clicked
+  ui$1.fileDrawer.closeDrawer.addEventListener('click', () => {
+    close$2();
+  });
+  
+  // Close drawer when clicking outside or pressing escape (built into SlDrawer)
+  drawer.addEventListener('sl-request-close', () => {
+    close$2();
+  });
+  
+  // Handle variant selection changes
+  ui$1.fileDrawer.variantSelect.addEventListener('sl-change', () => {
+    onVariantChange(state);
+  });
+  
+  // Handle label filter changes
+  ui$1.fileDrawer.labelFilter.addEventListener('sl-input', () => {
+    onLabelFilterChange(state);
+  });
+  
+  // Handle tree selection changes
+  drawer.addEventListener('sl-selection-change', (event) => {
+    onFileTreeSelection(event, state);
+  });
+}
+
+/**
+ * Opens the file selection drawer
+ */
+function open$2() {
+  api$h.debug("Opening file selection drawer");
+  ui$1.fileDrawer?.show();
+}
+
+/**
+ * Closes the file selection drawer
+ */
+function close$2() {
+  api$h.debug("Closing file selection drawer");
+  ui$1.fileDrawer?.hide();
+}
+
+/**
+ * Handles state updates
+ * @param {ApplicationState} state
+ */
+async function update$7(state) {
+  // Check if state has changed
+  const { xml, pdf, variant } = state;
+  const jsonState = JSON.stringify({ xml, pdf, variant, fileData: !!state.fileData });
+  const stateChanged = jsonState !== stateCache;
+  
+  if (stateChanged && state.fileData) {
+    stateCache = jsonState;
+    await populateVariantSelect(state);
+    await populateFileTree(state);
+  }
+  
+  // Always update selected values
+  if (ui$1.fileDrawer?.variantSelect) {
+    ui$1.fileDrawer.variantSelect.value = state.variant || "";
+  }
+}
+
+/**
+ * Populates the variant selectbox with unique variants from fileData
+ * @param {ApplicationState} state
+ */
+async function populateVariantSelect(state) {
+  if (!state.fileData) return;
+  
+  const variantSelect = ui$1.fileDrawer?.variantSelect;
+  if (!variantSelect) return;
+  
+  // Clear existing options
+  variantSelect.innerHTML = "";
+  
+  // Get unique variants
+  const variants = extractVariants(state.fileData);
+  
+  // Add "All" option
+  const allOption = new option_default();
+  allOption.value = "";
+  allOption.textContent = "All";
+  // @ts-ignore - size property not in SlOption type definition
+  allOption.size = "small";
+  variantSelect.appendChild(allOption);
+  
+  // Add "None" option for files without variants
+  const noneOption = new option_default();
+  noneOption.value = "none";
+  noneOption.textContent = "None";
+  // @ts-ignore - size property not in SlOption type definition
+  noneOption.size = "small";
+  variantSelect.appendChild(noneOption);
+  
+  // Add variant options
+  [...variants].sort().forEach(variant => {
+    const option = new option_default();
+    option.value = variant;
+    option.textContent = variant;
+    // @ts-ignore - size property not in SlOption type definition
+    option.size = "small";
+    variantSelect.appendChild(option);
+  });
+  
+  // Set current selection
+  variantSelect.value = state.variant || "";
+}
+
+/**
+ * Populates the file tree with hierarchical structure
+ * @param {ApplicationState} state
+ */
+async function populateFileTree(state) {
+  if (!state.fileData) return;
+  
+  const fileTree = ui$1.fileDrawer?.fileTree;
+  if (!fileTree) return;
+  
+  // Apply filters
+  let filteredData = filterFileDataByVariant(state.fileData, state.variant);
+  filteredData = filterFileDataByLabel(filteredData, currentLabelFilter);
+  
+  // Group by collection
+  const groupedFiles = groupFilesByCollection(filteredData);
+  const collections = Object.keys(groupedFiles).sort();
+  
+  // Clear existing tree
+  fileTree.innerHTML = '';
+  
+  // Build tree structure programmatically
+  for (const collectionName of collections) {
+    const collectionDisplayName = collectionName.replaceAll("_", " ").trim();
+    
+    // Create collection item
+    const collectionItem = document.createElement('sl-tree-item');
+    collectionItem.expanded = true;
+    collectionItem.className = 'collection-item';
+    collectionItem.textContent = collectionDisplayName;
+    
+    // Add folder icon
+    const folderIcon = document.createElement('sl-icon');
+    folderIcon.name = 'folder';
+    folderIcon.slot = 'prefix';
+    collectionItem.appendChild(folderIcon);
+    
+    const files = groupedFiles[collectionName]
+      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0);
+    
+    for (const file of files) {
+      // Get filtered content for this file
+      const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
+      
+      // Create PDF document item
+      const pdfItem = document.createElement('sl-tree-item');
+      pdfItem.expanded = true;
+      pdfItem.className = 'pdf-item';
+      pdfItem.dataset.type = 'pdf';
+      pdfItem.dataset.hash = file.pdf.hash;
+      pdfItem.dataset.collection = file.collection;
+      pdfItem.textContent = file.label;
+      
+      // Add Gold section if there are gold entries
+      if (goldToShow.length > 0) {
+        const goldSection = document.createElement('sl-tree-item');
+        goldSection.expanded = true;
+        goldSection.className = 'gold-section';
+        goldSection.dataset.type = 'section';
+        goldSection.textContent = 'Gold';
+        
+        // Add award icon
+        const awardIcon = document.createElement('sl-icon');
+        awardIcon.name = 'award';
+        awardIcon.slot = 'prefix';
+        goldSection.appendChild(awardIcon);
+        
+        goldToShow.forEach(gold => {
+          const goldItem = document.createElement('sl-tree-item');
+          goldItem.className = 'gold-item';
+          goldItem.dataset.type = 'gold';
+          goldItem.dataset.hash = gold.hash;
+          goldItem.dataset.pdfHash = file.pdf.hash;
+          goldItem.dataset.collection = file.collection;
+          goldItem.textContent = gold.label;
+          goldSection.appendChild(goldItem);
+        });
+        pdfItem.appendChild(goldSection);
+      }
+      
+      // Add Versions section if there are versions
+      if (versionsToShow.length > 0) {
+        const versionsSection = document.createElement('sl-tree-item');
+        versionsSection.expanded = true;
+        versionsSection.className = 'versions-section';
+        versionsSection.dataset.type = 'section';
+        versionsSection.textContent = 'Versions';
+        
+        // Add file-earmark-diff icon
+        const diffIcon = document.createElement('sl-icon');
+        diffIcon.name = 'file-earmark-diff';
+        diffIcon.slot = 'prefix';
+        versionsSection.appendChild(diffIcon);
+        
+        versionsToShow.forEach(version => {
+          const versionItem = document.createElement('sl-tree-item');
+          versionItem.className = 'version-item';
+          versionItem.dataset.type = 'version';
+          versionItem.dataset.hash = version.hash;
+          versionItem.dataset.pdfHash = file.pdf.hash;
+          versionItem.dataset.collection = file.collection;
+          if (version.is_locked) {
+            versionItem.disabled = true;
+            versionItem.textContent = `🔒 ${version.label}`;
+          } else {
+            versionItem.textContent = version.label;
+          }
+          versionsSection.appendChild(versionItem);
+        });
+        pdfItem.appendChild(versionsSection);
+      }
+      
+      collectionItem.appendChild(pdfItem);
+    }
+    
+    fileTree.appendChild(collectionItem);
+  }
+}
+
+//
+// Event Handlers
+//
+
+/**
+ * Handles variant selection changes
+ * @param {ApplicationState} state
+ */
+async function onVariantChange(state) {
+  const variant = ui$1.fileDrawer?.variantSelect?.value;
+  
+  // Update application state with new variant - clear XML to force reload
+  await updateState(state, { variant, xml: null });
+}
+
+/**
+ * Handles label filter input changes
+ * @param {ApplicationState} state
+ */
+async function onLabelFilterChange(state) {
+  currentLabelFilter = ui$1.fileDrawer?.labelFilter?.value || '';
+  
+  // Repopulate tree with new filter
+  await populateFileTree(state);
+}
+
+/**
+ * Handles file tree selection changes - only updates state
+ * @param {Event} event
+ * @param {ApplicationState} state
+ */
+async function onFileTreeSelection(event, state) {
+  // @ts-ignore - detail property exists on custom events
+  const selectedItems = event.detail.selection;
+  if (selectedItems.length === 0) return;
+  
+  const selectedItem = selectedItems[0];
+  const type = selectedItem.dataset.type;
+  const hash = selectedItem.dataset.hash;
+  const pdfHash = selectedItem.dataset.pdfHash;
+  const collection = selectedItem.dataset.collection;
+  
+  // Don't handle section clicks
+  if (type === 'section') return;
+  
+  // Prepare state updates
+  const stateUpdates = {};
+  
+  if (type === 'pdf') {
+    // User selected a PDF document
+    stateUpdates.pdf = hash;
+    stateUpdates.collection = collection;
+    
+    // Find matching gold file for this PDF and variant
+    if (state.fileData) {
+      const selectedFile = findFileByPdfHash(state.fileData, hash);
+      if (selectedFile) {
+        const matchingGold = findMatchingGold(selectedFile, state.variant);
+        if (matchingGold) {
+          stateUpdates.xml = matchingGold.hash;
+        } else {
+          stateUpdates.xml = null;
+        }
+      }
+    }
+  } else if (type === 'gold' || type === 'version') {
+    // User selected an XML file (gold or version)
+    stateUpdates.xml = hash;
+    stateUpdates.collection = collection;
+    
+    // Ensure the corresponding PDF is loaded
+    if (pdfHash && pdfHash !== state.pdf) {
+      stateUpdates.pdf = pdfHash;
+    }
+  }
+  
+  // Update state - let other plugins handle the loading
+  await updateState(state, stateUpdates);
+  
+  // Close drawer after selection
+  close$2();
 }
 
 const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
@@ -49265,7 +51128,7 @@ function getDocumentMetadata(xmlDoc) {
 /**
  * plugin API
  */
-const api$7 = {
+const api$8 = {
   extractFromCurrentPDF,
   extractFromNewPdf,
   extractFromPDF
@@ -49274,10 +51137,10 @@ const api$7 = {
 /**
  * plugin object
  */
-const plugin$b = {
+const plugin$c = {
   name: "extraction",
   deps: ['services'],
-  install: install$b,
+  install: install$c,
   state: {update: update$6}
 };
 
@@ -49310,8 +51173,8 @@ await registerTemplate('extraction-dialog', 'extraction-dialog.html');
 /**
  * @param {ApplicationState} state
  */
-async function install$b(state) {
-  api$f.debug(`Installing plugin "${plugin$b.name}"`);
+async function install$c(state) {
+  api$h.debug(`Installing plugin "${plugin$c.name}"`);
 
   // Create UI elements
   const extractionBtnGroup = createSingleFromTemplate('extraction-buttons');
@@ -49349,9 +51212,9 @@ async function extractFromCurrentPDF(state) {
  * @param {ApplicationState} state
  */
 async function extractFromNewPdf(state) {
-  const { type, filename, originalFilename } = await api$9.uploadFile();
+  const { type, filename, originalFilename } = await api$b.uploadFile();
   if (type !== "pdf") {
-    api$b.error("Extraction is only possible from PDF files");
+    api$d.error("Extraction is only possible from PDF files");
     return
   }
 
@@ -49407,10 +51270,10 @@ async function extractFromPDF(state, defaultOptions={}) {
     let result;
     try {
       const filename = options.filename || state.pdf;
-      result = await api$9.extractReferences(filename, options);
+      result = await api$b.extractReferences(filename, options);
       
       // Force reload of file list since server has updated cache
-      await api$8.reload(state, {refresh:true});
+      await api$a.reload(state, {refresh:true});
       
       // Update state.variant with the variant_id that was used for extraction
       if (options.variant_id) {
@@ -49418,7 +51281,7 @@ async function extractFromPDF(state, defaultOptions={}) {
       }
       
       // Load the extracted result (server now returns hashes)
-      await api$6.load(state, result);
+      await api$7.load(state, result);
       
     } finally {
       ui$1.spinner.hide();
@@ -49429,7 +51292,7 @@ async function extractFromPDF(state, defaultOptions={}) {
     if (error instanceof UserAbortException) {
       return // do nothing
     }
-    api$b.error(error.message);
+    api$d.error(error.message);
   }
 }
 
@@ -49441,7 +51304,7 @@ async function extractFromPDF(state, defaultOptions={}) {
 async function promptForExtractionOptions(options={}) {
 
   // load instructions
-  const instructionsData = await api$9.loadInstructions();
+  const instructionsData = await api$b.loadInstructions();
   const instructions = [];
 
   // Get document metadata to pre-fill form with current document values
@@ -49487,7 +51350,7 @@ async function promptForExtractionOptions(options={}) {
   // Get extractors and store for dynamic options
   let availableExtractors = [];
   try {
-    const extractors = await api$9.getExtractorList();
+    const extractors = await api$b.getExtractorList();
     // Filter extractors that support PDF input and TEI document output
     availableExtractors = extractors.filter(extractor => 
       extractor.input.includes("pdf") && extractor.output.includes("tei-document")
@@ -49522,7 +51385,7 @@ async function promptForExtractionOptions(options={}) {
     }
   } catch (error) {
     // Handle extractor list loading gracefully
-    api$f.warn("Could not load extraction engines:", error.message);
+    api$h.warn("Could not load extraction engines:", error.message);
     // Disable extraction functionality when extractors can't be loaded
     modelSelectBox.disabled = true;
     availableExtractors = [];
@@ -49701,7 +51564,7 @@ async function promptForExtractionOptions(options={}) {
   
   // Validate DOI only if one is provided
   if (formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
-    api$b.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
+    api$d.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
     return null
   }
   
@@ -49898,7 +51761,7 @@ var prettyPrintXml = {
 /**
  * plugin API
  */
-const api$6 = {
+const api$7 = {
   load: load$1,
   validateXml,
   saveXml,
@@ -49917,10 +51780,10 @@ const api$6 = {
 /**
  * component plugin
  */
-const plugin$a = {
+const plugin$b = {
   name: "services",
   deps: ['file-selection'],
-  install: install$a,
+  install: install$b,
   state: { update: update$5 },
   validation: { inProgress }
 };
@@ -49986,8 +51849,8 @@ await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
 /**
  * @param {ApplicationState} state
  */
-async function install$a(state) {
-  api$f.debug(`Installing plugin "${plugin$a.name}"`);
+async function install$b(state) {
+  api$h.debug(`Installing plugin "${plugin$b.name}"`);
 
   // Create UI elements
   const documentActionButtons = createFromTemplate('document-action-buttons');
@@ -50066,7 +51929,7 @@ async function update$5(state) {
     return
   }
 
-  da.deleteAll.disabled = api$8.fileData.length < 2; // at least on PDF must be present
+  da.deleteAll.disabled = api$a.fileData.length < 2; // at least on PDF must be present
   da.deleteAllVersions.disabled = ui$1.toolbar.xml.childElementCount < 2;
   // @ts-ignore
   da.deleteCurrentVersion.disabled = ui$1.toolbar.xml.value === ui$1.toolbar.xml.firstChild?.value;
@@ -50109,7 +51972,7 @@ async function load$1(state, { xml, pdf }) {
   // PDF 
   if (pdf) {
     await updateState(state, { pdf: null, xml: null, diff: null });
-    api$f.info("Loading PDF: " + pdf);
+    api$h.info("Loading PDF: " + pdf);
     // Convert document identifier to static file URL
     const pdfUrl = `/api/files/${pdf}`;
     promises.push(pdfViewer.load(pdfUrl));
@@ -50123,25 +51986,25 @@ async function load$1(state, { xml, pdf }) {
       try {
         ui$1.spinner.show('Loading file, please wait...');
         if (state.xml && !state.editorReadOnly) {
-          await api$9.releaseLock(state.xml);
+          await api$b.releaseLock(state.xml);
         }
         // Check access control before attempting to acquire lock
-        const canEdit = api.checkCanEditFile(xml);
+        const canEdit = api$1.checkCanEditFile(xml);
         if (!canEdit) {
-          api$f.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
+          api$h.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
           notify(`You don't have permission to edit this document, loading in read-only mode`);
           file_is_locked = true;
         } else {
           try {
-            await api$9.acquireLock(xml);
-            api$f.debug(`Acquired lock for file ${xml}`);
+            await api$b.acquireLock(xml);
+            api$h.debug(`Acquired lock for file ${xml}`);
           } catch (error) {
-            if (error instanceof api$9.LockedError) {
-              api$f.debug(`File ${xml} is locked, loading in read-only mode`);
+            if (error instanceof api$b.LockedError) {
+              api$h.debug(`File ${xml} is locked, loading in read-only mode`);
               notify(`File is being edited by another user, loading in read-only mode`);
               file_is_locked = true;
             } else {
-              api$b.error(error.message);
+              api$d.error(error.message);
               throw error
             }
           }
@@ -50153,7 +52016,7 @@ async function load$1(state, { xml, pdf }) {
 
     await removeMergeView(state);
     await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked });
-    api$f.info("Loading XML: " + xml);
+    api$h.info("Loading XML: " + xml);
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`;
     promises.push(xmlEditor.loadXml(xmlUrl));
@@ -50165,7 +52028,7 @@ async function load$1(state, { xml, pdf }) {
   } catch (error) {
     console.error(error.message);
     if (error.status === 404) {
-      await api$8.reload(state);
+      await api$a.reload(state);
       return
     }
     throw error
@@ -50182,7 +52045,7 @@ async function load$1(state, { xml, pdf }) {
 
   // Set collection based on loaded documents if not already set
   if ((pdf || xml) && !state.collection) {
-    for (const file of api$8.fileData) {
+    for (const file of api$a.fileData) {
       // Check PDF hash
       if (pdf && file.pdf && file.pdf.hash === pdf) {
         state.collection = file.collection;
@@ -50207,23 +52070,23 @@ async function load$1(state, { xml, pdf }) {
 async function startAutocomplete() {
   // Load autocomplete data asynchronously after XML is loaded
   try {
-    api$f.debug("Loading autocomplete data for XML document");
+    api$h.debug("Loading autocomplete data for XML document");
     const xmlContent = xmlEditor.getEditorContent();
     if (xmlContent) {
-      const autocompleteData = await api$9.getAutocompleteData(xmlContent);
+      const autocompleteData = await api$b.getAutocompleteData(xmlContent);
       if (autocompleteData && !autocompleteData.error) {
         // Resolve deduplicated references
         const resolvedData = resolveDeduplicated(autocompleteData);
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData);
-        api$f.debug("Autocomplete data loaded and applied");
+        api$h.debug("Autocomplete data loaded and applied");
       } else if (autocompleteData && autocompleteData.error) {
-        api$f.debug("No autocomplete data available: " + autocompleteData.error);
+        api$h.debug("No autocomplete data available: " + autocompleteData.error);
       }
     }
     return true 
   } catch (error) {
-    api$f.warn("Failed to load autocomplete data: " + error.message);
+    api$h.warn("Failed to load autocomplete data: " + error.message);
     return false
   }
 }
@@ -50233,8 +52096,8 @@ async function startAutocomplete() {
  * @returns {Promise<object[]>}
  */
 async function validateXml() {
-  api$f.info("Validating XML...");
-  return await api$a.validate() // todo use endpoint instead
+  api$h.info("Validating XML...");
+  return await api$c.validate() // todo use endpoint instead
 }
 
 /**
@@ -50245,7 +52108,7 @@ async function validateXml() {
  * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
-  api$f.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+  api$h.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
   if (!xmlEditor.getXmlTree()) {
     throw new Error("No XML valid document in the editor")
   }
@@ -50256,10 +52119,10 @@ async function saveXml(filePath, saveAsNewVersion = false) {
         ui$1.xmlEditor.statusbar.add(savingStatusWidget, 'left', 10);
       }
     }
-    return await api$9.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
+    return await api$b.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message);
-    api$b.error(`Could not save XML: ${e.message}`);
+    api$d.error(`Could not save XML: ${e.message}`);
     throw new Error(`Could not save XML: ${e.message}`)
   } finally {
     // clear status message after 1 second 
@@ -50277,7 +52140,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
 async function showMergeView(state, diff) {
-  api$f.info("Loading diff XML: " + diff);
+  api$h.info("Loading diff XML: " + diff);
   ui$1.spinner.show('Computing file differences, please wait...');
   try {
     // Convert document identifier to static file URL
@@ -50285,7 +52148,7 @@ async function showMergeView(state, diff) {
     await xmlEditor.showMergeView(diffUrl);
     await updateState(state, { diff: diff });
     // turn validation off as it creates too much visual noise
-    api$a.configure({ mode: "off" });
+    api$c.configure({ mode: "off" });
   } finally {
     ui$1.spinner.hide();
   }
@@ -50298,7 +52161,7 @@ async function showMergeView(state, diff) {
 async function removeMergeView(state) {
   xmlEditor.hideMergeView();
   // re-enable validation
-  api$a.configure({ mode: "auto" });
+  api$c.configure({ mode: "auto" });
   UrlHash.remove("diff");
   await updateState(state, { diff: null });
 }
@@ -50311,7 +52174,7 @@ async function removeMergeView(state) {
 async function deleteCurrentVersion(state) {
   // @ts-ignore
   if (ui$1.toolbar.xml.value.startsWith("/data/tei")) {
-    api$b.error("You cannot delete the gold version");
+    api$d.error("You cannot delete the gold version");
     return
   }
   const filePathsToDelete = [ui$1.toolbar.xml.value];
@@ -50319,20 +52182,20 @@ async function deleteCurrentVersion(state) {
     const versionName = ui$1.toolbar.xml.selectedOptions[0].textContent;
     const msg = `Are you sure you want to delete the current version "${versionName}"?`;
     if (!confirm(msg)) return; // todo use dialog
-    api$6.removeMergeView(state);
+    api$7.removeMergeView(state);
     // delete the file
-    await api$9.deleteFiles(filePathsToDelete);
+    await api$b.deleteFiles(filePathsToDelete);
     try {
       // Clear current XML state after successful deletion
       await updateState(state, { xml: null });
       // update the file data
-      await api$8.reload(state);
+      await api$a.reload(state);
       // load the gold version
       // @ts-ignore
       const xml = ui$1.toolbar.xml.firstChild?.value;
       await load$1(state, { xml });
       notify(`Version "${versionName}" has been deleted.`);
-      api$1.syncFiles(state)
+      api$2.syncFiles(state)
         .then(summary => summary && console.debug(summary))
         .catch(e => console.error(e));
     } catch (error) {
@@ -50350,7 +52213,7 @@ async function deleteCurrentVersion(state) {
 async function deleteAllVersions(state) {
   // Get the current PDF to find all its versions
   const currentPdf = ui$1.toolbar.pdf.value;
-  const selectedFile = api$8.fileData.find(file => file.pdf.hash === currentPdf);
+  const selectedFile = api$a.fileData.find(file => file.pdf.hash === currentPdf);
   
   if (!selectedFile || !selectedFile.versions) {
     return; // No versions to delete
@@ -50382,14 +52245,14 @@ async function deleteAllVersions(state) {
     notify(`No versions ${variantText} found to delete.`);
     return;
   }
-  api$6.removeMergeView(state);
+  api$7.removeMergeView(state);
   // delete
-  await api$9.deleteFiles(filePathsToDelete);
+  await api$b.deleteFiles(filePathsToDelete);
   try {
     // Clear current XML state after successful deletion
     await updateState(state, { xml: null });
     // update the file data
-    await api$8.reload(state);
+    await api$a.reload(state);
     
     // Find and load the appropriate gold version for the current variant
     let goldToLoad = null;
@@ -50413,7 +52276,7 @@ async function deleteAllVersions(state) {
     const variantText = variant === "none" ? "without variant" : 
                       variant && variant !== "" ? `with variant "${variant}"` : "";
     notify(`All versions ${variantText} have been deleted`);
-    api$1.syncFiles(state)
+    api$2.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e));
   } catch (error) {
@@ -50445,13 +52308,13 @@ async function deleteAll(state) {
     if (!confirm(msg)) return; // todo use dialog
   }
 
-  api$6.removeMergeView(state);
-  api$f.debug("Deleting files:" + filePathsToDelete.join(", "));
+  api$7.removeMergeView(state);
+  api$h.debug("Deleting files:" + filePathsToDelete.join(", "));
   
   try {
-    await api$9.deleteFiles(filePathsToDelete);
+    await api$b.deleteFiles(filePathsToDelete);
     notify(`${filePathsToDelete.length} files have been deleted.`);
-    api$1.syncFiles(state)
+    api$2.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e));
   } catch (error) {
@@ -50459,7 +52322,7 @@ async function deleteAll(state) {
     notify(error.message, "warning");
   } finally {
     // update the file data
-    await api$8.reload(state, {refresh:true});
+    await api$a.reload(state, {refresh:true});
     // remove xml and pdf
     await updateState(state, {xml: null, pdf: null});
   }
@@ -50475,7 +52338,7 @@ async function downloadXml(state) {
     throw new TypeError("State does not contain an xml path")
   }
   let xml = xmlEditor.getXML();
-  if (await api$e.get('xml.encode-entities.server')) {
+  if (await api$g.get('xml.encode-entities.server')) {
     xml = encodeXmlEntities(xml);
   }
   const blob = new Blob([xml], { type: 'application/xml' });
@@ -50493,10 +52356,10 @@ async function downloadXml(state) {
  * @param {ApplicationState} state 
  */
 async function uploadXml(state) {
-  const { filename: tempFilename } = await api$9.uploadFile(undefined, { accept: '.xml' });
+  const { filename: tempFilename } = await api$b.uploadFile(undefined, { accept: '.xml' });
   // @ts-ignore
-  const { path } = await api$9.createVersionFromUpload(tempFilename, state.xml);
-  await api$8.reload(state);
+  const { path } = await api$b.createVersionFromUpload(tempFilename, state.xml);
+  await api$a.reload(state);
   await load$1(state, { xml: path });
   notify("Document was uploaded. You are now editing the new version.");
 }
@@ -50556,7 +52419,7 @@ async function saveRevision(state) {
   const dialog = ui$1.newRevisionChangeDialog;
   dialog.changeDesc.value = "Corrections";
   try {
-    const user = api$2.getUser();
+    const user = api$3.getUser();
     if (user) {
       dialog.persId.value = dialog.persId.value || user.username;
       dialog.persName.value = dialog.persName.value || user.fullname;
@@ -50597,12 +52460,12 @@ async function saveRevision(state) {
     
     // If migration occurred, first reload file data, then update state
     if (result.status === "saved_with_migration") {
-      await api$8.reload(state);
+      await api$a.reload(state);
       state.xml = result.hash;
       await updateState(state);
     }
     
-    api$1.syncFiles(state)
+    api$2.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e));
 
@@ -50624,7 +52487,7 @@ async function createNewVersion(state) {
 
   const newVersiondialog = ui$1.newVersionDialog;
   try {
-    const user = api$2.getUser();
+    const user = api$3.getUser();
     if (user) {
       newVersiondialog.persId.value = newVersiondialog.persId.value || user.username;
       newVersiondialog.persName.value = newVersiondialog.persName.value || user.fullname;
@@ -50672,18 +52535,18 @@ async function createNewVersion(state) {
     xmlEditor.markAsClean(); 
 
     // reload the file data to display the new name and inform the user
-    await api$8.reload(state, {refresh:true});
+    await api$a.reload(state, {refresh:true});
     notify("Document was duplicated. You are now editing the copy.");
     
     // sync the new file to the WebDav server
     if (state.webdavEnabled) {
-      api$1.syncFiles(state)
-      .then(summary => summary && api$f.debug(summary))
+      api$2.syncFiles(state)
+      .then(summary => summary && api$h.debug(summary))
       .catch(e => console.error(e));
     }
   } catch (e) {
     console.error(e);
-    api$b.warn(e.message);
+    api$d.warn(e.message);
   } finally {
     ui$1.toolbar.documentActions.saveRevision.disabled = false;
     newVersiondialog.hide();
@@ -50749,7 +52612,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
     const versionName = edition.title;
     const editionTitleElements = xmlDoc.querySelectorAll('edition > title');
     const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName);
-    const nameExistsInVersions = api$8.fileData.some(file => file.label === versionName);
+    const nameExistsInVersions = api$a.fileData.some(file => file.label === versionName);
     if (nameExistsInDoc || nameExistsInVersions) {
       throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
     }
@@ -50771,7 +52634,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 /**
  * plugin API
  */
-const api$5 = {
+const api$6 = {
   show: () => ui$1.floatingPanel.classList.remove("hidden"),
   hide: () => ui$1.floatingPanel.classList.add("hidden"),
 };
@@ -50779,10 +52642,10 @@ const api$5 = {
 /**
  * component plugin
  */
-const plugin$9 = {
+const plugin$a = {
   name: "floating-panel",
   deps: ['config'],
-  install: install$9,
+  install: install$a,
   state: { update: update$4 }
 };
 
@@ -50828,8 +52691,8 @@ let cachedExtractors = null;
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$9(state) {
-  api$f.debug(`Installing plugin "${plugin$9.name}"`);
+async function install$a(state) {
+  api$h.debug(`Installing plugin "${plugin$a.name}"`);
 
   document.body.append(...floatingPanelControls);
   updateUi();
@@ -50865,11 +52728,11 @@ async function install$9(state) {
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff());
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
     xmlEditor.rejectAllDiffs();
-    api$6.removeMergeView(state);
+    api$7.removeMergeView(state);
   });
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
     xmlEditor.acceptAllDiffs();
-    api$6.removeMergeView(state);
+    api$7.removeMergeView(state);
   });
 
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex); // allow to input node index
@@ -50904,11 +52767,11 @@ async function update$4(state) {
     // Only fetch extractors if we don't have them cached or this is a real user change
     if (!cachedExtractors || (previousUser !== null && previousUser !== state.user)) {
       try {
-        cachedExtractors = await api$9.getExtractorList();
+        cachedExtractors = await api$b.getExtractorList();
         extractorsJustCached = true;
-        api$f.debug('Cached extractor list for floating panel:', cachedExtractors);
+        api$h.debug('Cached extractor list for floating panel:', cachedExtractors);
       } catch (error) {
-        api$f.warn('Failed to load extractor list:', error.message || error);
+        api$h.warn('Failed to load extractor list:', error.message || error);
         cachedExtractors = [];
       }
     }
@@ -50959,7 +52822,7 @@ function updateCounter(xpath, index) {
   try {
     size = xmlEditor.countDomNodesByXpath(xpath);
   } catch (e) {
-    api$f.warn('Cannot update counter: ' + e.message);
+    api$h.warn('Cannot update counter: ' + e.message);
     size = 0;
   }
   index = index || 1;
@@ -50996,7 +52859,7 @@ async function populateXpathSelectbox(state) {
   xp.innerHTML = '';
 
   const variantId = state.variant;
-  api$f.debug('populateXpathSelectbox called with variant:', variantId, 'cachedExtractors:', cachedExtractors);
+  api$h.debug('populateXpathSelectbox called with variant:', variantId, 'cachedExtractors:', cachedExtractors);
 
   if (!variantId) {
     // No variant selected, show empty selectbox
@@ -51022,11 +52885,11 @@ async function populateXpathSelectbox(state) {
   // Find the extractor that contains this variant
   let navigationXpathList = null;
   for (const extractor of cachedExtractors) {
-    api$f.debug('Checking extractor:', extractor.id, 'for variant:', variantId, 'navigation_xpath:', extractor.navigation_xpath);
+    api$h.debug('Checking extractor:', extractor.id, 'for variant:', variantId, 'navigation_xpath:', extractor.navigation_xpath);
     const navigationXpath = extractor.navigation_xpath?.[variantId];
     if (navigationXpath) {
       navigationXpathList = navigationXpath;
-      api$f.debug('Found navigation xpath list:', navigationXpathList);
+      api$h.debug('Found navigation xpath list:', navigationXpathList);
       break
     }
   }
@@ -51067,7 +52930,7 @@ function onClickSelectionIndex() {
   try {
     xmlEditor.selectByIndex(parseInt(index));
   } catch (error) {
-    api$b.error(error.message);
+    api$d.error(error.message);
   }
 }
 
@@ -51143,7 +53006,7 @@ function makeDraggable(element) {
 /**
  * plugin API
  */
-const api$4 = {
+const api$5 = {
   open: open$1,
   edit,
   duplicate: duplicateInstructions,
@@ -51156,10 +53019,10 @@ const api$4 = {
 /**
  * Plugin object
  */
-const plugin$8 = {
+const plugin$9 = {
   name: "prompt-editor",
   deps: ['extraction'],
-  install: install$8
+  install: install$9
 };
 
 //
@@ -51191,8 +53054,8 @@ await registerTemplate('prompt-editor-button', 'prompt-editor-button.html');
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$8(state) {
-  api$f.debug(`Installing plugin "${plugin$8.name}"`);
+async function install$9(state) {
+  api$h.debug(`Installing plugin "${plugin$9.name}"`);
   
   // Create UI elements
   createSingleFromTemplate('prompt-editor', document.body);
@@ -51208,7 +53071,7 @@ async function install$8(state) {
 
   // add a button to the command bar to show dialog with prompt editor
   ui$1.toolbar.extractionActions.append(promptEditorButton);
-  promptEditorButton.addEventListener("click", () => api$4.open());
+  promptEditorButton.addEventListener("click", () => api$5.open());
 }
 
 // API
@@ -51229,7 +53092,7 @@ let currentIndex = 0;
 async function open$1() {
   if (!prompts){
     ui$1.promptEditor.labelMenu.childNodes.forEach(node => node.remove());
-    prompts = await api$9.loadInstructions();
+    prompts = await api$b.loadInstructions();
     for (const [idx, prompt] of prompts.entries()) {
       addSlMenuItem(idx, prompt.label);
     }
@@ -51239,7 +53102,7 @@ async function open$1() {
   await populateExtractorSelect();
   
   ui$1.promptEditor.delete.disabled = prompts.length < 2;
-  api$4.edit(currentIndex);
+  api$5.edit(currentIndex);
   ui$1.promptEditor.show();
 }
 
@@ -51251,7 +53114,7 @@ async function populateExtractorSelect() {
   extractorSelect.innerHTML = "";
   
   try {
-    const extractors = await api$9.getExtractorList();
+    const extractors = await api$b.getExtractorList();
     for (const extractor of extractors) {
       const option = Object.assign(new option_default, {
         value: extractor.id,
@@ -51260,7 +53123,7 @@ async function populateExtractorSelect() {
       extractorSelect.appendChild(option);
     }
   } catch (error) {
-    api$f.warn("Could not load extractor list for prompt editor:", error);
+    api$h.warn("Could not load extractor list for prompt editor:", error);
     // Fallback to default extractor
     const option = Object.assign(new option_default, {
       value: "llamore-gemini",
@@ -51310,7 +53173,7 @@ function duplicateInstructions() {
  */
 async function save() {
   saveCurrentPrompt();
-  api$9.saveInstructions(prompts);
+  api$b.saveInstructions(prompts);
 }
 
 /**
@@ -51377,7 +53240,7 @@ function menuOnSelect(event) {
   // @ts-ignore
   ui$1.promptEditor.labelMenu.childNodes[currentIndex].checked = false;
   currentIndex = item.value;
-  api$4.edit(currentIndex);
+  api$5.edit(currentIndex);
 }
 
 /**
@@ -51419,9 +53282,9 @@ const enhancements = [
 
 
 
-const plugin$7 = {
+const plugin$8 = {
   name: "tei-wizard",
-  install: install$7,
+  install: install$8,
   state: {update: update$3},
   deps: ['services']
 };
@@ -51440,8 +53303,8 @@ let teiWizardButton;
 /**
  * @param {ApplicationState} state 
  */
-async function install$7(state) {
-  api$f.debug(`Installing plugin "${plugin$7.name}"`);
+async function install$8(state) {
+  api$h.debug(`Installing plugin "${plugin$8.name}"`);
 
   // Create UI elements
   teiWizardButton = createSingleFromTemplate('tei-wizard-button');
@@ -59912,7 +61775,7 @@ MarkdownIt.prototype.renderInline = function (src, env) {
 /**
  * plugin API
  */
-const api$3 = {
+const api$4 = {
   open,
   load,
   goBack,
@@ -59924,10 +61787,10 @@ const api$3 = {
 /**
  * Plugin object
  */
-const plugin$6 = {
+const plugin$7 = {
   name: "info",
   deps: ['authentication'],
-  install: install$6
+  install: install$7
 };
 
 //
@@ -60009,8 +61872,8 @@ let currentPage = 'index.md';
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$6(state) {
-  api$f.debug(`Installing plugin "${plugin$6.name}"`);
+async function install$7(state) {
+  api$h.debug(`Installing plugin "${plugin$7.name}"`);
   
   // Create UI elements
   createFromTemplate('info-dialog', document.body);
@@ -60028,7 +61891,7 @@ async function install$6(state) {
   });
 
   // add About button to login dialog footer (left side)
-  aboutButton.addEventListener('click', () => api$3.open());
+  aboutButton.addEventListener('click', () => api$4.open());
   
   // Insert the About button before the Login button
   ui$1.loginDialog.insertBefore(aboutButton, ui$1.loginDialog.submit);
@@ -60037,7 +61900,7 @@ async function install$6(state) {
   // add a button to the command bar to show dialog
   ui$1.toolbar.add(button, 1); // Low priority for info button
   updateUi();
-  button.addEventListener("click", () => api$3.open());
+  button.addEventListener("click", () => api$4.open());
   
   // configure markdown parser
   const options = {
@@ -60048,7 +61911,7 @@ async function install$6(state) {
   md = MarkdownIt(options);
   
   // @ts-ignore
-  window.appInfo = api$3;
+  window.appInfo = api$4;
 }
 
 // API
@@ -60095,7 +61958,7 @@ async function load(mdPath, addToHistory = true){
     // First, try to load from remote if online
     isOnline = await checkOnlineConnectivity();
     if (isOnline) {
-      api$f.debug(`Loading documentation from remote: ${mdPath}`);
+      api$h.debug(`Loading documentation from remote: ${mdPath}`);
       markdown = await (await fetch(`${remoteDocsBasePath}/${mdPath}`)).text();
     } else {
       throw new Error("No online connectivity")
@@ -60103,10 +61966,10 @@ async function load(mdPath, addToHistory = true){
   } catch(error) {
     // Fallback to local filesystem
     try {
-      api$f.debug(`Falling back to local documentation: ${mdPath}`);
+      api$h.debug(`Falling back to local documentation: ${mdPath}`);
       markdown = await (await fetch(`${localDocsBasePath}/${mdPath}`)).text();
     } catch(localError) {
-      api$b.error(`Failed to load documentation: ${localError.message}`);
+      api$d.error(`Failed to load documentation: ${localError.message}`);
       return 
     }
   }
@@ -60189,10 +62052,10 @@ function close() {
  */
 
 
-const plugin$5 = {
+const plugin$6 = {
   name: "move-files",
   deps: ['services'],
-  install: install$5
+  install: install$6
 };
 
 //
@@ -60225,8 +62088,8 @@ await registerTemplate('move-files-dialog', 'move-files-dialog.html');
 /**
  * @param {ApplicationState} state
  */
-async function install$5(state) {
-  api$f.debug(`Installing plugin "${plugin$5.name}"`);
+async function install$6(state) {
+  api$h.debug(`Installing plugin "${plugin$6.name}"`);
 
   // Create dialog and add button & dialog to UI
   createSingleFromTemplate('move-files-dialog', document.body);
@@ -60239,7 +62102,7 @@ async function install$5(state) {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
     if (newCollectionName) {
       if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
-        api$b.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
+        api$d.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
         return;
       }
       const option = Object.assign(document.createElement('sl-option'), {
@@ -60258,7 +62121,7 @@ async function install$5(state) {
 async function showMoveFilesDialog(state) {
   const { xml, pdf } = state;
   if (!xml || !pdf) {
-    api$b.error("Cannot move files, PDF or XML path is missing.");
+    api$d.error("Cannot move files, PDF or XML path is missing.");
     return;
   }
 
@@ -60283,7 +62146,7 @@ async function showMoveFilesDialog(state) {
       ui$1.moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
-    api$f.warn("User cancelled move files dialog");
+    api$h.warn("User cancelled move files dialog");
     return;
   } finally {
     ui$1.moveFilesDialog.hide();
@@ -60291,18 +62154,18 @@ async function showMoveFilesDialog(state) {
 
   const destinationCollection = String(collectionSelectBox.value);
   if (!destinationCollection) {
-    api$b.error("No collection selected.");
+    api$d.error("No collection selected.");
     return;
   }
 
   ui$1.spinner.show('Moving files, please wait...');
   try {
-    const { new_pdf_path, new_xml_path } = await api$9.moveFiles(pdf, xml, destinationCollection);
-    await api$8.reload(state);
-    await api$6.load(state, { pdf: new_pdf_path, xml: new_xml_path });
+    const { new_pdf_path, new_xml_path } = await api$b.moveFiles(pdf, xml, destinationCollection);
+    await api$a.reload(state);
+    await api$7.load(state, { pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
-    api$b.error(`Error moving files: ${error.message}`);
+    api$d.error(`Error moving files: ${error.message}`);
   } finally {
     ui$1.spinner.hide();
   }
@@ -60321,10 +62184,14 @@ async function showMoveFilesDialog(state) {
  * Plugin object
  * dependencies are automatically set to all other plugins, so that it is the last one to be installed
  */
-const plugin$4 = {
+const plugin$5 = {
   name: "start",
-  install: install$4,
-  start: start$1
+  install: install$5,
+  start: start$2,
+  state: {
+    changePdf: onPdfChange,
+    changeXml: onXmlChange
+  }
 };
 
 
@@ -60339,8 +62206,8 @@ let validationStatusWidget = null;
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-async function install$4(state) {
-  api$f.debug(`Installing plugin "${plugin$4.name}"`);
+async function install$5(state) {
+  api$h.debug(`Installing plugin "${plugin$5.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -60359,26 +62226,26 @@ async function install$4(state) {
 * Starts the application, configures plugins and the UI
 * @param {ApplicationState} state
 */
-async function start$1(state) {
+async function start$2(state) {
 
   // async operations
   try {
 
     // Authenticate user, otherwise we don't proceed further
-    const userData = await api$2.ensureAuthenticated();
-    api$f.info(`${userData.fullname} has logged in.`);
+    const userData = await api$3.ensureAuthenticated();
+    api$h.info(`${userData.fullname} has logged in.`);
     notify(`Welcome back, ${userData.fullname}!`);
     
     // load config data
-    await api$e.load();
+    await api$g.load();
 
     ui$1.spinner.show('Loading documents, please wait...');
 
     // update the file lists
-    await api$8.reload(state, {refresh:true});
+    await api$a.reload(state, {refresh:true});
 
     // disable regular validation so that we have more control over it
-    api$a.configure({ mode: "off" });
+    api$c.configure({ mode: "off" });
 
     // get document paths from URL hash 
     // @ts-ignore
@@ -60388,9 +62255,7 @@ async function start$1(state) {
 
     if (pdf !== null) {
       // lod the documents
-      await api$6.load(state, { pdf, xml, diff });
-    } else {
-      api$b.info("Load a PDF from the dropdown on the top left or extract from a new PDF.");
+      await api$7.load(state, { pdf, xml, diff });
     }
     
     // two alternative initial states:
@@ -60399,21 +62264,21 @@ async function start$1(state) {
     if (diff && diff !== xml) {
       // a) load the diff view
       try {
-        await api$6.showMergeView(state, diff);
+        await api$7.showMergeView(state, diff);
       } catch (error) {
-        api$f.warn("Error loading diff view: " + error.message);
+        api$h.warn("Error loading diff view: " + error.message);
       }
     } else {
       // b) validation & xpath selection
 
       // measure how long it takes to validate the document
       const startTime = new Date().getTime();
-      api$6.validateXml().then(() => {
+      api$7.validateXml().then(() => {
         const endTime = new Date().getTime();
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
-        api$f.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
-        api$a.configure({ mode: seconds > 3 ? "off" : "auto" });
+        api$h.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
+        api$c.configure({ mode: seconds > 3 ? "off" : "auto" });
       });
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
@@ -60426,10 +62291,10 @@ async function start$1(state) {
       // update the UI
       await updateState(state);
       // synchronize in the background
-      api$1.syncFiles(state).then(async (summary) => {
-        api$f.info(summary);
+      api$2.syncFiles(state).then(async (summary) => {
+        api$h.info(summary);
         if (summary && !summary.skipped) {
-          await api$8.reload(state, {refresh:true});
+          await api$a.reload(state, {refresh:true});
           await updateState(state);
         }
       });
@@ -60439,71 +62304,32 @@ async function start$1(state) {
     configureXmlEditor();
 
     // Heartbeat mechanism for file locking and offline detection
-    configureHeartbeat(state, await api$e.get('heartbeat.interval', 10));
+    api.start(state, await api$g.get('heartbeat.interval', 10));
 
     // finish initialization
     ui$1.spinner.hide();
-    api$5.show();
+    api$6.show();
     xmlEditor.setLineWrapping(true);
-    api$f.info("Application ready.");
+    api$h.info("Application ready.");
 
   } catch (error) {
     ui$1.spinner.hide();
-    api$b.error(error.message);
+    api$d.error(error.message);
     throw error
   }
 }
 
-
 /**
- * Save the current XML file if the editor is "dirty"
+ * Configure the xmleditor's behavior by responding to 
+ * events
  */
-async function saveIfDirty() {
-  const filePath = String(ui$1.toolbar.xml.value);
-  const hasXmlTree = !!xmlEditor.getXmlTree();
-  const isDirty = xmlEditor.isDirty();
-  
-  if (!filePath || filePath === "undefined") {
-    return
-  }
-  
-  if (!hasXmlTree) {
-    return
-  }
-  
-  if (!isDirty) {
-    return
-  }
-
-  try {
-    const result = await api$6.saveXml(filePath);
-    if (result.status == "unchanged") {
-      api$f.debug(`File has not changed`);
-    } else if (result.status == "saved_with_migration") {
-      api$f.debug(`Saved file ${result.hash} with migration of old version files`);
-      // Migration occurred, reload file data to show updated version structure
-      await api$8.reload(state);
-      // Update state to use new hash
-      state.xml = result.hash;
-      await updateState(state);
-    } else {
-      api$f.debug(`Saved file ${result.hash}`);
-      // Update state to use new hash
-      state.xml = result.hash;
-      await updateState(state);
-    }
-  } catch (error) {
-    api$f.warn(`Save failed: ${error.message}`);
-  }
-}
-
 function configureXmlEditor() {
   // Find the currently selected node's contents in the PDF
   xmlEditor.on("selectionChanged", searchNodeContents);
 
   // manually show diagnostics if validation is disabled
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    if (api$a.isDisabled()) {
+    if (api$c.isDisabled()) {
       let view = xmlEditor.getView();
       try {
         // Validate diagnostic positions before setting
@@ -60512,12 +62338,12 @@ function configureXmlEditor() {
         });
         view.dispatch(setDiagnostics(view.state, validDiagnostics));
       } catch (error) {
-        api$f.warn("Error setting diagnostics: " + error.message);
+        api$h.warn("Error setting diagnostics: " + error.message);
         // Clear diagnostics on error
         try {
           view.dispatch(setDiagnostics(view.state, []));
         } catch (clearError) {
-          api$f.warn("Error clearing diagnostics: " + clearError.message);
+          api$h.warn("Error clearing diagnostics: " + clearError.message);
         }
       }
     }
@@ -60537,7 +62363,7 @@ function configureXmlEditor() {
       });
       view.dispatch(setDiagnostics(view.state, validDiagnostics));
     } catch (error) {
-      api$f.warn("Error setting XML not well-formed diagnostics: " + error.message);
+      api$h.warn("Error setting XML not well-formed diagnostics: " + error.message);
     }
     // Show validation error in statusbar
     if (validationStatusWidget && !validationStatusWidget.isConnected) {
@@ -60552,7 +62378,7 @@ function configureXmlEditor() {
     try {
       xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
     } catch (error) {
-      api$f.warn("Error clearing diagnostics on well-formed XML: " + error.message);
+      api$h.warn("Error clearing diagnostics on well-formed XML: " + error.message);
     }
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
@@ -60564,117 +62390,44 @@ function configureXmlEditor() {
 }
 
 /**
- * Configures the heartbeat mechanism for file locking and offline detection.
- * @param {ApplicationState} state 
- * @param {number} [lockTimeoutSeconds=60]
+ * Save the current XML file if the editor is "dirty"
  */
-function configureHeartbeat(state, lockTimeoutSeconds = 60) {
-  if (!Number.isInteger(lockTimeoutSeconds)) {
-    throw new Error(`Invalid timeout value: ${lockTimeoutSeconds}`)
+async function saveIfDirty() {
+  const filePath = String(ui$1.toolbar.xml.value);
+  const hasXmlTree = !!xmlEditor.getXmlTree();
+  const isDirty = xmlEditor.isDirty();
+  
+  if (!filePath || filePath === "undefined" || !hasXmlTree || !isDirty) {
+    return
   }
-  api$f.debug(`Configuring a heartbeat of ${lockTimeoutSeconds} seconds`);
-  let heartbeatInterval = null;
-  const heartbeatFrequency = lockTimeoutSeconds * 1000;
 
-  /**
-   * stops the heartbeat mechanism 
-   */
-  const stopHeartbeat = () => {
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-      api$f.debug("Heartbeat stopped.");
+  try {
+    const result = await api$7.saveXml(filePath);
+    if (result.status == "unchanged") {
+      api$h.debug(`File has not changed`);
+    } else if (result.status == "saved_with_migration") {
+      api$h.debug(`Saved file ${result.hash} with migration of old version files`);
+      // Migration occurred, reload file data to show updated version structure
+      await api$a.reload(state);
+      // Update state to use new hash
+      state.xml = result.hash;
+      await updateState(state);
+    } else {
+      api$h.debug(`Saved file ${result.hash}`);
+      // Update state to use new hash
+      state.xml = result.hash;
+      await updateState(state);
     }
-    const filePath = ui$1.toolbar.xml.value;
-    if (filePath) {
-      api$9.releaseLock(filePath);
-    }
-  };
-  window.addEventListener('beforeunload', stopHeartbeat);
-
-  /**
-   * starts the heartbeat mechanism
-   */
-  const startHeartbeat = async () => {
-
-    let editorReadOnlyState;
-
-    heartbeatInterval = setInterval(async () => {
-      const filePath = String(ui$1.toolbar.xml.value);
-      const reasonsToSkip = {
-        "No user is logged in": state.user === null,
-        "No file path specified": !filePath
-      };
-
-      for (const reason in reasonsToSkip) {
-        if (reasonsToSkip[reason]) {
-          api$f.debug(`Skipping heartbeat: ${reason}.`);
-          return;
-        }
-      }
-
-      try {
-
-        let heartbeatResponse = null;
-        if (!state.editorReadOnly) {
-          api$f.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-          heartbeatResponse = await api$9.sendHeartbeat(filePath);
-        }
-
-        // Check if file data cache is dirty and only reload if necessary
-        // For read-only editors, check cache status separately since no heartbeat was sent
-        const cacheStatus = heartbeatResponse?.cache_status || await api$9.getCacheStatus();
-        if (cacheStatus.dirty) {
-          api$f.debug("File data cache is dirty, reloading file list");
-          await api$8.reload(state, { refresh: true });
-        }
-
-        // If we are here, the request was successful. Check if we were offline before.
-        if (state.offline) {
-          api$f.info("Connection restored.");
-          notify("Connection restored.");
-          await updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
-        }
-      } catch (error) {
-        console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
-        // Handle different types of errors
-        if (error instanceof TypeError) {
-          // This is likely a network error (client is offline)
-          if (state.offline) {
-            // we are still offline
-            const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`;
-            api$f.warn(message);
-            notify(message);
-            return
-          }
-          api$f.warn("Connection lost.");
-          notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
-          editorReadOnlyState = state.editorReadOnly;
-          await updateState(state, { offline: true, editorReadOnly: true });
-        } else if (error.statusCode === 409 || error.statusCode === 423) {
-          // Lock was lost or taken by another user
-          api$f.critical("Lock lost for file: " + filePath);
-          api$b.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-          await updateState(state, { editorReadOnly: true });
-        } else if (error.statusCode === 504) {
-          api$f.warn("Temporary connection failure, will try again...");
-        } else if (error.statusCode === 403) {
-          notify("You have been logged out"); 
-          api$2.logout();
-        } else {
-          // Another server-side error occurred
-          if (state.webdavEnabled) {
-            api$f.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
-            api$b.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
-            await updateState(state, { webdavEnabled: false });
-          }
-        }
-      }
-    }, heartbeatFrequency);
-  };
-  startHeartbeat().then(() => api$f.info("Heartbeat started."));
+  } catch (error) {
+    api$h.warn(`Save failed: ${error.message}`);
+  }
 }
 
+/**
+ * Called when the selection changes in the xmleditor
+ * so that the content of the selected node is searched
+ * in the PDF viewer
+ */
 let lastNode = null;
 async function searchNodeContents() {
   // workaround for the node selection not being updated immediately
@@ -60684,8 +62437,102 @@ async function searchNodeContents() {
   const node = xmlEditor.selectedNode;
 
   if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
-    await api$6.searchNodeContentsInPdf(node);
+    await api$7.searchNodeContentsInPdf(node);
     lastNode = node;
+  }
+}
+
+//
+// State Change Handlers
+//
+
+/**
+ * Handles PDF state changes by loading the new PDF document
+ * @param {ApplicationState} state
+ */
+async function onPdfChange(state) {
+  api$h.debug("PDF state changed, loading new PDF:"+ state.pdf);
+  
+  if (!state.pdf) {
+    api$h.debug("No PDF specified, skipping load");
+    return;
+  }
+  
+  try {
+    // Remove merge view if it exists
+    await api$7.removeMergeView(state);
+    
+    // Load the PDF (and XML if specified)
+    const filesToLoad = { pdf: state.pdf };
+    if (state.xml) {
+      filesToLoad.xml = state.xml;
+    }
+    
+    await api$7.load(state, filesToLoad);
+    api$h.debug("PDF loaded successfully");
+    
+  } catch (error) {
+    api$h.warn("Error loading PDF:"+ error.message);
+    // Reset PDF state on error
+    state.pdf = null;
+    state.collection = null;
+    await updateState(state);
+    throw error;
+  }
+}
+
+/**
+ * Handles XML state changes by loading the new XML document
+ * Ensures the corresponding PDF is also loaded
+ * @param {ApplicationState} state
+ */
+async function onXmlChange(state) {
+  api$h.debug("XML state changed, loading new XML:" + state.xml);
+  
+  if (!state.xml) {
+    api$h.debug("No XML specified, skipping load");
+    return;
+  }
+  
+  try {
+    // Remove merge view if it exists
+    await api$7.removeMergeView(state);
+    
+    // Find the corresponding PDF for this XML
+    if (!state.fileData) {
+      throw new Error("File data not available");
+    }
+    
+    const pdfMatch = findCorrespondingPdf(state.fileData, state.xml);
+    if (!pdfMatch) {
+      throw new Error(`Could not find corresponding PDF for XML: ${state.xml}`);
+    }
+    
+    // Always load both PDF and XML together
+    const filesToLoad = { 
+      pdf: pdfMatch.pdfHash,
+      xml: state.xml 
+    };
+    
+    // Update state with the correct PDF and collection if they changed
+    if (state.pdf !== pdfMatch.pdfHash) {
+      state.pdf = pdfMatch.pdfHash;
+      api$h.debug(`Loading corresponding PDF ${pdfMatch.pdfHash} for XML ${state.xml}`);
+    }
+    
+    if (state.collection !== pdfMatch.collection) {
+      state.collection = pdfMatch.collection;
+    }
+    
+    await api$7.load(state, filesToLoad);
+    api$h.debug("XML and corresponding PDF loaded successfully");
+    
+  } catch (error) {
+    api$h.warn("Error loading XML:" + error.message);
+    // Reset XML state on error
+    state.xml = null;
+    await updateState(state);
+    throw error;
   }
 }
 
@@ -60715,7 +62562,7 @@ await registerTemplate('logout-button', 'logout-button.html');
 /**
  * Public API for the authentication plugin
  */
-const api$2 = {
+const api$3 = {
   ensureAuthenticated,
   getUser,
   logout
@@ -60724,10 +62571,10 @@ const api$2 = {
 /**
  * Plugin definition
  */
-const plugin$3 = {
+const plugin$4 = {
   name: "authentication",
   deps: ['client'],
-  install: install$3,
+  install: install$4,
   state: {update: update$2}
 };
 
@@ -60752,8 +62599,8 @@ let user = null;
  * Installs the plugin.
  * @param {ApplicationState} state
  */
-async function install$3(state) {
-  api$f.debug(`Installing plugin "${plugin$3.name}"`);
+async function install$4(state) {
+  api$h.debug(`Installing plugin "${plugin$4.name}"`);
   state.user = null;
   
   // Create UI elements
@@ -60807,7 +62654,7 @@ async function update$2(state) {
  */
 async function ensureAuthenticated() {
   try {
-    const userData = await api$9.status();
+    const userData = await api$b.status();
     await updateState(state, { user: userData });
     return userData
   } catch (error) {
@@ -60838,7 +62685,7 @@ function _showLoginDialog() {
       dialog.message.textContent = '';
       const passwd_hash = await _hashPassword(password);
       try {
-        const response = await api$9.login(username, passwd_hash);
+        const response = await api$b.login(username, passwd_hash);
         // Server now returns sessionId in response
         const { sessionId, ...userData } = response;
         await updateState(state, { user: userData, sessionId });
@@ -60848,7 +62695,7 @@ function _showLoginDialog() {
         resolve(userData); // Resolve the promise on successful login
       } catch (error) {
         dialog.message.textContent = 'Wrong username or password';
-        api$f.error('Login failed:', error.message);
+        api$h.error('Login failed:', error.message);
       }
     }, {once:true});
     dialog.show();
@@ -60861,7 +62708,7 @@ function _showLoginDialog() {
  */
 async function logout() {
   try {
-    await api$9.logout();
+    await api$b.logout();
     await updateState(state, { 
       user: null, 
       sessionId: null,
@@ -60873,7 +62720,7 @@ async function logout() {
     UrlHash.remove('sessionId');
     await _showLoginDialog();
   } catch (error) {
-    api$f.error('Logout failed:', error);
+    api$h.error('Logout failed:', error);
   }
 }
 
@@ -60917,14 +62764,15 @@ async function _hashPassword(password) {
  * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
  * @property {UIPart<SlButtonGroup, syncActionsPart>} syncActions - Sync action buttons (added by sync plugin)
  * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
+ * @property {UIPart<SlButton, fileDrawerTriggerPart>} fileDrawerTrigger - File drawer trigger button (added by file-selection-drawer plugin)
  */
 
 /**
  * plugin object
  */
-const plugin$2 = {
+const plugin$3 = {
   name: "toolbar",
-  install: install$2
+  install: install$3
 };
 
 //
@@ -60935,8 +62783,8 @@ const plugin$2 = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$2(state) {
-  api$f.debug(`Installing plugin "${plugin$2.name}"`);
+async function install$3(state) {
+  api$h.debug(`Installing plugin "${plugin$3.name}"`);
   // Currently, the toolbar is just a static container div.
   // Future implementation will provide dynamic toolbar management similar to StatusBar.
 }
@@ -60949,17 +62797,17 @@ async function install$2(state) {
 /**
  * plugin API
  */
-const api$1 = {
+const api$2 = {
   syncFiles
 };
 
 /**
  * component plugin
  */
-const plugin$1 = {
+const plugin$2 = {
   name: "sync",
   deps: ['services'],
-  install: install$1,
+  install: install$2,
   state: { update: update$1 }
 };
 
@@ -60982,11 +62830,11 @@ let syncIcon;
 /**
  * @param {ApplicationState} state
  */
-async function install$1(state) {
-  api$f.debug(`Installing plugin "${plugin$1.name}"`);
+async function install$2(state) {
+  api$h.debug(`Installing plugin "${plugin$2.name}"`);
 
   // Set up SSE listeners for sync progress and messages
-  api$c.addEventListener('syncProgress', (event) => {
+  api$e.addEventListener('syncProgress', (event) => {
     const progress = parseInt(event.data);
     // Don't log progress counter to console, only update the progress bar
     if (syncProgressWidget && syncProgressWidget.isConnected) {
@@ -60995,7 +62843,7 @@ async function install$1(state) {
     }
   });
 
-  api$c.addEventListener('syncMessage', (event) => {
+  api$e.addEventListener('syncMessage', (event) => {
     const message = event.data;
     // Log sync messages to console instead of displaying in widget
     console.log(`Sync: ${message}`);
@@ -61049,7 +62897,7 @@ async function update$1(state) {
  */
 async function syncFiles(state) {
   if (state.webdavEnabled) {
-    api$f.debug("Synchronizing files on the server");
+    api$h.debug("Synchronizing files on the server");
     syncIcon.classList.add("rotating");
     // Reset progress widget for new sync
     if (syncProgressWidget) {
@@ -61057,11 +62905,11 @@ async function syncFiles(state) {
       syncProgressWidget.value = 0;
     }
     try {
-      const summary = await api$9.syncFiles();
+      const summary = await api$b.syncFiles();
       if (summary.skipped) {
-        api$f.debug("Sync skipped - no changes detected");
+        api$h.debug("Sync skipped - no changes detected");
       } else {
-        api$f.debug("Sync completed", summary);
+        api$h.debug("Sync completed", summary);
       }
       return summary
     } finally {
@@ -61097,7 +62945,7 @@ async function onClickSyncBtn(state) {
     await updateState(state, { editorReadOnly: originalReadOnly });
   }
   // manually pressing the sync button should reload file data even if there were no changes
-  await api$8.reload(state, {refresh:true});
+  await api$a.reload(state, {refresh:true});
 }
 
 /**
@@ -61148,10 +62996,10 @@ let pluginState = null;
 /**
  * Access control plugin
  */
-const plugin = {
+const plugin$1 = {
   name: "access-control",
-  install,
-  start,
+  install: install$1,
+  start: start$1,
   state: {
     update
   }
@@ -61160,7 +63008,7 @@ const plugin = {
 /**
  * Access control API
  */
-const api = {
+const api$1 = {
   getDocumentPermissions: () => currentPermissions,
   canEditDocument,
   canViewDocument,
@@ -61172,8 +63020,8 @@ const api = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install(state) {
-  api$f.debug(`Installing plugin "${plugin.name}"`);
+async function install$1(state) {
+  api$h.debug(`Installing plugin "${plugin$1.name}"`);
   
   // Create permission info widget
   permissionInfoWidget = PanelUtils.createText({
@@ -61196,8 +63044,8 @@ async function install(state) {
  * Runs after all plugins are installed
  * @param {ApplicationState} state
  */
-async function start(state) {
-  api$f.debug(`Starting plugin "${plugin.name}"`);
+async function start$1(state) {
+  api$h.debug(`Starting plugin "${plugin$1.name}"`);
 }
 
 let state_xml_cache; 
@@ -61226,18 +63074,18 @@ async function update(state) {
   }
 
   state_xml_cache = state.xml;
-  api$f.debug(`Access control: Updating access control for document: ${state.xml}`);  
+  api$h.debug(`Access control: Updating access control for document: ${state.xml}`);  
   await computeDocumentPermissions();
   
   // Update UI based on permissions
-  api$f.debug("Access control: Update UI");
+  api$h.debug("Access control: Update UI");
   updateAccessControlUI();
   
   // Check if document should be read-only based on permissions
   const shouldBeReadOnly = !canEditDocument(state.user);
   if (shouldBeReadOnly !== state.editorReadOnly) {
     // Update application state to reflect access control
-    api$f.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`);
+    api$h.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`);
     // Note: This will trigger xmleditor plugin to update editor state
     await updateState(state, { editorReadOnly: shouldBeReadOnly });
   }
@@ -61304,17 +63152,17 @@ async function handlePermissionChange(event) {
     
     // If making document private or protected, ensure current user becomes owner if no owner exists
     if ((newVisibility === 'private' || newEditability === 'protected') && !owner) {
-      const currentUser = api$2.getUser();
+      const currentUser = api$3.getUser();
       if (currentUser) {
         owner = currentUser.username;
-        api$f.debug(`Setting document owner to current user: ${owner}`);
+        api$h.debug(`Setting document owner to current user: ${owner}`);
       }
     }
     
     await updateDocumentStatus(newVisibility, newEditability, owner || undefined);
-    api$f.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`);
+    api$h.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`);
   } catch (error) {
-    api$f.error(`Failed to update document status: ${error.message}`);
+    api$h.error(`Failed to update document status: ${error.message}`);
     // Revert dropdown to previous state
     updateStatusDropdownDisplay();
   }
@@ -61347,12 +63195,12 @@ async function computeDocumentPermissions() {
     };
     
     // Now calculate can_modify using the updated permissions
-    const currentUser = api$2.getUser();
+    const currentUser = api$3.getUser();
     currentPermissions.can_modify = canEditDocument(currentUser);
     
-    api$f.debug('Parsed document permissions:' + JSON.stringify(currentPermissions) );
+    api$h.debug('Parsed document permissions:' + JSON.stringify(currentPermissions) );
   } catch (error) {
-    api$f.error(`Error parsing document permissions: ${error.message}`);
+    api$h.error(`Error parsing document permissions: ${error.message}`);
     // Use defaults on error
     currentPermissions = {
       visibility: 'public', 
@@ -61430,7 +63278,7 @@ function parsePermissionsFromXmlTree(xmlTree) {
       owner
     }
   } catch (error) {
-    api$f.warn(`Error parsing permissions from XML tree: ${error.message}`);
+    api$h.warn(`Error parsing permissions from XML tree: ${error.message}`);
     return {
       visibility: 'public',
       editability: 'editable',
@@ -61476,10 +63324,10 @@ async function updateDocumentStatus(visibility, editability, owner, description)
     change.setAttribute('when', timestamp);
     
     // Add who attribute to document who made the change
-    const currentUser = api$2.getUser();
+    const currentUser = api$3.getUser();
     if (currentUser) {
       // Ensure respStmt exists for current user
-      api$f.debug(`Ensuring respStmt for current user: ${currentUser.username}, fullname: ${currentUser.fullname}`);
+      api$h.debug(`Ensuring respStmt for current user: ${currentUser.username}, fullname: ${currentUser.fullname}`);
       ensureRespStmtForUser(xmlTree, currentUser.username, currentUser.fullname || currentUser.username);
       change.setAttribute('who', `#${currentUser.username}`);
     }
@@ -61508,9 +63356,9 @@ async function updateDocumentStatus(visibility, editability, owner, description)
       
       if (finalOwner) {
         // Ensure respStmt exists for owner
-        const ownerUser = api$2.getUser(); // For now, assume current user is the owner
+        const ownerUser = api$3.getUser(); // For now, assume current user is the owner
         if (ownerUser && finalOwner === ownerUser.username) {
-          api$f.debug(`Ensuring respStmt for owner: ${finalOwner}, fullname: ${ownerUser.fullname}`);
+          api$h.debug(`Ensuring respStmt for owner: ${finalOwner}, fullname: ${ownerUser.fullname}`);
           ensureRespStmtForUser(xmlTree, finalOwner, ownerUser.fullname || ownerUser.username || finalOwner);
         }
         
@@ -61540,7 +63388,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
     await xmlEditor.updateEditorFromNode(teiHeader);
     
     // Save the document using services API
-    await api$6.saveXml(pluginState.xml);
+    await api$7.saveXml(pluginState.xml);
     
     // Update cached permissions
     currentPermissions.visibility = visibility;
@@ -61558,7 +63406,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
       owner: currentPermissions.owner
     }
   } catch (error) {
-    api$f.error(`Failed to update document permissions: ${error.message}`);
+    api$h.error(`Failed to update document permissions: ${error.message}`);
     throw error
   }
 }
@@ -61750,12 +63598,12 @@ function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
  */
 function updateReadOnlyWidgetText(readOnlyWidget) {
   if (!readOnlyWidget) {
-    api$f.debug('Read-only widget not available, skipping context update');
+    api$h.debug('Read-only widget not available, skipping context update');
     return
   }
   
   const { visibility, editability, owner } = currentPermissions;
-  const currentUser = api$2.getUser();
+  const currentUser = api$3.getUser();
   
   let contextText = 'Read-only';
   
@@ -61773,7 +63621,7 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
   
   // Update the widget text
   readOnlyWidget.text = contextText;
-  api$f.debug(`Updated read-only context: ${contextText}`);
+  api$h.debug(`Updated read-only context: ${contextText}`);
 }
 
 /**
@@ -61783,10 +63631,10 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
  */
 function checkCanEditFile(fileId) {
   try {
-    const currentUser = api$2.getUser();
+    const currentUser = api$3.getUser();
     
     // Find the file metadata in fileselection data
-    const fileData = api$8.fileData;
+    const fileData = api$a.fileData;
     let fileMetadata = null;
     
     // Search through all files and their versions for matching ID
@@ -61816,7 +63664,7 @@ function checkCanEditFile(fileId) {
     
     if (!fileMetadata || !fileMetadata.access_control) {
       // No metadata found or no access control info - default to allow editing
-      api$f.debug('No access control metadata found, allowing edit');
+      api$h.debug('No access control metadata found, allowing edit');
       return true
     }
     
@@ -61844,9 +63692,160 @@ function checkCanEditFile(fileId) {
     
     return true
   } catch (error) {
-    api$f.warn(`Error checking file access permissions: ${error.message}`);
+    api$h.warn(`Error checking file access permissions: ${error.message}`);
     // Default to allowing edit on error to avoid breaking functionality
     return true
+  }
+}
+
+/**
+ * Heartbeat plugin for file locking and offline detection
+ */
+
+
+/**
+ * Plugin API
+ */
+const api = {
+  start,
+  stop
+};
+
+/**
+ * Component plugin
+ */
+const plugin = {
+  name: "heartbeat",
+  install
+};
+
+// Internal state
+let heartbeatInterval = null;
+let lockTimeoutSeconds = 60;
+let editorReadOnlyState;
+
+/**
+ * Runs when the main app starts
+ * @param {ApplicationState} state
+ */
+async function install(state) {
+  api$h.debug(`Installing plugin "${plugin.name}"`);
+  // Plugin installation complete - actual start happens via API
+}
+
+/**
+ * Starts the heartbeat mechanism
+ * @param {ApplicationState} state
+ * @param {number} [timeoutSeconds=60] - Heartbeat interval in seconds
+ */
+function start(state, timeoutSeconds = 60) {
+  if (!Number.isInteger(timeoutSeconds)) {
+    throw new Error(`Invalid timeout value: ${timeoutSeconds}`)
+  }
+  
+  if (heartbeatInterval) {
+    api$h.debug("Heartbeat already running, stopping previous instance");
+    stop();
+  }
+  
+  lockTimeoutSeconds = timeoutSeconds;
+  api$h.debug(`Starting heartbeat with ${lockTimeoutSeconds} second interval`);
+  
+  const heartbeatFrequency = lockTimeoutSeconds * 1000;
+
+  // Set up cleanup on page unload
+  window.addEventListener('beforeunload', stop);
+
+  // Start the heartbeat interval
+  heartbeatInterval = setInterval(async () => {
+    const filePath = String(ui$1.toolbar.xml.value);
+    const reasonsToSkip = {
+      "No user is logged in": state.user === null,
+      "No file path specified": !filePath
+    };
+
+    for (const reason in reasonsToSkip) {
+      if (reasonsToSkip[reason]) {
+        api$h.debug(`Skipping heartbeat: ${reason}.`);
+        return;
+      }
+    }
+
+    try {
+      let heartbeatResponse = null;
+      if (!state.editorReadOnly) {
+        api$h.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
+        heartbeatResponse = await api$b.sendHeartbeat(filePath);
+      }
+
+      // Check if file data cache is dirty and only reload if necessary
+      // For read-only editors, check cache status separately since no heartbeat was sent
+      const cacheStatus = heartbeatResponse?.cache_status || await api$b.getCacheStatus();
+      if (cacheStatus.dirty) {
+        api$h.debug("File data cache is dirty, reloading file list");
+        await api$a.reload(state, { refresh: true });
+      }
+
+      // If we are here, the request was successful. Check if we were offline before.
+      if (state.offline) {
+        api$h.info("Connection restored.");
+        notify("Connection restored.");
+        await updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
+      }
+    } catch (error) {
+      console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
+      // Handle different types of errors
+      if (error instanceof TypeError) {
+        // This is likely a network error (client is offline)
+        if (state.offline) {
+          // we are still offline
+          const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`;
+          api$h.warn(message);
+          notify(message);
+          return
+        }
+        api$h.warn("Connection lost.");
+        notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
+        editorReadOnlyState = state.editorReadOnly;
+        await updateState(state, { offline: true, editorReadOnly: true });
+      } else if (error.statusCode === 409 || error.statusCode === 423) {
+        // Lock was lost or taken by another user
+        api$h.critical("Lock lost for file: " + filePath);
+        api$d.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+        await updateState(state, { editorReadOnly: true });
+      } else if (error.statusCode === 504) {
+        api$h.warn("Temporary connection failure, will try again...");
+      } else if (error.statusCode === 403) {
+        notify("You have been logged out");
+        api$3.logout();
+      } else {
+        // Another server-side error occurred
+        if (state.webdavEnabled) {
+          api$h.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
+          api$d.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
+          await updateState(state, { webdavEnabled: false });
+        }
+      }
+    }
+  }, heartbeatFrequency);
+  
+  api$h.info("Heartbeat started.");
+}
+
+/**
+ * Stops the heartbeat mechanism
+ */
+function stop() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+    api$h.debug("Heartbeat stopped.");
+  }
+  
+  // Release file lock if we have one
+  const filePath = ui$1.toolbar.xml.value;
+  if (filePath) {
+    api$b.releaseLock(filePath);
   }
 }
 
@@ -61879,6 +63878,7 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
  * @property {boolean} offline  - Whether the application is in offline mode
  * @property {object|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
+ * @property {Array<object>|null} fileData - The file data loaded from the server
  */
 /**
  * @type{ApplicationState}
@@ -61894,7 +63894,8 @@ let state = {
   offline: false,
   sessionId: null,
   user: null,
-  collection: null
+  collection: null,
+  fileData: null
 };
 
 /**
@@ -61906,15 +63907,15 @@ let state = {
  */
 
 /** @type {Plugin[]} */
-const plugins = [plugin$l, plugin$j, plugin$d, plugin$k, 
-  plugin$h, plugin$2, plugin$g, plugin$f, plugin$c,
-  plugin$a, plugin$1, plugin$b, plugin$9, plugin$8,
-  plugin$7, plugin$e, plugin$6, plugin$5, plugin$i,
-  plugin$3, plugin,
-  /* must be the last plugin */ plugin$4];
+const plugins = [plugin$n, plugin$l, plugin$f, plugin$m, 
+  plugin$j, plugin$3, plugin$i, plugin$h, plugin$e,
+  plugin$d, plugin$b, plugin$2, plugin$c, plugin$a, plugin$9,
+  plugin$8, plugin$g, plugin$7, plugin$6, plugin$k,
+  plugin$4, plugin$1, plugin,
+  /* must be the last plugin */ plugin$5];
 
 // add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
-plugin$4.deps = plugins.slice(0,-1).map(p => p.name);
+plugin$5.deps = plugins.slice(0,-1).map(p => p.name);
 
 // register plugins
 for (const plugin of plugins) {
@@ -61936,16 +63937,16 @@ await invoke(endpoints.install, state);
 // persist the state across reloads in sessionStorage
 //
 const SESSION_STORAGE_ID = 'pdf-tei-editor.state';
-const persistedStateVars = (await api$e.get("state.persist") || []);
+const persistedStateVars = (await api$g.get("state.persist") || []);
 persistedStateVars.push('sessionId'); // the session id is always persisted
 const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID';
-let serverState = await api$9.state();
+let serverState = await api$b.state();
 let tmpState;
 try {
   tmpState = JSON.parse(stateInSessionStorage);
-  api$f.info("Loaded state from sessionStorage");
+  api$h.info("Loaded state from sessionStorage");
 } catch(e) {
-  api$f.info("Loading initial state from server");
+  api$h.info("Loading initial state from server");
   tmpState = serverState;
 }
 // special case where server state overrides saved state on reload
@@ -61955,14 +63956,35 @@ tmpState.webdavEnabled = serverState.webdavEnabled;
 updateState(state, tmpState);
 // save the state in the session storage befor leaving the page
 window.addEventListener('beforeunload', evt => {
-  api$f.debug("Saving state in sessionStorage");
+  api$h.debug("Saving state in sessionStorage");
   sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state));
 });
 
 // URL hash params override properties
-await api$d.updateStateFromUrlHash(state);
+await api$f.updateStateFromUrlHash(state);
 
 // start the application 
 await invoke(endpoints.start, state);
 
-export { api as accessControl, api$3 as appInfo, api$2 as authentication, api$9 as client, api$e as config, api$b as dialog, endpoints, api$7 as extraction, api$8 as fileselection, api$5 as floatingPanel, invoke, api$f as logger, pdfViewer, pluginManager, plugins, api$4 as promptEditor, api$6 as services, api$c as sse, state, api$1 as sync, updateState, api$d as urlHash, api$a as validation, xmlEditor };
+//
+// Utility functions
+//
+
+/**
+ * Reloads the file data from the server
+ * @param {ApplicationState} state
+ * @param {Object} options - Options for reloading
+ * @param {boolean} [options.refresh] - Whether to force refresh of server cache
+ * @returns {Promise} 
+ */
+async function reloadFileData(state, options = {}) {
+  api$h.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
+  let data = await api$b.getFileList(null, options.refresh);
+  if (!data || data.length === 0) {
+    api$d.error("No files found");
+  }
+  // Store fileData in state and propagate it
+  updateState(state, {fileData:data});
+}
+
+export { api$1 as accessControl, api$4 as appInfo, api$3 as authentication, api$b as client, api$g as config, api$d as dialog, endpoints, api$8 as extraction, api$9 as fileSelectionDrawer, api$a as fileselection, api$6 as floatingPanel, api as heartbeat, invoke, api$h as logger, pdfViewer, pluginManager, plugins, api$5 as promptEditor, reloadFileData, api$7 as services, api$e as sse, state, api$2 as sync, updateState, api$f as urlHash, api$c as validation, xmlEditor };
