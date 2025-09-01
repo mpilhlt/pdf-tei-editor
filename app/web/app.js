@@ -16186,8 +16186,8 @@ const PanelUtils = {
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {floatingPanelPart} from './plugins/floating-panel.js'
  * @import {documentActionsPart, teiServicesPart} from './plugins/services.js'
- * @import {extractionActionsPart, extractionOptionsDialog} from './plugins/extraction.js'
- * @import {infoDialogPart} from './plugins/info.js'
+ * @import {extractionActionsPart} from './plugins/extraction.js' 
+ * @import {infoDrawerPart} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
@@ -16213,8 +16213,8 @@ const PanelUtils = {
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
  * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
- * @property {UIPart<SlDialog, extractionOptionsDialog>} extractionOptions - A dialog to choose extraction options
- * @property {UIPart<SlDialog, infoDialogPart>} infoDialog - A dialog to display information and help
+ * @property {UIPart<SlDialog, extractionActionsPart>} extractionOptions - A dialog to choose extraction options
+ * @property {UIPart<SlDrawer, infoDrawerPart>} infoDrawer - A drawer component to display information and help
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
@@ -61799,7 +61799,7 @@ const plugin$7 = {
 
 /**
  * Help Window
- * @typedef {object} infoDialogPart
+ * @typedef {object} infoDrawerPart
  * @property {HTMLDivElement} content
  * @property {SlButton} backBtn
  * @property {SlButton} homeBtn
@@ -61809,7 +61809,7 @@ const plugin$7 = {
  */
 
 // Register templates
-await registerTemplate('info-dialog', 'info-dialog.html');
+await registerTemplate('info-dialog', 'info-drawer.html');
 await registerTemplate('about-button', 'about-button.html');
 await registerTemplate('info-toolbar-button', 'info-toolbar-button.html');
 
@@ -61881,11 +61881,11 @@ async function install$7(state) {
   const button = createSingleFromTemplate('info-toolbar-button');
   
   // Set up info dialog event listeners
-  ui$1.infoDialog.closeBtn.addEventListener('click', () => ui$1.infoDialog.hide());
-  ui$1.infoDialog.backBtn.addEventListener('click', goBack);
-  ui$1.infoDialog.homeBtn.addEventListener('click', goHome);
-  ui$1.infoDialog.forwardBtn.addEventListener('click', goForward);
-  ui$1.infoDialog.editGitHubBtn.addEventListener('click', () => {
+  ui$1.infoDrawer.closeBtn.addEventListener('click', () => ui$1.infoDrawer.hide());
+  ui$1.infoDrawer.backBtn.addEventListener('click', goBack);
+  ui$1.infoDrawer.homeBtn.addEventListener('click', goHome);
+  ui$1.infoDrawer.forwardBtn.addEventListener('click', goForward);
+  ui$1.infoDrawer.editGitHubBtn.addEventListener('click', () => {
     const githubUrl = `${githubEditBasePath}/${currentPage}`;
     window.open(githubUrl, '_blank');
   });
@@ -61921,13 +61921,12 @@ async function install$7(state) {
  * todo this needs to always reload the data since it might have changed on the server
  */
 async function open() {
-  // Reset navigation history when opening the dialog
-  navigationHistory = [];
-  forwardHistory = [];
   updateNavigationButtons();
-  ui$1.infoDialog.show();
-  // Load the index page
-  await load('index.md');
+  ui$1.infoDrawer.show();
+  // Load the index page if this is the first time
+  if (navigationHistory.length === 0) {
+    await load('index.md');
+  }
 }
 
 /**
@@ -61948,7 +61947,7 @@ async function load(mdPath, addToHistory = true){
   currentPage = mdPath;
   
   // remove existing content
-  ui$1.infoDialog.content.innerHTML = "";
+  ui$1.infoDrawer.content.innerHTML = "";
   
   // load markdown 
   let markdown;
@@ -61991,7 +61990,7 @@ async function load(mdPath, addToHistory = true){
     .replaceAll(/<!--|-->/gs, ''); 
 
 
-  await createHtmlElements(html, ui$1.infoDialog.content);
+  ui$1.infoDrawer.content.innerHTML = html;
 }
 
 
@@ -62002,7 +62001,9 @@ function goBack() {
   if (navigationHistory.length > 1) {
     // Add current page to forward history
     const currentPage = navigationHistory.pop();
-    forwardHistory.push(currentPage);
+    if (currentPage) {
+      forwardHistory.push(currentPage);
+    }
     // Load the previous page without adding to history
     const previousPage = navigationHistory[navigationHistory.length - 1];
     load(previousPage, false);
@@ -62024,9 +62025,11 @@ function goForward() {
   if (forwardHistory.length > 0) {
     // Get the next page from forward history
     const nextPage = forwardHistory.pop();
-    // Load the next page and add to history
-    load(nextPage, true);
-    updateNavigationButtons();
+    if (nextPage) {
+      // Load the next page and add to history
+      load(nextPage, true);
+      updateNavigationButtons();
+    }
   }
 }
 
@@ -62034,9 +62037,9 @@ function goForward() {
  * Updates the navigation button states based on history
  */
 function updateNavigationButtons() {
-  if (ui$1.infoDialog && ui$1.infoDialog.backBtn && ui$1.infoDialog.forwardBtn) {
-    ui$1.infoDialog.backBtn.disabled = navigationHistory.length <= 1;
-    ui$1.infoDialog.forwardBtn.disabled = forwardHistory.length === 0;
+  if (ui$1.infoDrawer && ui$1.infoDrawer.backBtn && ui$1.infoDrawer.forwardBtn) {
+    ui$1.infoDrawer.backBtn.disabled = navigationHistory.length <= 1;
+    ui$1.infoDrawer.forwardBtn.disabled = forwardHistory.length === 0;
   }
 }
 
@@ -62044,7 +62047,7 @@ function updateNavigationButtons() {
  * Closes the prompt editor
  */
 function close() {
-  ui$1.promptEditor.hide();
+  ui$1.infoDrawer.hide();
 }
 
 /**
@@ -62493,16 +62496,15 @@ async function onXmlChange(state) {
     api$h.debug("No XML specified, skipping load");
     return;
   }
+
+  if (!state.fileData) {
+    api$h.debug("File data not available - cannot load xml with id " + state.xml);
+    return
+  }
   
   try {
-    // Remove merge view if it exists
-    await api$7.removeMergeView(state);
-    
+
     // Find the corresponding PDF for this XML
-    if (!state.fileData) {
-      throw new Error("File data not available");
-    }
-    
     const pdfMatch = findCorrespondingPdf(state.fileData, state.xml);
     if (!pdfMatch) {
       throw new Error(`Could not find corresponding PDF for XML: ${state.xml}`);
@@ -63713,9 +63715,11 @@ const api = {
 
 /**
  * Component plugin
+ * @type {Plugin}
  */
 const plugin = {
   name: "heartbeat",
+  deps: ["logger", "client", "updateState", "fileselection", "dialog", "authentication"],
   install
 };
 
@@ -63903,7 +63907,6 @@ let state = {
  * @property {string} name - The name of the plugin
  * @property {string[]} [deps] - The names of the plugins this plugin depends on
  * @property {function(ApplicationState):Promise<*>} [install] - The function to install the plugin
- * @property {function(ApplicationState):Promise<*>} [update] - The function to respond to state updates
  */
 
 /** @type {Plugin[]} */
