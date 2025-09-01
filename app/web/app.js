@@ -947,7 +947,7 @@ async function registerTemplate(id, pathOrHtml) {
     id,
     pathOrHtml,
     cached: false,
-    html: null
+    html: ''
   };
   
   // Pre-load the HTML content
@@ -1097,7 +1097,7 @@ function createFromTemplate(id, parentNode = null, params = {}) {
  * @param {string} id - Template identifier
  * @param {Element|Document|null} [parentNode] - If given, appends generated element as child
  * @param {Object} [params] - Parameters for template substitution (e.g., {name: 'icon-name'})
- * @returns {ChildNode} The first created element
+ * @returns {HTMLElement} The first created element
  * @throws {Error} If template produces no elements
  */
 function createSingleFromTemplate(id, parentNode = null, params = {}) {
@@ -1106,8 +1106,12 @@ function createSingleFromTemplate(id, parentNode = null, params = {}) {
   if (nodes.length === 0) {
     throw new Error(`Template '${id}' produced no elements.`);
   }
-  
-  return nodes[0];
+ 
+  let element = Array.from(nodes).find(elem => elem instanceof HTMLElement);
+  if (element) {
+    return element
+  }
+  throw new Error(`Could not find an html element in the template with id ${id}.`)
 }
 
 /**
@@ -49583,7 +49587,7 @@ async function update$8(state) {
   const jsonState = JSON.stringify({ xml, pdf, diff, variant });
   const stateChanged = jsonState !== stateCache;
   
-  if (stateChanged) {
+  if (stateChanged && state.fileData) {
     stateCache = jsonState;
     await populateSelectboxes(state);
   }
@@ -50010,13 +50014,10 @@ async function install$c(state) {
   
   // Create and add trigger button to toolbar
   const triggerButton = createSingleFromTemplate('file-drawer-button');
-  if (triggerButton instanceof HTMLElement) {
-    ui$1.toolbar.add(triggerButton, 100); // Highest priority to appear first
-  }
+  ui$1.toolbar.add(triggerButton, 100); // Highest priority to appear first
   
   // Create and add drawer to document body
-  const drawer = createSingleFromTemplate('file-selection-drawer');
-  document.body.appendChild(drawer);
+  const drawer = createSingleFromTemplate('file-selection-drawer', document.body);
   
   // Update UI to register new elements
   updateUi();
@@ -50027,7 +50028,7 @@ async function install$c(state) {
   });
   
   // Close drawer when close button is clicked
-  drawer.closeDrawer.addEventListener('click', () => {
+  ui$1.fileDrawer.closeDrawer.addEventListener('click', () => {
     close$2();
   });
   
@@ -50037,7 +50038,7 @@ async function install$c(state) {
   });
   
   // Handle variant selection changes
-  drawer.variantSelect.addEventListener('sl-change', () => {
+  ui$1.fileDrawer.variantSelect.addEventListener('sl-change', () => {
     onVariantChange();
   });
   
