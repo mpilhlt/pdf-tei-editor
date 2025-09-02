@@ -205,10 +205,12 @@ sl-icon.rotating {
 
 /* File Selection Drawer Tree Styling */
 
-/* Collection items - bold with light blue background */
-sl-tree-item.collection-item {
-  font-weight: bold;
+/* Font size of the tree item labels (always use a span) */
+sl-tree-item span {
+  font-size: smaller;
 }
+
+/* Collection items - light blue background */
 sl-tree-item.collection-item::part(item) {
   background-color: var(--sl-color-blue-50);
   border-radius: var(--sl-border-radius-small);
@@ -216,9 +218,6 @@ sl-tree-item.collection-item::part(item) {
 }
 
 /* Gold section - light yellow/gold background */
-sl-tree-item.gold-section {
-  font-weight: 600;
-}
 sl-tree-item.gold-section::part(item) {
   background-color: var(--sl-color-amber-50);
   border-radius: var(--sl-border-radius-small);

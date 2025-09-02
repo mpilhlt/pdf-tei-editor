@@ -32,8 +32,7 @@ const plugin = {
   install,
   start,
   state: {
-    changePdf: onPdfChange,
-    changeXml: onXmlChange
+    update
   }
 }
 
@@ -60,7 +59,7 @@ async function install(state) {
   spinner.setAttribute('name', "spinner")
   document.body.appendChild(spinner)
   updateUi()
-  
+
   // Create validation status widget
   validationStatusWidget = PanelUtils.createText({
     text: 'Invalid XML',
@@ -81,14 +80,14 @@ async function start(state) {
     const userData = await authentication.ensureAuthenticated()
     logger.info(`${userData.fullname} has logged in.`)
     notify(`Welcome back, ${userData.fullname}!`)
-    
+
     // load config data
     await config.load()
 
     ui.spinner.show('Loading documents, please wait...')
 
     // update the file lists
-    await fileselection.reload(state, {refresh:true})
+    await fileselection.reload(state, { refresh: true })
 
     // disable regular validation so that we have more control over it
     validation.configure({ mode: "off" })
@@ -103,7 +102,7 @@ async function start(state) {
       // lod the documents
       await services.load(state, { pdf, xml, diff })
     }
-    
+
     // two alternative initial states:
     // a) if the diff param was given and is different from the xml param, show a diff/merge view 
     // b) if no diff, try to validate the document and select first match of xpath expression
@@ -140,7 +139,7 @@ async function start(state) {
       sync.syncFiles(state).then(async (summary) => {
         logger.info(summary)
         if (summary && !summary.skipped) {
-          await fileselection.reload(state, {refresh:true})
+          await fileselection.reload(state, { refresh: true })
           await updateState(state)
         }
       })
@@ -242,7 +241,7 @@ async function saveIfDirty() {
   const filePath = String(ui.toolbar.xml.value)
   const hasXmlTree = !!xmlEditor.getXmlTree()
   const isDirty = xmlEditor.isDirty()
-  
+
   if (!filePath || filePath === "undefined" || !hasXmlTree || !isDirty) {
     return
   }
@@ -292,91 +291,55 @@ async function searchNodeContents() {
 // State Change Handlers
 //
 
+let cachedHashes; 
+
 /**
  * Handles PDF state changes by loading the new PDF document
  * @param {ApplicationState} state
  */
-async function onPdfChange(state) {
-  logger.debug("PDF state changed, loading new PDF:"+ state.pdf);
-  
-  if (!state.pdf) {
-    logger.debug("No PDF specified, skipping load");
+async function update(state) {
+
+  if (!state.fileData) {
+    return
+  }
+
+  if (!state.pdf && !state.xml) {
+    logger.debug("No PDF or XML specified, nothing to do");
     return;
   }
-  
+
+  const { pdf, xml } = state;
+  if (JSON.stringify({pdf, xml}) === cachedHashes) {
+    logger.debug("PDF and XML have not changed, nothing to do");
+    return;
+  }
+  cachedHashes = JSON.stringify({ pdf, xml })
+
   try {
     // Remove merge view if it exists
     await services.removeMergeView(state);
-    
-    // Load the PDF (and XML if specified)
-    const filesToLoad = { pdf: state.pdf };
-    if (state.xml) {
-      filesToLoad.xml = state.xml;
+
+    // debug 
+    if (pdf) {
+      logger.debug("PDF state changed, loading new PDF:" + pdf);
     }
+    if (xml) {
+      logger.debug("XML state changed, loading new XML:" + xml);
+    }
+
+    // Load the PDF and XML
+    await services.load(state, { pdf, xml });
     
-    await services.load(state, filesToLoad);
-    logger.debug("PDF loaded successfully");
-    
+    logger.debug("PDF/XML loaded after state change");
+
   } catch (error) {
-    logger.warn("Error loading PDF:"+ error.message);
+    logger.warn("Error loading PDF:" + error.message);
     // Reset PDF state on error
     state.pdf = null;
     state.collection = null;
+    cachedHashes = null;
     await updateState(state);
     throw error;
   }
 }
 
-/**
- * Handles XML state changes by loading the new XML document
- * Ensures the corresponding PDF is also loaded
- * @param {ApplicationState} state
- */
-async function onXmlChange(state) {
-  logger.debug("XML state changed, loading new XML:" + state.xml);
-  
-  if (!state.xml) {
-    logger.debug("No XML specified, skipping load");
-    return;
-  }
-
-  if (!state.fileData) {
-    logger.debug("File data not available - cannot load xml with id " + state.xml);
-    return
-  }
-  
-  try {
-
-    // Find the corresponding PDF for this XML
-    const pdfMatch = findCorrespondingPdf(state.fileData, state.xml);
-    if (!pdfMatch) {
-      throw new Error(`Could not find corresponding PDF for XML: ${state.xml}`);
-    }
-    
-    // Always load both PDF and XML together
-    const filesToLoad = { 
-      pdf: pdfMatch.pdfHash,
-      xml: state.xml 
-    };
-    
-    // Update state with the correct PDF and collection if they changed
-    if (state.pdf !== pdfMatch.pdfHash) {
-      state.pdf = pdfMatch.pdfHash;
-      logger.debug(`Loading corresponding PDF ${pdfMatch.pdfHash} for XML ${state.xml}`);
-    }
-    
-    if (state.collection !== pdfMatch.collection) {
-      state.collection = pdfMatch.collection;
-    }
-    
-    await services.load(state, filesToLoad);
-    logger.debug("XML and corresponding PDF loaded successfully");
-    
-  } catch (error) {
-    logger.warn("Error loading XML:" + error.message);
-    // Reset XML state on error
-    state.xml = null;
-    await updateState(state);
-    throw error;
-  }
-}

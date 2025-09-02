@@ -58,13 +58,6 @@ export default plugin
 await registerTemplate('file-selection-drawer', 'file-selection-drawer.html');
 await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 
-// Icon resource requirements
-// <sl-icon name="list"></sl-icon>
-// <sl-icon name="search"></sl-icon>
-// <sl-icon name="folder"></sl-icon>
-// <sl-icon name="award"></sl-icon>
-// <sl-icon name="file-earmark-diff"></sl-icon>
-
 // Internal state
 let currentLabelFilter = '';
 let stateCache = null;
@@ -225,6 +218,9 @@ async function populateFileTree(state) {
   
   // Clear existing tree
   fileTree.innerHTML = '';
+
+  // default state for branches
+  const expanded = false;
   
   // Build tree structure programmatically
   for (const collectionName of collections) {
@@ -232,15 +228,9 @@ async function populateFileTree(state) {
     
     // Create collection item
     const collectionItem = document.createElement('sl-tree-item');
-    collectionItem.expanded = true;
+    collectionItem.expanded = expanded;
     collectionItem.className = 'collection-item';
-    collectionItem.textContent = collectionDisplayName;
-    
-    // Add folder icon
-    const folderIcon = document.createElement('sl-icon');
-    folderIcon.name = 'folder';
-    folderIcon.slot = 'prefix';
-    collectionItem.appendChild(folderIcon);
+    collectionItem.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
     
     const files = groupedFiles[collectionName]
       .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0);
@@ -251,12 +241,12 @@ async function populateFileTree(state) {
       
       // Create PDF document item
       const pdfItem = document.createElement('sl-tree-item');
-      pdfItem.expanded = true;
+      pdfItem.expanded = expanded;
       pdfItem.className = 'pdf-item';
       pdfItem.dataset.type = 'pdf';
       pdfItem.dataset.hash = file.pdf.hash;
       pdfItem.dataset.collection = file.collection;
-      pdfItem.textContent = file.label;
+      pdfItem.innerHTML = `<sl-icon name="file-pdf"></sl-icon><span>${file.label}</span>`;
       
       // Add Gold section if there are gold entries
       if (goldToShow.length > 0) {
@@ -264,14 +254,8 @@ async function populateFileTree(state) {
         goldSection.expanded = true;
         goldSection.className = 'gold-section';
         goldSection.dataset.type = 'section';
-        goldSection.textContent = 'Gold';
-        
-        // Add award icon
-        const awardIcon = document.createElement('sl-icon');
-        awardIcon.name = 'award';
-        awardIcon.slot = 'prefix';
-        goldSection.appendChild(awardIcon);
-        
+        goldSection.innerHTML = `<sl-icon name="award"></sl-icon><span>Gold</span>`;
+
         goldToShow.forEach(gold => {
           const goldItem = document.createElement('sl-tree-item');
           goldItem.className = 'gold-item';
@@ -288,16 +272,10 @@ async function populateFileTree(state) {
       // Add Versions section if there are versions
       if (versionsToShow.length > 0) {
         const versionsSection = document.createElement('sl-tree-item');
-        versionsSection.expanded = true;
+        versionsSection.expanded = expanded;
         versionsSection.className = 'versions-section';
         versionsSection.dataset.type = 'section';
-        versionsSection.textContent = 'Versions';
-        
-        // Add file-earmark-diff icon
-        const diffIcon = document.createElement('sl-icon');
-        diffIcon.name = 'file-earmark-diff';
-        diffIcon.slot = 'prefix';
-        versionsSection.appendChild(diffIcon);
+        versionsSection.innerHTML = `<sl-icon name="file-earmark-diff"></sl-icon><span>Versions</span>`;
         
         versionsToShow.forEach(version => {
           const versionItem = document.createElement('sl-tree-item');
@@ -359,6 +337,9 @@ async function onFileTreeSelection(event, state) {
   // @ts-ignore - detail property exists on custom events
   const selectedItems = event.detail.selection;
   if (selectedItems.length === 0) return;
+  if (!state.fileData) {
+    throw new Error("No file data in state")
+  }
   
   const selectedItem = selectedItems[0];
   const type = selectedItem.dataset.type;
@@ -378,15 +359,13 @@ async function onFileTreeSelection(event, state) {
     stateUpdates.collection = collection;
     
     // Find matching gold file for this PDF and variant
-    if (state.fileData) {
-      const selectedFile = findFileByPdfHash(state.fileData, hash);
-      if (selectedFile) {
-        const matchingGold = findMatchingGold(selectedFile, state.variant);
-        if (matchingGold) {
-          stateUpdates.xml = matchingGold.hash;
-        } else {
-          stateUpdates.xml = null;
-        }
+    const selectedFile = findFileByPdfHash(state.fileData, hash);
+    if (selectedFile) {
+      const matchingGold = findMatchingGold(selectedFile, state.variant);
+      if (matchingGold) {
+        stateUpdates.xml = matchingGold.hash;
+      } else {
+        stateUpdates.xml = null;
       }
     }
   } else if (type === 'gold' || type === 'version') {
@@ -401,6 +380,7 @@ async function onFileTreeSelection(event, state) {
   }
   
   // Update state - let other plugins handle the loading
+  console.log("DEBUG tree selection state update", stateUpdates)
   await updateState(state, stateUpdates);
   
   // Close drawer after selection
