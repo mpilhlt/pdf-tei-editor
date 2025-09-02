@@ -652,7 +652,7 @@ const plugin$l = {
   deps: ['config'],
   install: install$k,
   state: {
-    update: update$f
+    update: update$g
   }
 };
 
@@ -672,7 +672,7 @@ async function install$k(state) {
 /** 
  * @param {ApplicationState} state 
  */
-async function update$f(state) {
+async function update$g(state) {
   updateUrlHashfromState(state);
 }
 
@@ -781,7 +781,7 @@ const plugin$k = {
   name: "sse",
   install: install$j,
   state: {
-    update: update$e
+    update: update$f
   }
 };
 
@@ -803,7 +803,7 @@ async function install$j(state){
 /**
  * @param {ApplicationState} state 
  */
-async function update$e(state) {
+async function update$f(state) {
   const { user, sessionId } = state;
 
   // Close existing connection if the session ID has changed or user logged out
@@ -2704,7 +2704,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$d);
+    const documentElementObserver = new MutationObserver(update$e);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2725,9 +2725,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$d();
+    update$e();
 }
-function update$d() {
+function update$e() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -16819,7 +16819,7 @@ let currentFile;
 const plugin$i = {
   name: "pdfviewer",
   install: install$h,
-  state: { update: update$c }
+  state: { update: update$d }
 };
 
 //
@@ -16856,7 +16856,7 @@ async function install$h(state) {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$c(state) {
+async function update$d(state) {
   if (state.pdf !== currentFile) {
     currentFile = state.pdf;
     // Clear PDF viewer when no PDF is loaded
@@ -47879,7 +47879,7 @@ const plugin$h = {
   name: "xmleditor",
   install: install$g,
   state: {
-    update: update$b
+    update: update$c
   }
 };
 
@@ -48013,7 +48013,7 @@ async function install$g(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$b(state) {
+async function update$c(state) {
 
   [readOnlyStatusWidget, cursorPositionWidget, 
     indentationStatusWidget, teiHeaderToggleWidget]
@@ -48191,7 +48191,7 @@ const plugin$g = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install: install$f,
-  state: {update: update$a},
+  state: {update: update$b},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -48231,7 +48231,7 @@ async function install$f(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$a(state) {
+async function update$b(state) {
   if (state.offline || state.editorReadOnly || !state.xml ) {
     // if we are offline, disable validation
     configure({ mode: "off" });
@@ -49043,7 +49043,7 @@ const api$b = {
 const plugin$f = {
   name: "client",
   state: {
-    update: update$9
+    update: update$a
   }
 };
 
@@ -49051,7 +49051,7 @@ const plugin$f = {
  * 
  * @param {ApplicationState} state 
  */
-async function update$9(state) {
+async function update$a(state) {
   if (sessionId !== state.sessionId) {
     sessionId = state.sessionId;
     api$h.debug(`Setting session id to ${sessionId}`);
@@ -49556,7 +49556,7 @@ const plugin$e = {
 
   install: install$e,
   state: {
-    update: update$8,
+    update: update$9,
     changeFileData: data => {
       fileData = data;
     }
@@ -49633,7 +49633,7 @@ async function install$e(state) {
  * 
  * @param {ApplicationState} state 
  */
-async function update$8(state) {
+async function update$9(state) {
   if (!state.pdf) {
     state.collection = null;
   }
@@ -50179,29 +50179,6 @@ function findFileByPdfHash(fileData, pdfHash) {
 }
 
 /**
- * Finds the corresponding PDF hash and collection for a given XML hash
- * @param {Array} fileData - The file data array
- * @param {string} xmlHash - Hash of the XML file (gold or version)
- * @returns {Object|null} Object with {pdfHash, collection} or null if not found
- */
-function findCorrespondingPdf(fileData, xmlHash) {
-  for (const file of fileData) {
-    // Check if this XML is in the gold entries
-    const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xmlHash);
-    // Check if this XML is in the versions
-    const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xmlHash);
-    
-    if (hasGoldMatch || hasVersionMatch) {
-      return {
-        pdfHash: file.pdf.hash,
-        collection: file.collection
-      };
-    }
-  }
-  return null;
-}
-
-/**
  * File selection drawer plugin - replacement for selectbox-based file selection
  * Uses a SlDrawer with SlTree for hierarchical file selection
  */
@@ -50222,20 +50199,13 @@ const plugin$d = {
   name: "file-selection-drawer",
   install: install$d,
   state: {
-    update: update$7
+    update: update$8
   }
 };
 
 // Register templates
 await registerTemplate('file-selection-drawer', 'file-selection-drawer.html');
 await registerTemplate('file-drawer-button', 'file-drawer-button.html');
-
-// Icon resource requirements
-// <sl-icon name="list"></sl-icon>
-// <sl-icon name="search"></sl-icon>
-// <sl-icon name="folder"></sl-icon>
-// <sl-icon name="award"></sl-icon>
-// <sl-icon name="file-earmark-diff"></sl-icon>
 
 // Internal state
 let currentLabelFilter = '';
@@ -50313,7 +50283,7 @@ function close$2() {
  * Handles state updates
  * @param {ApplicationState} state
  */
-async function update$7(state) {
+async function update$8(state) {
   // Check if state has changed
   const { xml, pdf, variant } = state;
   const jsonState = JSON.stringify({ xml, pdf, variant, fileData: !!state.fileData });
@@ -50397,6 +50367,9 @@ async function populateFileTree(state) {
   
   // Clear existing tree
   fileTree.innerHTML = '';
+
+  // default state for branches
+  const expanded = false;
   
   // Build tree structure programmatically
   for (const collectionName of collections) {
@@ -50404,15 +50377,9 @@ async function populateFileTree(state) {
     
     // Create collection item
     const collectionItem = document.createElement('sl-tree-item');
-    collectionItem.expanded = true;
+    collectionItem.expanded = expanded;
     collectionItem.className = 'collection-item';
-    collectionItem.textContent = collectionDisplayName;
-    
-    // Add folder icon
-    const folderIcon = document.createElement('sl-icon');
-    folderIcon.name = 'folder';
-    folderIcon.slot = 'prefix';
-    collectionItem.appendChild(folderIcon);
+    collectionItem.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
     
     const files = groupedFiles[collectionName]
       .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0);
@@ -50423,12 +50390,12 @@ async function populateFileTree(state) {
       
       // Create PDF document item
       const pdfItem = document.createElement('sl-tree-item');
-      pdfItem.expanded = true;
+      pdfItem.expanded = expanded;
       pdfItem.className = 'pdf-item';
       pdfItem.dataset.type = 'pdf';
       pdfItem.dataset.hash = file.pdf.hash;
       pdfItem.dataset.collection = file.collection;
-      pdfItem.textContent = file.label;
+      pdfItem.innerHTML = `<sl-icon name="file-pdf"></sl-icon><span>${file.label}</span>`;
       
       // Add Gold section if there are gold entries
       if (goldToShow.length > 0) {
@@ -50436,14 +50403,8 @@ async function populateFileTree(state) {
         goldSection.expanded = true;
         goldSection.className = 'gold-section';
         goldSection.dataset.type = 'section';
-        goldSection.textContent = 'Gold';
-        
-        // Add award icon
-        const awardIcon = document.createElement('sl-icon');
-        awardIcon.name = 'award';
-        awardIcon.slot = 'prefix';
-        goldSection.appendChild(awardIcon);
-        
+        goldSection.innerHTML = `<sl-icon name="award"></sl-icon><span>Gold</span>`;
+
         goldToShow.forEach(gold => {
           const goldItem = document.createElement('sl-tree-item');
           goldItem.className = 'gold-item';
@@ -50460,16 +50421,10 @@ async function populateFileTree(state) {
       // Add Versions section if there are versions
       if (versionsToShow.length > 0) {
         const versionsSection = document.createElement('sl-tree-item');
-        versionsSection.expanded = true;
+        versionsSection.expanded = expanded;
         versionsSection.className = 'versions-section';
         versionsSection.dataset.type = 'section';
-        versionsSection.textContent = 'Versions';
-        
-        // Add file-earmark-diff icon
-        const diffIcon = document.createElement('sl-icon');
-        diffIcon.name = 'file-earmark-diff';
-        diffIcon.slot = 'prefix';
-        versionsSection.appendChild(diffIcon);
+        versionsSection.innerHTML = `<sl-icon name="file-earmark-diff"></sl-icon><span>Versions</span>`;
         
         versionsToShow.forEach(version => {
           const versionItem = document.createElement('sl-tree-item');
@@ -50531,6 +50486,9 @@ async function onFileTreeSelection(event, state) {
   // @ts-ignore - detail property exists on custom events
   const selectedItems = event.detail.selection;
   if (selectedItems.length === 0) return;
+  if (!state.fileData) {
+    throw new Error("No file data in state")
+  }
   
   const selectedItem = selectedItems[0];
   const type = selectedItem.dataset.type;
@@ -50550,15 +50508,13 @@ async function onFileTreeSelection(event, state) {
     stateUpdates.collection = collection;
     
     // Find matching gold file for this PDF and variant
-    if (state.fileData) {
-      const selectedFile = findFileByPdfHash(state.fileData, hash);
-      if (selectedFile) {
-        const matchingGold = findMatchingGold(selectedFile, state.variant);
-        if (matchingGold) {
-          stateUpdates.xml = matchingGold.hash;
-        } else {
-          stateUpdates.xml = null;
-        }
+    const selectedFile = findFileByPdfHash(state.fileData, hash);
+    if (selectedFile) {
+      const matchingGold = findMatchingGold(selectedFile, state.variant);
+      if (matchingGold) {
+        stateUpdates.xml = matchingGold.hash;
+      } else {
+        stateUpdates.xml = null;
       }
     }
   } else if (type === 'gold' || type === 'version') {
@@ -50573,6 +50529,7 @@ async function onFileTreeSelection(event, state) {
   }
   
   // Update state - let other plugins handle the loading
+  console.log("DEBUG tree selection state update", stateUpdates);
   await updateState(state, stateUpdates);
   
   // Close drawer after selection
@@ -51141,7 +51098,7 @@ const plugin$c = {
   name: "extraction",
   deps: ['services'],
   install: install$c,
-  state: {update: update$6}
+  state: {update: update$7}
 };
 
 //
@@ -51192,7 +51149,7 @@ async function install$c(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$6(state) {
+async function update$7(state) {
   // @ts-ignore
   ui$1.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline); 
   ui$1.toolbar.extractionActions.extractCurrent.disabled = !state.pdf;
@@ -51784,7 +51741,7 @@ const plugin$b = {
   name: "services",
   deps: ['file-selection'],
   install: install$b,
-  state: { update: update$5 },
+  state: { update: update$6 },
   validation: { inProgress }
 };
 
@@ -51913,7 +51870,7 @@ async function install$b(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$5(state) {
+async function update$6(state) {
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -52646,7 +52603,7 @@ const plugin$a = {
   name: "floating-panel",
   deps: ['config'],
   install: install$a,
-  state: { update: update$4 }
+  state: { update: update$5 }
 };
 
 //
@@ -52755,7 +52712,7 @@ async function install$a(state) {
  * Reacts to application state changes
  * @param {ApplicationState} state 
  */
-async function update$4(state) {
+async function update$5(state) {
   //console.warn("update", plugin.name, state)
   
   // Cache extractor list when user actually changes (not just stale initialization)
@@ -53285,7 +53242,7 @@ const enhancements = [
 const plugin$8 = {
   name: "tei-wizard",
   install: install$8,
-  state: {update: update$3},
+  state: {update: update$4},
   deps: ['services']
 };
 
@@ -53343,7 +53300,7 @@ async function install$8(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$3(state) {
+async function update$4(state) {
   // @ts-ignore
   teiWizardButton.disabled = state.editorReadOnly;
   //console.warn(plugin.name,"done")
@@ -62192,8 +62149,7 @@ const plugin$5 = {
   install: install$5,
   start: start$2,
   state: {
-    changePdf: onPdfChange,
-    changeXml: onXmlChange
+    update: update$3
   }
 };
 
@@ -62217,7 +62173,7 @@ async function install$5(state) {
   spinner.setAttribute('name', "spinner");
   document.body.appendChild(spinner);
   updateUi();
-  
+
   // Create validation status widget
   validationStatusWidget = PanelUtils.createText({
     text: 'Invalid XML',
@@ -62238,14 +62194,14 @@ async function start$2(state) {
     const userData = await api$3.ensureAuthenticated();
     api$h.info(`${userData.fullname} has logged in.`);
     notify(`Welcome back, ${userData.fullname}!`);
-    
+
     // load config data
     await api$g.load();
 
     ui$1.spinner.show('Loading documents, please wait...');
 
     // update the file lists
-    await api$a.reload(state, {refresh:true});
+    await api$a.reload(state, { refresh: true });
 
     // disable regular validation so that we have more control over it
     api$c.configure({ mode: "off" });
@@ -62260,7 +62216,7 @@ async function start$2(state) {
       // lod the documents
       await api$7.load(state, { pdf, xml, diff });
     }
-    
+
     // two alternative initial states:
     // a) if the diff param was given and is different from the xml param, show a diff/merge view 
     // b) if no diff, try to validate the document and select first match of xpath expression
@@ -62297,7 +62253,7 @@ async function start$2(state) {
       api$2.syncFiles(state).then(async (summary) => {
         api$h.info(summary);
         if (summary && !summary.skipped) {
-          await api$a.reload(state, {refresh:true});
+          await api$a.reload(state, { refresh: true });
           await updateState(state);
         }
       });
@@ -62399,7 +62355,7 @@ async function saveIfDirty() {
   const filePath = String(ui$1.toolbar.xml.value);
   const hasXmlTree = !!xmlEditor.getXmlTree();
   const isDirty = xmlEditor.isDirty();
-  
+
   if (!filePath || filePath === "undefined" || !hasXmlTree || !isDirty) {
     return
   }
@@ -62449,90 +62405,53 @@ async function searchNodeContents() {
 // State Change Handlers
 //
 
+let cachedHashes; 
+
 /**
  * Handles PDF state changes by loading the new PDF document
  * @param {ApplicationState} state
  */
-async function onPdfChange(state) {
-  api$h.debug("PDF state changed, loading new PDF:"+ state.pdf);
-  
-  if (!state.pdf) {
-    api$h.debug("No PDF specified, skipping load");
+async function update$3(state) {
+
+  if (!state.fileData) {
+    return
+  }
+
+  if (!state.pdf && !state.xml) {
+    api$h.debug("No PDF or XML specified, nothing to do");
     return;
   }
-  
+
+  const { pdf, xml } = state;
+  if (JSON.stringify({pdf, xml}) === cachedHashes) {
+    api$h.debug("PDF and XML have not changed, nothing to do");
+    return;
+  }
+  cachedHashes = JSON.stringify({ pdf, xml });
+
   try {
     // Remove merge view if it exists
     await api$7.removeMergeView(state);
-    
-    // Load the PDF (and XML if specified)
-    const filesToLoad = { pdf: state.pdf };
-    if (state.xml) {
-      filesToLoad.xml = state.xml;
+
+    // debug 
+    if (pdf) {
+      api$h.debug("PDF state changed, loading new PDF:" + pdf);
     }
+    if (xml) {
+      api$h.debug("XML state changed, loading new XML:" + xml);
+    }
+
+    // Load the PDF and XML
+    await api$7.load(state, { pdf, xml });
     
-    await api$7.load(state, filesToLoad);
-    api$h.debug("PDF loaded successfully");
-    
+    api$h.debug("PDF/XML loaded after state change");
+
   } catch (error) {
-    api$h.warn("Error loading PDF:"+ error.message);
+    api$h.warn("Error loading PDF:" + error.message);
     // Reset PDF state on error
     state.pdf = null;
     state.collection = null;
-    await updateState(state);
-    throw error;
-  }
-}
-
-/**
- * Handles XML state changes by loading the new XML document
- * Ensures the corresponding PDF is also loaded
- * @param {ApplicationState} state
- */
-async function onXmlChange(state) {
-  api$h.debug("XML state changed, loading new XML:" + state.xml);
-  
-  if (!state.xml) {
-    api$h.debug("No XML specified, skipping load");
-    return;
-  }
-
-  if (!state.fileData) {
-    api$h.debug("File data not available - cannot load xml with id " + state.xml);
-    return
-  }
-  
-  try {
-
-    // Find the corresponding PDF for this XML
-    const pdfMatch = findCorrespondingPdf(state.fileData, state.xml);
-    if (!pdfMatch) {
-      throw new Error(`Could not find corresponding PDF for XML: ${state.xml}`);
-    }
-    
-    // Always load both PDF and XML together
-    const filesToLoad = { 
-      pdf: pdfMatch.pdfHash,
-      xml: state.xml 
-    };
-    
-    // Update state with the correct PDF and collection if they changed
-    if (state.pdf !== pdfMatch.pdfHash) {
-      state.pdf = pdfMatch.pdfHash;
-      api$h.debug(`Loading corresponding PDF ${pdfMatch.pdfHash} for XML ${state.xml}`);
-    }
-    
-    if (state.collection !== pdfMatch.collection) {
-      state.collection = pdfMatch.collection;
-    }
-    
-    await api$7.load(state, filesToLoad);
-    api$h.debug("XML and corresponding PDF loaded successfully");
-    
-  } catch (error) {
-    api$h.warn("Error loading XML:" + error.message);
-    // Reset XML state on error
-    state.xml = null;
+    cachedHashes = null;
     await updateState(state);
     throw error;
   }
