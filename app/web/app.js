@@ -50210,6 +50210,8 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 // Internal state
 let currentLabelFilter = '';
 let stateCache = null;
+let needsTreeUpdate = false;
+let currentState = null;
 
 //
 // Implementation
@@ -50266,9 +50268,15 @@ async function install$d(state) {
 /**
  * Opens the file selection drawer
  */
-function open$2() {
+async function open$2() {
   api$h.debug("Opening file selection drawer");
   ui$1.fileDrawer?.show();
+  
+  // Update tree if needed when opening
+  if (needsTreeUpdate && currentState?.fileData) {
+    await populateFileTree(currentState);
+    needsTreeUpdate = false;
+  }
 }
 
 /**
@@ -50284,6 +50292,9 @@ function close$2() {
  * @param {ApplicationState} state
  */
 async function update$8(state) {
+  // Store current state for lazy loading
+  currentState = state;
+  
   // Check if state has changed
   const { xml, pdf, variant } = state;
   const jsonState = JSON.stringify({ xml, pdf, variant, fileData: !!state.fileData });
@@ -50292,7 +50303,14 @@ async function update$8(state) {
   if (stateChanged && state.fileData) {
     stateCache = jsonState;
     await populateVariantSelect(state);
-    await populateFileTree(state);
+    
+    // Only populate tree if drawer is visible, otherwise mark for lazy update
+    const drawer = ui$1.fileDrawer;
+    if (drawer && drawer.open) {
+      await populateFileTree(state);
+    } else {
+      needsTreeUpdate = true;
+    }
   }
   
   // Always update selected values
@@ -50368,8 +50386,33 @@ async function populateFileTree(state) {
   // Clear existing tree
   fileTree.innerHTML = '';
 
-  // default state for branches
-  const expanded = false;
+  // Find which nodes should be expanded based on current selections
+  const shouldExpandCollection = (collectionName) => {
+    if (!state.pdf && !state.xml) return false;
+    const files = groupedFiles[collectionName];
+    return files.some(file => {
+      // Expand if this collection contains the current PDF
+      if (state.pdf && file.pdf.hash === state.pdf) return true;
+      // Expand if this collection contains the current XML
+      if (state.xml) {
+        const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
+        return [...versionsToShow, ...goldToShow].some(item => item.hash === state.xml);
+      }
+      return false;
+    });
+  };
+
+  const shouldExpandPdf = (file) => {
+    if (!state.pdf && !state.xml) return false;
+    // Expand if this is the current PDF
+    if (state.pdf && file.pdf.hash === state.pdf) return true;
+    // Expand if this PDF contains the current XML
+    if (state.xml) {
+      const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
+      return [...versionsToShow, ...goldToShow].some(item => item.hash === state.xml);
+    }
+    return false;
+  };
   
   // Build tree structure programmatically
   for (const collectionName of collections) {
@@ -50377,7 +50420,7 @@ async function populateFileTree(state) {
     
     // Create collection item
     const collectionItem = document.createElement('sl-tree-item');
-    collectionItem.expanded = expanded;
+    collectionItem.expanded = shouldExpandCollection(collectionName);
     collectionItem.className = 'collection-item';
     collectionItem.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
     
@@ -50390,7 +50433,7 @@ async function populateFileTree(state) {
       
       // Create PDF document item
       const pdfItem = document.createElement('sl-tree-item');
-      pdfItem.expanded = expanded;
+      pdfItem.expanded = shouldExpandPdf(file);
       pdfItem.className = 'pdf-item';
       pdfItem.dataset.type = 'pdf';
       pdfItem.dataset.hash = file.pdf.hash;
@@ -50421,7 +50464,7 @@ async function populateFileTree(state) {
       // Add Versions section if there are versions
       if (versionsToShow.length > 0) {
         const versionsSection = document.createElement('sl-tree-item');
-        versionsSection.expanded = expanded;
+        versionsSection.expanded = false;
         versionsSection.className = 'versions-section';
         versionsSection.dataset.type = 'section';
         versionsSection.innerHTML = `<sl-icon name="file-earmark-diff"></sl-icon><span>Versions</span>`;
@@ -50448,6 +50491,38 @@ async function populateFileTree(state) {
     }
     
     fileTree.appendChild(collectionItem);
+  }
+  
+  // Programmatically select the item that corresponds to current state
+  await selectCurrentStateItem(state, fileTree);
+}
+
+/**
+ * Selects the tree item that corresponds to the current state
+ * @param {ApplicationState} state
+ * @param {SlTree} fileTree
+ */
+async function selectCurrentStateItem(state, fileTree) {
+  if (!state.pdf && !state.xml) return;
+  
+  let itemToSelect = null;
+  
+  // Priority: XML item (gold/version) over PDF item
+  if (state.xml) {
+    // Find XML item (gold or version) with matching hash
+    itemToSelect = fileTree.querySelector(`[data-type="gold"][data-hash="${state.xml}"], [data-type="version"][data-hash="${state.xml}"]`);
+  } else if (state.pdf) {
+    // Find PDF item with matching hash
+    itemToSelect = fileTree.querySelector(`[data-type="pdf"][data-hash="${state.pdf}"]`);
+  }
+  
+  if (itemToSelect) {
+    // Clear any existing selection first
+    const currentSelection = fileTree.querySelectorAll('sl-tree-item[selected]');
+    currentSelection.forEach(item => item.selected = false);
+    
+    // Select the item
+    itemToSelect.selected = true;
   }
 }
 
@@ -50527,13 +50602,14 @@ async function onFileTreeSelection(event, state) {
       stateUpdates.pdf = pdfHash;
     }
   }
+
+  // Close drawer before changing the state
+  close$2();
   
   // Update state - let other plugins handle the loading
-  console.log("DEBUG tree selection state update", stateUpdates);
+  console.log("DEBUG tree selection state update", { type, hash, pdfHash, stateUpdates });
   await updateState(state, stateUpdates);
-  
-  // Close drawer after selection
-  close$2();
+
 }
 
 const teiNamespaceURI = 'http://www.tei-c.org/ns/1.0';
