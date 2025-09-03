@@ -66,6 +66,12 @@ class StatusBar extends HTMLElement {
           white-space: nowrap;
         }
 
+        /* Special styling for title widgets to allow expansion */
+        ::slotted(.title-widget) {
+          flex-grow: 1;
+          min-width: 0;
+        }
+
         /* Dynamic overflow hiding - applied via JavaScript */
         ::slotted([data-overflow-hidden]) {
           display: none !important;

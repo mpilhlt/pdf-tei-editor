@@ -16,10 +16,17 @@ import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
+import { getDocumentTitle } from '../modules/file-data-utils.js'
 
 //
 // UI
 //
+
+/**
+ * XML editor headerbar navigation properties
+ * @typedef {object} xmlEditorHeaderbarPart
+ * @property {StatusText} titleWidget - The document title widget
+ */
 
 /**
  * XML editor statusbar navigation properties
@@ -32,6 +39,7 @@ import { detectXmlIndentation } from '../modules/codemirror_utils.js'
 /**
  * XML editor navigation properties
  * @typedef {object} xmlEditorPart
+ * @property {UIPart<StatusBar, xmlEditorHeaderbarPart>} headerbar - The XML editor headerbar
  * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
  */
 
@@ -41,7 +49,9 @@ import { detectXmlIndentation } from '../modules/codemirror_utils.js'
  */
 const xmlEditor = new NavXmlEditor('codemirror-container')
 
-// Status widgets for XML editor statusbar
+// Status widgets for XML editor headerbar and statusbar
+/** @type {StatusText} */
+let titleWidget;
 /** @type {StatusText} */
 let readOnlyStatusWidget;
 /** @type {StatusText} */
@@ -76,6 +86,16 @@ export default plugin
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
+
+  // Widget for the headerbar
+  titleWidget = PanelUtils.createText({
+    text: '',
+    // <sl-icon name="file-earmark-text"></sl-icon>
+    icon: 'file-earmark-text',
+    variant: 'neutral',
+    name: 'titleWidget'
+  })
+  titleWidget.classList.add('title-widget')
 
   // Widgets for the statusbar
   
@@ -113,6 +133,9 @@ async function install(state) {
   statusSeparator = PanelUtils.createSeparator({
     variant: 'dotted'
   })
+
+  // Add title widget to headerbar
+  ui.xmlEditor.headerbar.add(titleWidget, 'left', 1)
 
   // Add widgets to right side of statusbar (higher priority = more to the right)
   ui.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1)  // leftmost - indent to left of position  
@@ -205,6 +228,22 @@ async function update(state) {
   [readOnlyStatusWidget, cursorPositionWidget, 
     indentationStatusWidget, teiHeaderToggleWidget]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
+
+  // Update title widget with document title
+  if (titleWidget && state.xml) {
+    try {
+      const title = getDocumentTitle(state.xml);
+      titleWidget.text = title || 'XML Document';
+      titleWidget.style.display = 'inline-flex';
+    } catch (error) {
+      logger.warn("Could not get document title:", error.message);
+      titleWidget.text = 'XML Document';
+      titleWidget.style.display = 'inline-flex';
+    }
+  } else if (titleWidget) {
+    titleWidget.text = '';
+    titleWidget.style.display = 'none';
+  }
 
   if (!state.xml) {
     xmlEditor.clear()

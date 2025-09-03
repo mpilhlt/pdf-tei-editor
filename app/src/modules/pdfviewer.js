@@ -12,8 +12,9 @@ export class PDFJSViewer {
 
   /**
    * An array of {page, positions} objects with the best matches to the last search()
+   * @type {object[]}
    */
-  bestMatches = null;
+  bestMatches = [];
 
   /**
    * The index of the currently highlighted best match
@@ -22,7 +23,7 @@ export class PDFJSViewer {
 
   /**
    * Constructor for the PDFJSViewer class.
-   * @param {string} iframeId - The ID of the iframe element containing the PDF.js viewer.
+   * @param {string} containerDivId - The ID of the iframe element containing the PDF.js viewer.
    * @throws {Error} If the iframe element is not found.
    */
   constructor(containerDivId) {
@@ -77,7 +78,7 @@ export class PDFJSViewer {
    */
   async isReady() {
     if (this.isReadyFlag) {
-      return; // Already ready, resolve immediately
+      return this.PDFViewerApplication; // Already ready, resolve immediately
     }
 
     if (!this.initializePromise) {
@@ -86,7 +87,7 @@ export class PDFJSViewer {
           console.log("PDF.js viewer loaded in iframe, initializing...");
           try {
             this.iframeWindow = this.iframe.contentWindow;
-            this.PDFViewerApplication = this.iframeWindow.PDFViewerApplication
+            this.PDFViewerApplication = this.iframeWindow?.['PDFViewerApplication'];
             this.pdfViewer = this.PDFViewerApplication.pdfViewer;
             this.pdfLinkService = this.PDFViewerApplication.pdfLinkService;
             this.findController = this.PDFViewerApplication.findController;
@@ -117,7 +118,7 @@ export class PDFJSViewer {
 
         // remove pdf.js's saved state since it interferes 
         window.addEventListener('beforeunload', () => localStorage.removeItem('pdfjs.history'))
-        const file = this.pdfPath ? this.pdfPath : '/empty.pdf'
+        const file =  '/empty.pdf'
         this.iframe.src = `/pdfjs/web/viewer.html?file=${file}#pagemode=none`
       });
     }
@@ -135,7 +136,6 @@ export class PDFJSViewer {
    * @throws {Error} If there is an error loading the PDF in the iframe.
    */
   async load(pdfPath) {
-    pdfPath = pdfPath || this.pdfPath;
     if (!pdfPath) {
       throw new Error("No PDF path has been given.");
     }
@@ -150,12 +150,13 @@ export class PDFJSViewer {
 
     this.loadPromise = new Promise(async (resolve, reject) => {
       try {
-        this.pdfDoc = await this.iframeWindow.pdfjsLib.getDocument(pdfPath).promise;
+        // @ts-ignore
+        this.pdfDoc = await this.iframeWindow?.pdfjsLib.getDocument(pdfPath).promise;
         this.pdfViewer.setDocument(this.pdfDoc);
         this.pdfLinkService.setDocument(this.pdfDoc, null);
         console.log("PDF loaded successfully.");
         this.isLoadedFlag = true;
-        resolve();
+        resolve(true);
       } catch (error) {
         reject(error);
       }
@@ -246,7 +247,7 @@ export class PDFJSViewer {
       }
       
       // Clear best matches
-      this.bestMatches = null;
+      this.bestMatches = [];
       this.matchIndex = 0;
       
       this.isLoadedFlag = false;
@@ -323,7 +324,7 @@ export class PDFJSViewer {
             }
             this.scrollToBestMatch().catch(reject)
           }
-          resolve();
+          resolve([]);
         }, 100)
       },
         { once: true } // Remove the event listener after the first event
@@ -346,7 +347,7 @@ export class PDFJSViewer {
    * @param {number} index The index of the best match found, defaults to 0
    */
   async scrollToBestMatch(index = 0) {
-    if (!this.bestMatches) {
+    if (this.bestMatches.length === 0) {
       throw new Error("No best matches - do a search first");
     }
 
@@ -392,9 +393,9 @@ export class PDFJSViewer {
           this.findController._selected.pageIdx = pageIndex;
           this.findController.scrollMatchIntoView({ element, pageIndex, matchIndex });
         } catch (error) {
-          reject("Error computing the best match:", error.message)
+          reject("Error computing the best match:" + error.message)
         }
-        resolve()
+        resolve(true)
       }, 100)
     })
   }

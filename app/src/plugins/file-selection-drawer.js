@@ -5,7 +5,7 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { SlSelect, SlTree, SlButton, SlInput } from '../ui.js'
+ * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem } from '../ui.js'
  */
 
 /**
@@ -370,10 +370,10 @@ async function selectCurrentStateItem(state, fileTree) {
   if (itemToSelect) {
     // Clear any existing selection first
     const currentSelection = fileTree.querySelectorAll('sl-tree-item[selected]');
-    currentSelection.forEach(item => item.selected = false);
+    currentSelection.forEach(item => /** @type {SlTreeItem} */ (item).selected = false);
     
     // Select the item
-    itemToSelect.selected = true;
+    /** @type {SlTreeItem} */ (itemToSelect).selected = true;
   }
 }
 

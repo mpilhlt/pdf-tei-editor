@@ -335,7 +335,7 @@ export function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
     spaceIndentations.sort((a, b) => a - b);
 
     if (spaceIndentations.length === 1) {
-      return spaceIndentations[0];
+      return " ".repeat(spaceIndentations[0]);
     }
 
     // Heuristic: Find the greatest common divisor (GCD) of the indentation differences.

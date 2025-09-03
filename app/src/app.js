@@ -13,6 +13,7 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
 
 import ep from './endpoints.js'
 import { invoke, updateState, pluginManager } from './modules/plugin-utils.js' 
+import { createHashLookupIndex } from './modules/file-data-utils.js'
 
 // plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
@@ -159,6 +160,11 @@ async function reloadFileData(state, options = {}) {
   let data = await client.getFileList(null, options.refresh);
   if (!data || data.length === 0) {
     dialog.error("No files found")
+  }
+  // Create hash lookup index when fileData is loaded
+  if (data && data.length > 0) {
+    logger.debug('Creating hash lookup index for file data');
+    createHashLookupIndex(data);
   }
   // Store fileData in state and propagate it
   updateState(state, {fileData:data})

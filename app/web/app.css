@@ -108,7 +108,7 @@ iframe {
   flex-grow: 1;
   border: none;
   order: 1;
-  /* Ensure iframe appears before statusbar */
+  /* Ensure iframe appears after headerbar and before statusbar */
 }
 
 #xml-editor {
@@ -132,6 +132,19 @@ sl-dialog {
   --header-spacing: var(--sl-spacing-small);
   --body-spacing: var(--sl-spacing-small);
   --footer-spacing: var(--sl-spacing-small);
+}
+
+/* Headerbar styling */
+status-bar[name="headerbar"] {
+  border-bottom: 1px solid #e0e0e0;
+  background: #f5f5f5;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+  order: 0;
+  /* Ensure headerbar appears first */
 }
 
 /* Statusbar styling */

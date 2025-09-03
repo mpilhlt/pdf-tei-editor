@@ -7,6 +7,79 @@
  * @import { ApplicationState } from '../app.js'
  */
 
+// Global lookup index for efficient hash-based queries
+let hashLookupIndex = new Map();
+
+/**
+ * Creates a lookup index that maps hash values directly to items
+ * @param {Array} fileData - The file data array
+ * @returns {Map<string, Object>} Map of hash to item with metadata
+ */
+export function createHashLookupIndex(fileData) {
+  const index = new Map();
+  
+  fileData.forEach((file) => {
+    // Index PDF hash
+    if (file.pdf && file.pdf.hash) {
+      index.set(file.pdf.hash, {
+        type: 'pdf',
+        item: file.pdf,
+        file: file,
+        label: file.label
+      });
+    }
+    
+    // Index gold entries
+    if (file.gold) {
+      file.gold.forEach((gold) => {
+        if (gold.hash) {
+          index.set(gold.hash, {
+            type: 'gold',
+            item: gold,
+            file: file,
+            label: gold.label || file.label
+          });
+        }
+      });
+    }
+    
+    // Index version entries
+    if (file.versions) {
+      file.versions.forEach((version) => {
+        if (version.hash) {
+          index.set(version.hash, {
+            type: 'version',
+            item: version,
+            file: file,
+            label: version.label || file.label
+          });
+        }
+      });
+    }
+  });
+  
+  // Store globally for use by other functions
+  hashLookupIndex = index;
+  return index;
+}
+
+/**
+ * Gets document title/label from fileData based on any hash (PDF or XML)
+ * @param {string} hash - Hash of any file (PDF, gold, or version)
+ * @returns {string} Document title/label or empty string if not found
+ * @throws {Error} If hash lookup index has not been created
+ */
+export function getDocumentTitle(hash) {
+  if (!hash) return '';
+  
+  if (!hashLookupIndex || hashLookupIndex.size === 0) {
+    throw new Error('Hash lookup index not initialized. Call createHashLookupIndex() first.');
+  }
+  
+  const entry = hashLookupIndex.get(hash);
+  return entry?.label || '';
+}
+
 /**
  * Extracts all unique variants from file data
  * @param {Array} fileData - The file data array

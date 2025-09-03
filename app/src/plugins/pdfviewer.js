@@ -9,10 +9,17 @@ import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor } from '../app.js'
+import { getDocumentTitle } from '../modules/file-data-utils.js'
 
 //
 // UI Parts
 //
+
+/**
+ * PDF viewer headerbar navigation properties
+ * @typedef {object} pdfViewerHeaderbarPart
+ * @property {HTMLElement} titleWidget - The document title widget
+ */
 
 /**
  * PDF viewer statusbar navigation properties
@@ -23,6 +30,7 @@ import { logger, services, xmlEditor } from '../app.js'
 /**
  * PDF viewer navigation properties
  * @typedef {object} pdfViewerPart
+ * @property {UIPart<StatusBar, pdfViewerHeaderbarPart>} headerbar - The PDF viewer headerbar
  * @property {UIPart<StatusBar, pdfViewerStatusbarPart>} statusbar - The PDF viewer statusbar
  */
 
@@ -36,6 +44,7 @@ const pdfViewer = new PDFJSViewer('pdf-viewer')
 pdfViewer.hide()
 
 let currentFile;
+let titleWidget;
 
 /**
  * plugin object
@@ -62,6 +71,18 @@ async function install(state) {
   await pdfViewer.isReady()
   logger.info("PDF Viewer ready.")
   pdfViewer.show()
+  
+  // Add title widget to PDF viewer headerbar
+  const headerBar = ui.pdfViewer.headerbar
+  titleWidget = PanelUtils.createText({
+    text: '',
+    // <sl-icon name="file-pdf"></sl-icon>
+    icon: 'file-pdf',
+    variant: 'neutral',
+    name: 'titleWidget'
+  })
+  titleWidget.classList.add('title-widget')
+  headerBar.add(titleWidget, 'left', 1)
   
   // Add autosearch switch to PDF viewer statusbar
   const statusBar = ui.pdfViewer.statusbar
@@ -94,6 +115,19 @@ async function update(state) {
         logger.warn("Error clearing PDF viewer:", error.message);
       }
     }
+  }
+  
+  // Update title widget with document title
+  if (titleWidget && state.pdf) {
+    try {
+      const title = getDocumentTitle(state.pdf);
+      titleWidget.text = title || 'PDF Document';
+    } catch (error) {
+      logger.warn("Could not get document title:", error.message);
+      titleWidget.text = 'PDF Document';
+    }
+  } else if (titleWidget) {
+    titleWidget.text = '';
   }
 }
 
