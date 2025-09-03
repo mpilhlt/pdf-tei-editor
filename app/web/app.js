@@ -50284,7 +50284,7 @@ async function open$2() {
  */
 function close$2() {
   api$h.debug("Closing file selection drawer");
-  ui$1.fileDrawer?.hide();
+  ui$1.fileDrawer.hide();
 }
 
 /**
@@ -61910,7 +61910,6 @@ async function install$7(state) {
   
   // Create UI elements
   createFromTemplate('info-dialog', document.body);
-  const aboutButton = createSingleFromTemplate('about-button');
   const button = createSingleFromTemplate('info-toolbar-button');
   
   // Set up info dialog event listeners
@@ -61924,10 +61923,11 @@ async function install$7(state) {
   });
 
   // add About button to login dialog footer (left side)
-  aboutButton.addEventListener('click', () => api$4.open());
+  const aboutButton = createSingleFromTemplate('about-button');
+  aboutButton.addEventListener('click', showHelpFromLoginDialog);
   
-  // Insert the About button before the Login button
-  ui$1.loginDialog.insertBefore(aboutButton, ui$1.loginDialog.submit);
+  // Insert the About button after the Login button
+  ui$1.loginDialog.insertAdjacentElement("beforeend", aboutButton);
   updateUi();
 
   // add a button to the command bar to show dialog
@@ -62081,6 +62081,14 @@ function updateNavigationButtons() {
  */
 function close() {
   ui$1.infoDrawer.hide();
+}
+
+function showHelpFromLoginDialog() {
+  ui$1.loginDialog.hide();
+  ui$1.infoDrawer.addEventListener("sl-hide",() => {
+    ui$1.loginDialog.show();
+  }, {once:true});
+  api$4.open();
 }
 
 /**
