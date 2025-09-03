@@ -7,7 +7,7 @@
     "start:dev": "uv run python bin/start-dev",
     "start:prod": "uv run python bin/start-prod",
     "update-importmap": "node bin/generate-importmap.js",
-    "build": "bin/build",
+    "build": "node bin/build.js",
     "manage": "node bin/manage.js",
     "prepare": "husky",
     "test": "node --test tests/*.test.js",

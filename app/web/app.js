@@ -271,24 +271,223 @@ async function invoke(endpoint, param, options = {}) {
   }
 }
 
+// Note: updateState has been moved to modules/state-utils.js for better state management
+// This file now only contains plugin utilities
+
 /**
- * Utility method which updates the state object and invokes the "state.update" endpoint to propagate the change 
- * to the other plugins. Before invoking the endpoint with the state, any key-value pair in `changes` will be 
- * applied to the state. In addition, for each key in `changes`, the endpoint "state.changeKey" is individually
- * invoked with the state. For example, the {foo:"bar"} will invoke "state.changeFoo" with the state var.
- * 
- * @param {Object} state The application state object
- * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<Array>} Returns an array of return values of the plugin's update methods
+ * State management utilities for immutable state updates with history tracking
+ * @import { ApplicationState } from '../app.js'
  */
-async function updateState(state, changes={}) {
-  Object.entries(changes).forEach(async ([key, value]) => {
-    if (state[key] !== value) {
-      state[key] = value;
-      await invoke(`state.change${key[0].toUpperCase()}${key.slice(1)}`, state);  
+
+
+// Maximum number of states to keep in history
+const MAX_STATE_HISTORY = 10;
+
+// Array to track state history for garbage collection
+let stateHistory = [];
+
+/**
+ * Internal function to create a new state object with changes applied
+ * 
+ * @param {ApplicationState} currentState - The current application state  
+ * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
+ * @returns {{newState: ApplicationState, changedKeys: string[]}} New state and changed keys
+ */
+function createStateWithChanges(currentState, changes = {}) {
+  // Create new state object with all current properties
+  const newState = { ...currentState };
+  
+  // Ensure ext object is properly copied (shallow copy for extensions)
+  if (currentState.ext) {
+    newState.ext = { ...currentState.ext };
+  }
+  
+  // Apply changes to new state
+  const changedKeys = [];
+  Object.entries(changes).forEach(([key, value]) => {
+    if (currentState[key] !== value) {
+      newState[key] = value;
+      changedKeys.push(key);
     }
   });
-  return await invoke(endpoints.state.update, state)
+  
+  // Add reference to previous state for immediate comparison
+  newState.previousState = currentState;
+  
+  // Add new state to history array
+  stateHistory.push(newState);
+  
+  // Manage history size and garbage collection
+  if (stateHistory.length > MAX_STATE_HISTORY) {
+    // Get the state that will be removed from history
+    const oldestState = stateHistory.shift();
+    
+    // Find the state that points to the oldest state and break the chain
+    const secondOldest = stateHistory[0];
+    if (secondOldest && secondOldest.previousState === oldestState) {
+      secondOldest.previousState = null;
+    }
+    
+    // Clear the oldest state's previousState reference for GC
+    if (oldestState && oldestState.previousState) {
+      oldestState.previousState = null;
+    }
+  }
+  
+  return { newState, changedKeys };
+}
+
+/**
+ * Creates a new state object with changes applied (for initialization, does not notify plugins)
+ * 
+ * @param {ApplicationState} currentState - The current application state
+ * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
+ * @returns {ApplicationState} New state object with changes applied
+ */
+function createNewState(currentState, changes = {}) {
+  const { newState } = createStateWithChanges(currentState, changes);
+  return newState;
+}
+
+/**
+ * Updates the application state immutably with proper history management
+ * 
+ * @param {ApplicationState} currentState - The current application state
+ * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
+ * @returns {Promise<Array>} Returns array of results from plugin state.update endpoints
+ */
+async function updateState(currentState, changes = {}) {
+  const { newState, changedKeys } = createStateWithChanges(currentState, changes);
+  
+  // If no changes, return early
+  if (changedKeys.length === 0) {
+    return await invoke(endpoints.state.update, currentState);
+  }
+  
+  // Notify plugins of specific property changes
+  for (const key of changedKeys) {
+    const capitalizedKey = key[0].toUpperCase() + key.slice(1);
+    await invoke(`state.change${capitalizedKey}`, newState);
+  }
+  
+  // Notify all plugins of state update
+  return await invoke(endpoints.state.update, newState);
+}
+
+/**
+ * Utility function to check if specific keys have changed between current and previous state
+ * 
+ * @param {ApplicationState} state - Current state object
+ * @param {...keyof ApplicationState} keys - State keys to check for changes
+ * @returns {boolean} True if any of the specified keys have changed
+ */
+function hasStateChanged(state, ...keys) {
+  if (!state.previousState) return true; // First state, consider all keys changed
+  
+  return keys.some(key => state[key] !== state.previousState[key]);
+}
+
+/**
+ * Gets all keys that have changed between current and previous state
+ * 
+ * @param {ApplicationState} state - Current state object
+ * @returns {Array<keyof ApplicationState>} Array of keys that have changed
+ */
+function getChangedStateKeys(state) {
+  if (!state.previousState) return Object.keys(state).filter(key => key !== 'previousState');
+  
+  return Object.keys(state).filter(key => 
+    key !== 'previousState' && state[key] !== state.previousState[key]
+  );
+}
+
+/**
+ * Gets the previous value of a specific state key
+ * 
+ * @param {ApplicationState} state - Current state object
+ * @param {keyof ApplicationState} key - State key to get previous value for
+ * @returns {any} Previous value or undefined if no previous state
+ */
+function getPreviousStateValue(state, key) {
+  return state.previousState?.[key];
+}
+
+/**
+ * Clears the state history array (useful for testing or memory cleanup)
+ */
+function clearStateHistory() {
+  // Break all previousState chains
+  stateHistory.forEach(state => {
+    if (state.previousState) {
+      state.previousState = null;
+    }
+  });
+  
+  stateHistory = [];
+}
+
+/**
+ * Gets the current size of the state history
+ * 
+ * @returns {number} Number of states currently in history
+ */
+function getStateHistorySize() {
+  return stateHistory.length;
+}
+
+// State preservation variables
+const SESSION_STORAGE_ID = 'pdf-tei-editor.state';
+let beforeUnloadHandler = null;
+
+/**
+ * Gets saved state from sessionStorage
+ * 
+ * @returns {Object|null} Saved state object or null if none found/invalid
+ */
+function getStateFromSessionStorage() {
+  try {
+    const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID);
+    return stateInSessionStorage ? JSON.parse(stateInSessionStorage) : null;
+  } catch (error) {
+    console.warn("Failed to load state from sessionStorage:", error);
+    return null;
+  }
+}
+
+/**
+ * Enables or disables automatic state preservation in sessionStorage on page unload
+ * 
+ * @param {boolean} doPreserve - Whether to preserve state (true) or stop preserving (false)
+ */
+function preserveState(doPreserve = true) {
+  if (doPreserve && !beforeUnloadHandler) {
+    // Create and register the beforeunload handler
+    beforeUnloadHandler = () => {
+      // Save the newest state from history (last entry)
+      const newestState = stateHistory[stateHistory.length - 1];
+      if (newestState) {
+        console.log("DEBUG Saving state in sessionStorage");
+        sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(newestState));
+      }
+    };
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+  } else if (!doPreserve && beforeUnloadHandler) {
+    // Remove the handler
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
+    beforeUnloadHandler = null;
+  }
+}
+
+/**
+ * Updates extension properties in state.ext immutably
+ * 
+ * @param {ApplicationState} state - Current state object
+ * @param {Record<string, any>} extChanges - Extension properties to update
+ * @returns {Promise<Array>} Returns array of results from plugin state.update endpoints
+ */
+async function updateStateExt(state, extChanges) {
+  const newExt = { ...state.ext, ...extChanges };
+  return await updateState(state, { ext: newExt });
 }
 
 /**
@@ -864,7 +1063,8 @@ let allowSetFromUrl;
 
 const api$f = {
   updateUrlHashfromState,
-  updateStateFromUrlHash
+  updateStateFromUrlHash,
+  getStateFromUrlHash
 };
 
 /**
@@ -875,7 +1075,7 @@ const plugin$l = {
   deps: ['config'],
   install: install$k,
   state: {
-    update: update$g
+    update: update$h
   }
 };
 
@@ -895,7 +1095,7 @@ async function install$k(state) {
 /** 
  * @param {ApplicationState} state 
  */
-async function update$g(state) {
+async function update$h(state) {
   updateUrlHashfromState(state);
 }
 
@@ -922,22 +1122,33 @@ function updateUrlHashfromState(state) {
 }
 
 /**
- * Updates the state from the URL hash, removing all state properties that should not be shown in the URL from the hash
- * @param {ApplicationState} state
- * @returns {Promise<Array>} Returns the result of updateState
+ * Gets state properties from URL hash without updating state (for initialization)
+ * @returns {Object} Object with state properties from URL hash
  */
-async function updateStateFromUrlHash(state) {
+function getStateFromUrlHash() {
   const tmpState = {};
   const urlParams = new URLSearchParams(window.location.hash.slice(1));
   for (const [key, value] of urlParams.entries()) {
-    if (key in state && allowSetFromUrl.includes(key)) {
+    if (allowSetFromUrl.includes(key)) {
       tmpState[key] = value;
     }
     if (!showInUrl.includes(key)) {
       UrlHash.remove(key, false);
     }
   }
-  api$h.info("Setting state properties from URL hash:" + Object.keys(tmpState).join(", "));
+  if (Object.keys(tmpState).length > 0) {
+    api$h.info("Getting state properties from URL hash: " + Object.keys(tmpState).join(", "));
+  }
+  return tmpState
+}
+
+/**
+ * Updates the state from the URL hash, removing all state properties that should not be shown in the URL from the hash
+ * @param {ApplicationState} state
+ * @returns {Promise<Array>} Returns the result of updateState
+ */
+async function updateStateFromUrlHash(state) {
+  const tmpState = getStateFromUrlHash();
   return await updateState(state, tmpState)
 }
 
@@ -1004,7 +1215,7 @@ const plugin$k = {
   name: "sse",
   install: install$j,
   state: {
-    update: update$f
+    update: update$g
   }
 };
 
@@ -1026,7 +1237,7 @@ async function install$j(state){
 /**
  * @param {ApplicationState} state 
  */
-async function update$f(state) {
+async function update$g(state) {
   const { user, sessionId } = state;
 
   // Close existing connection if the session ID has changed or user logged out
@@ -2927,7 +3138,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$e);
+    const documentElementObserver = new MutationObserver(update$f);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -2948,9 +3159,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$e();
+    update$f();
 }
-function update$e() {
+function update$f() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -17048,7 +17259,7 @@ const pdfViewer = new PDFJSViewer('pdf-viewer');
 // hide it until ready
 pdfViewer.hide();
 
-let currentFile;
+// Note: currentFile state tracking now handled via state.previousState instead of local variable
 let titleWidget$1;
 
 /**
@@ -17057,7 +17268,7 @@ let titleWidget$1;
 const plugin$i = {
   name: "pdfviewer",
   install: install$h,
-  state: { update: update$d }
+  state: { update: update$e }
 };
 
 //
@@ -17106,9 +17317,8 @@ async function install$h(state) {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$d(state) {
-  if (state.pdf !== currentFile) {
-    currentFile = state.pdf;
+async function update$e(state) {
+  if (hasStateChanged(state, 'pdf')) {
     // Clear PDF viewer when no PDF is loaded
     if (state.pdf === null) {
       try {
@@ -48127,6 +48337,9 @@ class NavXmlEditor extends XMLEditor {
  */
 const xmlEditor = new NavXmlEditor('codemirror-container');
 
+// Current state for use in event handlers
+let currentState$6 = null;
+
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
 let titleWidget;
@@ -48151,7 +48364,7 @@ const plugin$h = {
   name: "xmleditor",
   install: install$g,
   state: {
-    update: update$c
+    update: update$d
   }
 };
 
@@ -48222,7 +48435,12 @@ async function install$g(state) {
 
   // selection => xpath state
   xmlEditor.on("selectionChanged", data => {
-    xmlEditor.whenReady().then(() => onSelectionChange(state));
+    xmlEditor.whenReady().then(() => {
+      // Use currentState from the update method
+      if (currentState$6) {
+        onSelectionChange(currentState$6);
+      }
+    });
     updateCursorPosition();
   });
 
@@ -48298,7 +48516,9 @@ async function install$g(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$c(state) {
+async function update$d(state) {
+  // Store current state for use in event handlers
+  currentState$6 = state;
 
   [readOnlyStatusWidget, cursorPositionWidget, 
     indentationStatusWidget, teiHeaderToggleWidget]
@@ -48492,7 +48712,7 @@ const plugin$g = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install: install$f,
-  state: {update: update$b},
+  state: {update: update$c},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -48532,7 +48752,7 @@ async function install$f(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$b(state) {
+async function update$c(state) {
   if (state.offline || state.editorReadOnly || !state.xml ) {
     // if we are offline, disable validation
     configure({ mode: "off" });
@@ -49292,7 +49512,8 @@ class ServerError extends Error {
   }
 }
 
-let sessionId;
+// Current sessionId stored locally for API requests (updated when state changes)
+let sessionId = null;
 let lastHttpStatus = null;
 
 const api_base_url = '/api';
@@ -49344,7 +49565,7 @@ const api$b = {
 const plugin$f = {
   name: "client",
   state: {
-    update: update$a
+    update: update$b
   }
 };
 
@@ -49352,13 +49573,13 @@ const plugin$f = {
  * 
  * @param {ApplicationState} state 
  */
-async function update$a(state) {
-  if (sessionId !== state.sessionId) {
+async function update$b(state) {
+  if (hasStateChanged(state, 'sessionId')) {
     sessionId = state.sessionId;
     api$h.debug(`Setting session id to ${sessionId}`);
   }
   //console.warn(plugin.name,"done")
-  return sessionId
+  return state.sessionId
 }
 
 /**
@@ -49857,7 +50078,7 @@ const plugin$e = {
 
   install: install$e,
   state: {
-    update: update$9,
+    update: update$a,
     changeFileData: data => {
       fileData = data;
     }
@@ -49916,7 +50137,22 @@ async function install$e(state) {
 
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
-    select.addEventListener('sl-change', async () => await handler(state));
+    select.addEventListener('sl-change', async () => {
+      
+      
+      // Ignore programmatic changes to prevent double-loading
+      if (isUpdatingProgrammatically$1) {
+        
+        return;
+      }
+      
+      
+      if (currentState$5) {
+        await handler(currentState$5);
+      } else {
+        console.warn(`${select.name} selection ignored: no current state available`);
+      }
+    });
 
     // this works around a problem with the z-index of the select dropdown being bound 
     // to the z-index of the parent toolbar (and therefore being hidden by the editors)
@@ -49934,25 +50170,28 @@ async function install$e(state) {
  * 
  * @param {ApplicationState} state 
  */
-async function update$9(state) {
-  if (!state.pdf) {
-    state.collection = null;
-  }
+async function update$a(state) {
+  // Store current state for use in event handlers
+  currentState$5 = state;
   
-  // check if state has changed (moved from populateSelectboxes)
-  const { xml, pdf, diff, variant } = state;
-  const jsonState = JSON.stringify({ xml, pdf, diff, variant });
-  const stateChanged = jsonState !== stateCache$1;
+  // Note: Don't mutate state directly in update() - that would cause infinite loops
+  // The state.collection should be managed by other functions that call updateState()
   
-  if (stateChanged && state.fileData) {
-    stateCache$1 = jsonState;
+  // Check if relevant state properties have changed
+  if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
     await populateSelectboxes(state);
   }
   
-  // Always update selected values
-  ui$1.toolbar.pdf.value = state.pdf || "";
-  ui$1.toolbar.xml.value = state.xml || "";
-  ui$1.toolbar.diff.value = state.diff || "";
+  // Always update selected values (with guard to prevent triggering events)
+  
+  isUpdatingProgrammatically$1 = true;
+  try {
+    ui$1.toolbar.pdf.value = state.pdf || "";
+    ui$1.toolbar.xml.value = state.xml || "";
+    ui$1.toolbar.diff.value = state.diff || "";
+  } finally {
+    isUpdatingProgrammatically$1 = false;
+  }
 }
 
 
@@ -49964,14 +50203,15 @@ async function update$9(state) {
  */
 async function reload(state, options = {}) {
   await reloadFileData(state, options);
-  stateCache$1 = null; // Reset cache to force repopulation
-  await populateSelectboxes(state);
+  // Note: populateSelectboxes() will be called automatically via the update() method 
+  // when reloadFileData() triggers a state update with new fileData
 }
 
 
-let stateCache$1;
 let variants;
 let collections;
+let currentState$5 = null;
+let isUpdatingProgrammatically$1 = false;
 
 /**
  * Populates the variant selectbox with unique variants from fileData
@@ -50032,8 +50272,13 @@ async function populateVariantSelectbox(state) {
     ui$1.toolbar.variant.appendChild(option);
   });
 
-  // Set current selection
-  ui$1.toolbar.variant.value = state.variant || "";
+  // Set current selection (with guard to prevent triggering events)
+  isUpdatingProgrammatically$1 = true;
+  try {
+    ui$1.toolbar.variant.value = state.variant || "";
+  } finally {
+    isUpdatingProgrammatically$1 = false;
+  }
 }
 
 /**
@@ -50046,9 +50291,11 @@ async function populateSelectboxes(state) {
   }
   api$h.debug("Populating selectboxes");
 
-  // Only reload if fileData is completely empty (initial load)
+  // Note: This function should only be called when fileData exists
+  // If fileData is missing, it should be loaded via reloadFileData() which will trigger
+  // this function again via the update() method
   if (!state.fileData || state.fileData.length === 0) {
-    await reloadFileData(state);
+    throw new Error("populateSelectboxes called but fileData is not available")
   }
   
   const fileData = state.fileData;
@@ -50252,16 +50499,14 @@ async function onChangePdfSelection(state) {
   }
 
   if (Object.keys(filesToLoad).length > 0) {
+    
     try {
       api$7.removeMergeView(state);
-      state.collection = collection;
+      await updateState(state, { collection });
       await api$7.load(state, filesToLoad);
     }
     catch (error) {
-      state.collection = null;
-      state.pdf = null;
-      state.xml = null;
-      await updateState(state);
+      await updateState(state, { collection: null, pdf: null, xml: null });
       await reload(state, {refresh:true});
       api$h.warn(error.message);
     }
@@ -50286,10 +50531,11 @@ async function onChangeXmlSelection(state) {
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
         
         if (hasGoldMatch || hasVersionMatch) {
-          state.collection = file.collection;
+          await updateState(state, { collection: file.collection });
           break;
         }
       }
+      
       
       await api$7.removeMergeView(state);
       await api$7.load(state, { xml });
@@ -50350,7 +50596,7 @@ const plugin$d = {
   name: "file-selection-drawer",
   install: install$d,
   state: {
-    update: update$8
+    update: update$9
   }
 };
 
@@ -50360,9 +50606,9 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 
 // Internal state
 let currentLabelFilter = '';
-let stateCache = null;
 let needsTreeUpdate = false;
-let currentState = null;
+let currentState$4 = null;
+let isUpdatingProgrammatically = false;
 
 //
 // Implementation
@@ -50402,17 +50648,50 @@ async function install$d(state) {
   
   // Handle variant selection changes
   ui$1.fileDrawer.variantSelect.addEventListener('sl-change', () => {
-    onVariantChange(state);
+    
+    
+    // Ignore programmatic changes to prevent double-loading
+    if (isUpdatingProgrammatically) {
+      
+      return;
+    }
+    
+    
+    // Use currentState instead of stale installation-time state
+    if (currentState$4) {
+      onVariantChange(currentState$4);
+    } else {
+      console.warn("Variant change ignored: no current state available");
+    }
   });
   
   // Handle label filter changes
   ui$1.fileDrawer.labelFilter.addEventListener('sl-input', () => {
-    onLabelFilterChange(state);
+    // Use currentState instead of stale installation-time state
+    if (currentState$4) {
+      onLabelFilterChange(currentState$4);
+    } else {
+      console.warn("Label filter change ignored: no current state available");
+    }
   });
   
   // Handle tree selection changes
   drawer.addEventListener('sl-selection-change', (event) => {
-    onFileTreeSelection(event, state);
+    
+    
+    // Ignore programmatic changes to prevent double-loading
+    if (isUpdatingProgrammatically) {
+      
+      return;
+    }
+    
+    
+    // Use currentState instead of stale installation-time state
+    if (currentState$4) {
+      onFileTreeSelection(event, currentState$4);
+    } else {
+      console.warn("File tree selection ignored: no current state available");
+    }
   });
 }
 
@@ -50424,8 +50703,8 @@ async function open$2() {
   ui$1.fileDrawer?.show();
   
   // Update tree if needed when opening
-  if (needsTreeUpdate && currentState?.fileData) {
-    await populateFileTree(currentState);
+  if (needsTreeUpdate && currentState$4?.fileData) {
+    await populateFileTree(currentState$4);
     needsTreeUpdate = false;
   }
 }
@@ -50442,17 +50721,12 @@ function close$2() {
  * Handles state updates
  * @param {ApplicationState} state
  */
-async function update$8(state) {
+async function update$9(state) {
   // Store current state for lazy loading
-  currentState = state;
+  currentState$4 = state;
   
-  // Check if state has changed
-  const { xml, pdf, variant } = state;
-  const jsonState = JSON.stringify({ xml, pdf, variant, fileData: !!state.fileData });
-  const stateChanged = jsonState !== stateCache;
-  
-  if (stateChanged && state.fileData) {
-    stateCache = jsonState;
+  // Check if relevant state properties have changed
+  if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData') && state.fileData) {
     await populateVariantSelect(state);
     
     // Only populate tree if drawer is visible, otherwise mark for lazy update
@@ -50464,9 +50738,15 @@ async function update$8(state) {
     }
   }
   
-  // Always update selected values
+  // Always update selected values (with guard to prevent triggering events)
   if (ui$1.fileDrawer?.variantSelect) {
-    ui$1.fileDrawer.variantSelect.value = state.variant || "";
+    
+    isUpdatingProgrammatically = true;
+    try {
+      ui$1.fileDrawer.variantSelect.value = state.variant || "";
+    } finally {
+      isUpdatingProgrammatically = false;
+    }
   }
 }
 
@@ -50512,8 +50792,13 @@ async function populateVariantSelect(state) {
     variantSelect.appendChild(option);
   });
   
-  // Set current selection
-  variantSelect.value = state.variant || "";
+  // Set current selection (with guard to prevent triggering events)
+  isUpdatingProgrammatically = true;
+  try {
+    variantSelect.value = state.variant || "";
+  } finally {
+    isUpdatingProgrammatically = false;
+  }
 }
 
 /**
@@ -50606,7 +50891,11 @@ async function populateFileTree(state) {
           goldItem.dataset.hash = gold.hash;
           goldItem.dataset.pdfHash = file.pdf.hash;
           goldItem.dataset.collection = file.collection;
-          goldItem.textContent = gold.label;
+          if (gold.is_locked) {
+            goldItem.innerHTML = `🔒 <span>${gold.label}</span>`;
+          } else {
+            goldItem.innerHTML = `<span>${gold.label}</span>`;
+          }          
           goldSection.appendChild(goldItem);
         });
         pdfItem.appendChild(goldSection);
@@ -50628,10 +50917,9 @@ async function populateFileTree(state) {
           versionItem.dataset.pdfHash = file.pdf.hash;
           versionItem.dataset.collection = file.collection;
           if (version.is_locked) {
-            versionItem.disabled = true;
-            versionItem.textContent = `🔒 ${version.label}`;
+            versionItem.innerHTML = `🔒 <span>${version.label}</span>`;
           } else {
-            versionItem.textContent = version.label;
+            versionItem.innerHTML = `<span>${version.label}</span>`;
           }
           versionsSection.appendChild(versionItem);
         });
@@ -50645,7 +50933,13 @@ async function populateFileTree(state) {
   }
   
   // Programmatically select the item that corresponds to current state
-  await selectCurrentStateItem(state, fileTree);
+  
+  isUpdatingProgrammatically = true;
+  try {
+    await selectCurrentStateItem(state, fileTree);
+  } finally {
+    isUpdatingProgrammatically = false;
+  }
 }
 
 /**
@@ -50686,7 +50980,7 @@ async function selectCurrentStateItem(state, fileTree) {
  * @param {ApplicationState} state
  */
 async function onVariantChange(state) {
-  const variant = ui$1.fileDrawer?.variantSelect?.value;
+  const variant = /** @type {string|null} */ (ui$1.fileDrawer?.variantSelect?.value);
   
   // Update application state with new variant - clear XML to force reload
   await updateState(state, { variant, xml: null });
@@ -50757,9 +51051,31 @@ async function onFileTreeSelection(event, state) {
   // Close drawer before changing the state
   close$2();
   
-  // Update state - let other plugins handle the loading
+  // Update state and load the selected files
   console.log("DEBUG tree selection state update", { type, hash, pdfHash, stateUpdates });
   await updateState(state, stateUpdates);
+  
+  // Actually load the files (similar to file-selection.js)
+  const filesToLoad = {};
+  if (stateUpdates.pdf && stateUpdates.pdf !== state.pdf) {
+    filesToLoad.pdf = stateUpdates.pdf;
+  }
+  if (stateUpdates.xml && stateUpdates.xml !== state.xml) {
+    filesToLoad.xml = stateUpdates.xml;
+  }
+  
+  if (Object.keys(filesToLoad).length > 0) {
+    
+    try {
+      await api$7.load(state, filesToLoad);
+    } catch (error) {
+      console.error("Error loading files:", error.message);
+      // On error, reset state and reload file data (similar to file-selection.js)
+      await updateState(state, { collection: null, pdf: null, xml: null });
+      // Note: fileselection.reload() would be called here, but we don't have access to that plugin
+      // The error will be handled by services.load() internally
+    }
+  }
 
 }
 
@@ -51325,8 +51641,11 @@ const plugin$c = {
   name: "extraction",
   deps: ['services'],
   install: install$c,
-  state: {update: update$7}
+  state: {update: update$8}
 };
+
+// Current state for use in event handlers
+let currentState$3 = null;
 
 //
 // UI
@@ -51369,14 +51688,21 @@ async function install$c(state) {
   updateUi();
 
   // add event listeners
-  ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state));
-  ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state));
+  ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => {
+    if (currentState$3) extractFromNewPdf(currentState$3);
+  });
+  ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => {
+    if (currentState$3) extractFromCurrentPDF(currentState$3);
+  });
 }
 
 /**
  * @param {ApplicationState} state
  */
-async function update$7(state) {
+async function update$8(state) {
+  // Store current state for use in event handlers
+  currentState$3 = state;
+  
   // @ts-ignore
   ui$1.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline); 
   ui$1.toolbar.extractionActions.extractCurrent.disabled = !state.pdf;
@@ -51461,7 +51787,7 @@ async function extractFromPDF(state, defaultOptions={}) {
       
       // Update state.variant with the variant_id that was used for extraction
       if (options.variant_id) {
-        await updateState({ variant: options.variant_id });
+        await updateState(state, { variant: options.variant_id });
       }
       
       // Load the extracted result (server now returns hashes)
@@ -51968,12 +52294,14 @@ const plugin$b = {
   name: "services",
   deps: ['file-selection'],
   install: install$b,
-  state: { update: update$6 },
+  state: { update: update$7 },
   validation: { inProgress }
 };
 
 // Status widget for saving progress
 let savingStatusWidget = null;
+// Current state for use in event handlers
+let currentState$2 = null;
 
 //
 // UI
@@ -52065,7 +52393,9 @@ async function install$b(state) {
   const da = ui$1.toolbar.documentActions;
 
   // save a revision
-  da.saveRevision.addEventListener('click', () => saveRevision(state));
+  da.saveRevision.addEventListener('click', () => {
+    if (currentState$2) saveRevision(currentState$2);
+  });
   // enable save button on dirty editor
   xmlEditor.on(
     XMLEditor.EVENT_EDITOR_READY,
@@ -52073,18 +52403,30 @@ async function install$b(state) {
   );
 
   // delete
-  da.deleteCurrentVersion.addEventListener("click", () => deleteCurrentVersion(state));
-  da.deleteAllVersions.addEventListener('click', () => deleteAllVersions(state));
-  da.deleteAll.addEventListener('click', () => deleteAll(state));
+  da.deleteCurrentVersion.addEventListener("click", () => {
+    if (currentState$2) deleteCurrentVersion(currentState$2);
+  });
+  da.deleteAllVersions.addEventListener('click', () => {
+    if (currentState$2) deleteAllVersions(currentState$2);
+  });
+  da.deleteAll.addEventListener('click', () => {
+    if (currentState$2) deleteAll(currentState$2);
+  });
 
   // new version
-  da.createNewVersion.addEventListener("click", () => createNewVersion(state));
+  da.createNewVersion.addEventListener("click", () => {
+    if (currentState$2) createNewVersion(currentState$2);
+  });
 
   // download
-  da.download.addEventListener("click", () => downloadXml(state));
+  da.download.addEventListener("click", () => {
+    if (currentState$2) downloadXml(currentState$2);
+  });
 
   // upload
-  da.upload.addEventListener("click", () => uploadXml(state));
+  da.upload.addEventListener("click", () => {
+    if (currentState$2) uploadXml(currentState$2);
+  });
 
   // === TEI button group ===
 
@@ -52097,7 +52439,9 @@ async function install$b(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$6(state) {
+async function update$7(state) {
+  // Store current state for use in event handlers
+  currentState$2 = state;
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -52830,7 +53174,7 @@ const plugin$a = {
   name: "floating-panel",
   deps: ['config'],
   install: install$a,
-  state: { update: update$5 }
+  state: { update: update$6 }
 };
 
 //
@@ -52939,7 +53283,7 @@ async function install$a(state) {
  * Reacts to application state changes
  * @param {ApplicationState} state 
  */
-async function update$5(state) {
+async function update$6(state) {
   //console.warn("update", plugin.name, state)
   
   // Cache extractor list when user actually changes (not just stale initialization)
@@ -53469,7 +53813,7 @@ const enhancements = [
 const plugin$8 = {
   name: "tei-wizard",
   install: install$8,
-  state: {update: update$4},
+  state: {update: update$5},
   deps: ['services']
 };
 
@@ -53527,7 +53871,7 @@ async function install$8(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$4(state) {
+async function update$5(state) {
   // @ts-ignore
   teiWizardButton.disabled = state.editorReadOnly;
   //console.warn(plugin.name,"done")
@@ -62250,8 +62594,12 @@ function showHelpFromLoginDialog() {
 const plugin$6 = {
   name: "move-files",
   deps: ['services'],
-  install: install$6
+  install: install$6,
+  state: { update: update$4 }
 };
+
+// Current state for use in event handlers  
+let currentState$1 = null;
 
 //
 // UI
@@ -62292,7 +62640,9 @@ async function install$6(state) {
   updateUi(); // Update UI so moveFilesDialog navigation is available
 
   // add event listener
-  moveBtn.addEventListener('click', () => showMoveFilesDialog(state));
+  moveBtn.addEventListener('click', () => {
+    if (currentState$1) showMoveFilesDialog(currentState$1);
+  });
   ui$1.moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
     if (newCollectionName) {
@@ -62364,6 +62714,15 @@ async function showMoveFilesDialog(state) {
   } finally {
     ui$1.spinner.hide();
   }
+}
+
+/**
+ * State update handler
+ * @param {ApplicationState} state
+ */
+async function update$4(state) {
+  // Store current state for use in event handlers
+  currentState$1 = state;
 }
 
 /**
@@ -62640,56 +62999,12 @@ async function searchNodeContents() {
 // State Change Handlers
 //
 
-let cachedHashes; 
-
 /**
- * Handles PDF state changes by loading the new PDF document
+ * Observes state changes for UI updates
  * @param {ApplicationState} state
  */
 async function update$3(state) {
-
-  if (!state.fileData) {
-    return
-  }
-
-  if (!state.pdf && !state.xml) {
-    api$h.debug("No PDF or XML specified, nothing to do");
-    return;
-  }
-
-  const { pdf, xml } = state;
-  if (JSON.stringify({pdf, xml}) === cachedHashes) {
-    api$h.debug("PDF and XML have not changed, nothing to do");
-    return;
-  }
-  cachedHashes = JSON.stringify({ pdf, xml });
-
-  try {
-    // Remove merge view if it exists
-    await api$7.removeMergeView(state);
-
-    // debug 
-    if (pdf) {
-      api$h.debug("PDF state changed, loading new PDF:" + pdf);
-    }
-    if (xml) {
-      api$h.debug("XML state changed, loading new XML:" + xml);
-    }
-
-    // Load the PDF and XML
-    await api$7.load(state, { pdf, xml });
-    
-    api$h.debug("PDF/XML loaded after state change");
-
-  } catch (error) {
-    api$h.warn("Error loading PDF:" + error.message);
-    // Reset PDF state on error
-    state.pdf = null;
-    state.collection = null;
-    cachedHashes = null;
-    await updateState(state);
-    throw error;
-  }
+  // Any UI updates based on state changes would go here
 }
 
 /**
@@ -62744,8 +63059,7 @@ const plugin$4 = {
  * @param {string} fullname
  * @param {string[]} roles
  */
-/** @type {UserData} */
-let user = null;
+// Note: user state tracking now handled via state.previousState instead of local variable
 
 //
 // Implementation
@@ -62791,17 +63105,21 @@ async function install$4(state) {
 }
 
 /**
+ * The current user
+ * @type {UserData}
+ */
+let user;
+
+/**
  * Handles state updates, specifically for updating the UI based on user login status.
  * @param {ApplicationState} state
  */
 async function update$2(state) {
-  if (state.user !== user) {
+  if (hasStateChanged(state, 'user')) {
     user = state.user;
     ui$1.toolbar.logoutButton.disabled = user === null;
   }
 }
-
-
 
 /**
  * Checks if the user is authenticated. If not, it shows a login dialog
@@ -62967,6 +63285,9 @@ const plugin$2 = {
   state: { update: update$1 }
 };
 
+// Current state for use in event handlers
+let currentState = null;
+
 //
 // UI
 //
@@ -63024,7 +63345,9 @@ async function install$2(state) {
   syncIcon.title = 'Click to sync files';
 
   // Add click handler to sync icon to start sync
-  syncIcon.addEventListener('click', () => onClickSyncBtn(state));
+  syncIcon.addEventListener('click', () => {
+    if (currentState) onClickSyncBtn(currentState);
+  });
 
   // Create a container that includes the icon and progress bar
   syncContainer = document.createElement('div');
@@ -63043,6 +63366,9 @@ async function install$2(state) {
  * @param {ApplicationState} state
  */
 async function update$1(state) {
+  // Store current state for use in event handlers
+  currentState = state;
+  
   // TODO implement `hidden` property on widgets
   syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none';
 }
@@ -63204,7 +63530,8 @@ async function start$1(state) {
   api$h.debug(`Starting plugin "${plugin$1.name}"`);
 }
 
-let state_xml_cache; 
+let state_xml_cache;
+let isUpdatingState = false; // Guard to prevent infinite loops 
 
 /**
  * Called when application state changes
@@ -63239,11 +63566,16 @@ async function update(state) {
   
   // Check if document should be read-only based on permissions
   const shouldBeReadOnly = !canEditDocument(state.user);
-  if (shouldBeReadOnly !== state.editorReadOnly) {
+  if (shouldBeReadOnly !== state.editorReadOnly && !isUpdatingState) {
     // Update application state to reflect access control
     api$h.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`);
     // Note: This will trigger xmleditor plugin to update editor state
-    await updateState(state, { editorReadOnly: shouldBeReadOnly });
+    isUpdatingState = true;
+    try {
+      await updateState(state, { editorReadOnly: shouldBeReadOnly });
+    } finally {
+      isUpdatingState = false;
+    }
   }
   
   // Update read-only widget context if xmleditor shows read-only status due to access control
@@ -63873,7 +64205,7 @@ const api = {
  */
 const plugin = {
   name: "heartbeat",
-  deps: ["logger", "client", "updateState", "fileselection", "dialog", "authentication"],
+  deps: ["logger", "client", "fileselection", "dialog", "authentication"],
   install
 };
 
@@ -64037,6 +64369,7 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
  * @property {object|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
  * @property {Array<object>|null} fileData - The file data loaded from the server
+ * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
  */
 /**
  * @type{ApplicationState}
@@ -64053,7 +64386,8 @@ let state = {
   sessionId: null,
   user: null,
   collection: null,
-  fileData: null
+  fileData: null,
+  ext: {}
 };
 
 /**
@@ -64093,38 +64427,39 @@ await invoke(endpoints.install, state);
 //
 // persist the state across reloads in sessionStorage
 //
-const SESSION_STORAGE_ID = 'pdf-tei-editor.state';
 const persistedStateVars = (await api$g.get("state.persist") || []);
 persistedStateVars.push('sessionId'); // the session id is always persisted
-const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID';
 let serverState = await api$b.state();
-let tmpState;
-try {
-  tmpState = JSON.parse(stateInSessionStorage);
+let sessionState = getStateFromSessionStorage();
+if (sessionState) {
   api$h.info("Loaded state from sessionStorage");
-} catch(e) {
+} else {
   api$h.info("Loading initial state from server");
-  tmpState = serverState;
+  sessionState = serverState;
 }
 // special case where server state overrides saved state on reload
 // this is a workaround to be fixed
-tmpState.webdavEnabled = serverState.webdavEnabled;
-// update the state in all plugins
-updateState(state, tmpState);
-// save the state in the session storage befor leaving the page
-window.addEventListener('beforeunload', evt => {
-  api$h.debug("Saving state in sessionStorage");
-  sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state));
-});
+sessionState.webdavEnabled = serverState.webdavEnabled;
+// create new state with loaded data (without notifying plugins yet)
+state = createNewState(state, sessionState);
 
-// URL hash params override properties
-await api$f.updateStateFromUrlHash(state);
+// enable automatic state preservation in sessionStorage
+preserveState(true);
 
-// start the application 
+// URL hash params override properties (apply to state without notifying plugins yet)
+const urlHashState = await api$f.getStateFromUrlHash(); 
+if (urlHashState && Object.keys(urlHashState).length > 0) {
+  state = createNewState(state, urlHashState);
+}
+
+// Now notify plugins with the final initial state
+await updateState(state, {});  
+
+// invoke the "start" endpoint
 await invoke(endpoints.start, state);
 
 //
-// Utility functions
+// Core application functions
 //
 
 /**
@@ -64149,4 +64484,4 @@ async function reloadFileData(state, options = {}) {
   updateState(state, {fileData:data});
 }
 
-export { api$1 as accessControl, api$4 as appInfo, api$3 as authentication, api$b as client, api$g as config, api$d as dialog, endpoints, api$8 as extraction, api$9 as fileSelectionDrawer, api$a as fileselection, api$6 as floatingPanel, api as heartbeat, invoke, api$h as logger, pdfViewer, pluginManager, plugins, api$5 as promptEditor, reloadFileData, api$7 as services, api$e as sse, state, api$2 as sync, updateState, api$f as urlHash, api$c as validation, xmlEditor };
+export { api$1 as accessControl, api$4 as appInfo, api$3 as authentication, clearStateHistory, api$b as client, api$g as config, createNewState, api$d as dialog, endpoints, api$8 as extraction, api$9 as fileSelectionDrawer, api$a as fileselection, api$6 as floatingPanel, getChangedStateKeys, getPreviousStateValue, getStateFromSessionStorage, getStateHistorySize, hasStateChanged, api as heartbeat, invoke, api$h as logger, pdfViewer, pluginManager, plugins, preserveState, api$5 as promptEditor, reloadFileData, api$7 as services, api$e as sse, state, api$2 as sync, updateState, updateStateExt, api$f as urlHash, api$c as validation, xmlEditor };

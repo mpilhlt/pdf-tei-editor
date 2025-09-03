@@ -1,8 +1,16 @@
 npm run build
-if [[ `git status --porcelain` ]]; then
-  git add -A
-  git commit -m "Update build files"
-else
-  echo "No changes"
-fi
-exit 0
+node -e "
+const { execSync } = require('child_process');
+try {
+  const status = execSync('git status --porcelain', { encoding: 'utf8' });
+  if (status.trim()) {
+    execSync('git add -A');
+    execSync('git commit -m \"Update build files\"');
+  } else {
+    console.log('No changes');
+  }
+} catch (e) {
+  console.error('Git operation failed:', e.message);
+  process.exit(1);
+}
+"
