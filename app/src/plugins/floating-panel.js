@@ -1,6 +1,5 @@
 /** 
  * @import { ApplicationState } from '../app.js'
- * @import { Switch } from '../modules/switch.js'
  * @import { UIPart } from '../ui.js'
  */
 import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
@@ -67,6 +66,9 @@ let currentVariant = null
 let currentUser = null
 let cachedExtractors = null
 
+/** @type {ApplicationState} */
+let currentState;
+
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
@@ -92,7 +94,7 @@ async function install(state) {
 
   // listen for changes in the selectbox
   xp.addEventListener('change', async () => {
-    await updateState(state, { xpath: xp.value })
+    await updateState(currentState, { xpath: xp.value })
   });
 
   // Edit XPath button functionality removed for now
@@ -101,29 +103,29 @@ async function install(state) {
   const fp = ui.floatingPanel
 
   // node navigation
-  fp.previousNode.addEventListener('click', () => changeNodeIndex(state, -1));
-  fp.nextNode.addEventListener('click', () => changeNodeIndex(state, +1));
+  fp.previousNode.addEventListener('click', () => changeNodeIndex(currentState, -1));
+  fp.nextNode.addEventListener('click', () => changeNodeIndex(currentState, +1));
 
   // diff navigation
   fp.diffNavigation.prevDiff.addEventListener('click', () => xmlEditor.goToPreviousDiff())
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff())
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
     xmlEditor.rejectAllDiffs()
-    services.removeMergeView(state)
+    services.removeMergeView(currentState)
   })
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
     xmlEditor.acceptAllDiffs()
-    services.removeMergeView(state)
+    services.removeMergeView(currentState)
   })
 
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex) // allow to input node index
 
   // configure "status" buttons
   $$('.node-status').forEach(btn => btn.addEventListener('click', async evt => {
-    if (!state.xpath) {
+    if (!currentState.xpath) {
       return
     }
-    xmlEditor.selectByXpath(state.xpath)
+    xmlEditor.selectByXpath(currentState.xpath)
     if (xmlEditor.selectedNode) {
       $$('.node-status').forEach(btn => btn.disabled = true)
       await xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status)
@@ -137,7 +139,7 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
-  //console.warn("update", plugin.name, state)
+  currentState = state
   
   // Cache extractor list when user actually changes (not just stale initialization)
   let extractorsJustCached = false
@@ -150,9 +152,9 @@ async function update(state) {
       try {
         cachedExtractors = await client.getExtractorList()
         extractorsJustCached = true
-        logger.debug('Cached extractor list for floating panel:', cachedExtractors)
+        logger.debug('Cached extractor list for floating panel:'+ cachedExtractors)
       } catch (error) {
-        logger.warn('Failed to load extractor list:', error.message || error)
+        logger.warn('Failed to load extractor list:' +  error.message || error)
         cachedExtractors = []
       }
     }
@@ -225,7 +227,7 @@ async function changeNodeIndex(state, delta) {
   if (index < 0) index = size 
   if (index >= size) index = 1
   const xpath = normativeXpath + `[${index}]`
-  await updateState(state, { xpath })
+  await updateState(currentState, { xpath })
 }
 
 
@@ -240,7 +242,7 @@ async function populateXpathSelectbox(state) {
   xp.innerHTML = '';
 
   const variantId = state.variant
-  logger.debug('populateXpathSelectbox called with variant:', variantId, 'cachedExtractors:', cachedExtractors)
+  //console.log('populateXpathSelectbox called with variant:', variantId, 'cachedExtractors:', cachedExtractors)
 
   if (!variantId) {
     // No variant selected, show empty selectbox
@@ -266,7 +268,7 @@ async function populateXpathSelectbox(state) {
   // Find the extractor that contains this variant
   let navigationXpathList = null
   for (const extractor of cachedExtractors) {
-    logger.debug('Checking extractor:', extractor.id, 'for variant:', variantId, 'navigation_xpath:', extractor.navigation_xpath)
+    //console.log('Checking extractor:', extractor.id, 'for variant:', variantId, 'navigation_xpath:', extractor.navigation_xpath)
     const navigationXpath = extractor.navigation_xpath?.[variantId]
     if (navigationXpath) {
       navigationXpathList = navigationXpath

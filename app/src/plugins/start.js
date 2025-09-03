@@ -12,8 +12,7 @@
 import ui from '../ui.js'
 import {
   updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
-  config, authentication, state, heartbeat,
-  sync
+  config, authentication, state, heartbeat, reloadFileData, sync
 } from '../app.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { Spinner, updateUi } from '../ui.js'
@@ -127,20 +126,16 @@ async function start(state) {
       })
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
-      const xpath = UrlHash.get("xpath")
-      if (xpath) {
-        state.xpath = xpath
-      } else {
-        state.xpath = ui.floatingPanel.xpath.value
-      }
+      const xpath = UrlHash.get("xpath") || ui.floatingPanel.xpath.value
+
       // update the UI
-      await updateState(state)
+      await updateState(state, { xpath })
+
       // synchronize in the background
       sync.syncFiles(state).then(async (summary) => {
         logger.info(summary)
         if (summary && !summary.skipped) {
-          await fileselection.reload(state, { refresh: true })
-          await updateState(state)
+          await reloadFileData(state, { refresh: true })
         }
       })
     }
@@ -250,18 +245,12 @@ async function saveIfDirty() {
     const result = await services.saveXml(filePath)
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
-    } else if (result.status == "saved_with_migration") {
-      logger.debug(`Saved file ${result.hash} with migration of old version files`)
-      // Migration occurred, reload file data to show updated version structure
-      await fileselection.reload(state)
-      // Update state to use new hash
-      state.xml = result.hash
-      await updateState(state)
     } else {
       logger.debug(`Saved file ${result.hash}`)
-      // Update state to use new hash
-      state.xml = result.hash
-      await updateState(state)
+      if (result.hash !== state.xml) {
+        // Update state to use new hash
+        await updateState(state, { xml: result.hash })
+      }
     }
   } catch (error) {
     logger.warn(`Save failed: ${error.message}`)

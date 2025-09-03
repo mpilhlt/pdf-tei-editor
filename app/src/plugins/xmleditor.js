@@ -101,7 +101,7 @@ async function install(state) {
   titleWidget.classList.add('title-widget')
 
   // Widgets for the statusbar
-  
+
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
     // <sl-icon name="lock-fill"></sl-icon>
@@ -197,7 +197,7 @@ async function install(state) {
 
   // Save automatically when XML becomes well-formed again
   xmlEditor.on("editorXmlWellFormed", () => {
-    saveIfDirty()
+    saveIfDirty(currentState)
   })
 
   // Add widget to toggle <teiHeader> visibility
@@ -205,7 +205,7 @@ async function install(state) {
     xmlEditor.whenReady().then(() => {
       // Restore line wrapping after XML is loaded
       xmlEditor.setLineWrapping(true)
-      
+
       // show only if there is a teiHeader in the document
       if (xmlEditor.getDomNodeByXpath("//tei:teiHeader")) {
         teiHeaderToggleWidget.style.display = 'inline-flex'
@@ -235,7 +235,7 @@ async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
 
-  [readOnlyStatusWidget, cursorPositionWidget, 
+  [readOnlyStatusWidget, cursorPositionWidget,
     indentationStatusWidget, teiHeaderToggleWidget]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
@@ -321,8 +321,9 @@ async function onSelectionChange(state) {
 
 /**
  * Save the current XML file if the editor is "dirty"
+ * @param {ApplicationState} state
  */
-async function saveIfDirty() {
+async function saveIfDirty(state) {
   const filePath = String(ui.toolbar.xml.value)
 
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
@@ -331,9 +332,10 @@ async function saveIfDirty() {
       logger.debug(`File has not changed`)
     } else {
       logger.debug(`Saved file ${result.hash}`)
-      // Update state to use new hash from server
-      state.xml = result.hash
-      await updateState(state)
+      if (result.hash !== state.xml) {
+        // Update state to use new hash from server
+        await updateState(state, { xml: result.hash })
+      }
     }
   }
 }
