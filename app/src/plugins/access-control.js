@@ -114,7 +114,8 @@ async function start(state) {
   logger.debug(`Starting plugin "${plugin.name}"`)
 }
 
-let state_xml_cache; 
+let state_xml_cache;
+let isUpdatingState = false; // Guard to prevent infinite loops 
 
 /**
  * Called when application state changes
@@ -149,11 +150,16 @@ async function update(state) {
   
   // Check if document should be read-only based on permissions
   const shouldBeReadOnly = !canEditDocument(state.user)
-  if (shouldBeReadOnly !== state.editorReadOnly) {
+  if (shouldBeReadOnly !== state.editorReadOnly && !isUpdatingState) {
     // Update application state to reflect access control
     logger.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`)
     // Note: This will trigger xmleditor plugin to update editor state
-    await updateState(state, { editorReadOnly: shouldBeReadOnly })
+    isUpdatingState = true
+    try {
+      await updateState(state, { editorReadOnly: shouldBeReadOnly })
+    } finally {
+      isUpdatingState = false
+    }
   }
   
   // Update read-only widget context if xmleditor shows read-only status due to access control

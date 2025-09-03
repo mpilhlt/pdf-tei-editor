@@ -245,6 +245,81 @@ When converting existing plugins:
 - **Shoelace Icon Resources**: When using Shoelace icons programmatically (via `icon` attribute or StatusText widget) where the literal `<sl-icon name="icon-name"></sl-icon>` is not present in the codebase, add a comment with the HTML literal to ensure the build system includes the icon resource: `// <sl-icon name="icon-name"></sl-icon>`. This is not needed when the icon tag already exists verbatim in templates or HTML.
 - **Debug Logging**: When adding temporary debug statements, use `console.log("DEBUG ...")` instead of `logger.debug()`. Always prefix the message with "DEBUG" to make them easily searchable and removable. Example: `console.log("DEBUG Collection in options:", options.collection);`. This allows easy filtering with browser dev tools and quick cleanup using search/replace.
 
+### State Management
+The application uses **immutable state management** with functional programming principles:
+
+#### Core Concepts
+- **Immutable Updates**: Each state change creates a new state object, preserving the previous state
+- **State History**: The system maintains a history of the last 10 states for debugging and potential undo functionality
+- **Change Detection**: Plugins use `hasStateChanged()` instead of manual caching to detect state changes
+- **State Snapshots**: Plugins receive immutable state snapshots via function parameters, never import the global state
+
+#### State Utilities (modules/state-utils.js)
+```javascript
+// Update state immutably
+await updateState(currentState, { pdf: 'new-file.pdf', xml: 'new-file.xml' })
+
+// Check if specific properties changed
+if (hasStateChanged(state, 'user', 'pdf')) {
+  // Handle changes
+}
+
+// Get all changed properties
+const changedKeys = getChangedStateKeys(state)
+
+// Get previous value of a property
+const previousUser = getPreviousStateValue(state, 'user')
+
+// Update extension properties (plugin-specific state)
+await updateStateExt(state, { myPlugin: { customData: 'value' } })
+
+// Access extension properties
+if (state.ext.myPlugin?.customData) {
+  // Handle custom plugin state
+}
+```
+
+#### Plugin State Handling Best Practices
+1. **Never import global state**: Plugins should only work with state parameters passed to functions
+2. **Use hasStateChanged()**: Replace manual state caching with `hasStateChanged(state, 'property')`
+3. **Local storage when needed**: Store local copies only for operations that need them (e.g., API requests)
+4. **Access previous state**: Use `state.previousState` to compare with previous values
+5. **Use state.ext for plugin-specific state**: Store plugin-specific state in `state.ext` to avoid TypeScript errors
+6. **Use updateStateExt()**: For updating extension properties immutably
+
+#### Example Plugin Pattern
+```javascript
+// Before: Manual caching
+let currentUser = null;
+async function update(state) {
+  if (state.user !== currentUser) {
+    currentUser = state.user;
+    // handle change
+  }
+}
+
+// After: Immutable state pattern
+async function update(state) {
+  if (hasStateChanged(state, 'user')) {
+    // handle change
+  }
+}
+```
+
+#### Memory Management
+- State history is automatically limited to 10 entries to prevent memory leaks
+- Older states are garbage collected when the limit is exceeded
+- The `previousState` chain is properly broken to allow garbage collection
+
+#### State Architecture Principles
+- **Plugin endpoints are reactive observers, not state mutators**: Plugin `update()` functions receive immutable state snapshots and react to changes by updating UI or internal plugin state. They do not return modified state objects.
+- **Only state utilities create new state objects**: Functions like `updateState()` and `updateStateExt()` are responsible for creating new immutable state objects. Plugin endpoints observe and react to state changes.
+- **Parallel plugin execution**: Since plugins don't mutate state, multiple plugins can process the same state snapshot concurrently without conflicts.
+- **State initialization is sequential**: During app initialization, state operations are chained sequentially to build up the initial state before plugins start reacting to changes.
+- **CRITICAL: Never call updateState() in state.update endpoints**: Plugin `update()` functions must never call `updateState()` as this creates infinite loops. They are observers/reactors, not mutators. Consider them "observe" functions rather than "update" functions.
+- **State mutation only in event handlers**: Only user event handlers (like button clicks) and async operations (like API responses) should call `updateState()`. The `update()` endpoints should only react to state changes, never create them.
+- **Event handlers must use current state**: Event handlers registered during plugin installation receive stale state references. Store the current state in a plugin variable (updated in the `update()` method) and use that in event handlers instead of the installation-time state parameter.
+
 ## Browser Automation and Testing
 
 ### MCP Browser Integration

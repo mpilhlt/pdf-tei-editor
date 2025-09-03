@@ -12,7 +12,8 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
 }
 
 import ep from './endpoints.js'
-import { invoke, updateState, pluginManager } from './modules/plugin-utils.js' 
+import { invoke, pluginManager } from './modules/plugin-utils.js'
+import { updateState, createNewState, hasStateChanged, getChangedStateKeys, getPreviousStateValue, clearStateHistory, getStateHistorySize, updateStateExt, preserveState, getStateFromSessionStorage } from './modules/state-utils.js'
 import { createHashLookupIndex } from './modules/file-data-utils.js'
 
 // plugins
@@ -58,6 +59,7 @@ import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat
  * @property {object|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
  * @property {Array<object>|null} fileData - The file data loaded from the server
+ * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
  */
 /**
  * @type{ApplicationState}
@@ -74,7 +76,8 @@ let state = {
   sessionId: null,
   user: null,
   collection: null,
-  fileData: null
+  fileData: null,
+  ext: {}
 }
 
 /**
@@ -114,38 +117,39 @@ await invoke(ep.install, state)
 //
 // persist the state across reloads in sessionStorage
 //
-const SESSION_STORAGE_ID = 'pdf-tei-editor.state'
 const persistedStateVars = (await config.get("state.persist") || [])
 persistedStateVars.push('sessionId') // the session id is always persisted
-const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID) || 'INVALID'
 let serverState = await client.state()
-let tmpState;
-try {
-  tmpState = JSON.parse(stateInSessionStorage)
+let sessionState = getStateFromSessionStorage();
+if (sessionState) {
   logger.info("Loaded state from sessionStorage")
-} catch(e) {
+} else {
   logger.info("Loading initial state from server")
-  tmpState = serverState
+  sessionState = serverState
 }
 // special case where server state overrides saved state on reload
 // this is a workaround to be fixed
-tmpState.webdavEnabled = serverState.webdavEnabled
-// update the state in all plugins
-updateState(state, tmpState)
-// save the state in the session storage befor leaving the page
-window.addEventListener('beforeunload', evt => {
-  logger.debug("Saving state in sessionStorage")
-  sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(state))
-})
+sessionState.webdavEnabled = serverState.webdavEnabled
+// create new state with loaded data (without notifying plugins yet)
+state = createNewState(state, sessionState)
 
-// URL hash params override properties
-await urlHash.updateStateFromUrlHash(state)
+// enable automatic state preservation in sessionStorage
+preserveState(true)
 
-// start the application 
+// URL hash params override properties (apply to state without notifying plugins yet)
+const urlHashState = await urlHash.getStateFromUrlHash() 
+if (urlHashState && Object.keys(urlHashState).length > 0) {
+  state = createNewState(state, urlHashState)
+}
+
+// Now notify plugins with the final initial state
+await updateState(state, {})  
+
+// invoke the "start" endpoint
 await invoke(ep.start, state)
 
 //
-// Utility functions
+// Core application functions
 //
 
 /**
@@ -173,6 +177,6 @@ async function reloadFileData(state, options = {}) {
 //
 // Exports
 // 
-export { state, ep as endpoints, invoke, updateState, pluginManager, plugins, reloadFileData }
+export { state, ep as endpoints, invoke, updateState, createNewState, hasStateChanged, getChangedStateKeys, getPreviousStateValue, clearStateHistory, getStateHistorySize, updateStateExt, preserveState, getStateFromSessionStorage, pluginManager, plugins, reloadFileData }
 export { logger, dialog, pdfViewer, xmlEditor, client, config, validation, fileselection, fileSelectionDrawer, extraction,
   services, sync, floatingPanel, promptEditor, urlHash, appInfo, sse, authentication, accessControl, heartbeat }

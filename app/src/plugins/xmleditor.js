@@ -49,6 +49,9 @@ import { getDocumentTitle } from '../modules/file-data-utils.js'
  */
 const xmlEditor = new NavXmlEditor('codemirror-container')
 
+// Current state for use in event handlers
+let currentState = null
+
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
 let titleWidget;
@@ -147,7 +150,12 @@ async function install(state) {
 
   // selection => xpath state
   xmlEditor.on("selectionChanged", data => {
-    xmlEditor.whenReady().then(() => onSelectionChange(state))
+    xmlEditor.whenReady().then(() => {
+      // Use currentState from the update method
+      if (currentState) {
+        onSelectionChange(currentState);
+      }
+    })
     updateCursorPosition()
   });
 
@@ -224,6 +232,8 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
+  // Store current state for use in event handlers
+  currentState = state;
 
   [readOnlyStatusWidget, cursorPositionWidget, 
     indentationStatusWidget, teiHeaderToggleWidget]

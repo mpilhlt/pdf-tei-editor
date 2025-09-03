@@ -43,22 +43,5 @@ export async function invoke(endpoint, param, options = {}) {
   }
 }
 
-/**
- * Utility method which updates the state object and invokes the "state.update" endpoint to propagate the change 
- * to the other plugins. Before invoking the endpoint with the state, any key-value pair in `changes` will be 
- * applied to the state. In addition, for each key in `changes`, the endpoint "state.changeKey" is individually
- * invoked with the state. For example, the {foo:"bar"} will invoke "state.changeFoo" with the state var.
- * 
- * @param {Object} state The application state object
- * @param {Object?} changes For each change in the state, provide a key-value pair in this object. 
- * @returns {Promise<Array>} Returns an array of return values of the plugin's update methods
- */
-export async function updateState(state, changes={}) {
-  Object.entries(changes).forEach(async ([key, value]) => {
-    if (state[key] !== value) {
-      state[key] = value
-      await invoke(`state.change${key[0].toUpperCase()}${key.slice(1)}`, state)  
-    }
-  })
-  return await invoke(ep.state.update, state)
-}
+// Note: updateState has been moved to modules/state-utils.js for better state management
+// This file now only contains plugin utilities

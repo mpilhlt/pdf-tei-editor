@@ -8,7 +8,7 @@
 import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
-import { logger, services, xmlEditor } from '../app.js'
+import { logger, services, xmlEditor, hasStateChanged } from '../app.js'
 import { getDocumentTitle } from '../modules/file-data-utils.js'
 
 //
@@ -43,7 +43,7 @@ const pdfViewer = new PDFJSViewer('pdf-viewer')
 // hide it until ready
 pdfViewer.hide()
 
-let currentFile;
+// Note: currentFile state tracking now handled via state.previousState instead of local variable
 let titleWidget;
 
 /**
@@ -105,8 +105,7 @@ async function install(state) {
  * @returns {Promise<void>}
  */
 async function update(state) {
-  if (state.pdf !== currentFile) {
-    currentFile = state.pdf;
+  if (hasStateChanged(state, 'pdf')) {
     // Clear PDF viewer when no PDF is loaded
     if (state.pdf === null) {
       try {

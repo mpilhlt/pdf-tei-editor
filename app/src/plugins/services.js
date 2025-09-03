@@ -57,6 +57,8 @@ export default plugin
 
 // Status widget for saving progress
 let savingStatusWidget = null
+// Current state for use in event handlers
+let currentState = null
 
 //
 // UI
@@ -148,7 +150,9 @@ async function install(state) {
   const da = ui.toolbar.documentActions
 
   // save a revision
-  da.saveRevision.addEventListener('click', () => saveRevision(state));
+  da.saveRevision.addEventListener('click', () => {
+    if (currentState) saveRevision(currentState);
+  });
   // enable save button on dirty editor
   xmlEditor.on(
     XMLEditor.EVENT_EDITOR_READY,
@@ -156,18 +160,30 @@ async function install(state) {
   );
 
   // delete
-  da.deleteCurrentVersion.addEventListener("click", () => deleteCurrentVersion(state))
-  da.deleteAllVersions.addEventListener('click', () => deleteAllVersions(state))
-  da.deleteAll.addEventListener('click', () => deleteAll(state))
+  da.deleteCurrentVersion.addEventListener("click", () => {
+    if (currentState) deleteCurrentVersion(currentState);
+  })
+  da.deleteAllVersions.addEventListener('click', () => {
+    if (currentState) deleteAllVersions(currentState);
+  })
+  da.deleteAll.addEventListener('click', () => {
+    if (currentState) deleteAll(currentState);
+  })
 
   // new version
-  da.createNewVersion.addEventListener("click", () => createNewVersion(state))
+  da.createNewVersion.addEventListener("click", () => {
+    if (currentState) createNewVersion(currentState);
+  })
 
   // download
-  da.download.addEventListener("click", () => downloadXml(state))
+  da.download.addEventListener("click", () => {
+    if (currentState) downloadXml(currentState);
+  })
 
   // upload
-  da.upload.addEventListener("click", () => uploadXml(state))
+  da.upload.addEventListener("click", () => {
+    if (currentState) uploadXml(currentState);
+  })
 
   // === TEI button group ===
 
@@ -181,6 +197,8 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
+  // Store current state for use in event handlers
+  currentState = state;
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected

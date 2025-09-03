@@ -10,7 +10,7 @@
 import ui from '../ui.js'
 import { SlOption, SlDivider, updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
-import { logger, services, dialog, updateState, reloadFileData } from '../app.js'
+import { logger, services, dialog, updateState, reloadFileData, hasStateChanged } from '../app.js'
 
 /**
  * The data about the pdf and xml files on the server
@@ -96,7 +96,22 @@ async function install(state) {
 
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
-    select.addEventListener('sl-change', async () => await handler(state));
+    select.addEventListener('sl-change', async () => {
+      
+      
+      // Ignore programmatic changes to prevent double-loading
+      if (isUpdatingProgrammatically) {
+        
+        return;
+      }
+      
+      
+      if (currentState) {
+        await handler(currentState);
+      } else {
+        console.warn(`${select.name} selection ignored: no current state available`);
+      }
+    });
 
     // this works around a problem with the z-index of the select dropdown being bound 
     // to the z-index of the parent toolbar (and therefore being hidden by the editors)
@@ -115,24 +130,27 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
-  if (!state.pdf) {
-    state.collection = null
-  }
+  // Store current state for use in event handlers
+  currentState = state;
   
-  // check if state has changed (moved from populateSelectboxes)
-  const { xml, pdf, diff, variant } = state
-  const jsonState = JSON.stringify({ xml, pdf, diff, variant })
-  const stateChanged = jsonState !== stateCache
+  // Note: Don't mutate state directly in update() - that would cause infinite loops
+  // The state.collection should be managed by other functions that call updateState()
   
-  if (stateChanged && state.fileData) {
-    stateCache = jsonState
+  // Check if relevant state properties have changed
+  if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
     await populateSelectboxes(state);
   }
   
-  // Always update selected values
-  ui.toolbar.pdf.value = state.pdf || ""
-  ui.toolbar.xml.value = state.xml || ""
-  ui.toolbar.diff.value = state.diff || ""
+  // Always update selected values (with guard to prevent triggering events)
+  
+  isUpdatingProgrammatically = true;
+  try {
+    ui.toolbar.pdf.value = state.pdf || ""
+    ui.toolbar.xml.value = state.xml || ""
+    ui.toolbar.diff.value = state.diff || ""
+  } finally {
+    isUpdatingProgrammatically = false;
+  }
 }
 
 
@@ -144,14 +162,15 @@ async function update(state) {
  */
 async function reload(state, options = {}) {
   await reloadFileData(state, options);
-  stateCache = null; // Reset cache to force repopulation
-  await populateSelectboxes(state);
+  // Note: populateSelectboxes() will be called automatically via the update() method 
+  // when reloadFileData() triggers a state update with new fileData
 }
 
 
-let stateCache
 let variants
 let collections
+let currentState = null
+let isUpdatingProgrammatically = false
 
 /**
  * Populates the variant selectbox with unique variants from fileData
@@ -212,8 +231,13 @@ async function populateVariantSelectbox(state) {
     ui.toolbar.variant.appendChild(option);
   });
 
-  // Set current selection
-  ui.toolbar.variant.value = state.variant || "";
+  // Set current selection (with guard to prevent triggering events)
+  isUpdatingProgrammatically = true;
+  try {
+    ui.toolbar.variant.value = state.variant || "";
+  } finally {
+    isUpdatingProgrammatically = false;
+  }
 }
 
 /**
@@ -226,9 +250,11 @@ async function populateSelectboxes(state) {
   }
   logger.debug("Populating selectboxes")
 
-  // Only reload if fileData is completely empty (initial load)
+  // Note: This function should only be called when fileData exists
+  // If fileData is missing, it should be loaded via reloadFileData() which will trigger
+  // this function again via the update() method
   if (!state.fileData || state.fileData.length === 0) {
-    await reloadFileData(state)
+    throw new Error("populateSelectboxes called but fileData is not available")
   }
   
   const fileData = state.fileData;
@@ -432,16 +458,14 @@ async function onChangePdfSelection(state) {
   }
 
   if (Object.keys(filesToLoad).length > 0) {
+    
     try {
       services.removeMergeView(state)
-      state.collection = collection
+      await updateState(state, { collection })
       await services.load(state, filesToLoad)
     }
     catch (error) {
-      state.collection = null
-      state.pdf = null
-      state.xml = null
-      await updateState(state)
+      await updateState(state, { collection: null, pdf: null, xml: null })
       await reload(state, {refresh:true})
       logger.warn(error.message)
     }
@@ -466,10 +490,11 @@ async function onChangeXmlSelection(state) {
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
         
         if (hasGoldMatch || hasVersionMatch) {
-          state.collection = file.collection;
+          await updateState(state, { collection: file.collection });
           break;
         }
       }
+      
       
       await services.removeMergeView(state)
       await services.load(state, { xml })

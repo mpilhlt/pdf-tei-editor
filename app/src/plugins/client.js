@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../app.js' 
  */
 
-import { logger } from '../app.js';
+import { logger, hasStateChanged } from '../app.js';
 import { notify } from '../modules/sl-utils.js';
 
 /**
@@ -78,7 +78,8 @@ class ServerError extends Error {
   }
 }
 
-let sessionId;
+// Current sessionId stored locally for API requests (updated when state changes)
+let sessionId = null;
 let lastHttpStatus = null;
 
 const api_base_url = '/api';
@@ -142,12 +143,12 @@ export default plugin
  * @param {ApplicationState} state 
  */
 async function update(state) {
-  if (sessionId !== state.sessionId) {
-    sessionId = state.sessionId
+  if (hasStateChanged(state, 'sessionId')) {
+    sessionId = state.sessionId;
     logger.debug(`Setting session id to ${sessionId}`)
   }
   //console.warn(plugin.name,"done")
-  return sessionId
+  return state.sessionId
 }
 
 /**

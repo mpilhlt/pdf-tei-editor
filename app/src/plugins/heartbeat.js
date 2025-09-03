@@ -23,7 +23,7 @@ const api = {
  */
 const plugin = {
   name: "heartbeat",
-  deps: ["logger", "client", "updateState", "fileselection", "dialog", "authentication"],
+  deps: ["logger", "client", "fileselection", "dialog", "authentication"],
   install
 }
 

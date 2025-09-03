@@ -14,11 +14,15 @@ import ui from '../ui.js'
 const plugin = {
   name: "move-files",
   deps: ['services'],
-  install
+  install,
+  state: { update }
 }
 
 export { plugin }
 export default plugin
+
+// Current state for use in event handlers  
+let currentState = null
 
 //
 // UI
@@ -59,7 +63,9 @@ async function install(state) {
   updateUi() // Update UI so moveFilesDialog navigation is available
 
   // add event listener
-  moveBtn.addEventListener('click', () => showMoveFilesDialog(state))
+  moveBtn.addEventListener('click', () => {
+    if (currentState) showMoveFilesDialog(currentState);
+  })
   ui.moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
     if (newCollectionName) {
@@ -131,4 +137,13 @@ async function showMoveFilesDialog(state) {
   } finally {
     ui.spinner.hide();
   }
+}
+
+/**
+ * State update handler
+ * @param {ApplicationState} state
+ */
+async function update(state) {
+  // Store current state for use in event handlers
+  currentState = state;
 }

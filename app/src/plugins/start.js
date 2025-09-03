@@ -291,55 +291,11 @@ async function searchNodeContents() {
 // State Change Handlers
 //
 
-let cachedHashes; 
-
 /**
- * Handles PDF state changes by loading the new PDF document
+ * Observes state changes for UI updates
  * @param {ApplicationState} state
  */
 async function update(state) {
-
-  if (!state.fileData) {
-    return
-  }
-
-  if (!state.pdf && !state.xml) {
-    logger.debug("No PDF or XML specified, nothing to do");
-    return;
-  }
-
-  const { pdf, xml } = state;
-  if (JSON.stringify({pdf, xml}) === cachedHashes) {
-    logger.debug("PDF and XML have not changed, nothing to do");
-    return;
-  }
-  cachedHashes = JSON.stringify({ pdf, xml })
-
-  try {
-    // Remove merge view if it exists
-    await services.removeMergeView(state);
-
-    // debug 
-    if (pdf) {
-      logger.debug("PDF state changed, loading new PDF:" + pdf);
-    }
-    if (xml) {
-      logger.debug("XML state changed, loading new XML:" + xml);
-    }
-
-    // Load the PDF and XML
-    await services.load(state, { pdf, xml });
-    
-    logger.debug("PDF/XML loaded after state change");
-
-  } catch (error) {
-    logger.warn("Error loading PDF:" + error.message);
-    // Reset PDF state on error
-    state.pdf = null;
-    state.collection = null;
-    cachedHashes = null;
-    await updateState(state);
-    throw error;
-  }
+  // Any UI updates based on state changes would go here
 }
 

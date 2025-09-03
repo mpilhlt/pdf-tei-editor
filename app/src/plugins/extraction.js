@@ -37,6 +37,9 @@ const plugin = {
 export { api, plugin }
 export default plugin
 
+// Current state for use in event handlers
+let currentState = null
+
 //
 // UI
 //
@@ -78,14 +81,21 @@ async function install(state) {
   updateUi()
 
   // add event listeners
-  ui.toolbar.extractionActions.extractNew.addEventListener('click', () => extractFromNewPdf(state))
-  ui.toolbar.extractionActions.extractCurrent.addEventListener('click', () => extractFromCurrentPDF(state))
+  ui.toolbar.extractionActions.extractNew.addEventListener('click', () => {
+    if (currentState) extractFromNewPdf(currentState);
+  })
+  ui.toolbar.extractionActions.extractCurrent.addEventListener('click', () => {
+    if (currentState) extractFromCurrentPDF(currentState);
+  })
 }
 
 /**
  * @param {ApplicationState} state
  */
 async function update(state) {
+  // Store current state for use in event handlers
+  currentState = state;
+  
   // @ts-ignore
   ui.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline) 
   ui.toolbar.extractionActions.extractCurrent.disabled = !state.pdf
@@ -170,7 +180,7 @@ async function extractFromPDF(state, defaultOptions={}) {
       
       // Update state.variant with the variant_id that was used for extraction
       if (options.variant_id) {
-        await updateState({ variant: options.variant_id })
+        await updateState(state, { variant: options.variant_id })
       }
       
       // Load the extracted result (server now returns hashes)

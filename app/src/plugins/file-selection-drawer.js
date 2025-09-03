@@ -21,7 +21,8 @@
  */
 import ui, { updateUi, SlOption } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import { logger, updateState } from '../app.js'
+import { logger, updateState, services } from '../app.js'
+import { hasStateChanged } from '../modules/state-utils.js'
 import {
   extractVariants,
   filterFileDataByVariant,
@@ -60,9 +61,9 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 
 // Internal state
 let currentLabelFilter = '';
-let stateCache = null;
 let needsTreeUpdate = false;
 let currentState = null;
+let isUpdatingProgrammatically = false;
 
 //
 // Implementation
@@ -102,17 +103,50 @@ async function install(state) {
   
   // Handle variant selection changes
   ui.fileDrawer.variantSelect.addEventListener('sl-change', () => {
-    onVariantChange(state);
+    
+    
+    // Ignore programmatic changes to prevent double-loading
+    if (isUpdatingProgrammatically) {
+      
+      return;
+    }
+    
+    
+    // Use currentState instead of stale installation-time state
+    if (currentState) {
+      onVariantChange(currentState);
+    } else {
+      console.warn("Variant change ignored: no current state available");
+    }
   });
   
   // Handle label filter changes
   ui.fileDrawer.labelFilter.addEventListener('sl-input', () => {
-    onLabelFilterChange(state);
+    // Use currentState instead of stale installation-time state
+    if (currentState) {
+      onLabelFilterChange(currentState);
+    } else {
+      console.warn("Label filter change ignored: no current state available");
+    }
   });
   
   // Handle tree selection changes
   drawer.addEventListener('sl-selection-change', (event) => {
-    onFileTreeSelection(event, state);
+    
+    
+    // Ignore programmatic changes to prevent double-loading
+    if (isUpdatingProgrammatically) {
+      
+      return;
+    }
+    
+    
+    // Use currentState instead of stale installation-time state
+    if (currentState) {
+      onFileTreeSelection(event, currentState);
+    } else {
+      console.warn("File tree selection ignored: no current state available");
+    }
   });
 }
 
@@ -146,13 +180,8 @@ async function update(state) {
   // Store current state for lazy loading
   currentState = state;
   
-  // Check if state has changed
-  const { xml, pdf, variant } = state;
-  const jsonState = JSON.stringify({ xml, pdf, variant, fileData: !!state.fileData });
-  const stateChanged = jsonState !== stateCache;
-  
-  if (stateChanged && state.fileData) {
-    stateCache = jsonState;
+  // Check if relevant state properties have changed
+  if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData') && state.fileData) {
     await populateVariantSelect(state);
     
     // Only populate tree if drawer is visible, otherwise mark for lazy update
@@ -164,9 +193,15 @@ async function update(state) {
     }
   }
   
-  // Always update selected values
+  // Always update selected values (with guard to prevent triggering events)
   if (ui.fileDrawer?.variantSelect) {
-    ui.fileDrawer.variantSelect.value = state.variant || "";
+    
+    isUpdatingProgrammatically = true;
+    try {
+      ui.fileDrawer.variantSelect.value = state.variant || "";
+    } finally {
+      isUpdatingProgrammatically = false;
+    }
   }
 }
 
@@ -212,8 +247,13 @@ async function populateVariantSelect(state) {
     variantSelect.appendChild(option);
   });
   
-  // Set current selection
-  variantSelect.value = state.variant || "";
+  // Set current selection (with guard to prevent triggering events)
+  isUpdatingProgrammatically = true;
+  try {
+    variantSelect.value = state.variant || "";
+  } finally {
+    isUpdatingProgrammatically = false;
+  }
 }
 
 /**
@@ -306,7 +346,11 @@ async function populateFileTree(state) {
           goldItem.dataset.hash = gold.hash;
           goldItem.dataset.pdfHash = file.pdf.hash;
           goldItem.dataset.collection = file.collection;
-          goldItem.textContent = gold.label;
+          if (gold.is_locked) {
+            goldItem.innerHTML = `🔒 <span>${gold.label}</span>`;
+          } else {
+            goldItem.innerHTML = `<span>${gold.label}</span>`;
+          }          
           goldSection.appendChild(goldItem);
         });
         pdfItem.appendChild(goldSection);
@@ -328,10 +372,9 @@ async function populateFileTree(state) {
           versionItem.dataset.pdfHash = file.pdf.hash;
           versionItem.dataset.collection = file.collection;
           if (version.is_locked) {
-            versionItem.disabled = true;
-            versionItem.textContent = `🔒 ${version.label}`;
+            versionItem.innerHTML = `🔒 <span>${version.label}</span>`;
           } else {
-            versionItem.textContent = version.label;
+            versionItem.innerHTML = `<span>${version.label}</span>`;
           }
           versionsSection.appendChild(versionItem);
         });
@@ -345,7 +388,13 @@ async function populateFileTree(state) {
   }
   
   // Programmatically select the item that corresponds to current state
-  await selectCurrentStateItem(state, fileTree);
+  
+  isUpdatingProgrammatically = true;
+  try {
+    await selectCurrentStateItem(state, fileTree);
+  } finally {
+    isUpdatingProgrammatically = false;
+  }
 }
 
 /**
@@ -386,7 +435,7 @@ async function selectCurrentStateItem(state, fileTree) {
  * @param {ApplicationState} state
  */
 async function onVariantChange(state) {
-  const variant = ui.fileDrawer?.variantSelect?.value;
+  const variant = /** @type {string|null} */ (ui.fileDrawer?.variantSelect?.value);
   
   // Update application state with new variant - clear XML to force reload
   await updateState(state, { variant, xml: null });
@@ -457,8 +506,30 @@ async function onFileTreeSelection(event, state) {
   // Close drawer before changing the state
   close();
   
-  // Update state - let other plugins handle the loading
+  // Update state and load the selected files
   console.log("DEBUG tree selection state update", { type, hash, pdfHash, stateUpdates })
   await updateState(state, stateUpdates);
+  
+  // Actually load the files (similar to file-selection.js)
+  const filesToLoad = {};
+  if (stateUpdates.pdf && stateUpdates.pdf !== state.pdf) {
+    filesToLoad.pdf = stateUpdates.pdf;
+  }
+  if (stateUpdates.xml && stateUpdates.xml !== state.xml) {
+    filesToLoad.xml = stateUpdates.xml;
+  }
+  
+  if (Object.keys(filesToLoad).length > 0) {
+    
+    try {
+      await services.load(state, filesToLoad);
+    } catch (error) {
+      console.error("Error loading files:", error.message);
+      // On error, reset state and reload file data (similar to file-selection.js)
+      await updateState(state, { collection: null, pdf: null, xml: null });
+      // Note: fileselection.reload() would be called here, but we don't have access to that plugin
+      // The error will be handled by services.load() internally
+    }
+  }
 
 }

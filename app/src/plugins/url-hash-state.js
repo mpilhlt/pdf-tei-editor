@@ -17,7 +17,8 @@ let allowSetFromUrl
 
 const api = {
   updateUrlHashfromState,
-  updateStateFromUrlHash
+  updateStateFromUrlHash,
+  getStateFromUrlHash
 }
 
 /**
@@ -78,21 +79,32 @@ function updateUrlHashfromState(state) {
 }
 
 /**
- * Updates the state from the URL hash, removing all state properties that should not be shown in the URL from the hash
- * @param {ApplicationState} state
- * @returns {Promise<Array>} Returns the result of updateState
+ * Gets state properties from URL hash without updating state (for initialization)
+ * @returns {Object} Object with state properties from URL hash
  */
-async function updateStateFromUrlHash(state) {
+function getStateFromUrlHash() {
   const tmpState = {}
   const urlParams = new URLSearchParams(window.location.hash.slice(1));
   for (const [key, value] of urlParams.entries()) {
-    if (key in state && allowSetFromUrl.includes(key)) {
+    if (allowSetFromUrl.includes(key)) {
       tmpState[key] = value
     }
     if (!showInUrl.includes(key)) {
       UrlHash.remove(key, false)
     }
   }
-  logger.info("Setting state properties from URL hash:" + Object.keys(tmpState).join(", "))
+  if (Object.keys(tmpState).length > 0) {
+    logger.info("Getting state properties from URL hash: " + Object.keys(tmpState).join(", "))
+  }
+  return tmpState
+}
+
+/**
+ * Updates the state from the URL hash, removing all state properties that should not be shown in the URL from the hash
+ * @param {ApplicationState} state
+ * @returns {Promise<Array>} Returns the result of updateState
+ */
+async function updateStateFromUrlHash(state) {
+  const tmpState = getStateFromUrlHash()
   return await updateState(state, tmpState)
 }

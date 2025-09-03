@@ -9,7 +9,7 @@
 
 import ui, { SlDialog, updateUi } from '../ui.js';
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
-import { updateState, logger, client, state } from '../app.js';
+import { updateState, hasStateChanged, logger, client, state } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
 
 // 
@@ -61,8 +61,7 @@ export { api, plugin };
  * @param {string} fullname
  * @param {string[]} roles
  */
-/** @type {UserData} */
-let user = null;
+// Note: user state tracking now handled via state.previousState instead of local variable
 
 //
 // Implementation
@@ -108,17 +107,21 @@ async function install(state) {
 }
 
 /**
+ * The current user
+ * @type {UserData}
+ */
+let user
+
+/**
  * Handles state updates, specifically for updating the UI based on user login status.
  * @param {ApplicationState} state
  */
 async function update(state) {
-  if (state.user !== user) {
-    user = state.user;
+  if (hasStateChanged(state, 'user')) {
+    user = state.user
     ui.toolbar.logoutButton.disabled = user === null
   }
 }
-
-
 
 /**
  * Checks if the user is authenticated. If not, it shows a login dialog

@@ -32,6 +32,9 @@ const plugin = {
 export { plugin, api }
 export default plugin
 
+// Current state for use in event handlers
+let currentState = null
+
 //
 // UI
 //
@@ -89,7 +92,9 @@ async function install(state) {
   syncIcon.title = 'Click to sync files'
 
   // Add click handler to sync icon to start sync
-  syncIcon.addEventListener('click', () => onClickSyncBtn(state))
+  syncIcon.addEventListener('click', () => {
+    if (currentState) onClickSyncBtn(currentState);
+  })
 
   // Create a container that includes the icon and progress bar
   syncContainer = document.createElement('div')
@@ -108,6 +113,9 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
+  // Store current state for use in event handlers
+  currentState = state;
+  
   // TODO implement `hidden` property on widgets
   syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none'
 }
