@@ -123,7 +123,6 @@ async function install(state) {
   
   // Create UI elements
   createFromTemplate('info-dialog', document.body);
-  const aboutButton = createSingleFromTemplate('about-button');
   const button = createSingleFromTemplate('info-toolbar-button');
   
   // Set up info dialog event listeners
@@ -137,10 +136,11 @@ async function install(state) {
   });
 
   // add About button to login dialog footer (left side)
-  aboutButton.addEventListener('click', () => api.open())
+  const aboutButton = createSingleFromTemplate('about-button');
+  aboutButton.addEventListener('click', showHelpFromLoginDialog)
   
-  // Insert the About button before the Login button
-  ui.loginDialog.insertBefore(aboutButton, ui.loginDialog.submit)
+  // Insert the About button after the Login button
+  ui.loginDialog.insertAdjacentElement("beforeend", aboutButton)
   updateUi()
 
   // add a button to the command bar to show dialog
@@ -296,3 +296,10 @@ function close() {
   ui.infoDrawer.hide()
 }
 
+function showHelpFromLoginDialog() {
+  ui.loginDialog.hide()
+  ui.infoDrawer.addEventListener("sl-hide",() => {
+    ui.loginDialog.show()
+  }, {once:true})
+  api.open()
+}

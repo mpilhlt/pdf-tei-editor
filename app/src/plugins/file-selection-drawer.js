@@ -135,7 +135,7 @@ async function open() {
  */
 function close() {
   logger.debug("Closing file selection drawer");
-  ui.fileDrawer?.hide();
+  ui.fileDrawer.hide();
 }
 
 /**
