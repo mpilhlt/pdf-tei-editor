@@ -17,7 +17,7 @@ function runCommand(command, description) {
 runCommand('node bin/generate-importmap.js', 'Updating the importmap');
 
 // Compile the app icons
-runCommand('python bin/compile-sl-icons.py', 'Compiling the app icons');
+runCommand('uv run python bin/compile-sl-icons.py', 'Compiling the app icons');
 
 // Bundle templates
 runCommand('node bin/bundle-templates.js', 'Bundling templates');
