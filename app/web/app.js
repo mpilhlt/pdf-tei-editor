@@ -48338,7 +48338,7 @@ class NavXmlEditor extends XMLEditor {
 const xmlEditor = new NavXmlEditor('codemirror-container');
 
 // Current state for use in event handlers
-let currentState$7 = null;
+let currentState$8 = null;
 
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
@@ -48386,7 +48386,7 @@ async function install$g(state) {
   titleWidget.classList.add('title-widget');
 
   // Widgets for the statusbar
-  
+
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
     // <sl-icon name="lock-fill"></sl-icon>
@@ -48437,8 +48437,8 @@ async function install$g(state) {
   xmlEditor.on("selectionChanged", data => {
     xmlEditor.whenReady().then(() => {
       // Use currentState from the update method
-      if (currentState$7) {
-        onSelectionChange(currentState$7);
+      if (currentState$8) {
+        onSelectionChange(currentState$8);
       }
     });
     updateCursorPosition();
@@ -48482,7 +48482,7 @@ async function install$g(state) {
 
   // Save automatically when XML becomes well-formed again
   xmlEditor.on("editorXmlWellFormed", () => {
-    saveIfDirty$1();
+    saveIfDirty$1(currentState$8);
   });
 
   // Add widget to toggle <teiHeader> visibility
@@ -48490,7 +48490,7 @@ async function install$g(state) {
     xmlEditor.whenReady().then(() => {
       // Restore line wrapping after XML is loaded
       xmlEditor.setLineWrapping(true);
-      
+
       // show only if there is a teiHeader in the document
       if (xmlEditor.getDomNodeByXpath("//tei:teiHeader")) {
         teiHeaderToggleWidget.style.display = 'inline-flex';
@@ -48518,9 +48518,9 @@ async function install$g(state) {
  */
 async function update$e(state) {
   // Store current state for use in event handlers
-  currentState$7 = state;
+  currentState$8 = state;
 
-  [readOnlyStatusWidget, cursorPositionWidget, 
+  [readOnlyStatusWidget, cursorPositionWidget,
     indentationStatusWidget, teiHeaderToggleWidget]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none');
 
@@ -48604,8 +48604,9 @@ async function onSelectionChange(state) {
 
 /**
  * Save the current XML file if the editor is "dirty"
+ * @param {ApplicationState} state
  */
-async function saveIfDirty$1() {
+async function saveIfDirty$1(state) {
   const filePath = String(ui$1.toolbar.xml.value);
 
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
@@ -48614,9 +48615,10 @@ async function saveIfDirty$1() {
       api$h.debug(`File has not changed`);
     } else {
       api$h.debug(`Saved file ${result.hash}`);
-      // Update state to use new hash from server
-      state.xml = result.hash;
-      await updateState(state);
+      if (result.hash !== state.xml) {
+        // Update state to use new hash from server
+        await updateState(state, { xml: result.hash });
+      }
     }
   }
 }
@@ -50147,8 +50149,8 @@ async function install$e(state) {
       }
       
       
-      if (currentState$6) {
-        await handler(currentState$6);
+      if (currentState$7) {
+        await handler(currentState$7);
       } else {
         console.warn(`${select.name} selection ignored: no current state available`);
       }
@@ -50172,7 +50174,7 @@ async function install$e(state) {
  */
 async function update$b(state) {
   // Store current state for use in event handlers
-  currentState$6 = state;
+  currentState$7 = state;
   
   // Note: Don't mutate state directly in update() - that would cause infinite loops
   // The state.collection should be managed by other functions that call updateState()
@@ -50210,7 +50212,7 @@ async function reload(state, options = {}) {
 
 let variants;
 let collections;
-let currentState$6 = null;
+let currentState$7 = null;
 let isUpdatingProgrammatically$1 = false;
 
 /**
@@ -50607,7 +50609,7 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 // Internal state
 let currentLabelFilter = '';
 let needsTreeUpdate = false;
-let currentState$5 = null;
+let currentState$6 = null;
 let isUpdatingProgrammatically = false;
 
 //
@@ -50658,8 +50660,8 @@ async function install$d(state) {
     
     
     // Use currentState instead of stale installation-time state
-    if (currentState$5) {
-      onVariantChange(currentState$5);
+    if (currentState$6) {
+      onVariantChange(currentState$6);
     } else {
       console.warn("Variant change ignored: no current state available");
     }
@@ -50668,8 +50670,8 @@ async function install$d(state) {
   // Handle label filter changes
   ui$1.fileDrawer.labelFilter.addEventListener('sl-input', () => {
     // Use currentState instead of stale installation-time state
-    if (currentState$5) {
-      onLabelFilterChange(currentState$5);
+    if (currentState$6) {
+      onLabelFilterChange(currentState$6);
     } else {
       console.warn("Label filter change ignored: no current state available");
     }
@@ -50687,8 +50689,8 @@ async function install$d(state) {
     
     
     // Use currentState instead of stale installation-time state
-    if (currentState$5) {
-      onFileTreeSelection(event, currentState$5);
+    if (currentState$6) {
+      onFileTreeSelection(event, currentState$6);
     } else {
       console.warn("File tree selection ignored: no current state available");
     }
@@ -50703,8 +50705,8 @@ async function open$2() {
   ui$1.fileDrawer?.show();
   
   // Update tree if needed when opening
-  if (needsTreeUpdate && currentState$5?.fileData) {
-    await populateFileTree(currentState$5);
+  if (needsTreeUpdate && currentState$6?.fileData) {
+    await populateFileTree(currentState$6);
     needsTreeUpdate = false;
   }
 }
@@ -50723,7 +50725,7 @@ function close$2() {
  */
 async function update$a(state) {
   // Store current state for lazy loading
-  currentState$5 = state;
+  currentState$6 = state;
   
   // Check if relevant state properties have changed
   if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData') && state.fileData) {
@@ -51645,7 +51647,7 @@ const plugin$c = {
 };
 
 // Current state for use in event handlers
-let currentState$4 = null;
+let currentState$5 = null;
 
 //
 // UI
@@ -51689,10 +51691,10 @@ async function install$c(state) {
 
   // add event listeners
   ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => {
-    if (currentState$4) extractFromNewPdf(currentState$4);
+    if (currentState$5) extractFromNewPdf(currentState$5);
   });
   ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => {
-    if (currentState$4) extractFromCurrentPDF(currentState$4);
+    if (currentState$5) extractFromCurrentPDF(currentState$5);
   });
 }
 
@@ -51701,7 +51703,7 @@ async function install$c(state) {
  */
 async function update$9(state) {
   // Store current state for use in event handlers
-  currentState$4 = state;
+  currentState$5 = state;
   
   // @ts-ignore
   ui$1.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline); 
@@ -52301,7 +52303,7 @@ const plugin$b = {
 // Status widget for saving progress
 let savingStatusWidget = null;
 // Current state for use in event handlers
-let currentState$3 = null;
+let currentState$4 = null;
 
 //
 // UI
@@ -52394,7 +52396,7 @@ async function install$b(state) {
 
   // save a revision
   da.saveRevision.addEventListener('click', () => {
-    if (currentState$3) saveRevision(currentState$3);
+    if (currentState$4) saveRevision(currentState$4);
   });
   // enable save button on dirty editor
   xmlEditor.on(
@@ -52404,28 +52406,28 @@ async function install$b(state) {
 
   // delete
   da.deleteCurrentVersion.addEventListener("click", () => {
-    if (currentState$3) deleteCurrentVersion(currentState$3);
+    if (currentState$4) deleteCurrentVersion(currentState$4);
   });
   da.deleteAllVersions.addEventListener('click', () => {
-    if (currentState$3) deleteAllVersions(currentState$3);
+    if (currentState$4) deleteAllVersions(currentState$4);
   });
   da.deleteAll.addEventListener('click', () => {
-    if (currentState$3) deleteAll(currentState$3);
+    if (currentState$4) deleteAll(currentState$4);
   });
 
   // new version
   da.createNewVersion.addEventListener("click", () => {
-    if (currentState$3) createNewVersion(currentState$3);
+    if (currentState$4) createNewVersion(currentState$4);
   });
 
   // download
   da.download.addEventListener("click", () => {
-    if (currentState$3) downloadXml(currentState$3);
+    if (currentState$4) downloadXml(currentState$4);
   });
 
   // upload
   da.upload.addEventListener("click", () => {
-    if (currentState$3) uploadXml(currentState$3);
+    if (currentState$4) uploadXml(currentState$4);
   });
 
   // === TEI button group ===
@@ -52441,7 +52443,7 @@ async function install$b(state) {
  */
 async function update$8(state) {
   // Store current state for use in event handlers
-  currentState$3 = state;
+  currentState$4 = state;
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -53155,7 +53157,6 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 
 /** 
  * @import { ApplicationState } from '../app.js'
- * @import { Switch } from '../modules/switch.js'
  * @import { UIPart } from '../ui.js'
  */
 
@@ -53214,6 +53215,9 @@ let currentVariant = null;
 let currentUser = null;
 let cachedExtractors = null;
 
+/** @type {ApplicationState} */
+let currentState$3;
+
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
@@ -53239,7 +53243,7 @@ async function install$a(state) {
 
   // listen for changes in the selectbox
   xp.addEventListener('change', async () => {
-    await updateState(state, { xpath: xp.value });
+    await updateState(currentState$3, { xpath: xp.value });
   });
 
   // Edit XPath button functionality removed for now
@@ -53248,29 +53252,29 @@ async function install$a(state) {
   const fp = ui$1.floatingPanel;
 
   // node navigation
-  fp.previousNode.addEventListener('click', () => changeNodeIndex(state, -1));
-  fp.nextNode.addEventListener('click', () => changeNodeIndex(state, 1));
+  fp.previousNode.addEventListener('click', () => changeNodeIndex(currentState$3, -1));
+  fp.nextNode.addEventListener('click', () => changeNodeIndex(currentState$3, 1));
 
   // diff navigation
   fp.diffNavigation.prevDiff.addEventListener('click', () => xmlEditor.goToPreviousDiff());
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff());
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
     xmlEditor.rejectAllDiffs();
-    api$7.removeMergeView(state);
+    api$7.removeMergeView(currentState$3);
   });
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
     xmlEditor.acceptAllDiffs();
-    api$7.removeMergeView(state);
+    api$7.removeMergeView(currentState$3);
   });
 
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex); // allow to input node index
 
   // configure "status" buttons
   $$('.node-status').forEach(btn => btn.addEventListener('click', async evt => {
-    if (!state.xpath) {
+    if (!currentState$3.xpath) {
       return
     }
-    xmlEditor.selectByXpath(state.xpath);
+    xmlEditor.selectByXpath(currentState$3.xpath);
     if (xmlEditor.selectedNode) {
       $$('.node-status').forEach(btn => btn.disabled = true);
       await xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status);
@@ -53284,7 +53288,7 @@ async function install$a(state) {
  * @param {ApplicationState} state 
  */
 async function update$7(state) {
-  //console.warn("update", plugin.name, state)
+  currentState$3 = state;
   
   // Cache extractor list when user actually changes (not just stale initialization)
   let extractorsJustCached = false;
@@ -53297,9 +53301,9 @@ async function update$7(state) {
       try {
         cachedExtractors = await api$b.getExtractorList();
         extractorsJustCached = true;
-        api$h.debug('Cached extractor list for floating panel:', cachedExtractors);
+        api$h.debug('Cached extractor list for floating panel:'+ cachedExtractors);
       } catch (error) {
-        api$h.warn('Failed to load extractor list:', error.message || error);
+        api$h.warn('Failed to load extractor list:' +  error.message || error);
         cachedExtractors = [];
       }
     }
@@ -53372,7 +53376,7 @@ async function changeNodeIndex(state, delta) {
   if (index < 0) index = size; 
   if (index >= size) index = 1;
   const xpath = normativeXpath + `[${index}]`;
-  await updateState(state, { xpath });
+  await updateState(currentState$3, { xpath });
 }
 
 
@@ -53387,7 +53391,7 @@ async function populateXpathSelectbox(state) {
   xp.innerHTML = '';
 
   const variantId = state.variant;
-  api$h.debug('populateXpathSelectbox called with variant:', variantId, 'cachedExtractors:', cachedExtractors);
+  //console.log('populateXpathSelectbox called with variant:', variantId, 'cachedExtractors:', cachedExtractors)
 
   if (!variantId) {
     // No variant selected, show empty selectbox
@@ -53413,7 +53417,7 @@ async function populateXpathSelectbox(state) {
   // Find the extractor that contains this variant
   let navigationXpathList = null;
   for (const extractor of cachedExtractors) {
-    api$h.debug('Checking extractor:', extractor.id, 'for variant:', variantId, 'navigation_xpath:', extractor.navigation_xpath);
+    //console.log('Checking extractor:', extractor.id, 'for variant:', variantId, 'navigation_xpath:', extractor.navigation_xpath)
     const navigationXpath = extractor.navigation_xpath?.[variantId];
     if (navigationXpath) {
       navigationXpathList = navigationXpath;
@@ -62835,20 +62839,16 @@ async function start$2(state) {
       });
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
-      const xpath = UrlHash.get("xpath");
-      if (xpath) {
-        state.xpath = xpath;
-      } else {
-        state.xpath = ui$1.floatingPanel.xpath.value;
-      }
+      const xpath = UrlHash.get("xpath") || ui$1.floatingPanel.xpath.value;
+
       // update the UI
-      await updateState(state);
+      await updateState(state, { xpath });
+
       // synchronize in the background
       api$2.syncFiles(state).then(async (summary) => {
         api$h.info(summary);
         if (summary && !summary.skipped) {
-          await api$a.reload(state, { refresh: true });
-          await updateState(state);
+          await reloadFileData(state, { refresh: true });
         }
       });
     }
@@ -62958,18 +62958,12 @@ async function saveIfDirty() {
     const result = await api$7.saveXml(filePath);
     if (result.status == "unchanged") {
       api$h.debug(`File has not changed`);
-    } else if (result.status == "saved_with_migration") {
-      api$h.debug(`Saved file ${result.hash} with migration of old version files`);
-      // Migration occurred, reload file data to show updated version structure
-      await api$a.reload(state);
-      // Update state to use new hash
-      state.xml = result.hash;
-      await updateState(state);
     } else {
       api$h.debug(`Saved file ${result.hash}`);
-      // Update state to use new hash
-      state.xml = result.hash;
-      await updateState(state);
+      if (result.hash !== state.xml) {
+        // Update state to use new hash
+        await updateState(state, { xml: result.hash });
+      }
     }
   } catch (error) {
     api$h.warn(`Save failed: ${error.message}`);
