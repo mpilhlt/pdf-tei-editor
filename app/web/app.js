@@ -1075,7 +1075,7 @@ const plugin$l = {
   deps: ['config'],
   install: install$k,
   state: {
-    update: update$h
+    update: update$i
   }
 };
 
@@ -1095,7 +1095,7 @@ async function install$k(state) {
 /** 
  * @param {ApplicationState} state 
  */
-async function update$h(state) {
+async function update$i(state) {
   updateUrlHashfromState(state);
 }
 
@@ -1215,7 +1215,7 @@ const plugin$k = {
   name: "sse",
   install: install$j,
   state: {
-    update: update$g
+    update: update$h
   }
 };
 
@@ -1237,7 +1237,7 @@ async function install$j(state){
 /**
  * @param {ApplicationState} state 
  */
-async function update$g(state) {
+async function update$h(state) {
   const { user, sessionId } = state;
 
   // Close existing connection if the session ID has changed or user logged out
@@ -3138,7 +3138,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$f);
+    const documentElementObserver = new MutationObserver(update$g);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -3159,9 +3159,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$f();
+    update$g();
 }
-function update$f() {
+function update$g() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -17268,7 +17268,7 @@ let titleWidget$1;
 const plugin$i = {
   name: "pdfviewer",
   install: install$h,
-  state: { update: update$e }
+  state: { update: update$f }
 };
 
 //
@@ -17317,7 +17317,7 @@ async function install$h(state) {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$e(state) {
+async function update$f(state) {
   if (hasStateChanged(state, 'pdf')) {
     // Clear PDF viewer when no PDF is loaded
     if (state.pdf === null) {
@@ -48338,7 +48338,7 @@ class NavXmlEditor extends XMLEditor {
 const xmlEditor = new NavXmlEditor('codemirror-container');
 
 // Current state for use in event handlers
-let currentState$6 = null;
+let currentState$7 = null;
 
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
@@ -48364,7 +48364,7 @@ const plugin$h = {
   name: "xmleditor",
   install: install$g,
   state: {
-    update: update$d
+    update: update$e
   }
 };
 
@@ -48437,8 +48437,8 @@ async function install$g(state) {
   xmlEditor.on("selectionChanged", data => {
     xmlEditor.whenReady().then(() => {
       // Use currentState from the update method
-      if (currentState$6) {
-        onSelectionChange(currentState$6);
+      if (currentState$7) {
+        onSelectionChange(currentState$7);
       }
     });
     updateCursorPosition();
@@ -48516,9 +48516,9 @@ async function install$g(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$d(state) {
+async function update$e(state) {
   // Store current state for use in event handlers
-  currentState$6 = state;
+  currentState$7 = state;
 
   [readOnlyStatusWidget, cursorPositionWidget, 
     indentationStatusWidget, teiHeaderToggleWidget]
@@ -48712,7 +48712,7 @@ const plugin$g = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
   install: install$f,
-  state: {update: update$c},
+  state: {update: update$d},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -48752,7 +48752,7 @@ async function install$f(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$c(state) {
+async function update$d(state) {
   if (state.offline || state.editorReadOnly || !state.xml ) {
     // if we are offline, disable validation
     configure({ mode: "off" });
@@ -49565,7 +49565,7 @@ const api$b = {
 const plugin$f = {
   name: "client",
   state: {
-    update: update$b
+    update: update$c
   }
 };
 
@@ -49573,7 +49573,7 @@ const plugin$f = {
  * 
  * @param {ApplicationState} state 
  */
-async function update$b(state) {
+async function update$c(state) {
   if (hasStateChanged(state, 'sessionId')) {
     sessionId = state.sessionId;
     api$h.debug(`Setting session id to ${sessionId}`);
@@ -50078,7 +50078,7 @@ const plugin$e = {
 
   install: install$e,
   state: {
-    update: update$a,
+    update: update$b,
     changeFileData: data => {
       fileData = data;
     }
@@ -50147,8 +50147,8 @@ async function install$e(state) {
       }
       
       
-      if (currentState$5) {
-        await handler(currentState$5);
+      if (currentState$6) {
+        await handler(currentState$6);
       } else {
         console.warn(`${select.name} selection ignored: no current state available`);
       }
@@ -50170,9 +50170,9 @@ async function install$e(state) {
  * 
  * @param {ApplicationState} state 
  */
-async function update$a(state) {
+async function update$b(state) {
   // Store current state for use in event handlers
-  currentState$5 = state;
+  currentState$6 = state;
   
   // Note: Don't mutate state directly in update() - that would cause infinite loops
   // The state.collection should be managed by other functions that call updateState()
@@ -50210,7 +50210,7 @@ async function reload(state, options = {}) {
 
 let variants;
 let collections;
-let currentState$5 = null;
+let currentState$6 = null;
 let isUpdatingProgrammatically$1 = false;
 
 /**
@@ -50596,7 +50596,7 @@ const plugin$d = {
   name: "file-selection-drawer",
   install: install$d,
   state: {
-    update: update$9
+    update: update$a
   }
 };
 
@@ -50607,7 +50607,7 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 // Internal state
 let currentLabelFilter = '';
 let needsTreeUpdate = false;
-let currentState$4 = null;
+let currentState$5 = null;
 let isUpdatingProgrammatically = false;
 
 //
@@ -50658,8 +50658,8 @@ async function install$d(state) {
     
     
     // Use currentState instead of stale installation-time state
-    if (currentState$4) {
-      onVariantChange(currentState$4);
+    if (currentState$5) {
+      onVariantChange(currentState$5);
     } else {
       console.warn("Variant change ignored: no current state available");
     }
@@ -50668,8 +50668,8 @@ async function install$d(state) {
   // Handle label filter changes
   ui$1.fileDrawer.labelFilter.addEventListener('sl-input', () => {
     // Use currentState instead of stale installation-time state
-    if (currentState$4) {
-      onLabelFilterChange(currentState$4);
+    if (currentState$5) {
+      onLabelFilterChange(currentState$5);
     } else {
       console.warn("Label filter change ignored: no current state available");
     }
@@ -50687,8 +50687,8 @@ async function install$d(state) {
     
     
     // Use currentState instead of stale installation-time state
-    if (currentState$4) {
-      onFileTreeSelection(event, currentState$4);
+    if (currentState$5) {
+      onFileTreeSelection(event, currentState$5);
     } else {
       console.warn("File tree selection ignored: no current state available");
     }
@@ -50703,8 +50703,8 @@ async function open$2() {
   ui$1.fileDrawer?.show();
   
   // Update tree if needed when opening
-  if (needsTreeUpdate && currentState$4?.fileData) {
-    await populateFileTree(currentState$4);
+  if (needsTreeUpdate && currentState$5?.fileData) {
+    await populateFileTree(currentState$5);
     needsTreeUpdate = false;
   }
 }
@@ -50721,9 +50721,9 @@ function close$2() {
  * Handles state updates
  * @param {ApplicationState} state
  */
-async function update$9(state) {
+async function update$a(state) {
   // Store current state for lazy loading
-  currentState$4 = state;
+  currentState$5 = state;
   
   // Check if relevant state properties have changed
   if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData') && state.fileData) {
@@ -51641,11 +51641,11 @@ const plugin$c = {
   name: "extraction",
   deps: ['services'],
   install: install$c,
-  state: {update: update$8}
+  state: {update: update$9}
 };
 
 // Current state for use in event handlers
-let currentState$3 = null;
+let currentState$4 = null;
 
 //
 // UI
@@ -51689,19 +51689,19 @@ async function install$c(state) {
 
   // add event listeners
   ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => {
-    if (currentState$3) extractFromNewPdf(currentState$3);
+    if (currentState$4) extractFromNewPdf(currentState$4);
   });
   ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => {
-    if (currentState$3) extractFromCurrentPDF(currentState$3);
+    if (currentState$4) extractFromCurrentPDF(currentState$4);
   });
 }
 
 /**
  * @param {ApplicationState} state
  */
-async function update$8(state) {
+async function update$9(state) {
   // Store current state for use in event handlers
-  currentState$3 = state;
+  currentState$4 = state;
   
   // @ts-ignore
   ui$1.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline); 
@@ -52294,14 +52294,14 @@ const plugin$b = {
   name: "services",
   deps: ['file-selection'],
   install: install$b,
-  state: { update: update$7 },
+  state: { update: update$8 },
   validation: { inProgress }
 };
 
 // Status widget for saving progress
 let savingStatusWidget = null;
 // Current state for use in event handlers
-let currentState$2 = null;
+let currentState$3 = null;
 
 //
 // UI
@@ -52394,7 +52394,7 @@ async function install$b(state) {
 
   // save a revision
   da.saveRevision.addEventListener('click', () => {
-    if (currentState$2) saveRevision(currentState$2);
+    if (currentState$3) saveRevision(currentState$3);
   });
   // enable save button on dirty editor
   xmlEditor.on(
@@ -52404,28 +52404,28 @@ async function install$b(state) {
 
   // delete
   da.deleteCurrentVersion.addEventListener("click", () => {
-    if (currentState$2) deleteCurrentVersion(currentState$2);
+    if (currentState$3) deleteCurrentVersion(currentState$3);
   });
   da.deleteAllVersions.addEventListener('click', () => {
-    if (currentState$2) deleteAllVersions(currentState$2);
+    if (currentState$3) deleteAllVersions(currentState$3);
   });
   da.deleteAll.addEventListener('click', () => {
-    if (currentState$2) deleteAll(currentState$2);
+    if (currentState$3) deleteAll(currentState$3);
   });
 
   // new version
   da.createNewVersion.addEventListener("click", () => {
-    if (currentState$2) createNewVersion(currentState$2);
+    if (currentState$3) createNewVersion(currentState$3);
   });
 
   // download
   da.download.addEventListener("click", () => {
-    if (currentState$2) downloadXml(currentState$2);
+    if (currentState$3) downloadXml(currentState$3);
   });
 
   // upload
   da.upload.addEventListener("click", () => {
-    if (currentState$2) uploadXml(currentState$2);
+    if (currentState$3) uploadXml(currentState$3);
   });
 
   // === TEI button group ===
@@ -52439,9 +52439,9 @@ async function install$b(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$7(state) {
+async function update$8(state) {
   // Store current state for use in event handlers
-  currentState$2 = state;
+  currentState$3 = state;
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -53174,7 +53174,7 @@ const plugin$a = {
   name: "floating-panel",
   deps: ['config'],
   install: install$a,
-  state: { update: update$6 }
+  state: { update: update$7 }
 };
 
 //
@@ -53283,7 +53283,7 @@ async function install$a(state) {
  * Reacts to application state changes
  * @param {ApplicationState} state 
  */
-async function update$6(state) {
+async function update$7(state) {
   //console.warn("update", plugin.name, state)
   
   // Cache extractor list when user actually changes (not just stale initialization)
@@ -53813,7 +53813,7 @@ const enhancements = [
 const plugin$8 = {
   name: "tei-wizard",
   install: install$8,
-  state: {update: update$5},
+  state: {update: update$6},
   deps: ['services']
 };
 
@@ -53871,7 +53871,7 @@ async function install$8(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$5(state) {
+async function update$6(state) {
   // @ts-ignore
   teiWizardButton.disabled = state.editorReadOnly;
   //console.warn(plugin.name,"done")
@@ -62595,11 +62595,11 @@ const plugin$6 = {
   name: "move-files",
   deps: ['services'],
   install: install$6,
-  state: { update: update$4 }
+  state: { update: update$5 }
 };
 
 // Current state for use in event handlers  
-let currentState$1 = null;
+let currentState$2 = null;
 
 //
 // UI
@@ -62641,7 +62641,7 @@ async function install$6(state) {
 
   // add event listener
   moveBtn.addEventListener('click', () => {
-    if (currentState$1) showMoveFilesDialog(currentState$1);
+    if (currentState$2) showMoveFilesDialog(currentState$2);
   });
   ui$1.moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
@@ -62720,9 +62720,9 @@ async function showMoveFilesDialog(state) {
  * State update handler
  * @param {ApplicationState} state
  */
-async function update$4(state) {
+async function update$5(state) {
   // Store current state for use in event handlers
-  currentState$1 = state;
+  currentState$2 = state;
 }
 
 /**
@@ -62743,7 +62743,7 @@ const plugin$5 = {
   install: install$5,
   start: start$2,
   state: {
-    update: update$3
+    update: update$4
   }
 };
 
@@ -63003,7 +63003,7 @@ async function searchNodeContents() {
  * Observes state changes for UI updates
  * @param {ApplicationState} state
  */
-async function update$3(state) {
+async function update$4(state) {
   // Any UI updates based on state changes would go here
 }
 
@@ -63046,7 +63046,7 @@ const plugin$4 = {
   name: "authentication",
   deps: ['client'],
   install: install$4,
-  state: {update: update$2}
+  state: {update: update$3}
 };
 
 //
@@ -63114,7 +63114,7 @@ let user;
  * Handles state updates, specifically for updating the UI based on user login status.
  * @param {ApplicationState} state
  */
-async function update$2(state) {
+async function update$3(state) {
   if (hasStateChanged(state, 'user')) {
     user = state.user;
     ui$1.toolbar.logoutButton.disabled = user === null;
@@ -63282,11 +63282,11 @@ const plugin$2 = {
   name: "sync",
   deps: ['services'],
   install: install$2,
-  state: { update: update$1 }
+  state: { update: update$2 }
 };
 
 // Current state for use in event handlers
-let currentState = null;
+let currentState$1 = null;
 
 //
 // UI
@@ -63346,7 +63346,7 @@ async function install$2(state) {
 
   // Add click handler to sync icon to start sync
   syncIcon.addEventListener('click', () => {
-    if (currentState) onClickSyncBtn(currentState);
+    if (currentState$1) onClickSyncBtn(currentState$1);
   });
 
   // Create a container that includes the icon and progress bar
@@ -63365,9 +63365,9 @@ async function install$2(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$1(state) {
+async function update$2(state) {
   // Store current state for use in event handlers
-  currentState = state;
+  currentState$1 = state;
   
   // TODO implement `hidden` property on widgets
   syncContainer.style.display = state.webdavEnabled ? 'flex' : 'none';
@@ -63483,7 +63483,7 @@ const plugin$1 = {
   install: install$1,
   start: start$1,
   state: {
-    update
+    update: update$1
   }
 };
 
@@ -63537,7 +63537,7 @@ let isUpdatingState = false; // Guard to prevent infinite loops
  * Called when application state changes
  * @param {ApplicationState} state
  */
-async function update(state) {
+async function update$1(state) {
   // Store state reference for internal use
   pluginState = state;
   
@@ -64205,14 +64205,18 @@ const api = {
  */
 const plugin = {
   name: "heartbeat",
-  deps: ["logger", "client", "fileselection", "dialog", "authentication"],
-  install
+  deps: ["logger", "client", "authentication"],
+  install,
+  state: {
+    update
+  }
 };
 
 // Internal state
 let heartbeatInterval = null;
 let lockTimeoutSeconds = 60;
 let editorReadOnlyState;
+let currentState = null;
 
 /**
  * Runs when the main app starts
@@ -64221,6 +64225,15 @@ let editorReadOnlyState;
 async function install(state) {
   api$h.debug(`Installing plugin "${plugin.name}"`);
   // Plugin installation complete - actual start happens via API
+}
+
+/**
+ * Handles state updates
+ * @param {ApplicationState} state
+ */
+async function update(state) {
+  // Store current state for use in interval callbacks
+  currentState = state;
 }
 
 /**
@@ -64248,9 +64261,15 @@ function start(state, timeoutSeconds = 60) {
 
   // Start the heartbeat interval
   heartbeatInterval = setInterval(async () => {
+    // Use current state instead of stale state from closure
+    if (!currentState) {
+      api$h.debug("Skipping heartbeat: no current state available");
+      return;
+    }
+    
     const filePath = String(ui$1.toolbar.xml.value);
     const reasonsToSkip = {
-      "No user is logged in": state.user === null,
+      "No user is logged in": currentState.user === null,
       "No file path specified": !filePath
     };
 
@@ -64263,7 +64282,7 @@ function start(state, timeoutSeconds = 60) {
 
     try {
       let heartbeatResponse = null;
-      if (!state.editorReadOnly) {
+      if (!currentState.editorReadOnly) {
         api$h.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
         heartbeatResponse = await api$b.sendHeartbeat(filePath);
       }
@@ -64273,21 +64292,21 @@ function start(state, timeoutSeconds = 60) {
       const cacheStatus = heartbeatResponse?.cache_status || await api$b.getCacheStatus();
       if (cacheStatus.dirty) {
         api$h.debug("File data cache is dirty, reloading file list");
-        await api$a.reload(state, { refresh: true });
+        await api$a.reload(currentState, { refresh: true });
       }
 
       // If we are here, the request was successful. Check if we were offline before.
-      if (state.offline) {
+      if (currentState.offline) {
         api$h.info("Connection restored.");
         notify("Connection restored.");
-        await updateState(state, { offline: false, editorReadOnly: editorReadOnlyState });
+        await updateState(currentState, { offline: false, editorReadOnly: editorReadOnlyState });
       }
     } catch (error) {
       console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
       // Handle different types of errors
       if (error instanceof TypeError) {
         // This is likely a network error (client is offline)
-        if (state.offline) {
+        if (currentState.offline) {
           // we are still offline
           const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`;
           api$h.warn(message);
@@ -64296,13 +64315,13 @@ function start(state, timeoutSeconds = 60) {
         }
         api$h.warn("Connection lost.");
         notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
-        editorReadOnlyState = state.editorReadOnly;
-        await updateState(state, { offline: true, editorReadOnly: true });
+        editorReadOnlyState = currentState.editorReadOnly;
+        await updateState(currentState, { offline: true, editorReadOnly: true });
       } else if (error.statusCode === 409 || error.statusCode === 423) {
         // Lock was lost or taken by another user
         api$h.critical("Lock lost for file: " + filePath);
         api$d.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-        await updateState(state, { editorReadOnly: true });
+        await updateState(currentState, { editorReadOnly: true });
       } else if (error.statusCode === 504) {
         api$h.warn("Temporary connection failure, will try again...");
       } else if (error.statusCode === 403) {
@@ -64310,10 +64329,10 @@ function start(state, timeoutSeconds = 60) {
         api$3.logout();
       } else {
         // Another server-side error occurred
-        if (state.webdavEnabled) {
+        if (currentState.webdavEnabled) {
           api$h.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
           api$d.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
-          await updateState(state, { webdavEnabled: false });
+          await updateState(currentState, { webdavEnabled: false });
         }
       }
     }
