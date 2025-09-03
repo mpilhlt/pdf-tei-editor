@@ -292,6 +292,229 @@ async function updateState(state, changes={}) {
 }
 
 /**
+ * Utility functions for processing file data across different file selection components
+ * This module provides reusable functionality for filtering, grouping, and processing fileData
+ */
+
+/**
+ * @import { ApplicationState } from '../app.js'
+ */
+
+// Global lookup index for efficient hash-based queries
+let hashLookupIndex = new Map();
+
+/**
+ * Creates a lookup index that maps hash values directly to items
+ * @param {Array} fileData - The file data array
+ * @returns {Map<string, Object>} Map of hash to item with metadata
+ */
+function createHashLookupIndex(fileData) {
+  const index = new Map();
+  
+  fileData.forEach((file) => {
+    // Index PDF hash
+    if (file.pdf && file.pdf.hash) {
+      index.set(file.pdf.hash, {
+        type: 'pdf',
+        item: file.pdf,
+        file: file,
+        label: file.label
+      });
+    }
+    
+    // Index gold entries
+    if (file.gold) {
+      file.gold.forEach((gold) => {
+        if (gold.hash) {
+          index.set(gold.hash, {
+            type: 'gold',
+            item: gold,
+            file: file,
+            label: gold.label || file.label
+          });
+        }
+      });
+    }
+    
+    // Index version entries
+    if (file.versions) {
+      file.versions.forEach((version) => {
+        if (version.hash) {
+          index.set(version.hash, {
+            type: 'version',
+            item: version,
+            file: file,
+            label: version.label || file.label
+          });
+        }
+      });
+    }
+  });
+  
+  // Store globally for use by other functions
+  hashLookupIndex = index;
+  return index;
+}
+
+/**
+ * Gets document title/label from fileData based on any hash (PDF or XML)
+ * @param {string} hash - Hash of any file (PDF, gold, or version)
+ * @returns {string} Document title/label or empty string if not found
+ * @throws {Error} If hash lookup index has not been created
+ */
+function getDocumentTitle(hash) {
+  if (!hash) return '';
+  
+  if (!hashLookupIndex || hashLookupIndex.size === 0) {
+    throw new Error('Hash lookup index not initialized. Call createHashLookupIndex() first.');
+  }
+  
+  const entry = hashLookupIndex.get(hash);
+  return entry?.label || '';
+}
+
+/**
+ * Extracts all unique variants from file data
+ * @param {Array} fileData - The file data array
+ * @returns {Set<string>} Set of unique variant IDs
+ */
+function extractVariants(fileData) {
+  const variants = new Set();
+  
+  fileData.forEach(file => {
+    // Add variant_id from gold entries
+    if (file.gold) {
+      file.gold.forEach(gold => {
+        if (gold.variant_id) {
+          variants.add(gold.variant_id);
+        }
+      });
+    }
+    // Add variant_id from versions
+    if (file.versions) {
+      file.versions.forEach(version => {
+        if (version.variant_id) {
+          variants.add(version.variant_id);
+        }
+      });
+    }
+  });
+  
+  return variants;
+}
+
+/**
+ * Filters file data by variant selection
+ * @param {Array} fileData - The file data array
+ * @param {string|null} variant - Selected variant ("", "none", or variant ID)
+ * @returns {Array} Filtered file data
+ */
+function filterFileDataByVariant(fileData, variant) {
+  if (variant === "none") {
+    // Show only files without variant_id in gold or versions
+    return fileData.filter(file => {
+      const hasGoldVariant = file.gold && file.gold.some(g => !!g.variant_id);
+      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
+      return !hasGoldVariant && !hasVersionVariant;
+    });
+  } else if (variant && variant !== "") {
+    // Show only files with the selected variant_id (in gold or versions)
+    return fileData.filter(file => {
+      const matchesGold = file.gold && file.gold.some(g => g.variant_id === variant);
+      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
+      return matchesGold || matchesVersion;
+    });
+  }
+  // If variant is "" (All), show all files
+  return fileData;
+}
+
+/**
+ * Filters file data by label text search
+ * @param {Array} fileData - The file data array
+ * @param {string} searchText - Text to search for in labels
+ * @returns {Array} Filtered file data
+ */
+function filterFileDataByLabel(fileData, searchText) {
+  if (!searchText || searchText.trim() === '') {
+    return fileData;
+  }
+  
+  const search = searchText.toLowerCase();
+  return fileData.filter(file => 
+    file.label && file.label.toLowerCase().includes(search)
+  );
+}
+
+/**
+ * Groups file data by collection
+ * @param {Array} fileData - The file data array
+ * @returns {Object} Grouped files by collection name
+ */
+function groupFilesByCollection(fileData) {
+  return fileData.reduce((groups, file) => {
+    const collection_name = file.collection;
+    (groups[collection_name] = groups[collection_name] || []).push(file);
+    return groups;
+  }, {});
+}
+
+/**
+ * Filters versions and gold entries by variant
+ * @param {Object} file - File object containing versions and gold
+ * @param {string|null} variant - Selected variant
+ * @returns {Object} Object with filtered versions and gold arrays
+ */
+function filterFileContentByVariant(file, variant) {
+  let versionsToShow = file.versions || [];
+  let goldToShow = file.gold || [];
+  
+  if (variant === "none") {
+    // Show only entries without variant_id
+    versionsToShow = file.versions ? file.versions.filter(version => !version.variant_id) : [];
+    goldToShow = file.gold ? file.gold.filter(gold => !gold.variant_id) : [];
+  } else if (variant && variant !== "") {
+    // Show only entries with the selected variant_id
+    versionsToShow = file.versions ? file.versions.filter(version => version.variant_id === variant) : [];
+    goldToShow = file.gold ? file.gold.filter(gold => gold.variant_id === variant) : [];
+  }
+  // If variant is "" (All), show all entries (already assigned above)
+  
+  return { versionsToShow, goldToShow };
+}
+
+/**
+ * Finds a matching gold file based on variant selection
+ * @param {Object} file - File object containing gold entries
+ * @param {string|null} variant - Selected variant
+ * @returns {Object|null} Matching gold entry or null
+ */
+function findMatchingGold(file, variant) {
+  if (!file.gold) return null;
+  
+  if (variant === "none") {
+    // Find gold without variant_id
+    return file.gold.find(gold => !gold.variant_id) || null;
+  } else if (variant && variant !== "") {
+    // Find gold with matching variant_id
+    return file.gold.find(gold => gold.variant_id === variant) || null;
+  } else {
+    // No variant filter - use first gold file
+    return file.gold[0] || null;
+  }
+}
+
+/**
+ * Finds a file object by PDF hash
+ * @param {Array} fileData - The file data array  
+ * @param {string} pdfHash - Hash of the PDF file
+ * @returns {Object|null} File object or null if not found
+ */
+function findFileByPdfHash(fileData, pdfHash) {
+  return fileData.find(file => file.pdf.hash === pdfHash) || null;
+}
+
+/**
  * This plugin provides logging endpoints and an API to invoke them. The implementation uses
  * console.* methods
  */
@@ -13235,6 +13458,12 @@ class StatusBar extends HTMLElement {
           white-space: nowrap;
         }
 
+        /* Special styling for title widgets to allow expansion */
+        ::slotted(.title-widget) {
+          flex-grow: 1;
+          min-width: 0;
+        }
+
         /* Dynamic overflow hiding - applied via JavaScript */
         ::slotted([data-overflow-hidden]) {
           display: none !important;
@@ -14393,7 +14622,7 @@ class StatusText extends HTMLElement {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          max-width: 200px;
+          max-width: 100%;
         }
 
         :host([clickable]) {
@@ -16336,8 +16565,9 @@ class PDFJSViewer {
 
   /**
    * An array of {page, positions} objects with the best matches to the last search()
+   * @type {object[]}
    */
-  bestMatches = null;
+  bestMatches = [];
 
   /**
    * The index of the currently highlighted best match
@@ -16346,7 +16576,7 @@ class PDFJSViewer {
 
   /**
    * Constructor for the PDFJSViewer class.
-   * @param {string} iframeId - The ID of the iframe element containing the PDF.js viewer.
+   * @param {string} containerDivId - The ID of the iframe element containing the PDF.js viewer.
    * @throws {Error} If the iframe element is not found.
    */
   constructor(containerDivId) {
@@ -16401,7 +16631,7 @@ class PDFJSViewer {
    */
   async isReady() {
     if (this.isReadyFlag) {
-      return; // Already ready, resolve immediately
+      return this.PDFViewerApplication; // Already ready, resolve immediately
     }
 
     if (!this.initializePromise) {
@@ -16410,7 +16640,7 @@ class PDFJSViewer {
           console.log("PDF.js viewer loaded in iframe, initializing...");
           try {
             this.iframeWindow = this.iframe.contentWindow;
-            this.PDFViewerApplication = this.iframeWindow.PDFViewerApplication;
+            this.PDFViewerApplication = this.iframeWindow?.['PDFViewerApplication'];
             this.pdfViewer = this.PDFViewerApplication.pdfViewer;
             this.pdfLinkService = this.PDFViewerApplication.pdfLinkService;
             this.findController = this.PDFViewerApplication.findController;
@@ -16441,7 +16671,7 @@ class PDFJSViewer {
 
         // remove pdf.js's saved state since it interferes 
         window.addEventListener('beforeunload', () => localStorage.removeItem('pdfjs.history'));
-        const file = this.pdfPath ? this.pdfPath : '/empty.pdf';
+        const file =  '/empty.pdf';
         this.iframe.src = `/pdfjs/web/viewer.html?file=${file}#pagemode=none`;
       });
     }
@@ -16459,7 +16689,6 @@ class PDFJSViewer {
    * @throws {Error} If there is an error loading the PDF in the iframe.
    */
   async load(pdfPath) {
-    pdfPath = pdfPath || this.pdfPath;
     if (!pdfPath) {
       throw new Error("No PDF path has been given.");
     }
@@ -16474,12 +16703,13 @@ class PDFJSViewer {
 
     this.loadPromise = new Promise(async (resolve, reject) => {
       try {
-        this.pdfDoc = await this.iframeWindow.pdfjsLib.getDocument(pdfPath).promise;
+        // @ts-ignore
+        this.pdfDoc = await this.iframeWindow?.pdfjsLib.getDocument(pdfPath).promise;
         this.pdfViewer.setDocument(this.pdfDoc);
         this.pdfLinkService.setDocument(this.pdfDoc, null);
         console.log("PDF loaded successfully.");
         this.isLoadedFlag = true;
-        resolve();
+        resolve(true);
       } catch (error) {
         reject(error);
       }
@@ -16570,7 +16800,7 @@ class PDFJSViewer {
       }
       
       // Clear best matches
-      this.bestMatches = null;
+      this.bestMatches = [];
       this.matchIndex = 0;
       
       this.isLoadedFlag = false;
@@ -16647,7 +16877,7 @@ class PDFJSViewer {
             }
             this.scrollToBestMatch().catch(reject);
           }
-          resolve();
+          resolve([]);
         }, 100);
       },
         { once: true } // Remove the event listener after the first event
@@ -16670,7 +16900,7 @@ class PDFJSViewer {
    * @param {number} index The index of the best match found, defaults to 0
    */
   async scrollToBestMatch(index = 0) {
-    if (!this.bestMatches) {
+    if (this.bestMatches.length === 0) {
       throw new Error("No best matches - do a search first");
     }
 
@@ -16716,9 +16946,9 @@ class PDFJSViewer {
           this.findController._selected.pageIdx = pageIndex;
           this.findController.scrollMatchIntoView({ element, pageIndex, matchIndex });
         } catch (error) {
-          reject("Error computing the best match:", error.message);
+          reject("Error computing the best match:" + error.message);
         }
-        resolve();
+        resolve(true);
       }, 100);
     })
   }
@@ -16791,6 +17021,12 @@ class PDFJSViewer {
 //
 
 /**
+ * PDF viewer headerbar navigation properties
+ * @typedef {object} pdfViewerHeaderbarPart
+ * @property {HTMLElement} titleWidget - The document title widget
+ */
+
+/**
  * PDF viewer statusbar navigation properties
  * @typedef {object} pdfViewerStatusbarPart
  * @property {HTMLElement} searchSwitch - The autosearch toggle switch
@@ -16799,6 +17035,7 @@ class PDFJSViewer {
 /**
  * PDF viewer navigation properties
  * @typedef {object} pdfViewerPart
+ * @property {UIPart<StatusBar, pdfViewerHeaderbarPart>} headerbar - The PDF viewer headerbar
  * @property {UIPart<StatusBar, pdfViewerStatusbarPart>} statusbar - The PDF viewer statusbar
  */
 
@@ -16812,6 +17049,7 @@ const pdfViewer = new PDFJSViewer('pdf-viewer');
 pdfViewer.hide();
 
 let currentFile;
+let titleWidget$1;
 
 /**
  * plugin object
@@ -16835,6 +17073,18 @@ async function install$h(state) {
   await pdfViewer.isReady();
   api$h.info("PDF Viewer ready.");
   pdfViewer.show();
+  
+  // Add title widget to PDF viewer headerbar
+  const headerBar = ui$1.pdfViewer.headerbar;
+  titleWidget$1 = PanelUtils.createText({
+    text: '',
+    // <sl-icon name="file-pdf"></sl-icon>
+    icon: 'file-pdf',
+    variant: 'neutral',
+    name: 'titleWidget'
+  });
+  titleWidget$1.classList.add('title-widget');
+  headerBar.add(titleWidget$1, 'left', 1);
   
   // Add autosearch switch to PDF viewer statusbar
   const statusBar = ui$1.pdfViewer.statusbar;
@@ -16867,6 +17117,19 @@ async function update$d(state) {
         api$h.warn("Error clearing PDF viewer:", error.message);
       }
     }
+  }
+  
+  // Update title widget with document title
+  if (titleWidget$1 && state.pdf) {
+    try {
+      const title = getDocumentTitle(state.pdf);
+      titleWidget$1.text = title || 'PDF Document';
+    } catch (error) {
+      api$h.warn("Could not get document title:", error.message);
+      titleWidget$1.text = 'PDF Document';
+    }
+  } else if (titleWidget$1) {
+    titleWidget$1.text = '';
   }
 }
 
@@ -45767,7 +46030,7 @@ function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
     spaceIndentations.sort((a, b) => a - b);
 
     if (spaceIndentations.length === 1) {
-      return spaceIndentations[0];
+      return " ".repeat(spaceIndentations[0]);
     }
 
     // Heuristic: Find the greatest common divisor (GCD) of the indentation differences.
@@ -47838,6 +48101,12 @@ class NavXmlEditor extends XMLEditor {
 //
 
 /**
+ * XML editor headerbar navigation properties
+ * @typedef {object} xmlEditorHeaderbarPart
+ * @property {StatusText} titleWidget - The document title widget
+ */
+
+/**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
  * @property {StatusText} readOnlyStatus - The read-only status widget
@@ -47848,6 +48117,7 @@ class NavXmlEditor extends XMLEditor {
 /**
  * XML editor navigation properties
  * @typedef {object} xmlEditorPart
+ * @property {UIPart<StatusBar, xmlEditorHeaderbarPart>} headerbar - The XML editor headerbar
  * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
  */
 
@@ -47857,7 +48127,9 @@ class NavXmlEditor extends XMLEditor {
  */
 const xmlEditor = new NavXmlEditor('codemirror-container');
 
-// Status widgets for XML editor statusbar
+// Status widgets for XML editor headerbar and statusbar
+/** @type {StatusText} */
+let titleWidget;
 /** @type {StatusText} */
 let readOnlyStatusWidget;
 /** @type {StatusText} */
@@ -47889,6 +48161,16 @@ const plugin$h = {
  */
 async function install$g(state) {
   api$h.debug(`Installing plugin "${plugin$h.name}"`);
+
+  // Widget for the headerbar
+  titleWidget = PanelUtils.createText({
+    text: '',
+    // <sl-icon name="file-earmark-text"></sl-icon>
+    icon: 'file-earmark-text',
+    variant: 'neutral',
+    name: 'titleWidget'
+  });
+  titleWidget.classList.add('title-widget');
 
   // Widgets for the statusbar
   
@@ -47926,6 +48208,9 @@ async function install$g(state) {
   statusSeparator = PanelUtils.createSeparator({
     variant: 'dotted'
   });
+
+  // Add title widget to headerbar
+  ui$1.xmlEditor.headerbar.add(titleWidget, 'left', 1);
 
   // Add widgets to right side of statusbar (higher priority = more to the right)
   ui$1.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1);  // leftmost - indent to left of position  
@@ -48018,6 +48303,22 @@ async function update$c(state) {
   [readOnlyStatusWidget, cursorPositionWidget, 
     indentationStatusWidget, teiHeaderToggleWidget]
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none');
+
+  // Update title widget with document title
+  if (titleWidget && state.xml) {
+    try {
+      const title = getDocumentTitle(state.xml);
+      titleWidget.text = title || 'XML Document';
+      titleWidget.style.display = 'inline-flex';
+    } catch (error) {
+      api$h.warn("Could not get document title:", error.message);
+      titleWidget.text = 'XML Document';
+      titleWidget.style.display = 'inline-flex';
+    }
+  } else if (titleWidget) {
+    titleWidget.text = '';
+    titleWidget.style.display = 'none';
+  }
 
   if (!state.xml) {
     xmlEditor.clear();
@@ -50029,156 +50330,6 @@ async function onChangeVariantSelection(state) {
 }
 
 /**
- * Utility functions for processing file data across different file selection components
- * This module provides reusable functionality for filtering, grouping, and processing fileData
- */
-
-/**
- * @import { ApplicationState } from '../app.js'
- */
-
-/**
- * Extracts all unique variants from file data
- * @param {Array} fileData - The file data array
- * @returns {Set<string>} Set of unique variant IDs
- */
-function extractVariants(fileData) {
-  const variants = new Set();
-  
-  fileData.forEach(file => {
-    // Add variant_id from gold entries
-    if (file.gold) {
-      file.gold.forEach(gold => {
-        if (gold.variant_id) {
-          variants.add(gold.variant_id);
-        }
-      });
-    }
-    // Add variant_id from versions
-    if (file.versions) {
-      file.versions.forEach(version => {
-        if (version.variant_id) {
-          variants.add(version.variant_id);
-        }
-      });
-    }
-  });
-  
-  return variants;
-}
-
-/**
- * Filters file data by variant selection
- * @param {Array} fileData - The file data array
- * @param {string|null} variant - Selected variant ("", "none", or variant ID)
- * @returns {Array} Filtered file data
- */
-function filterFileDataByVariant(fileData, variant) {
-  if (variant === "none") {
-    // Show only files without variant_id in gold or versions
-    return fileData.filter(file => {
-      const hasGoldVariant = file.gold && file.gold.some(g => !!g.variant_id);
-      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
-      return !hasGoldVariant && !hasVersionVariant;
-    });
-  } else if (variant && variant !== "") {
-    // Show only files with the selected variant_id (in gold or versions)
-    return fileData.filter(file => {
-      const matchesGold = file.gold && file.gold.some(g => g.variant_id === variant);
-      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
-      return matchesGold || matchesVersion;
-    });
-  }
-  // If variant is "" (All), show all files
-  return fileData;
-}
-
-/**
- * Filters file data by label text search
- * @param {Array} fileData - The file data array
- * @param {string} searchText - Text to search for in labels
- * @returns {Array} Filtered file data
- */
-function filterFileDataByLabel(fileData, searchText) {
-  if (!searchText || searchText.trim() === '') {
-    return fileData;
-  }
-  
-  const search = searchText.toLowerCase();
-  return fileData.filter(file => 
-    file.label && file.label.toLowerCase().includes(search)
-  );
-}
-
-/**
- * Groups file data by collection
- * @param {Array} fileData - The file data array
- * @returns {Object} Grouped files by collection name
- */
-function groupFilesByCollection(fileData) {
-  return fileData.reduce((groups, file) => {
-    const collection_name = file.collection;
-    (groups[collection_name] = groups[collection_name] || []).push(file);
-    return groups;
-  }, {});
-}
-
-/**
- * Filters versions and gold entries by variant
- * @param {Object} file - File object containing versions and gold
- * @param {string|null} variant - Selected variant
- * @returns {Object} Object with filtered versions and gold arrays
- */
-function filterFileContentByVariant(file, variant) {
-  let versionsToShow = file.versions || [];
-  let goldToShow = file.gold || [];
-  
-  if (variant === "none") {
-    // Show only entries without variant_id
-    versionsToShow = file.versions ? file.versions.filter(version => !version.variant_id) : [];
-    goldToShow = file.gold ? file.gold.filter(gold => !gold.variant_id) : [];
-  } else if (variant && variant !== "") {
-    // Show only entries with the selected variant_id
-    versionsToShow = file.versions ? file.versions.filter(version => version.variant_id === variant) : [];
-    goldToShow = file.gold ? file.gold.filter(gold => gold.variant_id === variant) : [];
-  }
-  // If variant is "" (All), show all entries (already assigned above)
-  
-  return { versionsToShow, goldToShow };
-}
-
-/**
- * Finds a matching gold file based on variant selection
- * @param {Object} file - File object containing gold entries
- * @param {string|null} variant - Selected variant
- * @returns {Object|null} Matching gold entry or null
- */
-function findMatchingGold(file, variant) {
-  if (!file.gold) return null;
-  
-  if (variant === "none") {
-    // Find gold without variant_id
-    return file.gold.find(gold => !gold.variant_id) || null;
-  } else if (variant && variant !== "") {
-    // Find gold with matching variant_id
-    return file.gold.find(gold => gold.variant_id === variant) || null;
-  } else {
-    // No variant filter - use first gold file
-    return file.gold[0] || null;
-  }
-}
-
-/**
- * Finds a file object by PDF hash
- * @param {Array} fileData - The file data array  
- * @param {string} pdfHash - Hash of the PDF file
- * @returns {Object|null} File object or null if not found
- */
-function findFileByPdfHash(fileData, pdfHash) {
-  return fileData.find(file => file.pdf.hash === pdfHash) || null;
-}
-
-/**
  * File selection drawer plugin - replacement for selectbox-based file selection
  * Uses a SlDrawer with SlTree for hierarchical file selection
  */
@@ -50519,10 +50670,10 @@ async function selectCurrentStateItem(state, fileTree) {
   if (itemToSelect) {
     // Clear any existing selection first
     const currentSelection = fileTree.querySelectorAll('sl-tree-item[selected]');
-    currentSelection.forEach(item => item.selected = false);
+    currentSelection.forEach(item => /** @type {SlTreeItem} */ (item).selected = false);
     
     // Select the item
-    itemToSelect.selected = true;
+    /** @type {SlTreeItem} */ (itemToSelect).selected = true;
   }
 }
 
@@ -63988,6 +64139,11 @@ async function reloadFileData(state, options = {}) {
   let data = await api$b.getFileList(null, options.refresh);
   if (!data || data.length === 0) {
     api$d.error("No files found");
+  }
+  // Create hash lookup index when fileData is loaded
+  if (data && data.length > 0) {
+    api$h.debug('Creating hash lookup index for file data');
+    createHashLookupIndex(data);
   }
   // Store fileData in state and propagate it
   updateState(state, {fileData:data});
