@@ -238,11 +238,11 @@ var pluginManager = {
 /**
  * Invoke an endpoint on all registered plugins with timeout support
  * @param {string} endpoint - The endpoint string to invoke
- * @param {any} param - Parameter to pass to the endpoint
+ * @param {any} [param] - Optional parameter to pass to the endpoint
  * @param {Object} options - Options object with timeout
  * @returns {Promise<any[]>} Array of settled results from all plugins
  */
-async function invoke(endpoint, param, options = {}) {
+async function invoke(endpoint, param=null, options = {}) {
   // get all promises (or sync results) from the endpoints
   const promises = pluginManager.invoke(endpoint, param);
     // Set up a timeout mechanism so that the app doesn't hang if a promise does not resolve quickly or ever
@@ -270,9 +270,6 @@ async function invoke(endpoint, param, options = {}) {
     clearTimeout(timeoutId);
   }
 }
-
-// Note: updateState has been moved to modules/state-utils.js for better state management
-// This file now only contains plugin utilities
 
 /**
  * State management utilities for immutable state updates with history tracking
@@ -364,12 +361,6 @@ async function updateState(currentState, changes = {}) {
     return await invoke(endpoints.state.update, currentState);
   }
   
-  // Notify plugins of specific property changes
-  for (const key of changedKeys) {
-    const capitalizedKey = key[0].toUpperCase() + key.slice(1);
-    await invoke(`state.change${capitalizedKey}`, newState);
-  }
-  
   // Notify all plugins of state update
   return await invoke(endpoints.state.update, newState);
 }
@@ -384,7 +375,7 @@ async function updateState(currentState, changes = {}) {
 function hasStateChanged(state, ...keys) {
   if (!state.previousState) return true; // First state, consider all keys changed
   
-  return keys.some(key => state[key] !== state.previousState[key]);
+  return keys.some(key => state[key] !== state.previousState?.[key]);
 }
 
 /**
@@ -394,11 +385,15 @@ function hasStateChanged(state, ...keys) {
  * @returns {Array<keyof ApplicationState>} Array of keys that have changed
  */
 function getChangedStateKeys(state) {
-  if (!state.previousState) return Object.keys(state).filter(key => key !== 'previousState');
-  
-  return Object.keys(state).filter(key => 
-    key !== 'previousState' && state[key] !== state.previousState[key]
-  );
+  let result; 
+  if (!state.previousState) {
+    result = Object.keys(state).filter(key => key !== 'previousState');
+  } else {
+    result = Object.keys(state).filter(key => 
+      key !== 'previousState' && state[key] !== state.previousState?.[key]
+    );
+  }
+  return /** @type {Array<keyof ApplicationState>} */ (result) 
 }
 
 /**
@@ -17324,7 +17319,7 @@ async function update$f(state) {
       try {
         await pdfViewer.clear();
       } catch (error) {
-        api$h.warn("Error clearing PDF viewer:", error.message);
+        api$h.warn("Error clearing PDF viewer:" + error.message);
       }
     }
   }
@@ -17335,7 +17330,7 @@ async function update$f(state) {
       const title = getDocumentTitle(state.pdf);
       titleWidget$1.text = title || 'PDF Document';
     } catch (error) {
-      api$h.warn("Could not get document title:", error.message);
+      api$h.warn("Could not get document title:"+ error.message);
       titleWidget$1.text = 'PDF Document';
     }
   } else if (titleWidget$1) {
@@ -48338,7 +48333,7 @@ class NavXmlEditor extends XMLEditor {
 const xmlEditor = new NavXmlEditor('codemirror-container');
 
 // Current state for use in event handlers
-let currentState$8 = null;
+let currentState$a = null;
 
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
@@ -48437,8 +48432,8 @@ async function install$g(state) {
   xmlEditor.on("selectionChanged", data => {
     xmlEditor.whenReady().then(() => {
       // Use currentState from the update method
-      if (currentState$8) {
-        onSelectionChange(currentState$8);
+      if (currentState$a) {
+        onSelectionChange(currentState$a);
       }
     });
     updateCursorPosition();
@@ -48482,7 +48477,7 @@ async function install$g(state) {
 
   // Save automatically when XML becomes well-formed again
   xmlEditor.on("editorXmlWellFormed", () => {
-    saveIfDirty$1(currentState$8);
+    saveIfDirty$1(currentState$a);
   });
 
   // Add widget to toggle <teiHeader> visibility
@@ -48518,7 +48513,7 @@ async function install$g(state) {
  */
 async function update$e(state) {
   // Store current state for use in event handlers
-  currentState$8 = state;
+  currentState$a = state;
 
   [readOnlyStatusWidget, cursorPositionWidget,
     indentationStatusWidget, teiHeaderToggleWidget]
@@ -49576,12 +49571,16 @@ const plugin$f = {
  * @param {ApplicationState} state 
  */
 async function update$c(state) {
+  console.log('DEBUG client update - received state:', state);
+  console.log('DEBUG client update - current sessionId before:', sessionId);
   if (hasStateChanged(state, 'sessionId')) {
     sessionId = state.sessionId;
+    console.log('DEBUG client update - sessionId changed, new value:', sessionId);
     api$h.debug(`Setting session id to ${sessionId}`);
+  } else {
+    console.log('DEBUG client update - sessionId unchanged:', sessionId);
   }
-  //console.warn(plugin.name,"done")
-  return state.sessionId
+  return sessionId
 }
 
 /**
@@ -49610,6 +49609,8 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     options.body = JSON.stringify(body);
   }
 
+  console.log('DEBUG callApi - making request to:', url, 'with sessionId:', sessionId);
+  
   // function to send the request which can be repeatedly called in case of a timeout
   const sendRequest = async () => {
 
@@ -49686,10 +49687,13 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
  * Logs in a user
  * @param {string} username
  * @param {string} passwd_hash
- * @returns {Promise<any>}
+ * @returns {Promise<import('./authentication.js').UserData>}
  */
 async function login(username, passwd_hash) {
-  return await callApi('/auth/login', 'POST', { username, passwd_hash });
+  console.log('DEBUG client login - attempting login with username:', username);
+  const result = await callApi('/auth/login', 'POST', { username, passwd_hash });
+  console.log('DEBUG client login - login result:', result);
+  return result;
 }
 
 /**
@@ -49720,6 +49724,7 @@ async function getFileList(variant = null, refresh = false) {
   const params = {};
   if (variant !== null) params.variant = variant;
   if (refresh) params.refresh = 'true';
+  // @ts-ignore
   const queryString = new URLSearchParams(params).toString();
   const url = '/files/list' + (queryString ? '?' + queryString : '');
   return await callApi(url, 'GET');
@@ -50149,8 +50154,8 @@ async function install$e(state) {
       }
       
       
-      if (currentState$7) {
-        await handler(currentState$7);
+      if (currentState$9) {
+        await handler(currentState$9);
       } else {
         console.warn(`${select.name} selection ignored: no current state available`);
       }
@@ -50174,7 +50179,7 @@ async function install$e(state) {
  */
 async function update$b(state) {
   // Store current state for use in event handlers
-  currentState$7 = state;
+  currentState$9 = state;
   
   // Note: Don't mutate state directly in update() - that would cause infinite loops
   // The state.collection should be managed by other functions that call updateState()
@@ -50212,7 +50217,7 @@ async function reload(state, options = {}) {
 
 let variants;
 let collections;
-let currentState$7 = null;
+let currentState$9 = null;
 let isUpdatingProgrammatically$1 = false;
 
 /**
@@ -50609,7 +50614,7 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 // Internal state
 let currentLabelFilter = '';
 let needsTreeUpdate = false;
-let currentState$6 = null;
+let currentState$8 = null;
 let isUpdatingProgrammatically = false;
 
 //
@@ -50660,8 +50665,8 @@ async function install$d(state) {
     
     
     // Use currentState instead of stale installation-time state
-    if (currentState$6) {
-      onVariantChange(currentState$6);
+    if (currentState$8) {
+      onVariantChange(currentState$8);
     } else {
       console.warn("Variant change ignored: no current state available");
     }
@@ -50670,8 +50675,8 @@ async function install$d(state) {
   // Handle label filter changes
   ui$1.fileDrawer.labelFilter.addEventListener('sl-input', () => {
     // Use currentState instead of stale installation-time state
-    if (currentState$6) {
-      onLabelFilterChange(currentState$6);
+    if (currentState$8) {
+      onLabelFilterChange(currentState$8);
     } else {
       console.warn("Label filter change ignored: no current state available");
     }
@@ -50689,8 +50694,8 @@ async function install$d(state) {
     
     
     // Use currentState instead of stale installation-time state
-    if (currentState$6) {
-      onFileTreeSelection(event, currentState$6);
+    if (currentState$8) {
+      onFileTreeSelection(event, currentState$8);
     } else {
       console.warn("File tree selection ignored: no current state available");
     }
@@ -50705,8 +50710,8 @@ async function open$2() {
   ui$1.fileDrawer?.show();
   
   // Update tree if needed when opening
-  if (needsTreeUpdate && currentState$6?.fileData) {
-    await populateFileTree(currentState$6);
+  if (needsTreeUpdate && currentState$8?.fileData) {
+    await populateFileTree(currentState$8);
     needsTreeUpdate = false;
   }
 }
@@ -50725,7 +50730,7 @@ function close$2() {
  */
 async function update$a(state) {
   // Store current state for lazy loading
-  currentState$6 = state;
+  currentState$8 = state;
   
   // Check if relevant state properties have changed
   if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData') && state.fileData) {
@@ -51647,7 +51652,7 @@ const plugin$c = {
 };
 
 // Current state for use in event handlers
-let currentState$5 = null;
+let currentState$7 = null;
 
 //
 // UI
@@ -51691,10 +51696,10 @@ async function install$c(state) {
 
   // add event listeners
   ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => {
-    if (currentState$5) extractFromNewPdf(currentState$5);
+    if (currentState$7) extractFromNewPdf(currentState$7);
   });
   ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => {
-    if (currentState$5) extractFromCurrentPDF(currentState$5);
+    if (currentState$7) extractFromCurrentPDF(currentState$7);
   });
 }
 
@@ -51703,7 +51708,7 @@ async function install$c(state) {
  */
 async function update$9(state) {
   // Store current state for use in event handlers
-  currentState$5 = state;
+  currentState$7 = state;
   
   // @ts-ignore
   ui$1.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline); 
@@ -52291,6 +52296,7 @@ const api$7 = {
 
 /**
  * component plugin
+ * @type {Plugin}
  */
 const plugin$b = {
   name: "services",
@@ -52303,7 +52309,7 @@ const plugin$b = {
 // Status widget for saving progress
 let savingStatusWidget = null;
 // Current state for use in event handlers
-let currentState$4 = null;
+let currentState$6 = null;
 
 //
 // UI
@@ -52396,38 +52402,35 @@ async function install$b(state) {
 
   // save a revision
   da.saveRevision.addEventListener('click', () => {
-    if (currentState$4) saveRevision(currentState$4);
+    if (currentState$6) saveRevision(currentState$6);
   });
   // enable save button on dirty editor
-  xmlEditor.on(
-    XMLEditor.EVENT_EDITOR_READY,
-    () => da.saveRevision.disabled = false
-  );
+  xmlEditor.on("editorReady",() => {da.saveRevision.disabled = false;});
 
   // delete
   da.deleteCurrentVersion.addEventListener("click", () => {
-    if (currentState$4) deleteCurrentVersion(currentState$4);
+    if (currentState$6) deleteCurrentVersion(currentState$6);
   });
   da.deleteAllVersions.addEventListener('click', () => {
-    if (currentState$4) deleteAllVersions(currentState$4);
+    if (currentState$6) deleteAllVersions(currentState$6);
   });
   da.deleteAll.addEventListener('click', () => {
-    if (currentState$4) deleteAll(currentState$4);
+    if (currentState$6) deleteAll(currentState$6);
   });
 
   // new version
   da.createNewVersion.addEventListener("click", () => {
-    if (currentState$4) createNewVersion(currentState$4);
+    if (currentState$6) createNewVersion(currentState$6);
   });
 
   // download
   da.download.addEventListener("click", () => {
-    if (currentState$4) downloadXml(currentState$4);
+    if (currentState$6) downloadXml(currentState$6);
   });
 
   // upload
   da.upload.addEventListener("click", () => {
-    if (currentState$4) uploadXml(currentState$4);
+    if (currentState$6) uploadXml(currentState$6);
   });
 
   // === TEI button group ===
@@ -52443,7 +52446,7 @@ async function install$b(state) {
  */
 async function update$8(state) {
   // Store current state for use in event handlers
-  currentState$4 = state;
+  currentState$6 = state;
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -52570,7 +52573,9 @@ async function load$1(state, { xml, pdf }) {
   if (xml) {
     state.xml = xml;
     // call asynchronously, don't block the editor
-    startAutocomplete().then(result => result && notify("Autocomplete is available"));
+    startAutocomplete().then(result => {
+      result && notify("Autocomplete is available");
+    });
   }
 
   // Set collection based on loaded documents if not already set
@@ -52945,7 +52950,7 @@ async function onClickValidateButton() {
  * @param {ApplicationState} state
  */
 async function saveRevision(state) {
-
+  // @ts-ignore
   const dialog = ui$1.newRevisionChangeDialog;
   dialog.changeDesc.value = "Corrections";
   try {
@@ -53014,7 +53019,7 @@ async function saveRevision(state) {
  * @param {ApplicationState} state
  */
 async function createNewVersion(state) {
-
+  // @ts-ignore
   const newVersiondialog = ui$1.newVersionDialog;
   try {
     const user = api$3.getUser();
@@ -53216,7 +53221,7 @@ let currentUser = null;
 let cachedExtractors = null;
 
 /** @type {ApplicationState} */
-let currentState$3;
+let currentState$5;
 
 
 /**
@@ -53243,7 +53248,7 @@ async function install$a(state) {
 
   // listen for changes in the selectbox
   xp.addEventListener('change', async () => {
-    await updateState(currentState$3, { xpath: xp.value });
+    await updateState(currentState$5, { xpath: xp.value });
   });
 
   // Edit XPath button functionality removed for now
@@ -53252,29 +53257,29 @@ async function install$a(state) {
   const fp = ui$1.floatingPanel;
 
   // node navigation
-  fp.previousNode.addEventListener('click', () => changeNodeIndex(currentState$3, -1));
-  fp.nextNode.addEventListener('click', () => changeNodeIndex(currentState$3, 1));
+  fp.previousNode.addEventListener('click', () => changeNodeIndex(currentState$5, -1));
+  fp.nextNode.addEventListener('click', () => changeNodeIndex(currentState$5, 1));
 
   // diff navigation
   fp.diffNavigation.prevDiff.addEventListener('click', () => xmlEditor.goToPreviousDiff());
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff());
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
     xmlEditor.rejectAllDiffs();
-    api$7.removeMergeView(currentState$3);
+    api$7.removeMergeView(currentState$5);
   });
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
     xmlEditor.acceptAllDiffs();
-    api$7.removeMergeView(currentState$3);
+    api$7.removeMergeView(currentState$5);
   });
 
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex); // allow to input node index
 
   // configure "status" buttons
   $$('.node-status').forEach(btn => btn.addEventListener('click', async evt => {
-    if (!currentState$3.xpath) {
+    if (!currentState$5.xpath) {
       return
     }
-    xmlEditor.selectByXpath(currentState$3.xpath);
+    xmlEditor.selectByXpath(currentState$5.xpath);
     if (xmlEditor.selectedNode) {
       $$('.node-status').forEach(btn => btn.disabled = true);
       await xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status);
@@ -53288,7 +53293,7 @@ async function install$a(state) {
  * @param {ApplicationState} state 
  */
 async function update$7(state) {
-  currentState$3 = state;
+  currentState$5 = state;
   
   // Cache extractor list when user actually changes (not just stale initialization)
   let extractorsJustCached = false;
@@ -53376,7 +53381,7 @@ async function changeNodeIndex(state, delta) {
   if (index < 0) index = size; 
   if (index >= size) index = 1;
   const xpath = normativeXpath + `[${index}]`;
-  await updateState(currentState$3, { xpath });
+  await updateState(currentState$5, { xpath });
 }
 
 
@@ -62603,7 +62608,7 @@ const plugin$6 = {
 };
 
 // Current state for use in event handlers  
-let currentState$2 = null;
+let currentState$4 = null;
 
 //
 // UI
@@ -62645,7 +62650,7 @@ async function install$6(state) {
 
   // add event listener
   moveBtn.addEventListener('click', () => {
-    if (currentState$2) showMoveFilesDialog(currentState$2);
+    if (currentState$4) showMoveFilesDialog(currentState$4);
   });
   ui$1.moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
@@ -62726,7 +62731,7 @@ async function showMoveFilesDialog(state) {
  */
 async function update$5(state) {
   // Store current state for use in event handlers
-  currentState$2 = state;
+  currentState$4 = state;
 }
 
 /**
@@ -62759,6 +62764,9 @@ const plugin$5 = {
 let spinner;
 let validationStatusWidget = null;
 
+/**@type {ApplicationState} */
+let currentState$3;
+
 /**
  * Invoked for plugin installation
  * @param {ApplicationState} state 
@@ -62780,10 +62788,17 @@ async function install$5(state) {
 }
 
 /**
+ * Observes state changes for UI updates
+ * @param {ApplicationState} state
+ */
+async function update$4(state) {
+  currentState$3 = state;
+}
+
+/**
 * Starts the application, configures plugins and the UI
-* @param {ApplicationState} state
 */
-async function start$2(state) {
+async function start$2() {
 
   // async operations
   try {
@@ -62799,20 +62814,20 @@ async function start$2(state) {
     ui$1.spinner.show('Loading documents, please wait...');
 
     // update the file lists
-    await api$a.reload(state, { refresh: true });
+    await reloadFileData(currentState$3, { refresh: true });
 
     // disable regular validation so that we have more control over it
     api$c.configure({ mode: "off" });
 
     // get document paths from URL hash 
     // @ts-ignore
-    const pdf = state.pdf || null;
-    const xml = state.xml || null;
-    const diff = state.diff;
+    const pdf = currentState$3.pdf || null;
+    const xml = currentState$3.xml || null;
+    const diff = currentState$3.diff;
 
     if (pdf !== null) {
       // lod the documents
-      await api$7.load(state, { pdf, xml, diff });
+      await api$7.load(currentState$3, { pdf, xml, diff });
     }
 
     // two alternative initial states:
@@ -62821,7 +62836,7 @@ async function start$2(state) {
     if (diff && diff !== xml) {
       // a) load the diff view
       try {
-        await api$7.showMergeView(state, diff);
+        await api$7.showMergeView(currentState$3, diff);
       } catch (error) {
         api$h.warn("Error loading diff view: " + error.message);
       }
@@ -62842,13 +62857,13 @@ async function start$2(state) {
       const xpath = UrlHash.get("xpath") || ui$1.floatingPanel.xpath.value;
 
       // update the UI
-      await updateState(state, { xpath });
+      await updateState(currentState$3, { xpath });
 
       // synchronize in the background
-      api$2.syncFiles(state).then(async (summary) => {
+      api$2.syncFiles(currentState$3).then(async (summary) => {
         api$h.info(summary);
         if (summary && !summary.skipped) {
-          await reloadFileData(state, { refresh: true });
+          await reloadFileData(currentState$3, { refresh: true });
         }
       });
     }
@@ -62857,7 +62872,7 @@ async function start$2(state) {
     configureXmlEditor();
 
     // Heartbeat mechanism for file locking and offline detection
-    api.start(state, await api$g.get('heartbeat.interval', 10));
+    api.start(currentState$3, await api$g.get('heartbeat.interval', 10));
 
     // finish initialization
     ui$1.spinner.hide();
@@ -62960,9 +62975,9 @@ async function saveIfDirty() {
       api$h.debug(`File has not changed`);
     } else {
       api$h.debug(`Saved file ${result.hash}`);
-      if (result.hash !== state.xml) {
+      if (result.hash !== currentState$3.xml) {
         // Update state to use new hash
-        await updateState(state, { xml: result.hash });
+        await updateState(currentState$3, { xml: result.hash });
       }
     }
   } catch (error) {
@@ -62987,18 +63002,6 @@ async function searchNodeContents() {
     await api$7.searchNodeContentsInPdf(node);
     lastNode = node;
   }
-}
-
-//
-// State Change Handlers
-//
-
-/**
- * Observes state changes for UI updates
- * @param {ApplicationState} state
- */
-async function update$4(state) {
-  // Any UI updates based on state changes would go here
 }
 
 /**
@@ -63028,6 +63031,7 @@ await registerTemplate('logout-button', 'logout-button.html');
  * Public API for the authentication plugin
  */
 const api$3 = {
+  showLoginDialog,
   ensureAuthenticated,
   getUser,
   logout
@@ -63043,17 +63047,13 @@ const plugin$4 = {
   state: {update: update$3}
 };
 
-//
-// State
-//
-
 /**
  * @typedef {Object} UserData 
  * @param {string} username
  * @param {string} fullname
  * @param {string[]} roles
+ * @param {string} [sessionId]
  */
-// Note: user state tracking now handled via state.previousState instead of local variable
 
 //
 // Implementation
@@ -63065,7 +63065,6 @@ const plugin$4 = {
  */
 async function install$4(state) {
   api$h.debug(`Installing plugin "${plugin$4.name}"`);
-  state.user = null;
   
   // Create UI elements
   createFromTemplate('login-dialog', document.body);
@@ -63092,43 +63091,64 @@ async function install$4(state) {
   
   // Add beforeunload handler to save session to URL hash
   window.addEventListener('beforeunload', () => {
-    if (state.sessionId) {
-      UrlHash.set('sessionId', state.sessionId, false);
+    if (currentState$2.sessionId) {
+      UrlHash.set('sessionId', currentState$2.sessionId, false);
     }
   });
 }
 
 /**
- * The current user
- * @type {UserData}
+ * The current state
+ * @type {ApplicationState}
  */
-let user;
+let currentState$2;
 
 /**
  * Handles state updates, specifically for updating the UI based on user login status.
  * @param {ApplicationState} state
  */
 async function update$3(state) {
+  console.log('DEBUG authentication update - received state:', state);
+  console.log('DEBUG authentication update - previous currentState:', currentState$2);
+  currentState$2 = state;
+  console.log('DEBUG authentication update - updated currentState:', currentState$2);
   if (hasStateChanged(state, 'user')) {
-    user = state.user;
-    ui$1.toolbar.logoutButton.disabled = user === null;
+    console.log('DEBUG authentication update - user changed:', state.user);
+    ui$1.toolbar.logoutButton.disabled = currentState$2.user === null;
+  }
+  if (hasStateChanged(state, 'sessionId')) {
+    console.log('DEBUG authentication update - sessionId changed:', state.sessionId);
   }
 }
 
 /**
  * Checks if the user is authenticated. If not, it shows a login dialog
  * and returns a promise that resolves only after a successful login.
- * @returns {Promise<Object>} the userdata
+ * @returns {Promise<UserData>} the userdata
  */
 async function ensureAuthenticated() {
+  let userData;
   try {
-    const userData = await api$b.status();
-    await updateState(state, { user: userData });
-    return userData
+    userData = await api$b.status();
+    console.log('DEBUG ensureAuthenticated - user from server', userData);
+    console.log('DEBUG ensureAuthenticated - current state before update:', currentState$2);
   } catch (error) {
+    console.log('DEBUG ensureAuthenticated - not authenticated, showing login dialog');
     // Not authenticated, proceed to show login dialog
-    return _showLoginDialog();
+    userData = await _showLoginDialog();
   }
+  console.log('DEBUG ensureAuthenticated - updating state with userData:', userData);
+  // Only update sessionId if userData contains one (from login), not from status check
+  const stateUpdate = { user: userData };
+  if (userData.sessionId) {
+    console.log('DEBUG ensureAuthenticated - userData has sessionId, updating it:', userData.sessionId);
+    stateUpdate.sessionId = userData.sessionId;
+  } else {
+    console.log('DEBUG ensureAuthenticated - userData has no sessionId, keeping existing sessionId:', currentState$2.sessionId);
+  }
+  await updateState(currentState$2, stateUpdate);
+  console.log('DEBUG ensureAuthenticated - state updated, new currentState:', currentState$2);
+  return userData
 }
 
 /**
@@ -63136,34 +63156,49 @@ async function ensureAuthenticated() {
  * @returns {UserData|null}
  */
 function getUser() {
-  return user
+  return currentState$2.user
+}
+
+/**
+ * Shows the login dialog and mutates the state if 
+ * login was successful
+ */
+async function showLoginDialog() {
+  try {
+    const userData = await _showLoginDialog();
+    console.log('DEBUG showLoginDialog - got userData:', userData);
+    console.log('DEBUG showLoginDialog - currentState before update:', currentState$2);
+    await updateState(currentState$2, {sessionId: userData.sessionId, user: userData});
+    console.log('DEBUG showLoginDialog - state updated, new currentState:', currentState$2);
+  } catch (error) {
+    api$h.error("Error logging in: " + error.message);
+  }
 }
 
 /**
  * Creates and displays the login dialog.
- * @returns {Promise<Object>} A promise that resolves on successful login with the user data.
+ * @returns {Promise<UserData>} A promise that resolves on successful login with the user data.
  * @private
  */
-function _showLoginDialog() {
+async function _showLoginDialog() {
   const dialog = ui$1.loginDialog;
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     dialog.submit.addEventListener('click', async () => {
       const username = dialog.username.value;
       const password = dialog.password.value;
       dialog.message.textContent = '';
       const passwd_hash = await _hashPassword(password);
       try {
-        const response = await api$b.login(username, passwd_hash);
-        // Server now returns sessionId in response
-        const { sessionId, ...userData } = response;
-        await updateState(state, { user: userData, sessionId });
+        const userData = await api$b.login(username, passwd_hash);
+        console.log('DEBUG _showLoginDialog - login successful, userData:', userData);
         dialog.hide();
         dialog.username.value = "";
         dialog.password.value = "";
-        resolve(userData); // Resolve the promise on successful login
+        resolve(userData); 
       } catch (error) {
         dialog.message.textContent = 'Wrong username or password';
         api$h.error('Login failed:', error.message);
+        reject(error);
       }
     }, {once:true});
     dialog.show();
@@ -63177,18 +63212,17 @@ function _showLoginDialog() {
 async function logout() {
   try {
     await api$b.logout();
-    await updateState(state, { 
+    await updateState(currentState$2, { 
       user: null, 
       sessionId: null,
       xml: null,
       pdf: null,
       diff: null
     });
-    // Remove session from URL hash if present
-    UrlHash.remove('sessionId');
-    await _showLoginDialog();
+    // re-login
+    await showLoginDialog();
   } catch (error) {
-    api$h.error('Logout failed:', error);
+    api$h.error('Logout failed:' +  error);
   }
 }
 
@@ -63230,7 +63264,6 @@ async function _hashPassword(password) {
  * @property {UIPart<SlButtonGroup, documentActionsPart>} documentActions - Document action buttons (added by services plugin)
  * @property {UIPart<SlButtonGroup, teiServicesPart>} teiActions - TEI service buttons (added by services plugin)
  * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
- * @property {UIPart<SlButtonGroup, syncActionsPart>} syncActions - Sync action buttons (added by sync plugin)
  * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
  * @property {UIPart<SlButton, fileDrawerTriggerPart>} fileDrawerTrigger - File drawer trigger button (added by file-selection-drawer plugin)
  */
@@ -63253,8 +63286,7 @@ const plugin$3 = {
  */
 async function install$3(state) {
   api$h.debug(`Installing plugin "${plugin$3.name}"`);
-  // Currently, the toolbar is just a static container div.
-  // Future implementation will provide dynamic toolbar management similar to StatusBar.
+  // the toolbar is defined in index.html, no need to install it
 }
 
 /**
@@ -64210,7 +64242,9 @@ const plugin = {
 let heartbeatInterval = null;
 let lockTimeoutSeconds = 60;
 let editorReadOnlyState;
-let currentState = null;
+
+/** @type {ApplicationState} */
+let currentState;
 
 /**
  * Runs when the main app starts
@@ -64383,8 +64417,11 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
  * @property {string|null} collection - The collection the current document is in
  * @property {Array<object>|null} fileData - The file data loaded from the server
  * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
+ * @property {ApplicationState|null} previousState - Links to the previous state object 
  */
+
 /**
+ * The initial application state
  * @type{ApplicationState}
  */
 let state = {
@@ -64400,7 +64437,8 @@ let state = {
   user: null,
   collection: null,
   fileData: null,
-  ext: {}
+  ext: {},
+  previousState: null
 };
 
 /**
@@ -64408,6 +64446,8 @@ let state = {
  * @property {string} name - The name of the plugin
  * @property {string[]} [deps] - The names of the plugins this plugin depends on
  * @property {function(ApplicationState):Promise<*>} [install] - The function to install the plugin
+ * @property {{update: function(ApplicationState):Promise<*>}} [state] - The function to update the plugin
+ * @property {*} [validation]
  */
 
 /** @type {Plugin[]} */
@@ -64469,7 +64509,7 @@ if (urlHashState && Object.keys(urlHashState).length > 0) {
 await updateState(state, {});  
 
 // invoke the "start" endpoint
-await invoke(endpoints.start, state);
+await invoke(endpoints.start);
 
 //
 // Core application functions
