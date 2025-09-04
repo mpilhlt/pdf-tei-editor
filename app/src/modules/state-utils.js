@@ -90,12 +90,6 @@ export async function updateState(currentState, changes = {}) {
     return await invoke(ep.state.update, currentState);
   }
   
-  // Notify plugins of specific property changes
-  for (const key of changedKeys) {
-    const capitalizedKey = key[0].toUpperCase() + key.slice(1);
-    await invoke(`state.change${capitalizedKey}`, newState);
-  }
-  
   // Notify all plugins of state update
   return await invoke(ep.state.update, newState);
 }
@@ -110,7 +104,7 @@ export async function updateState(currentState, changes = {}) {
 export function hasStateChanged(state, ...keys) {
   if (!state.previousState) return true; // First state, consider all keys changed
   
-  return keys.some(key => state[key] !== state.previousState[key]);
+  return keys.some(key => state[key] !== state.previousState?.[key]);
 }
 
 /**
@@ -120,11 +114,15 @@ export function hasStateChanged(state, ...keys) {
  * @returns {Array<keyof ApplicationState>} Array of keys that have changed
  */
 export function getChangedStateKeys(state) {
-  if (!state.previousState) return Object.keys(state).filter(key => key !== 'previousState');
-  
-  return Object.keys(state).filter(key => 
-    key !== 'previousState' && state[key] !== state.previousState[key]
-  );
+  let result; 
+  if (!state.previousState) {
+    result = Object.keys(state).filter(key => key !== 'previousState');
+  } else {
+    result = Object.keys(state).filter(key => 
+      key !== 'previousState' && state[key] !== state.previousState?.[key]
+    );
+  }
+  return /** @type {Array<keyof ApplicationState>} */ (result) 
 }
 
 /**

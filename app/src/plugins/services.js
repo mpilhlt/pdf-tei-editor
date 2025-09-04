@@ -3,8 +3,8 @@
  */
 
 /** 
- * @import { ApplicationState } from '../app.js' 
- * @import { SlButton, SlDialog, SlInput } from '../ui.js'
+ * @import { ApplicationState, Plugin } from '../app.js' 
+ * @import { SlButton, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  * @import { UserData } from '../plugins/authentication.js'
  */
@@ -43,6 +43,7 @@ const api = {
 
 /**
  * component plugin
+ * @type {Plugin}
  */
 const plugin = {
   name: "services",
@@ -154,10 +155,7 @@ async function install(state) {
     if (currentState) saveRevision(currentState);
   });
   // enable save button on dirty editor
-  xmlEditor.on(
-    XMLEditor.EVENT_EDITOR_READY,
-    () => da.saveRevision.disabled = false
-  );
+  xmlEditor.on("editorReady",() => {da.saveRevision.disabled = false});
 
   // delete
   da.deleteCurrentVersion.addEventListener("click", () => {
@@ -325,7 +323,9 @@ async function load(state, { xml, pdf }) {
   if (xml) {
     state.xml = xml
     // call asynchronously, don't block the editor
-    startAutocomplete().then(result => result && notify("Autocomplete is available"))
+    startAutocomplete().then(result => {
+      result && notify("Autocomplete is available")
+    })
   }
 
   // Set collection based on loaded documents if not already set
@@ -718,7 +718,7 @@ function getIdFromUser(userData) {
  * @param {ApplicationState} state
  */
 async function saveRevision(state) {
-
+  // @ts-ignore
   const dialog = ui.newRevisionChangeDialog;
   dialog.changeDesc.value = "Corrections"
   try {
@@ -787,7 +787,7 @@ async function saveRevision(state) {
  * @param {ApplicationState} state
  */
 async function createNewVersion(state) {
-
+  // @ts-ignore
   const newVersiondialog = ui.newVersionDialog;
   try {
     const user = authentication.getUser()

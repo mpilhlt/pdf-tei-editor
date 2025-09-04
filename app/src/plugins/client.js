@@ -143,12 +143,16 @@ export default plugin
  * @param {ApplicationState} state 
  */
 async function update(state) {
+  console.log('DEBUG client update - received state:', state)
+  console.log('DEBUG client update - current sessionId before:', sessionId)
   if (hasStateChanged(state, 'sessionId')) {
     sessionId = state.sessionId;
+    console.log('DEBUG client update - sessionId changed, new value:', sessionId)
     logger.debug(`Setting session id to ${sessionId}`)
+  } else {
+    console.log('DEBUG client update - sessionId unchanged:', sessionId)
   }
-  //console.warn(plugin.name,"done")
-  return state.sessionId
+  return sessionId
 }
 
 /**
@@ -177,6 +181,8 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     options.body = JSON.stringify(body);
   }
 
+  console.log('DEBUG callApi - making request to:', url, 'with sessionId:', sessionId)
+  
   // function to send the request which can be repeatedly called in case of a timeout
   const sendRequest = async () => {
 
@@ -253,10 +259,13 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
  * Logs in a user
  * @param {string} username
  * @param {string} passwd_hash
- * @returns {Promise<any>}
+ * @returns {Promise<import('./authentication.js').UserData>}
  */
 async function login(username, passwd_hash) {
-  return await callApi('/auth/login', 'POST', { username, passwd_hash });
+  console.log('DEBUG client login - attempting login with username:', username)
+  const result = await callApi('/auth/login', 'POST', { username, passwd_hash });
+  console.log('DEBUG client login - login result:', result)
+  return result;
 }
 
 /**
@@ -287,6 +296,7 @@ async function getFileList(variant = null, refresh = false) {
   const params = {};
   if (variant !== null) params.variant = variant;
   if (refresh) params.refresh = 'true';
+  // @ts-ignore
   const queryString = new URLSearchParams(params).toString();
   const url = '/files/list' + (queryString ? '?' + queryString : '');
   return await callApi(url, 'GET');

@@ -3,18 +3,17 @@
  */
 
 import pluginManager from "./plugin.js"
-import ep from '../endpoints.js'
 
 export {pluginManager}
 
 /**
  * Invoke an endpoint on all registered plugins with timeout support
  * @param {string} endpoint - The endpoint string to invoke
- * @param {any} param - Parameter to pass to the endpoint
+ * @param {any} [param] - Optional parameter to pass to the endpoint
  * @param {Object} options - Options object with timeout
  * @returns {Promise<any[]>} Array of settled results from all plugins
  */
-export async function invoke(endpoint, param, options = {}) {
+export async function invoke(endpoint, param=null, options = {}) {
   // get all promises (or sync results) from the endpoints
   const promises = pluginManager.invoke(endpoint, param)
     // Set up a timeout mechanism so that the app doesn't hang if a promise does not resolve quickly or ever
@@ -42,6 +41,3 @@ export async function invoke(endpoint, param, options = {}) {
     clearTimeout(timeoutId);
   }
 }
-
-// Note: updateState has been moved to modules/state-utils.js for better state management
-// This file now only contains plugin utilities

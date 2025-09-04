@@ -11,8 +11,8 @@
  */
 import ui from '../ui.js'
 import {
-  updateState, logger, services, dialog, validation, floatingPanel, xmlEditor, fileselection, client,
-  config, authentication, state, heartbeat, reloadFileData, sync
+  updateState, logger, services, dialog, validation, floatingPanel, xmlEditor,
+  config, authentication, heartbeat, reloadFileData, sync
 } from '../app.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { Spinner, updateUi } from '../ui.js'
@@ -46,6 +46,9 @@ export default plugin
 let spinner
 let validationStatusWidget = null
 
+/**@type {ApplicationState} */
+let currentState;
+
 /**
  * Invoked for plugin installation
  * @param {ApplicationState} state 
@@ -67,10 +70,17 @@ async function install(state) {
 }
 
 /**
+ * Observes state changes for UI updates
+ * @param {ApplicationState} state
+ */
+async function update(state) {
+  currentState = state
+}
+
+/**
 * Starts the application, configures plugins and the UI
-* @param {ApplicationState} state
 */
-async function start(state) {
+async function start() {
 
   // async operations
   try {
@@ -86,20 +96,20 @@ async function start(state) {
     ui.spinner.show('Loading documents, please wait...')
 
     // update the file lists
-    await fileselection.reload(state, { refresh: true })
+    await reloadFileData(currentState, { refresh: true })
 
     // disable regular validation so that we have more control over it
     validation.configure({ mode: "off" })
 
     // get document paths from URL hash 
     // @ts-ignore
-    const pdf = state.pdf || null
-    const xml = state.xml || null
-    const diff = state.diff
+    const pdf = currentState.pdf || null
+    const xml = currentState.xml || null
+    const diff = currentState.diff
 
     if (pdf !== null) {
       // lod the documents
-      await services.load(state, { pdf, xml, diff })
+      await services.load(currentState, { pdf, xml, diff })
     }
 
     // two alternative initial states:
@@ -108,7 +118,7 @@ async function start(state) {
     if (diff && diff !== xml) {
       // a) load the diff view
       try {
-        await services.showMergeView(state, diff)
+        await services.showMergeView(currentState, diff)
       } catch (error) {
         logger.warn("Error loading diff view: " + error.message)
       }
@@ -129,13 +139,13 @@ async function start(state) {
       const xpath = UrlHash.get("xpath") || ui.floatingPanel.xpath.value
 
       // update the UI
-      await updateState(state, { xpath })
+      await updateState(currentState, { xpath })
 
       // synchronize in the background
-      sync.syncFiles(state).then(async (summary) => {
+      sync.syncFiles(currentState).then(async (summary) => {
         logger.info(summary)
         if (summary && !summary.skipped) {
-          await reloadFileData(state, { refresh: true })
+          await reloadFileData(currentState, { refresh: true })
         }
       })
     }
@@ -144,7 +154,7 @@ async function start(state) {
     configureXmlEditor()
 
     // Heartbeat mechanism for file locking and offline detection
-    heartbeat.start(state, await config.get('heartbeat.interval', 10));
+    heartbeat.start(currentState, await config.get('heartbeat.interval', 10));
 
     // finish initialization
     ui.spinner.hide()
@@ -247,9 +257,9 @@ async function saveIfDirty() {
       logger.debug(`File has not changed`)
     } else {
       logger.debug(`Saved file ${result.hash}`)
-      if (result.hash !== state.xml) {
+      if (result.hash !== currentState.xml) {
         // Update state to use new hash
-        await updateState(state, { xml: result.hash })
+        await updateState(currentState, { xml: result.hash })
       }
     }
   } catch (error) {
@@ -274,17 +284,5 @@ async function searchNodeContents() {
     await services.searchNodeContentsInPdf(node)
     lastNode = node
   }
-}
-
-//
-// State Change Handlers
-//
-
-/**
- * Observes state changes for UI updates
- * @param {ApplicationState} state
- */
-async function update(state) {
-  // Any UI updates based on state changes would go here
 }
 

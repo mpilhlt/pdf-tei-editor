@@ -9,7 +9,7 @@
 
 import ui, { SlDialog, updateUi } from '../ui.js';
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
-import { updateState, hasStateChanged, logger, client, state } from '../app.js';
+import { updateState, hasStateChanged, logger, client } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
 
 // 
@@ -34,6 +34,7 @@ await registerTemplate('logout-button', 'logout-button.html');
  * Public API for the authentication plugin
  */
 const api = {
+  showLoginDialog,
   ensureAuthenticated,
   getUser,
   logout
@@ -51,17 +52,13 @@ const plugin = {
 
 export { api, plugin };
 
-//
-// State
-//
-
 /**
  * @typedef {Object} UserData 
  * @param {string} username
  * @param {string} fullname
  * @param {string[]} roles
+ * @param {string} [sessionId]
  */
-// Note: user state tracking now handled via state.previousState instead of local variable
 
 //
 // Implementation
@@ -73,7 +70,6 @@ export { api, plugin };
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`);
-  state.user = null;
   
   // Create UI elements
   createFromTemplate('login-dialog', document.body);
@@ -100,43 +96,64 @@ async function install(state) {
   
   // Add beforeunload handler to save session to URL hash
   window.addEventListener('beforeunload', () => {
-    if (state.sessionId) {
-      UrlHash.set('sessionId', state.sessionId, false)
+    if (currentState.sessionId) {
+      UrlHash.set('sessionId', currentState.sessionId, false)
     }
   })
 }
 
 /**
- * The current user
- * @type {UserData}
+ * The current state
+ * @type {ApplicationState}
  */
-let user
+let currentState
 
 /**
  * Handles state updates, specifically for updating the UI based on user login status.
  * @param {ApplicationState} state
  */
 async function update(state) {
+  console.log('DEBUG authentication update - received state:', state)
+  console.log('DEBUG authentication update - previous currentState:', currentState)
+  currentState = state
+  console.log('DEBUG authentication update - updated currentState:', currentState)
   if (hasStateChanged(state, 'user')) {
-    user = state.user
-    ui.toolbar.logoutButton.disabled = user === null
+    console.log('DEBUG authentication update - user changed:', state.user)
+    ui.toolbar.logoutButton.disabled = currentState.user === null
+  }
+  if (hasStateChanged(state, 'sessionId')) {
+    console.log('DEBUG authentication update - sessionId changed:', state.sessionId)
   }
 }
 
 /**
  * Checks if the user is authenticated. If not, it shows a login dialog
  * and returns a promise that resolves only after a successful login.
- * @returns {Promise<Object>} the userdata
+ * @returns {Promise<UserData>} the userdata
  */
 async function ensureAuthenticated() {
+  let userData;
   try {
-    const userData = await client.status();
-    await updateState(state, { user: userData });
-    return userData
+    userData = await client.status();
+    console.log('DEBUG ensureAuthenticated - user from server', userData)
+    console.log('DEBUG ensureAuthenticated - current state before update:', currentState)
   } catch (error) {
+    console.log('DEBUG ensureAuthenticated - not authenticated, showing login dialog')
     // Not authenticated, proceed to show login dialog
-    return _showLoginDialog();
+    userData = await _showLoginDialog();
   }
+  console.log('DEBUG ensureAuthenticated - updating state with userData:', userData)
+  // Only update sessionId if userData contains one (from login), not from status check
+  const stateUpdate = { user: userData }
+  if (userData.sessionId) {
+    console.log('DEBUG ensureAuthenticated - userData has sessionId, updating it:', userData.sessionId)
+    stateUpdate.sessionId = userData.sessionId
+  } else {
+    console.log('DEBUG ensureAuthenticated - userData has no sessionId, keeping existing sessionId:', currentState.sessionId)
+  }
+  await updateState(currentState, stateUpdate)
+  console.log('DEBUG ensureAuthenticated - state updated, new currentState:', currentState)
+  return userData
 }
 
 /**
@@ -144,34 +161,49 @@ async function ensureAuthenticated() {
  * @returns {UserData|null}
  */
 function getUser() {
-  return user
+  return currentState.user
+}
+
+/**
+ * Shows the login dialog and mutates the state if 
+ * login was successful
+ */
+async function showLoginDialog() {
+  try {
+    const userData = await _showLoginDialog()
+    console.log('DEBUG showLoginDialog - got userData:', userData)
+    console.log('DEBUG showLoginDialog - currentState before update:', currentState)
+    await updateState(currentState, {sessionId: userData.sessionId, user: userData})
+    console.log('DEBUG showLoginDialog - state updated, new currentState:', currentState)
+  } catch (error) {
+    logger.error("Error logging in: " + error.message)
+  }
 }
 
 /**
  * Creates and displays the login dialog.
- * @returns {Promise<Object>} A promise that resolves on successful login with the user data.
+ * @returns {Promise<UserData>} A promise that resolves on successful login with the user data.
  * @private
  */
-function _showLoginDialog() {
+async function _showLoginDialog() {
   const dialog = ui.loginDialog
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     dialog.submit.addEventListener('click', async () => {
       const username = dialog.username.value;
       const password = dialog.password.value;
       dialog.message.textContent = '';
       const passwd_hash = await _hashPassword(password);
       try {
-        const response = await client.login(username, passwd_hash);
-        // Server now returns sessionId in response
-        const { sessionId, ...userData } = response;
-        await updateState(state, { user: userData, sessionId });
+        const userData = await client.login(username, passwd_hash);
+        console.log('DEBUG _showLoginDialog - login successful, userData:', userData)
         dialog.hide();
         dialog.username.value = ""
         dialog.password.value = ""
-        resolve(userData); // Resolve the promise on successful login
+        resolve(userData); 
       } catch (error) {
         dialog.message.textContent = 'Wrong username or password';
         logger.error('Login failed:', error.message);
+        reject(error);
       }
     }, {once:true});
     dialog.show();
@@ -185,18 +217,17 @@ function _showLoginDialog() {
 async function logout() {
   try {
     await client.logout();
-    await updateState(state, { 
+    await updateState(currentState, { 
       user: null, 
       sessionId: null,
       xml: null,
       pdf: null,
       diff: null
     });
-    // Remove session from URL hash if present
-    UrlHash.remove('sessionId')
-    await _showLoginDialog();
+    // re-login
+    await showLoginDialog();
   } catch (error) {
-    logger.error('Logout failed:', error);
+    logger.error('Logout failed:' +  error);
   }
 }
 

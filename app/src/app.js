@@ -60,8 +60,11 @@ import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat
  * @property {string|null} collection - The collection the current document is in
  * @property {Array<object>|null} fileData - The file data loaded from the server
  * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
+ * @property {ApplicationState|null} previousState - Links to the previous state object 
  */
+
 /**
+ * The initial application state
  * @type{ApplicationState}
  */
 let state = {
@@ -77,7 +80,8 @@ let state = {
   user: null,
   collection: null,
   fileData: null,
-  ext: {}
+  ext: {},
+  previousState: null
 }
 
 /**
@@ -85,6 +89,8 @@ let state = {
  * @property {string} name - The name of the plugin
  * @property {string[]} [deps] - The names of the plugins this plugin depends on
  * @property {function(ApplicationState):Promise<*>} [install] - The function to install the plugin
+ * @property {{update: function(ApplicationState):Promise<*>}} [state] - The function to update the plugin
+ * @property {*} [validation]
  */
 
 /** @type {Plugin[]} */
@@ -146,7 +152,7 @@ if (urlHashState && Object.keys(urlHashState).length > 0) {
 await updateState(state, {})  
 
 // invoke the "start" endpoint
-await invoke(ep.start, state)
+await invoke(ep.start)
 
 //
 // Core application functions

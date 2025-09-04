@@ -37,7 +37,9 @@ export default plugin
 let heartbeatInterval = null;
 let lockTimeoutSeconds = 60;
 let editorReadOnlyState;
-let currentState = null;
+
+/** @type {ApplicationState} */
+let currentState;
 
 /**
  * Runs when the main app starts

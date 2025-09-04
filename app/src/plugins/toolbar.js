@@ -11,11 +11,11 @@
  * @import { SlSelect, SlButton, SlButtonGroup, UIPart } from '../ui.js'
  * @import { documentActionsPart, teiServicesPart } from './services.js'
  * @import { extractionActionsPart } from './extraction.js'
- * @import { syncActionsPart } from './sync.js'
  * @import { fileDrawerTriggerPart } from './file-selection-drawer.js'
  */
 
-import { logger } from '../app.js'
+import { logger, hasStateChanged } from '../app.js'
+import ui from '../ui.js'
 
 //
 // UI Parts
@@ -32,7 +32,6 @@ import { logger } from '../app.js'
  * @property {UIPart<SlButtonGroup, documentActionsPart>} documentActions - Document action buttons (added by services plugin)
  * @property {UIPart<SlButtonGroup, teiServicesPart>} teiActions - TEI service buttons (added by services plugin)
  * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
- * @property {UIPart<SlButtonGroup, syncActionsPart>} syncActions - Sync action buttons (added by sync plugin)
  * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
  * @property {UIPart<SlButton, fileDrawerTriggerPart>} fileDrawerTrigger - File drawer trigger button (added by file-selection-drawer plugin)
  */
@@ -58,6 +57,5 @@ export default plugin
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-  // Currently, the toolbar is just a static container div.
-  // Future implementation will provide dynamic toolbar management similar to StatusBar.
+  // the toolbar is defined in index.html, no need to install it
 }
