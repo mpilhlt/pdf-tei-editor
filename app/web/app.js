@@ -15,6 +15,12 @@ const endpoints = {
   start: "start",
 
   /**
+   * Invoked when the application is shutting down (beforeunload).
+   * Function signature: () => void
+   */
+  shutdown: "shutdown",
+
+  /**
    * Logging endpoints
    */
   log: {
@@ -35,22 +41,23 @@ const endpoints = {
   },
   state: {
     /**
-     * This endpoint allows all plugins to react to application state changes
+     * This endpoint allows all plugins to react to application state changes (legacy)
      * Function signature: (state: ApplicationState) => ApplicationState
      */
     update: "state.update",
     
     /**
-     * This endpoint is triggered when the PDF in the application state changes
-     * Function signature: (state: ApplicationState) => Promise<void>
+     * Internal state update for Plugin class instances (new system)
+     * Function signature: (state: ApplicationState) => void
      */
-    changePdf: "state.changePdf",
+    updateInternal: "updateInternalState",
     
     /**
-     * This endpoint is triggered when the XML in the application state changes  
-     * Function signature: (state: ApplicationState) => Promise<void>
+     * State change notification for Plugin class instances (new system)
+     * Function signature: (changedKeys: string[]) => void
      */
-    changeXml: "state.changeXml"
+    onChange: "onStateUpdate",
+
   },
   validation: {
     /**
@@ -79,410 +86,1191 @@ const endpoints = {
 };
 
 /**
- * patched version of https://www.npmjs.com/package/js-plugin
+ * Base Plugin class for class-based plugin architecture
+ * @import { ApplicationState } from '../app.js'
+ * @import { PluginContext } from './plugin-context.js'
  */
 
-var _plugins = [];
-var _byName = {};
-var _cache = {};
-
-// Only support debug mode on browser and node, not web workers.
-var isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
-
-var isNode$1 =
-  typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
-
-var isDebug =
-  (isBrowser && document.location.search.includes('JS_PLUGIN_DEBUG')) ||
-  (isNode$1 && process.env && process.env.JS_PLUGIN_DEBUG);
-
-function _isFunc(o) {
-  return !!(o.constructor && o.call && o.apply);
-}
-
-function _get$1(obj, prop) {
-  var arr = prop.split('.');
-  for (var i = 0; i < arr.length; i++) {
-    if (!(arr[i] in obj)) return undefined;
-    obj = obj[arr[i]];
-  }
-  return obj;
-}
-
-function _has(obj, prop) {
-  var arr = prop.split('.');
-  for (var i = 0; i < arr.length; i++) {
-    if (!(arr[i] in obj)) return undefined;
-    obj = obj[arr[i]];
-  }
-  return true;
-}
-
-// patch: convert to esm export
-var pluginManager = {
-  config: {},
-  register: function (p) {
-    if (!p.name) {
-      console.log('Every plugin should have a name.');
-      console.log(p);
-      throw new Error('Every plugin should have a name.');
+/**
+ * Base class for plugins that provides state management and lifecycle methods
+ */
+class Plugin {
+  /**
+   * @param {PluginContext} context - Plugin context providing controlled access to application services
+   * @param {object} [config] - Plugin configuration
+   * @param {string} [config.name] - Plugin name
+   * @param {string[]} [config.deps] - Plugin dependencies
+   */
+  constructor(context, config = {}) {
+    if (!context) {
+      throw new Error('PluginContext is required for Plugin constructor');
     }
-    if (_byName[p.name]) {
-      throw new Error('Plugin "' + p.name + '" already exits.');
+    this.context = context;
+    this.name = config.name || this.constructor.name.toLowerCase();
+    this.deps = config.deps || [];
+    this.#state = null;
+  }
+
+  /** @type {Map<Function, Plugin>} */
+  static #instances = new Map();
+
+  /**
+   * Create singleton instance of this plugin class
+   * @param {PluginContext} context - Plugin context
+   * @returns {Plugin} The singleton instance
+   */
+  static createInstance(context) {
+    if (!this.#instances.has(this)) {
+      this.#instances.set(this, new this(context));
     }
-    _cache = {};
-    _plugins = _plugins.slice();
-    var pos = _plugins.length;
-    _plugins.forEach((p2, i) => {
-      if (p2.deps && p2.deps.indexOf(p.name) >= 0) {
-        pos = Math.min(pos, i);
+    return this.#instances.get(this) || new this(context);
+  }
+
+  /**
+   * Get singleton instance of this plugin class
+   * @returns {Plugin|null} The singleton instance or null if not created yet
+   */
+  static getInstance() {
+    return this.#instances.get(this) || null;
+  }
+
+  /** @type {ApplicationState|null} */
+  #state = null;
+
+  //
+  // Plugin lifecycle methods (override in subclasses)
+  //
+
+  /**
+   * Plugin installation - override in subclasses
+   * @param {ApplicationState} initialState
+   */
+  async install(initialState) {
+    this.#state = initialState;
+    // Override for initialization logic
+  }
+
+  /**
+   * Plugin initialization - override in subclasses
+   */
+  async initialize() {
+    // Override for initialization logic
+  }  
+
+  /**
+   * Plugin startup - override in subclasses
+   */
+  async start() {
+    // Override for startup logic
+  }
+
+  /**
+   * Plugin (temporary) stop - override in subclasses
+   */
+  async stop() {
+    // Override for startup logic
+  }
+
+  /**
+   * Plugin shutdown - override in subclasses
+   * Called on window beforeunload
+   */
+  async shutdown() {
+    // Override for cleanup logic
+  }
+
+  //
+  // State management
+  //
+
+  /**
+   * React to state changes - override in subclasses
+   * @param {string[]} changedKeys - Keys that changed in the state
+   */
+  async onStateUpdate(changedKeys) {
+    // Override for reactive behavior
+    // Base implementation is empty - no need to call super()
+  }
+
+  //
+  // Internal state management
+  //
+
+  /**
+   * Update internal state reference
+   * @param {ApplicationState} newState
+   */
+  updateInternalState(newState) {
+    this.#state = newState;
+  }
+
+  //
+  // Convenience methods for plugin implementations
+  //
+
+  /**
+   * Read-only access to current state
+   * @returns {ApplicationState|null}
+   */
+  get state() {
+    return this.#state;
+  }
+
+  /**
+   * Dispatch state changes through the plugin context
+   * @param {Partial<ApplicationState>} changes
+   * @returns {Promise<ApplicationState>} New state after changes applied
+   */
+  async dispatchStateChange(changes) {
+    if (!this.#state) {
+      throw new Error(`Plugin ${this.name} attempted to dispatch state before initialization`);
+    }
+    const newState = await this.context.updateState(this.#state, changes);
+    this.#state = newState;
+    return newState;
+  }
+
+  /**
+   * Check if specific state keys have changed
+   * @param {...keyof ApplicationState} keys
+   * @returns {boolean}
+   */
+  hasStateChanged(...keys) {
+    if (!this.#state) {
+      return false;
+    }
+    return this.context.hasStateChanged(this.#state, ...keys);
+  }
+
+  /**
+   * Get all changed state keys
+   * @returns {Array<keyof ApplicationState>}
+   */
+  getChangedStateKeys() {
+    if (!this.#state) {
+      return [];
+    }
+    return this.context.getChangedStateKeys(this.#state);
+  }
+
+  /**
+   * Get endpoint mappings for this plugin
+   * Override in subclasses to provide custom endpoint mappings.
+   * Use `...super.getEndpoints()` to include the base lifecycle endpoints.
+   * 
+   * @example
+   * getEndpoints() {
+   *   return {
+   *     ...super.getEndpoints(),
+   *     'state.update': this.handleStateUpdate.bind(this),
+   *     'validation.validate': this.validate.bind(this)
+   *   };
+   * }
+   * 
+   * @returns {Record<string, Function>} Mapping of endpoint paths to bound methods
+   */
+  getEndpoints() {
+    /** @type {Record<string, Function>} */
+    const endpoints = {};
+    
+    // Standard lifecycle endpoints
+    if (typeof this.install === 'function') {
+      endpoints['install'] = this.install.bind(this);
+    }
+    if (typeof this.start === 'function') {
+      endpoints['start'] = this.start.bind(this);
+    }
+    if (typeof this.shutdown === 'function') {
+      endpoints['shutdown'] = this.shutdown.bind(this);
+    }
+    
+    return endpoints;
+  }
+
+}
+
+/**
+ * Plugin Manager with sophisticated dependency resolution using topological sorting
+ */
+
+
+/**
+ * The minimal plugin configuration object
+ * @typedef {Object} PluginConfig
+ * @property {string} name - Plugin name
+ * @property {string[]} [deps] - Array of plugin names this plugin depends on
+ * @property {any} [initialize] - Optional initialization function 
+ */
+
+/**
+ * Plugin Manager with dependency resolution
+ */
+class PluginManager {
+  constructor(options = {}) {
+    /** @type {Map<string, PluginConfig>} */
+    this.pluginsByName = new Map();
+    
+    /** @type {PluginConfig[]} */
+    this.registeredPlugins = [];
+    
+    /** @type {PluginConfig[]} */
+    this.dependencyOrderedPlugins = [];
+    
+    /** @type {Map<string, PluginConfig[]>} */
+    this.endpointCache = new Map();
+    
+    /** @type {Object} */
+    this.config = {
+      timeout: options.timeout || 2000,
+      throws: options.throws || false
+    };
+    
+    /** @type {boolean} */
+    this.debug = options.debug || false;
+
+  }
+
+  /**
+   * Register a plugin with dependency resolution
+   * @param {PluginConfig|Plugin} plugin - Plugin to register (can be Plugin instance or config object)
+   * @throws {Error} If plugin is invalid or creates circular dependencies
+   */
+  register(plugin) {
+    // Validate plugin
+    if (!plugin || typeof plugin !== 'object') {
+      throw new Error('Plugin must be an object');
+    }
+    
+    // Handle Plugin class instances - convert to plugin object
+    let pluginConfig;
+    if (plugin instanceof Plugin) {
+      if (this.debug) {
+        console.log(`Converting Plugin instance '${plugin.name}' to plugin object`);
       }
-    });
-    _plugins.splice(pos, 0, p);
-    _byName[p.name] = p;
-    if (p.initialize) {
-      p.initialize();
+      pluginConfig = this.convertPluginInstance(plugin);
+    } else {
+      pluginConfig = plugin;
     }
-  },
-
-  unregister: function (name) {
-    var p = _byName[name];
-    if (!p) throw new Error('Plugin "' + name + '" does\'t exist.');
-    var i = _plugins.indexOf(p);
-    if (i === -1)
-      throw new Error(
-        'Plugin "' +
-          name +
-          '" does\'t exist in _plugins but in _byName. This seems to be a bug of js-plugin.'
-      );
-    _cache = {};
-    delete _byName[name];
-    _plugins = _plugins.slice();
-    _plugins.splice(i, 1);
-  },
-
-  getPlugin: function (name) {
-    return _byName[name];
-  },
-
-  getPlugins: function (prop) {
-    if (!prop) {
-      prop = '.';
+    
+    if (!pluginConfig.name || typeof pluginConfig.name !== 'string') {
+      console.error('Invalid plugin:', pluginConfig);
+      throw new Error('Every plugin must have a name property');
     }
-    if (!_cache[prop]) {
-      _cache[prop] = _plugins.filter((p) => {
-        if (p.deps && p.deps.some((dep) => !_byName[dep])) {
-          // If deps not exist, then not load it.
-          const notExistDeps = p.deps.filter((dep) => !_byName[dep]);
-          console.log(
-            `Plugin ${p.name} is not loaded because its deps do not exist: ${notExistDeps}.`
-          );
+    
+    if (this.pluginsByName.has(pluginConfig.name)) {
+      throw new Error(`Plugin "${pluginConfig.name}" is already registered`);
+    }
+
+    // Normalize dependencies
+    const normalizedPlugin = {
+      ...pluginConfig,
+      deps: Array.isArray(pluginConfig.deps) ? pluginConfig.deps : []
+    };
+
+    // Register plugin
+    this.pluginsByName.set(pluginConfig.name, normalizedPlugin);
+    this.registeredPlugins.push(normalizedPlugin);
+
+    // Clear caches
+    this.endpointCache.clear();
+    this.dependencyOrderedPlugins = [];
+
+    // Recompute dependency order
+    this.computeDependencyOrder();
+
+    // Call initialize function if present
+    if (plugin instanceof Plugin) {
+      plugin.initialize();
+    }
+
+    if (this.debug) {
+      console.log(`Registered plugin '${plugin.name}' with dependencies: [${normalizedPlugin.deps.join(', ') || 'none'}]`);
+    }
+  }
+
+  /**
+   * Unregister a plugin
+   * @param {string} pluginName - Name of plugin to unregister
+   * @throws {Error} If plugin doesn't exist
+   */
+  unregister(pluginName) {
+    const plugin = this.pluginsByName.get(pluginName);
+    if (!plugin) {
+      throw new Error(`Plugin "${pluginName}" doesn't exist`);
+    }
+
+    // Remove from all collections
+    this.pluginsByName.delete(pluginName);
+    this.registeredPlugins = this.registeredPlugins.filter(p => p.name !== pluginName);
+    
+    // Clear caches and recompute order
+    this.endpointCache.clear();
+    this.dependencyOrderedPlugins = [];
+    this.computeDependencyOrder();
+  }
+
+  /**
+   * Get a specific plugin by name
+   * @param {string} pluginName - Name of plugin to retrieve
+   * @returns {PluginConfig|undefined} Plugin definition or undefined if not found
+   */
+  getPlugin(pluginName) {
+    return this.pluginsByName.get(pluginName);
+  }
+
+  /**
+   * Get plugins that implement a specific endpoint in dependency order
+   * @param {string} endpoint - Endpoint path (e.g., 'install', 'state.update')
+   * @returns {PluginConfig[]} Array of plugins that implement the endpoint
+   */
+  getPlugins(endpoint = '.') {
+    // Check cache first
+    if (this.endpointCache.has(endpoint)) {
+      return this.endpointCache.get(endpoint) || [];
+    }
+
+    // Filter plugins that have the endpoint and all their dependencies are satisfied
+    const filteredPlugins = this.dependencyOrderedPlugins.filter(plugin => {
+      // Check if any dependencies are missing
+      if (plugin.deps && plugin.deps.length > 0) {
+        const missingDependencies = plugin.deps.filter(depName => !this.pluginsByName.has(depName));
+        if (missingDependencies.length > 0) {
+          console.warn(`Plugin ${plugin.name} is not loaded because its dependencies do not exist: ${missingDependencies.join(', ')}`);
           return false;
         }
-        return prop === '.' ? true : _has(p, prop);
-      });
+      }
+
+      // Check if plugin has the requested endpoint
+      if (endpoint === '.') {
+        return true; // All plugins
+      }
+
+      return this.hasEndpoint(plugin, endpoint);
+    });
+
+    // Cache the result
+    this.endpointCache.set(endpoint, filteredPlugins);
+    return filteredPlugins;
+  }
+
+  /**
+   * Check if a plugin has a specific endpoint
+   * @param {PluginConfig} plugin - Plugin to check
+   * @param {string} endpoint - Endpoint path to check
+   * @returns {boolean} True if plugin has the endpoint
+   * @private
+   */
+  hasEndpoint(plugin, endpoint) {
+    const pathParts = endpoint.split('.');
+    let current = plugin;
+    
+    for (const part of pathParts) {
+      if (!current || typeof current !== 'object' || !(part in current)) {
+        return false;
+      }
+      current = current[part];
     }
-    return _cache[prop];
-  },
-
-  processRawPlugins: function (callback) {
-    // This method allows to process _plugins so that it could
-    // do some unified pre-process before application starts.
-    callback(_plugins);
-    _cache = {};
-  },
-
-  invoke: function (prop, ) {
-    var args = Array.prototype.slice.call(arguments, 1);
-    if (!prop) throw new Error('Invoke on plugin should have prop argument');
-    var noCall = /^!/.test(prop);
-    var throws = this.config.throws || /!$/.test(prop);
-    prop = prop.replace(/^!|!$/g, '');
-    var arr = prop.split('.');
-    arr.pop();
-    var obj = arr.join('.');
-
-    return this.getPlugins(prop).map(function (p) {
-      var method = _get$1(p, prop);
-      if (!_isFunc(method) || noCall) return method;
-      try {
-        isDebug && console.log('Before', p.name, prop, args);
-        return method.apply(_get$1(p, obj), args);
-      } catch (err) {
-        // When a plugin failed, doesn't break the app
-        console.log('Failed to invoke plugin: ' + p.name + '!' + prop);
-        if (throws) throw err;
-        else console.log(err);
-      } finally {
-        isDebug && console.log('After ', p.name, prop, args);
-      }
-      return null;
-    });
-  },
-  sort: function (arr, sortProp) {
-    // A helper method to sort an array according to 'order' (or by sortProp) property of the array element.
-    sortProp = sortProp || 'order';
-    arr.sort((a, b) => {
-      var order1 = a.hasOwnProperty(sortProp) ? a[sortProp] : 1000000;
-      var order2 = b.hasOwnProperty(sortProp) ? b[sortProp] : 1000000;
-      return order1 - order2;
-    });
+    
+    return true;
   }
-};
 
-/**
- * Utility functions for plugin management and state handling
- */
+  /**
+   * Get value at endpoint path in plugin
+   * @param {PluginConfig} plugin - Plugin object
+   * @param {string} endpoint - Endpoint path
+   * @returns {*} Value at endpoint or undefined
+   * @private
+   */
+  getEndpointValue(plugin, endpoint) {
+    const pathParts = endpoint.split('.');
+    let current = plugin;
+    
+    for (const part of pathParts) {
+      if (!current || typeof current !== 'object' || !(part in current)) {
+        return undefined;
+      }
+      current = current[part];
+    }
+    
+    return current;
+  }
 
+  /**
+   * Invoke an endpoint on all plugins that implement it, in dependency order
+   * @param {string} endpoint - Endpoint to invoke
+   * @param {...*} args - Arguments to pass to the endpoint functions
+   * @param {object} [options] - Optional configuration for this invocation
+   * @param {number} [options.timeout] - Timeout override for this invocation
+   * @returns {Promise<any[]>} Array of settled results from plugin endpoints
+   */
+  async invoke(endpoint, ...args) {
+    if (!endpoint) {
+      throw new Error('Invoke requires an endpoint argument');
+    }
 
-/**
- * Invoke an endpoint on all registered plugins with timeout support
- * @param {string} endpoint - The endpoint string to invoke
- * @param {any} [param] - Optional parameter to pass to the endpoint
- * @param {Object} options - Options object with timeout
- * @returns {Promise<any[]>} Array of settled results from all plugins
- */
-async function invoke(endpoint, param=null, options = {}) {
-  // get all promises (or sync results) from the endpoints
-  const promises = pluginManager.invoke(endpoint, param);
-    // Set up a timeout mechanism so that the app doesn't hang if a promise does not resolve quickly or ever
-  const timeout = options.timeout !== undefined ? options.timeout : 2000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, timeout);
-  
-  try {
-    const result = await Promise.allSettled(promises.map(async (promise) => {
+    // Extract options from last argument if it's an options object
+    let options = {};
+    let invokeArgs = args;
+    if (args.length > 0 && 
+        args[args.length - 1] && 
+        typeof args[args.length - 1] === 'object' && 
+        args[args.length - 1].constructor === Object &&
+        'timeout' in args[args.length - 1]) {
+      options = args[args.length - 1];
+      invokeArgs = args.slice(0, -1);
+    }
+
+    // Parse endpoint flags
+    const isNoCall = /^!/.test(endpoint);
+    const shouldThrow = this.config.throws || /!$/.test(endpoint);
+    const cleanEndpoint = endpoint.replace(/^!|!$/g, '');
+    
+    // Get the parent object path for method context
+    const endpointParts = cleanEndpoint.split('.');
+    endpointParts.pop(); // Remove the method name
+    const contextPath = endpointParts.join('.');
+
+    // Get plugins that implement this endpoint
+    const plugins = this.getPlugins(cleanEndpoint);
+
+    // Create promises for each plugin invocation
+    const promises = plugins.map(async plugin => {
+      const method = this.getEndpointValue(plugin, cleanEndpoint);
+      
+      if (typeof method !== 'function' || isNoCall) {
+        return method;
+      }
+
       try {
-        return await promise;
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
-        } else {
-          console.error(`Error in plugin endpoint ${endpoint}:`, error);
+        if (this.debug) {
+          console.log('Before', plugin.name, cleanEndpoint, invokeArgs);
         }
-        throw error;
+        
+        // Get the context object for the method
+        const context = contextPath ? this.getEndpointValue(plugin, contextPath) : plugin;
+        
+        // Invoke the method with proper context
+        const result = method.apply(context, invokeArgs);
+        
+        if (this.debug) {
+          console.log('After', plugin.name, cleanEndpoint, 'completed');
+        }
+        return result;
+      } catch (error) {
+        const errorMessage = `Failed to invoke plugin: ${plugin.name}!${cleanEndpoint}`;
+        console.error(errorMessage, error);
+        
+        if (shouldThrow) {
+          throw error;
+        }
+        
+        return null;
       }
-    }));
-    return result;
-  } finally {
-    clearTimeout(timeoutId);
+    });
+
+    // Set up timeout mechanism
+    const timeout = options.timeout !== undefined ? options.timeout : this.config.timeout;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, timeout);
+
+    try {
+      const result = await Promise.allSettled(promises.map(async (promise) => {
+        try {
+          return await promise;
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
+          } else {
+            console.error(`Error in plugin endpoint ${endpoint}:`, error);
+          }
+          throw error;
+        }
+      }));
+      return result;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
+
+  /**
+   * Compute dependency-resolved plugin order using topological sort
+   * @throws {Error} If circular dependencies are detected
+   * @private
+   */
+  computeDependencyOrder() {
+    const plugins = [...this.registeredPlugins];
+    const resolved = [];
+    const visiting = new Set();
+    const visited = new Set();
+
+    /**
+     * Depth-first search for topological sorting
+     * @param {PluginConfig} plugin - Plugin to visit
+     * @param {string[]} path - Current dependency path (for circular dependency detection)
+     */
+    const visit = (plugin, path = []) => {
+      if (visiting.has(plugin.name)) {
+        const cycle = [...path, plugin.name].join(' → ');
+        throw new Error(`Circular dependency detected: ${cycle}`);
+      }
+      
+      if (visited.has(plugin.name)) {
+        return; // Already processed
+      }
+
+      visiting.add(plugin.name);
+      
+      // Visit all dependencies first
+      for (const depName of plugin.deps || []) {
+        const dependency = this.pluginsByName.get(depName);
+        if (dependency) {
+          visit(dependency, [...path, plugin.name]);
+        }
+        // Missing dependencies are handled in getPlugins()
+      }
+      
+      visiting.delete(plugin.name);
+      visited.add(plugin.name);
+      resolved.push(plugin);
+    };
+
+    // Visit all plugins
+    for (const plugin of plugins) {
+      if (!visited.has(plugin.name)) {
+        visit(plugin);
+      }
+    }
+
+    this.dependencyOrderedPlugins = resolved;
+    
+    // Debug output
+    const pluginNames = resolved.map(p => p.name);
+    console.log(`🔗 Plugin dependency order: ${pluginNames.join(' → ')}`);
+  }
+
+  /**
+   * Sort an array by a property (utility method)
+   * @param {Array} array - Array to sort
+   * @param {string} [sortProperty='order'] - Property to sort by
+   */
+  sort(array, sortProperty = 'order') {
+    array.sort((a, b) => {
+      const orderA = a.hasOwnProperty(sortProperty) ? a[sortProperty] : 1000000;
+      const orderB = b.hasOwnProperty(sortProperty) ? b[sortProperty] : 1000000;
+      return orderA - orderB;
+    });
+  }
+
+  /**
+   * Process raw plugins array (utility method for pre-processing)
+   * @param {Function} callback - Function to process the plugins array
+   */
+  processRawPlugins(callback) {
+    callback(this.registeredPlugins);
+    this.endpointCache.clear();
+    this.computeDependencyOrder();
+  }
+
+  /**
+   * Convert Plugin instance to plugin object using getEndpoints() method
+   * @param {Plugin} pluginInstance - Plugin instance to convert
+   * @returns {Object} Plugin configuration object
+   * @private
+   */
+  convertPluginInstance(pluginInstance) {
+    const pluginObject = {
+      name: pluginInstance.name,
+      deps: [...pluginInstance.deps], // Create a copy to avoid reference issues
+    };
+
+    // Check if Plugin instance has getEndpoints method
+    if (typeof pluginInstance.getEndpoints === 'function') {
+      // Use explicit endpoint mapping
+      const endpoints = pluginInstance.getEndpoints();
+      
+      // Apply endpoint mappings to plugin object using dot notation
+      for (const [endpointPath, method] of Object.entries(endpoints)) {
+        this.setNestedProperty(pluginObject, endpointPath, method);
+      }
+    }
+
+    return pluginObject;
+  }
+
+  /**
+   * Set nested property in object using dot notation path
+   * @param {Object} obj - Object to set property on
+   * @param {string} path - Dot notation path
+   * @param {*} value - Value to set
+   * @private
+   */
+  setNestedProperty(obj, path, value) {
+    const pathParts = path.split('.');
+    let current = obj;
+    
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      const part = pathParts[i];
+      if (!(part in current)) {
+        current[part] = {};
+      }
+      current = current[part];
+    }
+    
+    current[pathParts[pathParts.length - 1]] = value;
+  }
+
 }
 
 /**
- * State management utilities for immutable state updates with history tracking
+ * Pure state management class for immutable state updates with history tracking
  * @import { ApplicationState } from '../app.js'
  */
 
-
-// Maximum number of states to keep in history
-const MAX_STATE_HISTORY = 10;
-
-// Array to track state history for garbage collection
-let stateHistory = [];
+// WeakMap to store state history without creating memory leaks
+const stateHistory = new WeakMap();
 
 /**
- * Internal function to create a new state object with changes applied
- * 
- * @param {ApplicationState} currentState - The current application state  
- * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
- * @returns {{newState: ApplicationState, changedKeys: string[]}} New state and changed keys
+ * StateManager class handles pure state operations without plugin dependencies
  */
-function createStateWithChanges(currentState, changes = {}) {
-  // Create new state object with all current properties
-  const newState = { ...currentState };
-  
-  // Ensure ext object is properly copied (shallow copy for extensions)
-  if (currentState.ext) {
-    newState.ext = { ...currentState.ext };
+class StateManager {
+  constructor() {
+    this.preserveStateEnabled = false;
+    this.persistedStateVars = [];
   }
-  
-  // Apply changes to new state
-  const changedKeys = [];
-  Object.entries(changes).forEach(([key, value]) => {
-    if (currentState[key] !== value) {
-      newState[key] = value;
-      changedKeys.push(key);
-    }
-  });
-  
-  // Add reference to previous state for immediate comparison
-  newState.previousState = currentState;
-  
-  // Add new state to history array
-  stateHistory.push(newState);
-  
-  // Manage history size and garbage collection
-  if (stateHistory.length > MAX_STATE_HISTORY) {
-    // Get the state that will be removed from history
-    const oldestState = stateHistory.shift();
+
+  /**
+   * Internal function to create a new state object with changes applied
+   * 
+   * @param {ApplicationState} currentState - The current application state  
+   * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
+   * @returns {{newState: ApplicationState, changedKeys: string[]}} New state and changed keys
+   */
+  createStateWithChanges(currentState, changes = {}) {
+    // Create new state object with all current properties
+    const newState = { ...currentState };
     
-    // Find the state that points to the oldest state and break the chain
-    const secondOldest = stateHistory[0];
-    if (secondOldest && secondOldest.previousState === oldestState) {
-      secondOldest.previousState = null;
-    }
+    // Track which keys actually changed
+    const changedKeys = [];
     
-    // Clear the oldest state's previousState reference for GC
-    if (oldestState && oldestState.previousState) {
-      oldestState.previousState = null;
-    }
-  }
-  
-  return { newState, changedKeys };
-}
-
-/**
- * Creates a new state object with changes applied (for initialization, does not notify plugins)
- * 
- * @param {ApplicationState} currentState - The current application state
- * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
- * @returns {ApplicationState} New state object with changes applied
- */
-function createNewState(currentState, changes = {}) {
-  const { newState } = createStateWithChanges(currentState, changes);
-  return newState;
-}
-
-/**
- * Updates the application state immutably with proper history management
- * 
- * @param {ApplicationState} currentState - The current application state
- * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
- * @returns {Promise<Array>} Returns array of results from plugin state.update endpoints
- */
-async function updateState(currentState, changes = {}) {
-  const { newState, changedKeys } = createStateWithChanges(currentState, changes);
-  
-  // If no changes, return early
-  if (changedKeys.length === 0) {
-    return await invoke(endpoints.state.update, currentState);
-  }
-  
-  // Notify all plugins of state update
-  return await invoke(endpoints.state.update, newState);
-}
-
-/**
- * Utility function to check if specific keys have changed between current and previous state
- * 
- * @param {ApplicationState} state - Current state object
- * @param {...keyof ApplicationState} keys - State keys to check for changes
- * @returns {boolean} True if any of the specified keys have changed
- */
-function hasStateChanged(state, ...keys) {
-  if (!state.previousState) return true; // First state, consider all keys changed
-  
-  return keys.some(key => state[key] !== state.previousState?.[key]);
-}
-
-/**
- * Gets all keys that have changed between current and previous state
- * 
- * @param {ApplicationState} state - Current state object
- * @returns {Array<keyof ApplicationState>} Array of keys that have changed
- */
-function getChangedStateKeys(state) {
-  let result; 
-  if (!state.previousState) {
-    result = Object.keys(state).filter(key => key !== 'previousState');
-  } else {
-    result = Object.keys(state).filter(key => 
-      key !== 'previousState' && state[key] !== state.previousState?.[key]
-    );
-  }
-  return /** @type {Array<keyof ApplicationState>} */ (result) 
-}
-
-/**
- * Gets the previous value of a specific state key
- * 
- * @param {ApplicationState} state - Current state object
- * @param {keyof ApplicationState} key - State key to get previous value for
- * @returns {any} Previous value or undefined if no previous state
- */
-function getPreviousStateValue(state, key) {
-  return state.previousState?.[key];
-}
-
-/**
- * Clears the state history array (useful for testing or memory cleanup)
- */
-function clearStateHistory() {
-  // Break all previousState chains
-  stateHistory.forEach(state => {
-    if (state.previousState) {
-      state.previousState = null;
-    }
-  });
-  
-  stateHistory = [];
-}
-
-/**
- * Gets the current size of the state history
- * 
- * @returns {number} Number of states currently in history
- */
-function getStateHistorySize() {
-  return stateHistory.length;
-}
-
-// State preservation variables
-const SESSION_STORAGE_ID = 'pdf-tei-editor.state';
-let beforeUnloadHandler = null;
-
-/**
- * Gets saved state from sessionStorage
- * 
- * @returns {Object|null} Saved state object or null if none found/invalid
- */
-function getStateFromSessionStorage() {
-  try {
-    const stateInSessionStorage = sessionStorage.getItem(SESSION_STORAGE_ID);
-    return stateInSessionStorage ? JSON.parse(stateInSessionStorage) : null;
-  } catch (error) {
-    console.warn("Failed to load state from sessionStorage:", error);
-    return null;
-  }
-}
-
-/**
- * Enables or disables automatic state preservation in sessionStorage on page unload
- * 
- * @param {boolean} doPreserve - Whether to preserve state (true) or stop preserving (false)
- */
-function preserveState(doPreserve = true) {
-  if (doPreserve && !beforeUnloadHandler) {
-    // Create and register the beforeunload handler
-    beforeUnloadHandler = () => {
-      // Save the newest state from history (last entry)
-      const newestState = stateHistory[stateHistory.length - 1];
-      if (newestState) {
-        console.log("DEBUG Saving state in sessionStorage");
-        sessionStorage.setItem(SESSION_STORAGE_ID, JSON.stringify(newestState));
+    // Apply changes and track modifications
+    for (const [key, value] of Object.entries(changes)) {
+      if (currentState[key] !== value) {
+        changedKeys.push(key);
+        newState[key] = value;
+        
+        // Special handling for ext object - ensure proper shallow copy
+        if (key === 'ext' && value && typeof value === 'object') {
+          newState.ext = { ...value };
+        }
       }
-    };
-    window.addEventListener('beforeunload', beforeUnloadHandler);
-  } else if (!doPreserve && beforeUnloadHandler) {
-    // Remove the handler
-    window.removeEventListener('beforeunload', beforeUnloadHandler);
-    beforeUnloadHandler = null;
+    }
+    
+    // Link to previous state using WeakMap (no memory leak issues)
+    if (currentState) {
+      stateHistory.set(newState, currentState);
+    }
+    
+    return { newState, changedKeys };
+  }
+
+  /**
+   * Create new state with changes applied (pure function)
+   * 
+   * @param {ApplicationState} currentState - The current application state
+   * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
+   * @returns {{newState: ApplicationState, changedKeys: string[]}} The new state and list of changed keys
+   */
+  applyStateChanges(currentState, changes = {}) {
+    const { newState, changedKeys } = this.createStateWithChanges(currentState, changes);
+    
+    // Preserve state if enabled
+    if (this.preserveStateEnabled && changedKeys.length > 0) {
+      this.saveStateToSessionStorage(newState);
+    }
+    
+    return { newState, changedKeys };
+  }
+
+  /**
+   * Apply extension properties changes to state (pure function)
+   * 
+   * @param {ApplicationState} currentState - The current application state
+   * @param {Object} extChanges - Extension properties to update
+   * @returns {{newState: ApplicationState, changedKeys: string[]}} The new state with updated extensions
+   */
+  applyExtensionChanges(currentState, extChanges = {}) {
+    const newExt = { ...(currentState.ext || {}), ...extChanges };
+    return this.applyStateChanges(currentState, { ext: newExt });
+  }
+
+  /**
+   * Get the previous state for a given state
+   * 
+   * @param {ApplicationState} state - Current state
+   * @returns {ApplicationState|undefined} Previous state or undefined if none
+   */
+  getPreviousState(state) {
+    return stateHistory.get(state);
+  }
+
+  /**
+   * Check if specific state properties have changed from the previous state
+   * 
+   * @param {ApplicationState} state - Current state to check
+   * @param {...string} propertyNames - Names of properties to check for changes
+   * @returns {boolean} True if any of the specified properties have changed
+   */
+  hasStateChanged(state, ...propertyNames) {
+    const previousState = this.getPreviousState(state);
+    if (!previousState) {
+      return true; // First state, everything is "changed"
+    }
+    
+    return propertyNames.some(prop => {
+      const currentValue = prop.includes('.') ? this.getNestedProperty(state, prop) : state[prop];
+      const previousValue = prop.includes('.') ? this.getNestedProperty(previousState, prop) : previousState[prop];
+      return currentValue !== previousValue;
+    });
+  }
+
+  /**
+   * Get all property names that have changed from the previous state
+   * 
+   * @param {ApplicationState} state - Current state to analyze
+   * @returns {string[]} Array of property names that have changed
+   */
+  getChangedStateKeys(state) {
+    const previousState = this.getPreviousState(state);
+    if (!previousState) {
+      return Object.keys(state);
+    }
+    
+    const changedKeys = [];
+    for (const key in state) {
+      if (state[key] !== previousState[key]) {
+        changedKeys.push(key);
+      }
+    }
+    return changedKeys;
+  }
+
+  /**
+   * Get the previous value of a state property
+   * 
+   * @param {ApplicationState} state - Current state
+   * @param {string} propertyName - Name of the property to get previous value for
+   * @returns {*} Previous value of the property, or undefined if no previous state
+   */
+  getPreviousStateValue(state, propertyName) {
+    const previousState = this.getPreviousState(state);
+    if (!previousState) {
+      return undefined;
+    }
+    
+    if (propertyName.includes('.')) {
+      return this.getNestedProperty(previousState, propertyName);
+    }
+    
+    return previousState[propertyName];
+  }
+
+  /**
+   * Get nested property value using dot notation
+   * 
+   * @param {Object} obj - Object to traverse
+   * @param {string} path - Dot-separated path to property
+   * @returns {*} Value at the path, or undefined if not found
+   * @private
+   */
+  getNestedProperty(obj, path) {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
+  }
+
+  /**
+   * Enable automatic state preservation in sessionStorage
+   * 
+   * @param {boolean} enabled - Whether to enable preservation
+   * @param {string[]} [persistedVars] - Specific state variables to persist
+   */
+  preserveState(enabled = true, persistedVars = []) {
+    this.preserveStateEnabled = enabled;
+    this.persistedStateVars = persistedVars;
+  }
+
+  /**
+   * Save specific state variables to sessionStorage
+   * 
+   * @param {ApplicationState} state - State to save
+   * @private
+   */
+  saveStateToSessionStorage(state) {
+    if (!this.preserveStateEnabled) return;
+    
+    const stateToSave = {};
+    
+    // Save only specified variables, or all if none specified
+    const varsToSave = this.persistedStateVars.length > 0 ? this.persistedStateVars : Object.keys(state);
+    
+    for (const key of varsToSave) {
+      if (state[key] !== undefined && state[key] !== null) {
+        stateToSave[key] = state[key];
+      }
+    }
+    
+    try {
+      sessionStorage.setItem('pdf-tei-editor.state', JSON.stringify(stateToSave));
+    } catch (error) {
+      console.warn('Failed to save state to sessionStorage:', error);
+    }
+  }
+
+  /**
+   * Load state from sessionStorage
+   * 
+   * @returns {Object|null} Saved state or null if none found
+   */
+  getStateFromSessionStorage() {
+    try {
+      const saved = sessionStorage.getItem('pdf-tei-editor.state');
+      return saved ? JSON.parse(saved) : null;
+    } catch (error) {
+      console.warn('Failed to load state from sessionStorage:', error);
+      return null;
+    }
   }
 }
 
 /**
- * Updates extension properties in state.ext immutably
- * 
- * @param {ApplicationState} state - Current state object
- * @param {Record<string, any>} extChanges - Extension properties to update
- * @returns {Promise<Array>} Returns array of results from plugin state.update endpoints
+ * PluginContext - Facade providing clean interface between plugins and application
+ * @import { ApplicationState } from '../app.js'
+ * @import { Application } from '../modules/application.js'
+ */ 
+
+/**
+ * PluginContext provides a controlled interface for plugins to interact with application services
+ * without creating tight coupling to the full Application class
  */
-async function updateStateExt(state, extChanges) {
-  const newExt = { ...state.ext, ...extChanges };
-  return await updateState(state, { ext: newExt });
+class PluginContext {
+  constructor(application) {
+    this.#application = application;
+  }
+
+  /** @type {Application} */
+  #application;
+
+  //
+  // State management methods
+  //
+
+  /**
+   * Update application state
+   * @param {ApplicationState} currentState - Current state
+   * @param {Partial<ApplicationState>} changes - Changes to apply
+   * @returns {Promise<ApplicationState>} New state after changes applied
+   */
+  async updateState(currentState, changes) {
+    return await this.#application.updateState(currentState, changes);
+  }
+
+  /**
+   * Update extension properties in state
+   * @param {ApplicationState} currentState - Current state
+   * @param {Object} extChanges - Extension properties to update
+   * @returns {Promise<ApplicationState>} New state after changes applied
+   */
+  async updateStateExt(currentState, extChanges) {
+    return await this.#application.updateStateExt(currentState, extChanges);
+  }
+
+  /**
+   * Check if specific state properties have changed
+   * @param {ApplicationState} state - Current state
+   * @param {...string} keys - Keys to check for changes
+   * @returns {boolean} True if any keys have changed
+   */
+  hasStateChanged(state, ...keys) {
+    return this.#application.getStateManager().hasStateChanged(state, ...keys);
+  }
+
+  /**
+   * Get all property names that have changed from previous state
+   * @param {ApplicationState} state - Current state
+   * @returns {Array<keyof ApplicationState>} Array of changed property names
+   */
+  getChangedStateKeys(state) {
+    return this.#application.getStateManager().getChangedStateKeys(state);
+  }
+
+  /**
+   * Get previous value of a state property
+   * @param {ApplicationState} state - Current state
+   * @param {string} propertyName - Property name to get previous value for
+   * @returns {*} Previous value or undefined
+   */
+  getPreviousStateValue(state, propertyName) {
+    return this.#application.getStateManager().getPreviousStateValue(state, propertyName);
+  }
+
+  /**
+   * Get the previous state object
+   * @param {ApplicationState} state - Current state
+   * @returns {ApplicationState|undefined} Previous state or undefined
+   */
+  getPreviousState(state) {
+    return this.#application.getStateManager().getPreviousState(state);
+  }
+
+  //
+  // Plugin invocation methods (for inter-plugin communication)
+  //
+
+  /**
+   * Invoke plugin endpoints (for inter-plugin communication)
+   * @param {string} endpoint - Endpoint to invoke
+   * @param {...*} args - Arguments to pass
+   * @returns {Promise<any[]>} Results from plugin invocations
+   */
+  async invokePlugins(endpoint, ...args) {
+    return await this.#application.invokePluginEndpoint(endpoint, ...args);
+  }
+
+  //
+  // Utility methods plugins might need
+  //
+
+  /**
+   * Get current application state (read-only access)
+   * @returns {ApplicationState|null} Current application state
+   */
+  getCurrentState() {
+    return this.#application.getCurrentState();
+  }
+}
+
+/**
+ * Application class - clean wrapper around plugin endpoint invocation and bootstrapping
+ * @import { ApplicationState } from '../app.js'
+ * @import PluginManager from '../modules/plugin-manager.js'
+ * @import StateManager from '../modules/state-manager.js'
+ */
+
+
+/**
+ * Application class that provides a clean API for plugin management and bootstrapping
+ */
+class Application {
+  /**
+   * @param {PluginManager} pluginManager 
+   * @param {StateManager} stateManager 
+   */
+  constructor(pluginManager, stateManager) {
+    this.#currentState = null;
+    this.#pluginManager = pluginManager;
+    this.#stateManager = stateManager;
+    this.#pluginContext = new PluginContext(this);
+    
+    // Set up shutdown handler
+    window.addEventListener('beforeunload', () => {
+      this.shutdown();
+    });
+  }
+
+  /** @type {ApplicationState|null} */
+  #currentState;
+
+  /** @type {PluginManager} */
+  #pluginManager;
+
+  /** @type {StateManager} */
+  #stateManager;
+
+  /** @type {PluginContext} */
+  #pluginContext;
+
+  //
+  // Application bootstrapping methods
+  //
+
+  /**
+   * Initialize application state with final composed state and configure bootstrapping
+   * @param {ApplicationState} finalState - The final composed initial state
+   * @param {object} options - Configuration options
+   * @param {string[]} [options.persistedStateVars] - State variable names to persist in sessionStorage
+   * @param {boolean} [options.enableStatePreservation=true] - Whether to enable automatic state preservation
+   * @returns {ApplicationState} The initialized state
+   */
+  initializeState(finalState, options = {}) {
+    const {
+      persistedStateVars = [],
+      enableStatePreservation = true
+    } = options;
+
+    // Update current state
+    this.#currentState = finalState;
+
+    // Enable automatic state preservation if requested
+    if (enableStatePreservation) {
+      // Always include sessionId in persisted vars
+      const allPersistedVars = [...persistedStateVars, 'sessionId'];
+      this.#stateManager.preserveState(true, allPersistedVars);
+    }
+
+    return this.#currentState;
+  }
+
+  /**
+   * Get the current state
+   * @returns {ApplicationState|null}
+   */
+  getCurrentState() {
+    return this.#currentState;
+  }
+
+  //
+  // Plugin lifecycle management
+  //
+
+  /**
+   * Register plugins with the plugin manager
+   * Supports plugin objects, Plugin class instances, and Plugin classes.
+   * @param {Array} plugins - Array of plugin objects, Plugin instances, or Plugin classes
+   */
+  registerPlugins(plugins) {
+    // Convert classes to instances, leave everything else as-is
+    const processedPlugins = plugins.map(plugin => {
+      // Check if it's a Plugin class (constructor function)
+      if (typeof plugin === 'function' && plugin.prototype && plugin.prototype.constructor === plugin) {
+        console.log(`Creating Plugin singleton instance from class '${plugin.name}' with context`);
+        return plugin.createInstance(this.#pluginContext);
+      }
+      return plugin;
+    });
+
+    // Register plugins - PluginManager handles Plugin instance conversion
+    for (const plugin of processedPlugins) {
+      const pluginName = plugin.name || plugin.constructor?.name || 'unknown';
+      const deps = plugin.deps || [];
+      console.log(`Registering plugin '${pluginName}' with deps: [${deps.join(', ') || 'none'}]`);
+      this.#pluginManager.register(plugin);
+    }
+  }
+
+  /**
+   * Install all registered plugins with provided state
+   * @param {ApplicationState} state - The state to pass to plugin install methods
+   * @returns {Promise<Array>}
+   */
+  async installPlugins(state) {
+    const results = await this.#pluginManager.invoke(endpoints.install, state);
+    return results;
+  }
+
+  /**
+   * Start all plugins after installation
+   * @returns {Promise<Array>}
+   */
+  async start() {
+    const results = await this.#pluginManager.invoke(endpoints.start);
+    return results;
+  }
+
+  /**
+   * Shutdown all plugins (called on beforeunload)
+   * @returns {Promise<Array>}
+   */
+  async shutdown() {
+    try {
+      const results = await this.#pluginManager.invoke(endpoints.shutdown);
+      return results;
+    } catch (error) {
+      console.warn('Error during plugin shutdown:', error);
+      return [];
+    }
+  }
+
+  //
+  // State management orchestration
+  //
+
+  /**
+   * Update application state and notify plugins
+   * @param {ApplicationState} currentState - Current state
+   * @param {Partial<ApplicationState>} changes - Changes to apply
+   * @returns {Promise<ApplicationState>} New state after plugin notification
+   */
+  async updateState(currentState, changes = {}) {
+    const { newState, changedKeys } = this.#stateManager.applyStateChanges(currentState, changes);
+    
+    // Skip plugin notification if no actual changes
+    if (changedKeys.length === 0) {
+      await this.#pluginManager.invoke(endpoints.state.update, currentState);
+      return currentState;
+    }
+    
+    // Invoke all state update endpoints by convention:
+    
+    // 1. Legacy system: state.update with full state
+    await this.#pluginManager.invoke(endpoints.state.update, newState);
+    
+    // 2. New system: updateInternalState with full state (silent)
+    await this.#pluginManager.invoke(endpoints.state.updateInternal, newState);
+    
+    // 3. New system: onStateUpdate with changed keys
+    await this.#pluginManager.invoke(endpoints.state.onChange, changedKeys);
+    
+    return newState;
+  }
+
+  /**
+   * Update extension properties in state and notify plugins
+   * @param {ApplicationState} currentState - Current state
+   * @param {Object} extChanges - Extension properties to update
+   * @returns {Promise<ApplicationState>} New state after plugin notification
+   */
+  async updateStateExt(currentState, extChanges = {}) {
+    const { newState, changedKeys } = this.#stateManager.applyExtensionChanges(currentState, extChanges);
+    
+    if (changedKeys.length === 0) {
+      await this.#pluginManager.invoke(endpoints.state.update, currentState);
+      return currentState;
+    }
+    
+    await this.#pluginManager.invoke(endpoints.state.update, newState);
+    return newState;
+  }
+
+  /**
+   * Get state manager for direct access to state utilities
+   * @returns {StateManager}
+   */
+  getStateManager() {
+    return this.#stateManager;
+  }
+
+  /**
+   * Get plugin context for plugin instantiation
+   * @returns {PluginContext}
+   */
+  getPluginContext() {
+    return this.#pluginContext;
+  }
+
+  //
+  // Convenience methods for common plugin operations
+  //
+
+  /**
+   * Invoke any plugin endpoint
+   * @param {string} endpoint
+   * @param {...*} args - Arguments to pass to the endpoint functions
+   * @returns {Promise<Array>}
+   */
+  async invokePluginEndpoint(endpoint, ...args) {
+    return await this.#pluginManager.invoke(endpoint, ...args);
+  }
+
 }
 
 /**
@@ -706,652 +1494,6 @@ function findMatchingGold(file, variant) {
  */
 function findFileByPdfHash(fileData, pdfHash) {
   return fileData.find(file => file.pdf.hash === pdfHash) || null;
-}
-
-/**
- * This plugin provides logging endpoints and an API to invoke them. The implementation uses
- * console.* methods
- */
-
-
-// name of the plugin
-const name$1 = "logger";
-
-/**
- * A object mapping human readable log level names to numbers
- */
-const logLevel = {
-  CRITICAL: 1,
-  WARN: 2,
-  INFO: 3,
-  DEBUG: 4};
-
-/**
- * The current logging level.
- * @type {number}
- * @global
- */
-let currentLogLevel = logLevel.INFO; 
-
-/**
- * Easy to use logging API which will  send log events to all registered log plugins 
- */
-const api$h = {
-  /**
-   * Sets the log level {@see logLevel}
-   * @param {Number} level The log level
-   * @returns {void}
-   */
-  setLogLevel: level => pluginManager.invoke(endpoints.log.setLogLevel, {level}),
-
-  /**
-   * Logs a debug message, with varying levels of verbosity
-   * @param {string} message The debug message
-   * @param {Number} level The log level, which is normally either DEBUG (4) or VERBOSE (5)
-   * @returns {void}
-   */
-  debug: (message, level = logLevel.DEBUG) => pluginManager.invoke(endpoints.log.debug, {message, level}),
-
-  /**
-   * Logs an informational message
-   * @param {string} message 
-   * @returns {void}
-   */
-  info: message => pluginManager.invoke(endpoints.log.info, {message}),
-
-  /**
-   * Logs an warning message
-   * @param {string} message 
-   * @returns {void}
-   */
-  warn: message => pluginManager.invoke(endpoints.log.warn, {message}),
-
-  /**
-   * Logs an message about a critical or fatal error
-   * @param {string} message 
-   * @returns {void}
-   */
-  critical: message => pluginManager.invoke(endpoints.log.critical, {message})
-};
-
-api$h.error = api$h.critical; // alias for critical
-
-/**
- * component plugin
- */
-const plugin$n = {
-  name: name$1,
-  install: install$l,
-  log: {
-    setLogLevel,
-    debug,
-    info: info$1,
-    warn,
-    critical
-  }
-};
-
-//
-// implementation
-//
-
-async function install$l(state) {
-  console.log(`Installing plugin "${plugin$n.name}"`);
-}
-
-
-
-/**
- * Sets the global debugging level.
- * Only debug messages with a level less than or equal to this value will be displayed.
- * @param {object} options - An object containing the message and level.
- * @param {number} options.level The new debugging level.
- * @returns {void}
- */
-function setLogLevel({level}) {
-  currentLogLevel = level;
-}
-
-/**
- * Logs a debug message if the message's level is less than or equal to the current global log level.
- * The message will be prefixed with "DEBUG: ".
- * @param {object} options - An object containing the message and level.
- * @param {any} options.message - The message or object to log.
- * @param {number} [options.level=1] - The level of this debug message. Defaults to 1.
- * @returns {void}
- */
-function debug({message, level = logLevel.DEBUG}) {
-  if (level >= currentLogLevel) {
-    console.groupCollapsed(`DEBUG`, message);
-    console.trace();
-    console.groupEnd();
-  }
-}
-
-/**
- * Logs an informational message using console.info.
- * @param {object} options - An object containing the message and level.
- * @param {any} options.message - The message or object to log.
- * @returns {void}
- */
-function info$1({message}) {
-  if (currentLogLevel >= logLevel.INFO) {
-    console.info(message);
-  }
-}
-
-/**
- * Logs a warning message using console.warn.
- * @param {object} options - An object containing the message and level.
- * @param {any} options.message - The message or object to log.
- * @returns {void}
- */
-function warn({message}) {
-  if (currentLogLevel >= logLevel.WARN) {
-    console.warn(message);
-  }
-}
-
-/**
- * Logs a fatal error message using console.error.
- * @param {object} options - An object containing the message and level.
- * @param {any} options.message - The message or object to log.
- * @returns {void}
- */
-function critical({message}) {
-  if (currentLogLevel >= logLevel.CRITICAL) {
-    console.error(message);
-  }
-}
-
-/**
- * Plugin providing an application configuration related API
- * The configuration is different from the application's state as it is stored on the server and typically 
- * changes only if explicit and relatively permanent changes to the application's behavior are intended.
- * It exposes only a public API and has no install or update lifecycle hooks 
- */
-
-
-/**
- * The public API of the config plugin.
- * @namespace
- */
-const api$g = {
-  get,
-  set,
-  load: updateConfigData
-};
-
-/**
- * The configuration plugin definition.
- * @type {Plugin}
- */
-const plugin$m = {
-  name: "config",
-  deps: ['client']
-};
-
-/**
- * A Map-like object holding the configuration data fetched from the server.
- * @type {Object<string, any> | undefined}
- */
-let configMap;
-
-/**
- * Fetches the configuration data from the server and updates the local `configMap`.
- * @async
- * @returns {Promise<void>} A promise that resolves when the configuration is updated.
- */
-async function updateConfigData () {
-  api$h.debug('Updating configuration data.');
-  configMap = await api$b.getConfigData();
-}
-
-/**
- * Checks if a given key exists in the configuration data and returns it value. If the key does not exist,
- * it either returns a default value if one has been passed, or throws a type error
- * @param {string} key The configuration key to check.
- * @param {string} [defaultValue] The value to return if the key does not exist
- * @throws {TypeError} If the key does not exist in the configuration and no default value hass been passed
- */
-async function _get(key, defaultValue){
-  if (configMap === undefined) {
-    throw new Error("Configuration data has not been loaded yet")
-  }
-  if (key in configMap) {
-    return configMap[key]
-  } 
-  if (defaultValue !== undefined) {
-    return defaultValue
-  }
-  throw new TypeError(`No configuration key "${key}" exists`)
-}
-
-/**
- * Retrieves a configuration value for a given key.
- * @async
- * @param {string} key The key of the configuration value to retrieve.
- * @param {any} [defaultValue] The value to return if the key does not exist
- * @param {boolean} [updateFirst=false] - If true, forces an update from the server before getting the value.
- * @returns {Promise<any>} A promise that resolves with the configuration value.
- * @throws {TypeError} If the key does not exist.
- */
-async function get(key, defaultValue, updateFirst=false) {
-  if (!configMap || updateFirst) {
-    await updateConfigData();
-  }
-  return await _get(key, defaultValue)
-}
-
-/**
- * Sets a configuration value for a given key on the server.
- * @async
- * @param {string} key The key of the configuration value to set.
- * @param {any} value The new value to set.
- * @returns {Promise<void>} A promise that resolves when the value has been set.
- * @throws {TypeError} If the key does not exist.
- */
-async function set(key, value) {
-  await _get(key); // this checks the key 
-  await api$b.setConfigValue(key, value);
-}
-
-/**
- * Given a selector, return all matching DOM nodes in an array
- * @param {string} selector The DOM selector
- * @returns {Array}
- */
-function $$(selector) {
-  return Array.from(document.querySelectorAll(selector))
-}
-
-
-class UrlHash {
-
-  /**
-   * Sets or updates a hash parameter in the URL without reloading the page and ensures browser history is updated.
-   * @param {string|Object} keyOrObj - The key of the hash parameter to set, or an object with several key-value pairs
-   * @param {string?} value - The value of the hash parameter to set. Not used if first parameter is an object
-   * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
-   */
-  static set(keyOrObj, value, dispatchEvent = true) {
-    const hash = new URLSearchParams(window.location.hash.slice(1));
-    if (typeof keyOrObj === "string" && typeof value === "string") {
-      hash.set(keyOrObj, value);
-    } else if (keyOrObj && typeof keyOrObj === "object") {
-      Object.entries(keyOrObj).forEach(([key, value]) => hash.set(key, value));
-    } else {
-      throw new TypeError(`Invalid parameters: ${keyOrObj}, ${value}`)
-    }
-
-    // Use history.replaceState to update the current history entry
-    history.replaceState(null, '', '#' + hash.toString());
-    if (dispatchEvent) {
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-    }
-  }
-
-  /**
-   * Retrieves the value of a hash parameter from the URL.
-   * @param {string} key - The key of the hash parameter to retrieve.
-   * @returns {string|null} The value of the hash parameter, or null if not found.
-   */
-  static get(key) {
-    const hash = new URLSearchParams(window.location.hash.slice(1));
-    return hash.get(key);
-  }
-
-  /**
-   * Returns true if the key exists in the URL hash or false if not
-   * @param {string} key The key of the hash parameter to retrieve.
-   * @returns  {boolean}
-   */
-  static has(key) {
-    return UrlHash.get(key) !== null;
-  }
-
-  /**
-   * Removes a hash parameter from the URL without reloading the page.
-   * @param {string} key - The key of the hash parameter to remove.
-   * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
-   */
-  static remove(key, dispatchEvent = true) {
-    if (!UrlHash.has(key)) return; // Do nothing if the key does not exist
-    const hash = new URLSearchParams(window.location.hash.slice(1));
-    hash.delete(key); // Remove the specified key
-    const updatedHash = hash.toString();
-    // Use history.replaceState to update the current history entry
-    history.replaceState(null, '', '#' + updatedHash);
-    if (dispatchEvent) {
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-    }
-  }
-}
-
-
-
-/**
- * Escapes the given text to valid html
- * @param {string} text 
- * @returns {string} The escaped text
- */
-function escapeHtml$1(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-/**
- * This plugin provides an API to save selected properties of the application state in the URL hash
- * and to update the application state from the URL hash on page load.
- * This allows sharing links to the current application state and restoring the state when reloading the page
- */
-
-
-/** 
- * @import { ApplicationState } from '../app.js' 
- */
-
-// module closure vars
-let showInUrl;
-let allowSetFromUrl;
-
-const api$f = {
-  updateUrlHashfromState,
-  updateStateFromUrlHash,
-  getStateFromUrlHash
-};
-
-/**
- * component plugin
- */
-const plugin$l = {
-  name: "url-hash-state",
-  deps: ['config'],
-  install: install$k,
-  state: {
-    update: update$i
-  }
-};
-
-//
-// implementation
-//
-
-/** 
- * @param {ApplicationState} state 
- */
-async function install$k(state) {
-  api$h.debug(`Installing plugin "${plugin$l.name}"`);
-  showInUrl = await api$g.get("state.showInUrl") || [];
-  allowSetFromUrl = await api$g.get("state.allowSetFromUrl") || [];
-}
-
-/** 
- * @param {ApplicationState} state 
- */
-async function update$i(state) {
-  updateUrlHashfromState(state);
-}
-
-/**
- * @param {ApplicationState} state 
- */
-function updateUrlHashfromState(state) {
-  const url = new URL(window.location.href);
-  const urlHashParams = new URLSearchParams(window.location.hash.slice(1));
-  Object.entries(state)
-    .filter(([key]) => showInUrl.includes(key))
-    .forEach(([key, value]) => {
-      if (value) {
-        urlHashParams.set(key, String(value));
-      } else {
-        urlHashParams.delete(key);
-      }
-    });
-  let hash = `#${urlHashParams.toString()}`;
-  if (hash !== url.hash) {
-    url.hash = hash;
-    window.history.replaceState({}, '', url);
-  }
-}
-
-/**
- * Gets state properties from URL hash without updating state (for initialization)
- * @returns {Object} Object with state properties from URL hash
- */
-function getStateFromUrlHash() {
-  const tmpState = {};
-  const urlParams = new URLSearchParams(window.location.hash.slice(1));
-  for (const [key, value] of urlParams.entries()) {
-    if (allowSetFromUrl.includes(key)) {
-      tmpState[key] = value;
-    }
-    if (!showInUrl.includes(key)) {
-      UrlHash.remove(key, false);
-    }
-  }
-  if (Object.keys(tmpState).length > 0) {
-    api$h.info("Getting state properties from URL hash: " + Object.keys(tmpState).join(", "));
-  }
-  return tmpState
-}
-
-/**
- * Updates the state from the URL hash, removing all state properties that should not be shown in the URL from the hash
- * @param {ApplicationState} state
- * @returns {Promise<Array>} Returns the result of updateState
- */
-async function updateStateFromUrlHash(state) {
-  const tmpState = getStateFromUrlHash();
-  return await updateState(state, tmpState)
-}
-
-/**
- * This implements Server-Sent Events (SSE) connection management
- */
-
-
-/**
- * plugin API
- */
-const api$e = {
-  /**
-   * @param {string} type
-   * @param {(event: MessageEvent) => void} listener
-   */
-  addEventListener: (type, listener) => {
-    if (eventSource) {
-      eventSource.addEventListener(type, listener);
-    } else {
-      // Queue listeners for when connection is established
-      if (!queuedListeners[type]) {
-        queuedListeners[type] = [];
-      }
-      queuedListeners[type].push(listener);
-    }
-  },
-  /**
-   * @param {string} type
-   * @param {(event: MessageEvent) => void} listener
-   */
-  removeEventListener: (type, listener) => {
-    if (eventSource) {
-      eventSource.removeEventListener(type, listener);
-    }
-  },
-  get readyState() {
-    return eventSource ? eventSource.readyState : EventSource.CLOSED
-  },
-  get url() {
-    return eventSource ? eventSource.url : null
-  },
-  get reconnectAttempts() {
-    return reconnectAttempts
-  },
-  /**
-   * Force a reconnection attempt
-   */
-  reconnect() {
-    if (cachedSessionId) {
-      api$h.info('Manual reconnection requested');
-      cleanupConnection();
-      establishConnection(cachedSessionId);
-    } else {
-      api$h.warn('Cannot reconnect: no cached session ID');
-    }
-  }
-};
-
-/**
- * component plugin
- */
-const plugin$k = {
-  name: "sse",
-  install: install$j,
-  state: {
-    update: update$h
-  }
-};
-
-let eventSource = null;
-let cachedSessionId = null;
-let queuedListeners = {};
-let reconnectTimeout = null;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
-
-/** 
- * @param {ApplicationState} state 
- */
-async function install$j(state){
-  api$h.debug(`Installing plugin "${plugin$k.name}"`);
-}
-
-/**
- * @param {ApplicationState} state 
- */
-async function update$h(state) {
-  const { user, sessionId } = state;
-
-  // Close existing connection if the session ID has changed or user logged out
-  if (eventSource && (sessionId !== cachedSessionId || !user)) {
-    api$h.debug('Closing SSE connection due to session change or logout.');
-    cleanupConnection();
-  }
-
-  // Open a new connection if user is logged in and there's no active connection
-  if (user && sessionId && !eventSource) {
-    establishConnection(sessionId);
-  }
-}
-
-/**
- * Establish SSE connection with retry logic
- * @param {string} sessionId 
- */
-function establishConnection(sessionId) {
-  api$h.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
-  
-  const url = `/sse/subscribe?session_id=${sessionId}`;
-  eventSource = new EventSource(url);
-  cachedSessionId = sessionId;
-
-  eventSource.onopen = () => {
-    api$h.info('SSE connection established successfully');
-    reconnectAttempts = 0; // Reset reconnection attempts on successful connection
-    
-    // Clear any pending reconnection timeout
-    if (reconnectTimeout) {
-      clearTimeout(reconnectTimeout);
-      reconnectTimeout = null;
-    }
-  };
-
-  // Add any queued listeners
-  Object.keys(queuedListeners).forEach(type => {
-    queuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
-      eventSource.addEventListener(type, listener);
-    });
-  });
-
-  eventSource.onerror = (_event) => {
-    const readyState = eventSource ? eventSource.readyState : 'unknown';
-    const errorMsg = `EventSource failed (readyState: ${readyState})`;
-    
-    // Provide more detailed error information
-    if (readyState === EventSource.CONNECTING) {
-      api$h.warn(`${errorMsg} - Connection attempt failed`);
-    } else if (readyState === EventSource.CLOSED) {
-      api$h.warn(`${errorMsg} - Connection was closed`);
-    } else {
-      api$h.error(`${errorMsg} - Unexpected error`);
-    }
-
-    // Close the connection
-    if (eventSource) {
-      eventSource.close();
-    }
-    eventSource = null;
-
-    // Attempt reconnection if we haven't exceeded the limit
-    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      const delay = RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts); // Exponential backoff
-      reconnectAttempts++;
-      
-      api$h.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-      
-      reconnectTimeout = setTimeout(() => {
-        if (cachedSessionId) { // Only reconnect if we still have a session
-          establishConnection(cachedSessionId);
-        }
-      }, delay);
-    } else {
-      api$h.error(`Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) exceeded. SSE connection abandoned.`);
-      cachedSessionId = null;
-      reconnectAttempts = 0;
-    }
-  };
-
-  // Clear queued listeners after adding them (but keep the reference for new connections)
-  const currentQueuedListeners = { ...queuedListeners };
-  queuedListeners = {};
-  
-  // Re-add listeners for reconnections
-  Object.keys(currentQueuedListeners).forEach(type => {
-    currentQueuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
-      api$e.addEventListener(type, listener);
-    });
-  });
-
-  // Standard message channels
-  eventSource.addEventListener('updateStatus', /** @param {MessageEvent} evt */ evt => {
-    api$h.info('SSE Status Update:' + evt.data);
-  });
-}
-
-/**
- * Clean up SSE connection and cancel any pending reconnections
- */
-function cleanupConnection() {
-  // Cancel any pending reconnection
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-  }
-  
-  // Close the connection
-  if (eventSource) {
-    eventSource.close();
-    eventSource = null;
-  }
-  
-  // Reset state
-  cachedSessionId = null;
-  reconnectAttempts = 0;
-  
-  api$h.debug('SSE connection cleaned up');
 }
 
 /**
@@ -3133,7 +3275,7 @@ let documentDirection = 'ltr';
 let documentLanguage = 'en';
 const isClient = (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && typeof document.documentElement !== "undefined");
 if (isClient) {
-    const documentElementObserver = new MutationObserver(update$g);
+    const documentElementObserver = new MutationObserver(update$h);
     documentDirection = document.documentElement.dir || 'ltr';
     documentLanguage = document.documentElement.lang || navigator.language;
     documentElementObserver.observe(document.documentElement, {
@@ -3154,9 +3296,9 @@ function registerTranslation(...translation) {
             fallback = t;
         }
     });
-    update$g();
+    update$h();
 }
-function update$g() {
+function update$h() {
     if (isClient) {
         documentDirection = document.documentElement.dir || 'ltr';
         documentLanguage = document.documentElement.lang || navigator.language;
@@ -16677,6 +16819,869 @@ var ui$1 = ui;
 window.ui = ui; // for debugging
 
 /**
+ * Given a selector, return all matching DOM nodes in an array
+ * @param {string} selector The DOM selector
+ * @returns {Array}
+ */
+function $$(selector) {
+  return Array.from(document.querySelectorAll(selector))
+}
+
+
+class UrlHash {
+
+  /**
+   * Sets or updates a hash parameter in the URL without reloading the page and ensures browser history is updated.
+   * @param {string|Object} keyOrObj - The key of the hash parameter to set, or an object with several key-value pairs
+   * @param {string?} value - The value of the hash parameter to set. Not used if first parameter is an object
+   * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
+   */
+  static set(keyOrObj, value, dispatchEvent = true) {
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (typeof keyOrObj === "string" && typeof value === "string") {
+      hash.set(keyOrObj, value);
+    } else if (keyOrObj && typeof keyOrObj === "object") {
+      Object.entries(keyOrObj).forEach(([key, value]) => hash.set(key, value));
+    } else {
+      throw new TypeError(`Invalid parameters: ${keyOrObj}, ${value}`)
+    }
+
+    // Use history.replaceState to update the current history entry
+    history.replaceState(null, '', '#' + hash.toString());
+    if (dispatchEvent) {
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
+  }
+
+  /**
+   * Retrieves the value of a hash parameter from the URL.
+   * @param {string} key - The key of the hash parameter to retrieve.
+   * @returns {string|null} The value of the hash parameter, or null if not found.
+   */
+  static get(key) {
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    return hash.get(key);
+  }
+
+  /**
+   * Returns true if the key exists in the URL hash or false if not
+   * @param {string} key The key of the hash parameter to retrieve.
+   * @returns  {boolean}
+   */
+  static has(key) {
+    return UrlHash.get(key) !== null;
+  }
+
+  /**
+   * Removes a hash parameter from the URL without reloading the page.
+   * @param {string} key - The key of the hash parameter to remove.
+   * @param {boolean} [dispatchEvent=true] If a 'hashchange' event should be dispatched. Defaults to true
+   */
+  static remove(key, dispatchEvent = true) {
+    if (!UrlHash.has(key)) return; // Do nothing if the key does not exist
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    hash.delete(key); // Remove the specified key
+    const updatedHash = hash.toString();
+    // Use history.replaceState to update the current history entry
+    history.replaceState(null, '', '#' + updatedHash);
+    if (dispatchEvent) {
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    }
+  }
+}
+
+
+
+/**
+ * Escapes the given text to valid html
+ * @param {string} text 
+ * @returns {string} The escaped text
+ */
+function escapeHtml$1(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
+ * Authentication plugin using the new class-based architecture
+ */
+
+
+// 
+// UI Type Definitions
+//
+
+/**
+ * @typedef {object} loginDialog
+ * @property {HTMLFormElement} form
+ * @property {SlInput} username
+ * @property {SlInput} password
+ * @property {SlButton} submit
+ * @property {SlButton} [aboutBtn]
+ * @property {HTMLDivElement} message
+ */
+
+/**
+ * @typedef {Object} UserData 
+ * @param {string} username
+ * @param {string} fullname
+ * @param {string[]} roles
+ * @param {string} [sessionId]
+ */
+
+// Register templates
+await registerTemplate('login-dialog', 'login-dialog.html');
+await registerTemplate('logout-button', 'logout-button.html');
+
+//
+// Authentication Plugin Class
+//
+
+class AuthenticationPlugin extends Plugin {
+  constructor(context) {
+    super(context, { 
+      name: 'authentication', 
+      deps: ['client'] 
+    });
+  }
+
+  /**
+   * Plugin installation - creates UI and sets up event handlers
+   * @param {ApplicationState} initialState
+   */
+  async install(initialState) {
+    await super.install(initialState);
+    api$g.debug(`Installing plugin "${this.name}"`);
+    
+    // Create UI elements
+    createFromTemplate('login-dialog', document.body);
+    const buttonElement = createSingleFromTemplate('logout-button');
+    
+    // @ts-ignore - insertAdjacentElement type issue
+    ui$1.toolbar.insertAdjacentElement("beforeend", buttonElement);
+    updateUi();
+    
+    // Set up event handlers - they can access this.state directly
+    ui$1.toolbar.logoutButton.addEventListener("click", () => this.logout());
+    
+    // Prevent dialog from closing
+    ui$1.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
+    
+    // Add Enter key handling for login
+    ui$1.loginDialog.username.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        ui$1.loginDialog.password.focus();
+      }
+    });
+    
+    ui$1.loginDialog.password.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        ui$1.loginDialog.submit.click();
+      }
+    });
+  }
+
+  /**
+   * React to state changes
+   * @param {string[]} changedKeys
+   */
+  async onStateUpdate(changedKeys) {
+    if (changedKeys.includes('user')) {
+      ui$1.toolbar.logoutButton.disabled = this.state?.user === null;
+    }
+  }
+
+  /**
+   * Save session to URL hash on shutdown
+   */
+  async shutdown() {
+    if (this.state?.sessionId) {
+      UrlHash.set('sessionId', this.state.sessionId, false);
+    }
+  }
+
+  //
+  // Public API methods
+  //
+
+  /**
+   * Checks if the user is authenticated. If not, shows a login dialog
+   * and returns a promise that resolves only after a successful login.
+   * @returns {Promise<UserData>} the userdata
+   */
+  async ensureAuthenticated() {
+    let userData;
+    try {
+      userData = await api$a.status();
+    } catch (error) {
+      // Not authenticated, proceed to show login dialog
+      userData = await this._showLoginDialog();
+    }
+    
+    // Only update sessionId if userData contains one (from login), not from status check
+    const stateUpdate = { user: userData };
+    if (userData.sessionId) {
+      stateUpdate.sessionId = userData.sessionId;
+    }
+    
+    await this.dispatchStateChange(stateUpdate);
+    return userData;
+  }
+
+  /**
+   * Returns the current user or null if none has been authenticated
+   * @returns {UserData|null}
+   */
+  getUser() {
+    return this.state?.user;
+  }
+
+  /**
+   * Shows the login dialog and updates state if login was successful
+   */
+  async showLoginDialog() {
+    try {
+      const userData = await this._showLoginDialog();
+      await this.dispatchStateChange({
+        sessionId: userData.sessionId, 
+        user: userData
+      });
+    } catch (error) {
+      api$g.error("Error logging in: " + error.message);
+    }
+  }
+
+  /**
+   * Logs the user out
+   */
+  async logout() {
+    try {
+      await api$a.logout();
+      await this.dispatchStateChange({ 
+        user: null, 
+        sessionId: null,
+        xml: null,
+        pdf: null,
+        diff: null
+      });
+      // re-login
+      await this.showLoginDialog();
+    } catch (error) {
+      api$g.error('Logout failed:' + error);
+    }
+  }
+
+  //
+  // Private methods
+  //
+
+  /**
+   * Creates and displays the login dialog.
+   * @returns {Promise<UserData>} A promise that resolves on successful login with the user data.
+   * @private
+   */
+  async _showLoginDialog() {
+    const dialog = ui$1.loginDialog;
+    return new Promise((resolve, reject) => {
+      dialog.submit.addEventListener('click', async () => {
+        const username = dialog.username.value;
+        const password = dialog.password.value;
+        dialog.message.textContent = '';
+        const passwd_hash = await this._hashPassword(password);
+        try {
+          const userData = await api$a.login(username, passwd_hash);
+          dialog.hide();
+          dialog.username.value = "";
+          dialog.password.value = "";
+          resolve(userData); 
+        } catch (error) {
+          dialog.message.textContent = 'Wrong username or password';
+          api$g.error('Login failed:', error.message);
+          reject(error);
+        }
+      }, {once: true});
+      dialog.show();
+    });
+  }
+
+  /**
+   * Hashes a password using SHA-256.
+   * @param {string} password
+   * @returns {Promise<string>}
+   * @private
+   */
+  async _hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+}
+
+/**
+ * This plugin provides logging endpoints and an API to invoke them. The implementation uses
+ * console.* methods
+ */
+
+
+// name of the plugin
+const name$1 = "logger";
+
+/**
+ * A object mapping human readable log level names to numbers
+ */
+const logLevel = {
+  CRITICAL: 1,
+  WARN: 2,
+  INFO: 3,
+  DEBUG: 4};
+
+/**
+ * The current logging level.
+ * @type {number}
+ * @global
+ */
+let currentLogLevel = logLevel.INFO; 
+
+/**
+ * Easy to use logging API which will  send log events to all registered log plugins 
+ */
+const api$g = {
+  /**
+   * Sets the log level {@see logLevel}
+   * @param {Number} level The log level
+   * @returns {Promise}
+   */
+  setLogLevel: level => pluginManager.invoke(endpoints.log.setLogLevel, {level}),
+
+  /**
+   * Logs a debug message, with varying levels of verbosity
+   * @param {string} message The debug message
+   * @param {Number} level The log level, which is normally either DEBUG (4) or VERBOSE (5)
+   * @returns {Promise}
+   */
+  debug: (message, level = logLevel.DEBUG) => pluginManager.invoke(endpoints.log.debug, {message, level}),
+
+  /**
+   * Logs an informational message
+   * @param {string} message 
+   * @returns {Promise}
+   */
+  info: message => pluginManager.invoke(endpoints.log.info, {message}),
+
+  /**
+   * Logs an warning message
+   * @param {string} message 
+   * @returns {Promise}
+   */
+  warn: message => pluginManager.invoke(endpoints.log.warn, {message}),
+
+  /**
+   * Logs an message about a critical or fatal error
+   * @param {string} message 
+   * @returns {Promise}
+   */
+  critical: message => pluginManager.invoke(endpoints.log.critical, {message})
+};
+
+api$g.error = api$g.critical; // alias for critical
+
+/**
+ * component plugin
+ */
+const plugin$m = {
+  name: name$1,
+  install: install$k,
+  log: {
+    setLogLevel,
+    debug,
+    info: info$1,
+    warn,
+    critical
+  }
+};
+
+//
+// implementation
+//
+
+async function install$k(state) {
+  console.log(`Installing plugin "${plugin$m.name}"`);
+}
+
+
+
+/**
+ * Sets the global debugging level.
+ * Only debug messages with a level less than or equal to this value will be displayed.
+ * @param {object} options - An object containing the message and level.
+ * @param {number} options.level The new debugging level.
+ * @returns {void}
+ */
+function setLogLevel({level}) {
+  currentLogLevel = level;
+}
+
+/**
+ * Logs a debug message if the message's level is less than or equal to the current global log level.
+ * The message will be prefixed with "DEBUG: ".
+ * @param {object} options - An object containing the message and level.
+ * @param {any} options.message - The message or object to log.
+ * @param {number} [options.level=1] - The level of this debug message. Defaults to 1.
+ * @returns {void}
+ */
+function debug({message, level = logLevel.DEBUG}) {
+  if (level >= currentLogLevel) {
+    console.groupCollapsed(`DEBUG`, message);
+    console.trace();
+    console.groupEnd();
+  }
+}
+
+/**
+ * Logs an informational message using console.info.
+ * @param {object} options - An object containing the message and level.
+ * @param {any} options.message - The message or object to log.
+ * @returns {void}
+ */
+function info$1({message}) {
+  if (currentLogLevel >= logLevel.INFO) {
+    console.info(message);
+  }
+}
+
+/**
+ * Logs a warning message using console.warn.
+ * @param {object} options - An object containing the message and level.
+ * @param {any} options.message - The message or object to log.
+ * @returns {void}
+ */
+function warn({message}) {
+  if (currentLogLevel >= logLevel.WARN) {
+    console.warn(message);
+  }
+}
+
+/**
+ * Logs a fatal error message using console.error.
+ * @param {object} options - An object containing the message and level.
+ * @param {any} options.message - The message or object to log.
+ * @returns {void}
+ */
+function critical({message}) {
+  if (currentLogLevel >= logLevel.CRITICAL) {
+    console.error(message);
+  }
+}
+
+/**
+ * Plugin providing an application configuration related API
+ * The configuration is different from the application's state as it is stored on the server and typically 
+ * changes only if explicit and relatively permanent changes to the application's behavior are intended.
+ * It exposes only a public API and has no install or update lifecycle hooks 
+ */
+
+
+/**
+ * The public API of the config plugin.
+ * @namespace
+ */
+const api$f = {
+  get,
+  set,
+  load: updateConfigData
+};
+
+/**
+ * The configuration plugin definition.
+ * @type {Plugin}
+ */
+const plugin$l = {
+  name: "config",
+  deps: ['client']
+};
+
+/**
+ * A Map-like object holding the configuration data fetched from the server.
+ * @type {Object<string, any> | undefined}
+ */
+let configMap;
+
+/**
+ * Fetches the configuration data from the server and updates the local `configMap`.
+ * @async
+ * @returns {Promise<void>} A promise that resolves when the configuration is updated.
+ */
+async function updateConfigData () {
+  api$g.debug('Updating configuration data.');
+  configMap = await api$a.getConfigData();
+}
+
+/**
+ * Checks if a given key exists in the configuration data and returns it value. If the key does not exist,
+ * it either returns a default value if one has been passed, or throws a type error
+ * @param {string} key The configuration key to check.
+ * @param {string} [defaultValue] The value to return if the key does not exist
+ * @throws {TypeError} If the key does not exist in the configuration and no default value hass been passed
+ */
+async function _get(key, defaultValue){
+  if (configMap === undefined) {
+    throw new Error("Configuration data has not been loaded yet")
+  }
+  if (key in configMap) {
+    return configMap[key]
+  } 
+  if (defaultValue !== undefined) {
+    return defaultValue
+  }
+  throw new TypeError(`No configuration key "${key}" exists`)
+}
+
+/**
+ * Retrieves a configuration value for a given key.
+ * @async
+ * @param {string} key The key of the configuration value to retrieve.
+ * @param {any} [defaultValue] The value to return if the key does not exist
+ * @param {boolean} [updateFirst=false] - If true, forces an update from the server before getting the value.
+ * @returns {Promise<any>} A promise that resolves with the configuration value.
+ * @throws {TypeError} If the key does not exist.
+ */
+async function get(key, defaultValue, updateFirst=false) {
+  if (!configMap || updateFirst) {
+    await updateConfigData();
+  }
+  return await _get(key, defaultValue)
+}
+
+/**
+ * Sets a configuration value for a given key on the server.
+ * @async
+ * @param {string} key The key of the configuration value to set.
+ * @param {any} value The new value to set.
+ * @returns {Promise<void>} A promise that resolves when the value has been set.
+ * @throws {TypeError} If the key does not exist.
+ */
+async function set(key, value) {
+  await _get(key); // this checks the key 
+  await api$a.setConfigValue(key, value);
+}
+
+/**
+ * This plugin provides an API to save selected properties of the application state in the URL hash
+ * and to update the application state from the URL hash on page load.
+ * This allows sharing links to the current application state and restoring the state when reloading the page
+ */
+
+
+/** 
+ * @import { ApplicationState } from '../app.js' 
+ */
+
+// module closure vars
+let showInUrl;
+let allowSetFromUrl$1;
+
+const api$e = {
+  updateUrlHashfromState,
+  updateStateFromUrlHash,
+  getStateFromUrlHash
+};
+
+/**
+ * component plugin
+ */
+const plugin$k = {
+  name: "url-hash-state",
+  deps: ['config'],
+  install: install$j,
+  state: {
+    update: update$g
+  }
+};
+
+//
+// implementation
+//
+
+/** 
+ * @param {ApplicationState} state 
+ */
+async function install$j(state) {
+  api$g.debug(`Installing plugin "${plugin$k.name}"`);
+  showInUrl = await api$f.get("state.showInUrl") || [];
+  allowSetFromUrl$1 = await api$f.get("state.allowSetFromUrl") || [];
+}
+
+/** 
+ * @param {ApplicationState} state 
+ */
+async function update$g(state) {
+  updateUrlHashfromState(state);
+}
+
+/**
+ * @param {ApplicationState} state 
+ */
+function updateUrlHashfromState(state) {
+  const url = new URL(window.location.href);
+  const urlHashParams = new URLSearchParams(window.location.hash.slice(1));
+  Object.entries(state)
+    .filter(([key]) => showInUrl.includes(key))
+    .forEach(([key, value]) => {
+      if (value) {
+        urlHashParams.set(key, String(value));
+      } else {
+        urlHashParams.delete(key);
+      }
+    });
+  let hash = `#${urlHashParams.toString()}`;
+  if (hash !== url.hash) {
+    url.hash = hash;
+    window.history.replaceState({}, '', url);
+  }
+}
+
+/**
+ * Gets state properties from URL hash without updating state (for initialization)
+ * @returns {Object} Object with state properties from URL hash
+ */
+function getStateFromUrlHash() {
+  const tmpState = {};
+  const urlParams = new URLSearchParams(window.location.hash.slice(1));
+  for (const [key, value] of urlParams.entries()) {
+    if (allowSetFromUrl$1.includes(key)) {
+      tmpState[key] = value;
+    }
+    if (!showInUrl.includes(key)) {
+      UrlHash.remove(key, false);
+    }
+  }
+  if (Object.keys(tmpState).length > 0) {
+    api$g.info("Getting state properties from URL hash: " + Object.keys(tmpState).join(", "));
+  }
+  return tmpState
+}
+
+/**
+ * Updates the state from the URL hash, removing all state properties that should not be shown in the URL from the hash
+ * @param {ApplicationState} state
+ * @returns {Promise<Array>} Returns the result of updateState
+ */
+async function updateStateFromUrlHash(state) {
+  const tmpState = getStateFromUrlHash();
+  return await updateState(state, tmpState)
+}
+
+/**
+ * This implements Server-Sent Events (SSE) connection management
+ */
+
+
+/**
+ * plugin API
+ */
+const api$d = {
+  /**
+   * @param {string} type
+   * @param {(event: MessageEvent) => void} listener
+   */
+  addEventListener: (type, listener) => {
+    if (eventSource) {
+      eventSource.addEventListener(type, listener);
+    } else {
+      // Queue listeners for when connection is established
+      if (!queuedListeners[type]) {
+        queuedListeners[type] = [];
+      }
+      queuedListeners[type].push(listener);
+    }
+  },
+  /**
+   * @param {string} type
+   * @param {(event: MessageEvent) => void} listener
+   */
+  removeEventListener: (type, listener) => {
+    if (eventSource) {
+      eventSource.removeEventListener(type, listener);
+    }
+  },
+  get readyState() {
+    return eventSource ? eventSource.readyState : EventSource.CLOSED
+  },
+  get url() {
+    return eventSource ? eventSource.url : null
+  },
+  get reconnectAttempts() {
+    return reconnectAttempts
+  },
+  /**
+   * Force a reconnection attempt
+   */
+  reconnect() {
+    if (cachedSessionId) {
+      api$g.info('Manual reconnection requested');
+      cleanupConnection();
+      establishConnection(cachedSessionId);
+    } else {
+      api$g.warn('Cannot reconnect: no cached session ID');
+    }
+  }
+};
+
+/**
+ * component plugin
+ */
+const plugin$j = {
+  name: "sse",
+  install: install$i,
+  state: {
+    update: update$f
+  }
+};
+
+let eventSource = null;
+let cachedSessionId = null;
+let queuedListeners = {};
+let reconnectTimeout = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
+
+/** 
+ * @param {ApplicationState} state 
+ */
+async function install$i(state){
+  api$g.debug(`Installing plugin "${plugin$j.name}"`);
+}
+
+/**
+ * @param {ApplicationState} state 
+ */
+async function update$f(state) {
+  const { user, sessionId } = state;
+
+  // Close existing connection if the session ID has changed or user logged out
+  if (eventSource && (sessionId !== cachedSessionId || !user)) {
+    api$g.debug('Closing SSE connection due to session change or logout.');
+    cleanupConnection();
+  }
+
+  // Open a new connection if user is logged in and there's no active connection
+  if (user && sessionId && !eventSource) {
+    establishConnection(sessionId);
+  }
+}
+
+/**
+ * Establish SSE connection with retry logic
+ * @param {string} sessionId 
+ */
+function establishConnection(sessionId) {
+  api$g.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
+  
+  const url = `/sse/subscribe?session_id=${sessionId}`;
+  eventSource = new EventSource(url);
+  cachedSessionId = sessionId;
+
+  eventSource.onopen = () => {
+    api$g.info('SSE connection established successfully');
+    reconnectAttempts = 0; // Reset reconnection attempts on successful connection
+    
+    // Clear any pending reconnection timeout
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
+  };
+
+  // Add any queued listeners
+  Object.keys(queuedListeners).forEach(type => {
+    queuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
+      eventSource.addEventListener(type, listener);
+    });
+  });
+
+  eventSource.onerror = (_event) => {
+    const readyState = eventSource ? eventSource.readyState : 'unknown';
+    const errorMsg = `EventSource failed (readyState: ${readyState})`;
+    
+    // Provide more detailed error information
+    if (readyState === EventSource.CONNECTING) {
+      api$g.warn(`${errorMsg} - Connection attempt failed`);
+    } else if (readyState === EventSource.CLOSED) {
+      api$g.warn(`${errorMsg} - Connection was closed`);
+    } else {
+      api$g.error(`${errorMsg} - Unexpected error`);
+    }
+
+    // Close the connection
+    if (eventSource) {
+      eventSource.close();
+    }
+    eventSource = null;
+
+    // Attempt reconnection if we haven't exceeded the limit
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      const delay = RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts); // Exponential backoff
+      reconnectAttempts++;
+      
+      api$g.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+      
+      reconnectTimeout = setTimeout(() => {
+        if (cachedSessionId) { // Only reconnect if we still have a session
+          establishConnection(cachedSessionId);
+        }
+      }, delay);
+    } else {
+      api$g.error(`Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) exceeded. SSE connection abandoned.`);
+      cachedSessionId = null;
+      reconnectAttempts = 0;
+    }
+  };
+
+  // Clear queued listeners after adding them (but keep the reference for new connections)
+  const currentQueuedListeners = { ...queuedListeners };
+  queuedListeners = {};
+  
+  // Re-add listeners for reconnections
+  Object.keys(currentQueuedListeners).forEach(type => {
+    currentQueuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
+      api$d.addEventListener(type, listener);
+    });
+  });
+
+  // Standard message channels
+  eventSource.addEventListener('updateStatus', /** @param {MessageEvent} evt */ evt => {
+    api$g.info('SSE Status Update:' + evt.data);
+  });
+}
+
+/**
+ * Clean up SSE connection and cancel any pending reconnections
+ */
+function cleanupConnection() {
+  // Cancel any pending reconnection
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  
+  // Close the connection
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  
+  // Reset state
+  cachedSessionId = null;
+  reconnectAttempts = 0;
+  
+  api$g.debug('SSE connection cleaned up');
+}
+
+/**
  * This application plugin implements a dialog registered as the "diaolog" property of the app
  */
 
@@ -16684,16 +17689,16 @@ window.ui = ui; // for debugging
 /** @import { ApplicationState } from '../app.js' */
 
 // Plugin API
-const api$d = {
+const api$c = {
   info,
   error: error$1,
   success
 };
 
 // Plugin object
-const plugin$j = {
+const plugin$i = {
   name: "dialog",
-  install: install$i
+  install: install$h
 };
 
 //
@@ -16717,8 +17722,8 @@ const plugin$j = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
-async function install$i(app) {
-  api$h.debug(`Installing plugin "${plugin$j.name}"`);
+async function install$h(app) {
+  api$g.debug(`Installing plugin "${plugin$i.name}"`);
   await createHtmlElements("dialog.html", document.body);
   updateUi();
   ui$1.dialog.closeBtn.addEventListener('click', () => ui$1.dialog.hide());
@@ -17260,10 +18265,10 @@ let titleWidget$1;
 /**
  * plugin object
  */
-const plugin$i = {
+const plugin$h = {
   name: "pdfviewer",
-  install: install$h,
-  state: { update: update$f }
+  install: install$g,
+  state: { update: update$e }
 };
 
 //
@@ -17274,10 +18279,10 @@ const plugin$i = {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function install$h(state) {
-  api$h.debug(`Installing plugin "${plugin$i.name}"`);
+async function install$g(state) {
+  api$g.debug(`Installing plugin "${plugin$h.name}"`);
   await pdfViewer.isReady();
-  api$h.info("PDF Viewer ready.");
+  api$g.info("PDF Viewer ready.");
   pdfViewer.show();
   
   // Add title widget to PDF viewer headerbar
@@ -17312,14 +18317,14 @@ async function install$h(state) {
  * @param {ApplicationState} state
  * @returns {Promise<void>}
  */
-async function update$f(state) {
-  if (hasStateChanged(state, 'pdf')) {
+async function update$e(state) {
+  if (hasStateChanged$1(state, 'pdf')) {
     // Clear PDF viewer when no PDF is loaded
     if (state.pdf === null) {
       try {
         await pdfViewer.clear();
       } catch (error) {
-        api$h.warn("Error clearing PDF viewer:" + error.message);
+        api$g.warn("Error clearing PDF viewer:" + error.message);
       }
     }
   }
@@ -17330,7 +18335,7 @@ async function update$f(state) {
       const title = getDocumentTitle(state.pdf);
       titleWidget$1.text = title || 'PDF Document';
     } catch (error) {
-      api$h.warn("Could not get document title:"+ error.message);
+      api$g.warn("Could not get document title:"+ error.message);
       titleWidget$1.text = 'PDF Document';
     }
   } else if (titleWidget$1) {
@@ -17353,9 +18358,9 @@ async function onAutoSearchSwitchChange(evt) {
     autoSearchSwitch.setAttribute('help-text', newHelpText);
   }
   
-  api$h.info(`Auto search is: ${checked}`);
+  api$g.info(`Auto search is: ${checked}`);
   if (checked && xmlEditor.selectedNode) {
-    await api$7.searchNodeContentsInPdf(xmlEditor.selectedNode);
+    await api$6.searchNodeContentsInPdf(xmlEditor.selectedNode);
   }
 }
 
@@ -48333,7 +49338,7 @@ class NavXmlEditor extends XMLEditor {
 const xmlEditor = new NavXmlEditor('codemirror-container');
 
 // Current state for use in event handlers
-let currentState$a = null;
+let currentState$9 = null;
 
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
@@ -48355,11 +49360,11 @@ let teiHeaderVisible = false;
 /**
  * component plugin
  */
-const plugin$h = {
+const plugin$g = {
   name: "xmleditor",
-  install: install$g,
+  install: install$f,
   state: {
-    update: update$e
+    update: update$d
   }
 };
 
@@ -48367,8 +49372,8 @@ const plugin$h = {
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$g(state) {
-  api$h.debug(`Installing plugin "${plugin$h.name}"`);
+async function install$f(state) {
+  api$g.debug(`Installing plugin "${plugin$g.name}"`);
 
   // Widget for the headerbar
   titleWidget = PanelUtils.createText({
@@ -48432,8 +49437,8 @@ async function install$g(state) {
   xmlEditor.on("selectionChanged", data => {
     xmlEditor.whenReady().then(() => {
       // Use currentState from the update method
-      if (currentState$a) {
-        onSelectionChange(currentState$a);
+      if (currentState$9) {
+        onSelectionChange(currentState$9);
       }
     });
     updateCursorPosition();
@@ -48441,7 +49446,7 @@ async function install$g(state) {
 
   // manually show diagnostics if validation is disabled
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    if (api$c.isDisabled()) {
+    if (api$b.isDisabled()) {
       let view = xmlEditor.getView();
       try {
         // Validate diagnostic positions before setting
@@ -48450,12 +49455,12 @@ async function install$g(state) {
         });
         view.dispatch(setDiagnostics(view.state, validDiagnostics));
       } catch (error) {
-        api$h.warn("Error setting diagnostics: " + error.message);
+        api$g.warn("Error setting diagnostics: " + error.message);
         // Clear diagnostics on error
         try {
           view.dispatch(setDiagnostics(view.state, []));
         } catch (clearError) {
-          api$h.warn("Error clearing diagnostics: " + clearError.message);
+          api$g.warn("Error clearing diagnostics: " + clearError.message);
         }
       }
     }
@@ -48470,14 +49475,14 @@ async function install$g(state) {
   // Handle indentation detection before loading XML
   xmlEditor.on("editorBeforeLoad", (xml) => {
     const indentUnit = detectXmlIndentation(xml);
-    api$h.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
+    api$g.debug(`Detected indentation unit: ${JSON.stringify(indentUnit)}`);
     xmlEditor.configureIntenation(indentUnit, 4); // default tab size of 4 spaces
     updateIndentationStatus(indentUnit);
   });
 
   // Save automatically when XML becomes well-formed again
   xmlEditor.on("editorXmlWellFormed", () => {
-    saveIfDirty$1(currentState$a);
+    saveIfDirty$1(currentState$9);
   });
 
   // Add widget to toggle <teiHeader> visibility
@@ -48494,7 +49499,7 @@ async function install$g(state) {
           teiHeaderVisible = false; // Reset state after document load
           updateTeiHeaderToggleWidget();
         } catch (error) {
-          api$h.debug(`Error folding teiHeader: ${error.message}`);
+          api$g.debug(`Error folding teiHeader: ${error.message}`);
         }
       } else {
         teiHeaderToggleWidget.style.display = 'none';
@@ -48511,9 +49516,9 @@ async function install$g(state) {
 /**
  * @param {ApplicationState} state
  */
-async function update$e(state) {
+async function update$d(state) {
   // Store current state for use in event handlers
-  currentState$a = state;
+  currentState$9 = state;
 
   [readOnlyStatusWidget, cursorPositionWidget,
     indentationStatusWidget, teiHeaderToggleWidget]
@@ -48526,7 +49531,7 @@ async function update$e(state) {
       titleWidget.text = title || 'XML Document';
       titleWidget.style.display = 'inline-flex';
     } catch (error) {
-      api$h.warn("Could not get document title:", error.message);
+      api$g.warn("Could not get document title:", error.message);
       titleWidget.text = 'XML Document';
       titleWidget.style.display = 'inline-flex';
     }
@@ -48544,7 +49549,7 @@ async function update$e(state) {
   // update the editor read-only state
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
     xmlEditor.setReadOnly(state.editorReadOnly);
-    api$h.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
+    api$g.debug(`Setting editor read-only state to ${state.editorReadOnly}`);
     if (state.editorReadOnly) {
       ui$1.xmlEditor.classList.add("editor-readonly");
       if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
@@ -48605,11 +49610,11 @@ async function saveIfDirty$1(state) {
   const filePath = String(ui$1.toolbar.xml.value);
 
   if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
-    const result = await api$7.saveXml(filePath);
+    const result = await api$6.saveXml(filePath);
     if (result.status == "unchanged") {
-      api$h.debug(`File has not changed`);
+      api$g.debug(`File has not changed`);
     } else {
-      api$h.debug(`Saved file ${result.hash}`);
+      api$g.debug(`Saved file ${result.hash}`);
       if (result.hash !== state.xml) {
         // Update state to use new hash from server
         await updateState(state, { xml: result.hash });
@@ -48662,16 +49667,16 @@ function toggleTeiHeaderVisibility() {
       // Fold the teiHeader
       xmlEditor.foldByXpath('//tei:teiHeader');
       teiHeaderVisible = false;
-      api$h.debug('Folded teiHeader');
+      api$g.debug('Folded teiHeader');
     } else {
       // Unfold the teiHeader
       xmlEditor.unfoldByXpath('//tei:teiHeader');
       teiHeaderVisible = true;
-      api$h.debug('Unfolded teiHeader');
+      api$g.debug('Unfolded teiHeader');
     }
     updateTeiHeaderToggleWidget();
   } catch (error) {
-    api$h.warn(`Error toggling teiHeader visibility: ${error.message}`);
+    api$g.warn(`Error toggling teiHeader visibility: ${error.message}`);
   }
 }
 
@@ -48698,18 +49703,18 @@ function updateTeiHeaderToggleWidget() {
  */
 
 
-const api$c = {
+const api$b = {
   configure,
   validate,
   isValidDocument,
   isDisabled
 };
 
-const plugin$g = {
+const plugin$f = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
-  install: install$f,
-  state: {update: update$d},
+  install: install$e,
+  state: {update: update$c},
   validation: {
     validate,
     inProgress: inProgress$1
@@ -48730,8 +49735,8 @@ let lastDiagnostics = [];
 /**
  * @param {ApplicationState} state 
  */
-async function install$f(state) {
-  api$h.debug(`Installing plugin "${plugin$g.name}"`);
+async function install$e(state) {
+  api$g.debug(`Installing plugin "${plugin$f.name}"`);
   // add the linter to the editor
   xmlEditor.addLinter([
     linter(lintSource, { 
@@ -48749,7 +49754,7 @@ async function install$f(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$d(state) {
+async function update$c(state) {
   if (state.offline || state.editorReadOnly || !state.xml ) {
     // if we are offline, disable validation
     configure({ mode: "off" });
@@ -48797,19 +49802,19 @@ async function lintSource(view) {
   const doc = view.state.doc;
   const xml = doc.toString();
   if (xml == "") {
-    api$h.debug("Nothing to validate.");
+    api$g.debug("Nothing to validate.");
     return [];
   }
 
   // don't validate if disabled and use last diagnostics
   if (_isDisabled) {
-    api$h.debug("Ignoring validation request: Validation is disabled");
+    api$g.debug("Ignoring validation request: Validation is disabled");
     return lastDiagnostics;
   }
 
   // if this is called while another validation is ongoing, return the last diagnostics
   if (validationInProgress) {
-    api$h.debug("Ignoring validation request: Validation is ongoing.");
+    api$g.debug("Ignoring validation request: Validation is ongoing.");
     return lastDiagnostics;
   }
 
@@ -48819,19 +49824,19 @@ async function lintSource(view) {
     let validationErrors;
     while (true) {
       validatedVersion = xmlEditor.getDocumentVersion(); // rewrite this!
-      api$h.debug(`Requesting validation for document version ${validatedVersion}...`);
+      api$g.debug(`Requesting validation for document version ${validatedVersion}...`);
       // inform other plugins
-      invoke(endpoints.validation.inProgress, validationPromise);
+      pluginManager.invoke(endpoints.validation.inProgress, validationPromise);
       // send request to server
       try {
-        validationErrors = await api$b.validateXml(xml);
+        validationErrors = await api$a.validateXml(xml);
       } catch (error) {
         return reject(error);
       }
       console.log(`Received validation results for document version ${validatedVersion}: ${validationErrors.length} errors.`);
       // check if document has changed in the meantime
       if (validatedVersion != xmlEditor.getDocumentVersion()) {
-        api$h.debug("Document has changed, restarting validation...");
+        api$g.debug("Document has changed, restarting validation...");
       } else {
         // convert xmllint errors to Diagnostic objects
         const diagnostics = validationErrors.map(/** @type {object} */ error => {
@@ -48875,8 +49880,8 @@ async function lintSource(view) {
     diagnostics = await validationPromise;
   } catch (error) {
     // stop querying
-    if (api$b.lastHttpStatus >= 400) {
-      console.debug("Disabling validation because of server error " + api$b.lastHttpStatus);
+    if (api$a.lastHttpStatus >= 400) {
+      console.debug("Disabling validation because of server error " + api$a.lastHttpStatus);
       configure({mode: "off"});
     }
     return lastDiagnostics
@@ -48902,11 +49907,11 @@ function configure({ mode = "auto" }) {
   switch (mode) {
     case "auto":
       _isDisabled = false;
-      api$h.info("Validation is enabled");
+      api$g.info("Validation is enabled");
       break
     case "off":
       _isDisabled = true;
-      api$h.info("Validation is disabled");
+      api$g.info("Validation is disabled");
       break
     default:
       throw new Error("Invalid mode parameter")
@@ -48921,7 +49926,7 @@ function configure({ mode = "auto" }) {
 async function validate() {
   if (isValidating()) {
     // if a validation is ongoing, we can wait for it to finish and use the result
-    api$h.debug("Validation is ongoing, waiting for it to finish");
+    api$g.debug("Validation is ongoing, waiting for it to finish");
     return await anyCurrentValidation()
   }
 
@@ -49015,7 +50020,7 @@ function removeDiagnosticsInChangedRanges(update) {
         });
       }
     } else {
-      api$h.debug("Removing diagnostic " + JSON.stringify(d));
+      api$g.debug("Removing diagnostic " + JSON.stringify(d));
     }
   });
 
@@ -49025,7 +50030,7 @@ function removeDiagnosticsInChangedRanges(update) {
   try {
     xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
   } catch (error) {
-    api$h.warn("Error setting diagnostics after range change:", error);
+    api$g.warn("Error setting diagnostics after range change:", error);
     // Clear all diagnostics if there's an error
     xmlEditor.getView().dispatch(setDiagnostics(viewState, []));
     lastDiagnostics = [];
@@ -49519,7 +50524,7 @@ const upload_route = api_base_url + '/files/upload';
 /**
  * plugin API
  */
-const api$b = {
+const api$a = {
   get lastHttpStatus() {
     return lastHttpStatus
   },
@@ -49551,34 +50556,29 @@ const api$b = {
   getAllLocks,
   getCacheStatus,
   login,
-  logout: logout$1,
+  logout,
   status
 };
 
 
 /**
  * component plugin
+ * @type {Plugin}
  */
-const plugin$f = {
+const plugin$e = {
   name: "client",
   state: {
-    update: update$c
+    update: update$b
   }
 };
 
 /**
- * 
  * @param {ApplicationState} state 
  */
-async function update$c(state) {
-  console.log('DEBUG client update - received state:', state);
-  console.log('DEBUG client update - current sessionId before:', sessionId);
-  if (hasStateChanged(state, 'sessionId')) {
+async function update$b(state) {
+  if (hasStateChanged$1(state, 'sessionId')) {
     sessionId = state.sessionId;
-    console.log('DEBUG client update - sessionId changed, new value:', sessionId);
-    api$h.debug(`Setting session id to ${sessionId}`);
-  } else {
-    console.log('DEBUG client update - sessionId unchanged:', sessionId);
+    api$g.debug(`Setting session id to ${sessionId}`);
   }
   return sessionId
 }
@@ -49609,8 +50609,6 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     options.body = JSON.stringify(body);
   }
 
-  console.log('DEBUG callApi - making request to:', url, 'with sessionId:', sessionId);
-  
   // function to send the request which can be repeatedly called in case of a timeout
   const sendRequest = async () => {
 
@@ -49664,7 +50662,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       error = e;
       if (error instanceof ConnectionError) {
         // retry in case of ConnectionError
-        api$h.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
+        api$g.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`);
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
@@ -49675,7 +50673,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
-  api$h.warn([error.statusCode, error.name, error.message].toString());
+  api$g.warn([error.statusCode, error.name, error.message].toString());
   if (!(error instanceof LockedError)) {
     notify(error.message, 'error');
   }
@@ -49690,17 +50688,14 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
  * @returns {Promise<import('./authentication.js').UserData>}
  */
 async function login(username, passwd_hash) {
-  console.log('DEBUG client login - attempting login with username:', username);
-  const result = await callApi('/auth/login', 'POST', { username, passwd_hash });
-  console.log('DEBUG client login - login result:', result);
-  return result;
+  return await callApi('/auth/login', 'POST', { username, passwd_hash });
 }
 
 /**
  * Logs out the current user
  * @returns {Promise<any>}
  */
-async function logout$1() {
+async function logout() {
   return await callApi('/auth/logout', 'POST', {});
 }
 
@@ -50072,7 +51067,7 @@ let fileData = [];
 /**
  * plugin API
  */
-const api$a = {
+const api$9 = {
   reload,
   fileData
 };
@@ -50080,12 +51075,12 @@ const api$a = {
 /**
  * component plugin
  */
-const plugin$e = {
+const plugin$d = {
   name: "file-selection",
 
-  install: install$e,
+  install: install$d,
   state: {
-    update: update$b,
+    update: update$a,
     changeFileData: data => {
       fileData = data;
     }
@@ -50109,9 +51104,9 @@ await registerTemplate('file-selection', 'file-selection.html');
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$e(state) {
+async function install$d(state) {
 
-  api$h.debug(`Installing plugin "${plugin$e.name}"`);
+  api$g.debug(`Installing plugin "${plugin$d.name}"`);
   
   // Create file selection controls
   const fileSelectionControls = createFromTemplate('file-selection');
@@ -50154,8 +51149,8 @@ async function install$e(state) {
       }
       
       
-      if (currentState$9) {
-        await handler(currentState$9);
+      if (currentState$8) {
+        await handler(currentState$8);
       } else {
         console.warn(`${select.name} selection ignored: no current state available`);
       }
@@ -50177,15 +51172,15 @@ async function install$e(state) {
  * 
  * @param {ApplicationState} state 
  */
-async function update$b(state) {
+async function update$a(state) {
   // Store current state for use in event handlers
-  currentState$9 = state;
+  currentState$8 = state;
   
   // Note: Don't mutate state directly in update() - that would cause infinite loops
   // The state.collection should be managed by other functions that call updateState()
   
   // Check if relevant state properties have changed
-  if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
+  if (hasStateChanged$1(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
     await populateSelectboxes(state);
   }
   
@@ -50217,7 +51212,7 @@ async function reload(state, options = {}) {
 
 let variants;
 let collections;
-let currentState$9 = null;
+let currentState$8 = null;
 let isUpdatingProgrammatically$1 = false;
 
 /**
@@ -50296,7 +51291,7 @@ async function populateSelectboxes(state) {
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
-  api$h.debug("Populating selectboxes");
+  api$g.debug("Populating selectboxes");
 
   // Note: This function should only be called when fileData exists
   // If fileData is missing, it should be loaded via reloadFileData() which will trigger
@@ -50508,14 +51503,14 @@ async function onChangePdfSelection(state) {
   if (Object.keys(filesToLoad).length > 0) {
     
     try {
-      api$7.removeMergeView(state);
+      api$6.removeMergeView(state);
       await updateState(state, { collection });
-      await api$7.load(state, filesToLoad);
+      await api$6.load(state, filesToLoad);
     }
     catch (error) {
       await updateState(state, { collection: null, pdf: null, xml: null });
       await reload(state, {refresh:true});
-      api$h.warn(error.message);
+      api$g.warn(error.message);
     }
   }
 }
@@ -50544,13 +51539,13 @@ async function onChangeXmlSelection(state) {
       }
       
       
-      await api$7.removeMergeView(state);
-      await api$7.load(state, { xml });
+      await api$6.removeMergeView(state);
+      await api$6.load(state, { xml });
     } catch (error) {
       console.error(error.message);
       await reload(state, {refresh:true});
       await updateState(state, {xml:null});
-      api$d.error(error.message);
+      api$c.error(error.message);
     }
   }
 }
@@ -50563,12 +51558,12 @@ async function onChangeDiffSelection(state) {
   const diff = ui$1.toolbar.diff.value;
   if (diff && typeof diff == "string" && diff !== ui$1.toolbar.xml.value) {
     try {
-      await api$7.showMergeView(state, diff);
+      await api$6.showMergeView(state, diff);
     } catch (error) {
       console.error(error);
     }
   } else {
-    await api$7.removeMergeView(state);
+    await api$6.removeMergeView(state);
   }
   await updateState(state, { diff: diff });
 }
@@ -50591,7 +51586,7 @@ async function onChangeVariantSelection(state) {
 /**
  * plugin API
  */
-const api$9 = {
+const api$8 = {
   open: open$2,
   close: close$2
 };
@@ -50599,11 +51594,11 @@ const api$9 = {
 /**
  * component plugin
  */
-const plugin$d = {
+const plugin$c = {
   name: "file-selection-drawer",
-  install: install$d,
+  install: install$c,
   state: {
-    update: update$a
+    update: update$9
   }
 };
 
@@ -50614,7 +51609,7 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 // Internal state
 let currentLabelFilter = '';
 let needsTreeUpdate = false;
-let currentState$8 = null;
+let currentState$7 = null;
 let isUpdatingProgrammatically = false;
 
 //
@@ -50625,8 +51620,8 @@ let isUpdatingProgrammatically = false;
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$d(state) {
-  api$h.debug(`Installing plugin "${plugin$d.name}"`);
+async function install$c(state) {
+  api$g.debug(`Installing plugin "${plugin$c.name}"`);
   
   // Create and add trigger button to toolbar
   const triggerButton = createSingleFromTemplate('file-drawer-button');
@@ -50665,8 +51660,8 @@ async function install$d(state) {
     
     
     // Use currentState instead of stale installation-time state
-    if (currentState$8) {
-      onVariantChange(currentState$8);
+    if (currentState$7) {
+      onVariantChange(currentState$7);
     } else {
       console.warn("Variant change ignored: no current state available");
     }
@@ -50675,8 +51670,8 @@ async function install$d(state) {
   // Handle label filter changes
   ui$1.fileDrawer.labelFilter.addEventListener('sl-input', () => {
     // Use currentState instead of stale installation-time state
-    if (currentState$8) {
-      onLabelFilterChange(currentState$8);
+    if (currentState$7) {
+      onLabelFilterChange(currentState$7);
     } else {
       console.warn("Label filter change ignored: no current state available");
     }
@@ -50694,8 +51689,8 @@ async function install$d(state) {
     
     
     // Use currentState instead of stale installation-time state
-    if (currentState$8) {
-      onFileTreeSelection(event, currentState$8);
+    if (currentState$7) {
+      onFileTreeSelection(event, currentState$7);
     } else {
       console.warn("File tree selection ignored: no current state available");
     }
@@ -50706,12 +51701,12 @@ async function install$d(state) {
  * Opens the file selection drawer
  */
 async function open$2() {
-  api$h.debug("Opening file selection drawer");
+  api$g.debug("Opening file selection drawer");
   ui$1.fileDrawer?.show();
   
   // Update tree if needed when opening
-  if (needsTreeUpdate && currentState$8?.fileData) {
-    await populateFileTree(currentState$8);
+  if (needsTreeUpdate && currentState$7?.fileData) {
+    await populateFileTree(currentState$7);
     needsTreeUpdate = false;
   }
 }
@@ -50720,7 +51715,7 @@ async function open$2() {
  * Closes the file selection drawer
  */
 function close$2() {
-  api$h.debug("Closing file selection drawer");
+  api$g.debug("Closing file selection drawer");
   ui$1.fileDrawer.hide();
 }
 
@@ -50728,9 +51723,9 @@ function close$2() {
  * Handles state updates
  * @param {ApplicationState} state
  */
-async function update$a(state) {
+async function update$9(state) {
   // Store current state for lazy loading
-  currentState$8 = state;
+  currentState$7 = state;
   
   // Check if relevant state properties have changed
   if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData') && state.fileData) {
@@ -51074,7 +52069,7 @@ async function onFileTreeSelection(event, state) {
   if (Object.keys(filesToLoad).length > 0) {
     
     try {
-      await api$7.load(state, filesToLoad);
+      await api$6.load(state, filesToLoad);
     } catch (error) {
       console.error("Error loading files:", error.message);
       // On error, reset state and reload file data (similar to file-selection.js)
@@ -51635,7 +52630,7 @@ function getDocumentMetadata(xmlDoc) {
 /**
  * plugin API
  */
-const api$8 = {
+const api$7 = {
   extractFromCurrentPDF,
   extractFromNewPdf,
   extractFromPDF
@@ -51644,15 +52639,15 @@ const api$8 = {
 /**
  * plugin object
  */
-const plugin$c = {
+const plugin$b = {
   name: "extraction",
   deps: ['services'],
-  install: install$c,
-  state: {update: update$9}
+  install: install$b,
+  state: {update: update$8}
 };
 
 // Current state for use in event handlers
-let currentState$7 = null;
+let currentState$6 = null;
 
 //
 // UI
@@ -51683,8 +52678,8 @@ await registerTemplate('extraction-dialog', 'extraction-dialog.html');
 /**
  * @param {ApplicationState} state
  */
-async function install$c(state) {
-  api$h.debug(`Installing plugin "${plugin$c.name}"`);
+async function install$b(state) {
+  api$g.debug(`Installing plugin "${plugin$b.name}"`);
 
   // Create UI elements
   const extractionBtnGroup = createSingleFromTemplate('extraction-buttons');
@@ -51696,19 +52691,19 @@ async function install$c(state) {
 
   // add event listeners
   ui$1.toolbar.extractionActions.extractNew.addEventListener('click', () => {
-    if (currentState$7) extractFromNewPdf(currentState$7);
+    if (currentState$6) extractFromNewPdf(currentState$6);
   });
   ui$1.toolbar.extractionActions.extractCurrent.addEventListener('click', () => {
-    if (currentState$7) extractFromCurrentPDF(currentState$7);
+    if (currentState$6) extractFromCurrentPDF(currentState$6);
   });
 }
 
 /**
  * @param {ApplicationState} state
  */
-async function update$9(state) {
+async function update$8(state) {
   // Store current state for use in event handlers
-  currentState$7 = state;
+  currentState$6 = state;
   
   // @ts-ignore
   ui$1.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline); 
@@ -51729,9 +52724,9 @@ async function extractFromCurrentPDF(state) {
  * @param {ApplicationState} state
  */
 async function extractFromNewPdf(state) {
-  const { type, filename, originalFilename } = await api$b.uploadFile();
+  const { type, filename, originalFilename } = await api$a.uploadFile();
   if (type !== "pdf") {
-    api$d.error("Extraction is only possible from PDF files");
+    api$c.error("Extraction is only possible from PDF files");
     return
   }
 
@@ -51787,10 +52782,10 @@ async function extractFromPDF(state, defaultOptions={}) {
     let result;
     try {
       const filename = options.filename || state.pdf;
-      result = await api$b.extractReferences(filename, options);
+      result = await api$a.extractReferences(filename, options);
       
       // Force reload of file list since server has updated cache
-      await api$a.reload(state, {refresh:true});
+      await api$9.reload(state, {refresh:true});
       
       // Update state.variant with the variant_id that was used for extraction
       if (options.variant_id) {
@@ -51798,7 +52793,7 @@ async function extractFromPDF(state, defaultOptions={}) {
       }
       
       // Load the extracted result (server now returns hashes)
-      await api$7.load(state, result);
+      await api$6.load(state, result);
       
     } finally {
       ui$1.spinner.hide();
@@ -51809,7 +52804,7 @@ async function extractFromPDF(state, defaultOptions={}) {
     if (error instanceof UserAbortException) {
       return // do nothing
     }
-    api$d.error(error.message);
+    api$c.error(error.message);
   }
 }
 
@@ -51821,7 +52816,7 @@ async function extractFromPDF(state, defaultOptions={}) {
 async function promptForExtractionOptions(options={}) {
 
   // load instructions
-  const instructionsData = await api$b.loadInstructions();
+  const instructionsData = await api$a.loadInstructions();
   const instructions = [];
 
   // Get document metadata to pre-fill form with current document values
@@ -51867,7 +52862,7 @@ async function promptForExtractionOptions(options={}) {
   // Get extractors and store for dynamic options
   let availableExtractors = [];
   try {
-    const extractors = await api$b.getExtractorList();
+    const extractors = await api$a.getExtractorList();
     // Filter extractors that support PDF input and TEI document output
     availableExtractors = extractors.filter(extractor => 
       extractor.input.includes("pdf") && extractor.output.includes("tei-document")
@@ -51902,7 +52897,7 @@ async function promptForExtractionOptions(options={}) {
     }
   } catch (error) {
     // Handle extractor list loading gracefully
-    api$h.warn("Could not load extraction engines:", error.message);
+    api$g.warn("Could not load extraction engines:", error.message);
     // Disable extraction functionality when extractors can't be loaded
     modelSelectBox.disabled = true;
     availableExtractors = [];
@@ -52081,7 +53076,7 @@ async function promptForExtractionOptions(options={}) {
   
   // Validate DOI only if one is provided
   if (formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
-    api$d.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
+    api$c.error(`"${formData.doi}" does not seem to be a DOI, please try again.`);
     return null
   }
   
@@ -52278,7 +53273,7 @@ var prettyPrintXml = {
 /**
  * plugin API
  */
-const api$7 = {
+const api$6 = {
   load: load$1,
   validateXml,
   saveXml,
@@ -52298,18 +53293,18 @@ const api$7 = {
  * component plugin
  * @type {Plugin}
  */
-const plugin$b = {
+const plugin$a = {
   name: "services",
   deps: ['file-selection'],
-  install: install$b,
-  state: { update: update$8 },
+  install: install$a,
+  state: { update: update$7 },
   validation: { inProgress }
 };
 
 // Status widget for saving progress
 let savingStatusWidget = null;
 // Current state for use in event handlers
-let currentState$6 = null;
+let currentState$5 = null;
 
 //
 // UI
@@ -52369,8 +53364,8 @@ await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
 /**
  * @param {ApplicationState} state
  */
-async function install$b(state) {
-  api$h.debug(`Installing plugin "${plugin$b.name}"`);
+async function install$a(state) {
+  api$g.debug(`Installing plugin "${plugin$a.name}"`);
 
   // Create UI elements
   const documentActionButtons = createFromTemplate('document-action-buttons');
@@ -52402,35 +53397,35 @@ async function install$b(state) {
 
   // save a revision
   da.saveRevision.addEventListener('click', () => {
-    if (currentState$6) saveRevision(currentState$6);
+    if (currentState$5) saveRevision(currentState$5);
   });
   // enable save button on dirty editor
   xmlEditor.on("editorReady",() => {da.saveRevision.disabled = false;});
 
   // delete
   da.deleteCurrentVersion.addEventListener("click", () => {
-    if (currentState$6) deleteCurrentVersion(currentState$6);
+    if (currentState$5) deleteCurrentVersion(currentState$5);
   });
   da.deleteAllVersions.addEventListener('click', () => {
-    if (currentState$6) deleteAllVersions(currentState$6);
+    if (currentState$5) deleteAllVersions(currentState$5);
   });
   da.deleteAll.addEventListener('click', () => {
-    if (currentState$6) deleteAll(currentState$6);
+    if (currentState$5) deleteAll(currentState$5);
   });
 
   // new version
   da.createNewVersion.addEventListener("click", () => {
-    if (currentState$6) createNewVersion(currentState$6);
+    if (currentState$5) createNewVersion(currentState$5);
   });
 
   // download
   da.download.addEventListener("click", () => {
-    if (currentState$6) downloadXml(currentState$6);
+    if (currentState$5) downloadXml(currentState$5);
   });
 
   // upload
   da.upload.addEventListener("click", () => {
-    if (currentState$6) uploadXml(currentState$6);
+    if (currentState$5) uploadXml(currentState$5);
   });
 
   // === TEI button group ===
@@ -52444,9 +53439,9 @@ async function install$b(state) {
  * Invoked on application state change
  * @param {ApplicationState} state
  */
-async function update$8(state) {
+async function update$7(state) {
   // Store current state for use in event handlers
-  currentState$6 = state;
+  currentState$5 = state;
   //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
@@ -52462,7 +53457,7 @@ async function update$8(state) {
     return
   }
 
-  da.deleteAll.disabled = api$a.fileData.length < 2; // at least on PDF must be present
+  da.deleteAll.disabled = api$9.fileData.length < 2; // at least on PDF must be present
   da.deleteAllVersions.disabled = ui$1.toolbar.xml.childElementCount < 2;
   // @ts-ignore
   da.deleteCurrentVersion.disabled = ui$1.toolbar.xml.value === ui$1.toolbar.xml.firstChild?.value;
@@ -52505,7 +53500,7 @@ async function load$1(state, { xml, pdf }) {
   // PDF 
   if (pdf) {
     await updateState(state, { pdf: null, xml: null, diff: null });
-    api$h.info("Loading PDF: " + pdf);
+    api$g.info("Loading PDF: " + pdf);
     // Convert document identifier to static file URL
     const pdfUrl = `/api/files/${pdf}`;
     promises.push(pdfViewer.load(pdfUrl));
@@ -52519,25 +53514,25 @@ async function load$1(state, { xml, pdf }) {
       try {
         ui$1.spinner.show('Loading file, please wait...');
         if (state.xml && !state.editorReadOnly) {
-          await api$b.releaseLock(state.xml);
+          await api$a.releaseLock(state.xml);
         }
         // Check access control before attempting to acquire lock
         const canEdit = api$1.checkCanEditFile(xml);
         if (!canEdit) {
-          api$h.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
+          api$g.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
           notify(`You don't have permission to edit this document, loading in read-only mode`);
           file_is_locked = true;
         } else {
           try {
-            await api$b.acquireLock(xml);
-            api$h.debug(`Acquired lock for file ${xml}`);
+            await api$a.acquireLock(xml);
+            api$g.debug(`Acquired lock for file ${xml}`);
           } catch (error) {
-            if (error instanceof api$b.LockedError) {
-              api$h.debug(`File ${xml} is locked, loading in read-only mode`);
+            if (error instanceof api$a.LockedError) {
+              api$g.debug(`File ${xml} is locked, loading in read-only mode`);
               notify(`File is being edited by another user, loading in read-only mode`);
               file_is_locked = true;
             } else {
-              api$d.error(error.message);
+              api$c.error(error.message);
               throw error
             }
           }
@@ -52549,7 +53544,7 @@ async function load$1(state, { xml, pdf }) {
 
     await removeMergeView(state);
     await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked });
-    api$h.info("Loading XML: " + xml);
+    api$g.info("Loading XML: " + xml);
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`;
     promises.push(xmlEditor.loadXml(xmlUrl));
@@ -52561,7 +53556,7 @@ async function load$1(state, { xml, pdf }) {
   } catch (error) {
     console.error(error.message);
     if (error.status === 404) {
-      await api$a.reload(state);
+      await api$9.reload(state);
       return
     }
     throw error
@@ -52580,7 +53575,7 @@ async function load$1(state, { xml, pdf }) {
 
   // Set collection based on loaded documents if not already set
   if ((pdf || xml) && !state.collection) {
-    for (const file of api$a.fileData) {
+    for (const file of api$9.fileData) {
       // Check PDF hash
       if (pdf && file.pdf && file.pdf.hash === pdf) {
         state.collection = file.collection;
@@ -52605,23 +53600,23 @@ async function load$1(state, { xml, pdf }) {
 async function startAutocomplete() {
   // Load autocomplete data asynchronously after XML is loaded
   try {
-    api$h.debug("Loading autocomplete data for XML document");
+    api$g.debug("Loading autocomplete data for XML document");
     const xmlContent = xmlEditor.getEditorContent();
     if (xmlContent) {
-      const autocompleteData = await api$b.getAutocompleteData(xmlContent);
+      const autocompleteData = await api$a.getAutocompleteData(xmlContent);
       if (autocompleteData && !autocompleteData.error) {
         // Resolve deduplicated references
         const resolvedData = resolveDeduplicated(autocompleteData);
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData);
-        api$h.debug("Autocomplete data loaded and applied");
+        api$g.debug("Autocomplete data loaded and applied");
       } else if (autocompleteData && autocompleteData.error) {
-        api$h.debug("No autocomplete data available: " + autocompleteData.error);
+        api$g.debug("No autocomplete data available: " + autocompleteData.error);
       }
     }
     return true 
   } catch (error) {
-    api$h.warn("Failed to load autocomplete data: " + error.message);
+    api$g.warn("Failed to load autocomplete data: " + error.message);
     return false
   }
 }
@@ -52631,8 +53626,8 @@ async function startAutocomplete() {
  * @returns {Promise<object[]>}
  */
 async function validateXml() {
-  api$h.info("Validating XML...");
-  return await api$c.validate() // todo use endpoint instead
+  api$g.info("Validating XML...");
+  return await api$b.validate() // todo use endpoint instead
 }
 
 /**
@@ -52643,7 +53638,7 @@ async function validateXml() {
  * @throws {Error}
  */
 async function saveXml(filePath, saveAsNewVersion = false) {
-  api$h.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+  api$g.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
   if (!xmlEditor.getXmlTree()) {
     throw new Error("No XML valid document in the editor")
   }
@@ -52654,10 +53649,10 @@ async function saveXml(filePath, saveAsNewVersion = false) {
         ui$1.xmlEditor.statusbar.add(savingStatusWidget, 'left', 10);
       }
     }
-    return await api$b.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
+    return await api$a.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
   } catch (e) {
     console.error("Error while saving XML:", e.message);
-    api$d.error(`Could not save XML: ${e.message}`);
+    api$c.error(`Could not save XML: ${e.message}`);
     throw new Error(`Could not save XML: ${e.message}`)
   } finally {
     // clear status message after 1 second 
@@ -52675,7 +53670,7 @@ async function saveXml(filePath, saveAsNewVersion = false) {
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
 async function showMergeView(state, diff) {
-  api$h.info("Loading diff XML: " + diff);
+  api$g.info("Loading diff XML: " + diff);
   ui$1.spinner.show('Computing file differences, please wait...');
   try {
     // Convert document identifier to static file URL
@@ -52683,7 +53678,7 @@ async function showMergeView(state, diff) {
     await xmlEditor.showMergeView(diffUrl);
     await updateState(state, { diff: diff });
     // turn validation off as it creates too much visual noise
-    api$c.configure({ mode: "off" });
+    api$b.configure({ mode: "off" });
   } finally {
     ui$1.spinner.hide();
   }
@@ -52696,7 +53691,7 @@ async function showMergeView(state, diff) {
 async function removeMergeView(state) {
   xmlEditor.hideMergeView();
   // re-enable validation
-  api$c.configure({ mode: "auto" });
+  api$b.configure({ mode: "auto" });
   UrlHash.remove("diff");
   await updateState(state, { diff: null });
 }
@@ -52709,7 +53704,7 @@ async function removeMergeView(state) {
 async function deleteCurrentVersion(state) {
   // @ts-ignore
   if (ui$1.toolbar.xml.value.startsWith("/data/tei")) {
-    api$d.error("You cannot delete the gold version");
+    api$c.error("You cannot delete the gold version");
     return
   }
   const filePathsToDelete = [ui$1.toolbar.xml.value];
@@ -52717,14 +53712,14 @@ async function deleteCurrentVersion(state) {
     const versionName = ui$1.toolbar.xml.selectedOptions[0].textContent;
     const msg = `Are you sure you want to delete the current version "${versionName}"?`;
     if (!confirm(msg)) return; // todo use dialog
-    api$7.removeMergeView(state);
+    api$6.removeMergeView(state);
     // delete the file
-    await api$b.deleteFiles(filePathsToDelete);
+    await api$a.deleteFiles(filePathsToDelete);
     try {
       // Clear current XML state after successful deletion
       await updateState(state, { xml: null });
       // update the file data
-      await api$a.reload(state);
+      await api$9.reload(state);
       // load the gold version
       // @ts-ignore
       const xml = ui$1.toolbar.xml.firstChild?.value;
@@ -52748,7 +53743,7 @@ async function deleteCurrentVersion(state) {
 async function deleteAllVersions(state) {
   // Get the current PDF to find all its versions
   const currentPdf = ui$1.toolbar.pdf.value;
-  const selectedFile = api$a.fileData.find(file => file.pdf.hash === currentPdf);
+  const selectedFile = api$9.fileData.find(file => file.pdf.hash === currentPdf);
   
   if (!selectedFile || !selectedFile.versions) {
     return; // No versions to delete
@@ -52780,14 +53775,14 @@ async function deleteAllVersions(state) {
     notify(`No versions ${variantText} found to delete.`);
     return;
   }
-  api$7.removeMergeView(state);
+  api$6.removeMergeView(state);
   // delete
-  await api$b.deleteFiles(filePathsToDelete);
+  await api$a.deleteFiles(filePathsToDelete);
   try {
     // Clear current XML state after successful deletion
     await updateState(state, { xml: null });
     // update the file data
-    await api$a.reload(state);
+    await api$9.reload(state);
     
     // Find and load the appropriate gold version for the current variant
     let goldToLoad = null;
@@ -52843,11 +53838,11 @@ async function deleteAll(state) {
     if (!confirm(msg)) return; // todo use dialog
   }
 
-  api$7.removeMergeView(state);
-  api$h.debug("Deleting files:" + filePathsToDelete.join(", "));
+  api$6.removeMergeView(state);
+  api$g.debug("Deleting files:" + filePathsToDelete.join(", "));
   
   try {
-    await api$b.deleteFiles(filePathsToDelete);
+    await api$a.deleteFiles(filePathsToDelete);
     notify(`${filePathsToDelete.length} files have been deleted.`);
     api$2.syncFiles(state)
       .then(summary => summary && console.debug(summary))
@@ -52857,7 +53852,7 @@ async function deleteAll(state) {
     notify(error.message, "warning");
   } finally {
     // update the file data
-    await api$a.reload(state, {refresh:true});
+    await api$9.reload(state, {refresh:true});
     // remove xml and pdf
     await updateState(state, {xml: null, pdf: null});
   }
@@ -52873,7 +53868,7 @@ async function downloadXml(state) {
     throw new TypeError("State does not contain an xml path")
   }
   let xml = xmlEditor.getXML();
-  if (await api$g.get('xml.encode-entities.server')) {
+  if (await api$f.get('xml.encode-entities.server')) {
     xml = encodeXmlEntities(xml);
   }
   const blob = new Blob([xml], { type: 'application/xml' });
@@ -52891,10 +53886,10 @@ async function downloadXml(state) {
  * @param {ApplicationState} state 
  */
 async function uploadXml(state) {
-  const { filename: tempFilename } = await api$b.uploadFile(undefined, { accept: '.xml' });
+  const { filename: tempFilename } = await api$a.uploadFile(undefined, { accept: '.xml' });
   // @ts-ignore
-  const { path } = await api$b.createVersionFromUpload(tempFilename, state.xml);
-  await api$a.reload(state);
+  const { path } = await api$a.createVersionFromUpload(tempFilename, state.xml);
+  await api$9.reload(state);
   await load$1(state, { xml: path });
   notify("Document was uploaded. You are now editing the new version.");
 }
@@ -52954,7 +53949,7 @@ async function saveRevision(state) {
   const dialog = ui$1.newRevisionChangeDialog;
   dialog.changeDesc.value = "Corrections";
   try {
-    const user = api$3.getUser();
+    const user = authentication.getUser();
     if (user) {
       dialog.persId.value = dialog.persId.value || user.username;
       dialog.persName.value = dialog.persName.value || user.fullname;
@@ -52995,7 +53990,7 @@ async function saveRevision(state) {
     
     // If migration occurred, first reload file data, then update state
     if (result.status === "saved_with_migration") {
-      await api$a.reload(state);
+      await api$9.reload(state);
       state.xml = result.hash;
       await updateState(state);
     }
@@ -53022,7 +54017,7 @@ async function createNewVersion(state) {
   // @ts-ignore
   const newVersiondialog = ui$1.newVersionDialog;
   try {
-    const user = api$3.getUser();
+    const user = authentication.getUser();
     if (user) {
       newVersiondialog.persId.value = newVersiondialog.persId.value || user.username;
       newVersiondialog.persName.value = newVersiondialog.persName.value || user.fullname;
@@ -53070,18 +54065,18 @@ async function createNewVersion(state) {
     xmlEditor.markAsClean(); 
 
     // reload the file data to display the new name and inform the user
-    await api$a.reload(state, {refresh:true});
+    await api$9.reload(state, {refresh:true});
     notify("Document was duplicated. You are now editing the copy.");
     
     // sync the new file to the WebDav server
     if (state.webdavEnabled) {
       api$2.syncFiles(state)
-      .then(summary => summary && api$h.debug(summary))
+      .then(summary => summary && api$g.debug(summary))
       .catch(e => console.error(e));
     }
   } catch (e) {
     console.error(e);
-    api$d.warn(e.message);
+    api$c.warn(e.message);
   } finally {
     ui$1.toolbar.documentActions.saveRevision.disabled = false;
     newVersiondialog.hide();
@@ -53147,7 +54142,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
     const versionName = edition.title;
     const editionTitleElements = xmlDoc.querySelectorAll('edition > title');
     const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName);
-    const nameExistsInVersions = api$a.fileData.some(file => file.label === versionName);
+    const nameExistsInVersions = api$9.fileData.some(file => file.label === versionName);
     if (nameExistsInDoc || nameExistsInVersions) {
       throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
     }
@@ -53168,7 +54163,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 /**
  * plugin API
  */
-const api$6 = {
+const api$5 = {
   show: () => ui$1.floatingPanel.classList.remove("hidden"),
   hide: () => ui$1.floatingPanel.classList.add("hidden"),
 };
@@ -53176,11 +54171,11 @@ const api$6 = {
 /**
  * component plugin
  */
-const plugin$a = {
+const plugin$9 = {
   name: "floating-panel",
   deps: ['config'],
-  install: install$a,
-  state: { update: update$7 }
+  install: install$9,
+  state: { update: update$6 }
 };
 
 //
@@ -53221,15 +54216,15 @@ let currentUser = null;
 let cachedExtractors = null;
 
 /** @type {ApplicationState} */
-let currentState$5;
+let currentState$4;
 
 
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
  */
-async function install$a(state) {
-  api$h.debug(`Installing plugin "${plugin$a.name}"`);
+async function install$9(state) {
+  api$g.debug(`Installing plugin "${plugin$9.name}"`);
 
   document.body.append(...floatingPanelControls);
   updateUi();
@@ -53248,7 +54243,7 @@ async function install$a(state) {
 
   // listen for changes in the selectbox
   xp.addEventListener('change', async () => {
-    await updateState(currentState$5, { xpath: xp.value });
+    await updateState(currentState$4, { xpath: xp.value });
   });
 
   // Edit XPath button functionality removed for now
@@ -53257,29 +54252,29 @@ async function install$a(state) {
   const fp = ui$1.floatingPanel;
 
   // node navigation
-  fp.previousNode.addEventListener('click', () => changeNodeIndex(currentState$5, -1));
-  fp.nextNode.addEventListener('click', () => changeNodeIndex(currentState$5, 1));
+  fp.previousNode.addEventListener('click', () => changeNodeIndex(currentState$4, -1));
+  fp.nextNode.addEventListener('click', () => changeNodeIndex(currentState$4, 1));
 
   // diff navigation
   fp.diffNavigation.prevDiff.addEventListener('click', () => xmlEditor.goToPreviousDiff());
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff());
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
     xmlEditor.rejectAllDiffs();
-    api$7.removeMergeView(currentState$5);
+    api$6.removeMergeView(currentState$4);
   });
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
     xmlEditor.acceptAllDiffs();
-    api$7.removeMergeView(currentState$5);
+    api$6.removeMergeView(currentState$4);
   });
 
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex); // allow to input node index
 
   // configure "status" buttons
   $$('.node-status').forEach(btn => btn.addEventListener('click', async evt => {
-    if (!currentState$5.xpath) {
+    if (!currentState$4.xpath) {
       return
     }
-    xmlEditor.selectByXpath(currentState$5.xpath);
+    xmlEditor.selectByXpath(currentState$4.xpath);
     if (xmlEditor.selectedNode) {
       $$('.node-status').forEach(btn => btn.disabled = true);
       await xmlEditor.setNodeStatus(xmlEditor.selectedNode, evt.target.dataset.status);
@@ -53292,8 +54287,8 @@ async function install$a(state) {
  * Reacts to application state changes
  * @param {ApplicationState} state 
  */
-async function update$7(state) {
-  currentState$5 = state;
+async function update$6(state) {
+  currentState$4 = state;
   
   // Cache extractor list when user actually changes (not just stale initialization)
   let extractorsJustCached = false;
@@ -53304,11 +54299,11 @@ async function update$7(state) {
     // Only fetch extractors if we don't have them cached or this is a real user change
     if (!cachedExtractors || (previousUser !== null && previousUser !== state.user)) {
       try {
-        cachedExtractors = await api$b.getExtractorList();
+        cachedExtractors = await api$a.getExtractorList();
         extractorsJustCached = true;
-        api$h.debug('Cached extractor list for floating panel:'+ cachedExtractors);
+        api$g.debug('Cached extractor list for floating panel:'+ cachedExtractors);
       } catch (error) {
-        api$h.warn('Failed to load extractor list:' +  error.message || error);
+        api$g.warn('Failed to load extractor list:' +  error.message || error);
         cachedExtractors = [];
       }
     }
@@ -53359,7 +54354,7 @@ function updateCounter(xpath, index) {
   try {
     size = xmlEditor.countDomNodesByXpath(xpath);
   } catch (e) {
-    api$h.warn('Cannot update counter: ' + e.message);
+    api$g.warn('Cannot update counter: ' + e.message);
     size = 0;
   }
   index = index || 1;
@@ -53381,7 +54376,7 @@ async function changeNodeIndex(state, delta) {
   if (index < 0) index = size; 
   if (index >= size) index = 1;
   const xpath = normativeXpath + `[${index}]`;
-  await updateState(currentState$5, { xpath });
+  await updateState(currentState$4, { xpath });
 }
 
 
@@ -53426,7 +54421,7 @@ async function populateXpathSelectbox(state) {
     const navigationXpath = extractor.navigation_xpath?.[variantId];
     if (navigationXpath) {
       navigationXpathList = navigationXpath;
-      api$h.debug('Found navigation xpath list:', navigationXpathList);
+      api$g.debug('Found navigation xpath list:', navigationXpathList);
       break
     }
   }
@@ -53467,7 +54462,7 @@ function onClickSelectionIndex() {
   try {
     xmlEditor.selectByIndex(parseInt(index));
   } catch (error) {
-    api$d.error(error.message);
+    api$c.error(error.message);
   }
 }
 
@@ -53543,7 +54538,7 @@ function makeDraggable(element) {
 /**
  * plugin API
  */
-const api$5 = {
+const api$4 = {
   open: open$1,
   edit,
   duplicate: duplicateInstructions,
@@ -53556,10 +54551,10 @@ const api$5 = {
 /**
  * Plugin object
  */
-const plugin$9 = {
+const plugin$8 = {
   name: "prompt-editor",
   deps: ['extraction'],
-  install: install$9
+  install: install$8
 };
 
 //
@@ -53591,8 +54586,8 @@ await registerTemplate('prompt-editor-button', 'prompt-editor-button.html');
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$9(state) {
-  api$h.debug(`Installing plugin "${plugin$9.name}"`);
+async function install$8(state) {
+  api$g.debug(`Installing plugin "${plugin$8.name}"`);
   
   // Create UI elements
   createSingleFromTemplate('prompt-editor', document.body);
@@ -53608,7 +54603,7 @@ async function install$9(state) {
 
   // add a button to the command bar to show dialog with prompt editor
   ui$1.toolbar.extractionActions.append(promptEditorButton);
-  promptEditorButton.addEventListener("click", () => api$5.open());
+  promptEditorButton.addEventListener("click", () => api$4.open());
 }
 
 // API
@@ -53629,7 +54624,7 @@ let currentIndex = 0;
 async function open$1() {
   if (!prompts){
     ui$1.promptEditor.labelMenu.childNodes.forEach(node => node.remove());
-    prompts = await api$b.loadInstructions();
+    prompts = await api$a.loadInstructions();
     for (const [idx, prompt] of prompts.entries()) {
       addSlMenuItem(idx, prompt.label);
     }
@@ -53639,7 +54634,7 @@ async function open$1() {
   await populateExtractorSelect();
   
   ui$1.promptEditor.delete.disabled = prompts.length < 2;
-  api$5.edit(currentIndex);
+  api$4.edit(currentIndex);
   ui$1.promptEditor.show();
 }
 
@@ -53651,7 +54646,7 @@ async function populateExtractorSelect() {
   extractorSelect.innerHTML = "";
   
   try {
-    const extractors = await api$b.getExtractorList();
+    const extractors = await api$a.getExtractorList();
     for (const extractor of extractors) {
       const option = Object.assign(new option_default, {
         value: extractor.id,
@@ -53660,7 +54655,7 @@ async function populateExtractorSelect() {
       extractorSelect.appendChild(option);
     }
   } catch (error) {
-    api$h.warn("Could not load extractor list for prompt editor:", error);
+    api$g.warn("Could not load extractor list for prompt editor:", error);
     // Fallback to default extractor
     const option = Object.assign(new option_default, {
       value: "llamore-gemini",
@@ -53710,7 +54705,7 @@ function duplicateInstructions() {
  */
 async function save() {
   saveCurrentPrompt();
-  api$b.saveInstructions(prompts);
+  api$a.saveInstructions(prompts);
 }
 
 /**
@@ -53777,7 +54772,7 @@ function menuOnSelect(event) {
   // @ts-ignore
   ui$1.promptEditor.labelMenu.childNodes[currentIndex].checked = false;
   currentIndex = item.value;
-  api$5.edit(currentIndex);
+  api$4.edit(currentIndex);
 }
 
 /**
@@ -53819,10 +54814,10 @@ const enhancements = [
 
 
 
-const plugin$8 = {
+const plugin$7 = {
   name: "tei-wizard",
-  install: install$8,
-  state: {update: update$6},
+  install: install$7,
+  state: {update: update$5},
   deps: ['services']
 };
 
@@ -53840,8 +54835,8 @@ let teiWizardButton;
 /**
  * @param {ApplicationState} state 
  */
-async function install$8(state) {
-  api$h.debug(`Installing plugin "${plugin$8.name}"`);
+async function install$7(state) {
+  api$g.debug(`Installing plugin "${plugin$7.name}"`);
 
   // Create UI elements
   teiWizardButton = createSingleFromTemplate('tei-wizard-button');
@@ -53880,7 +54875,7 @@ async function install$8(state) {
 /**
  * @param {ApplicationState} state 
  */
-async function update$6(state) {
+async function update$5(state) {
   // @ts-ignore
   teiWizardButton.disabled = state.editorReadOnly;
   //console.warn(plugin.name,"done")
@@ -62312,7 +63307,7 @@ MarkdownIt.prototype.renderInline = function (src, env) {
 /**
  * plugin API
  */
-const api$4 = {
+const api$3 = {
   open,
   load,
   goBack,
@@ -62324,10 +63319,10 @@ const api$4 = {
 /**
  * Plugin object
  */
-const plugin$7 = {
+const plugin$6 = {
   name: "info",
   deps: ['authentication'],
-  install: install$7
+  install: install$6
 };
 
 //
@@ -62409,8 +63404,8 @@ let currentPage = 'index.md';
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state The main application
  */
-async function install$7(state) {
-  api$h.debug(`Installing plugin "${plugin$7.name}"`);
+async function install$6(state) {
+  api$g.debug(`Installing plugin "${plugin$6.name}"`);
   
   // Create UI elements
   createFromTemplate('info-dialog', document.body);
@@ -62437,7 +63432,7 @@ async function install$7(state) {
   // add a button to the command bar to show dialog
   ui$1.toolbar.add(button, 1); // Low priority for info button
   updateUi();
-  button.addEventListener("click", () => api$4.open());
+  button.addEventListener("click", () => api$3.open());
   
   // configure markdown parser
   const options = {
@@ -62448,7 +63443,7 @@ async function install$7(state) {
   md = MarkdownIt(options);
   
   // @ts-ignore
-  window.appInfo = api$4;
+  window.appInfo = api$3;
 }
 
 // API
@@ -62494,7 +63489,7 @@ async function load(mdPath, addToHistory = true){
     // First, try to load from remote if online
     isOnline = await checkOnlineConnectivity();
     if (isOnline) {
-      api$h.debug(`Loading documentation from remote: ${mdPath}`);
+      api$g.debug(`Loading documentation from remote: ${mdPath}`);
       markdown = await (await fetch(`${remoteDocsBasePath}/${mdPath}`)).text();
     } else {
       throw new Error("No online connectivity")
@@ -62502,10 +63497,10 @@ async function load(mdPath, addToHistory = true){
   } catch(error) {
     // Fallback to local filesystem
     try {
-      api$h.debug(`Falling back to local documentation: ${mdPath}`);
+      api$g.debug(`Falling back to local documentation: ${mdPath}`);
       markdown = await (await fetch(`${localDocsBasePath}/${mdPath}`)).text();
     } catch(localError) {
-      api$d.error(`Failed to load documentation: ${localError.message}`);
+      api$c.error(`Failed to load documentation: ${localError.message}`);
       return 
     }
   }
@@ -62592,7 +63587,7 @@ function showHelpFromLoginDialog() {
   ui$1.infoDrawer.addEventListener("sl-hide",() => {
     ui$1.loginDialog.show();
   }, {once:true});
-  api$4.open();
+  api$3.open();
 }
 
 /**
@@ -62600,15 +63595,15 @@ function showHelpFromLoginDialog() {
  */
 
 
-const plugin$6 = {
+const plugin$5 = {
   name: "move-files",
   deps: ['services'],
-  install: install$6,
-  state: { update: update$5 }
+  install: install$5,
+  state: { update: update$4 }
 };
 
 // Current state for use in event handlers  
-let currentState$4 = null;
+let currentState$3 = null;
 
 //
 // UI
@@ -62640,8 +63635,8 @@ await registerTemplate('move-files-dialog', 'move-files-dialog.html');
 /**
  * @param {ApplicationState} state
  */
-async function install$6(state) {
-  api$h.debug(`Installing plugin "${plugin$6.name}"`);
+async function install$5(state) {
+  api$g.debug(`Installing plugin "${plugin$5.name}"`);
 
   // Create dialog and add button & dialog to UI
   createSingleFromTemplate('move-files-dialog', document.body);
@@ -62650,13 +63645,13 @@ async function install$6(state) {
 
   // add event listener
   moveBtn.addEventListener('click', () => {
-    if (currentState$4) showMoveFilesDialog(currentState$4);
+    if (currentState$3) showMoveFilesDialog(currentState$3);
   });
   ui$1.moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
     const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
     if (newCollectionName) {
       if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
-        api$d.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
+        api$c.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
         return;
       }
       const option = Object.assign(document.createElement('sl-option'), {
@@ -62675,7 +63670,7 @@ async function install$6(state) {
 async function showMoveFilesDialog(state) {
   const { xml, pdf } = state;
   if (!xml || !pdf) {
-    api$d.error("Cannot move files, PDF or XML path is missing.");
+    api$c.error("Cannot move files, PDF or XML path is missing.");
     return;
   }
 
@@ -62700,7 +63695,7 @@ async function showMoveFilesDialog(state) {
       ui$1.moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
-    api$h.warn("User cancelled move files dialog");
+    api$g.warn("User cancelled move files dialog");
     return;
   } finally {
     ui$1.moveFilesDialog.hide();
@@ -62708,18 +63703,18 @@ async function showMoveFilesDialog(state) {
 
   const destinationCollection = String(collectionSelectBox.value);
   if (!destinationCollection) {
-    api$d.error("No collection selected.");
+    api$c.error("No collection selected.");
     return;
   }
 
   ui$1.spinner.show('Moving files, please wait...');
   try {
-    const { new_pdf_path, new_xml_path } = await api$b.moveFiles(pdf, xml, destinationCollection);
-    await api$a.reload(state);
-    await api$7.load(state, { pdf: new_pdf_path, xml: new_xml_path });
+    const { new_pdf_path, new_xml_path } = await api$a.moveFiles(pdf, xml, destinationCollection);
+    await api$9.reload(state);
+    await api$6.load(state, { pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
-    api$d.error(`Error moving files: ${error.message}`);
+    api$c.error(`Error moving files: ${error.message}`);
   } finally {
     ui$1.spinner.hide();
   }
@@ -62729,9 +63724,9 @@ async function showMoveFilesDialog(state) {
  * State update handler
  * @param {ApplicationState} state
  */
-async function update$5(state) {
+async function update$4(state) {
   // Store current state for use in event handlers
-  currentState$4 = state;
+  currentState$3 = state;
 }
 
 /**
@@ -62747,12 +63742,12 @@ async function update$5(state) {
  * Plugin object
  * dependencies are automatically set to all other plugins, so that it is the last one to be installed
  */
-const plugin$5 = {
+const plugin$4 = {
   name: "start",
-  install: install$5,
+  install: install$4,
   start: start$2,
   state: {
-    update: update$4
+    update: update$3
   }
 };
 
@@ -62765,14 +63760,14 @@ let spinner;
 let validationStatusWidget = null;
 
 /**@type {ApplicationState} */
-let currentState$3;
+let currentState$2;
 
 /**
  * Invoked for plugin installation
  * @param {ApplicationState} state 
  */
-async function install$5(state) {
-  api$h.debug(`Installing plugin "${plugin$5.name}"`);
+async function install$4(state) {
+  api$g.debug(`Installing plugin "${plugin$4.name}"`);
   // spinner/blocker
   spinner = new Spinner;
   // @ts-ignore
@@ -62791,8 +63786,8 @@ async function install$5(state) {
  * Observes state changes for UI updates
  * @param {ApplicationState} state
  */
-async function update$4(state) {
-  currentState$3 = state;
+async function update$3(state) {
+  currentState$2 = state;
 }
 
 /**
@@ -62804,30 +63799,30 @@ async function start$2() {
   try {
 
     // Authenticate user, otherwise we don't proceed further
-    const userData = await api$3.ensureAuthenticated();
-    api$h.info(`${userData.fullname} has logged in.`);
+    const userData = await authentication.ensureAuthenticated();
+    api$g.info(`${userData.fullname} has logged in.`);
     notify(`Welcome back, ${userData.fullname}!`);
 
     // load config data
-    await api$g.load();
+    await api$f.load();
 
     ui$1.spinner.show('Loading documents, please wait...');
 
     // update the file lists
-    await reloadFileData(currentState$3, { refresh: true });
+    await reloadFileData(currentState$2, { refresh: true });
 
     // disable regular validation so that we have more control over it
-    api$c.configure({ mode: "off" });
+    api$b.configure({ mode: "off" });
 
     // get document paths from URL hash 
     // @ts-ignore
-    const pdf = currentState$3.pdf || null;
-    const xml = currentState$3.xml || null;
-    const diff = currentState$3.diff;
+    const pdf = currentState$2.pdf || null;
+    const xml = currentState$2.xml || null;
+    const diff = currentState$2.diff;
 
     if (pdf !== null) {
       // lod the documents
-      await api$7.load(currentState$3, { pdf, xml, diff });
+      await api$6.load(currentState$2, { pdf, xml, diff });
     }
 
     // two alternative initial states:
@@ -62836,34 +63831,34 @@ async function start$2() {
     if (diff && diff !== xml) {
       // a) load the diff view
       try {
-        await api$7.showMergeView(currentState$3, diff);
+        await api$6.showMergeView(currentState$2, diff);
       } catch (error) {
-        api$h.warn("Error loading diff view: " + error.message);
+        api$g.warn("Error loading diff view: " + error.message);
       }
     } else {
       // b) validation & xpath selection
 
       // measure how long it takes to validate the document
       const startTime = new Date().getTime();
-      api$7.validateXml().then(() => {
+      api$6.validateXml().then(() => {
         const endTime = new Date().getTime();
         const seconds = Math.round((endTime - startTime) / 1000);
         // disable validation if it took longer than 3 seconds on slow servers
-        api$h.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
-        api$c.configure({ mode: seconds > 3 ? "off" : "auto" });
+        api$g.info(`Validation took ${seconds} seconds${seconds > 3 ? ", disabling it." : "."}`);
+        api$b.configure({ mode: seconds > 3 ? "off" : "auto" });
       });
 
       // the xpath of the (to be) selected node in the xml editor, setting the state triggers the selection
       const xpath = UrlHash.get("xpath") || ui$1.floatingPanel.xpath.value;
 
       // update the UI
-      await updateState(currentState$3, { xpath });
+      await updateState(currentState$2, { xpath });
 
       // synchronize in the background
-      api$2.syncFiles(currentState$3).then(async (summary) => {
-        api$h.info(summary);
+      api$2.syncFiles(currentState$2).then(async (summary) => {
+        api$g.info(summary);
         if (summary && !summary.skipped) {
-          await reloadFileData(currentState$3, { refresh: true });
+          await reloadFileData(currentState$2, { refresh: true });
         }
       });
     }
@@ -62872,17 +63867,17 @@ async function start$2() {
     configureXmlEditor();
 
     // Heartbeat mechanism for file locking and offline detection
-    api.start(currentState$3, await api$g.get('heartbeat.interval', 10));
+    api.start(currentState$2, await api$f.get('heartbeat.interval', 10));
 
     // finish initialization
     ui$1.spinner.hide();
-    api$6.show();
+    api$5.show();
     xmlEditor.setLineWrapping(true);
-    api$h.info("Application ready.");
+    api$g.info("Application ready.");
 
   } catch (error) {
     ui$1.spinner.hide();
-    api$d.error(error.message);
+    api$c.error(error.message);
     throw error
   }
 }
@@ -62897,7 +63892,7 @@ function configureXmlEditor() {
 
   // manually show diagnostics if validation is disabled
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    if (api$c.isDisabled()) {
+    if (api$b.isDisabled()) {
       let view = xmlEditor.getView();
       try {
         // Validate diagnostic positions before setting
@@ -62906,12 +63901,12 @@ function configureXmlEditor() {
         });
         view.dispatch(setDiagnostics(view.state, validDiagnostics));
       } catch (error) {
-        api$h.warn("Error setting diagnostics: " + error.message);
+        api$g.warn("Error setting diagnostics: " + error.message);
         // Clear diagnostics on error
         try {
           view.dispatch(setDiagnostics(view.state, []));
         } catch (clearError) {
-          api$h.warn("Error clearing diagnostics: " + clearError.message);
+          api$g.warn("Error clearing diagnostics: " + clearError.message);
         }
       }
     }
@@ -62931,7 +63926,7 @@ function configureXmlEditor() {
       });
       view.dispatch(setDiagnostics(view.state, validDiagnostics));
     } catch (error) {
-      api$h.warn("Error setting XML not well-formed diagnostics: " + error.message);
+      api$g.warn("Error setting XML not well-formed diagnostics: " + error.message);
     }
     // Show validation error in statusbar
     if (validationStatusWidget && !validationStatusWidget.isConnected) {
@@ -62946,7 +63941,7 @@ function configureXmlEditor() {
     try {
       xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
     } catch (error) {
-      api$h.warn("Error clearing diagnostics on well-formed XML: " + error.message);
+      api$g.warn("Error clearing diagnostics on well-formed XML: " + error.message);
     }
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
@@ -62970,18 +63965,18 @@ async function saveIfDirty() {
   }
 
   try {
-    const result = await api$7.saveXml(filePath);
+    const result = await api$6.saveXml(filePath);
     if (result.status == "unchanged") {
-      api$h.debug(`File has not changed`);
+      api$g.debug(`File has not changed`);
     } else {
-      api$h.debug(`Saved file ${result.hash}`);
-      if (result.hash !== currentState$3.xml) {
+      api$g.debug(`Saved file ${result.hash}`);
+      if (result.hash !== currentState$2.xml) {
         // Update state to use new hash
-        await updateState(currentState$3, { xml: result.hash });
+        await updateState(currentState$2, { xml: result.hash });
       }
     }
   } catch (error) {
-    api$h.warn(`Save failed: ${error.message}`);
+    api$g.warn(`Save failed: ${error.message}`);
   }
 }
 
@@ -62999,245 +63994,9 @@ async function searchNodeContents() {
   const node = xmlEditor.selectedNode;
 
   if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
-    await api$7.searchNodeContentsInPdf(node);
+    await api$6.searchNodeContentsInPdf(node);
     lastNode = node;
   }
-}
-
-/**
- * Plugin that takes care of user authentication
- */
-
-
-// 
-// UI
-//
-
-/**
- * @typedef {object} loginDialog
- * @property {HTMLFormElement} form
- * @property {SlInput} username
- * @property {SlInput} password
- * @property {SlButton} submit
- * @property {SlButton} [aboutBtn]
- * @property {HTMLDivElement} message
- */
-
-// Register templates
-await registerTemplate('login-dialog', 'login-dialog.html');
-await registerTemplate('logout-button', 'logout-button.html');
-
-/**
- * Public API for the authentication plugin
- */
-const api$3 = {
-  showLoginDialog,
-  ensureAuthenticated,
-  getUser,
-  logout
-};
-
-/**
- * Plugin definition
- */
-const plugin$4 = {
-  name: "authentication",
-  deps: ['client'],
-  install: install$4,
-  state: {update: update$3}
-};
-
-/**
- * @typedef {Object} UserData 
- * @param {string} username
- * @param {string} fullname
- * @param {string[]} roles
- * @param {string} [sessionId]
- */
-
-//
-// Implementation
-//
-
-/**
- * Installs the plugin.
- * @param {ApplicationState} state
- */
-async function install$4(state) {
-  api$h.debug(`Installing plugin "${plugin$4.name}"`);
-  
-  // Create UI elements
-  createFromTemplate('login-dialog', document.body);
-  const buttonElement = createSingleFromTemplate('logout-button');
-  
-  // @ts-ignore - insertAdjacentElement type issue
-  ui$1.toolbar.insertAdjacentElement("beforeend", buttonElement);
-  updateUi();
-  ui$1.toolbar.logoutButton.addEventListener("click", logout);
-  // prevent dialog from closing
-  ui$1.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
-  
-  // Add Enter key handling for login
-  ui$1.loginDialog.username.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      ui$1.loginDialog.password.focus();
-    }
-  });
-  ui$1.loginDialog.password.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      ui$1.loginDialog.submit.click();
-    }
-  });
-  
-  // Add beforeunload handler to save session to URL hash
-  window.addEventListener('beforeunload', () => {
-    if (currentState$2.sessionId) {
-      UrlHash.set('sessionId', currentState$2.sessionId, false);
-    }
-  });
-}
-
-/**
- * The current state
- * @type {ApplicationState}
- */
-let currentState$2;
-
-/**
- * Handles state updates, specifically for updating the UI based on user login status.
- * @param {ApplicationState} state
- */
-async function update$3(state) {
-  console.log('DEBUG authentication update - received state:', state);
-  console.log('DEBUG authentication update - previous currentState:', currentState$2);
-  currentState$2 = state;
-  console.log('DEBUG authentication update - updated currentState:', currentState$2);
-  if (hasStateChanged(state, 'user')) {
-    console.log('DEBUG authentication update - user changed:', state.user);
-    ui$1.toolbar.logoutButton.disabled = currentState$2.user === null;
-  }
-  if (hasStateChanged(state, 'sessionId')) {
-    console.log('DEBUG authentication update - sessionId changed:', state.sessionId);
-  }
-}
-
-/**
- * Checks if the user is authenticated. If not, it shows a login dialog
- * and returns a promise that resolves only after a successful login.
- * @returns {Promise<UserData>} the userdata
- */
-async function ensureAuthenticated() {
-  let userData;
-  try {
-    userData = await api$b.status();
-    console.log('DEBUG ensureAuthenticated - user from server', userData);
-    console.log('DEBUG ensureAuthenticated - current state before update:', currentState$2);
-  } catch (error) {
-    console.log('DEBUG ensureAuthenticated - not authenticated, showing login dialog');
-    // Not authenticated, proceed to show login dialog
-    userData = await _showLoginDialog();
-  }
-  console.log('DEBUG ensureAuthenticated - updating state with userData:', userData);
-  // Only update sessionId if userData contains one (from login), not from status check
-  const stateUpdate = { user: userData };
-  if (userData.sessionId) {
-    console.log('DEBUG ensureAuthenticated - userData has sessionId, updating it:', userData.sessionId);
-    stateUpdate.sessionId = userData.sessionId;
-  } else {
-    console.log('DEBUG ensureAuthenticated - userData has no sessionId, keeping existing sessionId:', currentState$2.sessionId);
-  }
-  await updateState(currentState$2, stateUpdate);
-  console.log('DEBUG ensureAuthenticated - state updated, new currentState:', currentState$2);
-  return userData
-}
-
-/**
- * Returns the current user or null if none has been authenticated
- * @returns {UserData|null}
- */
-function getUser() {
-  return currentState$2.user
-}
-
-/**
- * Shows the login dialog and mutates the state if 
- * login was successful
- */
-async function showLoginDialog() {
-  try {
-    const userData = await _showLoginDialog();
-    console.log('DEBUG showLoginDialog - got userData:', userData);
-    console.log('DEBUG showLoginDialog - currentState before update:', currentState$2);
-    await updateState(currentState$2, {sessionId: userData.sessionId, user: userData});
-    console.log('DEBUG showLoginDialog - state updated, new currentState:', currentState$2);
-  } catch (error) {
-    api$h.error("Error logging in: " + error.message);
-  }
-}
-
-/**
- * Creates and displays the login dialog.
- * @returns {Promise<UserData>} A promise that resolves on successful login with the user data.
- * @private
- */
-async function _showLoginDialog() {
-  const dialog = ui$1.loginDialog;
-  return new Promise((resolve, reject) => {
-    dialog.submit.addEventListener('click', async () => {
-      const username = dialog.username.value;
-      const password = dialog.password.value;
-      dialog.message.textContent = '';
-      const passwd_hash = await _hashPassword(password);
-      try {
-        const userData = await api$b.login(username, passwd_hash);
-        console.log('DEBUG _showLoginDialog - login successful, userData:', userData);
-        dialog.hide();
-        dialog.username.value = "";
-        dialog.password.value = "";
-        resolve(userData); 
-      } catch (error) {
-        dialog.message.textContent = 'Wrong username or password';
-        api$h.error('Login failed:', error.message);
-        reject(error);
-      }
-    }, {once:true});
-    dialog.show();
-  });
-}
-
-/**
- * Logs the user out.
- * @private
- */
-async function logout() {
-  try {
-    await api$b.logout();
-    await updateState(currentState$2, { 
-      user: null, 
-      sessionId: null,
-      xml: null,
-      pdf: null,
-      diff: null
-    });
-    // re-login
-    await showLoginDialog();
-  } catch (error) {
-    api$h.error('Logout failed:' +  error);
-  }
-}
-
-/**
- * Hashes a password using SHA-256.
- * @param {string} password
- * @returns {Promise<string>}
- * @private
- */
-async function _hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -63285,7 +64044,7 @@ const plugin$3 = {
  * @returns {Promise<void>}
  */
 async function install$3(state) {
-  api$h.debug(`Installing plugin "${plugin$3.name}"`);
+  api$g.debug(`Installing plugin "${plugin$3.name}"`);
   // the toolbar is defined in index.html, no need to install it
 }
 
@@ -63334,10 +64093,10 @@ let syncIcon;
  * @param {ApplicationState} state
  */
 async function install$2(state) {
-  api$h.debug(`Installing plugin "${plugin$2.name}"`);
+  api$g.debug(`Installing plugin "${plugin$2.name}"`);
 
   // Set up SSE listeners for sync progress and messages
-  api$e.addEventListener('syncProgress', (event) => {
+  api$d.addEventListener('syncProgress', (event) => {
     const progress = parseInt(event.data);
     // Don't log progress counter to console, only update the progress bar
     if (syncProgressWidget && syncProgressWidget.isConnected) {
@@ -63346,7 +64105,7 @@ async function install$2(state) {
     }
   });
 
-  api$e.addEventListener('syncMessage', (event) => {
+  api$d.addEventListener('syncMessage', (event) => {
     const message = event.data;
     // Log sync messages to console instead of displaying in widget
     console.log(`Sync: ${message}`);
@@ -63405,7 +64164,7 @@ async function update$2(state) {
  */
 async function syncFiles(state) {
   if (state.webdavEnabled) {
-    api$h.debug("Synchronizing files on the server");
+    api$g.debug("Synchronizing files on the server");
     syncIcon.classList.add("rotating");
     // Reset progress widget for new sync
     if (syncProgressWidget) {
@@ -63413,11 +64172,11 @@ async function syncFiles(state) {
       syncProgressWidget.value = 0;
     }
     try {
-      const summary = await api$b.syncFiles();
+      const summary = await api$a.syncFiles();
       if (summary.skipped) {
-        api$h.debug("Sync skipped - no changes detected");
+        api$g.debug("Sync skipped - no changes detected");
       } else {
-        api$h.debug("Sync completed", summary);
+        api$g.debug("Sync completed", summary);
       }
       return summary
     } finally {
@@ -63453,7 +64212,7 @@ async function onClickSyncBtn(state) {
     await updateState(state, { editorReadOnly: originalReadOnly });
   }
   // manually pressing the sync button should reload file data even if there were no changes
-  await api$a.reload(state, {refresh:true});
+  await api$9.reload(state, {refresh:true});
 }
 
 /**
@@ -63529,7 +64288,7 @@ const api$1 = {
  * @param {ApplicationState} state
  */
 async function install$1(state) {
-  api$h.debug(`Installing plugin "${plugin$1.name}"`);
+  api$g.debug(`Installing plugin "${plugin$1.name}"`);
   
   // Create permission info widget
   permissionInfoWidget = PanelUtils.createText({
@@ -63553,7 +64312,7 @@ async function install$1(state) {
  * @param {ApplicationState} state
  */
 async function start$1(state) {
-  api$h.debug(`Starting plugin "${plugin$1.name}"`);
+  api$g.debug(`Starting plugin "${plugin$1.name}"`);
 }
 
 let state_xml_cache;
@@ -63583,18 +64342,18 @@ async function update$1(state) {
   }
 
   state_xml_cache = state.xml;
-  api$h.debug(`Access control: Updating access control for document: ${state.xml}`);  
+  api$g.debug(`Access control: Updating access control for document: ${state.xml}`);  
   await computeDocumentPermissions();
   
   // Update UI based on permissions
-  api$h.debug("Access control: Update UI");
+  api$g.debug("Access control: Update UI");
   updateAccessControlUI();
   
   // Check if document should be read-only based on permissions
   const shouldBeReadOnly = !canEditDocument(state.user);
   if (shouldBeReadOnly !== state.editorReadOnly && !isUpdatingState) {
     // Update application state to reflect access control
-    api$h.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`);
+    api$g.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`);
     // Note: This will trigger xmleditor plugin to update editor state
     isUpdatingState = true;
     try {
@@ -63666,17 +64425,17 @@ async function handlePermissionChange(event) {
     
     // If making document private or protected, ensure current user becomes owner if no owner exists
     if ((newVisibility === 'private' || newEditability === 'protected') && !owner) {
-      const currentUser = api$3.getUser();
+      const currentUser = authentication.getUser();
       if (currentUser) {
         owner = currentUser.username;
-        api$h.debug(`Setting document owner to current user: ${owner}`);
+        api$g.debug(`Setting document owner to current user: ${owner}`);
       }
     }
     
     await updateDocumentStatus(newVisibility, newEditability, owner || undefined);
-    api$h.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`);
+    api$g.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`);
   } catch (error) {
-    api$h.error(`Failed to update document status: ${error.message}`);
+    api$g.error(`Failed to update document status: ${error.message}`);
     // Revert dropdown to previous state
     updateStatusDropdownDisplay();
   }
@@ -63709,12 +64468,12 @@ async function computeDocumentPermissions() {
     };
     
     // Now calculate can_modify using the updated permissions
-    const currentUser = api$3.getUser();
+    const currentUser = authentication.getUser();
     currentPermissions.can_modify = canEditDocument(currentUser);
     
-    api$h.debug('Parsed document permissions:' + JSON.stringify(currentPermissions) );
+    api$g.debug('Parsed document permissions:' + JSON.stringify(currentPermissions) );
   } catch (error) {
-    api$h.error(`Error parsing document permissions: ${error.message}`);
+    api$g.error(`Error parsing document permissions: ${error.message}`);
     // Use defaults on error
     currentPermissions = {
       visibility: 'public', 
@@ -63792,7 +64551,7 @@ function parsePermissionsFromXmlTree(xmlTree) {
       owner
     }
   } catch (error) {
-    api$h.warn(`Error parsing permissions from XML tree: ${error.message}`);
+    api$g.warn(`Error parsing permissions from XML tree: ${error.message}`);
     return {
       visibility: 'public',
       editability: 'editable',
@@ -63838,10 +64597,10 @@ async function updateDocumentStatus(visibility, editability, owner, description)
     change.setAttribute('when', timestamp);
     
     // Add who attribute to document who made the change
-    const currentUser = api$3.getUser();
+    const currentUser = authentication.getUser();
     if (currentUser) {
       // Ensure respStmt exists for current user
-      api$h.debug(`Ensuring respStmt for current user: ${currentUser.username}, fullname: ${currentUser.fullname}`);
+      api$g.debug(`Ensuring respStmt for current user: ${currentUser.username}, fullname: ${currentUser.fullname}`);
       ensureRespStmtForUser(xmlTree, currentUser.username, currentUser.fullname || currentUser.username);
       change.setAttribute('who', `#${currentUser.username}`);
     }
@@ -63870,9 +64629,9 @@ async function updateDocumentStatus(visibility, editability, owner, description)
       
       if (finalOwner) {
         // Ensure respStmt exists for owner
-        const ownerUser = api$3.getUser(); // For now, assume current user is the owner
+        const ownerUser = authentication.getUser(); // For now, assume current user is the owner
         if (ownerUser && finalOwner === ownerUser.username) {
-          api$h.debug(`Ensuring respStmt for owner: ${finalOwner}, fullname: ${ownerUser.fullname}`);
+          api$g.debug(`Ensuring respStmt for owner: ${finalOwner}, fullname: ${ownerUser.fullname}`);
           ensureRespStmtForUser(xmlTree, finalOwner, ownerUser.fullname || ownerUser.username || finalOwner);
         }
         
@@ -63902,7 +64661,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
     await xmlEditor.updateEditorFromNode(teiHeader);
     
     // Save the document using services API
-    await api$7.saveXml(pluginState.xml);
+    await api$6.saveXml(pluginState.xml);
     
     // Update cached permissions
     currentPermissions.visibility = visibility;
@@ -63920,7 +64679,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
       owner: currentPermissions.owner
     }
   } catch (error) {
-    api$h.error(`Failed to update document permissions: ${error.message}`);
+    api$g.error(`Failed to update document permissions: ${error.message}`);
     throw error
   }
 }
@@ -64112,12 +64871,12 @@ function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
  */
 function updateReadOnlyWidgetText(readOnlyWidget) {
   if (!readOnlyWidget) {
-    api$h.debug('Read-only widget not available, skipping context update');
+    api$g.debug('Read-only widget not available, skipping context update');
     return
   }
   
   const { visibility, editability, owner } = currentPermissions;
-  const currentUser = api$3.getUser();
+  const currentUser = authentication.getUser();
   
   let contextText = 'Read-only';
   
@@ -64135,7 +64894,7 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
   
   // Update the widget text
   readOnlyWidget.text = contextText;
-  api$h.debug(`Updated read-only context: ${contextText}`);
+  api$g.debug(`Updated read-only context: ${contextText}`);
 }
 
 /**
@@ -64145,10 +64904,10 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
  */
 function checkCanEditFile(fileId) {
   try {
-    const currentUser = api$3.getUser();
+    const currentUser = authentication.getUser();
     
     // Find the file metadata in fileselection data
-    const fileData = api$a.fileData;
+    const fileData = api$9.fileData;
     let fileMetadata = null;
     
     // Search through all files and their versions for matching ID
@@ -64178,7 +64937,7 @@ function checkCanEditFile(fileId) {
     
     if (!fileMetadata || !fileMetadata.access_control) {
       // No metadata found or no access control info - default to allow editing
-      api$h.debug('No access control metadata found, allowing edit');
+      api$g.debug('No access control metadata found, allowing edit');
       return true
     }
     
@@ -64206,7 +64965,7 @@ function checkCanEditFile(fileId) {
     
     return true
   } catch (error) {
-    api$h.warn(`Error checking file access permissions: ${error.message}`);
+    api$g.warn(`Error checking file access permissions: ${error.message}`);
     // Default to allowing edit on error to avoid breaking functionality
     return true
   }
@@ -64251,7 +65010,7 @@ let currentState;
  * @param {ApplicationState} state
  */
 async function install(state) {
-  api$h.debug(`Installing plugin "${plugin.name}"`);
+  api$g.debug(`Installing plugin "${plugin.name}"`);
   // Plugin installation complete - actual start happens via API
 }
 
@@ -64275,12 +65034,12 @@ function start(state, timeoutSeconds = 60) {
   }
   
   if (heartbeatInterval) {
-    api$h.debug("Heartbeat already running, stopping previous instance");
+    api$g.debug("Heartbeat already running, stopping previous instance");
     stop();
   }
   
   lockTimeoutSeconds = timeoutSeconds;
-  api$h.debug(`Starting heartbeat with ${lockTimeoutSeconds} second interval`);
+  api$g.debug(`Starting heartbeat with ${lockTimeoutSeconds} second interval`);
   
   const heartbeatFrequency = lockTimeoutSeconds * 1000;
 
@@ -64291,7 +65050,7 @@ function start(state, timeoutSeconds = 60) {
   heartbeatInterval = setInterval(async () => {
     // Use current state instead of stale state from closure
     if (!currentState) {
-      api$h.debug("Skipping heartbeat: no current state available");
+      api$g.debug("Skipping heartbeat: no current state available");
       return;
     }
     
@@ -64303,7 +65062,7 @@ function start(state, timeoutSeconds = 60) {
 
     for (const reason in reasonsToSkip) {
       if (reasonsToSkip[reason]) {
-        api$h.debug(`Skipping heartbeat: ${reason}.`);
+        api$g.debug(`Skipping heartbeat: ${reason}.`);
         return;
       }
     }
@@ -64311,21 +65070,21 @@ function start(state, timeoutSeconds = 60) {
     try {
       let heartbeatResponse = null;
       if (!currentState.editorReadOnly) {
-        api$h.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-        heartbeatResponse = await api$b.sendHeartbeat(filePath);
+        api$g.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
+        heartbeatResponse = await api$a.sendHeartbeat(filePath);
       }
 
       // Check if file data cache is dirty and only reload if necessary
       // For read-only editors, check cache status separately since no heartbeat was sent
-      const cacheStatus = heartbeatResponse?.cache_status || await api$b.getCacheStatus();
+      const cacheStatus = heartbeatResponse?.cache_status || await api$a.getCacheStatus();
       if (cacheStatus.dirty) {
-        api$h.debug("File data cache is dirty, reloading file list");
-        await api$a.reload(currentState, { refresh: true });
+        api$g.debug("File data cache is dirty, reloading file list");
+        await api$9.reload(currentState, { refresh: true });
       }
 
       // If we are here, the request was successful. Check if we were offline before.
       if (currentState.offline) {
-        api$h.info("Connection restored.");
+        api$g.info("Connection restored.");
         notify("Connection restored.");
         await updateState(currentState, { offline: false, editorReadOnly: editorReadOnlyState });
       }
@@ -64337,36 +65096,36 @@ function start(state, timeoutSeconds = 60) {
         if (currentState.offline) {
           // we are still offline
           const message = `Still offline, will try again in ${lockTimeoutSeconds} seconds ...`;
-          api$h.warn(message);
+          api$g.warn(message);
           notify(message);
           return
         }
-        api$h.warn("Connection lost.");
+        api$g.warn("Connection lost.");
         notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
         editorReadOnlyState = currentState.editorReadOnly;
         await updateState(currentState, { offline: true, editorReadOnly: true });
       } else if (error.statusCode === 409 || error.statusCode === 423) {
         // Lock was lost or taken by another user
-        api$h.critical("Lock lost for file: " + filePath);
-        api$d.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+        api$g.critical("Lock lost for file: " + filePath);
+        api$c.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
         await updateState(currentState, { editorReadOnly: true });
       } else if (error.statusCode === 504) {
-        api$h.warn("Temporary connection failure, will try again...");
+        api$g.warn("Temporary connection failure, will try again...");
       } else if (error.statusCode === 403) {
         notify("You have been logged out");
-        api$3.logout();
+        authentication.logout();
       } else {
         // Another server-side error occurred
         if (currentState.webdavEnabled) {
-          api$h.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
-          api$d.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
+          api$g.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
+          api$c.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
           await updateState(currentState, { webdavEnabled: false });
         }
       }
     }
   }, heartbeatFrequency);
   
-  api$h.info("Heartbeat started.");
+  api$g.info("Heartbeat started.");
 }
 
 /**
@@ -64376,13 +65135,13 @@ function stop() {
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
-    api$h.debug("Heartbeat stopped.");
+    api$g.debug("Heartbeat stopped.");
   }
   
   // Release file lock if we have one
   const filePath = ui$1.toolbar.xml.value;
   if (filePath) {
-    api$b.releaseLock(filePath);
+    api$a.releaseLock(filePath);
   }
 }
 
@@ -64398,7 +65157,43 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
   alert('Safari is currently not supported due to compatibility issues. Please use Chrome, Firefox, or Edge.');
   throw new Error('Safari browser not supported');
 }
-//import { plugin as dummyLoggerPlugin } from './plugins/logger-dummy.js'
+
+/**
+ * @typedef {object} PluginConfiguration
+ * @property {string} name - The name of the plugin
+ * @property {string[]} [deps] - The names of the plugins this plugin depends on
+ */
+
+/** @type {Array<Plugin|PluginConfiguration>} */
+const plugins = [
+  // class-based
+  AuthenticationPlugin,
+
+  // modules with config object
+  plugin$m, 
+  plugin$k, 
+  plugin$e, 
+  plugin$l, 
+  plugin$i, 
+  plugin$3, 
+  plugin$h, 
+  plugin$g, 
+  plugin$d,
+  plugin$c, 
+  plugin$a, 
+  plugin$2, 
+  plugin$b, 
+  plugin$9, 
+  plugin$8,
+  plugin$7, 
+  plugin$f, 
+  plugin$6, 
+  plugin$5, 
+  plugin$j,
+  plugin$1, 
+  plugin, 
+  plugin$4
+];
 
 /**
  * The application state, which is often passed to the plugin endpoints
@@ -64441,75 +65236,71 @@ let state = {
   previousState: null
 };
 
-/**
- * @typedef {object} Plugin
- * @property {string} name - The name of the plugin
- * @property {string[]} [deps] - The names of the plugins this plugin depends on
- * @property {function(ApplicationState):Promise<*>} [install] - The function to install the plugin
- * @property {{update: function(ApplicationState):Promise<*>}} [state] - The function to update the plugin
- * @property {*} [validation]
- */
-
-/** @type {Plugin[]} */
-const plugins = [plugin$n, plugin$l, plugin$f, plugin$m, 
-  plugin$j, plugin$3, plugin$i, plugin$h, plugin$e,
-  plugin$d, plugin$b, plugin$2, plugin$c, plugin$a, plugin$9,
-  plugin$8, plugin$g, plugin$7, plugin$6, plugin$k,
-  plugin$4, plugin$1, plugin,
-  /* must be the last plugin */ plugin$5];
-
-// add all other plugins as dependencies of the start plugin, so that it is the last one to be installed
-plugin$5.deps = plugins.slice(0,-1).map(p => p.name);
-
-// register plugins
-for (const plugin of plugins) {
-  console.log(`Registering plugin '${plugin.name}'...`);
-  pluginManager.register(plugin);
-}
-
-// 
+//
 // Application bootstrapping
 //
 
-// log level
-await invoke(endpoints.log.setLogLevel, {level: logLevel.DEBUG});
+// Create plugin manager and state manager singletons
+const pluginManager = new PluginManager();
+const stateManager = new StateManager();
 
-// let the plugins install their components
-await invoke(endpoints.install, state);
+// Create application instance
+const app = new Application(pluginManager, stateManager);
 
-//
-// persist the state across reloads in sessionStorage
-//
-const persistedStateVars = (await api$g.get("state.persist") || []);
-persistedStateVars.push('sessionId'); // the session id is always persisted
-let serverState = await api$b.state();
-let sessionState = getStateFromSessionStorage();
+// Register plugins
+app.registerPlugins(plugins);
+
+// Set log level after registration
+await pluginManager.invoke(endpoints.log.setLogLevel, {level: logLevel.DEBUG});
+
+// Compose initial application state from various sources
+const persistedStateVars = (await api$f.get("state.persist") || []);
+let serverState = await api$a.state();
+let sessionState = stateManager.getStateFromSessionStorage();
 if (sessionState) {
-  api$h.info("Loaded state from sessionStorage");
+  api$g.info("Loaded state from sessionStorage");
 } else {
-  api$h.info("Loading initial state from server");
+  api$g.info("Loading initial state from server");
   sessionState = serverState;
 }
 // special case where server state overrides saved state on reload
 // this is a workaround to be fixed
 sessionState.webdavEnabled = serverState.webdavEnabled;
-// create new state with loaded data (without notifying plugins yet)
-state = createNewState(state, sessionState);
 
-// enable automatic state preservation in sessionStorage
-preserveState(true);
+// Apply session state to current state 
+Object.assign(state, sessionState);
 
-// URL hash params override properties (apply to state without notifying plugins yet)
-const urlHashState = await api$f.getStateFromUrlHash(); 
-if (urlHashState && Object.keys(urlHashState).length > 0) {
-  state = createNewState(state, urlHashState);
+// URL hash params override properties 
+const allowSetFromUrl = (await api$f.get("state.allowSetFromUrl") || []);
+const urlHashState = {};
+const urlParams = new URLSearchParams(window.location.hash.slice(1));
+for (const [key, value] of urlParams.entries()) {
+  if (allowSetFromUrl.includes(key)) {
+    urlHashState[key] = value;
+  }
+}
+if (Object.keys(urlHashState).length > 0) {
+  api$g.info("Getting state properties from URL hash: " + Object.keys(urlHashState).join(", "));
+  Object.assign(state, urlHashState);
 }
 
+// Initialize application with final composed state
+app.initializeState(state, {
+  persistedStateVars,
+  enableStatePreservation: true
+});
+
+// Configure state manager
+stateManager.preserveState(true, [...persistedStateVars, 'sessionId']);
+
+// Install plugins with the final composed state
+await app.installPlugins(state);
+
 // Now notify plugins with the final initial state
-await updateState(state, {});  
+await app.updateState(state, {});  
 
 // invoke the "start" endpoint
-await invoke(endpoints.start);
+await app.start();
 
 //
 // Core application functions
@@ -64523,18 +65314,45 @@ await invoke(endpoints.start);
  * @returns {Promise} 
  */
 async function reloadFileData(state, options = {}) {
-  api$h.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
-  let data = await api$b.getFileList(null, options.refresh);
+  api$g.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
+  let data = await api$a.getFileList(null, options.refresh);
   if (!data || data.length === 0) {
-    api$d.error("No files found");
+    api$c.error("No files found");
   }
   // Create hash lookup index when fileData is loaded
   if (data && data.length > 0) {
-    api$h.debug('Creating hash lookup index for file data');
+    api$g.debug('Creating hash lookup index for file data');
     createHashLookupIndex(data);
   }
   // Store fileData in state and propagate it
-  updateState(state, {fileData:data});
+  return await app.updateState(state, {fileData:data})
 }
 
-export { api$1 as accessControl, api$4 as appInfo, api$3 as authentication, clearStateHistory, api$b as client, api$g as config, createNewState, api$d as dialog, endpoints, api$8 as extraction, api$9 as fileSelectionDrawer, api$a as fileselection, api$6 as floatingPanel, getChangedStateKeys, getPreviousStateValue, getStateFromSessionStorage, getStateHistorySize, hasStateChanged, api as heartbeat, invoke, api$h as logger, pdfViewer, pluginManager, plugins, preserveState, api$5 as promptEditor, reloadFileData, api$7 as services, api$e as sse, state, api$2 as sync, updateState, updateStateExt, api$f as urlHash, api$c as validation, xmlEditor };
+//
+// Legacy compatibility functions for old plugin system
+//
+
+/**
+ * Legacy updateState function for backward compatibility with old plugins
+ * @param {ApplicationState} currentState - The current state
+ * @param {Partial<ApplicationState>} changes - Changes to apply
+ * @returns {Promise<ApplicationState>} New state after changes applied
+ */
+async function updateState(currentState, changes = {}) {
+  return await app.updateState(currentState, changes);
+}
+
+/**
+ * Legacy hasStateChanged function for backward compatibility with old plugins
+ * @param {ApplicationState} state - The current state
+ * @param {...string} propertyNames - Property names to check for changes
+ * @returns {boolean} True if any of the specified properties changed
+ */
+function hasStateChanged$1(state, ...propertyNames) {
+  return stateManager.hasStateChanged(state, ...propertyNames);
+}
+
+// plugin APIs  
+const authentication = AuthenticationPlugin.getInstance();
+
+export { api$1 as accessControl, app, api$3 as appInfo, authentication, api$a as client, api$f as config, api$c as dialog, endpoints, api$7 as extraction, api$8 as fileSelectionDrawer, api$9 as fileselection, api$5 as floatingPanel, hasStateChanged$1 as hasStateChanged, api as heartbeat, api$g as logger, pdfViewer, pluginManager, api$4 as promptEditor, reloadFileData, api$6 as services, api$d as sse, stateManager, api$2 as sync, updateState, api$e as urlHash, api$b as validation, xmlEditor };

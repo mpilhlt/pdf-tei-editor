@@ -4,7 +4,7 @@
  */
 
 import { EditorView, ViewUpdate } from '@codemirror/view';
-import { pluginManager, client, xmlEditor, invoke, logger, endpoints } from '../app.js'
+import { client, xmlEditor, pluginManager, logger, endpoints } from '../app.js'
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
 import { XMLEditor } from './xmleditor.js';
 
@@ -136,7 +136,7 @@ async function lintSource(view) {
       validatedVersion = xmlEditor.getDocumentVersion(); // rewrite this!
       logger.debug(`Requesting validation for document version ${validatedVersion}...`)
       // inform other plugins
-      invoke(endpoints.validation.inProgress, validationPromise)
+      pluginManager.invoke(endpoints.validation.inProgress, validationPromise)
       // send request to server
       try {
         validationErrors = await client.validateXml(xml);

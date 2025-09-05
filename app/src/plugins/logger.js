@@ -3,8 +3,8 @@
  * console.* methods
  */
 
-import pluginManager from "../modules/plugin.js"
 import ep from '../endpoints.js'
+import { pluginManager } from '../app.js'
 
 // name of the plugin
 const name = "logger"
@@ -35,7 +35,7 @@ const api = {
   /**
    * Sets the log level {@see logLevel}
    * @param {Number} level The log level
-   * @returns {void}
+   * @returns {Promise}
    */
   setLogLevel: level => pluginManager.invoke(ep.log.setLogLevel, {level}),
 
@@ -43,28 +43,28 @@ const api = {
    * Logs a debug message, with varying levels of verbosity
    * @param {string} message The debug message
    * @param {Number} level The log level, which is normally either DEBUG (4) or VERBOSE (5)
-   * @returns {void}
+   * @returns {Promise}
    */
   debug: (message, level = logLevel.DEBUG) => pluginManager.invoke(ep.log.debug, {message, level}),
 
   /**
    * Logs an informational message
    * @param {string} message 
-   * @returns {void}
+   * @returns {Promise}
    */
   info: message => pluginManager.invoke(ep.log.info, {message}),
 
   /**
    * Logs an warning message
    * @param {string} message 
-   * @returns {void}
+   * @returns {Promise}
    */
   warn: message => pluginManager.invoke(ep.log.warn, {message}),
 
   /**
    * Logs an message about a critical or fatal error
    * @param {string} message 
-   * @returns {void}
+   * @returns {Promise}
    */
   critical: message => pluginManager.invoke(ep.log.critical, {message})
 }

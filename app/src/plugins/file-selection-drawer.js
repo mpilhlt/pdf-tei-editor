@@ -21,8 +21,7 @@
  */
 import ui, { updateUi, SlOption } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import { logger, updateState, services } from '../app.js'
-import { hasStateChanged } from '../modules/state-utils.js'
+import { logger, updateState, hasStateChanged, services } from '../app.js'
 import {
   extractVariants,
   filterFileDataByVariant,

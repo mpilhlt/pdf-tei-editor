@@ -113,16 +113,9 @@ let currentState
  * @param {ApplicationState} state
  */
 async function update(state) {
-  console.log('DEBUG authentication update - received state:', state)
-  console.log('DEBUG authentication update - previous currentState:', currentState)
   currentState = state
-  console.log('DEBUG authentication update - updated currentState:', currentState)
   if (hasStateChanged(state, 'user')) {
-    console.log('DEBUG authentication update - user changed:', state.user)
     ui.toolbar.logoutButton.disabled = currentState.user === null
-  }
-  if (hasStateChanged(state, 'sessionId')) {
-    console.log('DEBUG authentication update - sessionId changed:', state.sessionId)
   }
 }
 
@@ -135,24 +128,16 @@ async function ensureAuthenticated() {
   let userData;
   try {
     userData = await client.status();
-    console.log('DEBUG ensureAuthenticated - user from server', userData)
-    console.log('DEBUG ensureAuthenticated - current state before update:', currentState)
   } catch (error) {
-    console.log('DEBUG ensureAuthenticated - not authenticated, showing login dialog')
     // Not authenticated, proceed to show login dialog
     userData = await _showLoginDialog();
   }
-  console.log('DEBUG ensureAuthenticated - updating state with userData:', userData)
   // Only update sessionId if userData contains one (from login), not from status check
   const stateUpdate = { user: userData }
   if (userData.sessionId) {
-    console.log('DEBUG ensureAuthenticated - userData has sessionId, updating it:', userData.sessionId)
     stateUpdate.sessionId = userData.sessionId
-  } else {
-    console.log('DEBUG ensureAuthenticated - userData has no sessionId, keeping existing sessionId:', currentState.sessionId)
   }
   await updateState(currentState, stateUpdate)
-  console.log('DEBUG ensureAuthenticated - state updated, new currentState:', currentState)
   return userData
 }
 
@@ -171,10 +156,7 @@ function getUser() {
 async function showLoginDialog() {
   try {
     const userData = await _showLoginDialog()
-    console.log('DEBUG showLoginDialog - got userData:', userData)
-    console.log('DEBUG showLoginDialog - currentState before update:', currentState)
     await updateState(currentState, {sessionId: userData.sessionId, user: userData})
-    console.log('DEBUG showLoginDialog - state updated, new currentState:', currentState)
   } catch (error) {
     logger.error("Error logging in: " + error.message)
   }
@@ -195,7 +177,6 @@ async function _showLoginDialog() {
       const passwd_hash = await _hashPassword(password);
       try {
         const userData = await client.login(username, passwd_hash);
-        console.log('DEBUG _showLoginDialog - login successful, userData:', userData)
         dialog.hide();
         dialog.username.value = ""
         dialog.password.value = ""

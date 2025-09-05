@@ -10,7 +10,7 @@
  */
 
 import ui from '../ui.js'
-import { validation, services, state, updateState, logger } from '../app.js'
+import { validation, services, updateState, logger } from '../app.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
@@ -246,7 +246,7 @@ async function update(state) {
       titleWidget.text = title || 'XML Document';
       titleWidget.style.display = 'inline-flex';
     } catch (error) {
-      logger.warn("Could not get document title:", error.message);
+      logger.warn("Could not get document title: "+ error.message);
       titleWidget.text = 'XML Document';
       titleWidget.style.display = 'inline-flex';
     }
