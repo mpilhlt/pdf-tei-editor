@@ -19,8 +19,7 @@ import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { notify } from '../modules/sl-utils.js'
-import { findCorrespondingPdf } from '../modules/file-data-utils.js'
-
+import { saveIfDirty } from './xmleditor.js' // TODO: needs to be implemented without tight coupling
 
 /**
  * Plugin object
@@ -74,7 +73,6 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
-  console.warn("#### SETTING STATE", state)
   currentState = state
 }
 
@@ -110,7 +108,12 @@ async function start() {
 
     if (pdf !== null) {
       // lod the documents
-      await services.load(currentState, { pdf, xml, diff })
+      try {
+        await services.load(currentState, { pdf, xml, diff })
+      } catch(error) {
+        dialog.error(error.message)
+        logger.critical(error.message)
+      }
     }
 
     // two alternative initial states:
@@ -201,7 +204,7 @@ function configureXmlEditor() {
   })
 
   // save dirty editor content after an update
-  xmlEditor.on("editorUpdateDelayed", () => saveIfDirty())
+  xmlEditor.on("editorUpdateDelayed", async () => await saveIfDirty())
 
   // xml vaidation events
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
@@ -223,7 +226,7 @@ function configureXmlEditor() {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
   })
-  xmlEditor.on("editorXmlWellFormed", () => {
+  xmlEditor.on("editorXmlWellFormed", async () => {
     // @ts-ignore
     ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
     try {
@@ -236,36 +239,8 @@ function configureXmlEditor() {
       ui.xmlEditor.statusbar.removeById(validationStatusWidget.id)
     }
     // Save if dirty now that XML is valid again
-    saveIfDirty()
+    await saveIfDirty()
   })
-}
-
-/**
- * Save the current XML file if the editor is "dirty"
- */
-async function saveIfDirty() {
-  const filePath = String(ui.toolbar.xml.value)
-  const hasXmlTree = !!xmlEditor.getXmlTree()
-  const isDirty = xmlEditor.isDirty()
-
-  if (!filePath || filePath === "undefined" || !hasXmlTree || !isDirty) {
-    return
-  }
-
-  try {
-    const result = await services.saveXml(filePath)
-    if (result.status == "unchanged") {
-      logger.debug(`File has not changed`)
-    } else {
-      logger.debug(`Saved file ${result.hash}`)
-      if (result.hash !== currentState.xml) {
-        // Update state to use new hash
-        await updateState(currentState, { xml: result.hash })
-      }
-    }
-  } catch (error) {
-    logger.warn(`Save failed: ${error.message}`)
-  }
 }
 
 /**

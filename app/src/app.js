@@ -158,18 +158,15 @@ if (sessionState) {
   sessionState = serverState
 }
 
-console.warn("STATE sessionState", sessionState)
 // special case where server state overrides saved state on reload
 // this is a workaround to be fixed
 sessionState.webdavEnabled = serverState.webdavEnabled
 
 // Apply session state to current state 
 Object.assign(state, sessionState)
-console.warn("STATE from session", sessionState)
-console.warn("STATE URL hash", window.location.hash.slice(1))
+
 // URL hash params override properties 
 const allowSetFromUrl = (await config.get("state.allowSetFromUrl") || [])
-console.warn("STATE",{allowSetFromUrl})
 const urlHashState = {}
 const urlParams = new URLSearchParams(window.location.hash.slice(1));
 for (const [key, value] of urlParams.entries()) {
@@ -177,13 +174,11 @@ for (const [key, value] of urlParams.entries()) {
     urlHashState[key] = value
   }
 }
-console.warn("STATE UrlHash", urlHashState)
+
 if (Object.keys(urlHashState).length > 0) {
   logger.info("Getting state properties from URL hash: " + Object.keys(urlHashState).join(", "))
   Object.assign(state, urlHashState)
 }
-
-console.warn("FINAL STATE", state)
 
 // Initialize application with final composed state
 const persistedStateVars = (await config.get("state.persistedVars") || [])
@@ -210,6 +205,7 @@ await app.start()
 
 /**
  * Reloads the file data from the server
+ * TODO move into own plugin together with some methods in services plugin
  * @param {ApplicationState} state
  * @param {Object} options - Options for reloading
  * @param {boolean} [options.refresh] - Whether to force refresh of server cache
