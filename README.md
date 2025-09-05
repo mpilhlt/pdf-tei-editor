@@ -1,6 +1,6 @@
 # PDF-TEI Editor
 
-A viewer/editor web app to compare the PDF source and TEI extraction/annotation results
+A viewer/editor web app to compare the PDF source and automated TEI extraction/annotation
 
 ![grafik](https://github.com/user-attachments/assets/864185f5-864a-439f-806c-537267470c46)
 

@@ -185,8 +185,9 @@ export class StateManager {
     
     const stateToSave = {};
     
-    // Save only specified variables, or all if none specified
-    const varsToSave = this.persistedStateVars.length > 0 ? this.persistedStateVars : Object.keys(state);
+    // Save only specified variables, or all if "*"
+    const varsToSave = this.persistedStateVars.includes("*") ?
+     Object.keys(state) : this.persistedStateVars;
     
     for (const key of varsToSave) {
       if (state[key] !== undefined && state[key] !== null) {

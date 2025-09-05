@@ -241,10 +241,10 @@ export class PDFJSViewer {
       this.pdfViewer.setDocument(null);
       this.pdfLinkService.setDocument(null, null);
       
-      // Clear any search results
-      if (this.findController) {
-        this.findController.reset();
-      }
+      // Clear any search results, TODO wrong API
+      //if (this.findController) {
+      //  this.findController.reset(); 
+      //}
       
       // Clear best matches
       this.bestMatches = [];

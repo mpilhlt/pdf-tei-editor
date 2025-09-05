@@ -74,6 +74,7 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function update(state) {
+  console.warn("#### SETTING STATE", state)
   currentState = state
 }
 
