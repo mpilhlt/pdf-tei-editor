@@ -17014,14 +17014,8 @@ class AuthenticationPlugin extends Plugin {
     
     // Create UI elements
     createFromTemplate('login-dialog', document.body);
-    const buttonElement = createSingleFromTemplate('logout-button');
     
-    // @ts-ignore - insertAdjacentElement type issue
-    ui$1.toolbar.insertAdjacentElement("beforeend", buttonElement);
-    updateUi();
-    
-    // Set up event handlers - they can access this.state directly
-    ui$1.toolbar.logoutButton.addEventListener("click", () => this.logout());
+
     
     // Prevent dialog from closing
     ui$1.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
@@ -17038,6 +17032,14 @@ class AuthenticationPlugin extends Plugin {
         ui$1.loginDialog.submit.click();
       }
     });
+  }
+
+  async start() {
+    // add the logout button after all other elements have been added to the toolbar
+    const buttonElement = createSingleFromTemplate('logout-button');
+    ui$1.toolbar.insertAdjacentElement("beforeend", buttonElement);
+    updateUi();
+    ui$1.toolbar.logoutButton.addEventListener("click", () => this.logout());
   }
 
   /**
