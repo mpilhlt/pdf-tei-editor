@@ -69,19 +69,50 @@ npm run start:prod           # Start production waitress server
 
 ## Development
 
-### Application architecture
+### Application Architecture
 
-The application has a modular architecture that makes it easy to extend. It is also lightweight and does not have a dependency on any particular web framework.
+The application uses a **plugin-based architecture** with immutable state management and reactive updates:
 
-Please note there is no central application instance. All functionality of the application is implemented through plugins, managed by [js-plugin](https://github.com/supnate/js-plugin#readme). In order to propagate state changes throughout the application, invoke [extension endpoints](https://github.com/mpilhlt/pdf-tei-editor/blob/main/app/src/endpoints.js) which may or may not be implemented by other plugins (see [app.js](https://github.com/mpilhlt/pdf-tei-editor/blob/main/app/src/app.js)). The most relevant endpoints, each invoked with the state object, are the following:
+#### Plugin System
+All functionality is implemented through **Plugin classes** that extend a common base class:
 
-- `install`: Invoked once as the first operation of the application, in order to let the plugins add components to the DOM, do server queries to initialize values, etc.
-- `start`: Invoked once when all plugins have been installed and the application is starting normal operations
-- `state.update` invoked when the application state has changed, each plugin can then update the part of the UI it is responsible for.
+```javascript
+class MyPlugin extends Plugin {
+  constructor(context) {
+    super(context, { name: 'my-plugin', deps: ['dependency'] });
+  }
+  
+  async install(state) {
+    // Setup UI components and event handlers
+  }
+  
+  async onStateUpdate(changedKeys) {
+    // React efficiently to specific state changes
+    if (changedKeys.includes('user')) {
+      const user = this.state.user
+      this.updateUserUI(user);
+    }
+  }
+  
+  async someAction() {
+    // Trigger state updates
+    await this.dispatchStateChange({ pdf: 'new-document.pdf' });
+  }
+}
+```
 
-New plugins can be easily added without having to change the application.
+#### Core Architecture
+- **PluginManager**: Handles plugin registration with automatic dependency resolution
+- **StateManager**: Manages immutable state with change detection and history
+- **Application**: Orchestrates plugins and state management
+- **PluginContext**: Provides controlled access to application services
 
-In addition to the loosely coupled way of plugin invocation (which might or might not be listened to), the plugins can also export an "api" object that exposes methods that can be imported and executed where a tightly coupled approach makes more sense.
+#### Key Plugin Lifecycle
+- `install` - Plugin initialization and DOM setup
+- `start` - Application startup after all plugins installed
+- `onStateUpdate` - Reactive updates when state properties change
+- `dispatchStateChange` - Trigger immutable state updates
+
 
 #### UI Parts Construction & Documentation
 

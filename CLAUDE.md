@@ -75,13 +75,101 @@ npm run test:sync
 - **Templates**: `app/src/templates/` - HTML templates for UI components
 - **Build output**: `app/web/` - Compiled/bundled frontend assets
 
-### Plugin System
-- Plugins implement endpoints defined in `endpoints.js`:
-  - `install` - Plugin initialization and DOM setup
-  - `start` - Application startup after all plugins installed
-  - `state.update` - React to application state changes
-- State is managed centrally and passed to all plugins
-- UI built with Shoelace WebComponents (`@shoelace-style/shoelace`)
+### Plugin System Architecture
+The application uses a sophisticated dual-architecture plugin system supporting both legacy and modern patterns:
+
+#### Architecture Overview
+- **Central Management**: `PluginManager` handles registration, dependency resolution, and endpoint invocation
+- **State Orchestration**: `Application` class coordinates between plugins and state management
+- **Immutable State**: All state updates create new objects, maintaining history for debugging
+- **Dependency Resolution**: Automatic topological sorting ensures plugins load in correct order
+
+#### Plugin Types
+
+**Legacy Plugin Objects** (being migrated):
+```javascript
+const plugin = {
+  name: "my-plugin",
+  deps: ['dependency1'],
+  install: async (state) => { /* setup UI */ },
+  state: {
+    update: async (state) => { /* react to changes */ }
+  }
+};
+```
+
+**New Plugin Classes** (modern approach):
+```javascript
+class MyPlugin extends Plugin {
+  constructor(context) {
+    super(context, { name: 'my-plugin', deps: ['dependency1'] });
+  }
+  
+  async install(state) { /* setup UI */ }
+  async onStateUpdate(changedKeys) { /* reactive updates */ }
+  async dispatchStateChange(changes) { /* trigger state updates */ }
+}
+```
+
+#### Plugin Endpoints System
+Plugins expose functionality through endpoints defined in `endpoints.js`:
+
+**Lifecycle Endpoints:**
+- `install` - Plugin initialization and DOM setup  
+- `start` - Application startup after all plugins installed
+- `shutdown` - Cleanup on application exit
+
+**State Management Endpoints:**
+- `state.update` - Legacy: React to state changes (full state)
+- `updateInternalState` - New: Silent state sync for Plugin classes
+- `onStateUpdate` - New: Reactive notifications with changed keys
+
+**Custom Endpoints:**
+- `validation.validate` - XML/TEI validation
+- `log.debug`, `log.info`, etc. - Logging system
+- Plugin-specific endpoints via `getEndpoints()` method
+
+#### State Management Integration
+
+**Legacy Plugins:**
+```javascript
+import { updateState, hasStateChanged } from '../app.js';
+
+async function someAction(currentState) {
+  if (hasStateChanged(currentState, 'user')) {
+    // React to user changes
+  }
+  await updateState(currentState, { pdf: 'new.pdf' });
+}
+```
+
+**New Plugin Classes:**
+```javascript
+class MyPlugin extends Plugin {
+  async onStateUpdate(changedKeys) {
+    if (changedKeys.includes('user')) {
+      // React to user changes
+    }
+  }
+  
+  async someAction() {
+    await this.dispatchStateChange({ pdf: 'new.pdf' });
+  }
+}
+```
+
+#### Dual System Support
+The system simultaneously supports both architectures:
+1. **Legacy `state.update`** - Called with full state for backward compatibility
+2. **New `updateInternalState`** - Silent state sync for Plugin instances  
+3. **New `onStateUpdate`** - Reactive notifications with changed properties
+
+#### Migration Path
+1. **Legacy Plugin Objects** → Continue working with BC wrappers
+2. **New Plugin Classes** → Gradual migration with full feature parity
+3. **Singleton Pattern** → Plugin classes use `createInstance()`/`getInstance()`
+4. **Controlled Access** → PluginContext facade limits plugin-application coupling
+5. **Test Coverage** - Separate tests for legacy and new systems (legacy marked for removal)
 
 ### Key Technologies
 - **Backend**: Flask, Python 3.13+, uv for dependency management
@@ -245,6 +333,109 @@ When converting existing plugins:
 - **Shoelace Icon Resources**: When using Shoelace icons programmatically (via `icon` attribute or StatusText widget) where the literal `<sl-icon name="icon-name"></sl-icon>` is not present in the codebase, add a comment with the HTML literal to ensure the build system includes the icon resource: `// <sl-icon name="icon-name"></sl-icon>`. This is not needed when the icon tag already exists verbatim in templates or HTML.
 - **Debug Logging**: When adding temporary debug statements, use `console.log("DEBUG ...")` instead of `logger.debug()`. Always prefix the message with "DEBUG" to make them easily searchable and removable. Example: `console.log("DEBUG Collection in options:", options.collection);`. This allows easy filtering with browser dev tools and quick cleanup using search/replace.
 
+### Plugin Development Guidelines
+
+#### Creating New Plugin Classes
+```javascript
+import { Plugin } from '../modules/plugin-base.js';
+import { registerTemplate, createSingleFromTemplate } from '../ui.js';
+
+class MyPlugin extends Plugin {
+  constructor(context) {
+    super(context, { 
+      name: 'my-plugin',
+      deps: ['dependency1', 'dependency2'] 
+    });
+  }
+
+  async install(state) {
+    // Call parent to set initial state
+    await super.install(state);
+    
+    // Create UI elements
+    await registerTemplate('my-template', 'my-template.html');
+    const element = createSingleFromTemplate('my-template');
+    document.body.appendChild(element);
+    
+    // Set up event handlers
+    element.addEventListener('click', () => {
+      this.handleClick();
+    });
+  }
+
+  async onStateUpdate(changedKeys) {
+    // React to specific state changes
+    if (changedKeys.includes('user')) {
+      this.updateUI();
+    }
+  }
+
+  async handleClick() {
+    // Dispatch state changes
+    await this.dispatchStateChange({ 
+      customProperty: 'new value' 
+    });
+  }
+
+  // Override to expose custom endpoints
+  getEndpoints() {
+    return {
+      ...super.getEndpoints(),
+      'custom.action': this.handleCustomAction.bind(this)
+    };
+  }
+}
+
+export default MyPlugin;
+```
+
+#### Plugin Registration in app.js
+```javascript
+// Import Plugin class
+import MyPlugin from './plugins/my-plugin.js';
+
+// Add to plugins array
+const plugins = [
+  MyPlugin,  // Plugin class - will be instantiated automatically
+  legacyPluginObject,  // Legacy object - used as-is
+  // ...
+];
+
+// Export singleton API (after registration)
+export const myPlugin = MyPlugin.getInstance();
+```
+
+#### State Management in Plugins
+- **Never mutate state directly** - always use `dispatchStateChange()`
+- **Use `onStateUpdate()` for reactions** - more efficient than legacy `state.update`
+- **Access current state via `this.state`** - read-only property
+- **Store plugin-specific state in `state.ext`** - avoids naming conflicts
+- **Use `hasStateChanged()` for conditional logic** - available via PluginContext
+
+#### Common Patterns
+```javascript
+// Conditional state updates
+async onStateUpdate(changedKeys) {
+  if (changedKeys.includes('user') && this.state.user) {
+    await this.setupUserUI();
+  }
+}
+
+// Plugin-specific state
+async savePreferences(prefs) {
+  await this.dispatchStateChange({
+    ext: { 
+      [this.name]: { preferences: prefs }
+    }
+  });
+}
+
+// Accessing plugin-specific state  
+get preferences() {
+  return this.state?.ext?.[this.name]?.preferences || {};
+}
+```
+
 ### State Management
 The application uses **immutable state management** with functional programming principles:
 
@@ -254,30 +445,48 @@ The application uses **immutable state management** with functional programming 
 - **Change Detection**: Plugins use `hasStateChanged()` instead of manual caching to detect state changes
 - **State Snapshots**: Plugins receive immutable state snapshots via function parameters, never import the global state
 
-#### State Utilities (modules/state-utils.js)
+#### State Management Architecture
+State is managed through the `StateManager` class and `Application` orchestrator:
+
 ```javascript
-// Update state immutably
+// Legacy plugins - BC wrappers in app.js
+import { updateState, hasStateChanged } from '../app.js';
 await updateState(currentState, { pdf: 'new-file.pdf', xml: 'new-file.xml' })
 
-// Check if specific properties changed
-if (hasStateChanged(state, 'user', 'pdf')) {
-  // Handle changes
-}
-
-// Get all changed properties
-const changedKeys = getChangedStateKeys(state)
-
-// Get previous value of a property
-const previousUser = getPreviousStateValue(state, 'user')
-
-// Update extension properties (plugin-specific state)
-await updateStateExt(state, { myPlugin: { customData: 'value' } })
-
-// Access extension properties
-if (state.ext.myPlugin?.customData) {
-  // Handle custom plugin state
+// New Plugin classes - via PluginContext
+class MyPlugin extends Plugin {
+  async someAction() {
+    // Dispatch state changes through context
+    await this.dispatchStateChange({ pdf: 'new-file.pdf' });
+    
+    // Check if properties changed (in onStateUpdate)
+    if (changedKeys.includes('user')) {
+      // Handle changes
+    }
+    
+    // Access current state
+    const user = this.state.user;
+    
+    // Plugin-specific state via extensions
+    await this.dispatchStateChange({
+      ext: { [this.name]: { customData: 'value' } }
+    });
+  }
+  
+  async onStateUpdate(changedKeys) {
+    // Reactive updates when state changes
+    if (changedKeys.includes('user')) {
+      this.handleUserChange();
+    }
+  }
 }
 ```
+
+**Key Components:**
+- `StateManager` - Handles immutable state updates, change detection, history
+- `Application.updateState()` - Orchestrates state changes and plugin notifications  
+- `PluginContext` - Provides controlled access to state utilities for Plugin classes
+- Legacy BC wrappers - `updateState()` and `hasStateChanged()` exported from app.js
 
 #### Plugin State Handling Best Practices
 1. **Never import global state**: Plugins should only work with state parameters passed to functions
@@ -287,24 +496,6 @@ if (state.ext.myPlugin?.customData) {
 5. **Use state.ext for plugin-specific state**: Store plugin-specific state in `state.ext` to avoid TypeScript errors
 6. **Use updateStateExt()**: For updating extension properties immutably
 
-#### Example Plugin Pattern
-```javascript
-// Before: Manual caching
-let currentUser = null;
-async function update(state) {
-  if (state.user !== currentUser) {
-    currentUser = state.user;
-    // handle change
-  }
-}
-
-// After: Immutable state pattern
-async function update(state) {
-  if (hasStateChanged(state, 'user')) {
-    // handle change
-  }
-}
-```
 
 #### Memory Management
 - State history is automatically limited to 10 entries to prevent memory leaks
