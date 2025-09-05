@@ -49539,8 +49539,8 @@ async function install$f(state) {
   });
 
   // Save automatically when XML becomes well-formed again
-  xmlEditor.on("editorXmlWellFormed", () => {
-    saveIfDirty$1(currentState$9);
+  xmlEditor.on("editorXmlWellFormed", async () => {
+    await saveIfDirty();
   });
 
   // Add widget to toggle <teiHeader> visibility
@@ -49660,25 +49660,45 @@ async function onSelectionChange(state) {
   if (index !== null && cursorParts.tagName === stateParts.tagName && index !== xmlEditor.currentIndex + 1) ;
 }
 
+let hashBeingSaved = null;
+
 /**
  * Save the current XML file if the editor is "dirty"
- * @param {ApplicationState} state
  */
-async function saveIfDirty$1(state) {
-  const filePath = String(ui$1.toolbar.xml.value);
+async function saveIfDirty() {
+  const fileHash = currentState$9.xml;
+  const isHashBeingSaved = fileHash === hashBeingSaved;
+  const hasXmlTree = !!xmlEditor.getXmlTree();
+  const isDirty = xmlEditor.isDirty();
 
-  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
-    const result = await api$6.saveXml(filePath);
+  if (isHashBeingSaved || !fileHash || !hasXmlTree || !isDirty) {
+    let reason;
+    if (isHashBeingSaved) reason = "Already saving document";
+    if (!fileHash) reason = "No document";
+    if (!hasXmlTree) reason = "No valid xml document";
+    if (!isDirty) reason = "Document hasn't changed";
+    api$g.debug(`Not saving: ${reason}`);
+    return
+  }
+
+  try {
+    hashBeingSaved = fileHash;
+    const result = await api$6.saveXml(fileHash);
+    hashBeingSaved = null;
     if (result.status == "unchanged") {
       api$g.debug(`File has not changed`);
     } else {
-      api$g.debug(`Saved file ${result.hash}`);
-      if (result.hash !== state.xml) {
-        // Update state to use new hash from server
-        await updateState(state, { xml: result.hash });
+      api$g.debug(`Saved file with hash ${result.hash}`);
+      if (result.hash !== fileHash) {
+        // Update state to use new hash
+        await updateState(currentState$9, { xml: result.hash });
       }
     }
+    xmlEditor.markAsClean();
+  } catch (error) {
+    api$g.warn(`Save failed: ${error.message}`);
   }
+
 }
 
 /**
@@ -63795,7 +63815,6 @@ async function update$4(state) {
  */
 
 
-
 /**
  * Plugin object
  * dependencies are automatically set to all other plugins, so that it is the last one to be installed
@@ -63845,7 +63864,6 @@ async function install$4(state) {
  * @param {ApplicationState} state
  */
 async function update$3(state) {
-  console.warn("#### SETTING STATE", state);
   currentState$2 = state;
 }
 
@@ -63881,7 +63899,12 @@ async function start$2() {
 
     if (pdf !== null) {
       // lod the documents
-      await api$6.load(currentState$2, { pdf, xml, diff });
+      try {
+        await api$6.load(currentState$2, { pdf, xml, diff });
+      } catch(error) {
+        api$c.error(error.message);
+        api$g.critical(error.message);
+      }
     }
 
     // two alternative initial states:
@@ -63972,7 +63995,7 @@ function configureXmlEditor() {
   });
 
   // save dirty editor content after an update
-  xmlEditor.on("editorUpdateDelayed", () => saveIfDirty());
+  xmlEditor.on("editorUpdateDelayed", async () => await saveIfDirty());
 
   // xml vaidation events
   xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
@@ -63994,7 +64017,7 @@ function configureXmlEditor() {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
   });
-  xmlEditor.on("editorXmlWellFormed", () => {
+  xmlEditor.on("editorXmlWellFormed", async () => {
     // @ts-ignore
     ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
     try {
@@ -64007,36 +64030,8 @@ function configureXmlEditor() {
       ui$1.xmlEditor.statusbar.removeById(validationStatusWidget.id);
     }
     // Save if dirty now that XML is valid again
-    saveIfDirty();
+    await saveIfDirty();
   });
-}
-
-/**
- * Save the current XML file if the editor is "dirty"
- */
-async function saveIfDirty() {
-  const filePath = String(ui$1.toolbar.xml.value);
-  const hasXmlTree = !!xmlEditor.getXmlTree();
-  const isDirty = xmlEditor.isDirty();
-
-  if (!filePath || filePath === "undefined" || !hasXmlTree || !isDirty) {
-    return
-  }
-
-  try {
-    const result = await api$6.saveXml(filePath);
-    if (result.status == "unchanged") {
-      api$g.debug(`File has not changed`);
-    } else {
-      api$g.debug(`Saved file ${result.hash}`);
-      if (result.hash !== currentState$2.xml) {
-        // Update state to use new hash
-        await updateState(currentState$2, { xml: result.hash });
-      }
-    }
-  } catch (error) {
-    api$g.warn(`Save failed: ${error.message}`);
-  }
 }
 
 /**
@@ -65327,18 +65322,15 @@ if (sessionState) {
   sessionState = serverState;
 }
 
-console.warn("STATE sessionState", sessionState);
 // special case where server state overrides saved state on reload
 // this is a workaround to be fixed
 sessionState.webdavEnabled = serverState.webdavEnabled;
 
 // Apply session state to current state 
 Object.assign(state, sessionState);
-console.warn("STATE from session", sessionState);
-console.warn("STATE URL hash", window.location.hash.slice(1));
+
 // URL hash params override properties 
 const allowSetFromUrl = (await api$f.get("state.allowSetFromUrl") || []);
-console.warn("STATE",{allowSetFromUrl});
 const urlHashState = {};
 const urlParams = new URLSearchParams(window.location.hash.slice(1));
 for (const [key, value] of urlParams.entries()) {
@@ -65346,13 +65338,11 @@ for (const [key, value] of urlParams.entries()) {
     urlHashState[key] = value;
   }
 }
-console.warn("STATE UrlHash", urlHashState);
+
 if (Object.keys(urlHashState).length > 0) {
   api$g.info("Getting state properties from URL hash: " + Object.keys(urlHashState).join(", "));
   Object.assign(state, urlHashState);
 }
-
-console.warn("FINAL STATE", state);
 
 // Initialize application with final composed state
 const persistedStateVars = (await api$f.get("state.persistedVars") || []);
@@ -65379,6 +65369,7 @@ await app.start();
 
 /**
  * Reloads the file data from the server
+ * TODO move into own plugin together with some methods in services plugin
  * @param {ApplicationState} state
  * @param {Object} options - Options for reloading
  * @param {boolean} [options.refresh] - Whether to force refresh of server cache
