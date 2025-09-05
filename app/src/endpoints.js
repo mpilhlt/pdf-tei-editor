@@ -15,6 +15,12 @@ const endpoints = {
   start: "start",
 
   /**
+   * Invoked when the application is shutting down (beforeunload).
+   * Function signature: () => void
+   */
+  shutdown: "shutdown",
+
+  /**
    * Logging endpoints
    */
   log: {
@@ -35,22 +41,23 @@ const endpoints = {
   },
   state: {
     /**
-     * This endpoint allows all plugins to react to application state changes
+     * This endpoint allows all plugins to react to application state changes (legacy)
      * Function signature: (state: ApplicationState) => ApplicationState
      */
     update: "state.update",
     
     /**
-     * This endpoint is triggered when the PDF in the application state changes
-     * Function signature: (state: ApplicationState) => Promise<void>
+     * Internal state update for Plugin class instances (new system)
+     * Function signature: (state: ApplicationState) => void
      */
-    changePdf: "state.changePdf",
+    updateInternal: "updateInternalState",
     
     /**
-     * This endpoint is triggered when the XML in the application state changes  
-     * Function signature: (state: ApplicationState) => Promise<void>
+     * State change notification for Plugin class instances (new system)
+     * Function signature: (changedKeys: string[]) => void
      */
-    changeXml: "state.changeXml"
+    onChange: "onStateUpdate",
+
   },
   validation: {
     /**

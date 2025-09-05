@@ -3,7 +3,7 @@
  */
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState, Plugin } from '../app.js' 
  */
 
 import { logger, hasStateChanged } from '../app.js';
@@ -127,6 +127,7 @@ const api = {
 
 /**
  * component plugin
+ * @type {Plugin}
  */
 const plugin = {
   name: "client",
@@ -139,18 +140,12 @@ export { api, plugin }
 export default plugin
 
 /**
- * 
  * @param {ApplicationState} state 
  */
 async function update(state) {
-  console.log('DEBUG client update - received state:', state)
-  console.log('DEBUG client update - current sessionId before:', sessionId)
   if (hasStateChanged(state, 'sessionId')) {
     sessionId = state.sessionId;
-    console.log('DEBUG client update - sessionId changed, new value:', sessionId)
     logger.debug(`Setting session id to ${sessionId}`)
-  } else {
-    console.log('DEBUG client update - sessionId unchanged:', sessionId)
   }
   return sessionId
 }
@@ -181,8 +176,6 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     options.body = JSON.stringify(body);
   }
 
-  console.log('DEBUG callApi - making request to:', url, 'with sessionId:', sessionId)
-  
   // function to send the request which can be repeatedly called in case of a timeout
   const sendRequest = async () => {
 
@@ -262,10 +255,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
  * @returns {Promise<import('./authentication.js').UserData>}
  */
 async function login(username, passwd_hash) {
-  console.log('DEBUG client login - attempting login with username:', username)
-  const result = await callApi('/auth/login', 'POST', { username, passwd_hash });
-  console.log('DEBUG client login - login result:', result)
-  return result;
+  return await callApi('/auth/login', 'POST', { username, passwd_hash });
 }
 
 /**

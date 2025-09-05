@@ -14,16 +14,15 @@
     "xml",
     "diff"
   ],
-  "state.persist": [
-    "variant",
-    "xpath",
-    "collection"
-  ],
   "state.allowSetFromUrl": [
+    "pdf",
+    "xml",
+    "diff",
     "variant",
     "xpath",
     "collection"
   ],
+  "state.persistedVars": ["*"],
   "server.logging.level": {
     "sse": "info",
     "sync": "info"

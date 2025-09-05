@@ -10,7 +10,7 @@
  */
 
 import ui from '../ui.js'
-import { validation, services, state, updateState, logger } from '../app.js'
+import { validation, services, updateState, logger } from '../app.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
@@ -80,7 +80,7 @@ const plugin = {
   }
 }
 
-export { xmlEditor as api, plugin, XMLEditor }
+export { xmlEditor as api, plugin, XMLEditor, saveIfDirty }
 export default plugin
 
 /**
@@ -196,8 +196,8 @@ async function install(state) {
   })
 
   // Save automatically when XML becomes well-formed again
-  xmlEditor.on("editorXmlWellFormed", () => {
-    saveIfDirty(currentState)
+  xmlEditor.on("editorXmlWellFormed", async () => {
+    await saveIfDirty(currentState)
   })
 
   // Add widget to toggle <teiHeader> visibility
@@ -246,7 +246,7 @@ async function update(state) {
       titleWidget.text = title || 'XML Document';
       titleWidget.style.display = 'inline-flex';
     } catch (error) {
-      logger.warn("Could not get document title:", error.message);
+      logger.warn("Could not get document title: "+ error.message);
       titleWidget.text = 'XML Document';
       titleWidget.style.display = 'inline-flex';
     }
@@ -319,25 +319,45 @@ async function onSelectionChange(state) {
   }
 }
 
+let hashBeingSaved = null
+
 /**
  * Save the current XML file if the editor is "dirty"
- * @param {ApplicationState} state
  */
-async function saveIfDirty(state) {
-  const filePath = String(ui.toolbar.xml.value)
+async function saveIfDirty() {
+  const fileHash = currentState.xml
+  const isHashBeingSaved = fileHash === hashBeingSaved
+  const hasXmlTree = !!xmlEditor.getXmlTree()
+  const isDirty = xmlEditor.isDirty()
 
-  if (filePath && xmlEditor.getXmlTree() && xmlEditor.isDirty()) {
-    const result = await services.saveXml(filePath)
+  if (isHashBeingSaved || !fileHash || !hasXmlTree || !isDirty) {
+    let reason;
+    if (isHashBeingSaved) reason = "Already saving document"
+    if (!fileHash) reason = "No document"
+    if (!hasXmlTree) reason = "No valid xml document"
+    if (!isDirty) reason = "Document hasn't changed"
+    logger.debug(`Not saving: ${reason}`)
+    return
+  }
+
+  try {
+    hashBeingSaved = fileHash
+    const result = await services.saveXml(fileHash)
+    hashBeingSaved = null
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
     } else {
-      logger.debug(`Saved file ${result.hash}`)
-      if (result.hash !== state.xml) {
-        // Update state to use new hash from server
-        await updateState(state, { xml: result.hash })
+      logger.debug(`Saved file with hash ${result.hash}`)
+      if (result.hash !== fileHash) {
+        // Update state to use new hash
+        await updateState(currentState, { xml: result.hash })
       }
     }
+    xmlEditor.markAsClean()
+  } catch (error) {
+    logger.warn(`Save failed: ${error.message}`)
   }
+
 }
 
 /**

@@ -22,7 +22,9 @@
       "mcp__browser-mcp__browser_scroll",
       "mcp__browser-mcp__browser_close",
       "mcp__browser-mcp__browser_press_key",
-      "WebFetch(domain:pdf-tei-editor.panya.de)"
+      "WebFetch(domain:pdf-tei-editor.panya.de)",
+      "Bash(npm test:*)",
+      "Bash(npm run test:*)"
     ],
     "deny": []
   }
