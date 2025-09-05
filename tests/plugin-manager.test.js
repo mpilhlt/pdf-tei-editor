@@ -368,9 +368,135 @@ describe('PluginManager', () => {
         install: (...args) => { receivedArgs = args; return 'ok'; }
       });
       
-      await pluginManager.invoke('install', 'arg1', { prop: 'value' }, 42);
+      await pluginManager.invoke('install', ['arg1', { prop: 'value' }, 42]);
       
       assert.deepStrictEqual(receivedArgs, ['arg1', { prop: 'value' }, 42]);
+    });
+
+    it('should handle multiple parameters via array spreading', async () => {
+      let receivedArgs;
+      
+      pluginManager.register({
+        name: 'test',
+        multiParam: (param1, param2, param3) => { 
+          receivedArgs = { param1, param2, param3 }; 
+          return receivedArgs; 
+        }
+      });
+      
+      await pluginManager.invoke('multiParam', ['hello', 'world', 123]);
+      
+      assert.deepStrictEqual(receivedArgs, { 
+        param1: 'hello', 
+        param2: 'world', 
+        param3: 123 
+      });
+    });
+
+    it('should handle single non-array parameter', async () => {
+      let receivedArgs;
+      
+      pluginManager.register({
+        name: 'test',
+        singleParam: (param) => { 
+          receivedArgs = param; 
+          return param; 
+        }
+      });
+      
+      await pluginManager.invoke('singleParam', 'single-string');
+      
+      assert.strictEqual(receivedArgs, 'single-string');
+    });
+
+    it('should handle array parameter by wrapping in another array', async () => {
+      let receivedArgs;
+      
+      pluginManager.register({
+        name: 'test',
+        arrayParam: (arrayParam) => { 
+          receivedArgs = arrayParam; 
+          return arrayParam; 
+        }
+      });
+      
+      // To pass an array as single parameter, wrap it in another array
+      await pluginManager.invoke('arrayParam', [['item1', 'item2', 'item3']]);
+      
+      assert.deepStrictEqual(receivedArgs, ['item1', 'item2', 'item3']);
+    });
+
+    it('should support sequential execution mode', async () => {
+      const callOrder = [];
+      
+      pluginManager.register({
+        name: 'a',
+        deps: ['b'],
+        test: async () => { 
+          await new Promise(resolve => setTimeout(resolve, 10));
+          callOrder.push('a'); 
+          return 'result-a'; 
+        }
+      });
+      pluginManager.register({
+        name: 'b',
+        deps: ['c'],
+        test: async () => { 
+          await new Promise(resolve => setTimeout(resolve, 10));
+          callOrder.push('b'); 
+          return 'result-b'; 
+        }
+      });
+      pluginManager.register({
+        name: 'c',
+        test: async () => { 
+          await new Promise(resolve => setTimeout(resolve, 10));
+          callOrder.push('c'); 
+          return 'result-c'; 
+        }
+      });
+      
+      await pluginManager.invoke('test', [], { mode: 'sequential' });
+      
+      // Should execute in dependency order: c -> b -> a
+      assert.deepStrictEqual(callOrder, ['c', 'b', 'a']);
+    });
+
+    it('should support parallel execution mode (default)', async () => {
+      const callOrder = [];
+      let resolveA, resolveB, resolveC;
+      
+      pluginManager.register({
+        name: 'a',
+        deps: ['b'],
+        test: () => new Promise(resolve => { resolveA = resolve; })
+      });
+      pluginManager.register({
+        name: 'b', 
+        deps: ['c'],
+        test: () => new Promise(resolve => { resolveB = resolve; })
+      });
+      pluginManager.register({
+        name: 'c',
+        test: () => new Promise(resolve => { resolveC = resolve; })
+      });
+      
+      // Start parallel execution
+      const resultPromise = pluginManager.invoke('test', [], { mode: 'parallel' });
+      
+      // Resolve in reverse order to test parallelism
+      setTimeout(() => { resolveA(); callOrder.push('a'); }, 10);
+      setTimeout(() => { resolveB(); callOrder.push('b'); }, 5);  
+      setTimeout(() => { resolveC(); callOrder.push('c'); }, 1);
+      
+      await resultPromise;
+      
+      // In parallel mode, execution order depends on timing, not dependencies
+      // We just verify all executed
+      assert.strictEqual(callOrder.length, 3);
+      assert(callOrder.includes('a'));
+      assert(callOrder.includes('b'));
+      assert(callOrder.includes('c'));
     });
 
     it('should handle timeout options', async () => {
@@ -379,7 +505,7 @@ describe('PluginManager', () => {
         slow: () => new Promise(resolve => setTimeout(() => resolve('done'), 100))
       });
       
-      const results = await pluginManager.invoke('slow', { timeout: 50 });
+      const results = await pluginManager.invoke('slow', [], { timeout: 50 });
       
       // Should still return result array even if individual promises timeout
       assert.strictEqual(results.length, 1);

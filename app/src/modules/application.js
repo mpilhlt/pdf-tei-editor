@@ -28,6 +28,11 @@ export class Application {
     });
   }
 
+  /** 
+   * simple flag for controlling debug messages
+   */
+  debug = false;
+
   /** @type {ApplicationState|null} */
   #currentState;
 
@@ -93,7 +98,7 @@ export class Application {
     const processedPlugins = plugins.map(plugin => {
       // Check if it's a Plugin class (constructor function)
       if (typeof plugin === 'function' && plugin.prototype && plugin.prototype.constructor === plugin) {
-        console.log(`Creating Plugin singleton instance from class '${plugin.name}' with context`);
+        this.debug && console.log(`Creating Plugin singleton instance from class '${plugin.name}' with context`);
         return plugin.createInstance(this.#pluginContext);
       }
       return plugin;
@@ -103,7 +108,7 @@ export class Application {
     for (const plugin of processedPlugins) {
       const pluginName = plugin.name || plugin.constructor?.name || 'unknown';
       const deps = plugin.deps || [];
-      console.log(`Registering plugin '${pluginName}' with deps: [${deps.join(', ') || 'none'}]`);
+      this.debug && console.log(`Registering plugin '${pluginName}' with deps: [${deps.join(', ') || 'none'}]`);
       this.#pluginManager.register(plugin);
     }
   }
@@ -114,7 +119,7 @@ export class Application {
    * @returns {Promise<Array>}
    */
   async installPlugins(state) {
-    const results = await this.#pluginManager.invoke(ep.install, state);
+    const results = await this.#pluginManager.invoke(ep.install, state, { mode: 'sequential' });
     return results;
   }
 
@@ -123,7 +128,7 @@ export class Application {
    * @returns {Promise<Array>}
    */
   async start() {
-    const results = await this.#pluginManager.invoke(ep.start);
+    const results = await this.#pluginManager.invoke(ep.start, [], { mode: 'sequential' });
     return results;
   }
 
@@ -133,7 +138,7 @@ export class Application {
    */
   async shutdown() {
     try {
-      const results = await this.#pluginManager.invoke(ep.shutdown);
+      const results = await this.#pluginManager.invoke(ep.shutdown, [], { mode: 'sequential' });
       return results;
     } catch (error) {
       console.warn('Error during plugin shutdown:', error);
