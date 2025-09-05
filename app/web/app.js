@@ -962,8 +962,9 @@ class StateManager {
     
     const stateToSave = {};
     
-    // Save only specified variables, or all if none specified
-    const varsToSave = this.persistedStateVars.length > 0 ? this.persistedStateVars : Object.keys(state);
+    // Save only specified variables, or all if "*"
+    const varsToSave = this.persistedStateVars.includes("*") ?
+     Object.keys(state) : this.persistedStateVars;
     
     for (const key of varsToSave) {
       if (state[key] !== undefined && state[key] !== null) {
@@ -18062,10 +18063,10 @@ class PDFJSViewer {
       this.pdfViewer.setDocument(null);
       this.pdfLinkService.setDocument(null, null);
       
-      // Clear any search results
-      if (this.findController) {
-        this.findController.reset();
-      }
+      // Clear any search results, TODO wrong API
+      //if (this.findController) {
+      //  this.findController.reset(); 
+      //}
       
       // Clear best matches
       this.bestMatches = [];
@@ -63844,6 +63845,7 @@ async function install$4(state) {
  * @param {ApplicationState} state
  */
 async function update$3(state) {
+  console.warn("#### SETTING STATE", state);
   currentState$2 = state;
 }
 
@@ -65205,8 +65207,10 @@ function stop() {
 /**
  * PDF-TEI-Editor
  * 
+ * A viewer/editor web app to compare the PDF source and automated TEI extraction/annotation
+ * 
  * @author Christian Boulanger (@cboulanger), Max Planck Institute for Legal History and Legal Theory
- * @license 
+ * @license CC0 1.0 Universal
  */
 
 // Check for Safari and block it temporarily
@@ -65314,7 +65318,6 @@ const authentication = AuthenticationPlugin.getInstance();
 await pluginManager.invoke(endpoints.log.setLogLevel, {level: logLevel.DEBUG});
 
 // Compose initial application state from various sources
-const persistedStateVars = (await api$f.get("state.persist") || []);
 let serverState = await api$a.state();
 let sessionState = stateManager.getStateFromSessionStorage();
 if (sessionState) {
@@ -65323,15 +65326,19 @@ if (sessionState) {
   api$g.info("Loading initial state from server");
   sessionState = serverState;
 }
+
+console.warn("STATE sessionState", sessionState);
 // special case where server state overrides saved state on reload
 // this is a workaround to be fixed
 sessionState.webdavEnabled = serverState.webdavEnabled;
 
 // Apply session state to current state 
 Object.assign(state, sessionState);
-
+console.warn("STATE from session", sessionState);
+console.warn("STATE URL hash", window.location.hash.slice(1));
 // URL hash params override properties 
 const allowSetFromUrl = (await api$f.get("state.allowSetFromUrl") || []);
+console.warn("STATE",{allowSetFromUrl});
 const urlHashState = {};
 const urlParams = new URLSearchParams(window.location.hash.slice(1));
 for (const [key, value] of urlParams.entries()) {
@@ -65339,12 +65346,16 @@ for (const [key, value] of urlParams.entries()) {
     urlHashState[key] = value;
   }
 }
+console.warn("STATE UrlHash", urlHashState);
 if (Object.keys(urlHashState).length > 0) {
   api$g.info("Getting state properties from URL hash: " + Object.keys(urlHashState).join(", "));
   Object.assign(state, urlHashState);
 }
 
+console.warn("FINAL STATE", state);
+
 // Initialize application with final composed state
+const persistedStateVars = (await api$f.get("state.persistedVars") || []);
 app.initializeState(state, {
   persistedStateVars,
   enableStatePreservation: true
