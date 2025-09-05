@@ -7,9 +7,9 @@
  * @import { SlButton, SlInput } from '../ui.js'
  */
 
-import ui, { SlDialog, updateUi } from '../ui.js';
+import ui, { updateUi } from '../ui.js';
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
-import { Plugin } from '../modules/plugin-base.js';
+import Plugin from '../modules/plugin-base.js';
 import { logger, client } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
 
@@ -61,14 +61,8 @@ class AuthenticationPlugin extends Plugin {
     
     // Create UI elements
     createFromTemplate('login-dialog', document.body);
-    const buttonElement = createSingleFromTemplate('logout-button');
     
-    // @ts-ignore - insertAdjacentElement type issue
-    ui.toolbar.insertAdjacentElement("beforeend", buttonElement);
-    updateUi();
-    
-    // Set up event handlers - they can access this.state directly
-    ui.toolbar.logoutButton.addEventListener("click", () => this.logout());
+
     
     // Prevent dialog from closing
     ui.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
@@ -85,6 +79,14 @@ class AuthenticationPlugin extends Plugin {
         ui.loginDialog.submit.click();
       }
     });
+  }
+
+  async start() {
+    // add the logout button after all other elements have been added to the toolbar
+    const buttonElement = createSingleFromTemplate('logout-button');
+    ui.toolbar.insertAdjacentElement("beforeend", buttonElement);
+    updateUi();
+    ui.toolbar.logoutButton.addEventListener("click", () => this.logout());
   }
 
   /**
