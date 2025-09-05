@@ -112,7 +112,7 @@ class Plugin {
   }
 
   /** @type {Map<Function, Plugin>} */
-  static #instances = new Map();
+  static instances = new Map();
 
   /**
    * Create singleton instance of this plugin class
@@ -120,10 +120,10 @@ class Plugin {
    * @returns {Plugin} The singleton instance
    */
   static createInstance(context) {
-    if (!this.#instances.has(this)) {
-      this.#instances.set(this, new this(context));
+    if (!Plugin.instances.has(this)) {
+      Plugin.instances.set(this, new this(context));
     }
-    return this.#instances.get(this) || new this(context);
+    return Plugin.instances.get(this) || new this(context);
   }
 
   /**
@@ -131,7 +131,7 @@ class Plugin {
    * @returns {Plugin|null} The singleton instance or null if not created yet
    */
   static getInstance() {
-    return this.#instances.get(this) || null;
+    return Plugin.instances.get(this) || null;
   }
 
   /** @type {ApplicationState|null} */
@@ -282,6 +282,14 @@ class Plugin {
     }
     if (typeof this.shutdown === 'function') {
       endpoints['shutdown'] = this.shutdown.bind(this);
+    }
+    
+    // New state management endpoints
+    if (typeof this.updateInternalState === 'function') {
+      endpoints['updateInternalState'] = this.updateInternalState.bind(this);
+    }
+    if (typeof this.onStateUpdate === 'function') {
+      endpoints['onStateUpdate'] = this.onStateUpdate.bind(this);
     }
     
     return endpoints;
@@ -18318,7 +18326,7 @@ async function install$g(state) {
  * @returns {Promise<void>}
  */
 async function update$e(state) {
-  if (hasStateChanged$1(state, 'pdf')) {
+  if (hasStateChanged(state, 'pdf')) {
     // Clear PDF viewer when no PDF is loaded
     if (state.pdf === null) {
       try {
@@ -49531,7 +49539,7 @@ async function update$d(state) {
       titleWidget.text = title || 'XML Document';
       titleWidget.style.display = 'inline-flex';
     } catch (error) {
-      api$g.warn("Could not get document title:", error.message);
+      api$g.warn("Could not get document title: "+ error.message);
       titleWidget.text = 'XML Document';
       titleWidget.style.display = 'inline-flex';
     }
@@ -50576,7 +50584,7 @@ const plugin$e = {
  * @param {ApplicationState} state 
  */
 async function update$b(state) {
-  if (hasStateChanged$1(state, 'sessionId')) {
+  if (hasStateChanged(state, 'sessionId')) {
     sessionId = state.sessionId;
     api$g.debug(`Setting session id to ${sessionId}`);
   }
@@ -51180,7 +51188,7 @@ async function update$a(state) {
   // The state.collection should be managed by other functions that call updateState()
   
   // Check if relevant state properties have changed
-  if (hasStateChanged$1(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
+  if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
     await populateSelectboxes(state);
   }
   
@@ -65250,6 +65258,9 @@ const app = new Application(pluginManager, stateManager);
 // Register plugins
 app.registerPlugins(plugins);
 
+// Create authentication API export after plugin registration
+const authentication = AuthenticationPlugin.getInstance();
+
 // Set log level after registration
 await pluginManager.invoke(endpoints.log.setLogLevel, {level: logLevel.DEBUG});
 
@@ -65348,11 +65359,8 @@ async function updateState(currentState, changes = {}) {
  * @param {...string} propertyNames - Property names to check for changes
  * @returns {boolean} True if any of the specified properties changed
  */
-function hasStateChanged$1(state, ...propertyNames) {
+function hasStateChanged(state, ...propertyNames) {
   return stateManager.hasStateChanged(state, ...propertyNames);
 }
 
-// plugin APIs  
-const authentication = AuthenticationPlugin.getInstance();
-
-export { api$1 as accessControl, app, api$3 as appInfo, authentication, api$a as client, api$f as config, api$c as dialog, endpoints, api$7 as extraction, api$8 as fileSelectionDrawer, api$9 as fileselection, api$5 as floatingPanel, hasStateChanged$1 as hasStateChanged, api as heartbeat, api$g as logger, pdfViewer, pluginManager, api$4 as promptEditor, reloadFileData, api$6 as services, api$d as sse, stateManager, api$2 as sync, updateState, api$e as urlHash, api$b as validation, xmlEditor };
+export { api$1 as accessControl, app, api$3 as appInfo, authentication, api$a as client, api$f as config, api$c as dialog, endpoints, api$7 as extraction, api$8 as fileSelectionDrawer, api$9 as fileselection, api$5 as floatingPanel, hasStateChanged, api as heartbeat, api$g as logger, pdfViewer, pluginManager, api$4 as promptEditor, reloadFileData, api$6 as services, api$d as sse, stateManager, api$2 as sync, updateState, api$e as urlHash, api$b as validation, xmlEditor };
