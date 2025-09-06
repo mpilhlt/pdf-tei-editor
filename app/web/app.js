@@ -83,1309 +83,13 @@ const endpoints = {
      * Function signature: (diagnostics: Diagnostics[]) => Promise<void> 
      */
     result: "validation.result"
+  },
+  filedata: {
+    /** (options:{refresh:Boolean}) => {Promise<ApplicationState>} */
+    reload: "filedata.reload",
+    saveXml: "filedata.saveXml"
   }
 };
-
-/**
- * Base Plugin class for class-based plugin architecture
- * @import { ApplicationState } from '../app.js'
- * @import { PluginContext } from './plugin-context.js'
- */
-
-/**
- * Base class for plugins that provides state management and lifecycle methods
- */
-class Plugin {
-  /**
-   * @param {PluginContext} context - Plugin context providing controlled access to application services
-   * @param {object} [config] - Plugin configuration
-   * @param {string} [config.name] - Plugin name
-   * @param {string[]} [config.deps] - Plugin dependencies
-   */
-  constructor(context, config = {}) {
-    if (!context) {
-      throw new Error('PluginContext is required for Plugin constructor');
-    }
-    this.context = context;
-    this.name = config.name || this.constructor.name.toLowerCase();
-    this.deps = config.deps || [];
-    this.#state = null;
-  }
-
-  /** @type {Map<Function, Plugin>} */
-  static instances = new Map();
-
-  /**
-   * Create singleton instance of this plugin class
-   * @param {PluginContext} context - Plugin context
-   * @returns {Plugin} The singleton instance
-   */
-  static createInstance(context) {
-    if (!Plugin.instances.has(this)) {
-      Plugin.instances.set(this, new this(context));
-    }
-    return Plugin.instances.get(this) || new this(context);
-  }
-
-  /**
-   * Get singleton instance of this plugin class
-   * @returns {Plugin|null} The singleton instance or null if not created yet
-   */
-  static getInstance() {
-    return Plugin.instances.get(this) || null;
-  }
-
-  /** @type {ApplicationState|null} */
-  #state = null;
-
-  //
-  // Plugin lifecycle methods (override in subclasses)
-  //
-
-  /**
-   * Plugin installation - override in subclasses
-   * @param {ApplicationState} initialState
-   */
-  async install(initialState) {
-    this.#state = initialState;
-    // Override for initialization logic
-  }
-
-  /**
-   * Plugin initialization - override in subclasses
-   */
-  async initialize() {
-    // Override for initialization logic
-  }  
-
-  /**
-   * Plugin startup - override in subclasses
-   */
-  async start() {
-    // Override for startup logic
-  }
-
-  /**
-   * Plugin (temporary) stop - override in subclasses
-   */
-  async stop() {
-    // Override for startup logic
-  }
-
-  /**
-   * Plugin shutdown - override in subclasses
-   * Called on window beforeunload
-   */
-  async shutdown() {
-    // Override for cleanup logic
-  }
-
-  //
-  // State management
-  //
-
-  /**
-   * React to state changes - override in subclasses
-   * @param {string[]} changedKeys - Keys that changed in the state
-   */
-  async onStateUpdate(changedKeys) {
-    // Override for reactive behavior
-    // Base implementation is empty - no need to call super()
-  }
-
-  //
-  // Internal state management
-  //
-
-  /**
-   * Update internal state reference
-   * @param {ApplicationState} newState
-   */
-  updateInternalState(newState) {
-    this.#state = newState;
-  }
-
-  //
-  // Convenience methods for plugin implementations
-  //
-
-  /**
-   * Read-only access to current state
-   * @returns {ApplicationState|null}
-   */
-  get state() {
-    return this.#state;
-  }
-
-  /**
-   * Dispatch state changes through the plugin context
-   * @param {Partial<ApplicationState>} changes
-   * @returns {Promise<ApplicationState>} New state after changes applied
-   */
-  async dispatchStateChange(changes) {
-    if (!this.#state) {
-      throw new Error(`Plugin ${this.name} attempted to dispatch state before initialization`);
-    }
-    const newState = await this.context.updateState(this.#state, changes);
-    this.#state = newState;
-    return newState;
-  }
-
-  /**
-   * Check if specific state keys have changed
-   * @param {...keyof ApplicationState} keys
-   * @returns {boolean}
-   */
-  hasStateChanged(...keys) {
-    if (!this.#state) {
-      return false;
-    }
-    return this.context.hasStateChanged(this.#state, ...keys);
-  }
-
-  /**
-   * Get all changed state keys
-   * @returns {Array<keyof ApplicationState>}
-   */
-  getChangedStateKeys() {
-    if (!this.#state) {
-      return [];
-    }
-    return this.context.getChangedStateKeys(this.#state);
-  }
-
-  /**
-   * Get endpoint mappings for this plugin
-   * Override in subclasses to provide custom endpoint mappings.
-   * Use `...super.getEndpoints()` to include the base lifecycle endpoints.
-   * 
-   * @example
-   * getEndpoints() {
-   *   return {
-   *     ...super.getEndpoints(),
-   *     'state.update': this.handleStateUpdate.bind(this),
-   *     'validation.validate': this.validate.bind(this)
-   *   };
-   * }
-   * 
-   * @returns {Record<string, Function>} Mapping of endpoint paths to bound methods
-   */
-  getEndpoints() {
-    /** @type {Record<string, Function>} */
-    const endpoints = {};
-    
-    // Standard lifecycle endpoints
-    if (typeof this.install === 'function') {
-      endpoints['install'] = this.install.bind(this);
-    }
-    if (typeof this.start === 'function') {
-      endpoints['start'] = this.start.bind(this);
-    }
-    if (typeof this.shutdown === 'function') {
-      endpoints['shutdown'] = this.shutdown.bind(this);
-    }
-    
-    // New state management endpoints
-    if (typeof this.updateInternalState === 'function') {
-      endpoints['updateInternalState'] = this.updateInternalState.bind(this);
-    }
-    if (typeof this.onStateUpdate === 'function') {
-      endpoints['onStateUpdate'] = this.onStateUpdate.bind(this);
-    }
-    
-    return endpoints;
-  }
-
-}
-
-/**
- * Plugin Manager with sophisticated dependency resolution using topological sorting
- */
-
-
-/**
- * The minimal plugin configuration object
- * @typedef {Object} PluginConfig
- * @property {string} name - Plugin name
- * @property {string[]} [deps] - Array of plugin names this plugin depends on
- * @property {any} [initialize] - Optional initialization function 
- */
-
-/**
- * Options for plugin endpoint invocation
- * @typedef {Object} InvokeOptions
- * @property {number} [timeout] - Timeout override for this invocation (milliseconds)
- * @property {'parallel'|'sequential'} [mode] - Execution mode: 'parallel' (default) or 'sequential'
- */
-
-/**
- * Plugin Manager with dependency resolution
- */
-class PluginManager {
-  constructor(options = {}) {
-    /** @type {Map<string, PluginConfig>} */
-    this.pluginsByName = new Map();
-    
-    /** @type {PluginConfig[]} */
-    this.registeredPlugins = [];
-    
-    /** @type {PluginConfig[]} */
-    this.dependencyOrderedPlugins = [];
-    
-    /** @type {Map<string, PluginConfig[]>} */
-    this.endpointCache = new Map();
-    
-    /** @type {Object} */
-    this.config = {
-      timeout: options.timeout || 2000,
-      throws: options.throws || false
-    };
-    
-    /** @type {boolean} */
-    this.debug = options.debug || false;
-
-  }
-
-  /**
-   * Register a plugin with dependency resolution
-   * @param {PluginConfig|Plugin} plugin - Plugin to register (can be Plugin instance or config object)
-   * @throws {Error} If plugin is invalid or creates circular dependencies
-   */
-  register(plugin) {
-    // Validate plugin
-    if (!plugin || typeof plugin !== 'object') {
-      throw new Error('Plugin must be an object');
-    }
-    
-    // Handle Plugin class instances - convert to plugin object
-    let pluginConfig;
-    if (plugin instanceof Plugin) {
-      if (this.debug) {
-        console.log(`Converting Plugin instance '${plugin.name}' to plugin object`);
-      }
-      pluginConfig = this.convertPluginInstance(plugin);
-    } else {
-      pluginConfig = plugin;
-    }
-    
-    if (!pluginConfig.name || typeof pluginConfig.name !== 'string') {
-      console.error('Invalid plugin:', pluginConfig);
-      throw new Error('Every plugin must have a name property');
-    }
-    
-    if (this.pluginsByName.has(pluginConfig.name)) {
-      throw new Error(`Plugin "${pluginConfig.name}" is already registered`);
-    }
-
-    // Normalize dependencies
-    const normalizedPlugin = {
-      ...pluginConfig,
-      deps: Array.isArray(pluginConfig.deps) ? pluginConfig.deps : []
-    };
-
-    // Register plugin
-    this.pluginsByName.set(pluginConfig.name, normalizedPlugin);
-    this.registeredPlugins.push(normalizedPlugin);
-
-    // Clear caches
-    this.endpointCache.clear();
-    this.dependencyOrderedPlugins = [];
-
-    // Recompute dependency order
-    this.computeDependencyOrder();
-
-    // Call initialize function if present
-    if (plugin instanceof Plugin) {
-      plugin.initialize();
-    }
-
-    if (this.debug) {
-      console.log(`Registered plugin '${plugin.name}' with dependencies: [${normalizedPlugin.deps.join(', ') || 'none'}]`);
-    }
-  }
-
-  /**
-   * Unregister a plugin
-   * @param {string} pluginName - Name of plugin to unregister
-   * @throws {Error} If plugin doesn't exist
-   */
-  unregister(pluginName) {
-    const plugin = this.pluginsByName.get(pluginName);
-    if (!plugin) {
-      throw new Error(`Plugin "${pluginName}" doesn't exist`);
-    }
-
-    // Remove from all collections
-    this.pluginsByName.delete(pluginName);
-    this.registeredPlugins = this.registeredPlugins.filter(p => p.name !== pluginName);
-    
-    // Clear caches and recompute order
-    this.endpointCache.clear();
-    this.dependencyOrderedPlugins = [];
-    this.computeDependencyOrder();
-  }
-
-  /**
-   * Get a specific plugin by name
-   * @param {string} pluginName - Name of plugin to retrieve
-   * @returns {PluginConfig|undefined} Plugin definition or undefined if not found
-   */
-  getPlugin(pluginName) {
-    return this.pluginsByName.get(pluginName);
-  }
-
-  /**
-   * Get plugins that implement a specific endpoint in dependency order
-   * @param {string} endpoint - Endpoint path (e.g., 'install', 'state.update')
-   * @returns {PluginConfig[]} Array of plugins that implement the endpoint
-   */
-  getPlugins(endpoint = '.') {
-    // Check cache first
-    if (this.endpointCache.has(endpoint)) {
-      return this.endpointCache.get(endpoint) || [];
-    }
-
-    // Filter plugins that have the endpoint and all their dependencies are satisfied
-    const filteredPlugins = this.dependencyOrderedPlugins.filter(plugin => {
-      // Check if any dependencies are missing
-      if (plugin.deps && plugin.deps.length > 0) {
-        const missingDependencies = plugin.deps.filter(depName => !this.pluginsByName.has(depName));
-        if (missingDependencies.length > 0) {
-          console.warn(`Plugin ${plugin.name} is not loaded because its dependencies do not exist: ${missingDependencies.join(', ')}`);
-          return false;
-        }
-      }
-
-      // Check if plugin has the requested endpoint
-      if (endpoint === '.') {
-        return true; // All plugins
-      }
-
-      return this.hasEndpoint(plugin, endpoint);
-    });
-
-    // Cache the result
-    this.endpointCache.set(endpoint, filteredPlugins);
-    return filteredPlugins;
-  }
-
-  /**
-   * Check if a plugin has a specific endpoint
-   * @param {PluginConfig} plugin - Plugin to check
-   * @param {string} endpoint - Endpoint path to check
-   * @returns {boolean} True if plugin has the endpoint
-   * @private
-   */
-  hasEndpoint(plugin, endpoint) {
-    const pathParts = endpoint.split('.');
-    let current = plugin;
-    
-    for (const part of pathParts) {
-      if (!current || typeof current !== 'object' || !(part in current)) {
-        return false;
-      }
-      current = current[part];
-    }
-    
-    return true;
-  }
-
-  /**
-   * Get value at endpoint path in plugin
-   * @param {PluginConfig} plugin - Plugin object
-   * @param {string} endpoint - Endpoint path
-   * @returns {*} Value at endpoint or undefined
-   * @private
-   */
-  getEndpointValue(plugin, endpoint) {
-    const pathParts = endpoint.split('.');
-    let current = plugin;
-    
-    for (const part of pathParts) {
-      if (!current || typeof current !== 'object' || !(part in current)) {
-        return undefined;
-      }
-      current = current[part];
-    }
-    
-    return current;
-  }
-
-  /**
-   * Invoke an endpoint on all plugins that implement it, in dependency order
-   * @param {string} endpoint - Endpoint to invoke
-   * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
-   * @param {InvokeOptions} [options] - Optional configuration for this invocation
-   * @returns {Promise<any[]>} Array of settled results from plugin endpoints
-   */
-  async invoke(endpoint, args = [], options = {}) {
-    if (!endpoint) {
-      throw new Error('Invoke requires an endpoint argument');
-    }
-    
-    // Convert args to array for apply() - if it's already an array, use it; otherwise wrap in array
-    const invokeArgs = Array.isArray(args) ? args : [args];
-
-    // Parse endpoint flags
-    const isNoCall = /^!/.test(endpoint);
-    const shouldThrow = this.config.throws || /!$/.test(endpoint);
-    const cleanEndpoint = endpoint.replace(/^!|!$/g, '');
-    
-    // Get the parent object path for method context
-    const endpointParts = cleanEndpoint.split('.');
-    endpointParts.pop(); // Remove the method name
-    const contextPath = endpointParts.join('.');
-
-    // Get plugins that implement this endpoint
-    const plugins = this.getPlugins(cleanEndpoint);
-    
-    // Determine execution mode
-    const mode = options.mode || 'parallel';
-    
-    if (mode === 'sequential') {
-      // Sequential execution - respects dependency order
-      const results = [];
-      
-      for (const plugin of plugins) {
-        const method = this.getEndpointValue(plugin, cleanEndpoint);
-        
-        if (typeof method !== 'function' || isNoCall) {
-          results.push({ status: 'fulfilled', value: method });
-          continue;
-        }
-
-        try {
-          if (this.debug) {
-            console.log('Before', plugin.name, cleanEndpoint, invokeArgs);
-          }
-          
-          // Get the context object for the method
-          const context = contextPath ? this.getEndpointValue(plugin, contextPath) : plugin;
-          
-          // Invoke the method with proper context
-          const result = await method.apply(context, invokeArgs);
-          
-          if (this.debug) {
-            console.log('After', plugin.name, cleanEndpoint, 'completed');
-          }
-          results.push({ status: 'fulfilled', value: result });
-        } catch (error) {
-          const errorMessage = `Failed to invoke plugin: ${plugin.name}!${cleanEndpoint}`;
-          console.error(errorMessage, error);
-          
-          if (shouldThrow) {
-            throw error;
-          }
-          
-          results.push({ status: 'rejected', reason: error });
-        }
-      }
-      
-      return results;
-    } else {
-      // Parallel execution (default behavior)
-      const promises = plugins.map(async plugin => {
-        const method = this.getEndpointValue(plugin, cleanEndpoint);
-        
-        if (typeof method !== 'function' || isNoCall) {
-          return method;
-        }
-
-        try {
-          if (this.debug) {
-            console.log('Before', plugin.name, cleanEndpoint, invokeArgs);
-          }
-          
-          // Get the context object for the method
-          const context = contextPath ? this.getEndpointValue(plugin, contextPath) : plugin;
-          
-          // Invoke the method with proper context
-          const result = method.apply(context, invokeArgs);
-          
-          if (this.debug) {
-            console.log('After', plugin.name, cleanEndpoint, 'completed');
-          }
-          return result;
-        } catch (error) {
-          const errorMessage = `Failed to invoke plugin: ${plugin.name}!${cleanEndpoint}`;
-          console.error(errorMessage, error);
-          
-          if (shouldThrow) {
-            throw error;
-          }
-          
-          return null;
-        }
-      });
-
-      // Set up timeout mechanism
-      const timeout = options.timeout !== undefined ? options.timeout : this.config.timeout;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-      }, timeout);
-
-      try {
-        const result = await Promise.allSettled(promises.map(async (promise) => {
-          try {
-            return await promise;
-          } catch (error) {
-            if (error.name === 'AbortError') {
-              console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
-            } else {
-              console.error(`Error in plugin endpoint ${endpoint}:`, error);
-            }
-            throw error;
-          }
-        }));
-        return result;
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    }
-  }
-
-  /**
-   * Compute dependency-resolved plugin order using topological sort
-   * @throws {Error} If circular dependencies are detected
-   * @private
-   */
-  computeDependencyOrder() {
-    const plugins = [...this.registeredPlugins];
-    const resolved = [];
-    const visiting = new Set();
-    const visited = new Set();
-
-    /**
-     * Depth-first search for topological sorting
-     * @param {PluginConfig} plugin - Plugin to visit
-     * @param {string[]} path - Current dependency path (for circular dependency detection)
-     */
-    const visit = (plugin, path = []) => {
-      if (visiting.has(plugin.name)) {
-        const cycle = [...path, plugin.name].join(' → ');
-        throw new Error(`Circular dependency detected: ${cycle}`);
-      }
-      
-      if (visited.has(plugin.name)) {
-        return; // Already processed
-      }
-
-      visiting.add(plugin.name);
-      
-      // Visit all dependencies first
-      for (const depName of plugin.deps || []) {
-        const dependency = this.pluginsByName.get(depName);
-        if (dependency) {
-          visit(dependency, [...path, plugin.name]);
-        }
-        // Missing dependencies are handled in getPlugins()
-      }
-      
-      visiting.delete(plugin.name);
-      visited.add(plugin.name);
-      resolved.push(plugin);
-    };
-
-    // Visit all plugins
-    for (const plugin of plugins) {
-      if (!visited.has(plugin.name)) {
-        visit(plugin);
-      }
-    }
-
-    this.dependencyOrderedPlugins = resolved;
-    
-    // Debug output
-    const pluginNames = resolved.map(p => p.name);
-    if (this.debug) {
-      console.log(`🔗 Plugin dependency order: ${pluginNames.join(' → ')}`);
-    }
-  }
-
-  /**
-   * Sort an array by a property (utility method)
-   * @param {Array} array - Array to sort
-   * @param {string} [sortProperty='order'] - Property to sort by
-   */
-  sort(array, sortProperty = 'order') {
-    array.sort((a, b) => {
-      const orderA = a.hasOwnProperty(sortProperty) ? a[sortProperty] : 1000000;
-      const orderB = b.hasOwnProperty(sortProperty) ? b[sortProperty] : 1000000;
-      return orderA - orderB;
-    });
-  }
-
-  /**
-   * Process raw plugins array (utility method for pre-processing)
-   * @param {Function} callback - Function to process the plugins array
-   */
-  processRawPlugins(callback) {
-    callback(this.registeredPlugins);
-    this.endpointCache.clear();
-    this.computeDependencyOrder();
-  }
-
-  /**
-   * Convert Plugin instance to plugin object using getEndpoints() method
-   * @param {Plugin} pluginInstance - Plugin instance to convert
-   * @returns {Object} Plugin configuration object
-   * @private
-   */
-  convertPluginInstance(pluginInstance) {
-    const pluginObject = {
-      name: pluginInstance.name,
-      deps: [...pluginInstance.deps], // Create a copy to avoid reference issues
-    };
-
-    // Check if Plugin instance has getEndpoints method
-    if (typeof pluginInstance.getEndpoints === 'function') {
-      // Use explicit endpoint mapping
-      const endpoints = pluginInstance.getEndpoints();
-      
-      // Apply endpoint mappings to plugin object using dot notation
-      for (const [endpointPath, method] of Object.entries(endpoints)) {
-        this.setNestedProperty(pluginObject, endpointPath, method);
-      }
-    }
-
-    return pluginObject;
-  }
-
-  /**
-   * Set nested property in object using dot notation path
-   * @param {Object} obj - Object to set property on
-   * @param {string} path - Dot notation path
-   * @param {*} value - Value to set
-   * @private
-   */
-  setNestedProperty(obj, path, value) {
-    const pathParts = path.split('.');
-    let current = obj;
-    
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      const part = pathParts[i];
-      if (!(part in current)) {
-        current[part] = {};
-      }
-      current = current[part];
-    }
-    
-    current[pathParts[pathParts.length - 1]] = value;
-  }
-
-}
-
-/**
- * Pure state management class for immutable state updates with history tracking
- * @import { ApplicationState } from '../app.js'
- */
-
-// WeakMap to store state history without creating memory leaks
-const stateHistory = new WeakMap();
-
-/**
- * StateManager class handles pure state operations without plugin dependencies
- */
-class StateManager {
-  constructor() {
-    this.preserveStateEnabled = false;
-    this.persistedStateVars = [];
-  }
-
-  /**
-   * Internal function to create a new state object with changes applied
-   * 
-   * @param {ApplicationState} currentState - The current application state  
-   * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
-   * @returns {{newState: ApplicationState, changedKeys: string[]}} New state and changed keys
-   */
-  createStateWithChanges(currentState, changes = {}) {
-    // Create new state object with all current properties
-    const newState = { ...currentState };
-    
-    // Track which keys actually changed
-    const changedKeys = [];
-    
-    // Apply changes and track modifications
-    for (const [key, value] of Object.entries(changes)) {
-      if (currentState[key] !== value) {
-        changedKeys.push(key);
-        newState[key] = value;
-        
-        // Special handling for ext object - ensure proper shallow copy
-        if (key === 'ext' && value && typeof value === 'object') {
-          newState.ext = { ...value };
-        }
-      }
-    }
-    
-    // Link to previous state using WeakMap (no memory leak issues)
-    if (currentState) {
-      stateHistory.set(newState, currentState);
-    }
-    
-    return { newState, changedKeys };
-  }
-
-  /**
-   * Create new state with changes applied (pure function)
-   * 
-   * @param {ApplicationState} currentState - The current application state
-   * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
-   * @returns {{newState: ApplicationState, changedKeys: string[]}} The new state and list of changed keys
-   */
-  applyStateChanges(currentState, changes = {}) {
-    const { newState, changedKeys } = this.createStateWithChanges(currentState, changes);
-    
-    // Preserve state if enabled
-    if (this.preserveStateEnabled && changedKeys.length > 0) {
-      this.saveStateToSessionStorage(newState);
-    }
-    
-    return { newState, changedKeys };
-  }
-
-  /**
-   * Apply extension properties changes to state (pure function)
-   * 
-   * @param {ApplicationState} currentState - The current application state
-   * @param {Object} extChanges - Extension properties to update
-   * @returns {{newState: ApplicationState, changedKeys: string[]}} The new state with updated extensions
-   */
-  applyExtensionChanges(currentState, extChanges = {}) {
-    const newExt = { ...(currentState.ext || {}), ...extChanges };
-    return this.applyStateChanges(currentState, { ext: newExt });
-  }
-
-  /**
-   * Get the previous state for a given state
-   * 
-   * @param {ApplicationState} state - Current state
-   * @returns {ApplicationState|undefined} Previous state or undefined if none
-   */
-  getPreviousState(state) {
-    return stateHistory.get(state);
-  }
-
-  /**
-   * Check if specific state properties have changed from the previous state
-   * 
-   * @param {ApplicationState} state - Current state to check
-   * @param {...string} propertyNames - Names of properties to check for changes
-   * @returns {boolean} True if any of the specified properties have changed
-   */
-  hasStateChanged(state, ...propertyNames) {
-    const previousState = this.getPreviousState(state);
-    if (!previousState) {
-      return true; // First state, everything is "changed"
-    }
-    
-    return propertyNames.some(prop => {
-      const currentValue = prop.includes('.') ? this.getNestedProperty(state, prop) : state[prop];
-      const previousValue = prop.includes('.') ? this.getNestedProperty(previousState, prop) : previousState[prop];
-      return currentValue !== previousValue;
-    });
-  }
-
-  /**
-   * Get all property names that have changed from the previous state
-   * 
-   * @param {ApplicationState} state - Current state to analyze
-   * @returns {string[]} Array of property names that have changed
-   */
-  getChangedStateKeys(state) {
-    const previousState = this.getPreviousState(state);
-    if (!previousState) {
-      return Object.keys(state);
-    }
-    
-    const changedKeys = [];
-    for (const key in state) {
-      if (state[key] !== previousState[key]) {
-        changedKeys.push(key);
-      }
-    }
-    return changedKeys;
-  }
-
-  /**
-   * Get the previous value of a state property
-   * 
-   * @param {ApplicationState} state - Current state
-   * @param {string} propertyName - Name of the property to get previous value for
-   * @returns {*} Previous value of the property, or undefined if no previous state
-   */
-  getPreviousStateValue(state, propertyName) {
-    const previousState = this.getPreviousState(state);
-    if (!previousState) {
-      return undefined;
-    }
-    
-    if (propertyName.includes('.')) {
-      return this.getNestedProperty(previousState, propertyName);
-    }
-    
-    return previousState[propertyName];
-  }
-
-  /**
-   * Get nested property value using dot notation
-   * 
-   * @param {Object} obj - Object to traverse
-   * @param {string} path - Dot-separated path to property
-   * @returns {*} Value at the path, or undefined if not found
-   * @private
-   */
-  getNestedProperty(obj, path) {
-    return path.split('.').reduce((current, key) => current?.[key], obj);
-  }
-
-  /**
-   * Enable automatic state preservation in sessionStorage
-   * 
-   * @param {boolean} enabled - Whether to enable preservation
-   * @param {string[]} [persistedVars] - Specific state variables to persist
-   */
-  preserveState(enabled = true, persistedVars = []) {
-    this.preserveStateEnabled = enabled;
-    this.persistedStateVars = persistedVars;
-  }
-
-  /**
-   * Save specific state variables to sessionStorage
-   * 
-   * @param {ApplicationState} state - State to save
-   * @private
-   */
-  saveStateToSessionStorage(state) {
-    if (!this.preserveStateEnabled) return;
-    
-    const stateToSave = {};
-    
-    // Save only specified variables, or all if "*"
-    const varsToSave = this.persistedStateVars.includes("*") ?
-     Object.keys(state) : this.persistedStateVars;
-    
-    for (const key of varsToSave) {
-      if (state[key] !== undefined && state[key] !== null) {
-        stateToSave[key] = state[key];
-      }
-    }
-    
-    try {
-      sessionStorage.setItem('pdf-tei-editor.state', JSON.stringify(stateToSave));
-    } catch (error) {
-      console.warn('Failed to save state to sessionStorage:', error);
-    }
-  }
-
-  /**
-   * Load state from sessionStorage
-   * 
-   * @returns {Object|null} Saved state or null if none found
-   */
-  getStateFromSessionStorage() {
-    try {
-      const saved = sessionStorage.getItem('pdf-tei-editor.state');
-      return saved ? JSON.parse(saved) : null;
-    } catch (error) {
-      console.warn('Failed to load state from sessionStorage:', error);
-      return null;
-    }
-  }
-}
-
-/**
- * PluginContext - Facade providing clean interface between plugins and application
- * @import { ApplicationState } from '../app.js'
- * @import { Application } from '../modules/application.js'
- */ 
-
-/**
- * PluginContext provides a controlled interface for plugins to interact with application services
- * without creating tight coupling to the full Application class
- */
-class PluginContext {
-  constructor(application) {
-    this.#application = application;
-  }
-
-  /** @type {Application} */
-  #application;
-
-  //
-  // State management methods
-  //
-
-  /**
-   * Update application state
-   * @param {ApplicationState} currentState - Current state
-   * @param {Partial<ApplicationState>} changes - Changes to apply
-   * @returns {Promise<ApplicationState>} New state after changes applied
-   */
-  async updateState(currentState, changes) {
-    return await this.#application.updateState(currentState, changes);
-  }
-
-  /**
-   * Update extension properties in state
-   * @param {ApplicationState} currentState - Current state
-   * @param {Object} extChanges - Extension properties to update
-   * @returns {Promise<ApplicationState>} New state after changes applied
-   */
-  async updateStateExt(currentState, extChanges) {
-    return await this.#application.updateStateExt(currentState, extChanges);
-  }
-
-  /**
-   * Check if specific state properties have changed
-   * @param {ApplicationState} state - Current state
-   * @param {...string} keys - Keys to check for changes
-   * @returns {boolean} True if any keys have changed
-   */
-  hasStateChanged(state, ...keys) {
-    return this.#application.getStateManager().hasStateChanged(state, ...keys);
-  }
-
-  /**
-   * Get all property names that have changed from previous state
-   * @param {ApplicationState} state - Current state
-   * @returns {Array<keyof ApplicationState>} Array of changed property names
-   */
-  getChangedStateKeys(state) {
-    return this.#application.getStateManager().getChangedStateKeys(state);
-  }
-
-  /**
-   * Get previous value of a state property
-   * @param {ApplicationState} state - Current state
-   * @param {string} propertyName - Property name to get previous value for
-   * @returns {*} Previous value or undefined
-   */
-  getPreviousStateValue(state, propertyName) {
-    return this.#application.getStateManager().getPreviousStateValue(state, propertyName);
-  }
-
-  /**
-   * Get the previous state object
-   * @param {ApplicationState} state - Current state
-   * @returns {ApplicationState|undefined} Previous state or undefined
-   */
-  getPreviousState(state) {
-    return this.#application.getStateManager().getPreviousState(state);
-  }
-
-  //
-  // Plugin invocation methods (for inter-plugin communication)
-  //
-
-  /**
-   * Invoke plugin endpoints (for inter-plugin communication)
-   * @param {string} endpoint - Endpoint to invoke
-   * @param {...*} args - Arguments to pass
-   * @returns {Promise<any[]>} Results from plugin invocations
-   */
-  async invokePlugins(endpoint, ...args) {
-    return await this.#application.invokePluginEndpoint(endpoint, ...args);
-  }
-
-  //
-  // Utility methods plugins might need
-  //
-
-  /**
-   * Get current application state (read-only access)
-   * @returns {ApplicationState|null} Current application state
-   */
-  getCurrentState() {
-    return this.#application.getCurrentState();
-  }
-}
-
-/**
- * Application class - clean wrapper around plugin endpoint invocation and bootstrapping
- * @import { ApplicationState } from '../app.js'
- * @import PluginManager from '../modules/plugin-manager.js'
- * @import StateManager from '../modules/state-manager.js'
- */
-
-
-/**
- * Application class that provides a clean API for plugin management and bootstrapping
- */
-class Application {
-  /**
-   * @param {PluginManager} pluginManager 
-   * @param {StateManager} stateManager 
-   */
-  constructor(pluginManager, stateManager) {
-    this.#currentState = null;
-    this.#pluginManager = pluginManager;
-    this.#stateManager = stateManager;
-    this.#pluginContext = new PluginContext(this);
-    
-    // Set up shutdown handler
-    window.addEventListener('beforeunload', () => {
-      this.shutdown();
-    });
-  }
-
-  /** 
-   * simple flag for controlling debug messages
-   */
-  debug = false;
-
-  /** @type {ApplicationState|null} */
-  #currentState;
-
-  /** @type {PluginManager} */
-  #pluginManager;
-
-  /** @type {StateManager} */
-  #stateManager;
-
-  /** @type {PluginContext} */
-  #pluginContext;
-
-  /** @type {boolean} */
-  #isUpdatingState = false;
-
-  //
-  // Application bootstrapping methods
-  //
-
-  /**
-   * Initialize application state with final composed state and configure bootstrapping
-   * @param {ApplicationState} finalState - The final composed initial state
-   * @param {object} options - Configuration options
-   * @param {string[]} [options.persistedStateVars] - State variable names to persist in sessionStorage
-   * @param {boolean} [options.enableStatePreservation=true] - Whether to enable automatic state preservation
-   * @returns {ApplicationState} The initialized state
-   */
-  initializeState(finalState, options = {}) {
-    const {
-      persistedStateVars = [],
-      enableStatePreservation = true
-    } = options;
-
-    // Update current state
-    this.#currentState = finalState;
-
-    // Enable automatic state preservation if requested
-    if (enableStatePreservation) {
-      // Always include sessionId in persisted vars
-      const allPersistedVars = [...persistedStateVars, 'sessionId'];
-      this.#stateManager.preserveState(true, allPersistedVars);
-    }
-
-    return this.#currentState;
-  }
-
-  /**
-   * Get the current state
-   * @returns {ApplicationState|null}
-   */
-  getCurrentState() {
-    return this.#currentState;
-  }
-
-  //
-  // Plugin lifecycle management
-  //
-
-  /**
-   * Register plugins with the plugin manager
-   * Supports plugin objects, Plugin class instances, and Plugin classes.
-   * @param {Array} plugins - Array of plugin objects, Plugin instances, or Plugin classes
-   */
-  registerPlugins(plugins) {
-    // Convert classes to instances, leave everything else as-is
-    const processedPlugins = plugins.map(plugin => {
-      // Check if it's a Plugin class (constructor function)
-      if (typeof plugin === 'function' && plugin.prototype && plugin.prototype.constructor === plugin) {
-        this.debug && console.log(`Creating Plugin singleton instance from class '${plugin.name}' with context`);
-        return plugin.createInstance(this.#pluginContext);
-      }
-      return plugin;
-    });
-
-    // Register plugins - PluginManager handles Plugin instance conversion
-    for (const plugin of processedPlugins) {
-      const pluginName = plugin.name || plugin.constructor?.name || 'unknown';
-      const deps = plugin.deps || [];
-      this.debug && console.log(`Registering plugin '${pluginName}' with deps: [${deps.join(', ') || 'none'}]`);
-      this.#pluginManager.register(plugin);
-    }
-  }
-
-  /**
-   * Install all registered plugins with provided state
-   * @param {ApplicationState} state - The state to pass to plugin install methods
-   * @returns {Promise<Array>}
-   */
-  async installPlugins(state) {
-    const results = await this.#pluginManager.invoke(endpoints.install, state, { mode: 'sequential' });
-    return results;
-  }
-
-  /**
-   * Start all plugins after installation
-   * @returns {Promise<Array>}
-   */
-  async start() {
-    const results = await this.#pluginManager.invoke(endpoints.start, [], { mode: 'sequential' });
-    return results;
-  }
-
-  /**
-   * Shutdown all plugins (called on beforeunload)
-   * @returns {Promise<Array>}
-   */
-  async shutdown() {
-    try {
-      const results = await this.#pluginManager.invoke(endpoints.shutdown, [], { mode: 'sequential' });
-      return results;
-    } catch (error) {
-      console.warn('Error during plugin shutdown:', error);
-      return [];
-    }
-  }
-
-  //
-  // State management orchestration
-  //
-
-  /**
-   * Update application state and notify plugins
-   * @param {ApplicationState} currentState - Current state
-   * @param {Partial<ApplicationState>} changes - Changes to apply
-   * @returns {Promise<ApplicationState>} New state after plugin notification
-   */
-  async updateState(currentState, changes = {}) {
-    // Prevent nested state changes during plugin notification
-    if (this.#isUpdatingState) {
-      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
-    }
-
-    const { newState, changedKeys } = this.#stateManager.applyStateChanges(currentState, changes);
-    
-    // Skip plugin notification if no actual changes (only legacy system)
-    if (changedKeys.length === 0) {
-      this.#isUpdatingState = true;
-      try {
-        const results = await this.#pluginManager.invoke(endpoints.state.update, currentState);
-        this.#checkForStateChangeErrors(results);
-      } finally {
-        this.#isUpdatingState = false;
-      }
-      return currentState;
-    }
-    
-    // Set lock to prevent nested state changes
-    this.#isUpdatingState = true;
-    
-    try {
-      // Invoke all state update endpoints by convention:
-      
-      // 1. Legacy system: state.update with full state
-      const legacyResults = await this.#pluginManager.invoke(endpoints.state.update, newState);
-      this.#checkForStateChangeErrors(legacyResults);
-      
-      // 2. New system: updateInternalState with full state (silent)
-      const internalResults = await this.#pluginManager.invoke(endpoints.state.updateInternal, newState);
-      this.#checkForStateChangeErrors(internalResults);
-      
-      // 3. New system: onStateUpdate with changed keys
-      const changeResults = await this.#pluginManager.invoke(endpoints.state.onStateUpdate, changedKeys, newState);
-      this.#checkForStateChangeErrors(changeResults);
-      
-      return newState;
-    } finally {
-      // Always release the lock
-      this.#isUpdatingState = false;
-    }
-  }
-
-  /**
-   * Update extension properties in state and notify plugins
-   * @param {ApplicationState} currentState - Current state
-   * @param {Object} extChanges - Extension properties to update
-   * @returns {Promise<ApplicationState>} New state after plugin notification
-   */
-  async updateStateExt(currentState, extChanges = {}) {
-    // Prevent nested state changes during plugin notification
-    if (this.#isUpdatingState) {
-      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
-    }
-
-    const { newState, changedKeys } = this.#stateManager.applyExtensionChanges(currentState, extChanges);
-    
-    if (changedKeys.length === 0) {
-      this.#isUpdatingState = true;
-      try {
-        const results = await this.#pluginManager.invoke(endpoints.state.update, currentState);
-        this.#checkForStateChangeErrors(results);
-      } finally {
-        this.#isUpdatingState = false;
-      }
-      return currentState;
-    }
-    
-    this.#isUpdatingState = true;
-    try {
-      const results = await this.#pluginManager.invoke(endpoints.state.update, newState);
-      this.#checkForStateChangeErrors(results);
-      return newState;
-    } finally {
-      this.#isUpdatingState = false;
-    }
-  }
-
-  /**
-   * Check plugin invocation results for state change errors and rethrow them
-   * @param {Array} results - Results from plugin manager invoke
-   * @private
-   */
-  #checkForStateChangeErrors(results) {
-    for (const result of results) {
-      if (result.status === 'rejected' && result.reason?.message?.includes('State changes are not allowed during state update propagation')) {
-        throw result.reason;
-      }
-    }
-  }
-
-  /**
-   * Get state manager for direct access to state utilities
-   * @returns {StateManager}
-   */
-  getStateManager() {
-    return this.#stateManager;
-  }
-
-  /**
-   * Get plugin context for plugin instantiation
-   * @returns {PluginContext}
-   */
-  getPluginContext() {
-    return this.#pluginContext;
-  }
-
-  //
-  // Convenience methods for common plugin operations
-  //
-
-  /**
-   * Invoke any plugin endpoint
-   * @param {string} endpoint
-   * @param {...*} args - Arguments to pass to the endpoint functions
-   * @returns {Promise<Array>}
-   */
-  async invokePluginEndpoint(endpoint, ...args) {
-    return await this.#pluginManager.invoke(endpoint, ...args);
-  }
-
-}
 
 /**
  * UI System - Template registration and DOM element utilities
@@ -16710,6 +15414,228 @@ var ui$1 = ui;
 window.ui = ui; // for debugging
 
 /**
+ * Base Plugin class for class-based plugin architecture
+ * @import { ApplicationState } from '../app.js'
+ * @import { PluginContext } from './plugin-context.js'
+ */
+
+/**
+ * Base class for plugins that provides state management and lifecycle methods
+ */
+class Plugin {
+  /**
+   * @param {PluginContext} context - Plugin context providing controlled access to application services
+   * @param {object} [config] - Plugin configuration
+   * @param {string} [config.name] - Plugin name
+   * @param {string[]} [config.deps] - Plugin dependencies
+   */
+  constructor(context, config = {}) {
+    if (!context) {
+      throw new Error('PluginContext is required for Plugin constructor');
+    }
+    this.context = context;
+    this.name = config.name || this.constructor.name.toLowerCase();
+    this.deps = config.deps || [];
+    this.#state = null;
+  }
+
+  /** @type {Map<Function, Plugin>} */
+  static instances = new Map();
+
+  /**
+   * Create singleton instance of this plugin class
+   * @param {PluginContext} context - Plugin context
+   * @returns {Plugin} The singleton instance
+   */
+  static createInstance(context) {
+    if (!Plugin.instances.has(this)) {
+      Plugin.instances.set(this, new this(context));
+    }
+    return Plugin.instances.get(this) || new this(context);
+  }
+
+  /**
+   * Get singleton instance of this plugin class
+   * @returns {Plugin|null} The singleton instance or null if not created yet
+   */
+  static getInstance() {
+    return Plugin.instances.get(this) || null;
+  }
+
+  /** @type {ApplicationState|null} */
+  #state = null;
+
+  //
+  // Plugin lifecycle methods (override in subclasses)
+  //
+
+  /**
+   * Plugin installation - override in subclasses
+   * @param {ApplicationState} initialState
+   */
+  async install(initialState) {
+    this.#state = initialState;
+    // Override for initialization logic
+  }
+
+  /**
+   * Plugin initialization - override in subclasses
+   */
+  async initialize() {
+    // Override for initialization logic
+  }  
+
+  /**
+   * Plugin startup - override in subclasses
+   */
+  async start() {
+    // Override for startup logic
+  }
+
+  /**
+   * Plugin (temporary) stop - override in subclasses
+   */
+  async stop() {
+    // Override for startup logic
+  }
+
+  /**
+   * Plugin shutdown - override in subclasses
+   * Called on window beforeunload
+   */
+  async shutdown() {
+    // Override for cleanup logic
+  }
+
+  //
+  // State management
+  //
+
+  /**
+   * React to state changes - override in subclasses
+   * @param {string[]} changedKeys - Keys that changed in the state
+   */
+  async onStateUpdate(changedKeys) {
+    // Override for reactive behavior
+    // Base implementation is empty - no need to call super()
+  }
+
+  //
+  // Internal state management
+  //
+
+  /**
+   * Update internal state reference
+   * @param {ApplicationState} newState
+   */
+  updateInternalState(newState) {
+    this.#state = newState;
+  }
+
+  //
+  // Convenience methods for plugin implementations
+  //
+
+  /**
+   * Read-only access to current state
+   * @returns {ApplicationState|null}
+   */
+  get state() {
+    return this.#state;
+  }
+
+  /**
+   * Dispatch state changes through the plugin context
+   * @param {Partial<ApplicationState>} changes
+   * @returns {Promise<ApplicationState>} New state after changes applied
+   */
+  async dispatchStateChange(changes) {
+    if (!this.#state) {
+      throw new Error(`Plugin ${this.name} attempted to dispatch state before initialization`);
+    }
+    
+    // Check if plugin state is stale compared to current application state
+    const currentAppState = this.context.getCurrentState();
+    let stateToUse = this.#state;
+    
+    if (currentAppState && currentAppState !== this.#state) {
+      console.warn(`Warning: Plugin "${this.name}" has stale state. Using current application state instead. This indicates a state synchronization issue that should be investigated.`);
+      stateToUse = currentAppState;
+    }
+    
+    const newState = await this.context.updateState(stateToUse, changes);
+    this.#state = newState;
+    return newState;
+  }
+
+  /**
+   * Check if specific state keys have changed
+   * @param {...keyof ApplicationState} keys
+   * @returns {boolean}
+   */
+  hasStateChanged(...keys) {
+    if (!this.#state) {
+      return false;
+    }
+    return this.context.hasStateChanged(this.#state, ...keys);
+  }
+
+  /**
+   * Get all changed state keys
+   * @returns {Array<keyof ApplicationState>}
+   */
+  getChangedStateKeys() {
+    if (!this.#state) {
+      return [];
+    }
+    return this.context.getChangedStateKeys(this.#state);
+  }
+
+  /**
+   * Get endpoint mappings for this plugin
+   * Override in subclasses to provide custom endpoint mappings.
+   * Use `...super.getEndpoints()` to include the base lifecycle endpoints.
+   * 
+   * @example
+   * getEndpoints() {
+   *   return {
+   *     ...super.getEndpoints(),
+   *     'state.update': this.handleStateUpdate.bind(this),
+   *     'validation.validate': this.validate.bind(this)
+   *   };
+   * }
+   * 
+   * @returns {Record<string, Function>} Mapping of endpoint paths to bound methods
+   */
+  getEndpoints() {
+    /** @type {Record<string, Function>} */
+    const endpoints = {};
+    
+    // Standard lifecycle endpoints
+    if (typeof this.install === 'function') {
+      endpoints['install'] = this.install.bind(this);
+    }
+    if (typeof this.start === 'function') {
+      endpoints['start'] = this.start.bind(this);
+    }
+    if (typeof this.shutdown === 'function') {
+      endpoints['shutdown'] = this.shutdown.bind(this);
+    }
+    
+    // New state management endpoints
+    if (typeof this.updateInternalState === 'function') {
+      endpoints['updateInternalState'] = this.updateInternalState.bind(this);
+    }
+    if (typeof this.onStateUpdate === 'function') {
+      endpoints['onStateUpdate'] = this.onStateUpdate.bind(this);
+    }
+    
+    return endpoints;
+  }
+
+}
+
+/**
  * Given a selector, return all matching DOM nodes in an array
  * @param {string} selector The DOM selector
  * @returns {Array}
@@ -17260,7 +16186,6 @@ class FiledataPlugin extends Plugin {
 
   async install(state) {
     await super.install(state);
-    
     api$g.debug(`Installing plugin "${this.name}"`);
 
     // Initialize empty hash lookup index to prevent errors during plugin initialization
@@ -17269,8 +16194,8 @@ class FiledataPlugin extends Plugin {
 
     // Create status widget for save operations
     this.savingStatusWidget = PanelUtils.createText({
-      text: 'Saving...',
-      icon: 'upload',
+      text: '',
+      icon: 'floppy',
       variant: 'primary',
       name: 'savingStatus'
     });
@@ -17286,7 +16211,6 @@ class FiledataPlugin extends Plugin {
     api$g.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
     
     let data = await api$a.getFileList(null, options.refresh);
-    
     if (!data || data.length === 0) {
       api$c.error("No files found");
       data = []; // Ensure data is an empty array instead of null/undefined
@@ -17303,29 +16227,27 @@ class FiledataPlugin extends Plugin {
     }
     
     // Store fileData in state and propagate it
-    return await this.dispatchStateChange({fileData: data});
+    const newState = await this.dispatchStateChange({fileData: data});
+    return newState
   }
 
   /**
    * Saves the current XML content to a file
-   * @param {string} filePath The path to the XML file on the server
+   * @param {string} fileHash The hash identifying the XML file on the server
    * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
    * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
    * @throws {Error}
    */
-  async saveXml(filePath, saveAsNewVersion = false) {
+  async saveXml(fileHash, saveAsNewVersion = false) {
     api$g.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
     if (!xmlEditor.getXmlTree()) {
-      throw new Error("No XML valid document in the editor");
+      throw new Error("Cannot save: No XML valid document in the editor");
     }
     try {
       // Show saving status
-      if (this.savingStatusWidget && !this.savingStatusWidget.isConnected) {
-        if (ui$1.xmlEditor.statusbar) {
-          ui$1.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
-        }
-      }
-      return await api$a.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion);
+      ui$1.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
+      const xmlContent = xmlEditor.getXML();
+      return await api$a.saveXml(xmlContent, fileHash, saveAsNewVersion);
     } catch (e) {
       console.error("Error while saving XML:", e.message);
       api$c.error(`Could not save XML: ${e.message}`);
@@ -17333,9 +16255,7 @@ class FiledataPlugin extends Plugin {
     } finally {
       // clear status message after 1 second 
       setTimeout(() => {
-        if (this.savingStatusWidget && this.savingStatusWidget.isConnected) {
-          ui$1.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
-        }
+        ui$1.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
       }, 1000);
     }
   }
@@ -17344,8 +16264,8 @@ class FiledataPlugin extends Plugin {
   getEndpoints() {
     return {
       ...super.getEndpoints(),
-      'filedata.reload': this.reload.bind(this),
-      'filedata.saveXml': this.saveXml.bind(this)
+      [endpoints.filedata.reload]: this.reload.bind(this),
+      [endpoints.filedata.saveXml]: this.saveXml.bind(this)
     };
   }
 }
@@ -48943,8 +47863,10 @@ class XMLEditor extends EventEmitter {
     // sync DOM with text content and syntax tree
     await this.sync();
 
-    // inform the listeners
-    await this.emit("editorUpdateDelayed", update);
+    // inform the listeners with a small timeout for the DOM to be ready
+    //await this.emit("editorUpdateDelayed", update)
+
+    setTimeout(async () => await this.emit("editorUpdateDelayed", update), 100);
   }
 
 
@@ -49759,8 +48681,8 @@ async function start$3(state) {
     name: 'validationStatus'
   });
 
-  // Additional xmleditor event handlers that were previously in start.js
-  
+  // Additional xmleditor event handlers 
+
   // save dirty editor content after an update
   xmlEditor.on("editorUpdateDelayed", async () => await saveIfDirty());
 
@@ -49806,8 +48728,6 @@ async function start$3(state) {
     if (validationStatusWidget && validationStatusWidget.isConnected) {
       ui$1.xmlEditor.statusbar.removeById(validationStatusWidget.id);
     }
-    // Save if dirty now that XML is valid again
-    await saveIfDirty();
   });
 }
 
@@ -49923,13 +48843,17 @@ async function saveIfDirty() {
 
   try {
     hashBeingSaved = fileHash;
-    const result = await FiledataPlugin.getInstance().saveXml(fileHash);
+    const result = await app.invokePluginEndpoint(endpoints.filedata.saveXml, fileHash, {result:"first"});
+    if (!result|| typeof result != "object" || !result.status)  {
+      api$g.warn("Invalid invocation result for " + endpoints.filedata.saveXml);
+      return
+    }
     hashBeingSaved = null;
     if (result.status == "unchanged") {
       api$g.debug(`File has not changed`);
     } else {
       api$g.debug(`Saved file with hash ${result.hash}`);
-      if (result.hash !== fileHash) {
+      if (result.hash && result.hash !== fileHash) {
         // Update state to use new hash
         await app.updateState(currentState$9, { xml: result.hash });
       }
@@ -53873,7 +52797,7 @@ async function load$1(state, { xml, pdf }) {
 
   // PDF 
   if (pdf) {
-    await updateState(state, { pdf: null, xml: null, diff: null });
+    await app.updateState(state, { pdf: null, xml: null, diff: null });
     api$g.info("Loading PDF: " + pdf);
     // Convert document identifier to static file URL
     const pdfUrl = `/api/files/${pdf}`;
@@ -53917,7 +52841,7 @@ async function load$1(state, { xml, pdf }) {
     }
 
     await removeMergeView(state);
-    await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked });
+    await app.updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked });
     api$g.info("Loading XML: " + xml);
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`;
@@ -53968,7 +52892,7 @@ async function load$1(state, { xml, pdf }) {
   }
 
   // notify plugins
-  await updateState(state);
+  await app.updateState(state);
 }
 
 async function startAutocomplete() {
@@ -54004,8 +52928,6 @@ async function validateXml() {
   return await api$b.validate() // todo use endpoint instead
 }
 
-// saveXml function moved to filedata plugin
-
 /**
  * Creates a diff between the current and the given document and shows a merge view
  * @param {ApplicationState} state
@@ -54018,7 +52940,7 @@ async function showMergeView(state, diff) {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`;
     await xmlEditor.showMergeView(diffUrl);
-    await updateState(state, { diff: diff });
+    await app.updateState(state, { diff: diff });
     // turn validation off as it creates too much visual noise
     api$b.configure({ mode: "off" });
   } finally {
@@ -54035,7 +52957,7 @@ async function removeMergeView(state) {
   // re-enable validation
   api$b.configure({ mode: "auto" });
   UrlHash.remove("diff");
-  await updateState(state, { diff: null });
+  await app.updateState(state, { diff: null });
 }
 
 /**
@@ -54059,7 +52981,7 @@ async function deleteCurrentVersion(state) {
     await api$a.deleteFiles(filePathsToDelete);
     try {
       // Clear current XML state after successful deletion
-      await updateState(state, { xml: null });
+      await app.updateState(state, { xml: null });
       // update the file data
       await api$9.reload(state);
       // load the gold version
@@ -54122,7 +53044,7 @@ async function deleteAllVersions(state) {
   await api$a.deleteFiles(filePathsToDelete);
   try {
     // Clear current XML state after successful deletion
-    await updateState(state, { xml: null });
+    await app.updateState(state, { xml: null });
     // update the file data
     await api$9.reload(state);
     
@@ -54196,7 +53118,7 @@ async function deleteAll(state) {
     // update the file data
     await api$9.reload(state, {refresh:true});
     // remove xml and pdf
-    await updateState(state, {xml: null, pdf: null});
+    await app.updateState(state, {xml: null, pdf: null});
   }
 }
 
@@ -54328,14 +53250,8 @@ async function saveRevision(state) {
   try {
     await addTeiHeaderInfo(respStmt, undefined, revisionChange);
     if (!state.xml) throw new Error('No XML file loaded')
-    const result = await saveXml(state.xml);
     
-    // If migration occurred, first reload file data, then update state
-    if (result.status === "saved_with_migration") {
-      await api$9.reload(state);
-      state.xml = result.hash;
-      await updateState(state);
-    }
+    await app.invokePluginEndpoint(endpoints.filedata.saveXml, state.xml);
     
     api$2.syncFiles(state)
       .then(summary => summary && console.debug(summary))
@@ -64144,8 +63060,8 @@ async function start$2() {
 
     ui$1.spinner.show('Loading documents, please wait...');
 
-    // update the file lists
-    await FiledataPlugin.getInstance().reload({ refresh: true });
+    // update the file data
+    await app.invokePluginEndpoint(endpoints.filedata.reload, {refresh:true});
 
     // disable regular validation so that we have more control over it
     api$b.configure({ mode: "off" });
@@ -64193,13 +63109,13 @@ async function start$2() {
       const xpath = UrlHash.get("xpath") || ui$1.floatingPanel.xpath.value;
 
       // update the UI
-      await app.updateState(currentState$2, { xpath });
+      const newState = await app.updateState(currentState$2, { xpath });
 
       // synchronize in the background
       api$2.syncFiles(currentState$2).then(async (summary) => {
         api$g.info(summary);
         if (summary && !summary.skipped) {
-          await FiledataPlugin.getInstance().reload({ refresh: true });
+          await app.invokePluginEndpoint(endpoints.filedata.reload, {refresh:true});
         }
       });
     }
@@ -65486,6 +64402,1201 @@ const initialState = {
 };
 
 /**
+ * Plugin Manager with sophisticated dependency resolution using topological sorting
+ * 
+ * This is a reimplementation of https://www.npmjs.com/package/js-plugin with additional features,
+ * designed as a superset that maintains compatibility with code written for js-plugin.
+ * 
+ * TODO: In the original js-plugin implementation, invocation targets are called "extension points" 
+ * not "endpoints". Consider renaming methods like `invoke()` and `hasEndpoint()` to use 
+ * "extensionPoint" terminology for consistency (e.g., `invokeExtensionPoint()`, `hasExtensionPoint()`).
+ * 
+ * ## Basic Usage Example
+ * 
+ * ```javascript
+ * import { PluginManager } from './plugin-manager.js';
+ * 
+ * const manager = new PluginManager();
+ * 
+ * // Register plugins
+ * manager.register({
+ *   name: 'logger',
+ *   config: { level: 'info' },
+ *   install() { console.log('Logger installed'); }
+ * });
+ * 
+ * manager.register({
+ *   name: 'database', 
+ *   deps: ['logger'],
+ *   config: { timeout: 5000 },
+ *   install() { console.log('Database installed'); }
+ * });
+ * 
+ * // Invoke extension points (functions)
+ * await manager.invoke('install');  // Calls install() on all plugins in dependency order
+ * 
+ * // Collect configuration values (no-call)
+ * const timeouts = await manager.invoke('!config.timeout');  // Returns [undefined, 5000]
+ * const levels = await manager.invoke('!config.level');      // Returns ['info', undefined]
+ * 
+ * // Error handling
+ * await manager.invoke('install!');  // Throws on first plugin error
+ * ```
+ * 
+ * ## Endpoint Invocation Flags
+ * 
+ * Endpoint names support special flag prefixes and suffixes to control invocation behavior:
+ * 
+ * ### No-Call Flag (`!` prefix)
+ * - **Usage**: `manager.invoke("!config.timeout")`
+ * - **Purpose**: Retrieve property values without calling functions
+ * - **Behavior**: Returns the value at the endpoint path from each plugin
+ * - **Example**: Collect configuration values or status data across plugins
+ * 
+ * ### Throw Flag (`!` suffix)  
+ * - **Usage**: `manager.invoke("install!")`
+ * - **Purpose**: Throw errors immediately instead of collecting them
+ * - **Behavior**: First plugin error terminates execution and rethrows
+ * - **Example**: Critical operations where failures should halt processing
+ * 
+ * Flags can be combined. 
+ * 
+ * The no-call flag (`!`) converts function invocation into value retrieval, enabling
+ * data collection workflows using the same plugin traversal and dependency ordering.
+ */
+
+
+/**
+ * The minimal plugin configuration object
+ * @typedef {Object} PluginConfig
+ * @property {string} name - Plugin name
+ * @property {string[]} [deps] - Array of plugin names this plugin depends on
+ * @property {any} [initialize] - Optional initialization function 
+ */
+
+/**
+ * Options for plugin endpoint invocation
+ * @typedef {Object} InvokeOptions
+ * @property {boolean} [throws] - If true, an error in one of the endpoints throws the invocation
+ * @property {boolean} [nocall] - If true, get the extension points value rather than trying to call it as a function
+ * @property {number} [timeout] - Timeout override for this invocation (milliseconds)
+ * @property {'parallel'|'sequential'} [mode] - Execution mode: 'parallel' (default) or 'sequential'
+ * @property {'first'|'values'|'full'} [result] - Form of result: 
+ *    'first' (default) returns the first fulfilled response, 
+ *    'values' returns the values of all fulfilled responses, 
+ *    'full' returns an array of {status:string, value:any} objects 
+ */
+
+/**
+ * Plugin Manager with dependency resolution
+ */
+class PluginManager {
+  /**
+   * @param {InvokeOptions} options 
+   */
+  constructor(options = {}) {
+    /** @type {Map<string, PluginConfig>} */
+    this.pluginsByName = new Map();
+
+    /** @type {PluginConfig[]} */
+    this.registeredPlugins = [];
+
+    /** @type {PluginConfig[]} */
+    this.dependencyOrderedPlugins = [];
+
+    /** @type {Map<string, PluginConfig[]>} */
+    this.endpointCache = new Map();
+
+    /** @type {InvokeOptions} */
+    this.config = {
+      timeout: options.timeout || 2000,
+      throws: options.throws || false,
+      mode: options.mode || "parallel",
+      result: options.result || "full"
+    };
+
+    /** @type {boolean} */
+    this.debug = options.debug || false;
+
+  }
+
+  /**
+   * Register a plugin with dependency resolution
+   * @param {PluginConfig|Plugin} plugin - Plugin to register (can be Plugin instance or config object)
+   * @throws {Error} If plugin is invalid or creates circular dependencies
+   */
+  register(plugin) {
+    // Validate plugin
+    if (!plugin || typeof plugin !== 'object') {
+      throw new Error('Plugin must be an object');
+    }
+
+    // Handle Plugin class instances - convert to plugin object
+    let pluginConfig;
+    if (plugin instanceof Plugin) {
+      if (this.debug) {
+        console.log(`Converting Plugin instance '${plugin.name}' to plugin object`);
+      }
+      pluginConfig = this.convertPluginInstance(plugin);
+    } else {
+      pluginConfig = plugin;
+    }
+
+    if (!pluginConfig.name || typeof pluginConfig.name !== 'string') {
+      console.error('Invalid plugin:', pluginConfig);
+      throw new Error('Every plugin must have a name property');
+    }
+
+    if (this.pluginsByName.has(pluginConfig.name)) {
+      throw new Error(`Plugin "${pluginConfig.name}" is already registered`);
+    }
+
+    // Normalize dependencies
+    const normalizedPlugin = {
+      ...pluginConfig,
+      deps: Array.isArray(pluginConfig.deps) ? pluginConfig.deps : []
+    };
+
+    // Register plugin
+    this.pluginsByName.set(pluginConfig.name, normalizedPlugin);
+    this.registeredPlugins.push(normalizedPlugin);
+
+    // Clear caches
+    this.endpointCache.clear();
+    this.dependencyOrderedPlugins = [];
+
+    // Recompute dependency order
+    this.computeDependencyOrder();
+
+    // Call initialize function if present
+    if (plugin instanceof Plugin) {
+      plugin.initialize();
+    }
+
+    if (this.debug) {
+      console.log(`Registered plugin '${plugin.name}' with dependencies: [${normalizedPlugin.deps.join(', ') || 'none'}]`);
+    }
+  }
+
+  /**
+   * Unregister a plugin
+   * @param {string} pluginName - Name of plugin to unregister
+   * @throws {Error} If plugin doesn't exist
+   */
+  unregister(pluginName) {
+    const plugin = this.pluginsByName.get(pluginName);
+    if (!plugin) {
+      throw new Error(`Plugin "${pluginName}" doesn't exist`);
+    }
+
+    // Remove from all collections
+    this.pluginsByName.delete(pluginName);
+    this.registeredPlugins = this.registeredPlugins.filter(p => p.name !== pluginName);
+
+    // Clear caches and recompute order
+    this.endpointCache.clear();
+    this.dependencyOrderedPlugins = [];
+    this.computeDependencyOrder();
+  }
+
+  /**
+   * Get a specific plugin by name
+   * @param {string} pluginName - Name of plugin to retrieve
+   * @returns {PluginConfig|undefined} Plugin definition or undefined if not found
+   */
+  getPlugin(pluginName) {
+    return this.pluginsByName.get(pluginName);
+  }
+
+  /**
+   * Get plugins that implement a specific endpoint in dependency order
+   * @param {string} endpoint - Endpoint path (e.g., 'install', 'state.update')
+   * @returns {PluginConfig[]} Array of plugins that implement the endpoint
+   */
+  getPlugins(endpoint = '.') {
+    // Check cache first
+    if (this.endpointCache.has(endpoint)) {
+      return this.endpointCache.get(endpoint) || [];
+    }
+
+    // Filter plugins that have the endpoint and all their dependencies are satisfied
+    const filteredPlugins = this.dependencyOrderedPlugins.filter(plugin => {
+      // Check if any dependencies are missing
+      if (plugin.deps && plugin.deps.length > 0) {
+        const missingDependencies = plugin.deps.filter(depName => !this.pluginsByName.has(depName));
+        if (missingDependencies.length > 0) {
+          console.warn(`Plugin ${plugin.name} is not loaded because its dependencies do not exist: ${missingDependencies.join(', ')}`);
+          return false;
+        }
+      }
+
+      // Check if plugin has the requested endpoint
+      if (endpoint === '.') {
+        return true; // All plugins
+      }
+      return this.hasEndpoint(plugin, endpoint);
+    });
+
+    // Cache the result
+    this.endpointCache.set(endpoint, filteredPlugins);
+    return filteredPlugins;
+  }
+
+  /**
+   * Check if a plugin has a specific endpoint
+   * @param {PluginConfig} plugin - Plugin to check
+   * @param {string} endpoint - Endpoint path to check
+   * @returns {boolean} True if plugin has the endpoint
+   * @private
+   */
+  hasEndpoint(plugin, endpoint) {
+    const pathParts = endpoint.split('.');
+    let current = plugin;
+
+    for (const part of pathParts) {
+      if (!current || typeof current !== 'object' || !(part in current)) {
+        return false;
+      }
+      current = current[part];
+    }
+
+    return true;
+  }
+
+  /**
+   * Get value at endpoint path in plugin
+   * @param {PluginConfig} plugin - Plugin object
+   * @param {string} endpoint - Endpoint path
+   * @returns {*} Value at endpoint or undefined
+   * @private
+   */
+  getEndpointValue(plugin, endpoint) {
+    const pathParts = endpoint.split('.');
+    let current = plugin;
+
+    for (const part of pathParts) {
+      if (!current || typeof current !== 'object' || !(part in current)) {
+        return undefined;
+      }
+      current = current[part];
+    }
+
+    return current;
+  }
+
+  /**
+   * @typedef {object} InvocationResult
+   * @property {'fulfilled'|'rejected'} status
+   * @property {any} value 
+   */
+
+  /**
+   * Invoke an endpoint on all plugins that implement it, in dependency order
+   * @param {string} endpoint - Endpoint to invoke
+   * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
+   * @param {InvokeOptions} [options] - Optional configuration for this invocation
+   * @returns {Promise<InvocationResult[] | any[] | any>} Result formatted depending on options.result
+   */
+  async invoke(endpoint, args = [], options = {}) {
+    if (!endpoint) {
+      throw new Error('Invoke requires an endpoint argument');
+    }
+
+    // Convert args to array for apply() - if it's already an array, use it; otherwise wrap in array
+    const invokeArgs = Array.isArray(args) ? args : [args];
+
+    // Parse endpoint flags
+    const isNoCall = options.nocall || /^!/.test(endpoint);
+    const shouldThrow = options.throws || /!$/.test(endpoint) || this.config.throws;
+    const cleanEndpoint = endpoint.replace(/^!|!$/g, '');
+
+    // Get the parent object path for method context
+    const endpointParts = cleanEndpoint.split('.');
+    endpointParts.pop(); // Remove the method name
+    const contextPath = endpointParts.join('.');
+
+    // Get plugins that implement this endpoint
+    const plugins = this.getPlugins(cleanEndpoint);
+
+    // invocation mode
+    const mode = options.mode || this.config.mode;
+
+    switch (mode) {
+      case 'sequential':
+        // Sequential execution - respects dependency order
+
+        /** @type {InvocationResult[]} */
+        const results = [];
+
+        for (const plugin of plugins) {
+          const method = this.getEndpointValue(plugin, cleanEndpoint);
+
+          if (typeof method !== 'function' || isNoCall) {
+            results.push({ status: 'fulfilled', value: method });
+            continue;
+          }
+
+          try {
+            if (this.debug) {
+              console.log('Before', plugin.name, cleanEndpoint, invokeArgs);
+            }
+
+            // Get the context object for the method
+            const context = contextPath ? this.getEndpointValue(plugin, contextPath) : plugin;
+
+            // Invoke the method with proper context
+            const result = await method.apply(context, invokeArgs);
+
+            if (this.debug) {
+              console.log('After', plugin.name, cleanEndpoint, 'completed');
+            }
+            results.push({ status: 'fulfilled', value: result });
+          } catch (error) {
+            const errorMessage = `Failed to invoke plugin: ${plugin.name}!${cleanEndpoint}`;
+            console.error(errorMessage, error);
+
+            if (shouldThrow) {
+              throw error;
+            }
+
+            results.push({ status: 'rejected', reason: error });
+          }
+        }
+
+        return this._processResult(results, options);
+
+      case 'parallel':
+      default:
+
+        // Parallel execution (default behavior)
+
+        const promises = plugins.map(async plugin => {
+          const method = this.getEndpointValue(plugin, cleanEndpoint);
+
+          if (typeof method !== 'function' || isNoCall) {
+            return method;
+          }
+
+          if (this.debug) {
+            console.log('Before', plugin.name, cleanEndpoint, invokeArgs);
+          }
+
+          // Get the context object for the method
+          const context = contextPath ? this.getEndpointValue(plugin, contextPath) : plugin;
+
+          // Invoke the method with proper context
+          const result = method.apply(context, invokeArgs);
+
+          if (this.debug) {
+            console.log('After', plugin.name, cleanEndpoint, 'completed');
+          }
+          return result;
+        });
+
+        // Set up timeout mechanism
+        const timeout = options.timeout !== undefined ? options.timeout : this.config.timeout;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, timeout);
+
+        try {
+          /** @type {InvocationResult[]} */
+          const result = await Promise.allSettled(promises);
+
+          // Handle throwing behavior before result processing
+          if (shouldThrow) {
+            const firstRejected = result.find(({ status }) => status === "rejected");
+            if (firstRejected) {
+              throw firstRejected.reason;
+            }
+          }
+
+          return this._processResult(result, options);
+        } finally {
+          clearTimeout(timeoutId);
+        }
+    }
+    //throw new Error(`Invalid option.result: '${options.result}'`)
+
+  }
+  /**
+   * Processes the results of the endpoint invocations
+   * @param {InvocationResult[]} result The result of the invocation
+   * @param {InvokeOptions} options 
+   * @return {any} {@see {InvocationOptions}}
+   */
+  _processResult(result, options = {}) {
+    const resultMode = options.result || this.config.result || 'full';
+    
+    switch (resultMode) {
+      case 'first':
+        const firstFulfilled = result.find(({ status }) => status === "fulfilled");
+        return firstFulfilled ? firstFulfilled.value : undefined;
+      case 'values':
+        // Return only the values from fulfilled results
+        return result
+          .filter(({ status }) => status === "fulfilled")
+          .map(({ value }) => value);
+      case 'full':
+      default:
+        return result;
+    }
+  }
+
+  /**
+   * Compute dependency-resolved plugin order using topological sort
+   * @throws {Error} If circular dependencies are detected
+   * @private
+   */
+  computeDependencyOrder() {
+    const plugins = [...this.registeredPlugins];
+    const resolved = [];
+    const visiting = new Set();
+    const visited = new Set();
+
+    /**
+     * Depth-first search for topological sorting
+     * @param {PluginConfig} plugin - Plugin to visit
+     * @param {string[]} path - Current dependency path (for circular dependency detection)
+     */
+    const visit = (plugin, path = []) => {
+      if (visiting.has(plugin.name)) {
+        const cycle = [...path, plugin.name].join(' → ');
+        throw new Error(`Circular dependency detected: ${cycle}`);
+      }
+
+      if (visited.has(plugin.name)) {
+        return; // Already processed
+      }
+
+      visiting.add(plugin.name);
+
+      // Visit all dependencies first
+      for (const depName of plugin.deps || []) {
+        const dependency = this.pluginsByName.get(depName);
+        if (dependency) {
+          visit(dependency, [...path, plugin.name]);
+        }
+        // Missing dependencies are handled in getPlugins()
+      }
+
+      visiting.delete(plugin.name);
+      visited.add(plugin.name);
+      resolved.push(plugin);
+    };
+
+    // Visit all plugins
+    for (const plugin of plugins) {
+      if (!visited.has(plugin.name)) {
+        visit(plugin);
+      }
+    }
+
+    this.dependencyOrderedPlugins = resolved;
+
+    // Debug output
+    const pluginNames = resolved.map(p => p.name);
+    if (this.debug) {
+      console.log(`🔗 Plugin dependency order: ${pluginNames.join(' → ')}`);
+    }
+  }
+
+  /**
+   * Sort an array by a property (utility method)
+   * @param {Array} array - Array to sort
+   * @param {string} [sortProperty='order'] - Property to sort by
+   */
+  sort(array, sortProperty = 'order') {
+    array.sort((a, b) => {
+      const orderA = a.hasOwnProperty(sortProperty) ? a[sortProperty] : 1000000;
+      const orderB = b.hasOwnProperty(sortProperty) ? b[sortProperty] : 1000000;
+      return orderA - orderB;
+    });
+  }
+
+  /**
+   * Process raw plugins array (utility method for pre-processing)
+   * @param {Function} callback - Function to process the plugins array
+   */
+  processRawPlugins(callback) {
+    callback(this.registeredPlugins);
+    this.endpointCache.clear();
+    this.computeDependencyOrder();
+  }
+
+  /**
+   * Convert Plugin instance to plugin object using getEndpoints() method
+   * @param {Plugin} pluginInstance - Plugin instance to convert
+   * @returns {Object} Plugin configuration object
+   * @private
+   */
+  convertPluginInstance(pluginInstance) {
+    const pluginObject = {
+      name: pluginInstance.name,
+      deps: [...pluginInstance.deps], // Create a copy to avoid reference issues
+    };
+
+    // Check if Plugin instance has getEndpoints method
+    if (typeof pluginInstance.getEndpoints === 'function') {
+      // Use explicit endpoint mapping
+      const endpoints = pluginInstance.getEndpoints();
+
+      // Apply endpoint mappings to plugin object using dot notation
+      for (const [endpointPath, method] of Object.entries(endpoints)) {
+        this.setNestedProperty(pluginObject, endpointPath, method);
+      }
+    }
+
+    return pluginObject;
+  }
+
+  /**
+   * Set nested property in object using dot notation path
+   * @param {Object} obj - Object to set property on
+   * @param {string} path - Dot notation path
+   * @param {*} value - Value to set
+   * @private
+   */
+  setNestedProperty(obj, path, value) {
+    const pathParts = path.split('.');
+    let current = obj;
+
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      const part = pathParts[i];
+      if (!(part in current)) {
+        current[part] = {};
+      }
+      current = current[part];
+    }
+
+    current[pathParts[pathParts.length - 1]] = value;
+  }
+
+}
+
+/**
+ * Pure state management class for immutable state updates with history tracking
+ * @import { ApplicationState } from '../app.js'
+ */
+
+// WeakMap to store state history without creating memory leaks
+const stateHistory = new WeakMap();
+
+/**
+ * StateManager class handles pure state operations without plugin dependencies
+ */
+class StateManager {
+  constructor() {
+    this.preserveStateEnabled = false;
+    this.persistedStateVars = [];
+  }
+
+  /**
+   * Internal function to create a new state object with changes applied
+   * 
+   * @param {ApplicationState} currentState - The current application state  
+   * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
+   * @returns {{newState: ApplicationState, changedKeys: string[]}} New state and changed keys
+   */
+  createStateWithChanges(currentState, changes = {}) {
+    // Create new state object with all current properties
+    const newState = { ...currentState };
+    
+    // Track which keys actually changed
+    const changedKeys = [];
+    
+    // Apply changes and track modifications
+    for (const [key, value] of Object.entries(changes)) {
+      if (currentState[key] !== value) {
+        changedKeys.push(key);
+        newState[key] = value;
+        
+        // Special handling for ext object - ensure proper shallow copy
+        if (key === 'ext' && value && typeof value === 'object') {
+          newState.ext = { ...value };
+        }
+      }
+    }
+    
+    // Link to previous state using WeakMap (no memory leak issues)
+    if (currentState) {
+      stateHistory.set(newState, currentState);
+    }
+    
+    return { newState, changedKeys };
+  }
+
+  /**
+   * Create new state with changes applied (pure function)
+   * 
+   * @param {ApplicationState} currentState - The current application state
+   * @param {Partial<ApplicationState>} changes - Key-value pairs of state changes to apply
+   * @returns {{newState: ApplicationState, changedKeys: string[]}} The new state and list of changed keys
+   */
+  applyStateChanges(currentState, changes = {}) {
+    const { newState, changedKeys } = this.createStateWithChanges(currentState, changes);
+    
+    // Preserve state if enabled
+    if (this.preserveStateEnabled && changedKeys.length > 0) {
+      this.saveStateToSessionStorage(newState);
+    }
+    
+    return { newState, changedKeys };
+  }
+
+  /**
+   * Apply extension properties changes to state (pure function)
+   * 
+   * @param {ApplicationState} currentState - The current application state
+   * @param {Object} extChanges - Extension properties to update
+   * @returns {{newState: ApplicationState, changedKeys: string[]}} The new state with updated extensions
+   */
+  applyExtensionChanges(currentState, extChanges = {}) {
+    const newExt = { ...(currentState.ext || {}), ...extChanges };
+    return this.applyStateChanges(currentState, { ext: newExt });
+  }
+
+  /**
+   * Get the previous state for a given state
+   * 
+   * @param {ApplicationState} state - Current state
+   * @returns {ApplicationState|undefined} Previous state or undefined if none
+   */
+  getPreviousState(state) {
+    return stateHistory.get(state);
+  }
+
+  /**
+   * Check if specific state properties have changed from the previous state
+   * 
+   * @param {ApplicationState} state - Current state to check
+   * @param {...string} propertyNames - Names of properties to check for changes
+   * @returns {boolean} True if any of the specified properties have changed
+   */
+  hasStateChanged(state, ...propertyNames) {
+    const previousState = this.getPreviousState(state);
+    if (!previousState) {
+      return true; // First state, everything is "changed"
+    }
+    
+    return propertyNames.some(prop => {
+      const currentValue = prop.includes('.') ? this.getNestedProperty(state, prop) : state[prop];
+      const previousValue = prop.includes('.') ? this.getNestedProperty(previousState, prop) : previousState[prop];
+      return currentValue !== previousValue;
+    });
+  }
+
+  /**
+   * Get all property names that have changed from the previous state
+   * 
+   * @param {ApplicationState} state - Current state to analyze
+   * @returns {string[]} Array of property names that have changed
+   */
+  getChangedStateKeys(state) {
+    const previousState = this.getPreviousState(state);
+    if (!previousState) {
+      return Object.keys(state);
+    }
+    
+    const changedKeys = [];
+    for (const key in state) {
+      if (state[key] !== previousState[key]) {
+        changedKeys.push(key);
+      }
+    }
+    return changedKeys;
+  }
+
+  /**
+   * Get the previous value of a state property
+   * 
+   * @param {ApplicationState} state - Current state
+   * @param {string} propertyName - Name of the property to get previous value for
+   * @returns {*} Previous value of the property, or undefined if no previous state
+   */
+  getPreviousStateValue(state, propertyName) {
+    const previousState = this.getPreviousState(state);
+    if (!previousState) {
+      return undefined;
+    }
+    
+    if (propertyName.includes('.')) {
+      return this.getNestedProperty(previousState, propertyName);
+    }
+    
+    return previousState[propertyName];
+  }
+
+  /**
+   * Get nested property value using dot notation
+   * 
+   * @param {Object} obj - Object to traverse
+   * @param {string} path - Dot-separated path to property
+   * @returns {*} Value at the path, or undefined if not found
+   * @private
+   */
+  getNestedProperty(obj, path) {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
+  }
+
+  /**
+   * Enable automatic state preservation in sessionStorage
+   * 
+   * @param {boolean} enabled - Whether to enable preservation
+   * @param {string[]} [persistedVars] - Specific state variables to persist
+   */
+  preserveState(enabled = true, persistedVars = []) {
+    this.preserveStateEnabled = enabled;
+    this.persistedStateVars = persistedVars;
+  }
+
+  /**
+   * Save specific state variables to sessionStorage
+   * 
+   * @param {ApplicationState} state - State to save
+   * @private
+   */
+  saveStateToSessionStorage(state) {
+    if (!this.preserveStateEnabled) return;
+    
+    const stateToSave = {};
+    
+    // Save only specified variables, or all if "*"
+    const varsToSave = this.persistedStateVars.includes("*") ?
+     Object.keys(state) : this.persistedStateVars;
+    
+    for (const key of varsToSave) {
+      if (state[key] !== undefined && state[key] !== null) {
+        stateToSave[key] = state[key];
+      }
+    }
+    
+    try {
+      sessionStorage.setItem('pdf-tei-editor.state', JSON.stringify(stateToSave));
+    } catch (error) {
+      console.warn('Failed to save state to sessionStorage:', error);
+    }
+  }
+
+  /**
+   * Load state from sessionStorage
+   * 
+   * @returns {Object|null} Saved state or null if none found
+   */
+  getStateFromSessionStorage() {
+    try {
+      const saved = sessionStorage.getItem('pdf-tei-editor.state');
+      return saved ? JSON.parse(saved) : null;
+    } catch (error) {
+      console.warn('Failed to load state from sessionStorage:', error);
+      return null;
+    }
+  }
+}
+
+/**
+ * PluginContext - Facade providing clean interface between plugins and application
+ * @import { ApplicationState } from '../app.js'
+ * @import { Application } from '../modules/application.js'
+ * @import {InvokeOptions} from '../modules/plugin-manager.js'
+ */ 
+
+/**
+ * PluginContext provides a controlled interface for plugins to interact with application services
+ * without creating tight coupling to the full Application class
+ */
+class PluginContext {
+  constructor(application) {
+    this.#application = application;
+  }
+
+  /** @type {Application} */
+  #application;
+
+  //
+  // State management methods
+  //
+
+  /**
+   * Update application state
+   * @param {ApplicationState} currentState - Current state
+   * @param {Partial<ApplicationState>} changes - Changes to apply
+   * @returns {Promise<ApplicationState>} New state after changes applied
+   */
+  async updateState(currentState, changes) {
+    return await this.#application.updateState(currentState, changes);
+  }
+
+  /**
+   * Update extension properties in state
+   * @param {ApplicationState} currentState - Current state
+   * @param {Object} extChanges - Extension properties to update
+   * @returns {Promise<ApplicationState>} New state after changes applied
+   */
+  async updateStateExt(currentState, extChanges) {
+    return await this.#application.updateStateExt(currentState, extChanges);
+  }
+
+  /**
+   * Check if specific state properties have changed
+   * @param {ApplicationState} state - Current state
+   * @param {...string} keys - Keys to check for changes
+   * @returns {boolean} True if any keys have changed
+   */
+  hasStateChanged(state, ...keys) {
+    return this.#application.getStateManager().hasStateChanged(state, ...keys);
+  }
+
+  /**
+   * Get all property names that have changed from previous state
+   * @param {ApplicationState} state - Current state
+   * @returns {Array<keyof ApplicationState>} Array of changed property names
+   */
+  getChangedStateKeys(state) {
+    return this.#application.getStateManager().getChangedStateKeys(state);
+  }
+
+  /**
+   * Get previous value of a state property
+   * @param {ApplicationState} state - Current state
+   * @param {string} propertyName - Property name to get previous value for
+   * @returns {*} Previous value or undefined
+   */
+  getPreviousStateValue(state, propertyName) {
+    return this.#application.getStateManager().getPreviousStateValue(state, propertyName);
+  }
+
+  /**
+   * Get the previous state object
+   * @param {ApplicationState} state - Current state
+   * @returns {ApplicationState|undefined} Previous state or undefined
+   */
+  getPreviousState(state) {
+    return this.#application.getStateManager().getPreviousState(state);
+  }
+
+  //
+  // Plugin invocation methods (for inter-plugin communication)
+  //
+
+  /**
+   * Invoke an endpoint on all plugins that implement it, in dependency order.
+   * By default, throws on the first error encountered, and returns the value of the 
+   * first fulfilled promise (or synchronous function). For other options, see {InvokeOptions}
+   * 
+   * @param {string} endpoint - Endpoint to invoke
+   * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
+   * @param {InvokeOptions} [options] - Optional configuration for this invocation
+   * @returns {Promise<InvocationResult[] | any[] | any>} Result formatted depending on options.result
+   */
+  async invokePluginEndpoint(endpoint, args = [], options = {throws:true, result:'full'}) {
+    return await this.#application.invokePluginEndpoint(endpoint, args, options);
+  }
+
+  //
+  // Utility methods plugins might need
+  //
+
+  /**
+   * Get current application state (read-only access)
+   * @returns {ApplicationState|null} Current application state
+   */
+  getCurrentState() {
+    return this.#application.getCurrentState();
+  }
+}
+
+/**
+ * Application class - clean wrapper around plugin endpoint invocation and bootstrapping
+ * @import { ApplicationState } from '../app.js'
+ * @import PluginManager from '../modules/plugin-manager.js'
+ * @import StateManager from '../modules/state-manager.js'
+ * @import { InvokeOptions, InvocationResult } from '../modules/plugin-manager.js'
+ */
+
+
+/**
+ * Application class that provides a clean API for plugin management and bootstrapping
+ */
+class Application {
+  /**
+   * @param {PluginManager} pluginManager 
+   * @param {StateManager} stateManager 
+   */
+  constructor(pluginManager, stateManager) {
+    this.#currentState = null;
+    this.#pluginManager = pluginManager;
+    this.#stateManager = stateManager;
+    this.#pluginContext = new PluginContext(this);
+    
+    // Set up shutdown handler
+    window.addEventListener('beforeunload', () => {
+      this.shutdown();
+    });
+  }
+
+  /** 
+   * simple flag for controlling debug messages
+   */
+  debug = false;
+
+  /** @type {ApplicationState|null} */
+  #currentState;
+
+  /** @type {PluginManager} */
+  #pluginManager;
+
+  /** @type {StateManager} */
+  #stateManager;
+
+  /** @type {PluginContext} */
+  #pluginContext;
+
+  /** @type {boolean} */
+  #isUpdatingState = false;
+
+  //
+  // Application bootstrapping methods
+  //
+
+  /**
+   * Initialize application state with final composed state and configure bootstrapping
+   * @param {ApplicationState} finalState - The final composed initial state
+   * @param {object} options - Configuration options
+   * @param {string[]} [options.persistedStateVars] - State variable names to persist in sessionStorage
+   * @param {boolean} [options.enableStatePreservation=true] - Whether to enable automatic state preservation
+   * @returns {ApplicationState} The initialized state
+   */
+  initializeState(finalState, options = {}) {
+    const {
+      persistedStateVars = [],
+      enableStatePreservation = true
+    } = options;
+
+    // Update current state
+    this.#currentState = finalState;
+
+    // Enable automatic state preservation if requested
+    if (enableStatePreservation) {
+      // Always include sessionId in persisted vars
+      const allPersistedVars = [...persistedStateVars, 'sessionId'];
+      this.#stateManager.preserveState(true, allPersistedVars);
+    }
+
+    return this.#currentState;
+  }
+
+  /**
+   * Get the current state
+   * @returns {ApplicationState|null}
+   */
+  getCurrentState() {
+    return this.#currentState;
+  }
+
+  //
+  // Plugin lifecycle management
+  //
+
+  /**
+   * Register plugins with the plugin manager
+   * Supports plugin objects, Plugin class instances, and Plugin classes.
+   * @param {Array} plugins - Array of plugin objects, Plugin instances, or Plugin classes
+   */
+  registerPlugins(plugins) {
+    // Convert classes to instances, leave everything else as-is
+    const processedPlugins = plugins.map(plugin => {
+      // Check if it's a Plugin class (constructor function)
+      if (typeof plugin === 'function' && plugin.prototype && plugin.prototype.constructor === plugin) {
+        this.debug && console.log(`Creating Plugin singleton instance from class '${plugin.name}' with context`);
+        return plugin.createInstance(this.#pluginContext);
+      }
+      return plugin;
+    });
+
+    // Register plugins - PluginManager handles Plugin instance conversion
+    for (const plugin of processedPlugins) {
+      const pluginName = plugin.name || plugin.constructor?.name || 'unknown';
+      const deps = plugin.deps || [];
+      this.debug && console.log(`Registering plugin '${pluginName}' with deps: [${deps.join(', ') || 'none'}]`);
+      this.#pluginManager.register(plugin);
+    }
+  }
+
+  /**
+   * Install all registered plugins with provided state
+   * @param {ApplicationState} state - The state to pass to plugin install methods
+   * @returns {Promise<Array>}
+   */
+  async installPlugins(state) {
+    const results = await this.#pluginManager.invoke(endpoints.install, state, { mode: 'sequential', result: 'full' });
+    return results;
+  }
+
+  /**
+   * Start all plugins after installation
+   * @returns {Promise<Array>}
+   */
+  async start() {
+    const results = await this.#pluginManager.invoke(endpoints.start, [], { mode: 'sequential', result: 'full' });
+    return results;
+  }
+
+  /**
+   * Shutdown all plugins (called on beforeunload)
+   * @returns {Promise<Array>}
+   */
+  async shutdown() {
+    try {
+      const results = await this.#pluginManager.invoke(endpoints.shutdown, [], { mode: 'sequential', result: 'full' });
+      return results;
+    } catch (error) {
+      console.warn('Error during plugin shutdown:', error);
+      return [];
+    }
+  }
+
+  //
+  // State management orchestration
+  //
+
+  /**
+   * Update application state and notify plugins
+   * @param {ApplicationState} currentState - Current state
+   * @param {Partial<ApplicationState>} changes - Changes to apply
+   * @returns {Promise<ApplicationState>} New state after plugin notification
+   */
+  async updateState(currentState, changes = {}) {
+    // Prevent nested state changes during plugin notification
+    if (this.#isUpdatingState) {
+      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+    }
+
+    const { newState, changedKeys } = this.#stateManager.applyStateChanges(currentState, changes);
+    
+    // Skip plugin notification if no actual changes (only legacy system)
+    if (changedKeys.length === 0) {
+      this.#isUpdatingState = true;
+      try {
+        const results = await this.#pluginManager.invoke(endpoints.state.update, currentState, { result: 'full' });
+        this.#checkForStateChangeErrors(results);
+      } finally {
+        this.#isUpdatingState = false;
+      }
+      return currentState;
+    }
+    
+    // Set lock to prevent nested state changes
+    this.#isUpdatingState = true;
+    
+    try {
+      // Invoke all state update endpoints by convention:
+      
+      // 1. Legacy system: state.update with full state
+      const legacyResults = await this.#pluginManager.invoke(endpoints.state.update, newState, { result: 'full' });
+      this.#checkForStateChangeErrors(legacyResults);
+      
+      // 2. New system: updateInternalState with full state (silent)
+      const internalResults = await this.#pluginManager.invoke(endpoints.state.updateInternal, newState, { result: 'full' });
+      this.#checkForStateChangeErrors(internalResults);
+      
+      // 3. New system: onStateUpdate with changed keys
+      const changeResults = await this.#pluginManager.invoke(endpoints.state.onStateUpdate, [changedKeys, newState], { result: 'full' });
+      this.#checkForStateChangeErrors(changeResults);
+      
+      return newState;
+    } finally {
+      // Always release the lock
+      this.#isUpdatingState = false;
+    }
+  }
+
+  /**
+   * Update extension properties in state and notify plugins
+   * @param {ApplicationState} currentState - Current state
+   * @param {Object} extChanges - Extension properties to update
+   * @returns {Promise<ApplicationState>} New state after plugin notification
+   */
+  async updateStateExt(currentState, extChanges = {}) {
+    // Prevent nested state changes during plugin notification
+    if (this.#isUpdatingState) {
+      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+    }
+
+    const { newState, changedKeys } = this.#stateManager.applyExtensionChanges(currentState, extChanges);
+    
+    if (changedKeys.length === 0) {
+      this.#isUpdatingState = true;
+      try {
+        const results = await this.#pluginManager.invoke(endpoints.state.update, currentState, { result: 'full' });
+        this.#checkForStateChangeErrors(results);
+      } finally {
+        this.#isUpdatingState = false;
+      }
+      return currentState;
+    }
+    
+    this.#isUpdatingState = true;
+    try {
+      const results = await this.#pluginManager.invoke(endpoints.state.update, newState, { result: 'full' });
+      this.#checkForStateChangeErrors(results);
+      return newState;
+    } finally {
+      this.#isUpdatingState = false;
+    }
+  }
+
+  /**
+   * Check plugin invocation results for state change errors and rethrow them
+   * @param {Array} results - Results from plugin manager invoke
+   * @private
+   */
+  #checkForStateChangeErrors(results) {
+    for (const result of results) {
+      if (result.status === 'rejected' && result.reason?.message?.includes('State changes are not allowed during state update propagation')) {
+        throw result.reason;
+      }
+    }
+  }
+
+  /**
+   * Get state manager for direct access to state utilities
+   * @returns {StateManager}
+   */
+  getStateManager() {
+    return this.#stateManager;
+  }
+
+  /**
+   * Get plugin context for plugin instantiation
+   * @returns {PluginContext}
+   */
+  getPluginContext() {
+    return this.#pluginContext;
+  }
+
+  //
+  // Convenience methods for common plugin operations
+  //
+
+  /**
+   * Invoke an endpoint on all plugins that implement it, in dependency order.
+   * By default, throws on the first error encountered, and returns the value of the 
+   * first fulfilled promise (or synchronous function). For other options, see {InvokeOptions}
+   * 
+   * @param {string} endpoint - Endpoint to invoke
+   * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
+   * @param {InvokeOptions} [options] - Optional configuration for this invocation. 
+   * @returns {Promise<InvocationResult[] | any[] | any>} Result formatted depending on options.result
+   */
+  async invokePluginEndpoint(endpoint, args = [], options = {throws:true, result:'first'}) {
+    const result = await this.#pluginManager.invoke(endpoint, args, options);
+    return result
+  }
+}
+
+/**
  * PDF-TEI-Editor
  * 
  * A viewer/editor web app to compare the PDF source and automated TEI extraction/annotation
@@ -65601,4 +65712,4 @@ function hasStateChanged(state, ...propertyNames) {
   return stateManager.hasStateChanged(state, ...propertyNames);
 }
 
-export { AuthenticationPlugin, FiledataPlugin, api$1 as accessControl, app, api$3 as appInfo, authentication, api$a as client, api$f as config, api$c as dialog, endpoints, api$7 as extraction, api$8 as fileSelectionDrawer, api$9 as fileselection, api$5 as floatingPanel, hasStateChanged, api as heartbeat, logLevel, api$g as logger, pdfViewer, pluginManager, api$4 as promptEditor, api$6 as services, api$d as sse, stateManager, api$2 as sync, updateState, api$e as urlHash, api$b as validation, xmlEditor };
+export { AuthenticationPlugin, FiledataPlugin, api$1 as accessControl, app, api$3 as appInfo, authentication, api$a as client, api$f as config, api$c as dialog, endpoints, api$7 as extraction, api$8 as fileSelectionDrawer, api$9 as fileselection, api$5 as floatingPanel, hasStateChanged, api as heartbeat, logLevel, api$g as logger, pdfViewer, pluginManager, api$4 as promptEditor, api$6 as services, api$d as sse, api$2 as sync, updateState, api$e as urlHash, api$b as validation, xmlEditor };
