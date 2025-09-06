@@ -1147,6 +1147,9 @@ class Application {
   /** @type {PluginContext} */
   #pluginContext;
 
+  /** @type {boolean} */
+  #isUpdatingState = false;
+
   //
   // Application bootstrapping methods
   //
@@ -1259,26 +1262,48 @@ class Application {
    * @returns {Promise<ApplicationState>} New state after plugin notification
    */
   async updateState(currentState, changes = {}) {
+    // Prevent nested state changes during plugin notification
+    if (this.#isUpdatingState) {
+      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+    }
+
     const { newState, changedKeys } = this.#stateManager.applyStateChanges(currentState, changes);
     
     // Skip plugin notification if no actual changes
     if (changedKeys.length === 0) {
-      await this.#pluginManager.invoke(endpoints.state.update, currentState);
+      this.#isUpdatingState = true;
+      try {
+        const results = await this.#pluginManager.invoke(endpoints.state.update, currentState);
+        this.#checkForStateChangeErrors(results);
+      } finally {
+        this.#isUpdatingState = false;
+      }
       return currentState;
     }
     
-    // Invoke all state update endpoints by convention:
+    // Set lock to prevent nested state changes
+    this.#isUpdatingState = true;
     
-    // 1. Legacy system: state.update with full state
-    await this.#pluginManager.invoke(endpoints.state.update, newState);
-    
-    // 2. New system: updateInternalState with full state (silent)
-    await this.#pluginManager.invoke(endpoints.state.updateInternal, newState);
-    
-    // 3. New system: onStateUpdate with changed keys
-    await this.#pluginManager.invoke(endpoints.state.onChange, changedKeys);
-    
-    return newState;
+    try {
+      // Invoke all state update endpoints by convention:
+      
+      // 1. Legacy system: state.update with full state
+      const legacyResults = await this.#pluginManager.invoke(endpoints.state.update, newState);
+      this.#checkForStateChangeErrors(legacyResults);
+      
+      // 2. New system: updateInternalState with full state (silent)
+      const internalResults = await this.#pluginManager.invoke(endpoints.state.updateInternal, newState);
+      this.#checkForStateChangeErrors(internalResults);
+      
+      // 3. New system: onStateUpdate with changed keys
+      const changeResults = await this.#pluginManager.invoke(endpoints.state.onChange, changedKeys);
+      this.#checkForStateChangeErrors(changeResults);
+      
+      return newState;
+    } finally {
+      // Always release the lock
+      this.#isUpdatingState = false;
+    }
   }
 
   /**
@@ -1288,15 +1313,45 @@ class Application {
    * @returns {Promise<ApplicationState>} New state after plugin notification
    */
   async updateStateExt(currentState, extChanges = {}) {
+    // Prevent nested state changes during plugin notification
+    if (this.#isUpdatingState) {
+      throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+    }
+
     const { newState, changedKeys } = this.#stateManager.applyExtensionChanges(currentState, extChanges);
     
     if (changedKeys.length === 0) {
-      await this.#pluginManager.invoke(endpoints.state.update, currentState);
+      this.#isUpdatingState = true;
+      try {
+        const results = await this.#pluginManager.invoke(endpoints.state.update, currentState);
+        this.#checkForStateChangeErrors(results);
+      } finally {
+        this.#isUpdatingState = false;
+      }
       return currentState;
     }
     
-    await this.#pluginManager.invoke(endpoints.state.update, newState);
-    return newState;
+    this.#isUpdatingState = true;
+    try {
+      const results = await this.#pluginManager.invoke(endpoints.state.update, newState);
+      this.#checkForStateChangeErrors(results);
+      return newState;
+    } finally {
+      this.#isUpdatingState = false;
+    }
+  }
+
+  /**
+   * Check plugin invocation results for state change errors and rethrow them
+   * @param {Array} results - Results from plugin manager invoke
+   * @private
+   */
+  #checkForStateChangeErrors(results) {
+    for (const result of results) {
+      if (result.status === 'rejected' && result.reason?.message?.includes('State changes are not allowed during state update propagation')) {
+        throw result.reason;
+      }
+    }
   }
 
   /**
