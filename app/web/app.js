@@ -1269,7 +1269,7 @@ class Application {
 
     const { newState, changedKeys } = this.#stateManager.applyStateChanges(currentState, changes);
     
-    // Skip plugin notification if no actual changes
+    // Skip plugin notification if no actual changes (only legacy system)
     if (changedKeys.length === 0) {
       this.#isUpdatingState = true;
       try {
@@ -49481,6 +49481,7 @@ let teiHeaderVisible = false;
 const plugin$g = {
   name: "xmleditor",
   install: install$f,
+  start: start$3,
   state: {
     update: update$d
   }
@@ -49598,10 +49599,7 @@ async function install$f(state) {
     updateIndentationStatus(indentUnit);
   });
 
-  // Save automatically when XML becomes well-formed again
-  xmlEditor.on("editorXmlWellFormed", async () => {
-    await saveIfDirty();
-  });
+  // Note: editorXmlWellFormed handler moved to start() function
 
   // Add widget to toggle <teiHeader> visibility
   xmlEditor.on("editorAfterLoad", () => {
@@ -49628,6 +49626,73 @@ async function install$f(state) {
   // Add click handler for teiHeader toggle widget
   teiHeaderToggleWidget.addEventListener('click', () => {
     toggleTeiHeaderVisibility();
+  });
+}
+
+/**
+ * Runs after all plugins are installed to configure xmleditor event handlers
+ * @param {ApplicationState} state
+ */
+async function start$3(state) {
+  api$g.debug(`Starting plugin "${plugin$g.name}" - configuring additional event handlers`);
+
+  // Create validation status widget for showing XML validation errors
+  const validationStatusWidget = PanelUtils.createText({
+    text: 'XML not valid',
+    icon: 'exclamation-triangle-fill',
+    variant: 'danger',
+    name: 'validationStatus'
+  });
+
+  // Additional xmleditor event handlers that were previously in start.js
+  
+  // save dirty editor content after an update
+  xmlEditor.on("editorUpdateDelayed", async () => await saveIfDirty());
+
+  // xml validation events - consolidated from start.js
+  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
+    console.warn("XML is not well-formed", diagnostics);
+    
+    // Show diagnostics either from validation plugin or manually if validation is disabled
+    let view = xmlEditor.getView();
+    try {
+      // Validate diagnostic positions before setting
+      const validDiagnostics = diagnostics.filter(d => {
+        return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
+      });
+      view.dispatch(setDiagnostics(view.state, validDiagnostics));
+    } catch (error) {
+      api$g.warn("Error setting XML not well-formed diagnostics: " + error.message);
+      // Clear diagnostics on error
+      try {
+        view.dispatch(setDiagnostics(view.state, []));
+      } catch (clearError) {
+        api$g.warn("Error clearing diagnostics: " + clearError.message);
+      }
+    }
+    
+    // Show validation error in statusbar
+    if (validationStatusWidget && !validationStatusWidget.isConnected) {
+      ui$1.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5);
+    }
+    // @ts-ignore
+    ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
+  });
+  
+  xmlEditor.on("editorXmlWellFormed", async () => {
+    // @ts-ignore
+    ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
+    try {
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
+    } catch (error) {
+      api$g.warn("Error clearing diagnostics on well-formed XML: " + error.message);
+    }
+    // Remove validation error from statusbar
+    if (validationStatusWidget && validationStatusWidget.isConnected) {
+      ui$1.xmlEditor.statusbar.removeById(validationStatusWidget.id);
+    }
+    // Save if dirty now that XML is valid again
+    await saveIfDirty();
   });
 }
 
@@ -63894,7 +63959,6 @@ const plugin$4 = {
 //
 
 let spinner;
-let validationStatusWidget = null;
 
 /**@type {ApplicationState} */
 let currentState$2;
@@ -63912,11 +63976,7 @@ async function install$4(state) {
   document.body.appendChild(spinner);
   updateUi();
 
-  // Create validation status widget
-  validationStatusWidget = PanelUtils.createText({
-    text: 'Invalid XML',
-    variant: 'error'
-  });
+  // Note: validation status widget creation moved to xmleditor plugin's start() function
 }
 
 /**
@@ -63961,7 +64021,7 @@ async function start$2() {
       // lod the documents
       try {
         await api$6.load(currentState$2, { pdf, xml, diff });
-      } catch(error) {
+      } catch (error) {
         api$c.error(error.message);
         api$g.critical(error.message);
       }
@@ -64006,7 +64066,7 @@ async function start$2() {
     }
 
     // configure the xml editor events
-    configureXmlEditor();
+    configureFindNodeInPdf();
 
     // Heartbeat mechanism for file locking and offline detection
     api.start(currentState$2, await api$f.get('heartbeat.interval', 10));
@@ -64025,92 +64085,24 @@ async function start$2() {
 }
 
 /**
- * Configure the xmleditor's behavior by responding to 
- * events
+ * Add behavior that looks up the content of the current node in the PDF
  */
-function configureXmlEditor() {
-  // Find the currently selected node's contents in the PDF
-  xmlEditor.on("selectionChanged", searchNodeContents);
+function configureFindNodeInPdf() {
+  let lastNode = null;
 
-  // manually show diagnostics if validation is disabled
-  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    if (api$b.isDisabled()) {
-      let view = xmlEditor.getView();
-      try {
-        // Validate diagnostic positions before setting
-        const validDiagnostics = diagnostics.filter(d => {
-          return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
-        });
-        view.dispatch(setDiagnostics(view.state, validDiagnostics));
-      } catch (error) {
-        api$g.warn("Error setting diagnostics: " + error.message);
-        // Clear diagnostics on error
-        try {
-          view.dispatch(setDiagnostics(view.state, []));
-        } catch (clearError) {
-          api$g.warn("Error clearing diagnostics: " + clearError.message);
-        }
-      }
+  // Cross-plugin coordination: Find the currently selected node's contents in the PDF
+  xmlEditor.on("selectionChanged", async () => {
+    // workaround for the node selection not being updated immediately
+    await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
+    // trigger auto-search if enabled and if a new node has been selected
+    const autoSearchSwitch = /** @type {any} */ (ui$1.pdfViewer.statusbar.searchSwitch);
+    const node = xmlEditor.selectedNode;
+
+    if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
+      await api$6.searchNodeContentsInPdf(node);
+      lastNode = node;
     }
   });
-
-  // save dirty editor content after an update
-  xmlEditor.on("editorUpdateDelayed", async () => await saveIfDirty());
-
-  // xml vaidation events
-  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    console.warn("XML is not well-formed", diagnostics);
-    try {
-      // Validate diagnostic positions before setting
-      const view = xmlEditor.getView();
-      const validDiagnostics = diagnostics.filter(d => {
-        return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
-      });
-      view.dispatch(setDiagnostics(view.state, validDiagnostics));
-    } catch (error) {
-      api$g.warn("Error setting XML not well-formed diagnostics: " + error.message);
-    }
-    // Show validation error in statusbar
-    if (validationStatusWidget && !validationStatusWidget.isConnected) {
-      ui$1.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5);
-    }
-    // @ts-ignore
-    ui$1.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml");
-  });
-  xmlEditor.on("editorXmlWellFormed", async () => {
-    // @ts-ignore
-    ui$1.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml");
-    try {
-      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []));
-    } catch (error) {
-      api$g.warn("Error clearing diagnostics on well-formed XML: " + error.message);
-    }
-    // Remove validation error from statusbar
-    if (validationStatusWidget && validationStatusWidget.isConnected) {
-      ui$1.xmlEditor.statusbar.removeById(validationStatusWidget.id);
-    }
-    // Save if dirty now that XML is valid again
-    await saveIfDirty();
-  });
-}
-
-/**
- * Called when the selection changes in the xmleditor
- * so that the content of the selected node is searched
- * in the PDF viewer
- */
-let lastNode = null;
-async function searchNodeContents() {
-  // workaround for the node selection not being updated immediately
-  await new Promise(resolve => setTimeout(resolve, 100)); // wait for the next tick
-  // trigger auto-search if enabled and if a new node has been selected
-  const autoSearchSwitch = /** @type {any} */ (ui$1.pdfViewer.statusbar.searchSwitch);
-  const node = xmlEditor.selectedNode;
-
-  if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
-    await api$6.searchNodeContentsInPdf(node);
-    lastNode = node;
-  }
 }
 
 /**
