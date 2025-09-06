@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## General tone
+
+- Don't be too congratulatory. You can express if you think something is a good idea, but you don't need to use vocabulary such as "excellent", "brilliant", etc.
+- If you think there might be a problem with the user's idea, say so. Don't assume the user's ideas are neccessarily correct. Ask if you should go with their idea, but also suggest alternatives.
+
 ## Essential Development Commands
 
 ### Setup and Installation

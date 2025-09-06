@@ -75,6 +75,7 @@ let teiHeaderVisible = false
 const plugin = {
   name: "xmleditor",
   install,
+  start,
   state: {
     update
   }
@@ -195,10 +196,7 @@ async function install(state) {
     updateIndentationStatus(indentUnit)
   })
 
-  // Save automatically when XML becomes well-formed again
-  xmlEditor.on("editorXmlWellFormed", async () => {
-    await saveIfDirty(currentState)
-  })
+  // Note: editorXmlWellFormed handler moved to start() function
 
   // Add widget to toggle <teiHeader> visibility
   xmlEditor.on("editorAfterLoad", () => {
@@ -225,6 +223,73 @@ async function install(state) {
   // Add click handler for teiHeader toggle widget
   teiHeaderToggleWidget.addEventListener('click', () => {
     toggleTeiHeaderVisibility()
+  })
+}
+
+/**
+ * Runs after all plugins are installed to configure xmleditor event handlers
+ * @param {ApplicationState} state
+ */
+async function start(state) {
+  logger.debug(`Starting plugin "${plugin.name}" - configuring additional event handlers`)
+
+  // Create validation status widget for showing XML validation errors
+  const validationStatusWidget = PanelUtils.createText({
+    text: 'XML not valid',
+    icon: 'exclamation-triangle-fill',
+    variant: 'danger',
+    name: 'validationStatus'
+  })
+
+  // Additional xmleditor event handlers that were previously in start.js
+  
+  // save dirty editor content after an update
+  xmlEditor.on("editorUpdateDelayed", async () => await saveIfDirty())
+
+  // xml validation events - consolidated from start.js
+  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
+    console.warn("XML is not well-formed", diagnostics)
+    
+    // Show diagnostics either from validation plugin or manually if validation is disabled
+    let view = xmlEditor.getView()
+    try {
+      // Validate diagnostic positions before setting
+      const validDiagnostics = diagnostics.filter(d => {
+        return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
+      })
+      view.dispatch(setDiagnostics(view.state, validDiagnostics))
+    } catch (error) {
+      logger.warn("Error setting XML not well-formed diagnostics: " + error.message)
+      // Clear diagnostics on error
+      try {
+        view.dispatch(setDiagnostics(view.state, []))
+      } catch (clearError) {
+        logger.warn("Error clearing diagnostics: " + clearError.message)
+      }
+    }
+    
+    // Show validation error in statusbar
+    if (validationStatusWidget && !validationStatusWidget.isConnected) {
+      ui.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5)
+    }
+    // @ts-ignore
+    ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
+  })
+  
+  xmlEditor.on("editorXmlWellFormed", async () => {
+    // @ts-ignore
+    ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
+    try {
+      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
+    } catch (error) {
+      logger.warn("Error clearing diagnostics on well-formed XML: " + error.message)
+    }
+    // Remove validation error from statusbar
+    if (validationStatusWidget && validationStatusWidget.isConnected) {
+      ui.xmlEditor.statusbar.removeById(validationStatusWidget.id)
+    }
+    // Save if dirty now that XML is valid again
+    await saveIfDirty()
   })
 }
 

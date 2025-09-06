@@ -7,19 +7,15 @@
 
 /** 
  * @import { ApplicationState } from '../app.js' 
- * @import { Diagnostic } from '@codemirror/lint'
  */
 import ui from '../ui.js'
 import {
   updateState, logger, services, dialog, validation, floatingPanel, xmlEditor,
   config, authentication, heartbeat, reloadFileData, sync
 } from '../app.js'
-import { PanelUtils } from '../modules/panels/index.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
-import { setDiagnostics } from '@codemirror/lint'
 import { notify } from '../modules/sl-utils.js'
-import { saveIfDirty } from './xmleditor.js' // TODO: needs to be implemented without tight coupling
 
 /**
  * Plugin object
@@ -43,7 +39,6 @@ export default plugin
 //
 
 let spinner
-let validationStatusWidget = null
 
 /**@type {ApplicationState} */
 let currentState;
@@ -61,11 +56,7 @@ async function install(state) {
   document.body.appendChild(spinner)
   updateUi()
 
-  // Create validation status widget
-  validationStatusWidget = PanelUtils.createText({
-    text: 'Invalid XML',
-    variant: 'error'
-  })
+  // Note: validation status widget creation moved to xmleditor plugin's start() function
 }
 
 /**
@@ -110,7 +101,7 @@ async function start() {
       // lod the documents
       try {
         await services.load(currentState, { pdf, xml, diff })
-      } catch(error) {
+      } catch (error) {
         dialog.error(error.message)
         logger.critical(error.message)
       }
@@ -155,7 +146,7 @@ async function start() {
     }
 
     // configure the xml editor events
-    configureXmlEditor()
+    configureFindNodeInPdf()
 
     // Heartbeat mechanism for file locking and offline detection
     heartbeat.start(currentState, await config.get('heartbeat.interval', 10));
@@ -174,91 +165,22 @@ async function start() {
 }
 
 /**
- * Configure the xmleditor's behavior by responding to 
- * events
+ * Add behavior that looks up the content of the current node in the PDF
  */
-function configureXmlEditor() {
-  // Find the currently selected node's contents in the PDF
-  xmlEditor.on("selectionChanged", searchNodeContents)
+function configureFindNodeInPdf() {
+  let lastNode = null;
 
-  // manually show diagnostics if validation is disabled
-  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    if (validation.isDisabled()) {
-      let view = xmlEditor.getView()
-      try {
-        // Validate diagnostic positions before setting
-        const validDiagnostics = diagnostics.filter(d => {
-          return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
-        })
-        view.dispatch(setDiagnostics(view.state, validDiagnostics))
-      } catch (error) {
-        logger.warn("Error setting diagnostics: " + error.message)
-        // Clear diagnostics on error
-        try {
-          view.dispatch(setDiagnostics(view.state, []))
-        } catch (clearError) {
-          logger.warn("Error clearing diagnostics: " + clearError.message)
-        }
-      }
-    }
-  })
+  // Cross-plugin coordination: Find the currently selected node's contents in the PDF
+  xmlEditor.on("selectionChanged", async () => {
+    // workaround for the node selection not being updated immediately
+    await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
+    // trigger auto-search if enabled and if a new node has been selected
+    const autoSearchSwitch = /** @type {any} */ (ui.pdfViewer.statusbar.searchSwitch)
+    const node = xmlEditor.selectedNode
 
-  // save dirty editor content after an update
-  xmlEditor.on("editorUpdateDelayed", async () => await saveIfDirty())
-
-  // xml vaidation events
-  xmlEditor.on("editorXmlNotWellFormed", diagnostics => {
-    console.warn("XML is not well-formed", diagnostics)
-    try {
-      // Validate diagnostic positions before setting
-      const view = xmlEditor.getView()
-      const validDiagnostics = diagnostics.filter(d => {
-        return d.from >= 0 && d.to > d.from && d.to <= view.state.doc.length
-      })
-      view.dispatch(setDiagnostics(view.state, validDiagnostics))
-    } catch (error) {
-      logger.warn("Error setting XML not well-formed diagnostics: " + error.message)
+    if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
+      await services.searchNodeContentsInPdf(node)
+      lastNode = node
     }
-    // Show validation error in statusbar
-    if (validationStatusWidget && !validationStatusWidget.isConnected) {
-      ui.xmlEditor.statusbar.add(validationStatusWidget, 'left', 5)
-    }
-    // @ts-ignore
-    ui.xmlEditor.querySelector(".cm-content").classList.add("invalid-xml")
-  })
-  xmlEditor.on("editorXmlWellFormed", async () => {
-    // @ts-ignore
-    ui.xmlEditor.querySelector(".cm-content").classList.remove("invalid-xml")
-    try {
-      xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
-    } catch (error) {
-      logger.warn("Error clearing diagnostics on well-formed XML: " + error.message)
-    }
-    // Remove validation error from statusbar
-    if (validationStatusWidget && validationStatusWidget.isConnected) {
-      ui.xmlEditor.statusbar.removeById(validationStatusWidget.id)
-    }
-    // Save if dirty now that XML is valid again
-    await saveIfDirty()
   })
 }
-
-/**
- * Called when the selection changes in the xmleditor
- * so that the content of the selected node is searched
- * in the PDF viewer
- */
-let lastNode = null;
-async function searchNodeContents() {
-  // workaround for the node selection not being updated immediately
-  await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
-  // trigger auto-search if enabled and if a new node has been selected
-  const autoSearchSwitch = /** @type {any} */ (ui.pdfViewer.statusbar.searchSwitch)
-  const node = xmlEditor.selectedNode
-
-  if (autoSearchSwitch && autoSearchSwitch.checked && node && node !== lastNode) {
-    await services.searchNodeContentsInPdf(node)
-    lastNode = node
-  }
-}
-

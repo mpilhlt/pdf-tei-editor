@@ -167,7 +167,7 @@ export class Application {
 
     const { newState, changedKeys } = this.#stateManager.applyStateChanges(currentState, changes);
     
-    // Skip plugin notification if no actual changes
+    // Skip plugin notification if no actual changes (only legacy system)
     if (changedKeys.length === 0) {
       this.#isUpdatingState = true;
       try {
