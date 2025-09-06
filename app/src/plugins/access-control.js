@@ -13,6 +13,7 @@
  */
 
 import { updateState, services, authentication, fileselection } from '../app.js'
+import { FiledataPlugin } from '../plugins.js'
 import ui from '../ui.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { api as logger } from './logger.js'
@@ -153,13 +154,15 @@ async function update(state) {
   if (shouldBeReadOnly !== state.editorReadOnly && !isUpdatingState) {
     // Update application state to reflect access control
     logger.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`)
-    // Note: This will trigger xmleditor plugin to update editor state
+    // Note: Defer state update to avoid circular update during reactive state cycle
     isUpdatingState = true
-    try {
-      await updateState(state, { editorReadOnly: shouldBeReadOnly })
-    } finally {
-      isUpdatingState = false
-    }
+    setTimeout(async () => {
+      try {
+        await updateState(state, { editorReadOnly: shouldBeReadOnly })
+      } finally {
+        isUpdatingState = false
+      }
+    }, 0);
   }
   
   // Update read-only widget context if xmleditor shows read-only status due to access control
@@ -460,7 +463,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
     await xmlEditor.updateEditorFromNode(teiHeader)
     
     // Save the document using services API
-    await services.saveXml(pluginState.xml)
+    await FiledataPlugin.getInstance().saveXml(pluginState.xml)
     
     // Update cached permissions
     currentPermissions.visibility = visibility

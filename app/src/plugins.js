@@ -11,6 +11,7 @@
 
 // class-based plugins
 import AuthenticationPlugin from './plugins/authentication.js'
+import FiledataPlugin from './plugins/filedata.js'
 
 // legacy plugins
 import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
@@ -47,6 +48,7 @@ import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat
 const plugins = [
   // class-based
   AuthenticationPlugin,
+  FiledataPlugin,
 
   // modules with config object
   loggerPlugin, 
@@ -59,7 +61,7 @@ const plugins = [
   xmlEditorPlugin, 
   fileselectionPlugin,
   fileSelectionDrawerPlugin, 
-  servicesPlugin, 
+  servicesPlugin,
   syncPlugin, 
   extractionPlugin, 
   floatingPanelPlugin, 
@@ -96,7 +98,7 @@ export {
   fileselection, 
   fileSelectionDrawer, 
   extraction,
-  services, 
+  services,
   floatingPanel, 
   promptEditor,
   appInfo,
@@ -104,3 +106,6 @@ export {
   accessControl, 
   heartbeat
 }
+
+// Export FiledataPlugin class for getInstance() access
+export { FiledataPlugin };

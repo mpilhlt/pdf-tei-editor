@@ -10,7 +10,8 @@
 import ui from '../ui.js'
 import { SlOption, SlDivider, updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
-import { logger, services, dialog, updateState, reloadFileData, hasStateChanged } from '../app.js'
+import { logger, services, dialog, updateState, hasStateChanged } from '../app.js'
+import { FiledataPlugin } from '../plugins.js'
 
 /**
  * The data about the pdf and xml files on the server
@@ -105,6 +106,12 @@ async function install(state) {
         return;
       }
       
+      // Ignore user changes during reactive state update cycle to prevent infinite loops
+      if (isInStateUpdateCycle) {
+        
+        return;
+      }
+      
       
       if (currentState) {
         await handler(currentState);
@@ -130,29 +137,86 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
-  // Store current state for use in event handlers
-  currentState = state;
+  // Set flag to prevent event handlers from causing state mutations during reactive updates
+  isInStateUpdateCycle = true;
   
-  // Note: Don't mutate state directly in update() - that would cause infinite loops
-  // The state.collection should be managed by other functions that call updateState()
-  
-  // Check if relevant state properties have changed
-  if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
-    await populateSelectboxes(state);
-  }
-  
-  // Always update selected values (with guard to prevent triggering events)
-  
-  isUpdatingProgrammatically = true;
   try {
-    ui.toolbar.pdf.value = state.pdf || ""
-    ui.toolbar.xml.value = state.xml || ""
-    ui.toolbar.diff.value = state.diff || ""
+    // Store current state for use in event handlers
+    currentState = state;
+    
+    // Note: Don't mutate state directly in update() - that would cause infinite loops
+    // The state.collection should be managed by other functions that call updateState()
+    
+    // Check if relevant state properties have changed
+    if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
+      const fileDataChanged = hasStateChanged(state, 'fileData');
+      const selectionsChanged = hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant');
+      const selectionsValid = isCurrentSelectionValid(state);
+      
+      // Only repopulate in these cases:
+      // 1. User selections changed (xml, pdf, diff, variant)
+      // 2. FileData changed AND current selections are no longer valid
+      const shouldRepopulate = selectionsChanged || (fileDataChanged && !selectionsValid);
+      
+      if (shouldRepopulate) {
+        await populateSelectboxes(state);
+      }
+    }
+    
+    // Always update selected values (with guard to prevent triggering events)
+    
+    isUpdatingProgrammatically = true;
+    try {
+      ui.toolbar.pdf.value = state.pdf || ""
+      ui.toolbar.xml.value = state.xml || ""
+      ui.toolbar.diff.value = state.diff || ""
+    } finally {
+      isUpdatingProgrammatically = false;
+    }
   } finally {
-    isUpdatingProgrammatically = false;
+    // Clear flag after update cycle completes
+    isInStateUpdateCycle = false;
   }
 }
 
+/**
+ * Check if current PDF/XML selections are still valid in the updated fileData
+ * @param {ApplicationState} state
+ * @returns {boolean} True if current selections are valid
+ */
+function isCurrentSelectionValid(state) {
+  if (!state.fileData || state.fileData.length === 0) {
+    return false;
+  }
+  
+  // Check if current PDF selection exists in fileData
+  if (state.pdf) {
+    const pdfExists = state.fileData.some(file => 
+      file.pdf && file.pdf.hash === state.pdf
+    );
+    if (!pdfExists) return false;
+  }
+  
+  // Check if current XML selection exists in fileData  
+  if (state.xml) {
+    const xmlExists = state.fileData.some(file => 
+      (file.gold && file.gold.some(g => g.hash === state.xml)) ||
+      (file.versions && file.versions.some(v => v.hash === state.xml))
+    );
+    if (!xmlExists) return false;
+  }
+  
+  // Check if current diff selection exists in fileData
+  if (state.diff) {
+    const diffExists = state.fileData.some(file =>
+      (file.gold && file.gold.some(g => g.hash === state.diff)) ||
+      (file.versions && file.versions.some(v => v.hash === state.diff))
+    );
+    if (!diffExists) return false;
+  }
+  
+  return true; // All current selections are valid
+}
 
 /**
  * Reloads data and then updates based on the application state
@@ -161,7 +225,7 @@ async function update(state) {
  * @param {boolean} [options.refresh] - Whether to force refresh of server cache
  */
 async function reload(state, options = {}) {
-  await reloadFileData(state, options);
+  await FiledataPlugin.getInstance().reload(options);
   // Note: populateSelectboxes() will be called automatically via the update() method 
   // when reloadFileData() triggers a state update with new fileData
 }
@@ -171,6 +235,7 @@ let variants
 let collections
 let currentState = null
 let isUpdatingProgrammatically = false
+let isInStateUpdateCycle = false
 
 /**
  * Populates the variant selectbox with unique variants from fileData

@@ -41,6 +41,9 @@ const stateManager = new StateManager();
 // Create application instance
 const app = new Application(pluginManager, stateManager)
 
+// Export app early so it's available for dynamic imports during plugin installation
+export { app }
+
 // Register plugins
 app.registerPlugins(plugins)
 
@@ -102,34 +105,6 @@ await app.updateState(state, {})
 await app.start()
 
 //
-// Core application functions
-//
-
-import { createHashLookupIndex } from './modules/file-data-utils.js'
-/**
- * Reloads the file data from the server
- * TODO move into own plugin together with some methods in services plugin
- * @param {ApplicationState} state
- * @param {Object} options - Options for reloading
- * @param {boolean} [options.refresh] - Whether to force refresh of server cache
- * @returns {Promise} 
- */
-async function reloadFileData(state, options = {}) {
-  logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""))
-  let data = await client.getFileList(null, options.refresh);
-  if (!data || data.length === 0) {
-    dialog.error("No files found")
-  }
-  // Create hash lookup index when fileData is loaded
-  if (data && data.length > 0) {
-    logger.debug('Creating hash lookup index for file data');
-    createHashLookupIndex(data);
-  }
-  // Store fileData in state and propagate it
-  return await app.updateState(state, {fileData:data})
-}
-
-//
 // Legacy compatibility functions for old plugin system
 //
 
@@ -138,6 +113,7 @@ async function reloadFileData(state, options = {}) {
  * @param {ApplicationState} currentState - The current state
  * @param {Partial<ApplicationState>} changes - Changes to apply
  * @returns {Promise<ApplicationState>} New state after changes applied
+ * @deprecated Use app.updateState() instead
  */
 async function updateState(currentState, changes = {}) {
   return await app.updateState(currentState, changes);
@@ -148,6 +124,7 @@ async function updateState(currentState, changes = {}) {
  * @param {ApplicationState} state - The current state
  * @param {...string} propertyNames - Property names to check for changes
  * @returns {boolean} True if any of the specified properties changed
+ * @deprecated Use stateManager.hasStateChanged() instead
  */
 function hasStateChanged(state, ...propertyNames) {
   return stateManager.hasStateChanged(state, ...propertyNames);
@@ -159,11 +136,9 @@ function hasStateChanged(state, ...propertyNames) {
 
 // application APIs and data
 export {
-  app, 
   ep as endpoints, 
   pluginManager, 
   stateManager, 
-  reloadFileData,
   updateState, // Legacy compatibility
   hasStateChanged // Legacy compatibility
 }

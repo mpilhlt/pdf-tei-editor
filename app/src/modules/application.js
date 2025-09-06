@@ -194,7 +194,7 @@ export class Application {
       this.#checkForStateChangeErrors(internalResults);
       
       // 3. New system: onStateUpdate with changed keys
-      const changeResults = await this.#pluginManager.invoke(ep.state.onChange, changedKeys);
+      const changeResults = await this.#pluginManager.invoke(ep.state.onStateUpdate, changedKeys, newState);
       this.#checkForStateChangeErrors(changeResults);
       
       return newState;

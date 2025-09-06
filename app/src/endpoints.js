@@ -43,6 +43,7 @@ const endpoints = {
     /**
      * This endpoint allows all plugins to react to application state changes (legacy)
      * Function signature: (state: ApplicationState) => ApplicationState
+     * @deprecated Use "onStateUpdate" instead
      */
     update: "state.update",
     
@@ -54,9 +55,9 @@ const endpoints = {
     
     /**
      * State change notification for Plugin class instances (new system)
-     * Function signature: (changedKeys: string[]) => void
+     * Function signature: (changedKeys: string[], state: ApplicationState) => void
      */
-    onChange: "onStateUpdate",
+    onStateUpdate: "onStateUpdate",
 
   },
   validation: {

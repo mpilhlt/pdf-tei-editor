@@ -28,7 +28,6 @@ import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js
 const api = {
   load,
   validateXml,
-  saveXml,
   showMergeView,
   removeMergeView,
   deleteCurrentVersion,
@@ -56,8 +55,7 @@ const plugin = {
 export { plugin, api }
 export default plugin
 
-// Status widget for saving progress
-let savingStatusWidget = null
+// Status widget for saving progress moved to filedata plugin
 // Current state for use in event handlers
 let currentState = null
 
@@ -137,13 +135,7 @@ async function install(state) {
   });
   updateUi() // Update UI so navigation objects are available
   
-  // Create saving status widget
-  // <sl-icon name="floppy"></sl-icon>
-  savingStatusWidget = PanelUtils.createText({
-    text: '',
-    icon: 'floppy',
-    variant: 'info'
-  })
+  // Saving status widget creation moved to filedata plugin
 
 
   // === Document button group ===
@@ -385,39 +377,7 @@ async function validateXml() {
   return await validation.validate() // todo use endpoint instead
 }
 
-/**
- * Saves the current XML content to the server, optionally as a new version
- * @param {string} filePath The path to the XML file on the server
- * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
- * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
- * @throws {Error}
- */
-async function saveXml(filePath, saveAsNewVersion = false) {
-  logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
-  if (!xmlEditor.getXmlTree()) {
-    throw new Error("No XML valid document in the editor")
-  }
-  try {
-    // Show saving status
-    if (savingStatusWidget && !savingStatusWidget.isConnected) {
-      if (ui.xmlEditor.statusbar) {
-        ui.xmlEditor.statusbar.add(savingStatusWidget, 'left', 10)
-      }
-    }
-    return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
-  } catch (e) {
-    console.error("Error while saving XML:", e.message)
-    dialog.error(`Could not save XML: ${e.message}`)
-    throw new Error(`Could not save XML: ${e.message}`)
-  } finally {
-    // clear status message after 1 second 
-    setTimeout(() => {
-      if (savingStatusWidget && savingStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.removeById(savingStatusWidget.id)
-      }
-    }, 1000)
-  }
-}
+// saveXml function moved to filedata plugin
 
 /**
  * Creates a diff between the current and the given document and shows a merge view

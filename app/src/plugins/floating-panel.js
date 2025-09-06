@@ -152,7 +152,7 @@ async function update(state) {
       try {
         cachedExtractors = await client.getExtractorList()
         extractorsJustCached = true
-        logger.debug('Cached extractor list for floating panel:'+ cachedExtractors)
+        logger.debug('Cached extractor list for floating panel')
       } catch (error) {
         logger.warn('Failed to load extractor list:' +  error.message || error)
         cachedExtractors = []

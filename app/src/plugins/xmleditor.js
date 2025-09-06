@@ -10,7 +10,8 @@
  */
 
 import ui from '../ui.js'
-import { validation, services, updateState, logger } from '../app.js'
+import { app, validation, logger } from '../app.js'
+import { FiledataPlugin } from '../plugins.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
@@ -407,7 +408,7 @@ async function saveIfDirty() {
 
   try {
     hashBeingSaved = fileHash
-    const result = await services.saveXml(fileHash)
+    const result = await FiledataPlugin.getInstance().saveXml(fileHash)
     hashBeingSaved = null
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
@@ -415,7 +416,7 @@ async function saveIfDirty() {
       logger.debug(`Saved file with hash ${result.hash}`)
       if (result.hash !== fileHash) {
         // Update state to use new hash
-        await updateState(currentState, { xml: result.hash })
+        await app.updateState(currentState, { xml: result.hash })
       }
     }
     xmlEditor.markAsClean()

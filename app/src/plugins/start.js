@@ -10,9 +10,10 @@
  */
 import ui from '../ui.js'
 import {
-  updateState, logger, services, dialog, validation, floatingPanel, xmlEditor,
-  config, authentication, heartbeat, reloadFileData, sync
+  app, logger, services, dialog, validation, floatingPanel, xmlEditor,
+  config, authentication, heartbeat, sync
 } from '../app.js'
+import { FiledataPlugin } from '../plugins.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
@@ -86,7 +87,7 @@ async function start() {
     ui.spinner.show('Loading documents, please wait...')
 
     // update the file lists
-    await reloadFileData(currentState, { refresh: true })
+    await FiledataPlugin.getInstance().reload({ refresh: true })
 
     // disable regular validation so that we have more control over it
     validation.configure({ mode: "off" })
@@ -134,13 +135,13 @@ async function start() {
       const xpath = UrlHash.get("xpath") || ui.floatingPanel.xpath.value
 
       // update the UI
-      await updateState(currentState, { xpath })
+      await app.updateState(currentState, { xpath })
 
       // synchronize in the background
       sync.syncFiles(currentState).then(async (summary) => {
         logger.info(summary)
         if (summary && !summary.skipped) {
-          await reloadFileData(currentState, { refresh: true })
+          await FiledataPlugin.getInstance().reload({ refresh: true })
         }
       })
     }
