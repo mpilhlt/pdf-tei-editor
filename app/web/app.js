@@ -43,6 +43,7 @@ const endpoints = {
     /**
      * This endpoint allows all plugins to react to application state changes (legacy)
      * Function signature: (state: ApplicationState) => ApplicationState
+     * @deprecated Use "onStateUpdate" instead
      */
     update: "state.update",
     
@@ -54,9 +55,9 @@ const endpoints = {
     
     /**
      * State change notification for Plugin class instances (new system)
-     * Function signature: (changedKeys: string[]) => void
+     * Function signature: (changedKeys: string[], state: ApplicationState) => void
      */
-    onChange: "onStateUpdate",
+    onStateUpdate: "onStateUpdate",
 
   },
   validation: {
@@ -1296,7 +1297,7 @@ class Application {
       this.#checkForStateChangeErrors(internalResults);
       
       // 3. New system: onStateUpdate with changed keys
-      const changeResults = await this.#pluginManager.invoke(endpoints.state.onChange, changedKeys);
+      const changeResults = await this.#pluginManager.invoke(endpoints.state.onStateUpdate, changedKeys, newState);
       this.#checkForStateChangeErrors(changeResults);
       
       return newState;
@@ -17013,6 +17014,343 @@ class AuthenticationPlugin extends Plugin {
 }
 
 /**
+ * Utility functions for processing file data across different file selection components
+ * This module provides reusable functionality for filtering, grouping, and processing fileData
+ */
+
+/**
+ * @import { ApplicationState } from '../app.js'
+ */
+
+// Global lookup index for efficient hash-based queries
+let hashLookupIndex = new Map();
+
+/**
+ * Creates a lookup index that maps hash values directly to items
+ * @param {Array} fileData - The file data array
+ * @returns {Map<string, Object>} Map of hash to item with metadata
+ */
+function createHashLookupIndex(fileData) {
+  const index = new Map();
+  
+  fileData.forEach((file) => {
+    // Index PDF hash
+    if (file.pdf && file.pdf.hash) {
+      index.set(file.pdf.hash, {
+        type: 'pdf',
+        item: file.pdf,
+        file: file,
+        label: file.label
+      });
+    }
+    
+    // Index gold entries
+    if (file.gold) {
+      file.gold.forEach((gold) => {
+        if (gold.hash) {
+          index.set(gold.hash, {
+            type: 'gold',
+            item: gold,
+            file: file,
+            label: gold.label || file.label
+          });
+        }
+      });
+    }
+    
+    // Index version entries
+    if (file.versions) {
+      file.versions.forEach((version) => {
+        if (version.hash) {
+          index.set(version.hash, {
+            type: 'version',
+            item: version,
+            file: file,
+            label: version.label || file.label
+          });
+        }
+      });
+    }
+  });
+  
+  // Store globally for use by other functions
+  hashLookupIndex = index;
+  return index;
+}
+
+/**
+ * Gets document title/label from fileData based on any hash (PDF or XML)
+ * @param {string} hash - Hash of any file (PDF, gold, or version)
+ * @returns {string} Document title/label or empty string if not found
+ * @throws {Error} If hash lookup index has not been created
+ */
+function getDocumentTitle(hash) {
+  if (!hash) return '';
+  
+  if (!hashLookupIndex || hashLookupIndex.size === 0) {
+    throw new Error('Hash lookup index not initialized. Call createHashLookupIndex() first.');
+  }
+  
+  const entry = hashLookupIndex.get(hash);
+  return entry?.label || '';
+}
+
+/**
+ * Extracts all unique variants from file data
+ * @param {Array} fileData - The file data array
+ * @returns {Set<string>} Set of unique variant IDs
+ */
+function extractVariants(fileData) {
+  const variants = new Set();
+  
+  fileData.forEach(file => {
+    // Add variant_id from gold entries
+    if (file.gold) {
+      file.gold.forEach(gold => {
+        if (gold.variant_id) {
+          variants.add(gold.variant_id);
+        }
+      });
+    }
+    // Add variant_id from versions
+    if (file.versions) {
+      file.versions.forEach(version => {
+        if (version.variant_id) {
+          variants.add(version.variant_id);
+        }
+      });
+    }
+  });
+  
+  return variants;
+}
+
+/**
+ * Filters file data by variant selection
+ * @param {Array} fileData - The file data array
+ * @param {string|null} variant - Selected variant ("", "none", or variant ID)
+ * @returns {Array} Filtered file data
+ */
+function filterFileDataByVariant(fileData, variant) {
+  if (variant === "none") {
+    // Show only files without variant_id in gold or versions
+    return fileData.filter(file => {
+      const hasGoldVariant = file.gold && file.gold.some(g => !!g.variant_id);
+      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
+      return !hasGoldVariant && !hasVersionVariant;
+    });
+  } else if (variant && variant !== "") {
+    // Show only files with the selected variant_id (in gold or versions)
+    return fileData.filter(file => {
+      const matchesGold = file.gold && file.gold.some(g => g.variant_id === variant);
+      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
+      return matchesGold || matchesVersion;
+    });
+  }
+  // If variant is "" (All), show all files
+  return fileData;
+}
+
+/**
+ * Filters file data by label text search
+ * @param {Array} fileData - The file data array
+ * @param {string} searchText - Text to search for in labels
+ * @returns {Array} Filtered file data
+ */
+function filterFileDataByLabel(fileData, searchText) {
+  if (!searchText || searchText.trim() === '') {
+    return fileData;
+  }
+  
+  const search = searchText.toLowerCase();
+  return fileData.filter(file => 
+    file.label && file.label.toLowerCase().includes(search)
+  );
+}
+
+/**
+ * Groups file data by collection
+ * @param {Array} fileData - The file data array
+ * @returns {Object} Grouped files by collection name
+ */
+function groupFilesByCollection(fileData) {
+  return fileData.reduce((groups, file) => {
+    const collection_name = file.collection;
+    (groups[collection_name] = groups[collection_name] || []).push(file);
+    return groups;
+  }, {});
+}
+
+/**
+ * Filters versions and gold entries by variant
+ * @param {Object} file - File object containing versions and gold
+ * @param {string|null} variant - Selected variant
+ * @returns {Object} Object with filtered versions and gold arrays
+ */
+function filterFileContentByVariant(file, variant) {
+  let versionsToShow = file.versions || [];
+  let goldToShow = file.gold || [];
+  
+  if (variant === "none") {
+    // Show only entries without variant_id
+    versionsToShow = file.versions ? file.versions.filter(version => !version.variant_id) : [];
+    goldToShow = file.gold ? file.gold.filter(gold => !gold.variant_id) : [];
+  } else if (variant && variant !== "") {
+    // Show only entries with the selected variant_id
+    versionsToShow = file.versions ? file.versions.filter(version => version.variant_id === variant) : [];
+    goldToShow = file.gold ? file.gold.filter(gold => gold.variant_id === variant) : [];
+  }
+  // If variant is "" (All), show all entries (already assigned above)
+  
+  return { versionsToShow, goldToShow };
+}
+
+/**
+ * Finds a matching gold file based on variant selection
+ * @param {Object} file - File object containing gold entries
+ * @param {string|null} variant - Selected variant
+ * @returns {Object|null} Matching gold entry or null
+ */
+function findMatchingGold(file, variant) {
+  if (!file.gold) return null;
+  
+  if (variant === "none") {
+    // Find gold without variant_id
+    return file.gold.find(gold => !gold.variant_id) || null;
+  } else if (variant && variant !== "") {
+    // Find gold with matching variant_id
+    return file.gold.find(gold => gold.variant_id === variant) || null;
+  } else {
+    // No variant filter - use first gold file
+    return file.gold[0] || null;
+  }
+}
+
+/**
+ * Finds a file object by PDF hash
+ * @param {Array} fileData - The file data array  
+ * @param {string} pdfHash - Hash of the PDF file
+ * @returns {Object|null} File object or null if not found
+ */
+function findFileByPdfHash(fileData, pdfHash) {
+  return fileData.find(file => file.pdf.hash === pdfHash) || null;
+}
+
+/**
+ * File Data Management Plugin
+ * 
+ * Handles file data operations including loading file lists, saving XML files,
+ * and managing file-related state updates.
+ */
+
+
+/**
+ * File data management plugin
+ */
+class FiledataPlugin extends Plugin {
+  constructor(context) {
+    super(context, { 
+      name: 'filedata',
+      deps: ['logger', 'client', 'dialog', 'xmleditor'] 
+    });
+    
+    /** @type {StatusText} */
+    this.savingStatusWidget = null;
+  }
+
+  async install(state) {
+    await super.install(state);
+    
+    api$g.debug(`Installing plugin "${this.name}"`);
+
+    // Initialize empty hash lookup index to prevent errors during plugin initialization
+    api$g.debug('Initializing empty hash lookup index during installation');
+    createHashLookupIndex([]);
+
+    // Create status widget for save operations
+    this.savingStatusWidget = PanelUtils.createText({
+      text: 'Saving...',
+      icon: 'upload',
+      variant: 'primary',
+      name: 'savingStatus'
+    });
+  }
+
+  /**
+   * Reloads the file data from the server
+   * @param {Object} options - Options for reloading
+   * @param {boolean} [options.refresh] - Whether to force refresh of server cache
+   * @returns {Promise<ApplicationState>} Updated state with new file data
+   */
+  async reload(options = {}) {
+    api$g.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
+    
+    let data = await api$a.getFileList(null, options.refresh);
+    
+    if (!data || data.length === 0) {
+      api$c.error("No files found");
+      data = []; // Ensure data is an empty array instead of null/undefined
+    }
+    
+    // Create hash lookup index when fileData is loaded
+    if (data && data.length > 0) {
+      api$g.debug('Creating hash lookup index for file data');
+      createHashLookupIndex(data);
+    } else {
+      // Initialize empty hash lookup index to prevent errors
+      api$g.debug('Initializing empty hash lookup index');
+      createHashLookupIndex([]);
+    }
+    
+    // Store fileData in state and propagate it
+    return await this.dispatchStateChange({fileData: data});
+  }
+
+  /**
+   * Saves the current XML content to a file
+   * @param {string} filePath The path to the XML file on the server
+   * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
+   * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
+   * @throws {Error}
+   */
+  async saveXml(filePath, saveAsNewVersion = false) {
+    api$g.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
+    if (!xmlEditor.getXmlTree()) {
+      throw new Error("No XML valid document in the editor");
+    }
+    try {
+      // Show saving status
+      if (this.savingStatusWidget && !this.savingStatusWidget.isConnected) {
+        if (ui$1.xmlEditor.statusbar) {
+          ui$1.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
+        }
+      }
+      return await api$a.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion);
+    } catch (e) {
+      console.error("Error while saving XML:", e.message);
+      api$c.error(`Could not save XML: ${e.message}`);
+      throw new Error(`Could not save XML: ${e.message}`);
+    } finally {
+      // clear status message after 1 second 
+      setTimeout(() => {
+        if (this.savingStatusWidget && this.savingStatusWidget.isConnected) {
+          ui$1.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
+        }
+      }, 1000);
+    }
+  }
+
+  // Override to expose custom endpoints
+  getEndpoints() {
+    return {
+      ...super.getEndpoints(),
+      'filedata.reload': this.reload.bind(this),
+      'filedata.saveXml': this.saveXml.bind(this)
+    };
+  }
+}
+
+/**
  * This plugin provides logging endpoints and an API to invoke them. The implementation uses
  * console.* methods
  */
@@ -18115,229 +18453,6 @@ class PDFJSViewer {
       return match
     }).filter(match => match.positions.length > 0)
   }
-}
-
-/**
- * Utility functions for processing file data across different file selection components
- * This module provides reusable functionality for filtering, grouping, and processing fileData
- */
-
-/**
- * @import { ApplicationState } from '../app.js'
- */
-
-// Global lookup index for efficient hash-based queries
-let hashLookupIndex = new Map();
-
-/**
- * Creates a lookup index that maps hash values directly to items
- * @param {Array} fileData - The file data array
- * @returns {Map<string, Object>} Map of hash to item with metadata
- */
-function createHashLookupIndex(fileData) {
-  const index = new Map();
-  
-  fileData.forEach((file) => {
-    // Index PDF hash
-    if (file.pdf && file.pdf.hash) {
-      index.set(file.pdf.hash, {
-        type: 'pdf',
-        item: file.pdf,
-        file: file,
-        label: file.label
-      });
-    }
-    
-    // Index gold entries
-    if (file.gold) {
-      file.gold.forEach((gold) => {
-        if (gold.hash) {
-          index.set(gold.hash, {
-            type: 'gold',
-            item: gold,
-            file: file,
-            label: gold.label || file.label
-          });
-        }
-      });
-    }
-    
-    // Index version entries
-    if (file.versions) {
-      file.versions.forEach((version) => {
-        if (version.hash) {
-          index.set(version.hash, {
-            type: 'version',
-            item: version,
-            file: file,
-            label: version.label || file.label
-          });
-        }
-      });
-    }
-  });
-  
-  // Store globally for use by other functions
-  hashLookupIndex = index;
-  return index;
-}
-
-/**
- * Gets document title/label from fileData based on any hash (PDF or XML)
- * @param {string} hash - Hash of any file (PDF, gold, or version)
- * @returns {string} Document title/label or empty string if not found
- * @throws {Error} If hash lookup index has not been created
- */
-function getDocumentTitle(hash) {
-  if (!hash) return '';
-  
-  if (!hashLookupIndex || hashLookupIndex.size === 0) {
-    throw new Error('Hash lookup index not initialized. Call createHashLookupIndex() first.');
-  }
-  
-  const entry = hashLookupIndex.get(hash);
-  return entry?.label || '';
-}
-
-/**
- * Extracts all unique variants from file data
- * @param {Array} fileData - The file data array
- * @returns {Set<string>} Set of unique variant IDs
- */
-function extractVariants(fileData) {
-  const variants = new Set();
-  
-  fileData.forEach(file => {
-    // Add variant_id from gold entries
-    if (file.gold) {
-      file.gold.forEach(gold => {
-        if (gold.variant_id) {
-          variants.add(gold.variant_id);
-        }
-      });
-    }
-    // Add variant_id from versions
-    if (file.versions) {
-      file.versions.forEach(version => {
-        if (version.variant_id) {
-          variants.add(version.variant_id);
-        }
-      });
-    }
-  });
-  
-  return variants;
-}
-
-/**
- * Filters file data by variant selection
- * @param {Array} fileData - The file data array
- * @param {string|null} variant - Selected variant ("", "none", or variant ID)
- * @returns {Array} Filtered file data
- */
-function filterFileDataByVariant(fileData, variant) {
-  if (variant === "none") {
-    // Show only files without variant_id in gold or versions
-    return fileData.filter(file => {
-      const hasGoldVariant = file.gold && file.gold.some(g => !!g.variant_id);
-      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
-      return !hasGoldVariant && !hasVersionVariant;
-    });
-  } else if (variant && variant !== "") {
-    // Show only files with the selected variant_id (in gold or versions)
-    return fileData.filter(file => {
-      const matchesGold = file.gold && file.gold.some(g => g.variant_id === variant);
-      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
-      return matchesGold || matchesVersion;
-    });
-  }
-  // If variant is "" (All), show all files
-  return fileData;
-}
-
-/**
- * Filters file data by label text search
- * @param {Array} fileData - The file data array
- * @param {string} searchText - Text to search for in labels
- * @returns {Array} Filtered file data
- */
-function filterFileDataByLabel(fileData, searchText) {
-  if (!searchText || searchText.trim() === '') {
-    return fileData;
-  }
-  
-  const search = searchText.toLowerCase();
-  return fileData.filter(file => 
-    file.label && file.label.toLowerCase().includes(search)
-  );
-}
-
-/**
- * Groups file data by collection
- * @param {Array} fileData - The file data array
- * @returns {Object} Grouped files by collection name
- */
-function groupFilesByCollection(fileData) {
-  return fileData.reduce((groups, file) => {
-    const collection_name = file.collection;
-    (groups[collection_name] = groups[collection_name] || []).push(file);
-    return groups;
-  }, {});
-}
-
-/**
- * Filters versions and gold entries by variant
- * @param {Object} file - File object containing versions and gold
- * @param {string|null} variant - Selected variant
- * @returns {Object} Object with filtered versions and gold arrays
- */
-function filterFileContentByVariant(file, variant) {
-  let versionsToShow = file.versions || [];
-  let goldToShow = file.gold || [];
-  
-  if (variant === "none") {
-    // Show only entries without variant_id
-    versionsToShow = file.versions ? file.versions.filter(version => !version.variant_id) : [];
-    goldToShow = file.gold ? file.gold.filter(gold => !gold.variant_id) : [];
-  } else if (variant && variant !== "") {
-    // Show only entries with the selected variant_id
-    versionsToShow = file.versions ? file.versions.filter(version => version.variant_id === variant) : [];
-    goldToShow = file.gold ? file.gold.filter(gold => gold.variant_id === variant) : [];
-  }
-  // If variant is "" (All), show all entries (already assigned above)
-  
-  return { versionsToShow, goldToShow };
-}
-
-/**
- * Finds a matching gold file based on variant selection
- * @param {Object} file - File object containing gold entries
- * @param {string|null} variant - Selected variant
- * @returns {Object|null} Matching gold entry or null
- */
-function findMatchingGold(file, variant) {
-  if (!file.gold) return null;
-  
-  if (variant === "none") {
-    // Find gold without variant_id
-    return file.gold.find(gold => !gold.variant_id) || null;
-  } else if (variant && variant !== "") {
-    // Find gold with matching variant_id
-    return file.gold.find(gold => gold.variant_id === variant) || null;
-  } else {
-    // No variant filter - use first gold file
-    return file.gold[0] || null;
-  }
-}
-
-/**
- * Finds a file object by PDF hash
- * @param {Array} fileData - The file data array  
- * @param {string} pdfHash - Hash of the PDF file
- * @returns {Object|null} File object or null if not found
- */
-function findFileByPdfHash(fileData, pdfHash) {
-  return fileData.find(file => file.pdf.hash === pdfHash) || null;
 }
 
 /**
@@ -49808,7 +49923,7 @@ async function saveIfDirty() {
 
   try {
     hashBeingSaved = fileHash;
-    const result = await api$6.saveXml(fileHash);
+    const result = await FiledataPlugin.getInstance().saveXml(fileHash);
     hashBeingSaved = null;
     if (result.status == "unchanged") {
       api$g.debug(`File has not changed`);
@@ -49816,7 +49931,7 @@ async function saveIfDirty() {
       api$g.debug(`Saved file with hash ${result.hash}`);
       if (result.hash !== fileHash) {
         // Update state to use new hash
-        await updateState(currentState$9, { xml: result.hash });
+        await app.updateState(currentState$9, { xml: result.hash });
       }
     }
     xmlEditor.markAsClean();
@@ -51351,6 +51466,12 @@ async function install$d(state) {
         return;
       }
       
+      // Ignore user changes during reactive state update cycle to prevent infinite loops
+      if (isInStateUpdateCycle) {
+        
+        return;
+      }
+      
       
       if (currentState$8) {
         await handler(currentState$8);
@@ -51376,29 +51497,86 @@ async function install$d(state) {
  * @param {ApplicationState} state 
  */
 async function update$a(state) {
-  // Store current state for use in event handlers
-  currentState$8 = state;
+  // Set flag to prevent event handlers from causing state mutations during reactive updates
+  isInStateUpdateCycle = true;
   
-  // Note: Don't mutate state directly in update() - that would cause infinite loops
-  // The state.collection should be managed by other functions that call updateState()
-  
-  // Check if relevant state properties have changed
-  if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
-    await populateSelectboxes(state);
-  }
-  
-  // Always update selected values (with guard to prevent triggering events)
-  
-  isUpdatingProgrammatically$1 = true;
   try {
-    ui$1.toolbar.pdf.value = state.pdf || "";
-    ui$1.toolbar.xml.value = state.xml || "";
-    ui$1.toolbar.diff.value = state.diff || "";
+    // Store current state for use in event handlers
+    currentState$8 = state;
+    
+    // Note: Don't mutate state directly in update() - that would cause infinite loops
+    // The state.collection should be managed by other functions that call updateState()
+    
+    // Check if relevant state properties have changed
+    if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
+      const fileDataChanged = hasStateChanged(state, 'fileData');
+      const selectionsChanged = hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant');
+      const selectionsValid = isCurrentSelectionValid(state);
+      
+      // Only repopulate in these cases:
+      // 1. User selections changed (xml, pdf, diff, variant)
+      // 2. FileData changed AND current selections are no longer valid
+      const shouldRepopulate = selectionsChanged || (fileDataChanged && !selectionsValid);
+      
+      if (shouldRepopulate) {
+        await populateSelectboxes(state);
+      }
+    }
+    
+    // Always update selected values (with guard to prevent triggering events)
+    
+    isUpdatingProgrammatically$1 = true;
+    try {
+      ui$1.toolbar.pdf.value = state.pdf || "";
+      ui$1.toolbar.xml.value = state.xml || "";
+      ui$1.toolbar.diff.value = state.diff || "";
+    } finally {
+      isUpdatingProgrammatically$1 = false;
+    }
   } finally {
-    isUpdatingProgrammatically$1 = false;
+    // Clear flag after update cycle completes
+    isInStateUpdateCycle = false;
   }
 }
 
+/**
+ * Check if current PDF/XML selections are still valid in the updated fileData
+ * @param {ApplicationState} state
+ * @returns {boolean} True if current selections are valid
+ */
+function isCurrentSelectionValid(state) {
+  if (!state.fileData || state.fileData.length === 0) {
+    return false;
+  }
+  
+  // Check if current PDF selection exists in fileData
+  if (state.pdf) {
+    const pdfExists = state.fileData.some(file => 
+      file.pdf && file.pdf.hash === state.pdf
+    );
+    if (!pdfExists) return false;
+  }
+  
+  // Check if current XML selection exists in fileData  
+  if (state.xml) {
+    const xmlExists = state.fileData.some(file => 
+      (file.gold && file.gold.some(g => g.hash === state.xml)) ||
+      (file.versions && file.versions.some(v => v.hash === state.xml))
+    );
+    if (!xmlExists) return false;
+  }
+  
+  // Check if current diff selection exists in fileData
+  if (state.diff) {
+    const diffExists = state.fileData.some(file =>
+      (file.gold && file.gold.some(g => g.hash === state.diff)) ||
+      (file.versions && file.versions.some(v => v.hash === state.diff))
+    );
+    if (!diffExists) return false;
+  }
+  
+  return true; // All current selections are valid
+}
 
 /**
  * Reloads data and then updates based on the application state
@@ -51407,7 +51585,7 @@ async function update$a(state) {
  * @param {boolean} [options.refresh] - Whether to force refresh of server cache
  */
 async function reload(state, options = {}) {
-  await reloadFileData(state, options);
+  await FiledataPlugin.getInstance().reload(options);
   // Note: populateSelectboxes() will be called automatically via the update() method 
   // when reloadFileData() triggers a state update with new fileData
 }
@@ -51417,6 +51595,7 @@ let variants;
 let collections;
 let currentState$8 = null;
 let isUpdatingProgrammatically$1 = false;
+let isInStateUpdateCycle = false;
 
 /**
  * Populates the variant selectbox with unique variants from fileData
@@ -53479,7 +53658,6 @@ var prettyPrintXml = {
 const api$6 = {
   load: load$1,
   validateXml,
-  saveXml,
   showMergeView,
   removeMergeView,
   deleteCurrentVersion,
@@ -53504,8 +53682,7 @@ const plugin$a = {
   validation: { inProgress }
 };
 
-// Status widget for saving progress
-let savingStatusWidget = null;
+// Status widget for saving progress moved to filedata plugin
 // Current state for use in event handlers
 let currentState$5 = null;
 
@@ -53585,13 +53762,7 @@ async function install$a(state) {
   });
   updateUi(); // Update UI so navigation objects are available
   
-  // Create saving status widget
-  // <sl-icon name="floppy"></sl-icon>
-  savingStatusWidget = PanelUtils.createText({
-    text: '',
-    icon: 'floppy',
-    variant: 'info'
-  });
+  // Saving status widget creation moved to filedata plugin
 
 
   // === Document button group ===
@@ -53833,39 +54004,7 @@ async function validateXml() {
   return await api$b.validate() // todo use endpoint instead
 }
 
-/**
- * Saves the current XML content to the server, optionally as a new version
- * @param {string} filePath The path to the XML file on the server
- * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
- * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
- * @throws {Error}
- */
-async function saveXml(filePath, saveAsNewVersion = false) {
-  api$g.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
-  if (!xmlEditor.getXmlTree()) {
-    throw new Error("No XML valid document in the editor")
-  }
-  try {
-    // Show saving status
-    if (savingStatusWidget && !savingStatusWidget.isConnected) {
-      if (ui$1.xmlEditor.statusbar) {
-        ui$1.xmlEditor.statusbar.add(savingStatusWidget, 'left', 10);
-      }
-    }
-    return await api$a.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion)
-  } catch (e) {
-    console.error("Error while saving XML:", e.message);
-    api$c.error(`Could not save XML: ${e.message}`);
-    throw new Error(`Could not save XML: ${e.message}`)
-  } finally {
-    // clear status message after 1 second 
-    setTimeout(() => {
-      if (savingStatusWidget && savingStatusWidget.isConnected) {
-        ui$1.xmlEditor.statusbar.removeById(savingStatusWidget.id);
-      }
-    }, 1000);
-  }
-}
+// saveXml function moved to filedata plugin
 
 /**
  * Creates a diff between the current and the given document and shows a merge view
@@ -54504,7 +54643,7 @@ async function update$6(state) {
       try {
         cachedExtractors = await api$a.getExtractorList();
         extractorsJustCached = true;
-        api$g.debug('Cached extractor list for floating panel:'+ cachedExtractors);
+        api$g.debug('Cached extractor list for floating panel');
       } catch (error) {
         api$g.warn('Failed to load extractor list:' +  error.message || error);
         cachedExtractors = [];
@@ -64006,7 +64145,7 @@ async function start$2() {
     ui$1.spinner.show('Loading documents, please wait...');
 
     // update the file lists
-    await reloadFileData(currentState$2, { refresh: true });
+    await FiledataPlugin.getInstance().reload({ refresh: true });
 
     // disable regular validation so that we have more control over it
     api$b.configure({ mode: "off" });
@@ -64054,13 +64193,13 @@ async function start$2() {
       const xpath = UrlHash.get("xpath") || ui$1.floatingPanel.xpath.value;
 
       // update the UI
-      await updateState(currentState$2, { xpath });
+      await app.updateState(currentState$2, { xpath });
 
       // synchronize in the background
       api$2.syncFiles(currentState$2).then(async (summary) => {
         api$g.info(summary);
         if (summary && !summary.skipped) {
-          await reloadFileData(currentState$2, { refresh: true });
+          await FiledataPlugin.getInstance().reload({ refresh: true });
         }
       });
     }
@@ -64460,13 +64599,15 @@ async function update$1(state) {
   if (shouldBeReadOnly !== state.editorReadOnly && !isUpdatingState) {
     // Update application state to reflect access control
     api$g.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`);
-    // Note: This will trigger xmleditor plugin to update editor state
+    // Note: Defer state update to avoid circular update during reactive state cycle
     isUpdatingState = true;
-    try {
-      await updateState(state, { editorReadOnly: shouldBeReadOnly });
-    } finally {
-      isUpdatingState = false;
-    }
+    setTimeout(async () => {
+      try {
+        await updateState(state, { editorReadOnly: shouldBeReadOnly });
+      } finally {
+        isUpdatingState = false;
+      }
+    }, 0);
   }
   
   // Update read-only widget context if xmleditor shows read-only status due to access control
@@ -64767,7 +64908,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
     await xmlEditor.updateEditorFromNode(teiHeader);
     
     // Save the document using services API
-    await api$6.saveXml(pluginState.xml);
+    await FiledataPlugin.getInstance().saveXml(pluginState.xml);
     
     // Update cached permissions
     currentPermissions.visibility = visibility;
@@ -65269,6 +65410,7 @@ function stop() {
 const plugins = [
   // class-based
   AuthenticationPlugin,
+  FiledataPlugin,
 
   // modules with config object
   plugin$m, 
@@ -65281,7 +65423,7 @@ const plugins = [
   plugin$g, 
   plugin$d,
   plugin$c, 
-  plugin$a, 
+  plugin$a,
   plugin$2, 
   plugin$b, 
   plugin$9, 
@@ -65432,28 +65574,6 @@ await app.updateState(state, {});
 
 // invoke the "start" endpoint
 await app.start();
-/**
- * Reloads the file data from the server
- * TODO move into own plugin together with some methods in services plugin
- * @param {ApplicationState} state
- * @param {Object} options - Options for reloading
- * @param {boolean} [options.refresh] - Whether to force refresh of server cache
- * @returns {Promise} 
- */
-async function reloadFileData(state, options = {}) {
-  api$g.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
-  let data = await api$a.getFileList(null, options.refresh);
-  if (!data || data.length === 0) {
-    api$c.error("No files found");
-  }
-  // Create hash lookup index when fileData is loaded
-  if (data && data.length > 0) {
-    api$g.debug('Creating hash lookup index for file data');
-    createHashLookupIndex(data);
-  }
-  // Store fileData in state and propagate it
-  return await app.updateState(state, {fileData:data})
-}
 
 //
 // Legacy compatibility functions for old plugin system
@@ -65464,6 +65584,7 @@ async function reloadFileData(state, options = {}) {
  * @param {ApplicationState} currentState - The current state
  * @param {Partial<ApplicationState>} changes - Changes to apply
  * @returns {Promise<ApplicationState>} New state after changes applied
+ * @deprecated Use app.updateState() instead
  */
 async function updateState(currentState, changes = {}) {
   return await app.updateState(currentState, changes);
@@ -65474,9 +65595,10 @@ async function updateState(currentState, changes = {}) {
  * @param {ApplicationState} state - The current state
  * @param {...string} propertyNames - Property names to check for changes
  * @returns {boolean} True if any of the specified properties changed
+ * @deprecated Use stateManager.hasStateChanged() instead
  */
 function hasStateChanged(state, ...propertyNames) {
   return stateManager.hasStateChanged(state, ...propertyNames);
 }
 
-export { AuthenticationPlugin, api$1 as accessControl, app, api$3 as appInfo, authentication, api$a as client, api$f as config, api$c as dialog, endpoints, api$7 as extraction, api$8 as fileSelectionDrawer, api$9 as fileselection, api$5 as floatingPanel, hasStateChanged, api as heartbeat, logLevel, api$g as logger, pdfViewer, pluginManager, api$4 as promptEditor, reloadFileData, api$6 as services, api$d as sse, stateManager, api$2 as sync, updateState, api$e as urlHash, api$b as validation, xmlEditor };
+export { AuthenticationPlugin, FiledataPlugin, api$1 as accessControl, app, api$3 as appInfo, authentication, api$a as client, api$f as config, api$c as dialog, endpoints, api$7 as extraction, api$8 as fileSelectionDrawer, api$9 as fileselection, api$5 as floatingPanel, hasStateChanged, api as heartbeat, logLevel, api$g as logger, pdfViewer, pluginManager, api$4 as promptEditor, api$6 as services, api$d as sse, stateManager, api$2 as sync, updateState, api$e as urlHash, api$b as validation, xmlEditor };
