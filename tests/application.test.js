@@ -448,6 +448,125 @@ describe('Application', () => {
     });
   });
 
+  describe('State Change Prevention During Propagation', () => {
+    it('should prevent nested state changes during state update propagation', async () => {
+      let nestedUpdateAttempted = false;
+      
+      // Create a plugin that tries to trigger state change in its update endpoint
+      const badPlugin = {
+        name: 'bad-plugin',
+        state: {
+          update: async (state) => {
+            try {
+              // This should throw an error - plugins cannot trigger state changes during propagation
+              nestedUpdateAttempted = true;
+              await application.updateState(state, { xml: 'nested-change.xml' });
+            } catch (error) {
+              // Expected error - rethrow to verify error handling
+              throw error;
+            }
+          }
+        }
+      };
+      
+      application.registerPlugins([badPlugin]);
+      
+      // This should throw an error when the plugin tries to nest a state change
+      await assert.rejects(
+        async () => {
+          await application.updateState(mockState, { pdf: 'trigger.pdf' });
+        },
+        {
+          name: 'Error',
+          message: /State changes are not allowed during state update propagation/
+        }
+      );
+      
+      assert.strictEqual(nestedUpdateAttempted, true);
+    });
+
+    it('should prevent nested state changes during extension state update', async () => {
+      const badPlugin = {
+        name: 'bad-ext-plugin',
+        state: {
+          update: async (state) => {
+            // Try to trigger extension state change during propagation
+            await application.updateStateExt(state, { myPlugin: { data: 'nested' } });
+          }
+        }
+      };
+      
+      application.registerPlugins([badPlugin]);
+      
+      await assert.rejects(
+        async () => {
+          await application.updateStateExt(mockState, { triggerPlugin: { value: 'test' } });
+        },
+        {
+          name: 'Error', 
+          message: /State changes are not allowed during state update propagation/
+        }
+      );
+    });
+
+    it('should allow state changes after propagation completes', async () => {
+      let stateAfterPropagation = null;
+      
+      const plugin = {
+        name: 'good-plugin',
+        state: {
+          update: (state) => {
+            // Store state but don't try to change it during propagation
+            stateAfterPropagation = state;
+          }
+        }
+      };
+      
+      application.registerPlugins([plugin]);
+      
+      // First state change should succeed
+      const newState1 = await application.updateState(mockState, { pdf: 'doc1.pdf' });
+      assert.strictEqual(newState1.pdf, 'doc1.pdf');
+      assert.strictEqual(stateAfterPropagation.pdf, 'doc1.pdf');
+      
+      // Second state change after propagation completes should also succeed
+      const newState2 = await application.updateState(newState1, { xml: 'doc1.xml' });
+      assert.strictEqual(newState2.xml, 'doc1.xml');
+      assert.strictEqual(newState2.pdf, 'doc1.pdf');
+    });
+
+    it('should handle plugin class onStateUpdate without allowing nested changes', async () => {
+      class BadPlugin extends Plugin {
+        constructor(context) {
+          super(context, { name: 'bad-class-plugin' });
+        }
+        
+        async onStateUpdate(changedKeys) {
+          // Acknowledge changed keys but still try to trigger nested change (should fail)
+          console.log('Received changed keys:', changedKeys);
+          // Try to trigger state change in reactive endpoint
+          await this.dispatchStateChange({ xml: 'nested-from-class.xml' });
+        }
+      }
+      
+      const context = application.getPluginContext();
+      const pluginInstance = new BadPlugin(context);
+      application.registerPlugins([pluginInstance]);
+      
+      await application.installPlugins(mockState);
+      
+      await assert.rejects(
+        async () => {
+          await application.updateState(mockState, { pdf: 'trigger-class.pdf' });
+        },
+        {
+          name: 'Error',
+          message: /State changes are not allowed during state update propagation/
+        }
+      );
+    });
+  });
+
   describe('Error Handling', () => {
     it('should handle plugin installation errors gracefully', async () => {
       const errorPlugin = {
