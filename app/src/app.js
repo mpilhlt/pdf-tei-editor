@@ -17,120 +17,22 @@ import ep from './endpoints.js'
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
-import Plugin from './modules/plugin-base.js';
 
-// ???
-import { createHashLookupIndex } from './modules/file-data-utils.js'
+// Import plugins and plugin APIs from plugins.js  
+import plugins from './plugins.js'
+import { logLevel, client, logger, config, dialog, AuthenticationPlugin } from './plugins.js'
 
-// class-based plugins
-import AuthenticationPlugin from './plugins/authentication.js'
-
-// legacy plugins
-import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
-import { plugin as configPlugin, api as config } from './plugins/config.js'
-import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
-import { plugin as ssePlugin, api as sse} from './plugins/sse.js'
-import { plugin as dialogPlugin, api as dialog } from './plugins/dialog.js'
-import { plugin as pdfViewerPlugin, api as pdfViewer } from './plugins/pdfviewer.js'
-import { plugin as xmlEditorPlugin, api as xmlEditor } from './plugins/xmleditor.js'
-import { plugin as validationPlugin, api as validation } from './plugins/tei-validation.js'
-import { plugin as clientPlugin, api as client } from './plugins/client.js'
-import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
-import { plugin as fileSelectionDrawerPlugin, api as fileSelectionDrawer } from './plugins/file-selection-drawer.js'
-import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
-import { plugin as servicesPlugin, api as services } from './plugins/services.js'
-import { plugin as floatingPanelPlugin, api as floatingPanel } from './plugins/floating-panel.js'
-import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
-import { plugin as teiWizardPlugin } from './plugins/tei-wizard.js'
-import { plugin as infoPlugin, api as appInfo } from './plugins/info.js'
-import { plugin as moveFilesPlugin } from './plugins/move-files.js'
-import { plugin as startPlugin } from './plugins/start.js'
-import { plugin as toolbarPlugin } from './plugins/toolbar.js'
-import { plugin as syncPlugin, api as sync } from './plugins/sync.js'
-import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
-import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
-
-/**
- * @typedef {object} PluginConfiguration
- * @property {string} name - The name of the plugin
- * @property {string[]} [deps] - The names of the plugins this plugin depends on
- */
-
-/** @type {Array<Plugin|PluginConfiguration>} */
-const plugins = [
-  // class-based
-  AuthenticationPlugin,
-
-  // modules with config object
-  loggerPlugin, 
-  urlHashStatePlugin, 
-  clientPlugin, 
-  configPlugin, 
-  dialogPlugin, 
-  toolbarPlugin, 
-  pdfViewerPlugin, 
-  xmlEditorPlugin, 
-  fileselectionPlugin,
-  fileSelectionDrawerPlugin, 
-  servicesPlugin, 
-  syncPlugin, 
-  extractionPlugin, 
-  floatingPanelPlugin, 
-  promptEditorPlugin,
-  teiWizardPlugin, 
-  validationPlugin, 
-  infoPlugin, 
-  moveFilesPlugin, 
-  ssePlugin,
-  accessControlPlugin, 
-  heartbeatPlugin, 
-  startPlugin
-]
-
-/**
- * The application state, which is often passed to the plugin endpoints
- * 
- * @typedef {object} ApplicationState
- * @property {string|null} sessionId - The session id of the particular app instance in a browser tab/window
- * @property {string|null} pdf - The document identifier for the PDF file in the viewer
- * @property {string|null} xml - The document identifier for the XML file in the editor
- * @property {string|null} diff - The document identifier for an XML file which is used to create a diff, if any
- * @property {string|null} xpath - The current xpath used to select a node in the editor
- * @property {string|null} variant - The variant filter to show only files with matching variant-id
- * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
- * @property {boolean} editorReadOnly - Whether the XML editor is read-only
- * @property {boolean} offline  - Whether the application is in offline mode
- * @property {object|null} user - The currently logged-in user
- * @property {string|null} collection - The collection the current document is in
- * @property {Array<object>|null} fileData - The file data loaded from the server
- * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
- * @property {ApplicationState|null} previousState - Links to the previous state object 
- */
-
-/**
- * The initial application state
- * @type{ApplicationState}
- */
-let state = {
-  pdf: null,
-  xml: null,
-  diff: null,
-  xpath: null,
-  variant: null,
-  webdavEnabled: false,
-  editorReadOnly: false,
-  offline: false,
-  sessionId: null,
-  user: null,
-  collection: null,
-  fileData: null,
-  ext: {},
-  previousState: null
-}
+// Import initial application state and its type definition
+/** @import { ApplicationState } from './state.js' */
+import initialState from './state.js'
 
 //
 // Application bootstrapping
 //
+
+// Create mutable copy of initial state
+/** @type {ApplicationState} */
+let state = { ...initialState }
 
 // Create plugin manager and state manager singletons
 const pluginManager = new PluginManager();
@@ -176,7 +78,7 @@ for (const [key, value] of urlParams.entries()) {
 }
 
 if (Object.keys(urlHashState).length > 0) {
-  logger.info("Getting state properties from URL hash: " + Object.keys(urlHashState).join(", "))
+  logger.info("Setting state properties from URL hash: " + Object.keys(urlHashState).join(", "))
   Object.assign(state, urlHashState)
 }
 
@@ -203,6 +105,7 @@ await app.start()
 // Core application functions
 //
 
+import { createHashLookupIndex } from './modules/file-data-utils.js'
 /**
  * Reloads the file data from the server
  * TODO move into own plugin together with some methods in services plugin
@@ -265,28 +168,5 @@ export {
   hasStateChanged // Legacy compatibility
 }
 
-// plugin APIs  
-// authentication is exported earlier after plugin registration
-
-// legacy plugin APIs
-export { 
-  logger, 
-  dialog, 
-  pdfViewer, 
-  xmlEditor, 
-  client, 
-  config, 
-  validation, 
-  fileselection, 
-  fileSelectionDrawer, 
-  extraction,
-  services, 
-  sync, 
-  floatingPanel, 
-  promptEditor, 
-  urlHash, 
-  appInfo, 
-  sse, 
-  accessControl, 
-  heartbeat 
-}
+// Re-export all plugin APIs and plugins from plugins.js
+export * from './plugins.js'
