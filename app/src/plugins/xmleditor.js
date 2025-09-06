@@ -10,7 +10,7 @@
  */
 
 import ui from '../ui.js'
-import { app, validation, logger } from '../app.js'
+import { endpoints as ep, app, validation, logger } from '../app.js'
 import { FiledataPlugin } from '../plugins.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
@@ -242,8 +242,8 @@ async function start(state) {
     name: 'validationStatus'
   })
 
-  // Additional xmleditor event handlers that were previously in start.js
-  
+  // Additional xmleditor event handlers 
+
   // save dirty editor content after an update
   xmlEditor.on("editorUpdateDelayed", async () => await saveIfDirty())
 
@@ -289,8 +289,6 @@ async function start(state) {
     if (validationStatusWidget && validationStatusWidget.isConnected) {
       ui.xmlEditor.statusbar.removeById(validationStatusWidget.id)
     }
-    // Save if dirty now that XML is valid again
-    await saveIfDirty()
   })
 }
 
@@ -408,13 +406,17 @@ async function saveIfDirty() {
 
   try {
     hashBeingSaved = fileHash
-    const result = await FiledataPlugin.getInstance().saveXml(fileHash)
+    const result = await app.invokePluginEndpoint(ep.filedata.saveXml, fileHash, {result:"first"})
+    if (!result|| typeof result != "object" || !result.status)  {
+      logger.warn("Invalid invocation result for " + ep.filedata.saveXml)
+      return
+    }
     hashBeingSaved = null
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
     } else {
       logger.debug(`Saved file with hash ${result.hash}`)
-      if (result.hash !== fileHash) {
+      if (result.hash && result.hash !== fileHash) {
         // Update state to use new hash
         await app.updateState(currentState, { xml: result.hash })
       }

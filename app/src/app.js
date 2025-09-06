@@ -13,18 +13,21 @@ if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chr
   throw new Error('Safari browser not supported');
 }
 
+/** @import { ApplicationState } from './state.js' */
+
+// plugin invocation endpoints
 import ep from './endpoints.js'
+export { ep as endpoints }
+
+// plugins
+import plugins from './plugins.js'
+import { logLevel, client, logger, config, AuthenticationPlugin } from './plugins.js'
+import initialState from './state.js'
+
+// core application orchestration classes
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
-
-// Import plugins and plugin APIs from plugins.js  
-import plugins from './plugins.js'
-import { logLevel, client, logger, config, dialog, AuthenticationPlugin } from './plugins.js'
-
-// Import initial application state and its type definition
-/** @import { ApplicationState } from './state.js' */
-import initialState from './state.js'
 
 //
 // Application bootstrapping
@@ -115,7 +118,7 @@ await app.start()
  * @returns {Promise<ApplicationState>} New state after changes applied
  * @deprecated Use app.updateState() instead
  */
-async function updateState(currentState, changes = {}) {
+export async function updateState(currentState, changes = {}) {
   return await app.updateState(currentState, changes);
 }
 
@@ -126,22 +129,15 @@ async function updateState(currentState, changes = {}) {
  * @returns {boolean} True if any of the specified properties changed
  * @deprecated Use stateManager.hasStateChanged() instead
  */
-function hasStateChanged(state, ...propertyNames) {
+export function hasStateChanged(state, ...propertyNames) {
   return stateManager.hasStateChanged(state, ...propertyNames);
 }
 
-//
-// Exports
-// 
-
-// application APIs and data
 export {
-  ep as endpoints, 
-  pluginManager, 
-  stateManager, 
-  updateState, // Legacy compatibility
-  hasStateChanged // Legacy compatibility
+  /** @deprecated Don't use the pluginManager in plugins */
+  pluginManager
 }
 
-// Re-export all plugin APIs and plugins from plugins.js
+// Re-export all plugin APIs and plugin objects from plugins.js for import by plugins
+// TODO replace direct calls to a plugin's API with invoking endpoints
 export * from './plugins.js'

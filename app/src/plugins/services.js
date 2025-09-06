@@ -8,15 +8,17 @@
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  * @import { UserData } from '../plugins/authentication.js'
  */
+
+import { endpoints as ep } from '../app.js'
 import ui, { updateUi } from '../ui.js'
 import {
-  updateState, client, logger, dialog, config,
-  fileselection, xmlEditor, pdfViewer, services, validation, authentication, sync, accessControl
+  app, client, logger, dialog, config,
+  fileselection, xmlEditor, pdfViewer, 
+  services, validation, authentication, 
+  sync, accessControl
 } from '../app.js'
-import { PanelUtils } from '../modules/panels/index.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
-import { XMLEditor } from './xmleditor.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror_utils.js'
@@ -246,7 +248,7 @@ async function load(state, { xml, pdf }) {
 
   // PDF 
   if (pdf) {
-    await updateState(state, { pdf: null, xml: null, diff: null })
+    await app.updateState(state, { pdf: null, xml: null, diff: null })
     logger.info("Loading PDF: " + pdf)
     // Convert document identifier to static file URL
     const pdfUrl = `/api/files/${pdf}`
@@ -290,7 +292,7 @@ async function load(state, { xml, pdf }) {
     }
 
     await removeMergeView(state)
-    await updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked })
+    await app.updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked })
     logger.info("Loading XML: " + xml)
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`
@@ -341,7 +343,7 @@ async function load(state, { xml, pdf }) {
   }
 
   // notify plugins
-  await updateState(state)
+  await app.updateState(state)
 }
 
 async function startAutocomplete() {
@@ -377,8 +379,6 @@ async function validateXml() {
   return await validation.validate() // todo use endpoint instead
 }
 
-// saveXml function moved to filedata plugin
-
 /**
  * Creates a diff between the current and the given document and shows a merge view
  * @param {ApplicationState} state
@@ -391,7 +391,7 @@ async function showMergeView(state, diff) {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`
     await xmlEditor.showMergeView(diffUrl)
-    await updateState(state, { diff: diff })
+    await app.updateState(state, { diff: diff })
     // turn validation off as it creates too much visual noise
     validation.configure({ mode: "off" })
   } finally {
@@ -408,7 +408,7 @@ async function removeMergeView(state) {
   // re-enable validation
   validation.configure({ mode: "auto" })
   UrlHash.remove("diff")
-  await updateState(state, { diff: null })
+  await app.updateState(state, { diff: null })
 }
 
 /**
@@ -432,7 +432,7 @@ async function deleteCurrentVersion(state) {
     await client.deleteFiles(filePathsToDelete)
     try {
       // Clear current XML state after successful deletion
-      await updateState(state, { xml: null })
+      await app.updateState(state, { xml: null })
       // update the file data
       await fileselection.reload(state)
       // load the gold version
@@ -495,7 +495,7 @@ async function deleteAllVersions(state) {
   await client.deleteFiles(filePathsToDelete)
   try {
     // Clear current XML state after successful deletion
-    await updateState(state, { xml: null })
+    await app.updateState(state, { xml: null })
     // update the file data
     await fileselection.reload(state)
     
@@ -569,7 +569,7 @@ async function deleteAll(state) {
     // update the file data
     await fileselection.reload(state, {refresh:true})
     // remove xml and pdf
-    await updateState(state, {xml: null, pdf: null})
+    await app.updateState(state, {xml: null, pdf: null})
   }
 }
 
@@ -719,14 +719,8 @@ async function saveRevision(state) {
   try {
     await addTeiHeaderInfo(respStmt, undefined, revisionChange)
     if (!state.xml) throw new Error('No XML file loaded')
-    const result = await saveXml(state.xml)
     
-    // If migration occurred, first reload file data, then update state
-    if (result.status === "saved_with_migration") {
-      await fileselection.reload(state)
-      state.xml = result.hash
-      await updateState(state)
-    }
+    await app.invokePluginEndpoint(ep.filedata.saveXml, state.xml)
     
     sync.syncFiles(state)
       .then(summary => summary && console.debug(summary))

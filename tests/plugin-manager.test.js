@@ -352,12 +352,28 @@ describe('PluginManager', () => {
         start: () => { callOrder.push('c'); return 'result-c'; }
       });
       
-      const results = await pluginManager.invoke('start');
-      
+      // Test default behavior (first fulfilled result)
+      const firstResult = await pluginManager.invoke('start');
       assert.deepStrictEqual(callOrder, ['c', 'b', 'a']);
-      assert.strictEqual(results.length, 3);
-      assert.strictEqual(results[0].status, 'fulfilled');
-      assert.strictEqual(results[0].value, 'result-c');
+      assert.strictEqual(firstResult, 'result-c'); // First plugin in dependency order
+      
+      // Test full results
+      callOrder.length = 0; // Reset call order
+      const fullResults = await pluginManager.invoke('start', [], { result: 'full' });
+      assert.deepStrictEqual(callOrder, ['c', 'b', 'a']);
+      assert.strictEqual(fullResults.length, 3);
+      assert.strictEqual(fullResults[0].status, 'fulfilled');
+      assert.strictEqual(fullResults[0].value, 'result-c');
+      assert.strictEqual(fullResults[1].status, 'fulfilled');
+      assert.strictEqual(fullResults[1].value, 'result-b');
+      assert.strictEqual(fullResults[2].status, 'fulfilled');
+      assert.strictEqual(fullResults[2].value, 'result-a');
+      
+      // Test values only
+      callOrder.length = 0;
+      const valuesResults = await pluginManager.invoke('start', [], { result: 'values' });
+      assert.deepStrictEqual(callOrder, ['c', 'b', 'a']);
+      assert.deepStrictEqual(valuesResults, ['result-c', 'result-b', 'result-a']);
     });
 
     it('should pass arguments to endpoint functions', async () => {
@@ -505,10 +521,13 @@ describe('PluginManager', () => {
         slow: () => new Promise(resolve => setTimeout(() => resolve('done'), 100))
       });
       
-      const results = await pluginManager.invoke('slow', [], { timeout: 50 });
+      // Test with full results to see timeout behavior
+      const fullResults = await pluginManager.invoke('slow', [], { timeout: 50, result: 'full' });
       
       // Should still return result array even if individual promises timeout
-      assert.strictEqual(results.length, 1);
+      assert.strictEqual(fullResults.length, 1);
+      // The promise might be rejected due to timeout or fulfilled if it completes in time
+      assert(fullResults[0].status === 'fulfilled' || fullResults[0].status === 'rejected');
     });
 
     it('should use proper method context for nested endpoints', async () => {
@@ -534,11 +553,15 @@ describe('PluginManager', () => {
         config: { value: 'test-config' }
       });
       
-      const results = await pluginManager.invoke('!config.value');
+      // Test default behavior (first result)
+      const firstResult = await pluginManager.invoke('!config.value');
+      assert.strictEqual(firstResult, 'test-config');
       
-      assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0].status, 'fulfilled');
-      assert.strictEqual(results[0].value, 'test-config');
+      // Test full results
+      const fullResults = await pluginManager.invoke('!config.value', [], { result: 'full' });
+      assert.strictEqual(fullResults.length, 1);
+      assert.strictEqual(fullResults[0].status, 'fulfilled');
+      assert.strictEqual(fullResults[0].value, 'test-config');
     });
 
     it('should handle errors gracefully', async () => {
@@ -547,11 +570,15 @@ describe('PluginManager', () => {
         failing: () => { throw new Error('Test error'); }
       });
       
-      const results = await pluginManager.invoke('failing');
+      // Test default behavior (first result, should be undefined since no fulfilled results)
+      const firstResult = await pluginManager.invoke('failing');
+      assert.strictEqual(firstResult, undefined); // No fulfilled results, returns undefined
       
-      assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0].status, 'fulfilled');
-      assert.strictEqual(results[0].value, null); // Error handled, returns null
+      // Test full results
+      const fullResults = await pluginManager.invoke('failing', [], { result: 'full' });
+      assert.strictEqual(fullResults.length, 1);
+      assert.strictEqual(fullResults[0].status, 'rejected');
+      assert(fullResults[0].reason instanceof Error); // Error preserved in reason
     });
 
     it('should throw errors when configured with throws flag', async () => {
@@ -561,11 +588,19 @@ describe('PluginManager', () => {
         failing: () => { throw new Error('Test error'); }
       });
       
-      const results = await pm.invoke('failing');
+      // Should throw error with throws config
+      await assert.rejects(
+        async () => await pm.invoke('failing'),
+        Error,
+        'Should throw the error from the plugin'
+      );
       
-      assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0].status, 'rejected');
-      assert(results[0].reason instanceof Error);
+      // Test full results with throws flag - should also throw
+      await assert.rejects(
+        async () => await pm.invoke('failing', [], { result: 'full' }),
+        Error,
+        'Should throw the error from the plugin even with full results'
+      );
     });
 
     it('should throw errors with !suffix flag', async () => {
@@ -574,11 +609,138 @@ describe('PluginManager', () => {
         failing: () => { throw new Error('Test error'); }
       });
       
-      const results = await pluginManager.invoke('failing!');
+      // Should throw error with !suffix flag
+      await assert.rejects(
+        async () => await pluginManager.invoke('failing!'),
+        Error,
+        'Should throw the error from the plugin with !suffix'
+      );
       
-      assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0].status, 'rejected');
-      assert(results[0].reason instanceof Error);
+      // Test full results with !suffix - should also throw
+      await assert.rejects(
+        async () => await pluginManager.invoke('failing!', [], { result: 'full' }),
+        Error,
+        'Should throw the error from the plugin even with full results and !suffix'
+      );
+    });
+
+    // New test cases for result processing options
+    it('should support different result processing modes', async () => {
+      pluginManager.register({
+        name: 'plugin-a',
+        test: () => 'result-a'
+      });
+      pluginManager.register({
+        name: 'plugin-b', 
+        test: () => 'result-b'
+      });
+      pluginManager.register({
+        name: 'failing-plugin',
+        test: () => { throw new Error('Plugin error'); }
+      });
+      
+      // Test 'first' mode (default)
+      const firstResult = await pluginManager.invoke('test');
+      assert.strictEqual(firstResult, 'result-a');
+      
+      // Test 'first' mode explicitly
+      const explicitFirstResult = await pluginManager.invoke('test', [], { result: 'first' });
+      assert.strictEqual(explicitFirstResult, 'result-a');
+      
+      // Test 'values' mode
+      const valuesResult = await pluginManager.invoke('test', [], { result: 'values' });
+      assert.deepStrictEqual(valuesResult, ['result-a', 'result-b']); // Only fulfilled values
+      
+      // Test 'full' mode
+      const fullResult = await pluginManager.invoke('test', [], { result: 'full' });
+      assert.strictEqual(fullResult.length, 3);
+      assert.strictEqual(fullResult[0].status, 'fulfilled');
+      assert.strictEqual(fullResult[0].value, 'result-a');
+      assert.strictEqual(fullResult[1].status, 'fulfilled');
+      assert.strictEqual(fullResult[1].value, 'result-b');
+      assert.strictEqual(fullResult[2].status, 'rejected');
+      assert(fullResult[2].reason instanceof Error); // Error preserved in reason
+    });
+
+    it('should use configured default result mode', async () => {
+      const pm = new PluginManager({ result: 'values' });
+      pm.register({
+        name: 'test-plugin',
+        test: () => 'test-result'
+      });
+      
+      // Should use 'values' as default
+      const result = await pm.invoke('test');
+      assert(Array.isArray(result));
+      assert.deepStrictEqual(result, ['test-result']);
+      
+      // Should be able to override default
+      const firstResult = await pm.invoke('test', [], { result: 'first' });
+      assert.strictEqual(firstResult, 'test-result');
+    });
+
+    it('should handle mixed success/failure scenarios', async () => {
+      pluginManager.register({
+        name: 'success1',
+        test: () => 'success-1'
+      });
+      pluginManager.register({
+        name: 'failure',
+        test: () => { throw new Error('Failure'); }
+      });
+      pluginManager.register({
+        name: 'success2',
+        test: () => 'success-2'
+      });
+      
+      // 'first' should return first successful result
+      const firstResult = await pluginManager.invoke('test');
+      assert.strictEqual(firstResult, 'success-1');
+      
+      // 'values' should return only successful values
+      const valuesResult = await pluginManager.invoke('test', [], { result: 'values' });
+      assert.deepStrictEqual(valuesResult, ['success-1', 'success-2']);
+      
+      // 'full' should return all results with status
+      const fullResult = await pluginManager.invoke('test', [], { result: 'full' });
+      assert.strictEqual(fullResult.length, 3);
+      assert.strictEqual(fullResult[0].status, 'fulfilled');
+      assert.strictEqual(fullResult[1].status, 'rejected');
+      assert.strictEqual(fullResult[2].status, 'fulfilled');
+      assert(fullResult[1].reason instanceof Error); // Failed plugin has error in reason
+    });
+
+    it('should work with sequential mode and result options', async () => {
+      const callOrder = [];
+      
+      pluginManager.register({
+        name: 'seq-a',
+        deps: ['seq-b'],
+        test: async () => { 
+          await new Promise(resolve => setTimeout(resolve, 5));
+          callOrder.push('a'); 
+          return 'result-a'; 
+        }
+      });
+      pluginManager.register({
+        name: 'seq-b',
+        test: async () => { 
+          await new Promise(resolve => setTimeout(resolve, 5));
+          callOrder.push('b'); 
+          return 'result-b'; 
+        }
+      });
+      
+      // Test sequential with first result
+      const firstResult = await pluginManager.invoke('test', [], { mode: 'sequential', result: 'first' });
+      assert.deepStrictEqual(callOrder, ['b', 'a']); // Dependency order
+      assert.strictEqual(firstResult, 'result-b'); // First in dependency order
+      
+      // Test sequential with values
+      callOrder.length = 0;
+      const valuesResult = await pluginManager.invoke('test', [], { mode: 'sequential', result: 'values' });
+      assert.deepStrictEqual(callOrder, ['b', 'a']);
+      assert.deepStrictEqual(valuesResult, ['result-b', 'result-a']);
     });
   });
 
@@ -652,8 +814,17 @@ describe('PluginManager', () => {
     });
 
     it('should handle invoke with no matching plugins', async () => {
-      const results = await pluginManager.invoke('nonexistent');
-      assert.strictEqual(results.length, 0);
+      // Default behavior should return undefined when no plugins match
+      const firstResult = await pluginManager.invoke('nonexistent');
+      assert.strictEqual(firstResult, undefined);
+      
+      // Full results should return empty array
+      const fullResults = await pluginManager.invoke('nonexistent', [], { result: 'full' });
+      assert.strictEqual(fullResults.length, 0);
+      
+      // Values should return empty array
+      const valuesResults = await pluginManager.invoke('nonexistent', [], { result: 'values' });
+      assert.strictEqual(valuesResults.length, 0);
     });
 
     it('should handle deeply nested endpoint paths', () => {

@@ -138,7 +138,17 @@ export class Plugin {
     if (!this.#state) {
       throw new Error(`Plugin ${this.name} attempted to dispatch state before initialization`);
     }
-    const newState = await this.context.updateState(this.#state, changes);
+    
+    // Check if plugin state is stale compared to current application state
+    const currentAppState = this.context.getCurrentState();
+    let stateToUse = this.#state;
+    
+    if (currentAppState && currentAppState !== this.#state) {
+      console.warn(`Warning: Plugin "${this.name}" has stale state. Using current application state instead. This indicates a state synchronization issue that should be investigated.`);
+      stateToUse = currentAppState;
+    }
+    
+    const newState = await this.context.updateState(stateToUse, changes);
     this.#state = newState;
     return newState;
   }

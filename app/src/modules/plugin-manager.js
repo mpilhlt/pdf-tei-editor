@@ -1,5 +1,65 @@
 /**
  * Plugin Manager with sophisticated dependency resolution using topological sorting
+ * 
+ * This is a reimplementation of https://www.npmjs.com/package/js-plugin with additional features,
+ * designed as a superset that maintains compatibility with code written for js-plugin.
+ * 
+ * TODO: In the original js-plugin implementation, invocation targets are called "extension points" 
+ * not "endpoints". Consider renaming methods like `invoke()` and `hasEndpoint()` to use 
+ * "extensionPoint" terminology for consistency (e.g., `invokeExtensionPoint()`, `hasExtensionPoint()`).
+ * 
+ * ## Basic Usage Example
+ * 
+ * ```javascript
+ * import { PluginManager } from './plugin-manager.js';
+ * 
+ * const manager = new PluginManager();
+ * 
+ * // Register plugins
+ * manager.register({
+ *   name: 'logger',
+ *   config: { level: 'info' },
+ *   install() { console.log('Logger installed'); }
+ * });
+ * 
+ * manager.register({
+ *   name: 'database', 
+ *   deps: ['logger'],
+ *   config: { timeout: 5000 },
+ *   install() { console.log('Database installed'); }
+ * });
+ * 
+ * // Invoke extension points (functions)
+ * await manager.invoke('install');  // Calls install() on all plugins in dependency order
+ * 
+ * // Collect configuration values (no-call)
+ * const timeouts = await manager.invoke('!config.timeout');  // Returns [undefined, 5000]
+ * const levels = await manager.invoke('!config.level');      // Returns ['info', undefined]
+ * 
+ * // Error handling
+ * await manager.invoke('install!');  // Throws on first plugin error
+ * ```
+ * 
+ * ## Endpoint Invocation Flags
+ * 
+ * Endpoint names support special flag prefixes and suffixes to control invocation behavior:
+ * 
+ * ### No-Call Flag (`!` prefix)
+ * - **Usage**: `manager.invoke("!config.timeout")`
+ * - **Purpose**: Retrieve property values without calling functions
+ * - **Behavior**: Returns the value at the endpoint path from each plugin
+ * - **Example**: Collect configuration values or status data across plugins
+ * 
+ * ### Throw Flag (`!` suffix)  
+ * - **Usage**: `manager.invoke("install!")`
+ * - **Purpose**: Throw errors immediately instead of collecting them
+ * - **Behavior**: First plugin error terminates execution and rethrows
+ * - **Example**: Critical operations where failures should halt processing
+ * 
+ * Flags can be combined. 
+ * 
+ * The no-call flag (`!`) converts function invocation into value retrieval, enabling
+ * data collection workflows using the same plugin traversal and dependency ordering.
  */
 
 import Plugin from './plugin-base.js';
@@ -15,33 +75,44 @@ import Plugin from './plugin-base.js';
 /**
  * Options for plugin endpoint invocation
  * @typedef {Object} InvokeOptions
+ * @property {boolean} [throws] - If true, an error in one of the endpoints throws the invocation
+ * @property {boolean} [nocall] - If true, get the extension points value rather than trying to call it as a function
  * @property {number} [timeout] - Timeout override for this invocation (milliseconds)
  * @property {'parallel'|'sequential'} [mode] - Execution mode: 'parallel' (default) or 'sequential'
+ * @property {'first'|'values'|'full'} [result] - Form of result: 
+ *    'first' (default) returns the first fulfilled response, 
+ *    'values' returns the values of all fulfilled responses, 
+ *    'full' returns an array of {status:string, value:any} objects 
  */
 
 /**
  * Plugin Manager with dependency resolution
  */
 export class PluginManager {
+  /**
+   * @param {InvokeOptions} options 
+   */
   constructor(options = {}) {
     /** @type {Map<string, PluginConfig>} */
     this.pluginsByName = new Map();
-    
+
     /** @type {PluginConfig[]} */
     this.registeredPlugins = [];
-    
+
     /** @type {PluginConfig[]} */
     this.dependencyOrderedPlugins = [];
-    
+
     /** @type {Map<string, PluginConfig[]>} */
     this.endpointCache = new Map();
-    
-    /** @type {Object} */
+
+    /** @type {InvokeOptions} */
     this.config = {
       timeout: options.timeout || 2000,
-      throws: options.throws || false
+      throws: options.throws || false,
+      mode: options.mode || "parallel",
+      result: options.result || "full"
     };
-    
+
     /** @type {boolean} */
     this.debug = options.debug || false;
 
@@ -57,7 +128,7 @@ export class PluginManager {
     if (!plugin || typeof plugin !== 'object') {
       throw new Error('Plugin must be an object');
     }
-    
+
     // Handle Plugin class instances - convert to plugin object
     let pluginConfig;
     if (plugin instanceof Plugin) {
@@ -68,12 +139,12 @@ export class PluginManager {
     } else {
       pluginConfig = plugin;
     }
-    
+
     if (!pluginConfig.name || typeof pluginConfig.name !== 'string') {
       console.error('Invalid plugin:', pluginConfig);
       throw new Error('Every plugin must have a name property');
     }
-    
+
     if (this.pluginsByName.has(pluginConfig.name)) {
       throw new Error(`Plugin "${pluginConfig.name}" is already registered`);
     }
@@ -119,7 +190,7 @@ export class PluginManager {
     // Remove from all collections
     this.pluginsByName.delete(pluginName);
     this.registeredPlugins = this.registeredPlugins.filter(p => p.name !== pluginName);
-    
+
     // Clear caches and recompute order
     this.endpointCache.clear();
     this.dependencyOrderedPlugins = [];
@@ -161,7 +232,6 @@ export class PluginManager {
       if (endpoint === '.') {
         return true; // All plugins
       }
-
       return this.hasEndpoint(plugin, endpoint);
     });
 
@@ -180,14 +250,14 @@ export class PluginManager {
   hasEndpoint(plugin, endpoint) {
     const pathParts = endpoint.split('.');
     let current = plugin;
-    
+
     for (const part of pathParts) {
       if (!current || typeof current !== 'object' || !(part in current)) {
         return false;
       }
       current = current[part];
     }
-    
+
     return true;
   }
 
@@ -201,37 +271,43 @@ export class PluginManager {
   getEndpointValue(plugin, endpoint) {
     const pathParts = endpoint.split('.');
     let current = plugin;
-    
+
     for (const part of pathParts) {
       if (!current || typeof current !== 'object' || !(part in current)) {
         return undefined;
       }
       current = current[part];
     }
-    
+
     return current;
   }
+
+  /**
+   * @typedef {object} InvocationResult
+   * @property {'fulfilled'|'rejected'} status
+   * @property {any} value 
+   */
 
   /**
    * Invoke an endpoint on all plugins that implement it, in dependency order
    * @param {string} endpoint - Endpoint to invoke
    * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
    * @param {InvokeOptions} [options] - Optional configuration for this invocation
-   * @returns {Promise<any[]>} Array of settled results from plugin endpoints
+   * @returns {Promise<InvocationResult[] | any[] | any>} Result formatted depending on options.result
    */
   async invoke(endpoint, args = [], options = {}) {
     if (!endpoint) {
       throw new Error('Invoke requires an endpoint argument');
     }
-    
+
     // Convert args to array for apply() - if it's already an array, use it; otherwise wrap in array
     const invokeArgs = Array.isArray(args) ? args : [args];
 
     // Parse endpoint flags
-    const isNoCall = /^!/.test(endpoint);
-    const shouldThrow = this.config.throws || /!$/.test(endpoint);
+    const isNoCall = options.nocall || /^!/.test(endpoint);
+    const shouldThrow = options.throws || /!$/.test(endpoint) || this.config.throws;
     const cleanEndpoint = endpoint.replace(/^!|!$/g, '');
-    
+
     // Get the parent object path for method context
     const endpointParts = cleanEndpoint.split('.');
     endpointParts.pop(); // Remove the method name
@@ -239,110 +315,130 @@ export class PluginManager {
 
     // Get plugins that implement this endpoint
     const plugins = this.getPlugins(cleanEndpoint);
-    
-    // Determine execution mode
-    const mode = options.mode || 'parallel';
-    
-    if (mode === 'sequential') {
-      // Sequential execution - respects dependency order
-      const results = [];
-      
-      for (const plugin of plugins) {
-        const method = this.getEndpointValue(plugin, cleanEndpoint);
-        
-        if (typeof method !== 'function' || isNoCall) {
-          results.push({ status: 'fulfilled', value: method });
-          continue;
+
+    // invocation mode
+    const mode = options.mode || this.config.mode;
+
+    switch (mode) {
+      case 'sequential':
+        // Sequential execution - respects dependency order
+
+        /** @type {InvocationResult[]} */
+        const results = [];
+
+        for (const plugin of plugins) {
+          const method = this.getEndpointValue(plugin, cleanEndpoint);
+
+          if (typeof method !== 'function' || isNoCall) {
+            results.push({ status: 'fulfilled', value: method });
+            continue;
+          }
+
+          try {
+            if (this.debug) {
+              console.log('Before', plugin.name, cleanEndpoint, invokeArgs);
+            }
+
+            // Get the context object for the method
+            const context = contextPath ? this.getEndpointValue(plugin, contextPath) : plugin;
+
+            // Invoke the method with proper context
+            const result = await method.apply(context, invokeArgs);
+
+            if (this.debug) {
+              console.log('After', plugin.name, cleanEndpoint, 'completed');
+            }
+            results.push({ status: 'fulfilled', value: result });
+          } catch (error) {
+            const errorMessage = `Failed to invoke plugin: ${plugin.name}!${cleanEndpoint}`;
+            console.error(errorMessage, error);
+
+            if (shouldThrow) {
+              throw error;
+            }
+
+            results.push({ status: 'rejected', reason: error });
+          }
         }
 
-        try {
+        return this._processResult(results, options);
+
+      case 'parallel':
+      default:
+
+        // Parallel execution (default behavior)
+
+        const promises = plugins.map(async plugin => {
+          const method = this.getEndpointValue(plugin, cleanEndpoint);
+
+          if (typeof method !== 'function' || isNoCall) {
+            return method;
+          }
+
           if (this.debug) {
             console.log('Before', plugin.name, cleanEndpoint, invokeArgs);
           }
-          
-          // Get the context object for the method
-          const context = contextPath ? this.getEndpointValue(plugin, contextPath) : plugin;
-          
-          // Invoke the method with proper context
-          const result = await method.apply(context, invokeArgs);
-          
-          if (this.debug) {
-            console.log('After', plugin.name, cleanEndpoint, 'completed');
-          }
-          results.push({ status: 'fulfilled', value: result });
-        } catch (error) {
-          const errorMessage = `Failed to invoke plugin: ${plugin.name}!${cleanEndpoint}`;
-          console.error(errorMessage, error);
-          
-          if (shouldThrow) {
-            throw error;
-          }
-          
-          results.push({ status: 'rejected', reason: error });
-        }
-      }
-      
-      return results;
-    } else {
-      // Parallel execution (default behavior)
-      const promises = plugins.map(async plugin => {
-        const method = this.getEndpointValue(plugin, cleanEndpoint);
-        
-        if (typeof method !== 'function' || isNoCall) {
-          return method;
-        }
 
-        try {
-          if (this.debug) {
-            console.log('Before', plugin.name, cleanEndpoint, invokeArgs);
-          }
-          
           // Get the context object for the method
           const context = contextPath ? this.getEndpointValue(plugin, contextPath) : plugin;
-          
+
           // Invoke the method with proper context
           const result = method.apply(context, invokeArgs);
-          
+
           if (this.debug) {
             console.log('After', plugin.name, cleanEndpoint, 'completed');
           }
           return result;
-        } catch (error) {
-          const errorMessage = `Failed to invoke plugin: ${plugin.name}!${cleanEndpoint}`;
-          console.error(errorMessage, error);
-          
+        });
+
+        // Set up timeout mechanism
+        const timeout = options.timeout !== undefined ? options.timeout : this.config.timeout;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, timeout);
+
+        try {
+          /** @type {InvocationResult[]} */
+          const result = await Promise.allSettled(promises);
+
+          // Handle throwing behavior before result processing
           if (shouldThrow) {
-            throw error;
-          }
-          
-          return null;
-        }
-      });
-
-      // Set up timeout mechanism
-      const timeout = options.timeout !== undefined ? options.timeout : this.config.timeout;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-      }, timeout);
-
-      try {
-        const result = await Promise.allSettled(promises.map(async (promise) => {
-          try {
-            return await promise;
-          } catch (error) {
-            if (error.name === 'AbortError') {
-              console.warn(`Plugin endpoint '${endpoint}' timed out after ${timeout}ms`);
-            } else {
-              console.error(`Error in plugin endpoint ${endpoint}:`, error);
+            const firstRejected = result.find(({ status }) => status === "rejected");
+            if (firstRejected) {
+              throw firstRejected.reason;
             }
-            throw error;
           }
-        }));
+
+          return this._processResult(result, options);
+        } finally {
+          clearTimeout(timeoutId);
+        }
+    }
+    //throw new Error(`Invalid option.result: '${options.result}'`)
+
+  }
+  /**
+   * Processes the results of the endpoint invocations
+   * @param {InvocationResult[]} result The result of the invocation
+   * @param {InvokeOptions} options 
+   * @return {any} {@see {InvocationOptions}}
+   */
+  _processResult(result, options = {}) {
+    const resultMode = options.result || this.config.result || 'full';
+    
+    switch (resultMode) {
+      case 'first':
+        const firstFulfilled = result.find(({ status }) => status === "fulfilled");
+        return firstFulfilled ? firstFulfilled.value : undefined;
+      case 'values':
+        // Return only the values from fulfilled results
+        return result
+          .filter(({ status }) => status === "fulfilled")
+          .map(({ value }) => value);
+      case 'full':
+      default:
         return result;
-      } finally {
-        clearTimeout(timeoutId);
-      }
     }
   }
 
@@ -367,13 +463,13 @@ export class PluginManager {
         const cycle = [...path, plugin.name].join(' → ');
         throw new Error(`Circular dependency detected: ${cycle}`);
       }
-      
+
       if (visited.has(plugin.name)) {
         return; // Already processed
       }
 
       visiting.add(plugin.name);
-      
+
       // Visit all dependencies first
       for (const depName of plugin.deps || []) {
         const dependency = this.pluginsByName.get(depName);
@@ -382,7 +478,7 @@ export class PluginManager {
         }
         // Missing dependencies are handled in getPlugins()
       }
-      
+
       visiting.delete(plugin.name);
       visited.add(plugin.name);
       resolved.push(plugin);
@@ -396,7 +492,7 @@ export class PluginManager {
     }
 
     this.dependencyOrderedPlugins = resolved;
-    
+
     // Debug output
     const pluginNames = resolved.map(p => p.name);
     if (this.debug) {
@@ -443,7 +539,7 @@ export class PluginManager {
     if (typeof pluginInstance.getEndpoints === 'function') {
       // Use explicit endpoint mapping
       const endpoints = pluginInstance.getEndpoints();
-      
+
       // Apply endpoint mappings to plugin object using dot notation
       for (const [endpointPath, method] of Object.entries(endpoints)) {
         this.setNestedProperty(pluginObject, endpointPath, method);
@@ -463,7 +559,7 @@ export class PluginManager {
   setNestedProperty(obj, path, value) {
     const pathParts = path.split('.');
     let current = obj;
-    
+
     for (let i = 0; i < pathParts.length - 1; i++) {
       const part = pathParts[i];
       if (!(part in current)) {
@@ -471,7 +567,7 @@ export class PluginManager {
       }
       current = current[part];
     }
-    
+
     current[pathParts[pathParts.length - 1]] = value;
   }
 

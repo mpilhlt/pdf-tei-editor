@@ -2,6 +2,7 @@
  * PluginContext - Facade providing clean interface between plugins and application
  * @import { ApplicationState } from '../app.js'
  * @import { Application } from '../modules/application.js'
+ * @import {InvokeOptions} from '../modules/plugin-manager.js'
  */ 
 
 /**
@@ -83,13 +84,17 @@ export class PluginContext {
   //
 
   /**
-   * Invoke plugin endpoints (for inter-plugin communication)
+   * Invoke an endpoint on all plugins that implement it, in dependency order.
+   * By default, throws on the first error encountered, and returns the value of the 
+   * first fulfilled promise (or synchronous function). For other options, see {InvokeOptions}
+   * 
    * @param {string} endpoint - Endpoint to invoke
-   * @param {...*} args - Arguments to pass
-   * @returns {Promise<any[]>} Results from plugin invocations
+   * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
+   * @param {InvokeOptions} [options] - Optional configuration for this invocation
+   * @returns {Promise<InvocationResult[] | any[] | any>} Result formatted depending on options.result
    */
-  async invokePlugins(endpoint, ...args) {
-    return await this.#application.invokePluginEndpoint(endpoint, ...args);
+  async invokePluginEndpoint(endpoint, args = [], options = {throws:true, result:'full'}) {
+    return await this.#application.invokePluginEndpoint(endpoint, args, options);
   }
 
   //

@@ -1154,8 +1154,10 @@ export class XMLEditor extends EventEmitter {
     // sync DOM with text content and syntax tree
     await this.sync()
 
-    // inform the listeners
-    await this.emit("editorUpdateDelayed", update)
+    // inform the listeners with a small timeout for the DOM to be ready
+    //await this.emit("editorUpdateDelayed", update)
+
+    setTimeout(async () => await this.emit("editorUpdateDelayed", update), 100)
   }
 
 

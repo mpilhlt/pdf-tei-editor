@@ -83,6 +83,11 @@ const endpoints = {
      * Function signature: (diagnostics: Diagnostics[]) => Promise<void> 
      */
     result: "validation.result"
+  },
+  filedata: {
+    /** (options:{refresh:Boolean}) => {Promise<ApplicationState>} */
+    reload: "filedata.reload",
+    saveXml: "filedata.saveXml"
   }
 }
 

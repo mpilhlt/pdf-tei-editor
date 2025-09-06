@@ -3,6 +3,7 @@
  * @import { ApplicationState } from '../app.js'
  * @import PluginManager from '../modules/plugin-manager.js'
  * @import StateManager from '../modules/state-manager.js'
+ * @import { InvokeOptions, InvocationResult } from '../modules/plugin-manager.js'
  */
 
 import { PluginContext } from './plugin-context.js';
@@ -122,7 +123,7 @@ export class Application {
    * @returns {Promise<Array>}
    */
   async installPlugins(state) {
-    const results = await this.#pluginManager.invoke(ep.install, state, { mode: 'sequential' });
+    const results = await this.#pluginManager.invoke(ep.install, state, { mode: 'sequential', result: 'full' });
     return results;
   }
 
@@ -131,7 +132,7 @@ export class Application {
    * @returns {Promise<Array>}
    */
   async start() {
-    const results = await this.#pluginManager.invoke(ep.start, [], { mode: 'sequential' });
+    const results = await this.#pluginManager.invoke(ep.start, [], { mode: 'sequential', result: 'full' });
     return results;
   }
 
@@ -141,7 +142,7 @@ export class Application {
    */
   async shutdown() {
     try {
-      const results = await this.#pluginManager.invoke(ep.shutdown, [], { mode: 'sequential' });
+      const results = await this.#pluginManager.invoke(ep.shutdown, [], { mode: 'sequential', result: 'full' });
       return results;
     } catch (error) {
       console.warn('Error during plugin shutdown:', error);
@@ -171,7 +172,7 @@ export class Application {
     if (changedKeys.length === 0) {
       this.#isUpdatingState = true;
       try {
-        const results = await this.#pluginManager.invoke(ep.state.update, currentState);
+        const results = await this.#pluginManager.invoke(ep.state.update, currentState, { result: 'full' });
         this.#checkForStateChangeErrors(results);
       } finally {
         this.#isUpdatingState = false;
@@ -186,15 +187,15 @@ export class Application {
       // Invoke all state update endpoints by convention:
       
       // 1. Legacy system: state.update with full state
-      const legacyResults = await this.#pluginManager.invoke(ep.state.update, newState);
+      const legacyResults = await this.#pluginManager.invoke(ep.state.update, newState, { result: 'full' });
       this.#checkForStateChangeErrors(legacyResults);
       
       // 2. New system: updateInternalState with full state (silent)
-      const internalResults = await this.#pluginManager.invoke(ep.state.updateInternal, newState);
+      const internalResults = await this.#pluginManager.invoke(ep.state.updateInternal, newState, { result: 'full' });
       this.#checkForStateChangeErrors(internalResults);
       
       // 3. New system: onStateUpdate with changed keys
-      const changeResults = await this.#pluginManager.invoke(ep.state.onStateUpdate, changedKeys, newState);
+      const changeResults = await this.#pluginManager.invoke(ep.state.onStateUpdate, [changedKeys, newState], { result: 'full' });
       this.#checkForStateChangeErrors(changeResults);
       
       return newState;
@@ -221,7 +222,7 @@ export class Application {
     if (changedKeys.length === 0) {
       this.#isUpdatingState = true;
       try {
-        const results = await this.#pluginManager.invoke(ep.state.update, currentState);
+        const results = await this.#pluginManager.invoke(ep.state.update, currentState, { result: 'full' });
         this.#checkForStateChangeErrors(results);
       } finally {
         this.#isUpdatingState = false;
@@ -231,7 +232,7 @@ export class Application {
     
     this.#isUpdatingState = true;
     try {
-      const results = await this.#pluginManager.invoke(ep.state.update, newState);
+      const results = await this.#pluginManager.invoke(ep.state.update, newState, { result: 'full' });
       this.#checkForStateChangeErrors(results);
       return newState;
     } finally {
@@ -273,15 +274,19 @@ export class Application {
   //
 
   /**
-   * Invoke any plugin endpoint
-   * @param {string} endpoint
-   * @param {...*} args - Arguments to pass to the endpoint functions
-   * @returns {Promise<Array>}
+   * Invoke an endpoint on all plugins that implement it, in dependency order.
+   * By default, throws on the first error encountered, and returns the value of the 
+   * first fulfilled promise (or synchronous function). For other options, see {InvokeOptions}
+   * 
+   * @param {string} endpoint - Endpoint to invoke
+   * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
+   * @param {InvokeOptions} [options] - Optional configuration for this invocation. 
+   * @returns {Promise<InvocationResult[] | any[] | any>} Result formatted depending on options.result
    */
-  async invokePluginEndpoint(endpoint, ...args) {
-    return await this.#pluginManager.invoke(endpoint, ...args);
+  async invokePluginEndpoint(endpoint, args = [], options = {throws:true, result:'first'}) {
+    const result = await this.#pluginManager.invoke(endpoint, args, options);
+    return result
   }
-
 }
 
 export default Application;

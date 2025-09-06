@@ -51,7 +51,7 @@ describe('Application', () => {
       // Should have the methods plugins need
       assert.strictEqual(typeof context.updateState, 'function');
       assert.strictEqual(typeof context.hasStateChanged, 'function');
-      assert.strictEqual(typeof context.invokePlugins, 'function');
+      assert.strictEqual(typeof context.invokePluginEndpoint, 'function');
     });
   });
 
@@ -404,7 +404,7 @@ describe('Application', () => {
         name: 'sender',
         sendMessage: async function() {
           const context = application.getPluginContext();
-          const results = await context.invokePlugins('receiver.receive', 'hello');
+          const results = await context.invokePluginEndpoint('receiver.receive', ['hello']);
           return results;
         }
       };
@@ -580,8 +580,8 @@ describe('Application', () => {
       const results = await application.installPlugins(mockState);
       
       assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0].status, 'fulfilled');
-      assert.strictEqual(results[0].value, null); // Error returns null
+      assert.strictEqual(results[0].status, 'rejected');
+      assert(results[0].reason instanceof Error); // Error preserved in reason
     });
 
     it('should handle plugin shutdown errors gracefully', async () => {

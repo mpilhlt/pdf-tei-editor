@@ -10,6 +10,7 @@
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  */
 
+import { endpoints as ep } from '../app.js'
 import { Plugin } from '../modules/plugin-base.js'
 import { logger, client, dialog, xmlEditor } from '../app.js'
 import { createHashLookupIndex } from '../modules/file-data-utils.js'
@@ -32,7 +33,6 @@ class FiledataPlugin extends Plugin {
 
   async install(state) {
     await super.install(state);
-    
     logger.debug(`Installing plugin "${this.name}"`);
 
     // Initialize empty hash lookup index to prevent errors during plugin initialization
@@ -41,8 +41,8 @@ class FiledataPlugin extends Plugin {
 
     // Create status widget for save operations
     this.savingStatusWidget = PanelUtils.createText({
-      text: 'Saving...',
-      icon: 'upload',
+      text: '',
+      icon: 'floppy',
       variant: 'primary',
       name: 'savingStatus'
     });
@@ -58,7 +58,6 @@ class FiledataPlugin extends Plugin {
     logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
     
     let data = await client.getFileList(null, options.refresh);
-    
     if (!data || data.length === 0) {
       dialog.error("No files found");
       data = []; // Ensure data is an empty array instead of null/undefined
@@ -75,29 +74,27 @@ class FiledataPlugin extends Plugin {
     }
     
     // Store fileData in state and propagate it
-    return await this.dispatchStateChange({fileData: data});
+    const newState = await this.dispatchStateChange({fileData: data});
+    return newState
   }
 
   /**
    * Saves the current XML content to a file
-   * @param {string} filePath The path to the XML file on the server
+   * @param {string} fileHash The hash identifying the XML file on the server
    * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
    * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
    * @throws {Error}
    */
-  async saveXml(filePath, saveAsNewVersion = false) {
+  async saveXml(fileHash, saveAsNewVersion = false) {
     logger.info(`Saving XML${saveAsNewVersion ? " as new version" : ""}...`);
     if (!xmlEditor.getXmlTree()) {
-      throw new Error("No XML valid document in the editor");
+      throw new Error("Cannot save: No XML valid document in the editor");
     }
     try {
       // Show saving status
-      if (this.savingStatusWidget && !this.savingStatusWidget.isConnected) {
-        if (ui.xmlEditor.statusbar) {
-          ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
-        }
-      }
-      return await client.saveXml(xmlEditor.getXML(), filePath, saveAsNewVersion);
+      ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
+      const xmlContent = xmlEditor.getXML()
+      return await client.saveXml(xmlContent, fileHash, saveAsNewVersion);
     } catch (e) {
       console.error("Error while saving XML:", e.message);
       dialog.error(`Could not save XML: ${e.message}`);
@@ -105,9 +102,7 @@ class FiledataPlugin extends Plugin {
     } finally {
       // clear status message after 1 second 
       setTimeout(() => {
-        if (this.savingStatusWidget && this.savingStatusWidget.isConnected) {
-          ui.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
-        }
+        ui.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
       }, 1000);
     }
   }
@@ -116,8 +111,8 @@ class FiledataPlugin extends Plugin {
   getEndpoints() {
     return {
       ...super.getEndpoints(),
-      'filedata.reload': this.reload.bind(this),
-      'filedata.saveXml': this.saveXml.bind(this)
+      [ep.filedata.reload]: this.reload.bind(this),
+      [ep.filedata.saveXml]: this.saveXml.bind(this)
     };
   }
 }
