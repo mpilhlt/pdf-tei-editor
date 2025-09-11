@@ -62,6 +62,25 @@ npm run start:prod           # Start production waitress server
 ./bin/start-prod 127.0.0.1 3001
 ```
 
+### Docker Deployment
+
+For containerized deployments, use the provided Docker setup:
+
+```bash
+# Deploy with Docker
+./bin/start-docker-image.sh your-domain.com 8001
+
+# Enable nginx configuration
+sudo ln -sf /etc/nginx/sites-available/pdf-tei-editor-your-domain.com /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+
+# Add SSL certificate
+sudo certbot --nginx -d your-domain.com
+```
+
+The Docker container runs the waitress server on the specified port while nginx on the host handles SSL termination and reverse proxying. Application data persists in Docker volumes across container restarts.
+
 ### Security considerations
 - **Application mode**: For production deployments, set `"application.mode": "production"` in `config/config.json`. This disables access to development files (`/src/` and `/node_modules/`) that should not be exposed in production.
 - File uploads are checked using the libmagic package to prevent malicious file content. This package depends on the native libmagic library, which is available on Linux via package manager. On Intel MacOS and Windows, use `uv add python-magic-bin`, on Apple Silicon Macs, use Homebrew and `brew install libmagic`. If the bindings are not available, the backend will only check for the correct file extension.
