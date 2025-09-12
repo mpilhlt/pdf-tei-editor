@@ -1,6 +1,6 @@
 # Installation
 
-## Local test-drive or development
+## Local development
 
 ```shell
 # requires uv and node/npm
