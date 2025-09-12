@@ -18,6 +18,7 @@ npm start # this starts the development server on port 3001
 This is a recipe to install the application on a Ubuntu server, with a waitress WSGI server and a nginx https reverse proxy for https.
 
 ## install uv
+
 ```shell
 sudo apt update
 apt-get install pipx
@@ -25,6 +26,7 @@ pipx install uv
 ```
 
 ## get the source
+
 ```shell
 git clone https://github.com/mpilhlt/pdf-tei-editor.git
 cd pdf-tei-editor/
@@ -32,12 +34,14 @@ uv sync
 ```
 
 ## install certbot for a SSL certificate
+
 ```shell
 sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d pdf-tei-editor.example.com
 ```
 
 ## install and configure nginx
+
 ```shell
 sudo apt install nginx
 sudo systemctl status nginx
@@ -83,6 +87,7 @@ server {
 ```
 
 ## check ngix configurea and start server
+
 ```shell
 sudo nginx -t
 sudo systemctl reload nginx
@@ -95,9 +100,9 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 source ~/.bashrc
 nvm install lts/jod
 npm install
-``` 
+```
 
-# Create a systemd service file:
+## Create a systemd service file
 
 ```shell
 sudo nano /etc/systemd/system/pdf-tei-editor.service
@@ -123,6 +128,7 @@ WantedBy=multi-user.target
 ```
 
 Then:
+
 ```shell
 # Reload systemd
 sudo systemctl daemon-reload
@@ -138,7 +144,7 @@ sudo systemctl status pdf-tei-editor
 sudo journalctl -u pdf-tei-editor -f
 ```
 
-After updating the codebase, you need to run 
+After updating the codebase, you need to run
 
 ```shell
 sudo systemctl restart pdf-tei-editor

@@ -7,6 +7,7 @@ This guide covers the application architecture, development workflow, and best p
 The PDF-TEI Editor uses a **plugin-based architecture** with immutable state management and reactive updates.
 
 ### Backend (Python/Flask)
+
 - **Main server**: `server/flask_app.py` - Flask application with dynamic blueprint registration
 - **API routes**: `server/api/` - Each file defines a blueprint (auth.py, files.py, etc.)
 - **Utilities**: `server/lib/` - Server-side utilities and helpers
@@ -14,6 +15,7 @@ The PDF-TEI Editor uses a **plugin-based architecture** with immutable state man
 - **Configuration**: `config/` and `db/` directories for app settings and user data
 
 ### Frontend (JavaScript/ES Modules)
+
 - **Plugin architecture**: All functionality implemented as plugins in `app/src/plugins/`
 - **Core files**:
   - `app/src/app.js` - Main application bootstrap and plugin registration
@@ -23,6 +25,7 @@ The PDF-TEI Editor uses a **plugin-based architecture** with immutable state man
 - **Build output**: `app/web/` - Compiled/bundled frontend assets
 
 ### Key Technologies
+
 - **Backend**: Flask, Python 3.13+, uv for dependency management
 - **Frontend**: ES6 modules, CodeMirror 6, PDF.js, Shoelace UI components
 - **Build**: Rollup for bundling, importmap for development
@@ -33,6 +36,7 @@ The PDF-TEI Editor uses a **plugin-based architecture** with immutable state man
 The application uses a sophisticated dual-architecture plugin system supporting both legacy and modern patterns.
 
 ### Architecture Overview
+
 - **Central Management**: `PluginManager` handles registration, dependency resolution, and endpoint invocation
 - **State Orchestration**: `Application` class coordinates between plugins and state management
 - **Immutable State**: All state updates create new objects, maintaining history for debugging
@@ -41,6 +45,7 @@ The application uses a sophisticated dual-architecture plugin system supporting 
 ### Plugin Types
 
 **Legacy Plugin Objects** (being migrated):
+
 ```javascript
 const plugin = {
   name: "my-plugin",
@@ -53,6 +58,7 @@ const plugin = {
 ```
 
 **New Plugin Classes** (modern approach):
+
 ```javascript
 class MyPlugin extends Plugin {
   constructor(context) {
@@ -66,19 +72,23 @@ class MyPlugin extends Plugin {
 ```
 
 ### Plugin Endpoints System
+
 Plugins expose functionality through endpoints defined in `endpoints.js`:
 
 **Lifecycle Endpoints:**
+
 - `install` - Plugin initialization and DOM setup  
 - `start` - Application startup after all plugins installed
 - `shutdown` - Cleanup on application exit
 
 **State Management Endpoints:**
+
 - `state.update` - Legacy: React to state changes (full state)
 - `updateInternalState` - New: Silent state sync for Plugin classes
 - `onStateUpdate` - New: Reactive notifications with changed keys
 
 **Custom Endpoints:**
+
 - `validation.validate` - XML/TEI validation
 - `log.debug`, `log.info`, etc. - Logging system
 - Plugin-specific endpoints via `getEndpoints()` method
@@ -88,6 +98,7 @@ Plugins expose functionality through endpoints defined in `endpoints.js`:
 The application uses **immutable state management** with functional programming principles:
 
 ### Core Concepts
+
 - **Immutable Updates**: Each state change creates a new state object, preserving the previous state
 - **State History**: The system maintains a history of the last 10 states for debugging and potential undo functionality
 - **Change Detection**: Plugins use `hasStateChanged()` instead of manual caching to detect state changes
@@ -96,6 +107,7 @@ The application uses **immutable state management** with functional programming 
 ### State Management Integration
 
 **Legacy Plugins:**
+
 ```javascript
 import { updateState, hasStateChanged } from '../app.js';
 
@@ -108,6 +120,7 @@ async function someAction(currentState) {
 ```
 
 **New Plugin Classes:**
+
 ```javascript
 class MyPlugin extends Plugin {
   async onStateUpdate(changedKeys) {
@@ -127,11 +140,13 @@ class MyPlugin extends Plugin {
 The application uses a typed UI hierarchy system with specific naming and documentation conventions.
 
 ### UI Part Naming Convention
+
 - Each UI part typedef follows camelCase naming ending with "Part" (e.g., `toolbarPart`, `dialogPart`)
 - UI parts represent singletons in the UI using lowercase naming
 - Parts are defined in the plugin that uses/creates them
 
 ### UI Part Documentation
+
 UI parts use the `UIPart<T, N>` generic type combining DOM element type `T` with navigation properties type `N`:
 
 ```javascript
@@ -156,12 +171,14 @@ ui.dialog.message.innerHTML = text  // Access child element
 The application uses a modern template registration system supporting both development and production modes.
 
 ### Overview
+
 - **Development Mode** (`?dev` parameter): Templates loaded dynamically from files for fast iteration
 - **Production Mode**: Templates bundled into `templates.json` for optimal performance
 - **Synchronous Creation**: Templates pre-loaded during registration, creation is fast and synchronous
 - **Parameter Substitution**: Support for `${param}` syntax in templates
 
 ### Basic Usage
+
 ```javascript
 // Register templates at module level
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js';
@@ -185,12 +202,14 @@ async function install(state) {
 ## Development Workflow
 
 ### Frontend Development
+
 1. **Live Development**: Edit files in `app/src/`, test with `?dev` URL parameter
 2. **No Rebuild Required**: The importmap loads source files directly in development mode
 3. **Auto-reload**: Flask development server detects backend changes automatically
 4. **Building**: Only needed for production, handled by pre-push git hooks
 
 ### Backend Development
+
 1. **Auto-restart**: Flask server automatically restarts on backend changes
 2. **No Manual Restart**: Never manually restart the development server
 3. **Logging**: Development server uses colorized logging for better visibility
@@ -212,6 +231,7 @@ npm test
 ```
 
 ### Important File Paths
+
 - Entry point: `app/src/app.js`
 - Plugin registration: Plugins array in `app/src/app.js:71-76`
 - Server startup: `bin/server`
@@ -220,6 +240,7 @@ npm test
 ## Plugin Development Guidelines
 
 ### Creating New Plugin Classes
+
 ```javascript
 import { Plugin } from '../modules/plugin-base.js';
 import { registerTemplate, createSingleFromTemplate } from '../ui.js';
@@ -274,6 +295,7 @@ export default MyPlugin;
 ```
 
 ### Plugin Registration in app.js
+
 ```javascript
 // Import Plugin class
 import MyPlugin from './plugins/my-plugin.js';
@@ -292,16 +314,19 @@ export const myPlugin = MyPlugin.getInstance();
 ## Best Practices and Code Conventions
 
 ### Frontend Development
+
 - **Shoelace Component Registration**: When using new Shoelace components, ensure they are properly imported and exported in `app/src/ui.js`
 - **Debug Logging**: Use `console.log("DEBUG ...")` for temporary debug statements, prefixed with "DEBUG" for easy removal
 - **Template Registration**: Import all UI functions from `ui.js` for consistency
 
 ### Python Development
+
 - Always prefer `pathlib Path().as_posix()` over manual path concatenation
 - **Never restart** the Flask server - it auto-restarts on changes
 - Call `updateUi()` when adding new named elements to DOM
 
 ### State Management Best Practices
+
 1. **Never mutate state directly** - always use `dispatchStateChange()`
 2. **Use `onStateUpdate()` for reactions** - more efficient than legacy `state.update`
 3. **Access current state via `this.state`** - read-only property
@@ -311,6 +336,7 @@ export const myPlugin = MyPlugin.getInstance();
 ## Testing and Debugging
 
 ### Browser Automation
+
 The application can be automated using MCP browser tools for testing:
 
 - **Login credentials**: Use "user" / "user" for development testing
@@ -318,7 +344,9 @@ The application can be automated using MCP browser tools for testing:
 - **Shoelace components**: Use component-specific selectors, not standard HTML selectors
 
 ### Console Monitoring
+
 The application generates detailed debug logs visible in browser dev tools, including:
+
 - XML editor navigation issues
 - TEI validation performance and errors
 - Application lifecycle events

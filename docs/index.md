@@ -13,23 +13,25 @@ For detailed information about the project background and research context, see 
 ## Table of Contents
 
 ### Getting Started
+
 - [Authentication](authentication.md)
-- [Interface Overview](interface-overview.md) 
+- [Interface Overview](interface-overview.md)
 - [Loading Documents](loading-documents.md)
 
 ### Core Workflows  
+
 - [Data Extraction Process](extraction-workflow.md)
 - [Version Management](version-management.md)
 - [Document Editing](editing-workflow.md)
 - [Validation and Quality Control](validation-workflow.md)
 
 ### Advanced Features
+
 - [Document Comparison and Merging](comparison-workflow.md)
-- [Access Control and Permissions](access-control.md) 
+- [Access Control and Permissions](access-control.md)
 - [Collection Management](collection-management.md)
 - [File Synchronization](sync-workflow.md)
 - [Document Revisions](revision-management.md)
-
 
 ## Quick Start
 
@@ -57,5 +59,3 @@ For detailed information about the project background and research context, see 
 - Collaborative annotation of legal and humanities literature
 - Training data preparation for machine learning models
 - Quality assurance for large-scale digitization projects
-
-

@@ -11,7 +11,8 @@ This guide covers installation and setup for development and production deployme
 docker run -p 8000:8000 -e APP_ADMIN_PASSWORD=admin123 cboulanger/pdf-tei-editor:latest
 ```
 
-Then visit: **http://localhost:8000**
+Then visit: **<http://localhost:8000>**
+
 - Login: `admin` / `admin123`
 
 **📖 For detailed Docker setup and configuration options:** [**→ Docker Testdrive Guide**](testdrive-docker.md)
@@ -97,6 +98,7 @@ sudo ./docker/setup-demo.sh
 ```
 
 This script will:
+
 - Configure nginx with SSL certificates via Let's Encrypt
 - Set up persistent data directories per domain in `/opt/pdf-tei-editor-data/$FQDN/`
 - Create admin user with specified password
@@ -117,7 +119,7 @@ mkdir -p ~/.config/husky/ && echo "source .venv/bin/activate" > ~/.config/husky/
 To extract references from PDF, the [LLamore library](https://github.com/mpilhlt/llamore) is used. For LLamore to work, you need a Gemini API Key:
 
 1. Get a key at <https://aistudio.google.com>
-2. Rename `.env.dist` to `.env` 
+2. Rename `.env.dist` to `.env`
 3. Add your key to the `.env` file
 
 ## Security Considerations

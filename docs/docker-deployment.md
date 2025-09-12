@@ -11,7 +11,8 @@ The fastest way to try PDF TEI Editor:
 docker run -p 8000:8000 -e APP_ADMIN_PASSWORD=admin123 cboulanger/pdf-tei-editor:latest
 ```
 
-Then visit: **http://localhost:8000**
+Then visit: **<http://localhost:8000>**
+
 - Login: `admin` / `admin123`
 
 For detailed configuration options, see the [Docker Testdrive Guide](testdrive-docker.md).
@@ -19,7 +20,7 @@ For detailed configuration options, see the [Docker Testdrive Guide](testdrive-d
 ## Docker Image
 
 The official Docker images are available at:
-**https://hub.docker.com/r/cboulanger/pdf-tei-editor**
+**<https://hub.docker.com/r/cboulanger/pdf-tei-editor>**
 
 ### Available Tags
 
@@ -34,18 +35,21 @@ The official Docker images are available at:
 Configure the container using environment variables:
 
 ### User Authentication
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `APP_ADMIN_PASSWORD` | Password for admin user (full access) | `admin` |
 | `APP_DEMO_PASSWORD` | Password for demo user (limited access) | Not created if not set |
 
 ### AI Services (Optional)
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `GEMINI_API_KEY` | Google Gemini API key for LLamore extraction | Disabled |
 | `GROBID_SERVER_URL` | Grobid server URL for bibliographic parsing | `http://localhost:8070` |
 
 ### Server Configuration
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Internal server port | `8000` |
@@ -95,6 +99,7 @@ volumes:
 ```
 
 Run with:
+
 ```bash
 docker-compose up -d
 ```
@@ -115,6 +120,7 @@ docker run -p 8000:8000 \
 ```
 
 ### Data Directories
+
 - **`/app/data`**: Uploaded PDFs, extracted TEI files, processed documents
 - **`/app/config`**: Application configuration files, prompts, settings
 - **`/app/db`**: User accounts, sessions, application metadata
@@ -168,6 +174,7 @@ sudo ./docker/setup-demo.sh
 ```
 
 This script will:
+
 - Configure nginx with SSL certificates via Let's Encrypt
 - Set up persistent data directories per domain in `/opt/pdf-tei-editor-data/$FQDN/`
 - Create admin user with specified password
@@ -175,6 +182,7 @@ This script will:
 - Deploy the application with production settings
 
 **Data Persistence:**
+
 - Initial configuration: `/opt/pdf-tei-editor-data/$FQDN/config/` - Production settings
 - Application configuration database: `/opt/pdf-tei-editor-data/$FQDN/db/` - Live configuration values, user accounts and other metadata
 - File Data: `/opt/pdf-tei-editor-data/$FQDN/data/` - Uploaded PDFs and TEI files
@@ -193,6 +201,7 @@ sudo ./docker/setup-demo.sh
 ```
 
 The nightly reset (2 AM daily):
+
 - Preserves user accounts, passwords, configuration, API keys
 - Resets file data (uploaded PDFs, processed TEI files) by restoring the sample data from repository
 - Updates application code from latest GitHub version
@@ -218,11 +227,13 @@ The build script supports both Docker and Podman with auto-detection and include
 After starting the container:
 
 ### Admin User
+
 - **Username**: `admin`
 - **Password**: Value of `APP_ADMIN_PASSWORD` or `admin` if not set
 - **Permissions**: Full access to all features, user management, configuration
 
 ### Demo User (Optional)
+
 - **Username**: `demo`
 - **Password**: Value of `APP_DEMO_PASSWORD`
 - **Permissions**: Standard user access, cannot manage other users
@@ -239,16 +250,19 @@ After starting the container:
 ## Troubleshooting
 
 ### Container Won't Start
+
 - Check if port 8000 is available: `lsof -i :8000`
 - Verify environment variables are set correctly
 - Check container logs: `docker logs <container_name>`
 
 ### Cannot Login
+
 - Verify `APP_ADMIN_PASSWORD` was set when starting container
 - Try restarting container with a new password
 - Check logs for user creation messages
 
 ### AI Features Not Working
+
 - Verify `GEMINI_API_KEY` is valid and has quota
 - Check if `GROBID_SERVER_URL` is accessible
 - Look for API error messages in container logs
