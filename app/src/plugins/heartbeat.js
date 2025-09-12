@@ -122,7 +122,7 @@ function start(state, timeoutSeconds = 60) {
       if (currentState.offline) {
         logger.info("Connection restored.");
         notify("Connection restored.");
-        await updateState(currentState, { offline: false, editorReadOnly: editorReadOnlyState });
+        await updateState({ offline: false, editorReadOnly: editorReadOnlyState });
       }
     } catch (error) {
       console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
@@ -139,12 +139,12 @@ function start(state, timeoutSeconds = 60) {
         logger.warn("Connection lost.");
         notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
         editorReadOnlyState = currentState.editorReadOnly
-        await updateState(currentState, { offline: true, editorReadOnly: true });
+        await updateState({ offline: true, editorReadOnly: true });
       } else if (error.statusCode === 409 || error.statusCode === 423) {
         // Lock was lost or taken by another user
         logger.critical("Lock lost for file: " + filePath);
         dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-        await updateState(currentState, { editorReadOnly: true });
+        await updateState({ editorReadOnly: true });
       } else if (error.statusCode === 504) {
         logger.warn("Temporary connection failure, will try again...")
       } else if (error.statusCode === 403) {
@@ -155,7 +155,7 @@ function start(state, timeoutSeconds = 60) {
         if (currentState.webdavEnabled) {
           logger.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
           dialog.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
-          await updateState(currentState, { webdavEnabled: false });
+          await updateState({ webdavEnabled: false });
         }
       }
     }

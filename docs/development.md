@@ -44,20 +44,40 @@ The application uses a sophisticated dual-architecture plugin system supporting 
 
 ### Plugin Types
 
-**Legacy Plugin Objects** (being migrated):
+**Plugin Objects**:
+
+The object-based style is compatible with the original implementation of the plugin system. It is less involved, but requires manual management of state updates.
 
 ```javascript
+import { app } from '../app.js';
+
 const plugin = {
   name: "my-plugin",
   deps: ['dependency1'],
-  install: async (state) => { /* setup UI */ },
-  state: {
-    update: async (state) => { /* react to changes */ }
-  }
+  install,
+  onStateUpdate
 };
+
+function install(initialState) {
+  // ... setup UI
+}
+
+let currentState
+async function onStateUpdate(changes, state) {
+  currentState = state
+  // ... react to state changes
+}
+
+
+// Use app API for state changes
+async function handleEvent() {
+  await app.updateState({ someProperty: 'new value' });
+}
 ```
 
-**New Plugin Classes** (modern approach):
+**Plugin Classes**:
+
+Plugin classes offer automatic state management (it can be accesses as the `state` property of the plugin).
 
 ```javascript
 class MyPlugin extends Plugin {
@@ -65,8 +85,8 @@ class MyPlugin extends Plugin {
     super(context, { name: 'my-plugin', deps: ['dependency1'] });
   }
   
-  async install(state) { /* setup UI */ }
-  async onStateUpdate(changedKeys) { /* reactive updates */ }
+  async install(initialState) { /* setup UI */ }
+  async onStateUpdate(changedKeys, fullState) { /* reactive updates */ }
   async dispatchStateChange(changes) { /* trigger state updates */ }
 }
 ```
@@ -83,9 +103,8 @@ Plugins expose functionality through endpoints defined in `endpoints.js`:
 
 **State Management Endpoints:**
 
-- `state.update` - Legacy: React to state changes (full state)
-- `updateInternalState` - New: Silent state sync for Plugin classes
-- `onStateUpdate` - New: Reactive notifications with changed keys
+- `updateInternalState` - Plugin Classes: Silent state sync for Plugin classes
+- `onStateUpdate` - Plugin Classes: Reactive notifications with changed keys
 
 **Custom Endpoints:**
 
@@ -106,20 +125,20 @@ The application uses **immutable state management** with functional programming 
 
 ### State Management Integration
 
-**Legacy Plugins:**
+**Plugin Objects:**
 
 ```javascript
-import { updateState, hasStateChanged } from '../app.js';
+import { app, hasStateChanged } from '../app.js';
 
 async function someAction(currentState) {
   if (hasStateChanged(currentState, 'user')) {
     // React to user changes
   }
-  await updateState(currentState, { pdf: 'new.pdf' });
+  await app.updateState({ pdf: 'new.pdf' });
 }
 ```
 
-**New Plugin Classes:**
+**Plugin Classes:**
 
 ```javascript
 class MyPlugin extends Plugin {
@@ -303,7 +322,7 @@ import MyPlugin from './plugins/my-plugin.js';
 // Add to plugins array
 const plugins = [
   MyPlugin,  // Plugin class - will be instantiated automatically
-  legacyPluginObject,  // Legacy object - used as-is
+  pluginObject,  // Plugin object - used as-is
   // ...
 ];
 
@@ -327,30 +346,12 @@ export const myPlugin = MyPlugin.getInstance();
 
 ### State Management Best Practices
 
-1. **Never mutate state directly** - always use `dispatchStateChange()`
-2. **Use `onStateUpdate()` for reactions** - more efficient than legacy `state.update`
+1. **Never mutate state directly** - always use `dispatchStateChange()` (Plugin Classes) or `app.updateState()` (Plugin Objects)
+2. **Use `onStateUpdate()` for reactions** 
 3. **Access current state via `this.state`** - read-only property
 4. **Store plugin-specific state in `state.ext`** - avoids naming conflicts
-5. **Never call updateState() in state.update endpoints** - creates infinite loops
+5. **Never call updateState() in state update endpoints** - this will raise an exception
 
-## Testing and Debugging
-
-### Browser Automation
-
-The application can be automated using MCP browser tools for testing:
-
-- **Login credentials**: Use "user" / "user" for development testing
-- **Application URL**: `http://localhost:3001/index.html?dev` for development mode
-- **Shoelace components**: Use component-specific selectors, not standard HTML selectors
-
-### Console Monitoring
-
-The application generates detailed debug logs visible in browser dev tools, including:
-
-- XML editor navigation issues
-- TEI validation performance and errors
-- Application lifecycle events
-- Heartbeat system for server communication
 
 ## Related Documentation
 

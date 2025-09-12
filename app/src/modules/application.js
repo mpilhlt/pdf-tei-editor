@@ -156,14 +156,19 @@ export class Application {
 
   /**
    * Update application state and notify plugins
-   * @param {ApplicationState} currentState - Current state
-   * @param {Partial<ApplicationState>} changes - Changes to apply
+   * @param {Partial<ApplicationState>} changes - Changes to apply  
    * @returns {Promise<ApplicationState>} New state after plugin notification
    */
-  async updateState(currentState, changes = {}) {
+  async updateState(changes = {}) {
     // Prevent nested state changes during plugin notification
     if (this.#isUpdatingState) {
       throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+    }
+
+    // Use current state as base for changes
+    const currentState = this.#currentState;
+    if (!currentState) {
+      throw new Error('Application state not initialized. Call initializeState() first.');
     }
 
     const { newState, changedKeys } = this.#stateManager.applyStateChanges(currentState, changes);
@@ -198,6 +203,9 @@ export class Application {
       const changeResults = await this.#pluginManager.invoke(ep.state.onStateUpdate, [changedKeys, newState], { result: 'full' });
       this.#checkForStateChangeErrors(changeResults);
       
+      // Update current state after successful plugin notification
+      this.#currentState = newState;
+      
       return newState;
     } finally {
       // Always release the lock
@@ -207,14 +215,19 @@ export class Application {
 
   /**
    * Update extension properties in state and notify plugins
-   * @param {ApplicationState} currentState - Current state
    * @param {Object} extChanges - Extension properties to update
    * @returns {Promise<ApplicationState>} New state after plugin notification
    */
-  async updateStateExt(currentState, extChanges = {}) {
+  async updateStateExt(extChanges = {}) {
     // Prevent nested state changes during plugin notification
     if (this.#isUpdatingState) {
       throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+    }
+
+    // Use current state as base for changes
+    const currentState = this.#currentState;
+    if (!currentState) {
+      throw new Error('Application state not initialized. Call initializeState() first.');
     }
 
     const { newState, changedKeys } = this.#stateManager.applyExtensionChanges(currentState, extChanges);
@@ -234,6 +247,10 @@ export class Application {
     try {
       const results = await this.#pluginManager.invoke(ep.state.update, newState, { result: 'full' });
       this.#checkForStateChangeErrors(results);
+      
+      // Update current state after successful plugin notification
+      this.#currentState = newState;
+      
       return newState;
     } finally {
       this.#isUpdatingState = false;

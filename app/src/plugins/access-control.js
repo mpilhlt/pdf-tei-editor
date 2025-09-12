@@ -12,7 +12,7 @@
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  */
 
-import { updateState, services, authentication, fileselection } from '../app.js'
+import { app, services, authentication, fileselection } from '../app.js'
 import { FiledataPlugin } from '../plugins.js'
 import ui from '../ui.js'
 import { PanelUtils } from '../modules/panels/index.js'
@@ -158,7 +158,10 @@ async function update(state) {
     isUpdatingState = true
     setTimeout(async () => {
       try {
-        await updateState(state, { editorReadOnly: shouldBeReadOnly })
+        // Only update if the state still needs changing (avoid race conditions)
+        if (pluginState && pluginState.editorReadOnly !== shouldBeReadOnly) {
+          await app.updateState({ editorReadOnly: shouldBeReadOnly })
+        }
       } finally {
         isUpdatingState = false
       }

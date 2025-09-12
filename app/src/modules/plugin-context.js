@@ -23,22 +23,26 @@ export class PluginContext {
 
   /**
    * Update application state
-   * @param {ApplicationState} currentState - Current state
    * @param {Partial<ApplicationState>} changes - Changes to apply
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async updateState(currentState, changes) {
-    return await this.#application.updateState(currentState, changes);
+  async updateState(changes, secondArg) {
+    if (secondArg !== undefined) {
+      throw new Error('PluginContext.updateState() now takes only one parameter (changes). Remove the currentState parameter.');
+    }
+    return await this.#application.updateState(changes);
   }
 
   /**
    * Update extension properties in state
-   * @param {ApplicationState} currentState - Current state
    * @param {Object} extChanges - Extension properties to update
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async updateStateExt(currentState, extChanges) {
-    return await this.#application.updateStateExt(currentState, extChanges);
+  async updateStateExt(extChanges, secondArg) {
+    if (secondArg !== undefined) {
+      throw new Error('PluginContext.updateStateExt() now takes only one parameter (extChanges). Remove the currentState parameter.');
+    }
+    return await this.#application.updateStateExt(extChanges);
   }
 
   /**

@@ -134,7 +134,7 @@ async function start() {
       const xpath = UrlHash.get("xpath") || ui.floatingPanel.xpath.value
 
       // update the UI
-      const newState = await app.updateState(currentState, { xpath })
+      const newState = await app.updateState({ xpath })
 
       // synchronize in the background
       sync.syncFiles(currentState).then(async (summary) => {

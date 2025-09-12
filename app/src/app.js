@@ -102,7 +102,7 @@ stateManager.preserveState(true, [...persistedStateVars, 'sessionId'])
 await app.installPlugins(state)
 
 // Now notify plugins with the final initial state
-await app.updateState(state, {})  
+await app.updateState({})  
 
 // invoke the "start" endpoint
 await app.start()
@@ -113,13 +113,21 @@ await app.start()
 
 /**
  * Legacy updateState function for backward compatibility with old plugins
- * @param {ApplicationState} currentState - The current state
- * @param {Partial<ApplicationState>} changes - Changes to apply
+ * Supports both old API: updateState(currentState, changes) and new API: updateState(changes)
+ * @param {ApplicationState|Partial<ApplicationState>} currentStateOrChanges - The current state (old API) or changes (new API)
+ * @param {Partial<ApplicationState>} [changes] - Changes to apply (old API only)
  * @returns {Promise<ApplicationState>} New state after changes applied
  * @deprecated Use app.updateState() instead
  */
-export async function updateState(currentState, changes = {}) {
-  return await app.updateState(currentState, changes);
+export async function updateState(currentStateOrChanges, changes) {
+  // New API: updateState(changes)
+  if (changes === undefined) {
+    return await app.updateState(currentStateOrChanges);
+  }
+  
+  // Old API: updateState(currentState, changes) - ignore currentState, use changes only
+  console.warn('updateState: Using deprecated 2-parameter API. The currentState parameter is ignored. Use updateState(changes) instead.');
+  return await app.updateState(changes);
 }
 
 /**

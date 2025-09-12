@@ -418,7 +418,7 @@ async function saveIfDirty() {
       logger.debug(`Saved file with hash ${result.hash}`)
       if (result.hash && result.hash !== fileHash) {
         // Update state to use new hash
-        await app.updateState(currentState, { xml: result.hash })
+        await app.updateState({ xml: result.hash })
       }
     }
     xmlEditor.markAsClean()

@@ -248,7 +248,7 @@ async function load(state, { xml, pdf }) {
 
   // PDF 
   if (pdf) {
-    await app.updateState(state, { pdf: null, xml: null, diff: null })
+    await app.updateState({ pdf: null, xml: null, diff: null })
     logger.info("Loading PDF: " + pdf)
     // Convert document identifier to static file URL
     const pdfUrl = `/api/files/${pdf}`
@@ -292,7 +292,7 @@ async function load(state, { xml, pdf }) {
     }
 
     await removeMergeView(state)
-    await app.updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked })
+    await app.updateState({ xml: null, diff: null, editorReadOnly: file_is_locked })
     logger.info("Loading XML: " + xml)
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`
@@ -391,7 +391,7 @@ async function showMergeView(state, diff) {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`
     await xmlEditor.showMergeView(diffUrl)
-    await app.updateState(state, { diff: diff })
+    await app.updateState({ diff: diff })
     // turn validation off as it creates too much visual noise
     validation.configure({ mode: "off" })
   } finally {
@@ -408,7 +408,7 @@ async function removeMergeView(state) {
   // re-enable validation
   validation.configure({ mode: "auto" })
   UrlHash.remove("diff")
-  await app.updateState(state, { diff: null })
+  await app.updateState({ diff: null })
 }
 
 /**
@@ -432,7 +432,7 @@ async function deleteCurrentVersion(state) {
     await client.deleteFiles(filePathsToDelete)
     try {
       // Clear current XML state after successful deletion
-      await app.updateState(state, { xml: null })
+      await app.updateState({ xml: null })
       // update the file data
       await fileselection.reload(state)
       // load the gold version
@@ -495,7 +495,7 @@ async function deleteAllVersions(state) {
   await client.deleteFiles(filePathsToDelete)
   try {
     // Clear current XML state after successful deletion
-    await app.updateState(state, { xml: null })
+    await app.updateState({ xml: null })
     // update the file data
     await fileselection.reload(state)
     
@@ -569,7 +569,7 @@ async function deleteAll(state) {
     // update the file data
     await fileselection.reload(state, {refresh:true})
     // remove xml and pdf
-    await app.updateState(state, {xml: null, pdf: null})
+    await app.updateState({xml: null, pdf: null})
   }
 }
 

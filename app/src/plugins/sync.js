@@ -164,14 +164,14 @@ async function onClickSyncBtn(state) {
   const originalReadOnly = state.editorReadOnly
 
   // Set editor to read-only during sync to prevent conflicts
-  await updateState(state, { editorReadOnly: true })
+  await updateState({ editorReadOnly: true })
   try {
     summary = await syncFiles(state)
   } catch (e) {
     throw e
   } finally {
     // Restore original read-only state
-    await updateState(state, { editorReadOnly: originalReadOnly })
+    await updateState({ editorReadOnly: originalReadOnly })
   }
   // manually pressing the sync button should reload file data even if there were no changes
   await fileselection.reload(state, {refresh:true})

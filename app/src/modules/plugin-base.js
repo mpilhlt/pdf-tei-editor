@@ -148,7 +148,7 @@ export class Plugin {
       stateToUse = currentAppState;
     }
     
-    const newState = await this.context.updateState(stateToUse, changes);
+    const newState = await this.context.updateState(changes);
     this.#state = newState;
     return newState;
   }

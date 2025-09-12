@@ -437,7 +437,7 @@ async function onVariantChange(state) {
   const variant = /** @type {string|null} */ (ui.fileDrawer?.variantSelect?.value);
   
   // Update application state with new variant - clear XML to force reload
-  await updateState(state, { variant, xml: null });
+  await updateState({ variant, xml: null });
 }
 
 /**
@@ -506,8 +506,7 @@ async function onFileTreeSelection(event, state) {
   close();
   
   // Update state and load the selected files
-  console.log("DEBUG tree selection state update", { type, hash, pdfHash, stateUpdates })
-  await updateState(state, stateUpdates);
+  await updateState(stateUpdates);
   
   // Actually load the files (similar to file-selection.js)
   const filesToLoad = {};
@@ -525,7 +524,7 @@ async function onFileTreeSelection(event, state) {
     } catch (error) {
       console.error("Error loading files:", error.message);
       // On error, reset state and reload file data (similar to file-selection.js)
-      await updateState(state, { collection: null, pdf: null, xml: null });
+      await updateState({ collection: null, pdf: null, xml: null });
       // Note: fileselection.reload() would be called here, but we don't have access to that plugin
       // The error will be handled by services.load() internally
     }
