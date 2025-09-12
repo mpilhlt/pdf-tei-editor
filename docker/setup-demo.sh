@@ -283,15 +283,15 @@ setup_users() {
     # Remove default admin user and create new one with specified password
     log_info "Creating admin user..."
     podman exec pdf-tei-editor-demo npm run manage user remove admin 2>/dev/null || true
-    podman exec pdf-tei-editor-demo npm run manage user add admin --password "$ADMIN_PASSWORD" --fullname "Administrator" --email "$EMAIL"
+    podman exec pdf-tei-editor-demo npm run manage user add admin --password "'$ADMIN_PASSWORD'" --fullname "'Administrator'" --email "'$EMAIL'"
     podman exec pdf-tei-editor-demo npm run manage user add-role admin admin
     
     # Create demo user if requested
     if [[ $CREATE_DEMO_USER =~ ^[Yy]$ ]]; then
         log_info "Creating demo user: $DEMO_USERNAME..."
-        podman exec pdf-tei-editor-demo npm run manage user remove "$DEMO_USERNAME" 2>/dev/null || true
-        podman exec pdf-tei-editor-demo npm run manage user add "$DEMO_USERNAME" --password "$DEMO_PASSWORD" --fullname "$DEMO_FULLNAME" --email "demo@$FQDN"
-        podman exec pdf-tei-editor-demo npm run manage user add-role "$DEMO_USERNAME" user
+        podman exec pdf-tei-editor-demo npm run manage user remove "'$DEMO_USERNAME'" 2>/dev/null || true
+        podman exec pdf-tei-editor-demo npm run manage user add "'$DEMO_USERNAME'" --password "'$DEMO_PASSWORD'" --fullname "'$DEMO_FULLNAME'" --email "'demo@$FQDN'"
+        podman exec pdf-tei-editor-demo npm run manage user add-role "'$DEMO_USERNAME'" user
     fi
     
     log_success "User accounts configured"
