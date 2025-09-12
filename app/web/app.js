@@ -15556,14 +15556,13 @@ class Plugin {
     
     // Check if plugin state is stale compared to current application state
     const currentAppState = this.context.getCurrentState();
-    let stateToUse = this.#state;
+    this.#state;
     
     if (currentAppState && currentAppState !== this.#state) {
       console.warn(`Warning: Plugin "${this.name}" has stale state. Using current application state instead. This indicates a state synchronization issue that should be investigated.`);
-      stateToUse = currentAppState;
     }
     
-    const newState = await this.context.updateState(stateToUse, changes);
+    const newState = await this.context.updateState(changes);
     this.#state = newState;
     return newState;
   }
@@ -48855,7 +48854,7 @@ async function saveIfDirty() {
       api$g.debug(`Saved file with hash ${result.hash}`);
       if (result.hash && result.hash !== fileHash) {
         // Update state to use new hash
-        await app.updateState(currentState$9, { xml: result.hash });
+        await app.updateState({ xml: result.hash });
       }
     }
     xmlEditor.markAsClean();
@@ -50967,7 +50966,7 @@ async function install$c(state) {
     
     // Use currentState instead of stale installation-time state
     if (currentState$7) {
-      onVariantChange(currentState$7);
+      onVariantChange();
     } else {
       console.warn("Variant change ignored: no current state available");
     }
@@ -51291,7 +51290,7 @@ async function onVariantChange(state) {
   const variant = /** @type {string|null} */ (ui$1.fileDrawer?.variantSelect?.value);
   
   // Update application state with new variant - clear XML to force reload
-  await updateState(state, { variant, xml: null });
+  await updateState({ variant, xml: null });
 }
 
 /**
@@ -51360,8 +51359,7 @@ async function onFileTreeSelection(event, state) {
   close$2();
   
   // Update state and load the selected files
-  console.log("DEBUG tree selection state update", { type, hash, pdfHash, stateUpdates });
-  await updateState(state, stateUpdates);
+  await updateState(stateUpdates);
   
   // Actually load the files (similar to file-selection.js)
   const filesToLoad = {};
@@ -51379,7 +51377,7 @@ async function onFileTreeSelection(event, state) {
     } catch (error) {
       console.error("Error loading files:", error.message);
       // On error, reset state and reload file data (similar to file-selection.js)
-      await updateState(state, { collection: null, pdf: null, xml: null });
+      await updateState({ collection: null, pdf: null, xml: null });
       // Note: fileselection.reload() would be called here, but we don't have access to that plugin
       // The error will be handled by services.load() internally
     }
@@ -52797,7 +52795,7 @@ async function load$1(state, { xml, pdf }) {
 
   // PDF 
   if (pdf) {
-    await app.updateState(state, { pdf: null, xml: null, diff: null });
+    await app.updateState({ pdf: null, xml: null, diff: null });
     api$g.info("Loading PDF: " + pdf);
     // Convert document identifier to static file URL
     const pdfUrl = `/api/files/${pdf}`;
@@ -52840,8 +52838,8 @@ async function load$1(state, { xml, pdf }) {
       }
     }
 
-    await removeMergeView(state);
-    await app.updateState(state, { xml: null, diff: null, editorReadOnly: file_is_locked });
+    await removeMergeView();
+    await app.updateState({ xml: null, diff: null, editorReadOnly: file_is_locked });
     api$g.info("Loading XML: " + xml);
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`;
@@ -52940,7 +52938,7 @@ async function showMergeView(state, diff) {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`;
     await xmlEditor.showMergeView(diffUrl);
-    await app.updateState(state, { diff: diff });
+    await app.updateState({ diff: diff });
     // turn validation off as it creates too much visual noise
     api$b.configure({ mode: "off" });
   } finally {
@@ -52957,7 +52955,7 @@ async function removeMergeView(state) {
   // re-enable validation
   api$b.configure({ mode: "auto" });
   UrlHash.remove("diff");
-  await app.updateState(state, { diff: null });
+  await app.updateState({ diff: null });
 }
 
 /**
@@ -52981,7 +52979,7 @@ async function deleteCurrentVersion(state) {
     await api$a.deleteFiles(filePathsToDelete);
     try {
       // Clear current XML state after successful deletion
-      await app.updateState(state, { xml: null });
+      await app.updateState({ xml: null });
       // update the file data
       await api$9.reload(state);
       // load the gold version
@@ -53044,7 +53042,7 @@ async function deleteAllVersions(state) {
   await api$a.deleteFiles(filePathsToDelete);
   try {
     // Clear current XML state after successful deletion
-    await app.updateState(state, { xml: null });
+    await app.updateState({ xml: null });
     // update the file data
     await api$9.reload(state);
     
@@ -53118,7 +53116,7 @@ async function deleteAll(state) {
     // update the file data
     await api$9.reload(state, {refresh:true});
     // remove xml and pdf
-    await app.updateState(state, {xml: null, pdf: null});
+    await app.updateState({xml: null, pdf: null});
   }
 }
 
@@ -63109,7 +63107,7 @@ async function start$2() {
       const xpath = UrlHash.get("xpath") || ui$1.floatingPanel.xpath.value;
 
       // update the UI
-      const newState = await app.updateState(currentState$2, { xpath });
+      const newState = await app.updateState({ xpath });
 
       // synchronize in the background
       api$2.syncFiles(currentState$2).then(async (summary) => {
@@ -63363,14 +63361,14 @@ async function onClickSyncBtn(state) {
   const originalReadOnly = state.editorReadOnly;
 
   // Set editor to read-only during sync to prevent conflicts
-  await updateState(state, { editorReadOnly: true });
+  await updateState({ editorReadOnly: true });
   try {
     summary = await syncFiles(state);
   } catch (e) {
     throw e
   } finally {
     // Restore original read-only state
-    await updateState(state, { editorReadOnly: originalReadOnly });
+    await updateState({ editorReadOnly: originalReadOnly });
   }
   // manually pressing the sync button should reload file data even if there were no changes
   await api$9.reload(state, {refresh:true});
@@ -63519,7 +63517,10 @@ async function update$1(state) {
     isUpdatingState = true;
     setTimeout(async () => {
       try {
-        await updateState(state, { editorReadOnly: shouldBeReadOnly });
+        // Only update if the state still needs changing (avoid race conditions)
+        if (pluginState && pluginState.editorReadOnly !== shouldBeReadOnly) {
+          await app.updateState({ editorReadOnly: shouldBeReadOnly });
+        }
       } finally {
         isUpdatingState = false;
       }
@@ -64249,7 +64250,7 @@ function start(state, timeoutSeconds = 60) {
       if (currentState.offline) {
         api$g.info("Connection restored.");
         notify("Connection restored.");
-        await updateState(currentState, { offline: false, editorReadOnly: editorReadOnlyState });
+        await updateState({ offline: false, editorReadOnly: editorReadOnlyState });
       }
     } catch (error) {
       console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
@@ -64266,12 +64267,12 @@ function start(state, timeoutSeconds = 60) {
         api$g.warn("Connection lost.");
         notify(`Connection to the server was lost. Will retry in ${lockTimeoutSeconds} seconds.`, "warning");
         editorReadOnlyState = currentState.editorReadOnly;
-        await updateState(currentState, { offline: true, editorReadOnly: true });
+        await updateState({ offline: true, editorReadOnly: true });
       } else if (error.statusCode === 409 || error.statusCode === 423) {
         // Lock was lost or taken by another user
         api$g.critical("Lock lost for file: " + filePath);
         api$c.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-        await updateState(currentState, { editorReadOnly: true });
+        await updateState({ editorReadOnly: true });
       } else if (error.statusCode === 504) {
         api$g.warn("Temporary connection failure, will try again...");
       } else if (error.statusCode === 403) {
@@ -64282,7 +64283,7 @@ function start(state, timeoutSeconds = 60) {
         if (currentState.webdavEnabled) {
           api$g.error("An unexpected server error occurred during heartbeat. Disabling WebDAV features.", error);
           api$c.error("An unexpected server error occurred. File synchronization has been disabled for safety.");
-          await updateState(currentState, { webdavEnabled: false });
+          await updateState({ webdavEnabled: false });
         }
       }
     }
@@ -65220,22 +65221,26 @@ class PluginContext {
 
   /**
    * Update application state
-   * @param {ApplicationState} currentState - Current state
    * @param {Partial<ApplicationState>} changes - Changes to apply
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async updateState(currentState, changes) {
-    return await this.#application.updateState(currentState, changes);
+  async updateState(changes, secondArg) {
+    if (secondArg !== undefined) {
+      throw new Error('PluginContext.updateState() now takes only one parameter (changes). Remove the currentState parameter.');
+    }
+    return await this.#application.updateState(changes);
   }
 
   /**
    * Update extension properties in state
-   * @param {ApplicationState} currentState - Current state
    * @param {Object} extChanges - Extension properties to update
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async updateStateExt(currentState, extChanges) {
-    return await this.#application.updateStateExt(currentState, extChanges);
+  async updateStateExt(extChanges, secondArg) {
+    if (secondArg !== undefined) {
+      throw new Error('PluginContext.updateStateExt() now takes only one parameter (extChanges). Remove the currentState parameter.');
+    }
+    return await this.#application.updateStateExt(extChanges);
   }
 
   /**
@@ -65463,14 +65468,19 @@ class Application {
 
   /**
    * Update application state and notify plugins
-   * @param {ApplicationState} currentState - Current state
-   * @param {Partial<ApplicationState>} changes - Changes to apply
+   * @param {Partial<ApplicationState>} changes - Changes to apply  
    * @returns {Promise<ApplicationState>} New state after plugin notification
    */
-  async updateState(currentState, changes = {}) {
+  async updateState(changes = {}) {
     // Prevent nested state changes during plugin notification
     if (this.#isUpdatingState) {
       throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+    }
+
+    // Use current state as base for changes
+    const currentState = this.#currentState;
+    if (!currentState) {
+      throw new Error('Application state not initialized. Call initializeState() first.');
     }
 
     const { newState, changedKeys } = this.#stateManager.applyStateChanges(currentState, changes);
@@ -65505,6 +65515,9 @@ class Application {
       const changeResults = await this.#pluginManager.invoke(endpoints.state.onStateUpdate, [changedKeys, newState], { result: 'full' });
       this.#checkForStateChangeErrors(changeResults);
       
+      // Update current state after successful plugin notification
+      this.#currentState = newState;
+      
       return newState;
     } finally {
       // Always release the lock
@@ -65514,14 +65527,19 @@ class Application {
 
   /**
    * Update extension properties in state and notify plugins
-   * @param {ApplicationState} currentState - Current state
    * @param {Object} extChanges - Extension properties to update
    * @returns {Promise<ApplicationState>} New state after plugin notification
    */
-  async updateStateExt(currentState, extChanges = {}) {
+  async updateStateExt(extChanges = {}) {
     // Prevent nested state changes during plugin notification
     if (this.#isUpdatingState) {
       throw new Error('State changes are not allowed during state update propagation. Plugin state.update endpoints must be reactive observers only, not state mutators.');
+    }
+
+    // Use current state as base for changes
+    const currentState = this.#currentState;
+    if (!currentState) {
+      throw new Error('Application state not initialized. Call initializeState() first.');
     }
 
     const { newState, changedKeys } = this.#stateManager.applyExtensionChanges(currentState, extChanges);
@@ -65541,6 +65559,10 @@ class Application {
     try {
       const results = await this.#pluginManager.invoke(endpoints.state.update, newState, { result: 'full' });
       this.#checkForStateChangeErrors(results);
+      
+      // Update current state after successful plugin notification
+      this.#currentState = newState;
+      
       return newState;
     } finally {
       this.#isUpdatingState = false;
@@ -65681,7 +65703,7 @@ stateManager.preserveState(true, [...persistedStateVars, 'sessionId']);
 await app.installPlugins(state);
 
 // Now notify plugins with the final initial state
-await app.updateState(state, {});  
+await app.updateState({});  
 
 // invoke the "start" endpoint
 await app.start();
@@ -65692,13 +65714,21 @@ await app.start();
 
 /**
  * Legacy updateState function for backward compatibility with old plugins
- * @param {ApplicationState} currentState - The current state
- * @param {Partial<ApplicationState>} changes - Changes to apply
+ * Supports both old API: updateState(currentState, changes) and new API: updateState(changes)
+ * @param {ApplicationState|Partial<ApplicationState>} currentStateOrChanges - The current state (old API) or changes (new API)
+ * @param {Partial<ApplicationState>} [changes] - Changes to apply (old API only)
  * @returns {Promise<ApplicationState>} New state after changes applied
  * @deprecated Use app.updateState() instead
  */
-async function updateState(currentState, changes = {}) {
-  return await app.updateState(currentState, changes);
+async function updateState(currentStateOrChanges, changes) {
+  // New API: updateState(changes)
+  if (changes === undefined) {
+    return await app.updateState(currentStateOrChanges);
+  }
+  
+  // Old API: updateState(currentState, changes) - ignore currentState, use changes only
+  console.warn('updateState: Using deprecated 2-parameter API. The currentState parameter is ignored. Use updateState(changes) instead.');
+  return await app.updateState(changes);
 }
 
 /**
