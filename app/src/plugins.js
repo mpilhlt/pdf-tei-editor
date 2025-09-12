@@ -6,7 +6,7 @@
  */
 
 /**
- * @import {Plugin} from 'modules/plugin-base.js'
+ * @import {Plugin} from './modules/plugin-base.js'
  */
 
 // class-based plugins
@@ -39,7 +39,7 @@ import { plugin as accessControlPlugin, api as accessControl } from './plugins/a
 import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
 
 /**
- * @typedef {object} PluginConfiguration
+ * @typedef {object & Record<string, any>} PluginConfiguration
  * @property {string} name - The name of the plugin
  * @property {string[]} [deps] - The names of the plugins this plugin depends on
  */

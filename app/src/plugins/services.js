@@ -3,7 +3,8 @@
  */
 
 /** 
- * @import { ApplicationState, Plugin } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
+ * @import { PluginConfiguration } from '../plugins.js'
  * @import { SlButton, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  * @import { UserData } from '../plugins/authentication.js'
@@ -44,7 +45,7 @@ const api = {
 
 /**
  * component plugin
- * @type {Plugin}
+ * @type {PluginConfiguration}
  */
 const plugin = {
   name: "services",
@@ -429,7 +430,7 @@ async function deleteCurrentVersion(state) {
     const versionName = ui.toolbar.xml.selectedOptions[0].textContent
     const msg = `Are you sure you want to delete the current version "${versionName}"?`
     if (!confirm(msg)) return; // todo use dialog
-    services.removeMergeView(state)
+    services.removeMergeView()
     // delete the file
     await client.deleteFiles(filePathsToDelete)
     try {
@@ -492,7 +493,7 @@ async function deleteAllVersions(state) {
     notify(`No versions ${variantText} found to delete.`);
     return;
   }
-  services.removeMergeView(state)
+  services.removeMergeView()
   // delete
   await client.deleteFiles(filePathsToDelete)
   try {
@@ -555,7 +556,7 @@ async function deleteAll(state) {
     if (!confirm(msg)) return; // todo use dialog
   }
 
-  services.removeMergeView(state)
+  services.removeMergeView()
   logger.debug("Deleting files:" + filePathsToDelete.join(", "))
   
   try {
