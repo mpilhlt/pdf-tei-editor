@@ -9,5 +9,5 @@ PORT=${PORT:-8000}
 # Change to app directory
 cd /app
 
-# Start the PDF TEI Editor application on the specified port
-exec .venv/bin/python bin/start-prod
+# Start the PDF TEI Editor application bound to all interfaces for Docker
+exec .venv/bin/python bin/start-prod 0.0.0.0 $PORT

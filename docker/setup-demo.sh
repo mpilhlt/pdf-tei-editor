@@ -276,8 +276,22 @@ EOF
     # Test nginx configuration
     if nginx -t; then
         log_success "Nginx configuration is valid"
-        systemctl reload nginx
-        log_success "Nginx reloaded"
+        
+        # Handle nginx service properly - ensure it's managed by systemd
+        if systemctl is-active --quiet nginx; then
+            log_info "Reloading nginx configuration..."
+            systemctl reload nginx
+        else
+            log_info "Nginx service not active, checking for rogue processes..."
+            if pgrep nginx > /dev/null; then
+                log_info "Stopping unmanaged nginx processes..."
+                pkill nginx
+                sleep 2
+            fi
+            log_info "Starting nginx service..."
+            systemctl start nginx
+        fi
+        log_success "Nginx configured and running"
     else
         log_error "Nginx configuration test failed"
         exit 1
