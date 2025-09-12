@@ -15444,8 +15444,10 @@ class Plugin {
 
   /**
    * Create singleton instance of this plugin class
+   * @template {Plugin} T
+   * @this {new (context: PluginContext) => T}
    * @param {PluginContext} context - Plugin context
-   * @returns {Plugin} The singleton instance
+   * @returns {T} The singleton instance
    */
   static createInstance(context) {
     if (!Plugin.instances.has(this)) {
@@ -15456,10 +15458,16 @@ class Plugin {
 
   /**
    * Get singleton instance of this plugin class
-   * @returns {Plugin|null} The singleton instance or null if not created yet
+   * @template {Plugin} T
+   * @this {new (context: PluginContext) => T}
+   * @returns {T} The singleton instance
    */
   static getInstance() {
-    return Plugin.instances.get(this) || null;
+    const instance = Plugin.instances.get(this);
+    if (!instance) {
+      throw new Error(`Plugin ${this.name} not instantiated. Call createInstance() first.`);
+    }
+    return instance;
   }
 
   /** @type {ApplicationState|null} */
@@ -15549,19 +15557,7 @@ class Plugin {
    * @param {Partial<ApplicationState>} changes
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async dispatchStateChange(changes) {
-    if (!this.#state) {
-      throw new Error(`Plugin ${this.name} attempted to dispatch state before initialization`);
-    }
-    
-    // Check if plugin state is stale compared to current application state
-    const currentAppState = this.context.getCurrentState();
-    this.#state;
-    
-    if (currentAppState && currentAppState !== this.#state) {
-      console.warn(`Warning: Plugin "${this.name}" has stale state. Using current application state instead. This indicates a state synchronization issue that should be investigated.`);
-    }
-    
+  async dispatchStateChange(changes) {    
     const newState = await this.context.updateState(changes);
     this.#state = newState;
     return newState;
@@ -16623,7 +16619,7 @@ function getStateFromUrlHash() {
  */
 async function updateStateFromUrlHash(state) {
   const tmpState = getStateFromUrlHash();
-  return await updateState(state, tmpState)
+  return await updateState(tmpState)
 }
 
 /**
@@ -49777,7 +49773,7 @@ const api$a = {
   getFileList,
   validateXml: validateXml$1,
   getAutocompleteData,
-  saveXml: saveXml$1,
+  saveXml,
   extractReferences,
   getExtractorList,
   loadInstructions,
@@ -49994,7 +49990,7 @@ async function getAutocompleteData(xmlString) {
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<Object>}
  */
-async function saveXml$1(xmlString, filePath, saveAsNewVersion) {
+async function saveXml(xmlString, filePath, saveAsNewVersion) {
   return await callApi('/files/save', 'POST',
     { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
 }
@@ -50348,10 +50344,10 @@ await registerTemplate('file-selection', 'file-selection.html');
 async function install$d(state) {
 
   api$g.debug(`Installing plugin "${plugin$d.name}"`);
-  
+
   // Create file selection controls
   const fileSelectionControls = createFromTemplate('file-selection');
-  
+
   // Add file selection controls to toolbar with specified priorities
   const controlPriorities = {
     'pdf': 10,    // High priority - essential
@@ -50359,7 +50355,7 @@ async function install$d(state) {
     'variant': 5, // Medium priority
     'diff': 3     // Lower priority
   };
-  
+
   fileSelectionControls.forEach(control => {
     // Ensure we're working with HTMLElement
     if (control instanceof HTMLElement) {
@@ -50369,7 +50365,7 @@ async function install$d(state) {
     }
   });
   updateUi();
-  
+
   /**  @type {[SlSelect,function][]} */
   const handlers = [
     [ui$1.toolbar.variant, onChangeVariantSelection],
@@ -50380,27 +50376,16 @@ async function install$d(state) {
 
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
-    select.addEventListener('sl-change', async () => {
-      
-      
+    select.addEventListener('sl-change', async evt => {
       // Ignore programmatic changes to prevent double-loading
       if (isUpdatingProgrammatically$1) {
-        
         return;
       }
-      
       // Ignore user changes during reactive state update cycle to prevent infinite loops
       if (isInStateUpdateCycle) {
-        
         return;
       }
-      
-      
-      if (currentState$8) {
-        await handler(currentState$8);
-      } else {
-        console.warn(`${select.name} selection ignored: no current state available`);
-      }
+      await handler();
     });
 
     // this works around a problem with the z-index of the select dropdown being bound 
@@ -50422,32 +50407,32 @@ async function install$d(state) {
 async function update$a(state) {
   // Set flag to prevent event handlers from causing state mutations during reactive updates
   isInStateUpdateCycle = true;
-  
+
   try {
     // Store current state for use in event handlers
     currentState$8 = state;
-    
+
     // Note: Don't mutate state directly in update() - that would cause infinite loops
     // The state.collection should be managed by other functions that call updateState()
-    
+
     // Check if relevant state properties have changed
     if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
       const fileDataChanged = hasStateChanged(state, 'fileData');
       const selectionsChanged = hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant');
       const selectionsValid = isCurrentSelectionValid(state);
-      
+
       // Only repopulate in these cases:
       // 1. User selections changed (xml, pdf, diff, variant)
       // 2. FileData changed AND current selections are no longer valid
-      const shouldRepopulate = selectionsChanged || (fileDataChanged && !selectionsValid);
-      
+      const shouldRepopulate = selectionsChanged || (fileDataChanged && selectionsValid);
+
       if (shouldRepopulate) {
         await populateSelectboxes(state);
       }
     }
-    
+
     // Always update selected values (with guard to prevent triggering events)
-    
+
     isUpdatingProgrammatically$1 = true;
     try {
       ui$1.toolbar.pdf.value = state.pdf || "";
@@ -50471,24 +50456,24 @@ function isCurrentSelectionValid(state) {
   if (!state.fileData || state.fileData.length === 0) {
     return false;
   }
-  
+
   // Check if current PDF selection exists in fileData
   if (state.pdf) {
-    const pdfExists = state.fileData.some(file => 
+    const pdfExists = state.fileData.some(file =>
       file.pdf && file.pdf.hash === state.pdf
     );
     if (!pdfExists) return false;
   }
-  
+
   // Check if current XML selection exists in fileData  
   if (state.xml) {
-    const xmlExists = state.fileData.some(file => 
+    const xmlExists = state.fileData.some(file =>
       (file.gold && file.gold.some(g => g.hash === state.xml)) ||
       (file.versions && file.versions.some(v => v.hash === state.xml))
     );
     if (!xmlExists) return false;
   }
-  
+
   // Check if current diff selection exists in fileData
   if (state.diff) {
     const diffExists = state.fileData.some(file =>
@@ -50497,17 +50482,16 @@ function isCurrentSelectionValid(state) {
     );
     if (!diffExists) return false;
   }
-  
+
   return true; // All current selections are valid
 }
 
 /**
  * Reloads data and then updates based on the application state
- * @param {ApplicationState} state
  * @param {Object} options - Options for reloading
  * @param {boolean} [options.refresh] - Whether to force refresh of server cache
  */
-async function reload(state, options = {}) {
+async function reload(options = {}) {
   await FiledataPlugin.getInstance().reload(options);
   // Note: populateSelectboxes() will be called automatically via the update() method 
   // when reloadFileData() triggers a state update with new fileData
@@ -50604,7 +50588,7 @@ async function populateSelectboxes(state) {
   if (!state.fileData || state.fileData.length === 0) {
     throw new Error("populateSelectboxes called but fileData is not available")
   }
-  
+
   const fileData = state.fileData;
 
   // Populate variant selectbox first
@@ -50618,7 +50602,7 @@ async function populateSelectboxes(state) {
   // Filter files by variant selection
   let filteredFileData = fileData;
   const variant = state.variant;
-  
+
   if (variant === "none") {
     // Show only files without variant_id in gold or versions
     filteredFileData = fileData.filter(file => {
@@ -50649,12 +50633,12 @@ async function populateSelectboxes(state) {
 
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
-    
-    await createHtmlElements(`<small>${collection_name.replaceAll("_"," ").trim()}</small>`, ui$1.toolbar.pdf);
-    
+
+    await createHtmlElements(`<small>${collection_name.replaceAll("_", " ").trim()}</small>`, ui$1.toolbar.pdf);
+
     // get a list of file data sorted by label
     const files = grouped_files[collection_name]
-      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0 );
+      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0);
 
     for (const file of files) {
       // populate pdf select box 
@@ -50684,7 +50668,7 @@ async function populateSelectboxes(state) {
             versionsToShow = file.versions.filter(version => version.variant_id === variant);
           }
           // If variant is "" (All), show all versions
-          
+
           // Also add gold entries if they match the variant filter
           let goldToShow = [];
           if (file.gold) {
@@ -50702,7 +50686,7 @@ async function populateSelectboxes(state) {
             // Add "Gold" group headers for both selectboxes
             await createHtmlElements(`<small>Gold</small>`, ui$1.toolbar.xml);
             await createHtmlElements(`<small>Gold</small>`, ui$1.toolbar.diff);
-            
+
             goldToShow.forEach((gold) => {
               // xml
               let option = new option_default();
@@ -50719,7 +50703,7 @@ async function populateSelectboxes(state) {
               option.textContent = gold.label;
               ui$1.toolbar.diff.appendChild(option);
             });
-            
+
             // Add dividers after gold entries if there are versions to show
             if (versionsToShow.length > 0) {
               ui$1.toolbar.xml.appendChild(new divider_default());
@@ -50732,7 +50716,7 @@ async function populateSelectboxes(state) {
             // Add "Versions" group headers for both selectboxes
             await createHtmlElements(`<small>Versions</small>`, ui$1.toolbar.xml);
             await createHtmlElements(`<small>Versions</small>`, ui$1.toolbar.diff);
-            
+
             versionsToShow.forEach((version) => {
               // xml
               let option = new option_default();
@@ -50766,22 +50750,23 @@ async function populateSelectboxes(state) {
 
 /**
  * Called when the selection in the PDF selectbox changes
- * @param {ApplicationState} state
  */
-async function onChangePdfSelection(state) {
+async function onChangePdfSelection() {
+  let state = app.getCurrentState();
+
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
   const selectedFile = state.fileData.find(file => file.pdf.hash === ui$1.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash;  // Use document identifier
   const collection = selectedFile.collection;
-  
+
   // Find gold file matching current variant selection
   let xml = null;
   if (selectedFile.gold) {
     const { variant } = state;
     let matchingGold;
-    
+
     if (variant === "none") {
       // Find gold without variant_id
       matchingGold = selectedFile.gold.find(gold => !gold.variant_id);
@@ -50792,10 +50777,10 @@ async function onChangePdfSelection(state) {
       // No variant filter - use first gold file
       matchingGold = selectedFile.gold[0];
     }
-    
+
     xml = matchingGold?.hash;
   }
-  
+
   const filesToLoad = {};
 
   if (pdf && pdf !== state.pdf) {
@@ -50806,16 +50791,15 @@ async function onChangePdfSelection(state) {
   }
 
   if (Object.keys(filesToLoad).length > 0) {
-    
     try {
-      api$6.removeMergeView(state);
-      await updateState(state, { collection });
-      await api$6.load(state, filesToLoad);
+      await api$6.removeMergeView(state);
+      await app.updateState({ collection });
+      await api$6.load(filesToLoad);
     }
     catch (error) {
-      await updateState(state, { collection: null, pdf: null, xml: null });
-      await reload(state, {refresh:true});
-      api$g.warn(error.message);
+      api$g.error(error.message);
+      await app.updateState({ collection: null, pdf: null, xml: null });
+      await reload({ refresh: true });
     }
   }
 }
@@ -50823,9 +50807,9 @@ async function onChangePdfSelection(state) {
 
 /**
  * Called when the selection in the XML selectbox changes
- * @param {ApplicationState} state
  */
-async function onChangeXmlSelection(state) {
+async function onChangeXmlSelection() {
+  const state = app.getCurrentState();
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
@@ -50836,20 +50820,20 @@ async function onChangeXmlSelection(state) {
       for (const file of state.fileData) {
         const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
-        
+
         if (hasGoldMatch || hasVersionMatch) {
-          await updateState(state, { collection: file.collection });
+          await app.updateState({ collection: file.collection });
           break;
         }
       }
-      
-      
+
+
       await api$6.removeMergeView(state);
-      await api$6.load(state, { xml });
+      await api$6.load({ xml });
     } catch (error) {
       console.error(error.message);
-      await reload(state, {refresh:true});
-      await updateState(state, {xml:null});
+      await reload({ refresh: true });
+      await updateState({ xml: null });
       api$c.error(error.message);
     }
   }
@@ -50857,9 +50841,9 @@ async function onChangeXmlSelection(state) {
 
 /**
  * Called when the selection in the diff version selectbox  changes
- * @param {ApplicationState} state
  */
-async function onChangeDiffSelection(state) {
+async function onChangeDiffSelection() {
+  const state = app.getCurrentState();
   const diff = ui$1.toolbar.diff.value;
   if (diff && typeof diff == "string" && diff !== ui$1.toolbar.xml.value) {
     try {
@@ -50870,16 +50854,16 @@ async function onChangeDiffSelection(state) {
   } else {
     await api$6.removeMergeView(state);
   }
-  await updateState(state, { diff: diff });
+  await app.updateState({ diff: diff });
 }
 
 /**
  * Called when the selection in the variant selectbox changes
  * @param {ApplicationState} state
  */
-async function onChangeVariantSelection(state) {
+async function onChangeVariantSelection() {
   const variant = ui$1.toolbar.variant.value;
-  await updateState(state, { variant, xml:null });
+  await app.updateState({ variant, xml: null });
 }
 
 /**
@@ -50991,7 +50975,6 @@ async function install$c(state) {
       
       return;
     }
-    
     
     // Use currentState instead of stale installation-time state
     if (currentState$7) {
@@ -51373,7 +51356,7 @@ async function onFileTreeSelection(event, state) {
   if (Object.keys(filesToLoad).length > 0) {
     
     try {
-      await api$6.load(state, filesToLoad);
+      await api$6.load(filesToLoad);
     } catch (error) {
       console.error("Error loading files:", error.message);
       // On error, reset state and reload file data (similar to file-selection.js)
@@ -52089,15 +52072,15 @@ async function extractFromPDF(state, defaultOptions={}) {
       result = await api$a.extractReferences(filename, options);
       
       // Force reload of file list since server has updated cache
-      await api$9.reload(state, {refresh:true});
+      await api$9.reload({refresh:true});
       
       // Update state.variant with the variant_id that was used for extraction
       if (options.variant_id) {
-        await updateState(state, { variant: options.variant_id });
+        await app.updateState({ variant: options.variant_id });
       }
       
       // Load the extracted result (server now returns hashes)
-      await api$6.load(state, result);
+      await api$6.load(result);
       
     } finally {
       ui$1.spinner.hide();
@@ -52785,10 +52768,13 @@ async function inProgress(validationPromise) {
 
 /**
  * Loads the given XML and/or PDF file(s) into the editor and viewer 
- * @param {ApplicationState} state
  * @param {Object} files An Object with one or more of the keys "xml" and "pdf"
  */
-async function load$1(state, { xml, pdf }) {
+async function load$1({ xml, pdf }) {
+
+  // use application state instead of
+  const currentState = app.getCurrentState();
+  const stateChanges = {};
 
   const promises = [];
   let file_is_locked = false;
@@ -52806,11 +52792,11 @@ async function load$1(state, { xml, pdf }) {
   if (xml) {
     // Check for lock before loading
 
-    if (state.xml !== xml) {
+    if (currentState.xml !== xml) {
       try {
         ui$1.spinner.show('Loading file, please wait...');
-        if (state.xml && !state.editorReadOnly) {
-          await api$a.releaseLock(state.xml);
+        if (currentState.xml && !currentState.editorReadOnly) {
+          await api$a.releaseLock(currentState.xml);
         }
         // Check access control before attempting to acquire lock
         const canEdit = api$1.checkCanEditFile(xml);
@@ -52852,17 +52838,17 @@ async function load$1(state, { xml, pdf }) {
   } catch (error) {
     console.error(error.message);
     if (error.status === 404) {
-      await api$9.reload(state);
+      await api$9.reload();
       return
     }
     throw error
   }
 
   if (pdf) {
-    state.pdf = pdf;
+    stateChanges.pdf = pdf;
   }
   if (xml) {
-    state.xml = xml;
+    stateChanges.xml = xml;
     // call asynchronously, don't block the editor
     startAutocomplete().then(result => {
       result && notify("Autocomplete is available");
@@ -52870,11 +52856,11 @@ async function load$1(state, { xml, pdf }) {
   }
 
   // Set collection based on loaded documents if not already set
-  if ((pdf || xml) && !state.collection) {
+  if ((pdf || xml) && !currentState.collection) {
     for (const file of api$9.fileData) {
       // Check PDF hash
       if (pdf && file.pdf && file.pdf.hash === pdf) {
-        state.collection = file.collection;
+        stateChanges.collection = file.collection;
         break;
       }
       // Check XML hash in gold or versions
@@ -52882,7 +52868,7 @@ async function load$1(state, { xml, pdf }) {
         const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
         if (hasGoldMatch || hasVersionMatch) {
-          state.collection = file.collection;
+          stateChanges.collection = file.collection;
           break;
         }
       }
@@ -52890,7 +52876,7 @@ async function load$1(state, { xml, pdf }) {
   }
 
   // notify plugins
-  await app.updateState(state);
+  await app.updateState(stateChanges);
 }
 
 async function startAutocomplete() {
@@ -52948,9 +52934,8 @@ async function showMergeView(state, diff) {
 
 /**
  * Removes all remaining diffs
- * @param {ApplicationState} state
  */
-async function removeMergeView(state) {
+async function removeMergeView() {
   xmlEditor.hideMergeView();
   // re-enable validation
   api$b.configure({ mode: "auto" });
@@ -52981,11 +52966,11 @@ async function deleteCurrentVersion(state) {
       // Clear current XML state after successful deletion
       await app.updateState({ xml: null });
       // update the file data
-      await api$9.reload(state);
+      await api$9.reload();
       // load the gold version
       // @ts-ignore
       const xml = ui$1.toolbar.xml.firstChild?.value;
-      await load$1(state, { xml });
+      await load$1({ xml });
       notify(`Version "${versionName}" has been deleted.`);
       api$2.syncFiles(state)
         .then(summary => summary && console.debug(summary))
@@ -53044,7 +53029,7 @@ async function deleteAllVersions(state) {
     // Clear current XML state after successful deletion
     await app.updateState({ xml: null });
     // update the file data
-    await api$9.reload(state);
+    await api$9.reload();
     
     // Find and load the appropriate gold version for the current variant
     let goldToLoad = null;
@@ -53062,7 +53047,7 @@ async function deleteAllVersions(state) {
     }
     
     if (goldToLoad) {
-      await load$1(state, { xml: goldToLoad.hash });
+      await load$1({ xml: goldToLoad.hash });
     }
     
     const variantText = variant === "none" ? "without variant" : 
@@ -53114,7 +53099,7 @@ async function deleteAll(state) {
     notify(error.message, "warning");
   } finally {
     // update the file data
-    await api$9.reload(state, {refresh:true});
+    await api$9.reload({refresh:true});
     // remove xml and pdf
     await app.updateState({xml: null, pdf: null});
   }
@@ -53151,8 +53136,8 @@ async function uploadXml(state) {
   const { filename: tempFilename } = await api$a.uploadFile(undefined, { accept: '.xml' });
   // @ts-ignore
   const { path } = await api$a.createVersionFromUpload(tempFilename, state.xml);
-  await api$9.reload(state);
-  await load$1(state, { xml: path });
+  await api$9.reload();
+  await load$1({ xml: path });
   notify("Document was uploaded. You are now editing the new version.");
 }
 
@@ -53270,6 +53255,7 @@ async function saveRevision(state) {
  * @param {ApplicationState} state
  */
 async function createNewVersion(state) {
+
   // @ts-ignore
   const newVersiondialog = ui$1.newVersionDialog;
   try {
@@ -53306,22 +53292,29 @@ async function createNewVersion(state) {
 
   ui$1.toolbar.documentActions.saveRevision.disabled = true;
   try {
+    if (!state.xml) throw new Error('No XML file loaded');
+    
     // save new version first
-    if (!state.xml) throw new Error('No XML file loaded')
-    let { hash } = await saveXml(state.xml, true);
+    let { hash } = await app.invokePluginEndpoint(
+      endpoints.filedata.saveXml, 
+      [state.xml, /* save as new version */ true], 
+      {result:"first"}
+    );
 
     // update the state to load the new document
-    await load$1(state, { xml: hash });
+    await load$1({ xml: hash });
 
     // now modify the header
     await addTeiHeaderInfo(respStmt, editionStmt);
 
     // save the modified content back to the same timestamped version file
-    await saveXml(hash, false);
+    await app.invokePluginEndpoint(endpoints.filedata.saveXml, hash);
     xmlEditor.markAsClean(); 
 
     // reload the file data to display the new name and inform the user
-    await api$9.reload(state, {refresh:true});
+    await api$9.reload({refresh:true});
+    await app.updateState({ xml: hash }); // should have been done 
+
     notify("Document was duplicated. You are now editing the copy.");
     
     // sync the new file to the WebDav server
@@ -53338,9 +53331,6 @@ async function createNewVersion(state) {
     newVersiondialog.hide();
   }
 }
-
-
-
 
 /**
  * Returns a list of non-empty text content from all text nodes contained in the given node
@@ -53499,7 +53489,7 @@ async function install$9(state) {
 
   // listen for changes in the selectbox
   xp.addEventListener('change', async () => {
-    await updateState(currentState$4, { xpath: xp.value });
+    await updateState({ xpath: xp.value });
   });
 
   // Edit XPath button functionality removed for now
@@ -53632,7 +53622,7 @@ async function changeNodeIndex(state, delta) {
   if (index < 0) index = size; 
   if (index >= size) index = 1;
   const xpath = normativeXpath + `[${index}]`;
-  await updateState(currentState$4, { xpath });
+  await updateState({ xpath });
 }
 
 
@@ -62965,9 +62955,10 @@ async function showMoveFilesDialog(state) {
 
   ui$1.spinner.show('Moving files, please wait...');
   try {
+    state = app.getCurrentState();
     const { new_pdf_path, new_xml_path } = await api$a.moveFiles(pdf, xml, destinationCollection);
-    await api$9.reload(state);
-    await api$6.load(state, { pdf: new_pdf_path, xml: new_xml_path });
+    await api$9.reload();
+    await api$6.load({ pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
     api$c.error(`Error moving files: ${error.message}`);
@@ -63073,7 +63064,7 @@ async function start$2() {
     if (pdf !== null) {
       // lod the documents
       try {
-        await api$6.load(currentState$2, { pdf, xml, diff });
+        await api$6.load({ pdf, xml, diff });
       } catch (error) {
         api$c.error(error.message);
         api$g.critical(error.message);
@@ -63371,7 +63362,7 @@ async function onClickSyncBtn(state) {
     await updateState({ editorReadOnly: originalReadOnly });
   }
   // manually pressing the sync button should reload file data even if there were no changes
-  await api$9.reload(state, {refresh:true});
+  await api$9.reload({refresh:true});
 }
 
 /**
@@ -64243,7 +64234,7 @@ function start(state, timeoutSeconds = 60) {
       const cacheStatus = heartbeatResponse?.cache_status || await api$a.getCacheStatus();
       if (cacheStatus.dirty) {
         api$g.debug("File data cache is dirty, reloading file list");
-        await api$9.reload(currentState, { refresh: true });
+        await api$9.reload({ refresh: true });
       }
 
       // If we are here, the request was successful. Check if we were offline before.
@@ -64692,7 +64683,7 @@ class PluginManager {
    */
 
   /**
-   * Invoke an endpoint on all plugins that implement it, in dependency order
+   * Invoke an endpoint on all plugins that implement it, in dependency order. The invocation can be done in parallel or sequentially. 
    * @param {string} endpoint - Endpoint to invoke
    * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
    * @param {InvokeOptions} [options] - Optional configuration for this invocation
