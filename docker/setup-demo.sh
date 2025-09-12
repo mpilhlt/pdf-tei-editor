@@ -103,6 +103,14 @@ get_email() {
     EMAIL=${EMAIL:-"admin@$FQDN"}
 }
 
+get_api_keys() {
+    echo
+    log_info "API Configuration (optional - leave blank to skip)"
+    read -p "Enter Gemini API key (for LLamore extraction) [optional]: " GEMINI_API_KEY
+    read -p "Enter Grobid server URL [http://localhost:8070]: " GROBID_SERVER_URL
+    GROBID_SERVER_URL=${GROBID_SERVER_URL:-"http://localhost:8070"}
+}
+
 # Check if required packages are installed
 check_dependencies() {
     log_info "Checking system dependencies..."
@@ -145,22 +153,33 @@ print(f'{salt}:{hashed.hex()}')
 
 # Update application configuration
 update_config() {
-    local config_file="config/config.json"
-    log_info "Updating application configuration..."
+    local instance_dir="/opt/pdf-tei-editor-data/$FQDN"
+    local config_dir="$instance_dir/config"
+    local config_file="$config_dir/config.json"
     
-    if [ -f "$config_file" ]; then
-        # Create backup
-        cp "$config_file" "${config_file}.backup"
-        
-        # Update configuration using Python
-        python3 -c "
+    log_info "Setting up persistent configuration directory for $FQDN..."
+    
+    # Create persistent config directory
+    mkdir -p "$config_dir"
+    
+    # Copy default config if it doesn't exist
+    if [ ! -f "$config_file" ] && [ -f "config/config.json" ]; then
+        cp "config/config.json" "$config_file"
+        log_info "Copied default configuration"
+    fi
+    
+    # Create or update configuration
+    python3 -c "
 import json
 import sys
+import os
 
 config_file = '$config_file'
 try:
-    with open(config_file, 'r') as f:
-        config = json.load(f)
+    config = {}
+    if os.path.exists(config_file):
+        with open(config_file, 'r') as f:
+            config = json.load(f)
     
     # Set production mode
     if 'application' not in config:
@@ -175,30 +194,57 @@ except Exception as e:
     print(f'Error updating configuration: {e}', file=sys.stderr)
     sys.exit(1)
 "
-    else
-        log_warning "Config file not found, creating new one..."
-        mkdir -p config
-        cat > "$config_file" << EOF
-{
-  "application": {
-    "mode": "production"
-  }
+    
+    log_success "Configuration updated in $config_file"
 }
+
+# Setup environment configuration
+setup_env() {
+    local instance_dir="/opt/pdf-tei-editor-data/$FQDN"
+    local env_file="$instance_dir/.env"
+    
+    log_info "Setting up environment configuration..."
+    
+    # Create .env file
+    cat > "$env_file" << EOF
+# PDF TEI Editor Environment Configuration for $FQDN
+# Generated on $(date)
+
 EOF
+
+    if [ -n "$GEMINI_API_KEY" ]; then
+        echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> "$env_file"
+        log_info "Added Gemini API key to environment"
     fi
     
-    log_success "Configuration updated"
+    if [ -n "$GROBID_SERVER_URL" ]; then
+        echo "GROBID_SERVER_URL=$GROBID_SERVER_URL" >> "$env_file"
+        log_info "Added Grobid server URL to environment"
+    fi
+    
+    # Disable WebDAV for demo
+    echo "WEBDAV_ENABLED=false" >> "$env_file"
+    
+    log_success "Environment configuration created at $env_file"
 }
 
 # Update users database
 update_users() {
-    local users_file="db/users.json"
+    local instance_dir="/opt/pdf-tei-editor-data/$FQDN"
+    local db_dir="$instance_dir/db"
+    local users_file="$db_dir/users.json"
     local hashed_password=$(hash_password "$ADMIN_PASSWORD")
     
-    log_info "Updating admin user..."
+    log_info "Setting up persistent user database for $FQDN..."
     
-    # Create db directory if it doesn't exist
-    mkdir -p db
+    # Create persistent db directory
+    mkdir -p "$db_dir"
+    
+    # Copy default users if they don't exist
+    if [ ! -f "$users_file" ] && [ -f "db/users.json" ]; then
+        cp "db/users.json" "$users_file"
+        log_info "Copied default user database"
+    fi
     
     # Create users.json with admin user
     python3 -c "
@@ -228,7 +274,26 @@ except Exception as e:
     sys.exit(1)
 "
     
-    log_success "Admin user configured"
+    log_success "Admin user configured in $users_file"
+}
+
+# Initialize data directory with repo contents
+setup_data_directory() {
+    local instance_dir="/opt/pdf-tei-editor-data/$FQDN"
+    local data_dir="$instance_dir/data"
+    
+    log_info "Setting up data directory for $FQDN..."
+    
+    # Create data directory
+    mkdir -p "$data_dir"
+    
+    # Copy sample data from repo if data directory is empty
+    if [ -d "data" ] && [ -z "$(ls -A "$data_dir" 2>/dev/null)" ]; then
+        cp -r data/* "$data_dir/" 2>/dev/null || true
+        log_info "Copied sample data from repository"
+    fi
+    
+    log_success "Data directory initialized at $data_dir"
 }
 
 # Generate and install nginx configuration
@@ -340,19 +405,24 @@ deploy_application() {
     log_info "Building Docker image..."
     $container_cmd build -t pdf-tei-editor .
     
-    # Create persistent volume
-    $container_cmd volume create pdf-tei-editor-demo-data 2>/dev/null || true
+    # Set up instance-specific directories
+    local instance_dir="/opt/pdf-tei-editor-data/$FQDN"
+    local data_dir="$instance_dir/data"
+    local config_dir="$instance_dir/config"
+    local db_dir="$instance_dir/db"
+    local env_file="$instance_dir/.env"
     
-    # Run the container
-    log_info "Starting application container..."
+    # Run the container with per-instance volumes
+    log_info "Starting application container for $FQDN..."
     $container_cmd run -d \
         --name pdf-tei-editor-demo \
         --restart unless-stopped \
         -p "$PORT:8000" \
         -e PORT=8000 \
-        -v pdf-tei-editor-demo-data:/app/data \
-        -v "$(pwd)/config:/app/config" \
-        -v "$(pwd)/db:/app/db" \
+        -v "$data_dir:/app/data" \
+        -v "$config_dir:/app/config" \
+        -v "$db_dir:/app/db" \
+        -v "$env_file:/app/.env" \
         pdf-tei-editor
     
     log_success "Application deployed successfully"
@@ -398,6 +468,7 @@ main() {
     get_port
     get_admin_password
     get_email
+    get_api_keys
     echo
     
     # Confirm settings
@@ -417,7 +488,9 @@ main() {
     
     # Setup application configuration
     update_config
+    setup_env
     update_users
+    setup_data_directory
     
     # Setup nginx
     setup_nginx

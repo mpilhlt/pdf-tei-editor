@@ -81,6 +81,47 @@ sudo certbot --nginx -d your-domain.com
 
 The Docker container runs the waitress server on the specified port while nginx on the host handles SSL termination and reverse proxying. Application data persists in Docker volumes across container restarts.
 
+### Interactive Demo Setup
+
+For a complete demo deployment with automatic configuration:
+
+```bash
+# Run interactive setup (prompts for domain, SSL, admin password, API keys)
+sudo ./docker/setup-demo.sh
+```
+
+This script will:
+- Configure nginx with SSL certificates via Let's Encrypt
+- Set up persistent data directories per domain in `/opt/pdf-tei-editor-data/$FQDN/`
+- Create admin user with specified password
+- Configure API keys for LLamore (Gemini) and Grobid services
+- Deploy the application with production settings
+
+**Data Persistence:**
+- Initial onfiguration: `/opt/pdf-tei-editor-data/$FQDN/config/` - Production settings
+- Application configuraton database: `/opt/pdf-tei-editor-data/$FQDN/db/` - Live configuration values, user accounts and other metadata
+- File Data: `/opt/pdf-tei-editor-data/$FQDN/data/` - Uploaded PDFs and TEI files
+- Environment: `/opt/pdf-tei-editor-data/$FQDN/.env` - API keys and service configuration
+
+### Demo Sandbox with Nightly Reset
+
+For demo/sandbox environments that reset automatically:
+
+```bash
+# Interactively set up the demo instance
+sudo ./docker/setup-demo.sh
+
+# Configure nightly reset (run once)
+./docker/setup-cron.sh <FQDN> <PORT> "$(realpath .)"
+```
+
+The nightly reset (2 AM daily):
+- preserves ser accounts, passwords, configuration, API keys
+- resets file data (uploaded PDFs, processed TEI files) by restoring the sample data from repository
+- updates application code from latest GitHub version
+
+This creates a sandbox environment where users can experiment freely, knowing their accounts persist but the file workspace resets to a clean state each night. 
+
 ### Security considerations
 - **Application mode**: For production deployments, set `"application.mode": "production"` in `config/config.json`. This disables access to development files (`/src/` and `/node_modules/`) that should not be exposed in production.
 - File uploads are checked using the libmagic package to prevent malicious file content. This package depends on the native libmagic library, which is available on Linux via package manager. On Intel MacOS and Windows, use `uv add python-magic-bin`, on Apple Silicon Macs, use Homebrew and `brew install libmagic`. If the bindings are not available, the backend will only check for the correct file extension.
