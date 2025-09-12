@@ -449,6 +449,16 @@ deploy_application() {
     local db_dir="$instance_dir/db"
     local env_file="$instance_dir/.env"
     
+    # Ensure all directories exist before mounting
+    log_info "Ensuring all mount directories exist..."
+    mkdir -p "$data_dir" "$config_dir" "$db_dir"
+    
+    # Ensure .env file exists (create empty if missing)
+    if [ ! -f "$env_file" ]; then
+        touch "$env_file"
+        log_info "Created empty .env file"
+    fi
+    
     # Run the container with per-instance volumes
     log_info "Starting application container for $FQDN..."
     $container_cmd run -d \
