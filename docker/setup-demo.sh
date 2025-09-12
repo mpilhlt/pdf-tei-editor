@@ -163,9 +163,15 @@ update_config() {
     mkdir -p "$config_dir"
     
     # Copy default config if it doesn't exist
-    if [ ! -f "$config_file" ] && [ -f "config/config.json" ]; then
-        cp "config/config.json" "$config_file"
-        log_info "Copied default configuration"
+    if [ ! -f "$config_file" ]; then
+        if [ -f "config/config.json" ]; then
+            cp "config/config.json" "$config_file"
+            log_info "Copied default configuration from repository"
+        else
+            # Create minimal config if repo config doesn't exist
+            echo '{}' > "$config_file"
+            log_info "Created empty configuration file"
+        fi
     fi
     
     # Create or update configuration

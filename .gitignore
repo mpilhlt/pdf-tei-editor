@@ -17,3 +17,9 @@ data/*
 !data/pdf/example/
 !data/tei/example/
 !data/versions/.gitignore
+
+# Ignore backup files and temporary files
+*.backup
+gunicorn.txt
+nohup.out
+
