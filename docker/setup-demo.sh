@@ -297,6 +297,23 @@ setup_users() {
     log_success "User accounts configured"
 }
 
+# Fix ownership of persistent data directories
+fix_ownership() {
+    local instance_dir="/opt/pdf-tei-editor-data/$FQDN"
+    
+    log_info "Setting correct ownership for persistent data directories..."
+    
+    # Create the instance directory with proper ownership
+    mkdir -p "$instance_dir"
+    chown -R "$REAL_UID:$REAL_GID" "$instance_dir"
+    
+    # Set permissions to be readable/writable by owner and group
+    chmod -R 755 "$instance_dir"
+    find "$instance_dir" -type f -exec chmod 644 {} \;
+    
+    log_success "Ownership set to $REAL_USER ($REAL_UID:$REAL_GID)"
+}
+
 # Initialize data directory with repo contents
 setup_data_directory() {
     local instance_dir="/opt/pdf-tei-editor-data/$FQDN"
@@ -478,6 +495,11 @@ main() {
     # Check if running as root
     check_root
     
+    # Get the user who invoked sudo (for file ownership)
+    REAL_USER=${SUDO_USER:-$(whoami)}
+    REAL_UID=${SUDO_UID:-$(id -u)}
+    REAL_GID=${SUDO_GID:-$(id -g)}
+    
     # Check dependencies
     check_dependencies
     
@@ -507,10 +529,11 @@ main() {
     echo
     log_info "Starting setup process..."
     
-    # Setup application configuration
+    # Setup application configuration and fix ownership
     update_config
     setup_env
     setup_data_directory
+    fix_ownership
     
     # Setup nginx
     setup_nginx
