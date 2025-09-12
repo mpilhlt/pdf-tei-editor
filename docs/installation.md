@@ -36,10 +36,6 @@ uv sync
 
 # Install Node.js dependencies  
 npm install
-
-# On Windows, use:
-npm --ignore-scripts install
-uv run python bin\download-pdfjs
 ```
 
 ### Build the Application
@@ -52,8 +48,7 @@ npm run build
 
 ```bash
 # Development server (Python/Flask backend + JS frontend)
-./bin/server
-# On Windows: uv run python bin\server
+npm start
 
 # Access at http://localhost:3001
 ```
