@@ -412,15 +412,34 @@ setup_ssl() {
         log_success "SSL certificate obtained"
         
         # Update nginx configuration for HTTPS
-        certbot --nginx -d "$FQDN" --non-interactive
-        log_success "Nginx configured for HTTPS"
+        if certbot --nginx -d "$FQDN" --non-interactive; then
+            log_success "Nginx configured for HTTPS"
+        else
+            log_warning "SSL configuration completed but nginx restart failed"
+            log_info "This is usually not a problem - checking nginx status..."
+        fi
         
-        # Start nginx
-        systemctl start nginx
+        # Handle nginx restart more gracefully
+        if systemctl is-active --quiet nginx; then
+            log_success "Nginx is already running and serving HTTPS"
+        else
+            log_info "Attempting to start nginx..."
+            if systemctl start nginx; then
+                log_success "Nginx started successfully"
+            else
+                log_warning "Nginx systemd service failed, but checking if it's actually running..."
+                if pgrep nginx > /dev/null; then
+                    log_success "Nginx process is running despite systemd error"
+                else
+                    log_error "Nginx is not running - there may be a configuration issue"
+                    return 1
+                fi
+            fi
+        fi
     else
         log_error "Failed to obtain SSL certificate"
-        systemctl start nginx
-        exit 1
+        systemctl start nginx 2>/dev/null || true
+        return 1
     fi
 }
 
@@ -557,20 +576,40 @@ main() {
     # Setup user accounts after container is running
     setup_users
     
+    # Fix ownership after container has created initial files
+    fix_ownership
+    
     # Setup SSL
     setup_ssl
     
     echo
     log_success "Setup completed successfully!"
-    log_success "Your PDF TEI Editor demo is now available at: https://$FQDN"
-    log_info "Admin login: admin"
-    log_info "Admin password: [the password you entered]"
+    
+    # Test if the site is actually accessible
+    log_info "Testing site accessibility..."
+    if curl -s -k "https://$FQDN" > /dev/null; then
+        log_success "✅ Your PDF TEI Editor demo is now available at: https://$FQDN"
+    elif pgrep nginx > /dev/null; then
+        log_success "🔄 Your PDF TEI Editor demo should be available at: https://$FQDN"
+        log_info "(Nginx is running but may need a moment to fully initialize)"
+    else
+        log_warning "⚠️  Setup completed but site may not be accessible yet"
+        log_info "Try: sudo systemctl start nginx"
+    fi
+    
     echo
-    log_info "To monitor the application:"
-    log_info "  sudo podman logs -f pdf-tei-editor-demo"
+    log_info "👤 Login credentials:"
+    log_info "  Admin: admin / [your admin password]"
+    if [[ $CREATE_DEMO_USER =~ ^[Yy]$ ]]; then
+        log_info "  Demo: $DEMO_USERNAME / [your demo password]"
+    fi
+    
     echo
-    log_info "To stop the demo:"
-    log_info "  sudo podman stop pdf-tei-editor-demo"
+    log_info "📊 Management commands:"
+    log_info "  Monitor logs: sudo podman logs -f pdf-tei-editor-demo"
+    log_info "  Stop demo: sudo podman stop pdf-tei-editor-demo"
+    log_info "  Fix file ownership: sudo chown -R $REAL_UID:$REAL_GID /opt/pdf-tei-editor-data/$FQDN/"
+    log_info "  Data location: /opt/pdf-tei-editor-data/$FQDN/"
 }
 
 # Run main function

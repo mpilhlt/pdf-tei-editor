@@ -1,4 +1,9 @@
-FROM ubuntu:22.04
+# Use Python slim for smaller image with Python pre-installed (~45MB vs ~78MB)
+FROM python:3.13-slim
+# Alternative options:
+# FROM ubuntu:22.04          # ~78MB - full Ubuntu
+# FROM ubuntu:22.04-minimal  # ~29MB - minimal Ubuntu  
+# FROM python:3.13-slim      # ~45MB - Debian-based, Python pre-installed (recommended)
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -7,14 +12,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     curl \
     git \
-    pipx \
     libmagic1 \
     libmagic-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-RUN pipx install uv
-ENV PATH="/root/.local/bin:$PATH"
+# Install uv (Python already available, no need for pipx)
+RUN pip install uv
 
 # Install Node.js via nvm
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
