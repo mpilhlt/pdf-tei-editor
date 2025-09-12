@@ -98,6 +98,34 @@ get_admin_password() {
     done
 }
 
+get_demo_user() {
+    echo
+    read -p "Create demo user? (y/N): " CREATE_DEMO_USER
+    if [[ $CREATE_DEMO_USER =~ ^[Yy]$ ]]; then
+        read -p "Demo username [demo]: " DEMO_USERNAME
+        DEMO_USERNAME=${DEMO_USERNAME:-"demo"}
+        
+        while true; do
+            read -s -p "Enter demo user password (minimum 8 characters): " DEMO_PASSWORD
+            echo
+            if [ ${#DEMO_PASSWORD} -ge 8 ]; then
+                read -s -p "Confirm demo user password: " DEMO_PASSWORD_CONFIRM
+                echo
+                if [ "$DEMO_PASSWORD" = "$DEMO_PASSWORD_CONFIRM" ]; then
+                    break
+                else
+                    log_error "Passwords do not match. Please try again."
+                fi
+            else
+                log_error "Password must be at least 8 characters long."
+            fi
+        done
+        
+        read -p "Demo user full name [Demo User]: " DEMO_FULLNAME
+        DEMO_FULLNAME=${DEMO_FULLNAME:-"Demo User"}
+    fi
+}
+
 get_email() {
     read -p "Enter email for SSL certificate [admin@$FQDN]: " EMAIL
     EMAIL=${EMAIL:-"admin@$FQDN"}
@@ -162,16 +190,15 @@ update_config() {
     # Create persistent config directory
     mkdir -p "$config_dir"
     
-    # Copy default config if it doesn't exist
-    if [ ! -f "$config_file" ]; then
-        if [ -f "config/config.json" ]; then
-            cp "config/config.json" "$config_file"
-            log_info "Copied default configuration from repository"
-        else
-            # Create minimal config if repo config doesn't exist
-            echo '{}' > "$config_file"
-            log_info "Created empty configuration file"
-        fi
+    # Copy entire config directory if it doesn't exist or is incomplete
+    if [ -d "config" ] && [ ! -f "$config_dir/users.json" -o ! -f "$config_dir/prompt.json" ]; then
+        log_info "Copying complete configuration structure from repository..."
+        cp -r config/* "$config_dir/"
+        log_info "Copied configuration directory structure"
+    elif [ ! -f "$config_file" ]; then
+        # Create minimal config if repo config doesn't exist
+        echo '{}' > "$config_file"
+        log_info "Created minimal configuration file"
     fi
     
     # Create or update configuration
@@ -234,53 +261,40 @@ EOF
     log_success "Environment configuration created at $env_file"
 }
 
-# Update users database
-update_users() {
+# Setup user accounts using manage.js
+setup_users() {
     local instance_dir="/opt/pdf-tei-editor-data/$FQDN"
     local db_dir="$instance_dir/db"
-    local users_file="$db_dir/users.json"
-    local hashed_password=$(hash_password "$ADMIN_PASSWORD")
     
-    log_info "Setting up persistent user database for $FQDN..."
+    log_info "Setting up user accounts for $FQDN..."
     
     # Create persistent db directory
     mkdir -p "$db_dir"
     
-    # Copy default users if they don't exist
-    if [ ! -f "$users_file" ] && [ -f "db/users.json" ]; then
-        cp "db/users.json" "$users_file"
+    # Copy default user database if it doesn't exist
+    if [ ! -f "$db_dir/users.json" ] && [ -f "db/users.json" ]; then
+        cp "db/users.json" "$db_dir/"
         log_info "Copied default user database"
     fi
     
-    # Create users.json with admin user
-    python3 -c "
-import json
-import sys
-
-users_file = '$users_file'
-hashed_password = '$hashed_password'
-
-try:
-    users = {
-        'admin': {
-            'username': 'admin',
-            'fullname': 'Administrator',
-            'email': '$EMAIL',
-            'password': hashed_password,
-            'roles': ['admin', 'user']
-        }
-    }
+    # Wait a moment to ensure container is fully ready
+    sleep 5
     
-    with open(users_file, 'w') as f:
-        json.dump(users, f, indent=2)
+    # Remove default admin user and create new one with specified password
+    log_info "Creating admin user..."
+    podman exec pdf-tei-editor-demo npm run manage user remove admin 2>/dev/null || true
+    podman exec pdf-tei-editor-demo npm run manage user add admin --password "$ADMIN_PASSWORD" --fullname "Administrator" --email "$EMAIL"
+    podman exec pdf-tei-editor-demo npm run manage user add-role admin admin
     
-    print('Admin user created successfully')
-except Exception as e:
-    print(f'Error creating admin user: {e}', file=sys.stderr)
-    sys.exit(1)
-"
+    # Create demo user if requested
+    if [[ $CREATE_DEMO_USER =~ ^[Yy]$ ]]; then
+        log_info "Creating demo user: $DEMO_USERNAME..."
+        podman exec pdf-tei-editor-demo npm run manage user remove "$DEMO_USERNAME" 2>/dev/null || true
+        podman exec pdf-tei-editor-demo npm run manage user add "$DEMO_USERNAME" --password "$DEMO_PASSWORD" --fullname "$DEMO_FULLNAME" --email "demo@$FQDN"
+        podman exec pdf-tei-editor-demo npm run manage user add-role "$DEMO_USERNAME" user
+    fi
     
-    log_success "Admin user configured in $users_file"
+    log_success "User accounts configured"
 }
 
 # Initialize data directory with repo contents
@@ -473,6 +487,7 @@ main() {
     get_fqdn
     get_port
     get_admin_password
+    get_demo_user
     get_email
     get_api_keys
     echo
@@ -495,7 +510,6 @@ main() {
     # Setup application configuration
     update_config
     setup_env
-    update_users
     setup_data_directory
     
     # Setup nginx
@@ -506,6 +520,9 @@ main() {
     
     # Wait for application to start
     wait_for_application
+    
+    # Setup user accounts after container is running
+    setup_users
     
     # Setup SSL
     setup_ssl
