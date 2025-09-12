@@ -52577,7 +52577,7 @@ const api$6 = {
 
 /**
  * component plugin
- * @type {Plugin}
+ * @type {PluginConfiguration}
  */
 const plugin$a = {
   name: "services",
@@ -52959,7 +52959,7 @@ async function deleteCurrentVersion(state) {
     const versionName = ui$1.toolbar.xml.selectedOptions[0].textContent;
     const msg = `Are you sure you want to delete the current version "${versionName}"?`;
     if (!confirm(msg)) return; // todo use dialog
-    api$6.removeMergeView(state);
+    api$6.removeMergeView();
     // delete the file
     await api$a.deleteFiles(filePathsToDelete);
     try {
@@ -53022,7 +53022,7 @@ async function deleteAllVersions(state) {
     notify(`No versions ${variantText} found to delete.`);
     return;
   }
-  api$6.removeMergeView(state);
+  api$6.removeMergeView();
   // delete
   await api$a.deleteFiles(filePathsToDelete);
   try {
@@ -53085,7 +53085,7 @@ async function deleteAll(state) {
     if (!confirm(msg)) return; // todo use dialog
   }
 
-  api$6.removeMergeView(state);
+  api$6.removeMergeView();
   api$g.debug("Deleting files:" + filePathsToDelete.join(", "));
   
   try {
@@ -64309,7 +64309,7 @@ function stop() {
 
 
 /**
- * @typedef {object} PluginConfiguration
+ * @typedef {object & Record<string, any>} PluginConfiguration
  * @property {string} name - The name of the plugin
  * @property {string[]} [deps] - The names of the plugins this plugin depends on
  */
