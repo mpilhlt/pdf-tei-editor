@@ -19,7 +19,7 @@ ENV PATH="/root/.local/bin:$PATH"
 # Install Node.js via nvm
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 ENV NVM_DIR="/root/.nvm"
-RUN bash -c "source $NVM_DIR/nvm.sh && nvm install lts/iron && nvm use lts/iron && nvm alias default lts/iron"
+RUN bash -c "source $NVM_DIR/nvm.sh && nvm install lts/iod && nvm use lts/iod && nvm alias default lts/iod"
 RUN bash -c "source $NVM_DIR/nvm.sh && ln -sf \$NVM_DIR/versions/node/\$(node --version)/bin/* /usr/local/bin/"
 
 # Create app directory
