@@ -29,8 +29,10 @@ export class Plugin {
 
   /**
    * Create singleton instance of this plugin class
+   * @template {Plugin} T
+   * @this {new (context: PluginContext) => T}
    * @param {PluginContext} context - Plugin context
-   * @returns {Plugin} The singleton instance
+   * @returns {T} The singleton instance
    */
   static createInstance(context) {
     if (!Plugin.instances.has(this)) {
@@ -41,10 +43,16 @@ export class Plugin {
 
   /**
    * Get singleton instance of this plugin class
-   * @returns {Plugin|null} The singleton instance or null if not created yet
+   * @template {Plugin} T
+   * @this {new (context: PluginContext) => T}
+   * @returns {T} The singleton instance
    */
   static getInstance() {
-    return Plugin.instances.get(this) || null;
+    const instance = Plugin.instances.get(this);
+    if (!instance) {
+      throw new Error(`Plugin ${this.name} not instantiated. Call createInstance() first.`);
+    }
+    return instance;
   }
 
   /** @type {ApplicationState|null} */
@@ -134,20 +142,7 @@ export class Plugin {
    * @param {Partial<ApplicationState>} changes
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async dispatchStateChange(changes) {
-    if (!this.#state) {
-      throw new Error(`Plugin ${this.name} attempted to dispatch state before initialization`);
-    }
-    
-    // Check if plugin state is stale compared to current application state
-    const currentAppState = this.context.getCurrentState();
-    let stateToUse = this.#state;
-    
-    if (currentAppState && currentAppState !== this.#state) {
-      console.warn(`Warning: Plugin "${this.name}" has stale state. Using current application state instead. This indicates a state synchronization issue that should be investigated.`);
-      stateToUse = currentAppState;
-    }
-    
+  async dispatchStateChange(changes) {    
     const newState = await this.context.updateState(changes);
     this.#state = newState;
     return newState;

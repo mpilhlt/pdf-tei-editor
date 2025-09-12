@@ -10,7 +10,7 @@
 import ui from '../ui.js'
 import { SlOption, SlDivider, updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
-import { logger, services, dialog, updateState, hasStateChanged } from '../app.js'
+import { app, logger, services, dialog, updateState, hasStateChanged } from '../app.js'
 import { FiledataPlugin } from '../plugins.js'
 
 /**
@@ -65,10 +65,10 @@ await registerTemplate('file-selection', 'file-selection.html');
 async function install(state) {
 
   logger.debug(`Installing plugin "${plugin.name}"`);
-  
+
   // Create file selection controls
   const fileSelectionControls = createFromTemplate('file-selection');
-  
+
   // Add file selection controls to toolbar with specified priorities
   const controlPriorities = {
     'pdf': 10,    // High priority - essential
@@ -76,7 +76,7 @@ async function install(state) {
     'variant': 5, // Medium priority
     'diff': 3     // Lower priority
   };
-  
+
   fileSelectionControls.forEach(control => {
     // Ensure we're working with HTMLElement
     if (control instanceof HTMLElement) {
@@ -86,7 +86,7 @@ async function install(state) {
     }
   });
   updateUi()
-  
+
   /**  @type {[SlSelect,function][]} */
   const handlers = [
     [ui.toolbar.variant, onChangeVariantSelection],
@@ -97,27 +97,16 @@ async function install(state) {
 
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
-    select.addEventListener('sl-change', async () => {
-      
-      
+    select.addEventListener('sl-change', async evt => {
       // Ignore programmatic changes to prevent double-loading
       if (isUpdatingProgrammatically) {
-        
         return;
       }
-      
       // Ignore user changes during reactive state update cycle to prevent infinite loops
       if (isInStateUpdateCycle) {
-        
         return;
       }
-      
-      
-      if (currentState) {
-        await handler(currentState);
-      } else {
-        console.warn(`${select.name} selection ignored: no current state available`);
-      }
+      await handler()
     });
 
     // this works around a problem with the z-index of the select dropdown being bound 
@@ -139,32 +128,32 @@ async function install(state) {
 async function update(state) {
   // Set flag to prevent event handlers from causing state mutations during reactive updates
   isInStateUpdateCycle = true;
-  
+
   try {
     // Store current state for use in event handlers
     currentState = state;
-    
+
     // Note: Don't mutate state directly in update() - that would cause infinite loops
     // The state.collection should be managed by other functions that call updateState()
-    
+
     // Check if relevant state properties have changed
     if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
       const fileDataChanged = hasStateChanged(state, 'fileData');
       const selectionsChanged = hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant');
       const selectionsValid = isCurrentSelectionValid(state);
-      
+
       // Only repopulate in these cases:
       // 1. User selections changed (xml, pdf, diff, variant)
       // 2. FileData changed AND current selections are no longer valid
-      const shouldRepopulate = selectionsChanged || (fileDataChanged && !selectionsValid);
-      
+      const shouldRepopulate = selectionsChanged || (fileDataChanged && selectionsValid);
+
       if (shouldRepopulate) {
         await populateSelectboxes(state);
       }
     }
-    
+
     // Always update selected values (with guard to prevent triggering events)
-    
+
     isUpdatingProgrammatically = true;
     try {
       ui.toolbar.pdf.value = state.pdf || ""
@@ -188,24 +177,24 @@ function isCurrentSelectionValid(state) {
   if (!state.fileData || state.fileData.length === 0) {
     return false;
   }
-  
+
   // Check if current PDF selection exists in fileData
   if (state.pdf) {
-    const pdfExists = state.fileData.some(file => 
+    const pdfExists = state.fileData.some(file =>
       file.pdf && file.pdf.hash === state.pdf
     );
     if (!pdfExists) return false;
   }
-  
+
   // Check if current XML selection exists in fileData  
   if (state.xml) {
-    const xmlExists = state.fileData.some(file => 
+    const xmlExists = state.fileData.some(file =>
       (file.gold && file.gold.some(g => g.hash === state.xml)) ||
       (file.versions && file.versions.some(v => v.hash === state.xml))
     );
     if (!xmlExists) return false;
   }
-  
+
   // Check if current diff selection exists in fileData
   if (state.diff) {
     const diffExists = state.fileData.some(file =>
@@ -214,17 +203,16 @@ function isCurrentSelectionValid(state) {
     );
     if (!diffExists) return false;
   }
-  
+
   return true; // All current selections are valid
 }
 
 /**
  * Reloads data and then updates based on the application state
- * @param {ApplicationState} state
  * @param {Object} options - Options for reloading
  * @param {boolean} [options.refresh] - Whether to force refresh of server cache
  */
-async function reload(state, options = {}) {
+async function reload(options = {}) {
   await FiledataPlugin.getInstance().reload(options);
   // Note: populateSelectboxes() will be called automatically via the update() method 
   // when reloadFileData() triggers a state update with new fileData
@@ -321,7 +309,7 @@ async function populateSelectboxes(state) {
   if (!state.fileData || state.fileData.length === 0) {
     throw new Error("populateSelectboxes called but fileData is not available")
   }
-  
+
   const fileData = state.fileData;
 
   // Populate variant selectbox first
@@ -335,7 +323,7 @@ async function populateSelectboxes(state) {
   // Filter files by variant selection
   let filteredFileData = fileData;
   const variant = state.variant;
-  
+
   if (variant === "none") {
     // Show only files without variant_id in gold or versions
     filteredFileData = fileData.filter(file => {
@@ -366,12 +354,12 @@ async function populateSelectboxes(state) {
 
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
-    
-    await createHtmlElements(`<small>${collection_name.replaceAll("_"," ").trim()}</small>`, ui.toolbar.pdf)
-    
+
+    await createHtmlElements(`<small>${collection_name.replaceAll("_", " ").trim()}</small>`, ui.toolbar.pdf)
+
     // get a list of file data sorted by label
     const files = grouped_files[collection_name]
-      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0 )
+      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0)
 
     for (const file of files) {
       // populate pdf select box 
@@ -401,7 +389,7 @@ async function populateSelectboxes(state) {
             versionsToShow = file.versions.filter(version => version.variant_id === variant);
           }
           // If variant is "" (All), show all versions
-          
+
           // Also add gold entries if they match the variant filter
           let goldToShow = [];
           if (file.gold) {
@@ -419,7 +407,7 @@ async function populateSelectboxes(state) {
             // Add "Gold" group headers for both selectboxes
             await createHtmlElements(`<small>Gold</small>`, ui.toolbar.xml);
             await createHtmlElements(`<small>Gold</small>`, ui.toolbar.diff);
-            
+
             goldToShow.forEach((gold) => {
               // xml
               let option = new SlOption()
@@ -436,7 +424,7 @@ async function populateSelectboxes(state) {
               option.textContent = gold.label;
               ui.toolbar.diff.appendChild(option)
             });
-            
+
             // Add dividers after gold entries if there are versions to show
             if (versionsToShow.length > 0) {
               ui.toolbar.xml.appendChild(new SlDivider());
@@ -449,7 +437,7 @@ async function populateSelectboxes(state) {
             // Add "Versions" group headers for both selectboxes
             await createHtmlElements(`<small>Versions</small>`, ui.toolbar.xml);
             await createHtmlElements(`<small>Versions</small>`, ui.toolbar.diff);
-            
+
             versionsToShow.forEach((version) => {
               // xml
               let option = new SlOption()
@@ -483,22 +471,23 @@ async function populateSelectboxes(state) {
 
 /**
  * Called when the selection in the PDF selectbox changes
- * @param {ApplicationState} state
  */
-async function onChangePdfSelection(state) {
+async function onChangePdfSelection() {
+  let state = app.getCurrentState()
+
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
   const selectedFile = state.fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
   const pdf = selectedFile.pdf.hash  // Use document identifier
   const collection = selectedFile.collection
-  
+
   // Find gold file matching current variant selection
   let xml = null;
   if (selectedFile.gold) {
     const { variant } = state;
     let matchingGold;
-    
+
     if (variant === "none") {
       // Find gold without variant_id
       matchingGold = selectedFile.gold.find(gold => !gold.variant_id);
@@ -509,10 +498,10 @@ async function onChangePdfSelection(state) {
       // No variant filter - use first gold file
       matchingGold = selectedFile.gold[0];
     }
-    
+
     xml = matchingGold?.hash;
   }
-  
+
   const filesToLoad = {}
 
   if (pdf && pdf !== state.pdf) {
@@ -523,16 +512,15 @@ async function onChangePdfSelection(state) {
   }
 
   if (Object.keys(filesToLoad).length > 0) {
-    
     try {
-      services.removeMergeView(state)
-      await updateState(state, { collection })
-      await services.load(state, filesToLoad)
+      await services.removeMergeView(state)
+      await app.updateState({ collection })
+      await services.load(filesToLoad)
     }
     catch (error) {
-      await updateState(state, { collection: null, pdf: null, xml: null })
-      await reload(state, {refresh:true})
-      logger.warn(error.message)
+      logger.error(error.message)
+      await app.updateState({ collection: null, pdf: null, xml: null })
+      await reload({ refresh: true })
     }
   }
 }
@@ -540,9 +528,9 @@ async function onChangePdfSelection(state) {
 
 /**
  * Called when the selection in the XML selectbox changes
- * @param {ApplicationState} state
  */
-async function onChangeXmlSelection(state) {
+async function onChangeXmlSelection() {
+  const state = app.getCurrentState()
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
@@ -553,20 +541,20 @@ async function onChangeXmlSelection(state) {
       for (const file of state.fileData) {
         const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
-        
+
         if (hasGoldMatch || hasVersionMatch) {
-          await updateState(state, { collection: file.collection });
+          await app.updateState({ collection: file.collection });
           break;
         }
       }
-      
-      
+
+
       await services.removeMergeView(state)
-      await services.load(state, { xml })
+      await services.load({ xml })
     } catch (error) {
       console.error(error.message)
-      await reload(state, {refresh:true})
-      await updateState(state, {xml:null})
+      await reload({ refresh: true })
+      await updateState({ xml: null })
       dialog.error(error.message)
     }
   }
@@ -574,9 +562,9 @@ async function onChangeXmlSelection(state) {
 
 /**
  * Called when the selection in the diff version selectbox  changes
- * @param {ApplicationState} state
  */
-async function onChangeDiffSelection(state) {
+async function onChangeDiffSelection() {
+  const state = app.getCurrentState()
   const diff = ui.toolbar.diff.value
   if (diff && typeof diff == "string" && diff !== ui.toolbar.xml.value) {
     try {
@@ -587,14 +575,14 @@ async function onChangeDiffSelection(state) {
   } else {
     await services.removeMergeView(state)
   }
-  await updateState(state, { diff: diff })
+  await app.updateState({ diff: diff })
 }
 
 /**
  * Called when the selection in the variant selectbox changes
  * @param {ApplicationState} state
  */
-async function onChangeVariantSelection(state) {
+async function onChangeVariantSelection() {
   const variant = ui.toolbar.variant.value
-  await updateState(state, { variant, xml:null })
+  await app.updateState({ variant, xml: null })
 }

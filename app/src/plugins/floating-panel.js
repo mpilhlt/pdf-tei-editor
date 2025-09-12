@@ -94,7 +94,7 @@ async function install(state) {
 
   // listen for changes in the selectbox
   xp.addEventListener('change', async () => {
-    await updateState(currentState, { xpath: xp.value })
+    await updateState({ xpath: xp.value })
   });
 
   // Edit XPath button functionality removed for now
@@ -227,7 +227,7 @@ async function changeNodeIndex(state, delta) {
   if (index < 0) index = size 
   if (index >= size) index = 1
   const xpath = normativeXpath + `[${index}]`
-  await updateState(currentState, { xpath })
+  await updateState({ xpath })
 }
 
 

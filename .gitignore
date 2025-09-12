@@ -1,5 +1,6 @@
 .venv
 .env
+.env.docker
 node_modules
 llamore
 pdfjs

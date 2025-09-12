@@ -139,7 +139,6 @@ async function install(state) {
       return;
     }
     
-    
     // Use currentState instead of stale installation-time state
     if (currentState) {
       onFileTreeSelection(event, currentState);
@@ -520,7 +519,7 @@ async function onFileTreeSelection(event, state) {
   if (Object.keys(filesToLoad).length > 0) {
     
     try {
-      await services.load(state, filesToLoad);
+      await services.load(filesToLoad);
     } catch (error) {
       console.error("Error loading files:", error.message);
       // On error, reset state and reload file data (similar to file-selection.js)

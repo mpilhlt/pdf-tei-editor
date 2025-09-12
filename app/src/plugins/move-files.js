@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../app.js'
  * @import { SlButton, SlSelect, SlOption, SlDialog } from '../ui.js'
  */
-import { client, services, dialog, fileselection, updateState, logger } from '../app.js'
+import { app, client, services, dialog, fileselection, updateState, logger } from '../app.js'
 import { notify } from '../modules/sl-utils.js'
 import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js'
 import ui from '../ui.js'
@@ -128,9 +128,10 @@ async function showMoveFilesDialog(state) {
 
   ui.spinner.show('Moving files, please wait...');
   try {
+    state = app.getCurrentState()
     const { new_pdf_path, new_xml_path } = await client.moveFiles(pdf, xml, destinationCollection);
-    await fileselection.reload(state);
-    await services.load(state, { pdf: new_pdf_path, xml: new_xml_path });
+    await fileselection.reload();
+    await services.load({ pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
     dialog.error(`Error moving files: ${error.message}`);

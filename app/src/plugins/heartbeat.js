@@ -6,7 +6,7 @@
  * @import { ApplicationState, Plugin } from '../app.js' 
  */
 import ui from '../ui.js'
-import { logger, client, updateState, fileselection, dialog, authentication } from '../app.js'
+import { app, logger, client, updateState, fileselection, dialog, authentication } from '../app.js'
 import { notify } from '../modules/sl-utils.js'
 
 /**
@@ -115,7 +115,7 @@ function start(state, timeoutSeconds = 60) {
       const cacheStatus = heartbeatResponse?.cache_status || await client.getCacheStatus();
       if (cacheStatus.dirty) {
         logger.debug("File data cache is dirty, reloading file list");
-        await fileselection.reload(currentState, { refresh: true });
+        await fileselection.reload({ refresh: true });
       }
 
       // If we are here, the request was successful. Check if we were offline before.

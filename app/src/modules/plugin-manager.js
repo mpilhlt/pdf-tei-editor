@@ -289,7 +289,7 @@ export class PluginManager {
    */
 
   /**
-   * Invoke an endpoint on all plugins that implement it, in dependency order
+   * Invoke an endpoint on all plugins that implement it, in dependency order. The invocation can be done in parallel or sequentially. 
    * @param {string} endpoint - Endpoint to invoke
    * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
    * @param {InvokeOptions} [options] - Optional configuration for this invocation

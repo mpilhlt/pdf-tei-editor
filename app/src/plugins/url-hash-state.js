@@ -106,5 +106,5 @@ function getStateFromUrlHash() {
  */
 async function updateStateFromUrlHash(state) {
   const tmpState = getStateFromUrlHash()
-  return await updateState(state, tmpState)
+  return await updateState(tmpState)
 }

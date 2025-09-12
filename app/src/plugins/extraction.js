@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../app.js' 
  * @import { SlButton, SlButtonGroup, SlDialog } from '../ui.js'
  */
-import { client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
+import { app, client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
 import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ui from '../ui.js'
@@ -176,15 +176,15 @@ async function extractFromPDF(state, defaultOptions={}) {
       result = await client.extractReferences(filename, options)
       
       // Force reload of file list since server has updated cache
-      await fileselection.reload(state, {refresh:true})
+      await fileselection.reload({refresh:true})
       
       // Update state.variant with the variant_id that was used for extraction
       if (options.variant_id) {
-        await updateState(state, { variant: options.variant_id })
+        await app.updateState({ variant: options.variant_id })
       }
       
       // Load the extracted result (server now returns hashes)
-      await services.load(state, result)
+      await services.load(result)
       
     } finally {
       ui.spinner.hide()

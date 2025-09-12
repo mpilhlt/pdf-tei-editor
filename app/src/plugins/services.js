@@ -9,10 +9,10 @@
  * @import { UserData } from '../plugins/authentication.js'
  */
 
-import { endpoints as ep } from '../app.js'
+import { app, endpoints as ep } from '../app.js'
 import ui, { updateUi } from '../ui.js'
 import {
-  app, client, logger, dialog, config,
+  client, logger, dialog, config,
   fileselection, xmlEditor, pdfViewer, 
   services, validation, authentication, 
   sync, accessControl
@@ -238,10 +238,13 @@ async function inProgress(validationPromise) {
 
 /**
  * Loads the given XML and/or PDF file(s) into the editor and viewer 
- * @param {ApplicationState} state
  * @param {Object} files An Object with one or more of the keys "xml" and "pdf"
  */
-async function load(state, { xml, pdf }) {
+async function load({ xml, pdf }) {
+
+  // use application state instead of
+  const currentState = app.getCurrentState()
+  const stateChanges = {}
 
   const promises = []
   let file_is_locked = false
@@ -259,11 +262,11 @@ async function load(state, { xml, pdf }) {
   if (xml) {
     // Check for lock before loading
 
-    if (state.xml !== xml) {
+    if (currentState.xml !== xml) {
       try {
         ui.spinner.show('Loading file, please wait...')
-        if (state.xml && !state.editorReadOnly) {
-          await client.releaseLock(state.xml)
+        if (currentState.xml && !currentState.editorReadOnly) {
+          await client.releaseLock(currentState.xml)
         }
         // Check access control before attempting to acquire lock
         const canEdit = accessControl.checkCanEditFile(xml)
@@ -291,7 +294,7 @@ async function load(state, { xml, pdf }) {
       }
     }
 
-    await removeMergeView(state)
+    await removeMergeView()
     await app.updateState({ xml: null, diff: null, editorReadOnly: file_is_locked })
     logger.info("Loading XML: " + xml)
     // Convert document identifier to static file URL
@@ -305,17 +308,17 @@ async function load(state, { xml, pdf }) {
   } catch (error) {
     console.error(error.message)
     if (error.status === 404) {
-      await fileselection.reload(state)
+      await fileselection.reload()
       return
     }
     throw error
   }
 
   if (pdf) {
-    state.pdf = pdf
+    stateChanges.pdf = pdf
   }
   if (xml) {
-    state.xml = xml
+    stateChanges.xml = xml
     // call asynchronously, don't block the editor
     startAutocomplete().then(result => {
       result && notify("Autocomplete is available")
@@ -323,11 +326,11 @@ async function load(state, { xml, pdf }) {
   }
 
   // Set collection based on loaded documents if not already set
-  if ((pdf || xml) && !state.collection) {
+  if ((pdf || xml) && !currentState.collection) {
     for (const file of fileselection.fileData) {
       // Check PDF hash
       if (pdf && file.pdf && file.pdf.hash === pdf) {
-        state.collection = file.collection;
+        stateChanges.collection = file.collection;
         break;
       }
       // Check XML hash in gold or versions
@@ -335,7 +338,7 @@ async function load(state, { xml, pdf }) {
         const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
         const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
         if (hasGoldMatch || hasVersionMatch) {
-          state.collection = file.collection;
+          stateChanges.collection = file.collection;
           break;
         }
       }
@@ -343,7 +346,7 @@ async function load(state, { xml, pdf }) {
   }
 
   // notify plugins
-  await app.updateState(state)
+  await app.updateState(stateChanges)
 }
 
 async function startAutocomplete() {
@@ -401,9 +404,8 @@ async function showMergeView(state, diff) {
 
 /**
  * Removes all remaining diffs
- * @param {ApplicationState} state
  */
-async function removeMergeView(state) {
+async function removeMergeView() {
   xmlEditor.hideMergeView()
   // re-enable validation
   validation.configure({ mode: "auto" })
@@ -434,11 +436,11 @@ async function deleteCurrentVersion(state) {
       // Clear current XML state after successful deletion
       await app.updateState({ xml: null })
       // update the file data
-      await fileselection.reload(state)
+      await fileselection.reload()
       // load the gold version
       // @ts-ignore
       const xml = ui.toolbar.xml.firstChild?.value
-      await load(state, { xml })
+      await load({ xml })
       notify(`Version "${versionName}" has been deleted.`)
       sync.syncFiles(state)
         .then(summary => summary && console.debug(summary))
@@ -497,7 +499,7 @@ async function deleteAllVersions(state) {
     // Clear current XML state after successful deletion
     await app.updateState({ xml: null })
     // update the file data
-    await fileselection.reload(state)
+    await fileselection.reload()
     
     // Find and load the appropriate gold version for the current variant
     let goldToLoad = null;
@@ -515,7 +517,7 @@ async function deleteAllVersions(state) {
     }
     
     if (goldToLoad) {
-      await load(state, { xml: goldToLoad.hash });
+      await load({ xml: goldToLoad.hash });
     }
     
     const variantText = variant === "none" ? "without variant" : 
@@ -567,7 +569,7 @@ async function deleteAll(state) {
     notify(error.message, "warning")
   } finally {
     // update the file data
-    await fileselection.reload(state, {refresh:true})
+    await fileselection.reload({refresh:true})
     // remove xml and pdf
     await app.updateState({xml: null, pdf: null})
   }
@@ -604,8 +606,8 @@ async function uploadXml(state) {
   const { filename: tempFilename } = await client.uploadFile(undefined, { accept: '.xml' })
   // @ts-ignore
   const { path } = await client.createVersionFromUpload(tempFilename, state.xml)
-  await fileselection.reload(state)
-  await load(state, { xml: path })
+  await fileselection.reload()
+  await load({ xml: path })
   notify("Document was uploaded. You are now editing the new version.")
 }
 
@@ -741,6 +743,7 @@ async function saveRevision(state) {
  * @param {ApplicationState} state
  */
 async function createNewVersion(state) {
+
   // @ts-ignore
   const newVersiondialog = ui.newVersionDialog;
   try {
@@ -777,22 +780,29 @@ async function createNewVersion(state) {
 
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
+    if (!state.xml) throw new Error('No XML file loaded');
+    
     // save new version first
-    if (!state.xml) throw new Error('No XML file loaded')
-    let { hash } = await saveXml(state.xml, true)
+    let { hash } = await app.invokePluginEndpoint(
+      ep.filedata.saveXml, 
+      [state.xml, /* save as new version */ true], 
+      {result:"first"}
+    )
 
     // update the state to load the new document
-    await load(state, { xml: hash })
+    await load({ xml: hash })
 
     // now modify the header
     await addTeiHeaderInfo(respStmt, editionStmt)
 
     // save the modified content back to the same timestamped version file
-    await saveXml(hash, false)
+    await app.invokePluginEndpoint(ep.filedata.saveXml, hash)
     xmlEditor.markAsClean() 
 
     // reload the file data to display the new name and inform the user
-    await fileselection.reload(state, {refresh:true})
+    await fileselection.reload({refresh:true})
+    await app.updateState({ xml: hash }) // should have been done 
+
     notify("Document was duplicated. You are now editing the copy.")
     
     // sync the new file to the WebDav server
@@ -809,9 +819,6 @@ async function createNewVersion(state) {
     newVersiondialog.hide()
   }
 }
-
-
-
 
 /**
  * Returns a list of non-empty text content from all text nodes contained in the given node

@@ -174,5 +174,5 @@ async function onClickSyncBtn(state) {
     await updateState({ editorReadOnly: originalReadOnly })
   }
   // manually pressing the sync button should reload file data even if there were no changes
-  await fileselection.reload(state, {refresh:true})
+  await fileselection.reload({refresh:true})
 }

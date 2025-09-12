@@ -100,7 +100,7 @@ async function start() {
     if (pdf !== null) {
       // lod the documents
       try {
-        await services.load(currentState, { pdf, xml, diff })
+        await services.load({ pdf, xml, diff })
       } catch (error) {
         dialog.error(error.message)
         logger.critical(error.message)
