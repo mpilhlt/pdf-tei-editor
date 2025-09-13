@@ -1,111 +1,36 @@
 #!/usr/bin/env node
 
 /**
- * Test script for extractor discovery and listing
- * 
- * This script:
- * 1. Starts the development server with TEST_IN_PROGRESS flag
- * 2. Tests the /api/extract/list endpoint
- * 3. Verifies that extractors are properly discovered and listed
- * 4. Cleans up by stopping the server
+ * Backend Integration Test for extractor discovery and listing
+ *
+ * This test assumes a containerized test environment is already running
+ * and focuses on testing the backend API.
+ *
+ * Usage: npm run test:e2e:backend tests/e2e/test-extractors.js
+ *
+ * @testCovers server/api/extract.py
+ * @testCovers server/lib/extractors/
  */
 
-const { spawn } = require('child_process');
-const http = require('http');
-const fs = require('fs');
-
-// Configuration
-const SERVER_PORT = 3002; // Use different port for testing
-const SERVER_HOST = 'localhost';
-const TEST_TIMEOUT = 30000; // 30 seconds
+import http from 'http';
 
 class ExtractorTest {
     constructor() {
-        this.serverProcess = null;
         this.testResults = {
-            serverStarted: false,
             apiResponding: false,
             llamoreFound: false,
             kisskiFound: false,
             totalExtractors: 0
         };
+
+        // Get configuration from environment variables
+        this.host = process.env.E2E_HOST || 'localhost';
+        this.port = parseInt(process.env.E2E_PORT || '8000');
+        this.containerUrl = process.env.E2E_CONTAINER_URL || `http://${this.host}:${this.port}`;
+
+        console.log(`📡 Using container URL: ${this.containerUrl}`);
     }
 
-    /**
-     * Start the development server with test environment variables
-     */
-    async startServer() {
-        console.log('🚀 Starting development server...');
-        
-        return new Promise((resolve, reject) => {
-            const env = {
-                ...process.env,
-                TEST_IN_PROGRESS: '1',
-                KISSKI_API_KEY: 'dummy-key-for-testing'
-            };
-
-            // Use bash to source the virtual environment and run the server on test port
-            this.serverProcess = spawn('bash', ['-c', `source .venv/bin/activate && ./bin/server ${SERVER_HOST} ${SERVER_PORT}`], {
-                cwd: process.cwd(),
-                env: env,
-                stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-            let serverOutput = '';
-            let startupComplete = false;
-
-            this.serverProcess.stdout.on('data', (data) => {
-                const output = data.toString();
-                serverOutput += output;
-                console.log(`[SERVER] ${output.trim()}`);
-                
-                // Check if server has started
-                if (output.includes(`Running on http://${SERVER_HOST}:${SERVER_PORT}`) && !startupComplete) {
-                    startupComplete = true;
-                    this.testResults.serverStarted = true;
-                    console.log('✅ Server started successfully');
-                    
-                    // Wait a bit more for full initialization
-                    setTimeout(() => resolve(), 3000);
-                }
-            });
-
-            this.serverProcess.stderr.on('data', (data) => {
-                const output = data.toString();
-                console.log(`[SERVER ERROR] ${output.trim()}`);
-                
-                // Flask outputs the "Running on" message to stderr
-                if (output.includes(`Running on http://${SERVER_HOST}:${SERVER_PORT}`) && !startupComplete) {
-                    startupComplete = true;
-                    this.testResults.serverStarted = true;
-                    console.log('✅ Server started successfully');
-                    
-                    // Wait a bit more for full initialization
-                    setTimeout(() => resolve(), 3000);
-                }
-            });
-
-            this.serverProcess.on('error', (error) => {
-                console.error('❌ Failed to start server:', error.message);
-                reject(error);
-            });
-
-            this.serverProcess.on('exit', (code) => {
-                if (!startupComplete) {
-                    console.error(`❌ Server exited with code ${code} before startup completed`);
-                    reject(new Error(`Server startup failed with exit code ${code}`));
-                }
-            });
-
-            // Timeout for server startup
-            setTimeout(() => {
-                if (!startupComplete) {
-                    console.error('❌ Server startup timeout');
-                    reject(new Error('Server startup timeout'));
-                }
-            }, 15000);
-        });
-    }
 
     /**
      * Test the /api/extract/list endpoint
@@ -115,8 +40,8 @@ class ExtractorTest {
         
         return new Promise((resolve, reject) => {
             const options = {
-                hostname: SERVER_HOST,
-                port: SERVER_PORT,
+                hostname: this.host,
+                port: this.port,
                 path: '/api/extract/list',
                 method: 'GET',
                 headers: {
@@ -220,32 +145,6 @@ class ExtractorTest {
         }
     }
 
-    /**
-     * Stop the development server
-     */
-    async stopServer() {
-        console.log('🛑 Stopping development server...');
-        
-        if (this.serverProcess) {
-            return new Promise((resolve) => {
-                this.serverProcess.on('exit', () => {
-                    console.log('✅ Server stopped');
-                    resolve();
-                });
-                
-                this.serverProcess.kill('SIGTERM');
-                
-                // Force kill if it doesn't stop gracefully
-                setTimeout(() => {
-                    if (this.serverProcess && !this.serverProcess.killed) {
-                        console.log('🔨 Force killing server...');
-                        this.serverProcess.kill('SIGKILL');
-                        resolve();
-                    }
-                }, 5000);
-            });
-        }
-    }
 
     /**
      * Print test results summary
@@ -253,17 +152,16 @@ class ExtractorTest {
     printResults() {
         console.log('\n📊 TEST RESULTS SUMMARY');
         console.log('========================');
-        console.log(`Server Started: ${this.testResults.serverStarted ? '✅ PASS' : '❌ FAIL'}`);
         console.log(`API Responding: ${this.testResults.apiResponding ? '✅ PASS' : '❌ FAIL'}`);
         console.log(`LLamore Extractor Found: ${this.testResults.llamoreFound ? '✅ PASS' : '❌ FAIL'}`);
         console.log(`KISSKI Extractor Found: ${this.testResults.kisskiFound ? '✅ PASS' : '❌ FAIL'}`);
         console.log(`Total Extractors: ${this.testResults.totalExtractors}`);
-        
-        const totalTests = 4;
+
+        const totalTests = 3;
         const passedTests = Object.values(this.testResults).filter(result => result === true).length;
-        
+
         console.log(`\n🎯 OVERALL: ${passedTests}/${totalTests} tests passed`);
-        
+
         if (passedTests === totalTests) {
             console.log('🎉 ALL TESTS PASSED!');
             return true;
@@ -277,61 +175,27 @@ class ExtractorTest {
      * Run all tests
      */
     async runTests() {
-        console.log('🧪 Starting Extractor Discovery Tests');
-        console.log('=====================================\n');
-        
+        console.log('🧪 Backend Integration Test - Extractor Discovery');
+        console.log('=================================================\n');
+
         try {
-            // Start server
-            await this.startServer();
-            
-            // Test extractor list
+            // Test extractor list endpoint
             await this.testExtractorList();
-            
-            // Print results
+
+            // Print results and exit
             const allPassed = this.printResults();
-            
-            // Stop server
-            await this.stopServer();
-            
-            // Exit with appropriate code
             process.exit(allPassed ? 0 : 1);
-            
+
         } catch (error) {
             console.error('💥 Test failed with error:', error.message);
-            
-            // Try to stop server if it's running
-            if (this.serverProcess) {
-                await this.stopServer();
-            }
-            
             this.printResults();
             process.exit(1);
         }
     }
 }
 
-// Handle process termination
-let testInstance = null;
-
-process.on('SIGINT', async () => {
-    console.log('\n🛑 Test interrupted by user');
-    if (testInstance && testInstance.serverProcess) {
-        await testInstance.stopServer();
-    }
-    process.exit(1);
-});
-
-process.on('SIGTERM', async () => {
-    console.log('\n🛑 Test terminated');
-    if (testInstance && testInstance.serverProcess) {
-        await testInstance.stopServer();
-    }
-    process.exit(1);
-});
-
 // Run the tests
 const test = new ExtractorTest();
-testInstance = test; // Store reference for cleanup
 test.runTests().catch((error) => {
     console.error('💥 Unexpected error:', error.message);
     process.exit(1);

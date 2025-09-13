@@ -5,7 +5,7 @@
 
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import StateManager from '../app/src/modules/state-manager.js';
+import StateManager from '../../app/src/modules/state-manager.js';
 
 describe('StateManager', () => {
   let stateManager;

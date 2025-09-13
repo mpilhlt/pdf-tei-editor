@@ -27,7 +27,8 @@
       "Bash(npm run test:*)",
       "WebFetch(domain:github.com)",
       "Bash(git branch:*)",
-      "Bash(podman logs:*)"
+      "Bash(podman logs:*)",
+      "Bash(./bin/test-e2e)"
     ],
     "deny": []
   }

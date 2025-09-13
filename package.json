@@ -10,12 +10,15 @@
     "build": "node bin/build.js",
     "manage": "node bin/manage.js",
     "prepare": "husky",
-    "test": "node --test tests/*.test.js",
-    "test:hook": "node --test tests/application.test.js tests/plugin-manager.test.js tests/state-manager.test.js tests/sync-algorithm.test.js",
-    "test:sync": "node --test tests/sync-algorithm.test.js",
-    "test:e2e": "./bin/test-e2e",
-    "test:e2e:headed": "./bin/test-e2e --headed",
-    "test:e2e:debug": "./bin/test-e2e --debug --headed"
+    "test": "node tests/smart-test-runner.js",
+    "test:hook": "node --test tests/js/application.test.js tests/js/plugin-manager.test.js tests/js/state-manager.test.js tests/js/sync-algorithm.test.js",
+    "test:sync": "node --test tests/js/sync-algorithm.test.js",
+    "test:e2e": "node tests/e2e-runner.js --playwright",
+    "test:e2e:headed": "node tests/e2e-runner.js --playwright --headed",
+    "test:e2e:debug": "node tests/e2e-runner.js --playwright --debug --headed",
+    "test:e2e:firefox": "node tests/e2e-runner.js --playwright --browser firefox",
+    "test:e2e:webkit": "node tests/e2e-runner.js --playwright --browser webkit",
+    "test:e2e:backend": "node tests/e2e-runner.js"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

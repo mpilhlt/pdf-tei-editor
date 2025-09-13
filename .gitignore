@@ -29,8 +29,8 @@ data/*
 tests/test-dependencies.json
 
 # Playwright test artifacts
-tests/test-results/
-tests/playwright-report/
+tests/e2e/test-results/
+tests/e2e/playwright-report/
 tests/.cache/
 
 # Build artifacts

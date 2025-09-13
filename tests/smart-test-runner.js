@@ -7,7 +7,7 @@ import madge from 'madge';
 import { parse as parseComments } from 'comment-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = dirname(dirname(dirname(__dirname))); // Go up from app/src/modules to project root
+const projectRoot = dirname(__dirname); // Go up from tests to project root
 const cacheFile = join(projectRoot, 'tests', 'test-dependencies.json');
 
 /**
@@ -45,23 +45,36 @@ class SmartTestRunner {
     const testsDir = join(projectRoot, 'tests');
     if (!existsSync(testsDir)) return { js: [], py: [], e2e: [] };
 
-    const files = readdirSync(testsDir);
+    const jsTests = [];
+    const pyTests = [];
 
-    const jsTests = files
-      .filter(file => file.endsWith('.test.js'))
-      .map(file => `tests/${file}`);
+    // Discover JS tests in tests/js/
+    const jsDir = join(testsDir, 'js');
+    if (existsSync(jsDir)) {
+      const jsFiles = readdirSync(jsDir);
+      jsTests.push(...jsFiles
+        .filter(file => file.endsWith('.test.js') || file.endsWith('.cjs'))
+        .map(file => `tests/js/${file}`)
+      );
+    }
 
-    const pyTests = files
-      .filter(file => file.startsWith('test_') && file.endsWith('.py'))
-      .map(file => `tests/${file}`);
+    // Discover Python tests in tests/py/
+    const pyDir = join(testsDir, 'py');
+    if (existsSync(pyDir)) {
+      const pyFiles = readdirSync(pyDir);
+      pyTests.push(...pyFiles
+        .filter(file => file.startsWith('test_') && file.endsWith('.py'))
+        .map(file => `tests/py/${file}`)
+      );
+    }
 
-    // Discover e2e tests
+    // Discover e2e tests (both Playwright .spec.js and backend .js)
     const e2eTests = [];
     const e2eDir = join(testsDir, 'e2e');
     if (existsSync(e2eDir)) {
       const e2eFiles = readdirSync(e2eDir);
       e2eTests.push(...e2eFiles
-        .filter(file => file.endsWith('.spec.js'))
+        .filter(file => file.endsWith('.spec.js') || (file.endsWith('.js') && file.startsWith('test-')))
         .map(file => `tests/e2e/${file}`)
       );
     }
@@ -147,7 +160,8 @@ class SmartTestRunner {
         }
         
         // Use madge to analyze imports with correct API
-        const result = await madge(fullPath, {
+        const result = await madge(testFile, {
+          baseDir: projectRoot,
           fileExtensions: ['js'],
           excludeRegExp: [/node_modules/, /\.husky/]
         });
@@ -155,19 +169,12 @@ class SmartTestRunner {
         // Get the dependency tree using the correct method
         const dependencyTree = result.obj();
         
-        // Madge uses filename without path prefix when analyzing single file
-        const filename = testFile.split('/').pop(); // Get just 'temp-import-test.test.js'
-        const dependencies = dependencyTree[filename] || [];
+        const dependencies = dependencyTree[testFile] || [];
         
         
         const filteredDeps = dependencies
           .map(dep => {
-            // Convert relative paths to absolute from project root
-            if (dep.startsWith('../')) {
-              // Resolve relative imports like '../app/src/modules/application.js'
-              const resolved = dep.replace(/^\.\.\//, '');
-              return resolved;
-            }
+            // paths are now relative to project root, so no need for complex mapping
             return dep;
           })
           .filter(dep => dep.startsWith('app/') || dep.startsWith('server/'))

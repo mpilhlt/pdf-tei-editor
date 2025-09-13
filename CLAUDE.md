@@ -55,8 +55,32 @@ npm test
 # Run specific test suite (e.g., synchronization algorithm tests)
 npm run test:sync
 
+# Run end-to-end tests in containerized environment
+npm run test:e2e
+npm run test:e2e:firefox    # Test with Firefox
+npm run test:e2e:headed     # Show browser UI
+npm run test:e2e:debug      # Debug mode
+npm run test:e2e:backend    # Backend integration tests only
+
+# Run smart test runner (selects tests based on file changes)
+node tests/smart-test-runner.js --changed-files <files>
+
 # The application includes XML validation through TEI schema validation
 ```
+
+#### Testing Architecture
+
+**Smart Test Runner**: Automatically selects relevant tests based on file dependencies using `@testCovers` annotations. Supports wildcard patterns like `@testCovers app/src/*` for frontend-wide coverage.
+
+**End-to-End Tests**: Unified cross-platform E2E testing using Node.js runner (`tests/e2e-runner.js`) that handles both Playwright browser tests and backend integration tests. Features:
+- **Containerized testing**: Docker/Podman with multi-stage builds and layer caching
+- **Cross-platform support**: Works on Windows, macOS, and Linux (replaces Linux-only bash script)
+- **Dual test modes**: Playwright browser tests (`--playwright` flag) and backend integration tests
+- **Automatic cleanup**: Containers cleaned up, images preserved for cache efficiency
+- **Environment variables**: `E2E_HOST`, `E2E_PORT`, `E2E_CONTAINER_PORT` for flexible configuration
+- **Integration**: Works with smart test runner via `@testCovers` annotations
+
+**UI Testing Guidelines**: E2E tests should use the UI navigation system exposed via `window.ui` (see `app/src/ui.js:103`) to efficiently access UI parts documented via JSDoc. This provides type-safe access to named DOM elements like `ui.toolbar.pdf`, `ui.dialog.message`, etc. For custom selectors, the navigation system helps identify paths to named descendants.
 
 ### User Management
 
