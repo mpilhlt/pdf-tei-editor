@@ -1,13 +1,19 @@
-.venv
+# Secrets and caches
 .env
 .env.docker
-node_modules
-llamore
-pdfjs
+
+# Caches and temp files
+.venv
 __pycache__
 .python-version
 .DS_Store
 ._*
+*.backup
+nohup.out
+
+# installation artifacts
+node_modules
+pdfjs
 
 # Debug logs
 log/
@@ -19,8 +25,10 @@ data/*
 !data/tei/example/
 !data/versions/.gitignore
 
-# Ignore backup files and temporary files
-*.backup
-gunicorn.txt
-nohup.out
+# Smart test runner cache
+tests/test-dependencies.json
 
+# Build artifacts
+app/web/app.js
+app/web/templates.json
+app/web/assets/

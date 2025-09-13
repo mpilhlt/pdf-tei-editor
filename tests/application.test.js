@@ -2,6 +2,7 @@
  * Unit tests for Application class
  * Tests orchestration between PluginManager and StateManager, plugin lifecycle management,
  * and proper separation of concerns
+ * @testCovers *
  */
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
