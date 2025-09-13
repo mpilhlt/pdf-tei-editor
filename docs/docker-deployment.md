@@ -134,8 +134,11 @@ This creates a sandbox environment where users can experiment freely, knowing th
 To build your own images:
 
 ```bash
-# Build locally
-docker build -t my-pdf-tei-editor .
+# Build locally (production image)
+docker build --target app -t my-pdf-tei-editor .
+
+# Build test image (includes test user and configurations)
+docker build --target test -t my-pdf-tei-editor-test .
 
 # Build and push to Docker Hub
 ./docker/build-and-push.sh

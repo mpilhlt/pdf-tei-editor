@@ -119,8 +119,8 @@ build_image() {
     
     log_info "Building container image: $full_tag"
     
-    # Build with both version tag and latest
-    if $CONTAINER_CMD build -t "$full_tag" -t "$latest_tag" .; then
+    # Build with both version tag and latest (using app target for production)
+    if $CONTAINER_CMD build --target app -t "$full_tag" -t "$latest_tag" .; then
         log_success "Container image built successfully"
         
         # Show image details

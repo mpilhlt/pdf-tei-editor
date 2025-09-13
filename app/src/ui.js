@@ -101,3 +101,4 @@ export default ui;
 
 // @ts-ignore
 window.ui = ui; // for debugging
+// Trigger e2e test
