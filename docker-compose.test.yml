@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  pdf-tei-editor-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount test data directory for easier test file management
+      - ./tests/e2e/fixtures:/app/test-data:ro
+    environment:
+      - FLASK_ENV=testing
+      - PYTHONPATH=/app
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    # Ensure clean state for each test run
+    container_name: pdf-tei-editor-test-${TEST_RUN_ID:-default}
