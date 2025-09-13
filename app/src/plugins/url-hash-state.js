@@ -8,7 +8,7 @@ import { logger, config, updateState } from '../app.js'
 import { UrlHash } from '../modules/browser-utils.js'
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
  */
 
 // module closure vars

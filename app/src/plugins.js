@@ -7,6 +7,7 @@
 
 /**
  * @import {Plugin} from './modules/plugin-base.js'
+ * @import {PluginConfig} from './modules/plugin-manager.js'
  */
 
 // class-based plugins
@@ -38,13 +39,7 @@ import { plugin as syncPlugin, api as sync } from './plugins/sync.js'
 import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
 import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
 
-/**
- * @typedef {object & Record<string, any>} PluginConfiguration
- * @property {string} name - The name of the plugin
- * @property {string[]} [deps] - The names of the plugins this plugin depends on
- */
-
-/** @type {Array<Plugin|PluginConfiguration>} */
+/** @type {Array<Plugin|PluginConfig>} */
 const plugins = [
   // class-based
   AuthenticationPlugin,

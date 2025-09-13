@@ -4,7 +4,7 @@
  */
 
 /**
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  */
 
 // Global lookup index for efficient hash-based queries

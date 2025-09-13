@@ -66,11 +66,12 @@ import Plugin from './plugin-base.js';
 
 /**
  * The minimal plugin configuration object
- * @typedef {Object} PluginConfig
- * @property {string} name - Plugin name
- * @property {string[]} [deps] - Array of plugin names this plugin depends on
+ * @typedef {object & Record<string, any>} PluginConfig
+ * @property {string} name - The name of the plugin
+ * @property {string[]} [deps] - The names of the plugins this plugin depends on
  * @property {any} [initialize] - Optional initialization function 
  */
+
 
 /**
  * Options for plugin endpoint invocation
@@ -83,6 +84,11 @@ import Plugin from './plugin-base.js';
  *    'first' (default) returns the first fulfilled response, 
  *    'values' returns the values of all fulfilled responses, 
  *    'full' returns an array of {status:string, value:any} objects 
+ * @property {boolean} [debug] - If true, output verbose debug messages
+ */
+
+/**
+ * @typedef {({status: 'fulfilled', value: any} | {status: 'rejected', reason: Error})} InvocationResult
  */
 
 /**
@@ -110,7 +116,7 @@ export class PluginManager {
       timeout: options.timeout || 2000,
       throws: options.throws || false,
       mode: options.mode || "parallel",
-      result: options.result || "full"
+      result: options.result || "first"
     };
 
     /** @type {boolean} */
@@ -283,12 +289,6 @@ export class PluginManager {
   }
 
   /**
-   * @typedef {object} InvocationResult
-   * @property {'fulfilled'|'rejected'} status
-   * @property {any} value 
-   */
-
-  /**
    * Invoke an endpoint on all plugins that implement it, in dependency order. The invocation can be done in parallel or sequentially. 
    * @param {string} endpoint - Endpoint to invoke
    * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
@@ -405,7 +405,8 @@ export class PluginManager {
           // Handle throwing behavior before result processing
           if (shouldThrow) {
             const firstRejected = result.find(({ status }) => status === "rejected");
-            if (firstRejected) {
+            if (firstRejected ) {
+              // @ts-ignore
               throw firstRejected.reason;
             }
           }
@@ -430,11 +431,13 @@ export class PluginManager {
     switch (resultMode) {
       case 'first':
         const firstFulfilled = result.find(({ status }) => status === "fulfilled");
+        // @ts-ignore
         return firstFulfilled ? firstFulfilled.value : undefined;
       case 'values':
         // Return only the values from fulfilled results
         return result
           .filter(({ status }) => status === "fulfilled")
+          // @ts-ignore
           .map(({ value }) => value);
       case 'full':
       default:

@@ -1,5 +1,5 @@
 /** 
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  * @import { UIPart } from '../ui.js'
  */
 import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'

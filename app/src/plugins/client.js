@@ -3,7 +3,8 @@
  */
 
 /** 
- * @import { ApplicationState, Plugin } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
+ * @import { PluginConfig } from '../modules/plugin-manager.js'
  */
 
 import { logger, hasStateChanged } from '../app.js';
@@ -127,7 +128,7 @@ const api = {
 
 /**
  * component plugin
- * @type {Plugin}
+ * @type {PluginConfig}
  */
 const plugin = {
   name: "client",

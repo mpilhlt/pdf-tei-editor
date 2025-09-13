@@ -3,7 +3,7 @@
  */
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
  * @import { SlButton, SlInput } from '../ui.js'
  */
 

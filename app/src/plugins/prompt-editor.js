@@ -3,7 +3,7 @@
  * LLM prompt
  */
 
-/** @import { ApplicationState } from '../app.js' */
+/** @import { ApplicationState } from '../state.js' */
 import ui from '../ui.js'
 import { logger, client } from '../app.js'
 import { registerTemplate, createSingleFromTemplate, updateUi, SlDialog, SlButton, SlMenu, SlMenuItem, SlTextarea, SlInput, SlSelect, SlOption } from '../ui.js'

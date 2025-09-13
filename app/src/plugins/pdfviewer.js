@@ -2,7 +2,7 @@
  * PDF Viewer Plugin
  */
 
-/** @import { ApplicationState } from '../app.js' */
+/** @import { ApplicationState } from '../state.js' */
 /** @import { UIPart } from '../ui.js' */
 /** @import { StatusBar } from '../modules/panels/status-bar.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'

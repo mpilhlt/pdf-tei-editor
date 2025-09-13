@@ -1,8 +1,8 @@
 /**
  * PluginContext - Facade providing clean interface between plugins and application
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  * @import { Application } from '../modules/application.js'
- * @import {InvokeOptions} from '../modules/plugin-manager.js'
+ * @import { InvokeOptions, InvocationResult } from '../modules/plugin-manager.js'
  */ 
 
 /**
@@ -26,7 +26,7 @@ export class PluginContext {
    * @param {Partial<ApplicationState>} changes - Changes to apply
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async updateState(changes, secondArg) {
+  async updateState(changes, secondArg=undefined) {
     if (secondArg !== undefined) {
       throw new Error('PluginContext.updateState() now takes only one parameter (changes). Remove the currentState parameter.');
     }

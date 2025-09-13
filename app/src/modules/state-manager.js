@@ -1,6 +1,6 @@
 /**
  * Pure state management class for immutable state updates with history tracking
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  */
 
 // WeakMap to store state history without creating memory leaks
@@ -114,17 +114,19 @@ export class StateManager {
    * Get all property names that have changed from the previous state
    * 
    * @param {ApplicationState} state - Current state to analyze
-   * @returns {string[]} Array of property names that have changed
+   * @returns {Array<keyof ApplicationState>} Array of property names that have changed
    */
   getChangedStateKeys(state) {
     const previousState = this.getPreviousState(state);
     if (!previousState) {
-      return Object.keys(state);
+      const keys = /** @type {Array<keyof ApplicationState>} */  (Object.keys(state))
+      return keys;
     }
     
-    const changedKeys = [];
+    const changedKeys = /** @type {Array<keyof ApplicationState>} */ ([]);
     for (const key in state) {
       if (state[key] !== previousState[key]) {
+        // @ts-ignore
         changedKeys.push(key);
       }
     }

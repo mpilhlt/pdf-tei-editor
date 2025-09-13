@@ -7,7 +7,7 @@
  */
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
  * @import { SlSelect, SlButton, SlButtonGroup, UIPart } from '../ui.js'
  * @import { documentActionsPart, teiServicesPart } from './services.js'
  * @import { extractionActionsPart } from './extraction.js'

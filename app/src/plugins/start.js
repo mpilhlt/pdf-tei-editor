@@ -6,7 +6,7 @@
  */
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
  */
 import ui from '../ui.js'
 import {

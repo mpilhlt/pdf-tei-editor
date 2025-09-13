@@ -40,7 +40,8 @@ describe('Application', () => {
     it('should create application with plugin and state managers', () => {
       const app = new Application(pluginManager, stateManager);
       
-      assert.strictEqual(app.getCurrentState(), null);
+      // State should not be initialized yet, so getCurrentState should throw
+      assert.throws(() => app.getCurrentState(), /State has not been initialized yet/);
       assert.strictEqual(app.getStateManager(), stateManager);
       assert.ok(app.getPluginContext());
     });
@@ -71,7 +72,10 @@ describe('Application', () => {
         }
       });
       
-      const newState = await application.updateState(mockState, {
+      // Initialize state first (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
+      
+      const newState = await application.updateState({
         pdf: 'document.pdf'
       });
       
@@ -91,7 +95,10 @@ describe('Application', () => {
         }
       });
       
-      const newState = await application.updateState(mockState, {});
+      // Initialize state first (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
+      
+      const newState = await application.updateState({});
       
       assert.strictEqual(pluginCallCount, 1); // Still called once
       assert.strictEqual(newState, mockState); // Returns original state
@@ -107,7 +114,10 @@ describe('Application', () => {
         }
       });
       
-      const newState = await application.updateStateExt(mockState, {
+      // Initialize state first (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
+      
+      const newState = await application.updateStateExt({
         myPlugin: { data: 'test' }
       });
       
@@ -151,7 +161,10 @@ describe('Application', () => {
       });
 
       await application.installPlugins(mockState);
-      const newState = await application.updateState(mockState, { pdf: 'legacy-test.pdf' });
+      // Initialize state first (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
+      
+      const newState = await application.updateState({ pdf: 'legacy-test.pdf' });
 
       assert.strictEqual(legacyUpdateCalled, true);
       assert.strictEqual(receivedState?.pdf, 'legacy-test.pdf');
@@ -185,7 +198,10 @@ describe('Application', () => {
       application.registerPlugins([pluginInstance]);
 
       await application.installPlugins(mockState);
-      const newState = await application.updateState(mockState, { 
+      // Initialize state first (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
+      
+      const newState = await application.updateState({ 
         pdf: 'new-plugin-test.pdf', 
         xml: 'new-plugin-test.xml' 
       });
@@ -325,6 +341,9 @@ describe('Application', () => {
       // Install first to set initial state
       await pluginInstance.install(mockState);
       
+      // Initialize application state (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
+      
       // Trigger state change through plugin
       const newState = await pluginInstance.triggerStateChange();
       
@@ -350,7 +369,10 @@ describe('Application', () => {
       await application.installPlugins(mockState);
       
       // Trigger state update
-      await application.updateState(mockState, { pdf: 'new.pdf' });
+      // Initialize state first (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
+      
+      await application.updateState({ pdf: 'new.pdf' });
       
       assert.strictEqual(stateUpdateCalled, true);
     });
@@ -474,7 +496,10 @@ describe('Application', () => {
       // This should throw an error when the plugin tries to nest a state change
       await assert.rejects(
         async () => {
-          await application.updateState(mockState, { pdf: 'trigger.pdf' });
+          // Initialize state first (disable state preservation for tests)
+          application.initializeState(mockState, { enableStatePreservation: false });
+          
+          await application.updateState({ pdf: 'trigger.pdf' });
         },
         {
           name: 'Error',
@@ -500,7 +525,10 @@ describe('Application', () => {
       
       await assert.rejects(
         async () => {
-          await application.updateStateExt(mockState, { triggerPlugin: { value: 'test' } });
+          // Initialize state first (disable state preservation for tests)
+          application.initializeState(mockState, { enableStatePreservation: false });
+          
+          await application.updateStateExt({ triggerPlugin: { value: 'test' } });
         },
         {
           name: 'Error', 
@@ -525,12 +553,15 @@ describe('Application', () => {
       application.registerPlugins([plugin]);
       
       // First state change should succeed
-      const newState1 = await application.updateState(mockState, { pdf: 'doc1.pdf' });
+      // Initialize state first (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
+      
+      const newState1 = await application.updateState({ pdf: 'doc1.pdf' });
       assert.strictEqual(newState1.pdf, 'doc1.pdf');
       assert.strictEqual(stateAfterPropagation.pdf, 'doc1.pdf');
       
       // Second state change after propagation completes should also succeed
-      const newState2 = await application.updateState(newState1, { xml: 'doc1.xml' });
+      const newState2 = await application.updateState({ xml: 'doc1.xml' });
       assert.strictEqual(newState2.xml, 'doc1.xml');
       assert.strictEqual(newState2.pdf, 'doc1.pdf');
     });
@@ -557,7 +588,10 @@ describe('Application', () => {
       
       await assert.rejects(
         async () => {
-          await application.updateState(mockState, { pdf: 'trigger-class.pdf' });
+          // Initialize state first (disable state preservation for tests)
+          application.initializeState(mockState, { enableStatePreservation: false });
+          
+          await application.updateState({ pdf: 'trigger-class.pdf' });
         },
         {
           name: 'Error',
@@ -601,11 +635,12 @@ describe('Application', () => {
 
   describe('Performance and Memory Management', () => {
     it('should not create memory leaks with state history', async () => {
-      // Create many state transitions
-      let currentState = mockState;
+      // Initialize state first (disable state preservation for tests)
+      application.initializeState(mockState, { enableStatePreservation: false });
       
+      // Create many state transitions
       for (let i = 0; i < 20; i++) {
-        currentState = await application.updateState(currentState, {
+        await application.updateState({
           pdf: `document-${i}.pdf`
         });
       }
@@ -613,6 +648,7 @@ describe('Application', () => {
       // State history should be managed by WeakMap - no way to directly test
       // but we can verify state chain still works for recent states
       const stateManager = application.getStateManager();
+      const currentState = application.getCurrentState();
       const previousState = stateManager.getPreviousState(currentState);
       
       assert.ok(previousState);

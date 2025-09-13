@@ -1,6 +1,6 @@
 /**
  * Application class - clean wrapper around plugin endpoint invocation and bootstrapping
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  * @import PluginManager from '../modules/plugin-manager.js'
  * @import StateManager from '../modules/state-manager.js'
  * @import { InvokeOptions, InvocationResult } from '../modules/plugin-manager.js'
@@ -82,9 +82,12 @@ export class Application {
 
   /**
    * Get the current state
-   * @returns {ApplicationState|null}
+   * @returns {ApplicationState}
    */
   getCurrentState() {
+    if (!this.#currentState) {
+      throw new Error("State has not been initialized yet")
+    }
     return this.#currentState;
   }
 
@@ -260,7 +263,6 @@ export class Application {
   /**
    * Check plugin invocation results for state change errors and rethrow them
    * @param {Array} results - Results from plugin manager invoke
-   * @private
    */
   #checkForStateChangeErrors(results) {
     for (const result of results) {

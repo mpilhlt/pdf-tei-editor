@@ -1,6 +1,6 @@
 /**
  * Base Plugin class for class-based plugin architecture
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from './plugin-context.js'
  */
 
@@ -24,26 +24,27 @@ export class Plugin {
     this.#state = null;
   }
 
-  /** @type {Map<Function, Plugin>} */
+  /** @type {Map<Function, any>} */
   static instances = new Map();
 
   /**
    * Create singleton instance of this plugin class
-   * @template {Plugin} T
+   * @template T
    * @this {new (context: PluginContext) => T}
    * @param {PluginContext} context - Plugin context
    * @returns {T} The singleton instance
    */
   static createInstance(context) {
     if (!Plugin.instances.has(this)) {
-      Plugin.instances.set(this, new this(context));
+      const PluginClass = /** @type {new (context: PluginContext) => T} */ (this);
+      Plugin.instances.set(this, new PluginClass(context));
     }
-    return Plugin.instances.get(this) || new this(context);
+    return /** @type {T} */ (Plugin.instances.get(this));
   }
 
   /**
    * Get singleton instance of this plugin class
-   * @template {Plugin} T
+   * @template T
    * @this {new (context: PluginContext) => T}
    * @returns {T} The singleton instance
    */
@@ -52,7 +53,7 @@ export class Plugin {
     if (!instance) {
       throw new Error(`Plugin ${this.name} not instantiated. Call createInstance() first.`);
     }
-    return instance;
+    return /** @type {T} */ (instance);
   }
 
   /** @type {ApplicationState|null} */
@@ -111,6 +112,8 @@ export class Plugin {
   async onStateUpdate(changedKeys) {
     // Override for reactive behavior
     // Base implementation is empty - no need to call super()
+    // eslint-disable-next-line no-unused-vars
+    void changedKeys;
   }
 
   //
@@ -142,7 +145,10 @@ export class Plugin {
    * @param {Partial<ApplicationState>} changes
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async dispatchStateChange(changes) {    
+  async dispatchStateChange(changes) {
+    if (!this.#state) {
+      throw new Error("State hasn't been initialized")
+    }
     const newState = await this.context.updateState(changes);
     this.#state = newState;
     return newState;
@@ -166,9 +172,9 @@ export class Plugin {
    */
   getChangedStateKeys() {
     if (!this.#state) {
-      return [];
+      return /** @type {Array<keyof ApplicationState>} */ ([]);
     }
-    return this.context.getChangedStateKeys(this.#state);
+    return /** @type {Array<keyof ApplicationState>} */ (this.context.getChangedStateKeys(this.#state));
   }
 
   /**

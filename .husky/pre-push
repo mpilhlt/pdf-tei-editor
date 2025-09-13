@@ -1,16 +1,1 @@
-npm run build
-node -e "
-const { execSync } = require('child_process');
-try {
-  const status = execSync('git status --porcelain', { encoding: 'utf8' });
-  if (status.trim()) {
-    execSync('git add -A');
-    execSync('git commit -m \"Update build files\"');
-  } else {
-    console.log('No changes');
-  }
-} catch (e) {
-  console.error('Git operation failed:', e.message);
-  process.exit(1);
-}
-"
+node .husky/pre-push.js

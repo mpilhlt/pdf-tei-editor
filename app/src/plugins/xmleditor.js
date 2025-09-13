@@ -3,7 +3,7 @@
  */
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { UIPart } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'

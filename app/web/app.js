@@ -15415,7 +15415,7 @@ window.ui = ui; // for debugging
 
 /**
  * Base Plugin class for class-based plugin architecture
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from './plugin-context.js'
  */
 
@@ -15940,7 +15940,7 @@ class AuthenticationPlugin extends Plugin {
  */
 
 /**
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  */
 
 // Global lookup index for efficient hash-based queries
@@ -16524,7 +16524,7 @@ async function set(key, value) {
 
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
  */
 
 // module closure vars
@@ -16834,7 +16834,7 @@ function cleanupConnection() {
  */
 
 
-/** @import { ApplicationState } from '../app.js' */
+/** @import { ApplicationState } from '../state.js' */
 
 // Plugin API
 const api$c = {
@@ -48936,7 +48936,7 @@ function updateTeiHeaderToggleWidget() {
 
 /**
  * @import { Diagnostic } from '@codemirror/lint'
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  */
 
 
@@ -52577,7 +52577,7 @@ const api$6 = {
 
 /**
  * component plugin
- * @type {PluginConfiguration}
+ * @type {PluginConfig}
  */
 const plugin$a = {
   name: "services",
@@ -53402,7 +53402,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 }
 
 /** 
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  * @import { UIPart } from '../ui.js'
  */
 
@@ -64969,7 +64969,7 @@ class PluginManager {
 
 /**
  * Pure state management class for immutable state updates with history tracking
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  */
 
 // WeakMap to store state history without creating memory leaks
@@ -65189,7 +65189,7 @@ class StateManager {
 
 /**
  * PluginContext - Facade providing clean interface between plugins and application
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  * @import { Application } from '../modules/application.js'
  * @import {InvokeOptions} from '../modules/plugin-manager.js'
  */ 
@@ -65305,7 +65305,7 @@ class PluginContext {
 
 /**
  * Application class - clean wrapper around plugin endpoint invocation and bootstrapping
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  * @import PluginManager from '../modules/plugin-manager.js'
  * @import StateManager from '../modules/state-manager.js'
  * @import { InvokeOptions, InvocationResult } from '../modules/plugin-manager.js'

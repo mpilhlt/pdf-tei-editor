@@ -6,7 +6,7 @@
  */
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  */
 

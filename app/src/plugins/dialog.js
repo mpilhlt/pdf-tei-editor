@@ -6,7 +6,7 @@ import { SlButton, SlDialog, createHtmlElements, updateUi } from '../ui.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
 
-/** @import { ApplicationState } from '../app.js' */
+/** @import { ApplicationState } from '../state.js' */
 
 // Plugin API
 const api = {

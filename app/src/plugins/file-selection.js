@@ -4,7 +4,7 @@
 
 
 /** 
- * @import { ApplicationState } from '../app.js' 
+ * @import { ApplicationState } from '../state.js' 
  * @import { SlSelect } from '../ui.js'
  */
 import ui from '../ui.js'

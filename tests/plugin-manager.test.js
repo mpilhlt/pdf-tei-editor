@@ -352,14 +352,14 @@ describe('PluginManager', () => {
         start: () => { callOrder.push('c'); return 'result-c'; }
       });
       
-      // Test default behavior (first fulfilled result)
-      const firstResult = await pluginManager.invoke('start');
+      // Test sequential behavior (dependency order)
+      const firstResult = await pluginManager.invoke('start', [], { mode: 'sequential' });
       assert.deepStrictEqual(callOrder, ['c', 'b', 'a']);
       assert.strictEqual(firstResult, 'result-c'); // First plugin in dependency order
       
-      // Test full results
+      // Test full results in sequential mode
       callOrder.length = 0; // Reset call order
-      const fullResults = await pluginManager.invoke('start', [], { result: 'full' });
+      const fullResults = await pluginManager.invoke('start', [], { mode: 'sequential', result: 'full' });
       assert.deepStrictEqual(callOrder, ['c', 'b', 'a']);
       assert.strictEqual(fullResults.length, 3);
       assert.strictEqual(fullResults[0].status, 'fulfilled');

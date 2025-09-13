@@ -4,7 +4,7 @@
 
 /** 
  * @import { ApplicationState } from '../state.js' 
- * @import { PluginConfiguration } from '../plugins.js'
+ * @import { PluginConfig } from '../modules/plugin-manager.js'
  * @import { SlButton, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  * @import { UserData } from '../plugins/authentication.js'
@@ -45,7 +45,7 @@ const api = {
 
 /**
  * component plugin
- * @type {PluginConfiguration}
+ * @type {PluginConfig}
  */
 const plugin = {
   name: "services",
@@ -244,7 +244,7 @@ async function inProgress(validationPromise) {
 async function load({ xml, pdf }) {
 
   // use application state instead of
-  const currentState = app.getCurrentState()
+  const currentState = app.getCurrentState() 
   const stateChanges = {}
 
   const promises = []

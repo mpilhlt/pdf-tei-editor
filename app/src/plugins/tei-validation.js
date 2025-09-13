@@ -1,6 +1,6 @@
 /**
  * @import { Diagnostic } from '@codemirror/lint'
- * @import { ApplicationState } from '../app.js'
+ * @import { ApplicationState } from '../state.js'
  */
 
 import { EditorView, ViewUpdate } from '@codemirror/view';
