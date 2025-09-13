@@ -24,7 +24,9 @@
       "mcp__browser-mcp__browser_press_key",
       "WebFetch(domain:pdf-tei-editor.panya.de)",
       "Bash(npm test:*)",
-      "Bash(npm run test:*)"
+      "Bash(npm run test:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(git branch:*)"
     ],
     "deny": []
   }

@@ -7,7 +7,7 @@ import madge from 'madge';
 import { parse as parseComments } from 'comment-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = dirname(__dirname);
+const projectRoot = dirname(dirname(dirname(__dirname))); // Go up from app/src/modules to project root
 const cacheFile = join(projectRoot, 'tests', 'test-dependencies.json');
 
 /**
@@ -90,14 +90,22 @@ class SmartTestRunner {
         const coversTags = [];
         let isAlwaysRun = false;
         
-        const docstringRegex = /"""[\s\S]*?@testCovers\s+([^\s\n]+)[\s\S]*?"""/g;
-        let match;
-        while ((match = docstringRegex.exec(content)) !== null) {
-          const target = match[1];
-          if (target === '*') {
-            isAlwaysRun = true;
-          } else {
-            coversTags.push(target);
+        // First extract docstring content
+        const docstringRegex = /"""([\s\S]*?)"""/;
+        const docstringMatch = content.match(docstringRegex);
+        
+        if (docstringMatch) {
+          const docstring = docstringMatch[1];
+          // Find all @testCovers annotations within the docstring
+          const coversRegex = /@testCovers\s+([^\s\n]+)/g;
+          let match;
+          while ((match = coversRegex.exec(docstring)) !== null) {
+            const target = match[1];
+            if (target === '*') {
+              isAlwaysRun = true;
+            } else {
+              coversTags.push(target);
+            }
           }
         }
 
@@ -127,14 +135,30 @@ class SmartTestRunner {
           alwaysRunTests.push(testFile);
         }
         
-        // Use madge to analyze imports
+        // Use madge to analyze imports with correct API
         const result = await madge(fullPath, {
           fileExtensions: ['js'],
           excludeRegExp: [/node_modules/, /\.husky/]
         });
         
-        const dependencies = result.depends(fullPath);
+        // Get the dependency tree using the correct method
+        const dependencyTree = result.obj();
+        
+        // Madge uses filename without path prefix when analyzing single file
+        const filename = testFile.split('/').pop(); // Get just 'temp-import-test.test.js'
+        const dependencies = dependencyTree[filename] || [];
+        
+        
         const filteredDeps = dependencies
+          .map(dep => {
+            // Convert relative paths to absolute from project root
+            if (dep.startsWith('../')) {
+              // Resolve relative imports like '../app/src/modules/application.js'
+              const resolved = dep.replace(/^\.\.\//, '');
+              return resolved;
+            }
+            return dep;
+          })
           .filter(dep => dep.startsWith('app/') || dep.startsWith('server/'))
           .map(dep => dep.replace(/^\.\//, ''));
 

@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 try {
   // Run smart tests first - fail fast if tests don't pass
   console.log('Running smart tests...');
-  execSync('node .husky/smart-test-runner.js', { stdio: 'inherit' });
+  execSync('node app/src/modules/smart-test-runner.js', { stdio: 'inherit' });
   console.log('Tests passed. Running build...');
   
   // Run build
