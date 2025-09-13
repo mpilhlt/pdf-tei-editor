@@ -2,7 +2,7 @@
   "type": "module",
   "scripts": {
     "ci": "pip install -r requirements.txt",
-    "postinstall": "node bin/generate-importmap.js && uv run python bin/compile-sl-icons.py && uv run python bin/download-pdfjs",
+    "postinstall": "node bin/generate-importmap.js && uv run python bin/compile-sl-icons.py && uv run python bin/download-pdfjs && npm run build",
     "start": "uv run python bin/start-dev",
     "start:dev": "uv run python bin/start-dev",
     "start:prod": "uv run python bin/start-prod",

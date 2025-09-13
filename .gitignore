@@ -27,3 +27,7 @@ nohup.out
 # Smart test runner cache
 tests/test-dependencies.json
 
+# Build artifacts
+app/web/app.js
+app/web/templates.json
+app/web/assets/
