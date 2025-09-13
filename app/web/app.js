@@ -15439,26 +15439,27 @@ class Plugin {
     this.#state = null;
   }
 
-  /** @type {Map<Function, Plugin>} */
+  /** @type {Map<Function, any>} */
   static instances = new Map();
 
   /**
    * Create singleton instance of this plugin class
-   * @template {Plugin} T
+   * @template T
    * @this {new (context: PluginContext) => T}
    * @param {PluginContext} context - Plugin context
    * @returns {T} The singleton instance
    */
   static createInstance(context) {
     if (!Plugin.instances.has(this)) {
-      Plugin.instances.set(this, new this(context));
+      const PluginClass = /** @type {new (context: PluginContext) => T} */ (this);
+      Plugin.instances.set(this, new PluginClass(context));
     }
-    return Plugin.instances.get(this) || new this(context);
+    return /** @type {T} */ (Plugin.instances.get(this));
   }
 
   /**
    * Get singleton instance of this plugin class
-   * @template {Plugin} T
+   * @template T
    * @this {new (context: PluginContext) => T}
    * @returns {T} The singleton instance
    */
@@ -15467,7 +15468,7 @@ class Plugin {
     if (!instance) {
       throw new Error(`Plugin ${this.name} not instantiated. Call createInstance() first.`);
     }
-    return instance;
+    return /** @type {T} */ (instance);
   }
 
   /** @type {ApplicationState|null} */
@@ -15524,8 +15525,6 @@ class Plugin {
    * @param {string[]} changedKeys - Keys that changed in the state
    */
   async onStateUpdate(changedKeys) {
-    // Override for reactive behavior
-    // Base implementation is empty - no need to call super()
   }
 
   //
@@ -15557,7 +15556,10 @@ class Plugin {
    * @param {Partial<ApplicationState>} changes
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async dispatchStateChange(changes) {    
+  async dispatchStateChange(changes) {
+    if (!this.#state) {
+      throw new Error("State hasn't been initialized")
+    }
     const newState = await this.context.updateState(changes);
     this.#state = newState;
     return newState;
@@ -15581,9 +15583,9 @@ class Plugin {
    */
   getChangedStateKeys() {
     if (!this.#state) {
-      return [];
+      return /** @type {Array<keyof ApplicationState>} */ ([]);
     }
-    return this.context.getChangedStateKeys(this.#state);
+    return /** @type {Array<keyof ApplicationState>} */ (this.context.getChangedStateKeys(this.#state));
   }
 
   /**
@@ -49800,7 +49802,7 @@ const api$a = {
 
 /**
  * component plugin
- * @type {Plugin}
+ * @type {PluginConfig}
  */
 const plugin$e = {
   name: "client",
@@ -52773,7 +52775,7 @@ async function inProgress(validationPromise) {
 async function load$1({ xml, pdf }) {
 
   // use application state instead of
-  const currentState = app.getCurrentState();
+  const currentState = app.getCurrentState(); 
   const stateChanges = {};
 
   const promises = [];
@@ -64308,13 +64310,7 @@ function stop() {
  */
 
 
-/**
- * @typedef {object & Record<string, any>} PluginConfiguration
- * @property {string} name - The name of the plugin
- * @property {string[]} [deps] - The names of the plugins this plugin depends on
- */
-
-/** @type {Array<Plugin|PluginConfiguration>} */
+/** @type {Array<Plugin|PluginConfig>} */
 const plugins = [
   // class-based
   AuthenticationPlugin,
@@ -64460,11 +64456,12 @@ const initialState = {
 
 /**
  * The minimal plugin configuration object
- * @typedef {Object} PluginConfig
- * @property {string} name - Plugin name
- * @property {string[]} [deps] - Array of plugin names this plugin depends on
+ * @typedef {object & Record<string, any>} PluginConfig
+ * @property {string} name - The name of the plugin
+ * @property {string[]} [deps] - The names of the plugins this plugin depends on
  * @property {any} [initialize] - Optional initialization function 
  */
+
 
 /**
  * Options for plugin endpoint invocation
@@ -64477,6 +64474,11 @@ const initialState = {
  *    'first' (default) returns the first fulfilled response, 
  *    'values' returns the values of all fulfilled responses, 
  *    'full' returns an array of {status:string, value:any} objects 
+ * @property {boolean} [debug] - If true, output verbose debug messages
+ */
+
+/**
+ * @typedef {({status: 'fulfilled', value: any} | {status: 'rejected', reason: Error})} InvocationResult
  */
 
 /**
@@ -64504,7 +64506,7 @@ class PluginManager {
       timeout: options.timeout || 2000,
       throws: options.throws || false,
       mode: options.mode || "parallel",
-      result: options.result || "full"
+      result: options.result || "first"
     };
 
     /** @type {boolean} */
@@ -64677,12 +64679,6 @@ class PluginManager {
   }
 
   /**
-   * @typedef {object} InvocationResult
-   * @property {'fulfilled'|'rejected'} status
-   * @property {any} value 
-   */
-
-  /**
    * Invoke an endpoint on all plugins that implement it, in dependency order. The invocation can be done in parallel or sequentially. 
    * @param {string} endpoint - Endpoint to invoke
    * @param {*|Array} [args] - Arguments to pass to endpoint functions. If array, spread as parameters; if not array, pass as single parameter
@@ -64799,7 +64795,8 @@ class PluginManager {
           // Handle throwing behavior before result processing
           if (shouldThrow) {
             const firstRejected = result.find(({ status }) => status === "rejected");
-            if (firstRejected) {
+            if (firstRejected ) {
+              // @ts-ignore
               throw firstRejected.reason;
             }
           }
@@ -64824,11 +64821,13 @@ class PluginManager {
     switch (resultMode) {
       case 'first':
         const firstFulfilled = result.find(({ status }) => status === "fulfilled");
+        // @ts-ignore
         return firstFulfilled ? firstFulfilled.value : undefined;
       case 'values':
         // Return only the values from fulfilled results
         return result
           .filter(({ status }) => status === "fulfilled")
+          // @ts-ignore
           .map(({ value }) => value);
       case 'full':
       default:
@@ -65083,17 +65082,19 @@ class StateManager {
    * Get all property names that have changed from the previous state
    * 
    * @param {ApplicationState} state - Current state to analyze
-   * @returns {string[]} Array of property names that have changed
+   * @returns {Array<keyof ApplicationState>} Array of property names that have changed
    */
   getChangedStateKeys(state) {
     const previousState = this.getPreviousState(state);
     if (!previousState) {
-      return Object.keys(state);
+      const keys = /** @type {Array<keyof ApplicationState>} */  (Object.keys(state));
+      return keys;
     }
     
-    const changedKeys = [];
+    const changedKeys = /** @type {Array<keyof ApplicationState>} */ ([]);
     for (const key in state) {
       if (state[key] !== previousState[key]) {
+        // @ts-ignore
         changedKeys.push(key);
       }
     }
@@ -65191,7 +65192,7 @@ class StateManager {
  * PluginContext - Facade providing clean interface between plugins and application
  * @import { ApplicationState } from '../state.js'
  * @import { Application } from '../modules/application.js'
- * @import {InvokeOptions} from '../modules/plugin-manager.js'
+ * @import { InvokeOptions, InvocationResult } from '../modules/plugin-manager.js'
  */ 
 
 /**
@@ -65215,7 +65216,7 @@ class PluginContext {
    * @param {Partial<ApplicationState>} changes - Changes to apply
    * @returns {Promise<ApplicationState>} New state after changes applied
    */
-  async updateState(changes, secondArg) {
+  async updateState(changes, secondArg=undefined) {
     if (secondArg !== undefined) {
       throw new Error('PluginContext.updateState() now takes only one parameter (changes). Remove the currentState parameter.');
     }
@@ -65385,9 +65386,12 @@ class Application {
 
   /**
    * Get the current state
-   * @returns {ApplicationState|null}
+   * @returns {ApplicationState}
    */
   getCurrentState() {
+    if (!this.#currentState) {
+      throw new Error("State has not been initialized yet")
+    }
     return this.#currentState;
   }
 
@@ -65563,7 +65567,6 @@ class Application {
   /**
    * Check plugin invocation results for state change errors and rethrow them
    * @param {Array} results - Results from plugin manager invoke
-   * @private
    */
   #checkForStateChangeErrors(results) {
     for (const result of results) {

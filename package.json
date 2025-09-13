@@ -11,6 +11,7 @@
     "manage": "node bin/manage.js",
     "prepare": "husky",
     "test": "node --test tests/*.test.js",
+    "test:hook": "node --test tests/application.test.js tests/plugin-manager.test.js tests/state-manager.test.js tests/sync-algorithm.test.js",
     "test:sync": "node --test tests/sync-algorithm.test.js"
   },
   "dependencies": {

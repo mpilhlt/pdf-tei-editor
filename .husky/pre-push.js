@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 try {
   // Run tests first - fail fast if tests don't pass
   console.log('Running tests...');
-  execSync('npm test', { stdio: 'inherit' });
+  execSync('npm run test:hook', { stdio: 'inherit' });
   console.log('Tests passed. Running build...');
   
   // Run build
