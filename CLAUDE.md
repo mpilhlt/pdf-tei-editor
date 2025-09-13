@@ -49,11 +49,20 @@ npm run update-importmap
 ### Testing and Validation
 
 ```bash
-# Run all tests
+# Run all tests (JS, Python, E2E)
 npm test
 
-# Run specific test suite (e.g., synchronization algorithm tests)
-npm run test:sync
+# Alias for npm test
+npm run test:all
+
+# Run only tests for changed files
+npm run test:changed
+
+# Run all JavaScript unit tests
+npm run test:js
+
+# Run all Python integration tests
+npm run test:py
 
 # Run end-to-end tests in containerized environment
 npm run test:e2e

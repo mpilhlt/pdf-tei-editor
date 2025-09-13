@@ -24,13 +24,22 @@ The project uses a multi-tiered testing approach:
 ### Test Commands
 
 ```bash
-# Run all tests (unit + integration)
+# Run all tests (JS, Python, E2E)
 npm test
 
-# Run JavaScript unit tests only
+# Alias for npm test
+npm run test:all
+
+# Run only tests for changed files
+npm run test:changed
+
+# Run all tests with TAP output
+npm run test:tap
+
+# Run all JavaScript unit tests
 npm run test:js
 
-# Run Python integration tests only
+# Run all Python integration tests
 npm run test:py
 
 # Run end-to-end tests in containerized environment
@@ -277,7 +286,7 @@ Use CSS selectors when:
 
 ```javascript
 // Fallback to selectors when needed
-const dynamicElements = await page.$$('.dynamic-content');
+const dynamicElements = await page.$('.dynamic-content');
 const errorMessage = await page.textContent('[data-testid="error-message"]');
 ```
 

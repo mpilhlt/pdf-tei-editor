@@ -16,7 +16,7 @@ from glob import glob
 
 
 # Copied and simplified version of the file types mapping
-file_types = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
+file_types = {'.pdf': 'pdf', '.tei.xml': 'xml', '.xml': 'xml'}
 
 
 class MockLogger:
@@ -40,7 +40,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from server.lib.server_utils import (
+from server.lib.file_data import (
     extract_file_id_from_version_filename, 
     extract_version_label_from_path
 )

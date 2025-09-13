@@ -145,14 +145,14 @@ class E2ERunner {
         console.log('🧹 Cleaning up existing containers...');
         try {
             const existingContainers = execSync(
-                `${this.containerCmd} ps -a --format \"table {{.ID}}\\t{{.Ports}}\" | grep ":${this.config.port}->" | awk '{print $1}'`,
+                `${this.containerCmd} ps -a --format "table {{.ID}}\\t{{.Ports}}" | grep ":${this.config.port}->" | awk '{print $1}'`,
                 { encoding: 'utf8', stdio: 'pipe' }
             ).trim();
 
             if (existingContainers) {
                 console.log(`🛑 Stopping existing containers using port ${this.config.port}...`);
-                execSync(`echo \"${existingContainers}\" | xargs -r ${this.containerCmd} stop`, { stdio: 'ignore' });
-                execSync(`echo \"${existingContainers}\" | xargs -r ${this.containerCmd} rm`, { stdio: 'ignore' });
+                execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} stop`, { stdio: 'ignore' });
+                execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} rm`, { stdio: 'ignore' });
             }
         } catch (error) {
             // Ignore cleanup errors
@@ -300,14 +300,14 @@ class E2ERunner {
                     // Clean up any containers using the configured port
                     try {
                         const existingContainers = execSync(
-                            `${this.containerCmd} ps -a --format \"table {{.ID}}\\t{{.Ports}}\" | grep ":${this.config.port}:" | awk '{print $1}'`,
+                            `${this.containerCmd} ps -a --format "table {{.ID}}\\t{{.Ports}}" | grep ":${this.config.port}->" | awk '{print $1}'`,
                             { encoding: 'utf8', stdio: 'pipe' }
                         ).trim();
 
                         if (existingContainers) {
                             console.log(`🛑 Stopping all containers using port ${this.config.port}...`);
-                            execSync(`echo \"${existingContainers}\" | xargs -r ${this.containerCmd} stop`, { stdio: 'ignore' });
-                            execSync(`echo \"${existingContainers}\" | xargs -r ${this.containerCmd} rm`, { stdio: 'ignore' });
+                            execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} stop`, { stdio: 'ignore' });
+                            execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} rm`, { stdio: 'ignore' });
                         }
                     } catch (error) {
                         // Ignore cleanup errors
@@ -328,15 +328,6 @@ class E2ERunner {
                     console.log('🛑 Compose environment stopped');
                 }
             }
-
-            // Prune dangling images to save space
-            try {
-                console.log('🧹 Pruning dangling container images...');
-                execSync(`${this.containerCmd} image prune -f`, { stdio: 'ignore' });
-            } catch (error) {
-                console.warn('⚠️ Could not prune images:', error.message);
-            }
-
         } catch (error) {
             console.log('⚠️ Error during cleanup (may be expected):', error.message);
         }

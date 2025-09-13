@@ -23,4 +23,11 @@ llamore = { git = "https://github.com/mpilhlt/llamore.git" }
 [dependency-groups]
 dev = [
     "pydeps>=3.0.1",
+    "pytest>=8.4.0",
+    "pytest-tap>=3.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "."
 ]
