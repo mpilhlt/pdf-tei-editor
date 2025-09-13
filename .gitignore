@@ -24,3 +24,6 @@ data/*
 gunicorn.txt
 nohup.out
 
+# Smart test runner cache
+tests/test-dependencies.json
+

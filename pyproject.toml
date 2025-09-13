@@ -19,3 +19,8 @@ dependencies = [
 
 [tool.uv.sources]
 llamore = { git = "https://github.com/mpilhlt/llamore.git" }
+
+[dependency-groups]
+dev = [
+    "pydeps>=3.0.1",
+]

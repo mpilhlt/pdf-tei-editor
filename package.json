@@ -36,8 +36,10 @@
     "@jsenv/importmap-node-module": "^7.1.1",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@types/uuid": "^10.0.0",
+    "comment-parser": "^1.4.1",
     "husky": "^9.1.7",
     "jsdom": "^26.1.0",
+    "madge": "^8.0.0",
     "rollup": "^4.40.2"
   }
 }
