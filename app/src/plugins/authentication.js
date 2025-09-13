@@ -165,8 +165,9 @@ class AuthenticationPlugin extends Plugin {
   async logout() {
     try {
       await client.logout();
-      await this.dispatchStateChange({ 
-        user: null, 
+      logger.info('User logged out successfully');
+      await this.dispatchStateChange({
+        user: null,
         sessionId: null,
         xml: null,
         pdf: null,
@@ -198,10 +199,11 @@ class AuthenticationPlugin extends Plugin {
         const passwd_hash = await this._hashPassword(password);
         try {
           const userData = await client.login(username, passwd_hash);
+          logger.info(`Login successful for user: ${userData.username}`);
           dialog.hide();
           dialog.username.value = "";
           dialog.password.value = "";
-          resolve(userData); 
+          resolve(userData);
         } catch (error) {
           dialog.message.textContent = 'Wrong username or password';
           logger.error('Login failed:', error.message);

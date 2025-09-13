@@ -37,6 +37,7 @@ This section provides comprehensive documentation for developers working on the 
 ### Getting Started
 - **[Installation](docs/installation.md)** - Setup and installation for development and production
 - **[Development Guide](docs/development.md)** - Application architecture, plugin system, and best practices
+- **[Testing Guide](docs/testing.md)** - Comprehensive testing infrastructure including unit, integration, and E2E tests
 
 ### Deployment
 - **[Docker Deployment](docs/docker-deployment.md)** - Containerized deployment options and production setup
@@ -53,7 +54,9 @@ npm start                       # Start development server
 npm run build                   # Build application for production
 
 # Testing
-npm test                        # Run all tests, coverage isn't great yet
+npm test                        # Run all tests (unit + integration)
+npm run test:e2e                # Run end-to-end tests in containers
+npm run test:js                 # Run JavaScript unit tests only
 
 # User management
 npm run manage help            # Management help

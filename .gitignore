@@ -28,6 +28,11 @@ data/*
 # Smart test runner cache
 tests/test-dependencies.json
 
+# Playwright test artifacts
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+tests/.cache/
+
 # Build artifacts
 app/web/app.js
 app/web/templates.json

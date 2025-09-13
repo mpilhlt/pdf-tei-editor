@@ -7,10 +7,10 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { Application } from '../app/src/modules/application.js';
-import PluginManager from '../app/src/modules/plugin-manager.js';
-import StateManager from '../app/src/modules/state-manager.js';
-import Plugin from '../app/src/modules/plugin-base.js';
+import { Application } from '../../app/src/modules/application.js';
+import PluginManager from '../../app/src/modules/plugin-manager.js';
+import StateManager from '../../app/src/modules/state-manager.js';
+import Plugin from '../../app/src/modules/plugin-base.js';
 
 // Mock window for shutdown handler
 // @ts-ignore

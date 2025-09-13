@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, openSync, closeSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import madge from 'madge';
 import { parse as parseComments } from 'comment-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = dirname(dirname(dirname(__dirname))); // Go up from app/src/modules to project root
+const projectRoot = dirname(__dirname); // Go up from tests to project root
 const cacheFile = join(projectRoot, 'tests', 'test-dependencies.json');
 
 /**
@@ -43,20 +43,46 @@ class SmartTestRunner {
 
   discoverTestFiles() {
     const testsDir = join(projectRoot, 'tests');
-    if (!existsSync(testsDir)) return { js: [], py: [] };
+    if (!existsSync(testsDir)) return { js: [], py: [], e2e: [] };
 
-    const files = readdirSync(testsDir);
-    
-    const jsTests = files
-      .filter(file => file.endsWith('.test.js'))
-      .map(file => `tests/${file}`);
-    
-    const pyTests = files
-      .filter(file => file.startsWith('test_') && file.endsWith('.py'))
-      .map(file => `tests/${file}`);
+    const jsTests = [];
+    const pyTests = [];
 
-    console.log(`📋 Discovered ${jsTests.length} JS tests, ${pyTests.length} Python tests`);
-    return { js: jsTests, py: pyTests };
+    // Discover JS tests in tests/js/
+    const jsDir = join(testsDir, 'js');
+    if (existsSync(jsDir)) {
+      const jsFiles = readdirSync(jsDir);
+      jsTests.push(...jsFiles
+        .filter(file => file.endsWith('.test.js') || file.endsWith('.cjs'))
+        .map(file => `tests/js/${file}`)
+      );
+    }
+
+    // Discover Python tests in tests/py/
+    const pyDir = join(testsDir, 'py');
+    if (existsSync(pyDir)) {
+      const pyFiles = readdirSync(pyDir);
+      pyTests.push(...pyFiles
+        .filter(file => file.startsWith('test_') && file.endsWith('.py'))
+        .map(file => `tests/py/${file}`)
+      );
+    }
+
+    // Discover e2e tests (both Playwright .spec.js and backend .js)
+    const e2eTests = [];
+    const e2eDir = join(testsDir, 'e2e');
+    if (existsSync(e2eDir)) {
+      const e2eFiles = readdirSync(e2eDir);
+      e2eTests.push(...e2eFiles
+        .filter(file => file.endsWith('.spec.js') || (file.endsWith('.js') && file.startsWith('test-')))
+        .map(file => `tests/e2e/${file}`)
+      );
+    }
+
+    if (!process.argv.includes('--tap')) {
+      console.log(`📋 Discovered ${jsTests.length} JS tests, ${pyTests.length} Python tests, ${e2eTests.length} E2E tests`);
+    }
+    return { js: jsTests, py: pyTests, e2e: e2eTests };
   }
 
   parseTestCoversAnnotations(filePath) {
@@ -119,7 +145,7 @@ class SmartTestRunner {
   }
 
   async analyzeJSDependencies(testFiles) {
-    console.log('🔍 Analyzing JavaScript dependencies...');
+    if (!process.argv.includes('--tap')) console.log('🔍 Analyzing JavaScript dependencies...');
     const jsDeps = {};
     const alwaysRunTests = [];
 
@@ -136,7 +162,8 @@ class SmartTestRunner {
         }
         
         // Use madge to analyze imports with correct API
-        const result = await madge(fullPath, {
+        const result = await madge(testFile, {
+          baseDir: projectRoot,
           fileExtensions: ['js'],
           excludeRegExp: [/node_modules/, /\.husky/]
         });
@@ -144,19 +171,12 @@ class SmartTestRunner {
         // Get the dependency tree using the correct method
         const dependencyTree = result.obj();
         
-        // Madge uses filename without path prefix when analyzing single file
-        const filename = testFile.split('/').pop(); // Get just 'temp-import-test.test.js'
-        const dependencies = dependencyTree[filename] || [];
+        const dependencies = dependencyTree[testFile] || [];
         
         
         const filteredDeps = dependencies
           .map(dep => {
-            // Convert relative paths to absolute from project root
-            if (dep.startsWith('../')) {
-              // Resolve relative imports like '../app/src/modules/application.js'
-              const resolved = dep.replace(/^\.\.\//, '');
-              return resolved;
-            }
+            // paths are now relative to project root, so no need for complex mapping
             return dep;
           })
           .filter(dep => dep.startsWith('app/') || dep.startsWith('server/'))
@@ -170,7 +190,7 @@ class SmartTestRunner {
         
         const depCount = jsDeps[testFile].dependencies.length;
         const alwaysRunFlag = alwaysRun ? ' (always run)' : '';
-        console.log(`  ${testFile}: ${depCount} dependencies${alwaysRunFlag}`);
+        if (!process.argv.includes('--tap')) console.log(`  ${testFile}: ${depCount} dependencies${alwaysRunFlag}`);
       } catch (error) {
         console.warn(`  Could not analyze ${testFile}:`, error.message);
         jsDeps[testFile] = { dependencies: [], alwaysRun: false };
@@ -181,7 +201,7 @@ class SmartTestRunner {
   }
 
   async analyzePyDependencies(testFiles) {
-    console.log('🔍 Analyzing Python dependencies...');
+    if (!process.argv.includes('--tap')) console.log('🔍 Analyzing Python dependencies...');
     const pyDeps = {};
     const alwaysRunTests = [];
 
@@ -219,7 +239,7 @@ class SmartTestRunner {
         
         const depCount = pyDeps[testFile].dependencies.length;
         const alwaysRunFlag = alwaysRun ? ' (always run)' : '';
-        console.log(`  ${testFile}: ${depCount} dependencies${alwaysRunFlag}`);
+        if (!process.argv.includes('--tap')) console.log(`  ${testFile}: ${depCount} dependencies${alwaysRunFlag}`);
       } catch (error) {
         console.warn(`  Could not analyze ${testFile}:`, error.message);
         pyDeps[testFile] = { dependencies: [], alwaysRun: false };
@@ -229,7 +249,46 @@ class SmartTestRunner {
     return { dependencies: pyDeps, alwaysRunTests };
   }
 
-  async analyzeDependencies() {
+  async analyzeE2EDependencies(testFiles) {
+    if (!process.argv.includes('--tap')) console.log('📱 Analyzing E2E test dependencies...');
+    const e2eDeps = {};
+    const alwaysRunTests = [];
+
+    for (const testFile of testFiles) {
+      try {
+        const testPath = join(projectRoot, testFile);
+        const { dependencies: explicitDeps, alwaysRun } = this.parseTestCoversAnnotations(testPath);
+
+        if (alwaysRun) {
+          alwaysRunTests.push(testFile);
+        }
+
+        // E2E tests typically cover frontend files by default
+        const dependencies = [...explicitDeps];
+
+        e2eDeps[testFile] = {
+          dependencies: [...new Set(dependencies)],
+          alwaysRun
+        };
+
+        const depCount = e2eDeps[testFile].dependencies.length;
+        const alwaysRunFlag = alwaysRun ? ' (always run)' : '';
+        if (!process.argv.includes('--tap')) console.log(`  ${testFile}: ${depCount} dependencies${alwaysRunFlag}`);
+      } catch (error) {
+        console.warn(`  Could not analyze ${testFile}:`, error.message);
+        e2eDeps[testFile] = { dependencies: [], alwaysRun: false };
+      }
+    }
+
+    return { dependencies: e2eDeps, alwaysRunTests };
+  }
+
+  async analyzeDependencies(options = {}) {
+    if (options.tap) {
+        // No analysis needed for TAP mode, but we need to discover tests
+        return { dependencies: {}, alwaysRunTests: [] };
+    }
+
     const needsReanalysis = Date.now() - this.cache.lastAnalysis > 24 * 60 * 60 * 1000; // 24 hours
     
     if (!needsReanalysis && this.cache.dependencies && Object.keys(this.cache.dependencies).length > 0) {
@@ -240,13 +299,14 @@ class SmartTestRunner {
     console.log('🔬 Running dependency analysis...');
     
     const testFiles = this.discoverTestFiles();
-    const [jsResult, pyResult] = await Promise.all([
+    const [jsResult, pyResult, e2eResult] = await Promise.all([
       this.analyzeJSDependencies(testFiles.js),
-      this.analyzePyDependencies(testFiles.py)
+      this.analyzePyDependencies(testFiles.py),
+      this.analyzeE2EDependencies(testFiles.e2e)
     ]);
 
-    const allDeps = { ...jsResult.dependencies, ...pyResult.dependencies };
-    const allAlwaysRun = [...jsResult.alwaysRunTests, ...pyResult.alwaysRunTests];
+    const allDeps = { ...jsResult.dependencies, ...pyResult.dependencies, ...e2eResult.dependencies };
+    const allAlwaysRun = [...jsResult.alwaysRunTests, ...pyResult.alwaysRunTests, ...e2eResult.alwaysRunTests];
     
     const result = {
       dependencies: allDeps,
@@ -296,9 +356,15 @@ class SmartTestRunner {
         if (dep.endsWith('/')) {
           return changedFile.startsWith(dep);
         }
-        // Support partial matches (ending with -)  
+        // Support partial matches (ending with -)
         if (dep.endsWith('-')) {
           return changedFile.startsWith(dep);
+        }
+        // Support wildcard matches (containing *)
+        if (dep.includes('*')) {
+          const pattern = dep.replace(/\*/g, '.*');
+          const regex = new RegExp(`^${pattern}$`);
+          return regex.test(changedFile);
         }
         // Exact file match
         return changedFile === dep || changedFile.startsWith(dep.replace(/\.js$/, ''));
@@ -306,94 +372,172 @@ class SmartTestRunner {
     });
   }
 
-  async getTestsToRun() {
-    const changedFiles = this.getChangedFiles();
-    console.log('📁 Changed files:', changedFiles.length > 0 ? changedFiles : 'none');
-
+  async getTestsToRun(options = {}) {
     const testFiles = this.discoverTestFiles();
-    const analysisResult = await this.analyzeDependencies();
+
+    if (options.all) {
+      if (!options.tap) console.log('🏃 Running all tests...');
+      return testFiles;
+    }
+
+    const changedFiles = this.getChangedFiles();
+    if (!options.tap) console.log('📁 Changed files:', changedFiles.length > 0 ? changedFiles : 'none');
+
+    const analysisResult = await this.analyzeDependencies(options);
 
     if (changedFiles.length === 0) {
       // No changes, run only always-run tests
-      const alwaysRunJs = testFiles.js.filter(test => 
+      const alwaysRunJs = testFiles.js.filter(test =>
         analysisResult.alwaysRunTests.includes(test)
       );
-      const alwaysRunPy = testFiles.py.filter(test => 
+      const alwaysRunPy = testFiles.py.filter(test =>
         analysisResult.alwaysRunTests.includes(test)
       );
-      return { js: alwaysRunJs, py: alwaysRunPy };
+      const alwaysRunE2E = testFiles.e2e.filter(test =>
+        analysisResult.alwaysRunTests.includes(test)
+      );
+      return { js: alwaysRunJs, py: alwaysRunPy, e2e: alwaysRunE2E };
     }
 
-    const jsTests = testFiles.js.filter(test => 
-      this.shouldRunTest(test, changedFiles, analysisResult)
-    );
-    
-    const pyTests = testFiles.py.filter(test => 
+    const jsTests = testFiles.js.filter(test =>
       this.shouldRunTest(test, changedFiles, analysisResult)
     );
 
-    return { js: jsTests, py: pyTests };
+    const pyTests = testFiles.py.filter(test =>
+      this.shouldRunTest(test, changedFiles, analysisResult)
+    );
+
+    const e2eTests = testFiles.e2e.filter(test =>
+      this.shouldRunTest(test, changedFiles, analysisResult)
+    );
+
+    return { js: jsTests, py: pyTests, e2e: e2eTests };
   }
 
-  async run() {
-    console.log('🧠 Smart Test Runner - Analyzing dependencies and changes...');
+  async run(options = {}) {
+    const isTap = options.tap;
+
+    if (isTap) {
+        // In TAP mode, we don't show the smart runner's own logs, only the TAP output from the runners
+    } else {
+        console.log('🧠 Smart Test Runner - Analyzing dependencies and changes...');
+    }
     
-    const testsToRun = await this.getTestsToRun();
-    const totalTests = testsToRun.js.length + testsToRun.py.length;
+    const testsToRun = await this.getTestsToRun(options);
     
-    if (totalTests === 0) {
-      console.log('✅ No relevant tests to run');
+    const jsCommand = testsToRun.js.length > 0 ? `node --test ${isTap ? '--test-reporter=tap' : ''} ${testsToRun.js.join(' ')}` : null;
+    const pyCommand = testsToRun.py.length > 0 ? `uv run pytest ${isTap ? '--tap-stream' : ''} ${testsToRun.py.join(' ')} -v` : null;
+    const e2eCommand = testsToRun.e2e.length > 0 ? 'npm run test:e2e' : null;
+
+    const testSuites = [
+        {name: 'JavaScript tests', command: jsCommand, tap: isTap},
+        {name: 'Python tests', command: pyCommand, tap: isTap},
+        {name: 'E2E tests', command: e2eCommand, tap: false} // no tap support for e2e
+    ].filter(s => s.command);
+
+    if (isTap) {
+        console.log('TAP version 13');
+        console.log(`1..${testSuites.length}`);
+    }
+    
+    if (testSuites.length === 0) {
+      if (!isTap) console.log('✅ No relevant tests to run');
       return;
     }
 
-    console.log(`🧪 Running ${totalTests} relevant test(s):`);
-    
-    if (testsToRun.js.length > 0) {
-      console.log('  JavaScript tests:');
-      testsToRun.js.forEach(test => console.log(`    - ${test}`));
-    }
-    
-    if (testsToRun.py.length > 0) {
-      console.log('  Python tests:');
-      testsToRun.py.forEach(test => console.log(`    - ${test}`));
-    }
-
-    try {
-      // Run JavaScript tests
-      if (testsToRun.js.length > 0) {
-        console.log('\n🟨 Running JavaScript tests...');
-        execSync(`node --test ${testsToRun.js.join(' ')}`, { 
-          stdio: 'inherit',
-          cwd: projectRoot 
-        });
-      }
-
-      // Run Python tests  
-      if (testsToRun.py.length > 0) {
-        console.log('\n🐍 Running Python tests...');
-        for (const test of testsToRun.py) {
-          execSync(`uv run python -m pytest ${test} -v`, { 
-            stdio: 'inherit',
-            cwd: projectRoot 
-          });
+    if (!isTap) {
+        console.log(`🧪 Running ${testSuites.length} test suite(s):`);
+        if (testsToRun.js.length > 0) {
+          console.log('  JavaScript tests:');
+          testsToRun.js.forEach(test => console.log(`    - ${test}`));
         }
-      }
-
-      console.log('\n✅ All tests passed');
-    } catch (error) {
-      console.error('\n❌ Tests failed');
-      process.exit(1);
+        if (testsToRun.py.length > 0) {
+          console.log('  Python tests:');
+          testsToRun.py.forEach(test => console.log(`    - ${test}`));
+        }
+        if (testsToRun.e2e.length > 0) {
+          console.log('  E2E tests:');
+          testsToRun.e2e.forEach(test => console.log(`    - ${test}`));
+        }
     }
+
+    let testCounter = 1;
+    let allTestsPassed = true;
+
+    for (const suite of testSuites) {
+        try {
+            if (!isTap) console.log(`\nRunning ${suite.name}...`);
+            execSync(suite.command, {
+              stdio: 'inherit',
+              cwd: projectRoot 
+            });
+            if (isTap && !suite.tap) {
+                console.log(`ok ${testCounter++} - ${suite.name}`);
+            }
+        } catch (error) {
+            if (isTap && !suite.tap) {
+                console.log(`not ok ${testCounter++} - ${suite.name}`);
+            }
+            allTestsPassed = false;
+        }
+    }
+
+    if (!allTestsPassed) {
+        if (!isTap) console.error('\n❌ Tests failed');
+        process.exit(1);
+    }
+
+    if (!isTap) console.log('\n✅ All tests passed');
   }
+}
+
+function parseArgs(args) {
+    const parsed = {
+        all: false,
+        help: false,
+        tap: false
+    };
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+
+        switch (arg) {
+            case '--all':
+                parsed.all = true;
+                break;
+            case '--help':
+            case '-h':
+                parsed.help = true;
+                break;
+            case '--tap':
+                parsed.tap = true;
+                break;
+        }
+    }
+
+    return parsed;
 }
 
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const runner = new SmartTestRunner();
-  runner.run().catch(error => {
-    console.error('Smart test runner failed:', error);
-    process.exit(1);
-  });
+    const args = parseArgs(process.argv.slice(2));
+
+    if (args.help) {
+        // showHelp();
+        process.exit(0);
+    }
+
+    const runner = new SmartTestRunner();
+    
+    const options = {
+        all: args.all,
+        tap: args.tap
+    };
+
+    runner.run(options).catch(error => {
+        console.error('Smart test runner failed:', error);
+        process.exit(1);
+    });
 }
 
 export default SmartTestRunner;

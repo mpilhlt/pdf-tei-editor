@@ -1,10 +1,10 @@
 /**
- * The UI of the application as a typed object structure, which can then be traversed. 
+ * The UI of the application as a typed object structure, which can then be traversed.
  * In this structure, each named DOM element encapsulates all named descencdent elements.
  * This allows to access the elements via `ui.toolbar.pdf`, `ui.floatingPanel`, etc. The structure
  * is created by `createNavigableElement()`, which is called on the document
- * body at the end of this file. The JSDoc structure is used to document the UI elements and their 
- * properties and allow autocompletion in IDEs that support JSDoc.   
+ * body at the end of this file. The JSDoc structure is used to document the UI elements and their
+ * properties and allow autocompletion in IDEs that support JSDoc.
  */
 
 import { createNavigableElement, createHtmlElements, registerTemplate, createFromTemplate, createSingleFromTemplate } from './modules/ui-system.js';
@@ -101,3 +101,4 @@ export default ui;
 
 // @ts-ignore
 window.ui = ui; // for debugging
+

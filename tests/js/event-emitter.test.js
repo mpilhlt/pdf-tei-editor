@@ -7,7 +7,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { EventEmitter } from '../app/src/modules/event-emitter.js';
+import { EventEmitter } from '../../app/src/modules/event-emitter.js';
 
 describe('EventEmitter', () => {
   

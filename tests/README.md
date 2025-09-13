@@ -1,46 +1,18 @@
-# Test Suite
+# Testing
 
-This directory contains tests for the PDF-TEI Editor application using Node.js built-in test runner.
+This directory contains the test suites for the PDF-TEI Editor application.
 
-## Running Tests
+## Testing Architecture
 
-```bash
-# Run all tests
-npm test
+The project employs a multi-layered testing strategy, including:
 
-# Run specific test suite
-npm run test:sync
+*   **Unit Tests:** For isolated JavaScript and Python code.
+*   **Integration Tests:** For backend functionalities.
+*   **End-to-End (E2E) Tests:** Using Playwright to test the full application in a containerized environment.
+*   **Smart Test Runner:** A script that selectively runs tests based on code changes to improve efficiency.
 
-# Run tests with coverage (Node 20+)
-node --test --experimental-test-coverage tests/*.test.js
-```
+## Detailed Documentation
 
-## Test Structure
+For comprehensive information on the testing architecture, how to run tests, and best practices for writing new tests, please refer to the main testing guide:
 
-Tests use Node.js built-in test runner (Node 18+) with:
-- `describe()` for organizing test suites
-- `test()` for individual test cases
-- `assert` module for assertions
-- `jsdom` for DOM simulation in Node.js environment
-
-## Key Test Scenarios
-
-### Processing Instructions
-- XML documents with processing instructions before root element
-- Mixed content (processing instructions, comments, elements)
-- Edge cases with processing instruction-only documents
-
-### Synchronization Algorithm
-- Basic element mapping between syntax and DOM trees
-- Error handling for mismatched tag names
-- Child element count validation
-- Empty document handling
-
-## Writing New Tests
-
-When adding new test files:
-1. Use `.test.js` extension
-2. Import `test`, `describe` from `node:test`
-3. Import `assert` from `node:assert`
-4. Follow the existing pattern for mock setups
-5. Add meaningful test descriptions and assertions
+**[-> Full Testing Documentation in `docs/testing.md`](../docs/testing.md)**
