@@ -100,6 +100,22 @@ node tests/smart-test-runner.js --changed-files <files>
 ./bin/manage.py user remove <username>
 ```
 
+### Configuration Management
+
+```bash
+# Get/set configuration values
+./bin/manage.py config get <key>                    # Read from db/config.json
+./bin/manage.py config get <key> --default          # Read from config/config.json
+./bin/manage.py config set <key> <json_value>       # Set in db/config.json
+./bin/manage.py config set <key> <json_value> --default  # Set in both files
+./bin/manage.py config delete <key>                 # Delete from db/config.json
+./bin/manage.py config delete <key> --default       # Delete from both files
+
+# Value constraints and validation
+./bin/manage.py config set <key> --values '["val1", "val2"]'  # Set allowed values
+./bin/manage.py config set <key> --type "string"              # Set type constraint
+```
+
 ## Application Architecture
 
 ### Backend (Python/Flask)

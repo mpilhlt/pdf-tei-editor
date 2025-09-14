@@ -22,7 +22,9 @@
     "xpath",
     "collection"
   ],
-  "state.persistedVars": ["*"],
+  "state.persistedVars": [
+    "*"
+  ],
   "server.logging.level": {
     "sse": "info",
     "sync": "info"
@@ -30,6 +32,7 @@
   "application.mode": "development",
   "application.mode.values": [
     "development",
-    "production"
+    "production",
+    "testing"
   ]
 }
