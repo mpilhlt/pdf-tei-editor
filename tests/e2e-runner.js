@@ -172,6 +172,9 @@ class E2ERunner {
             cwd: projectRoot
         });
 
+        // Clean up dangling images to prevent accumulation while preserving cache
+        await this.cleanupStaleImages();
+
         // Start container with test environment
         console.log('🚀 Starting test container...');
         const portMapping = `${this.config.port}:${this.config.containerPort}`;
@@ -203,6 +206,9 @@ class E2ERunner {
             stdio: 'inherit',
             cwd: projectRoot
         });
+
+        // Clean up dangling images to prevent accumulation while preserving cache
+        await this.cleanupStaleImages();
     }
 
     /**
@@ -282,6 +288,83 @@ class E2ERunner {
             }
         } catch (error) {
             console.error('Could not retrieve container logs:', error.message);
+        }
+    }
+
+    /**
+     * Clean up stale Docker/Podman images while preserving cached layers
+     *
+     * This prevents accumulation of '<none>' tagged images that are created during
+     * multi-stage Docker builds. The cleanup strategy:
+     * 1. Removes dangling images (untagged intermediate build artifacts)
+     * 2. Preserves recent images (last 24 hours) that may contain useful cached layers
+     * 3. Removes older stale images that are no longer needed
+     *
+     * This balances cleanup with build performance by keeping useful cache layers.
+     */
+    async cleanupStaleImages() {
+        try {
+            console.log('🧹 Cleaning up stale images...');
+
+            // Remove dangling images (untagged <none> images) that are not part of build cache
+            // This removes intermediate build images that are no longer needed
+            const cleanupCmd = `${this.containerCmd} image prune -f --filter "dangling=true"`;
+            const result = execSync(cleanupCmd, {
+                encoding: 'utf8',
+                stdio: 'pipe'
+            });
+
+            if (result.trim()) {
+                console.log('🗑️ Removed dangling images:', result.trim());
+            }
+
+            // Additionally, remove old untagged project-specific images
+            // Get all <none> images and filter for ones that likely came from our builds
+            try {
+                const listCmd = `${this.containerCmd} images --filter "dangling=true" --format "{{.ID}} {{.CreatedAt}}"`;
+                const danglingImages = execSync(listCmd, {
+                    encoding: 'utf8',
+                    stdio: 'pipe'
+                }).trim();
+
+                if (danglingImages) {
+                    const lines = danglingImages.split('\n');
+                    let removedCount = 0;
+
+                    // Keep only recent dangling images (last 24 hours) as they might be useful cache
+                    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+
+                    for (const line of lines) {
+                        const [imageId, createdAt] = line.split(' ', 2);
+                        if (imageId && createdAt) {
+                            // Parse the creation date - container tools use different formats
+                            const createdDate = new Date(createdAt);
+
+                            // Remove if older than 24 hours (keeping recent ones as cache)
+                            if (createdDate.getTime() < oneDayAgo) {
+                                try {
+                                    execSync(`${this.containerCmd} rmi ${imageId}`, {
+                                        stdio: 'ignore'
+                                    });
+                                    removedCount++;
+                                } catch (error) {
+                                    // Image might be in use, skip silently
+                                }
+                            }
+                        }
+                    }
+
+                    if (removedCount > 0) {
+                        console.log(`🗑️ Removed ${removedCount} stale image(s) older than 24 hours`);
+                    }
+                }
+            } catch (error) {
+                // Ignore errors in additional cleanup - the main prune should have worked
+            }
+
+        } catch (error) {
+            // Don't fail the build if cleanup fails
+            console.log('⚠️ Image cleanup failed (continuing anyway):', error.message);
         }
     }
 

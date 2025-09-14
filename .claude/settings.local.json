@@ -28,7 +28,8 @@
       "WebFetch(domain:github.com)",
       "Bash(git branch:*)",
       "Bash(podman logs:*)",
-      "Bash(./bin/test-e2e)"
+      "Bash(./bin/test-e2e)",
+      "Bash(podman images:*)"
     ],
     "deny": []
   }

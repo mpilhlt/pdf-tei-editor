@@ -212,25 +212,27 @@ test('dummy test', () => {});
 
   test('should handle no changed files scenario', async () => {
     const runner = new SmartTestRunner();
-    
+
     // Mock no changed files
     const originalGetChangedFiles = runner.getChangedFiles;
     runner.getChangedFiles = () => [];
-    
+
     try {
       const testsToRun = await runner.getTestsToRun();
-      
-      // Should only run always-run tests when no changes
-      assert(testsToRun.js.includes('tests/js/application.test.js'), 'Should run critical tests when no changes');
-      assert(testsToRun.js.includes('tests/js/plugin-manager.test.js'), 'Should run critical tests when no changes');
-      
-      // Should not run regular tests
-      const nonCriticalTests = testsToRun.js.filter(test => 
-        !['tests/js/application.test.js', 'tests/js/plugin-manager.test.js'].includes(test)
-      );
-      
+
+      // When no files have changed, only always-run tests should be selected
+      // Filter out temporary test files created by other tests in this suite
+      const realJSTests = testsToRun.js.filter(test => !test.includes('temp-'));
+      const realPyTests = testsToRun.py.filter(test => !test.includes('temp_'));
+      const realE2ETests = testsToRun.e2e.filter(test => !test.includes('temp-'));
+
+      // Real test files should not run since we removed @testCovers * from them
+      assert(realJSTests.length === 0, `Should not run real JavaScript tests when no changes, but got: ${realJSTests.join(', ')}`);
+      assert(realPyTests.length === 0, `Should not run real Python tests when no changes, but got: ${realPyTests.join(', ')}`);
+      assert(realE2ETests.length === 0, `Should not run real E2E tests when no changes, but got: ${realE2ETests.join(', ')}`);
+
       console.log('Tests for no changes scenario:', testsToRun);
-      console.log('Non-critical tests selected:', nonCriticalTests);
+      console.log(`Total tests selected: ${testsToRun.js.length + testsToRun.py.length + testsToRun.e2e.length}`);
     } finally {
       runner.getChangedFiles = originalGetChangedFiles;
     }

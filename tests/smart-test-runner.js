@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, readdirSync, openSync, closeSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import madge from 'madge';
@@ -320,18 +320,22 @@ class SmartTestRunner {
     return result;
   }
 
-  getChangedFiles() {
+  getChangedFiles(customFiles = null) {
+    if (customFiles) {
+      return customFiles;
+    }
+
     try {
       // Get staged files
       const staged = execSync('git diff --cached --name-only', { encoding: 'utf8' });
-      // Get modified files  
+      // Get modified files
       const modified = execSync('git diff --name-only', { encoding: 'utf8' });
-      
+
       const allChanged = [...new Set([
         ...staged.split('\n').filter(f => f.trim()),
         ...modified.split('\n').filter(f => f.trim())
       ])];
-      
+
       return allChanged;
     } catch (error) {
       console.warn('Could not get changed files, running all tests');
@@ -380,7 +384,7 @@ class SmartTestRunner {
       return testFiles;
     }
 
-    const changedFiles = this.getChangedFiles();
+    const changedFiles = this.getChangedFiles(options.changedFiles);
     if (!options.tap) console.log('📁 Changed files:', changedFiles.length > 0 ? changedFiles : 'none');
 
     const analysisResult = await this.analyzeDependencies(options);
@@ -416,15 +420,16 @@ class SmartTestRunner {
 
   async run(options = {}) {
     const isTap = options.tap;
+    const dryRun = options.dryRun;
 
     if (isTap) {
         // In TAP mode, we don't show the smart runner's own logs, only the TAP output from the runners
     } else {
         console.log('🧠 Smart Test Runner - Analyzing dependencies and changes...');
     }
-    
+
     const testsToRun = await this.getTestsToRun(options);
-    
+
     const jsCommand = testsToRun.js.length > 0 ? `node --test ${isTap ? '--test-reporter=tap' : ''} ${testsToRun.js.join(' ')}` : null;
     const pyCommand = testsToRun.py.length > 0 ? `uv run pytest ${isTap ? '--tap-stream' : ''} ${testsToRun.py.join(' ')} -v` : null;
     const e2eCommand = testsToRun.e2e.length > 0 ? 'npm run test:e2e' : null;
@@ -435,11 +440,34 @@ class SmartTestRunner {
         {name: 'E2E tests', command: e2eCommand, tap: false} // no tap support for e2e
     ].filter(s => s.command);
 
+    if (dryRun) {
+        console.log('🔍 Dry run - showing tests that would run:');
+        if (testsToRun.js.length > 0) {
+          console.log('\n  📄 JavaScript tests:');
+          testsToRun.js.forEach(test => console.log(`    - ${test}`));
+        }
+        if (testsToRun.py.length > 0) {
+          console.log('\n  🐍 Python tests:');
+          testsToRun.py.forEach(test => console.log(`    - ${test}`));
+        }
+        if (testsToRun.e2e.length > 0) {
+          console.log('\n  🌐 E2E tests:');
+          testsToRun.e2e.forEach(test => console.log(`    - ${test}`));
+        }
+
+        if (testSuites.length === 0) {
+            console.log('\n✅ No relevant tests would run');
+        } else {
+            console.log(`\n📊 Total: ${testsToRun.js.length + testsToRun.py.length + testsToRun.e2e.length} tests would run across ${testSuites.length} suite(s)`);
+        }
+        return;
+    }
+
     if (isTap) {
         console.log('TAP version 13');
         console.log(`1..${testSuites.length}`);
     }
-    
+
     if (testSuites.length === 0) {
       if (!isTap) console.log('✅ No relevant tests to run');
       return;
@@ -469,7 +497,7 @@ class SmartTestRunner {
             if (!isTap) console.log(`\nRunning ${suite.name}...`);
             execSync(suite.command, {
               stdio: 'inherit',
-              cwd: projectRoot 
+              cwd: projectRoot
             });
             if (isTap && !suite.tap) {
                 console.log(`ok ${testCounter++} - ${suite.name}`);
@@ -495,7 +523,9 @@ function parseArgs(args) {
     const parsed = {
         all: false,
         help: false,
-        tap: false
+        tap: false,
+        dryRun: false,
+        changedFiles: null
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -512,10 +542,46 @@ function parseArgs(args) {
             case '--tap':
                 parsed.tap = true;
                 break;
+            case '--dry-run':
+                parsed.dryRun = true;
+                break;
+            case '--changed-files':
+                if (i + 1 < args.length) {
+                    parsed.changedFiles = args[i + 1].split(',').map(f => f.trim());
+                    i++; // Skip the next argument as it's the file list
+                }
+                break;
         }
     }
 
     return parsed;
+}
+
+function showHelp() {
+    console.log('🧠 Smart Test Runner - Intelligent test execution based on file dependencies');
+    console.log('');
+    console.log('Usage:');
+    console.log('  node tests/smart-test-runner.js [options]');
+    console.log('');
+    console.log('Options:');
+    console.log('  --all                    Run all tests regardless of changes');
+    console.log('  --changed-files <files>  Comma-separated list of changed files to analyze');
+    console.log('  --dry-run                Show which tests would run without executing them');
+    console.log('  --tap                    Output results in TAP format');
+    console.log('  --help, -h               Show this help message');
+    console.log('');
+    console.log('Examples:');
+    console.log('  node tests/smart-test-runner.js');
+    console.log('  node tests/smart-test-runner.js --all');
+    console.log('  node tests/smart-test-runner.js --changed-files app/src/ui.js,server/api/auth.py');
+    console.log('  node tests/smart-test-runner.js --changed-files app/src/ui.js --dry-run');
+    console.log('  node tests/smart-test-runner.js --tap');
+    console.log('');
+    console.log('How it works:');
+    console.log('  • Analyzes test files for @testCovers annotations');
+    console.log('  • Detects JavaScript import dependencies automatically');
+    console.log('  • Runs only tests affected by changed files');
+    console.log('  • Always runs tests marked with @testCovers *');
 }
 
 // Run if called directly
@@ -523,15 +589,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const args = parseArgs(process.argv.slice(2));
 
     if (args.help) {
-        // showHelp();
+        showHelp();
         process.exit(0);
     }
 
     const runner = new SmartTestRunner();
-    
+
     const options = {
         all: args.all,
-        tap: args.tap
+        tap: args.tap,
+        dryRun: args.dryRun,
+        changedFiles: args.changedFiles
     };
 
     runner.run(options).catch(error => {

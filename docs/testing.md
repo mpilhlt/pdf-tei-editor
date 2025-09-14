@@ -96,10 +96,15 @@ test('frontend smoke test', async ({ page }) => {
 ### Usage Examples
 
 ```bash
+# Run all tests
+node tests/smart-test-runner.js --all 
+
 # Test specific files
 node tests/smart-test-runner.js --changed-files app/src/ui.js,server/api/auth.py
 
-# Test from git changes
+# Test from git changes 
+node tests/smart-test-runner.js 
+# same as:
 node tests/smart-test-runner.js --changed-files $(git diff --name-only HEAD~1)
 
 # Dry run (show which tests would run)
@@ -131,11 +136,6 @@ FROM base AS deps                    # Dependencies (changes when package files 
 FROM deps AS app                     # Application code (rebuilds when source changes)
 FROM app AS test                     # Test-optimized variant
 ```
-
-### Benefits:
-- **Fast Builds**: Only application layer rebuilds when source code changes
-- **Clean Isolation**: Each test run gets a fresh container
-- **Optimal Caching**: Expensive dependency layers are reused across runs
 
 ### Running E2E Tests
 
@@ -280,6 +280,7 @@ window.ui.floatingPanel.status     // Status display
 ### When to Use Selectors
 
 Use CSS selectors when:
+
 - Elements are not part of the named UI system
 - Testing dynamic content
 - Verifying specific styling or attributes
@@ -420,6 +421,7 @@ exec node tests/smart-test-runner.js
 ### Common Issues
 
 **Docker Build Failures**:
+
 ```bash
 # Clean and rebuild
 docker system prune -f
@@ -427,6 +429,7 @@ npm run test:e2e
 ```
 
 **Port Conflicts**:
+
 ```bash
 # The test script automatically cleans up port conflicts
 # If manual cleanup is needed:
@@ -434,11 +437,13 @@ docker stop $(docker ps -q --filter "publish=8000")
 ```
 
 **Test Timeouts**:
+
 - Increase timeout in `playwright.config.js`
 - Check container startup logs
 - Verify application health checks
 
 **UI Element Not Found**:
+
 - Use `window.ui` navigation system instead of selectors
 - Check element names in UI type definitions
 - Verify element is properly registered with `updateUi()`
@@ -457,9 +462,4 @@ docker stop $(docker ps -q --filter "publish=8000")
 2. ✅ **Prefer `window.ui` navigation** over CSS selectors
 3. ✅ **Write descriptive test names** and organize in logical suites
 4. ✅ **Filter expected errors** in E2E tests
-5. ✅ **Test critical user workflows** end-to-end
-6. ✅ **Use containerized testing** for isolation
-7. ✅ **Leverage Docker layer caching** for fast builds
-8. ✅ **Run smart test selection** during development
 
-This testing infrastructure provides fast, reliable, and comprehensive coverage while minimizing maintenance overhead and maximizing developer productivity.
