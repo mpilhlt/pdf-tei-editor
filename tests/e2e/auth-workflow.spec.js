@@ -35,7 +35,7 @@ test.describe('Authentication Workflow', () => {
     await page.goto(E2E_BASE_URL);
 
     // Wait for application to load and show login dialog
-    await page.waitForSelector('sl-dialog[open]', { timeout: 10000 });
+    await page.waitForSelector('sl-dialog[name="loginDialog"][open]', { timeout: 10000 });
 
     // Verify login dialog is visible using UI navigation system
     const loginDialogVisible = await page.evaluate(() => {
@@ -73,7 +73,7 @@ test.describe('Authentication Workflow', () => {
     });
 
     // Wait for login to complete and dialog to hide
-    await page.waitForSelector('sl-dialog:not([open])', { timeout: 5000 });
+    await page.waitForSelector('sl-dialog[name="loginDialog"]:not([open])', { timeout: 5000 });
 
     // Verify login dialog is now hidden
     const loginDialogHidden = await page.evaluate(() => {

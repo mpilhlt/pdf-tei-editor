@@ -6,6 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+/** @import { namedElementsTree } from '../../app/src/ui.js' */
 
 test.describe('Application Loading', () => {
   test('should load application without critical console errors', async ({ page }) => {
@@ -59,10 +60,14 @@ test.describe('Application Loading', () => {
 
     // Verify basic application structure is present
     // The app should have loaded and show either the login form or main interface
-    const hasLoginForm = await page.locator('sl-input[name="username"]').isVisible();
-    const hasMainInterface = await page.locator('[name="app-container"]').isVisible();
 
-    expect(hasLoginForm || hasMainInterface, 'Application should show either login form or main interface').toBeTruthy();
+    const hasLoginForm = await page.evaluate(() => {
+      /** @type {namedElementsTree} */ 
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.hidden === false;
+    });
+    
+    expect(hasLoginForm, `Application should show login form`).toBeTruthy();
 
     // Log any warnings for informational purposes (but don't fail the test)
     if (consoleWarnings.length > 0) {
@@ -114,6 +119,7 @@ test.describe('Application Loading', () => {
     expect(pageErrors, `Page errors in dev mode: ${pageErrors.join(', ')}`).toHaveLength(0);
 
     // Verify application loaded in development mode
+    /** @type {namedElementsTree} */ const ui = /** @type {any} */(window).ui;
     const hasLoginForm = await page.locator('sl-input[name="username"]').isVisible();
     const hasMainInterface = await page.locator('[name="app-container"]').isVisible();
 
