@@ -1,51 +1,99 @@
-# Multi-stage Dockerfile optimized for fast rebuilds and testing
-# Stage 1: Base system dependencies (changes rarely)
-FROM python:3.13-slim as base
+# Production-optimized multi-stage Dockerfile
+#
+# Version configuration (can be overridden with --build-arg)
+# Example: podman build --build-arg PYTHON_VERSION=3.12 --build-arg NODE_VERSION=18.20.4 .
+ARG PYTHON_VERSION=3.13
+ARG NODE_VERSION=20.18.0
+
+# Stage 1: Base system with essential tools
+FROM python:${PYTHON_VERSION}-slim as base
+
+# Re-declare ARG variables for this stage
+ARG NODE_VERSION=20.18.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies - cached layer
+# Install system dependencies and Node.js in one optimized layer
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     libmagic1 \
     libmagic-dev \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    xz-utils \
+    # Install Node.js directly (smaller than nvm)
+    && curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1 \
+    # Clean up all caches and temporary files in same layer
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && rm -rf /tmp/* /var/tmp/*
 
-# Install uv - cached layer
-RUN pip install uv
-
-# Install Node.js via nvm - cached layer
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-ENV NVM_DIR="/root/.nvm"
-RUN bash -c "source $NVM_DIR/nvm.sh && nvm install lts/jod && nvm use lts/jod && nvm alias default lts/jod"
-RUN bash -c "source $NVM_DIR/nvm.sh && ln -sf \$NVM_DIR/versions/node/\$(node --version)/bin/* /usr/local/bin/"
+# Install uv
+RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Stage 2: Dependencies installation (changes when package files change)
-FROM base as deps
+# Stage 2: Build stage (includes all dependencies temporarily)
+FROM base as builder
 
-# Copy dependency files
+# Copy dependency files first
 COPY package.json package-lock.json* ./
 COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies - cached when pyproject.toml/uv.lock unchanged
-RUN uv sync
+# Install Python dependencies first (no dev dependencies needed yet)
+RUN uv sync --no-dev --no-cache
 
-# Install Node.js dependencies without postinstall scripts that need source files
-RUN bash -c "source $NVM_DIR/nvm.sh && npm install --ignore-scripts"
-
-# Stage 3: Application build (rebuilds when source changes)
-FROM deps as app
+# Install Node.js dependencies without postinstall (which needs source files)
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
 # Copy source code
 COPY . .
 
-# Run postinstall scripts now that source files are available
-RUN bash -c "source $NVM_DIR/nvm.sh && npm run postinstall"
+# Now install dev dependencies and run build process once
+RUN uv sync --no-cache \
+    && npm install --no-audit --no-fund \
+    && npm run postinstall \
+    && npm run build \
+    # Remove dev dependencies immediately after build
+    && npm prune --omit=dev \
+    && npm cache clean --force \
+    && uv sync --no-dev --no-cache \
+    && uv cache clean \
+    # Remove all build-time files and directories
+    && rm -rf .git \
+    && rm -rf tests \
+    && rm -rf docs \
+    && rm -rf app/src \
+    && rm -rf node_modules/.cache \
+    && rm -rf /root/.cache \
+    && rm -rf /root/.npm \
+    && rm -rf /tmp/* /var/tmp/* \
+    # Remove unnecessary files
+    && rm -f .dockerignore .gitignore README.md LICENSE \
+    && rm -f playwright.config.js docker-compose.test.yml \
+    && rm -f package-lock.json \
+    # Keep only essential directories and files
+    && find . -name "*.pyc" -delete \
+    && find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
-# Expose port for waitress server
+# Stage 3: Production runtime (minimal final image)
+FROM base as production
+
+# Copy only production files from builder (no node_modules needed!)
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/app/web /app/app/web
+COPY --from=builder /app/server /app/server
+COPY --from=builder /app/config /app/config
+
+# Set production mode in the container
+RUN sed -i 's/"application.mode": "development"/"application.mode": "production"/' /app/config/config.json
+COPY --from=builder /app/bin /app/bin
+COPY --from=builder /app/schema /app/schema
+COPY --from=builder /app/data /app/data
+COPY --from=builder /app/package.json /app/package.json
+COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+
+# Expose port
 EXPOSE 8000
 
 # Create entrypoint script
@@ -54,8 +102,8 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-# Stage 4: Test-optimized variant
-FROM app as test
+# Stage 4: Test-optimized variant (inherits from builder)
+FROM builder as test
 
 # Override entrypoint for test environment
 COPY docker/entrypoint-test.sh /entrypoint-test.sh
