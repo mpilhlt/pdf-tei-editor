@@ -17,6 +17,8 @@
     "test:js": "node --test tests/js/*.test.js",
     "test:py": "uv run pytest tests/py/",
     "test:e2e": "node tests/e2e-runner.js --playwright",
+    "test:e2e:fast": "node tests/e2e-runner.js --playwright --no-rebuild",
+    "test:e2e:fast:dev": "node tests/e2e-runner.js --playwright --no-rebuild --development",
     "test:e2e:headed": "node tests/e2e-runner.js --playwright --headed",
     "test:e2e:debug": "node tests/e2e-runner.js --playwright --debug --headed",
     "test:e2e:firefox": "node tests/e2e-runner.js --playwright --browser firefox",

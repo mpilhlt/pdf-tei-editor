@@ -67,19 +67,19 @@ class E2ERunner {
             this.containerCmd = 'podman';
             this.usePodman = true;
             console.log('🐙 Using podman as container tool');
+            console.log('📦 Preferring native podman commands over compose tools');
 
-            // Check for compose tools with podman
+            // Prefer native podman - only use compose tools if explicitly needed
+            // Check for compose tools with podman but keep usePodman = true
             try {
                 execSync('command -v podman-compose', { stdio: 'ignore' });
                 this.composeCmd = 'podman-compose';
-                this.usePodman = false;
-                console.log('📦 Found podman-compose');
+                console.log('📦 Found podman-compose (available but using native podman)');
             } catch {
                 try {
                     execSync('command -v docker-compose', { stdio: 'ignore' });
                     this.composeCmd = 'docker-compose';
-                    this.usePodman = false;
-                    console.log('📦 Found docker-compose (with podman)');
+                    console.log('📦 Found docker-compose (available but using native podman)');
                 } catch {
                     console.log('📦 No compose tool found, using direct podman commands');
                 }
@@ -114,15 +114,15 @@ class E2ERunner {
     /**
      * Start the containerized test environment
      */
-    async startContainer() {
+    async startContainer(noRebuild = false) {
         console.log('🚀 Starting containerized test environment...');
         console.log(`🆔 Test Run ID: ${this.testRunId}`);
 
         try {
             if (this.usePodman) {
-                await this.startDirectContainer();
+                await this.startDirectContainer(noRebuild);
             } else {
-                await this.startComposeContainer();
+                await this.startComposeContainer(noRebuild);
             }
 
             this.isContainerStarted = true;
@@ -140,7 +140,7 @@ class E2ERunner {
     /**
      * Start container using direct container commands
      */
-    async startDirectContainer() {
+    async startDirectContainer(noRebuild = false) {
         // Clean up any existing containers using the configured port
         console.log('🧹 Cleaning up existing containers...');
         try {
@@ -165,15 +165,26 @@ class E2ERunner {
             // Ignore if container doesn't exist
         }
 
-        // Build test image with consistent name for layer caching
-        console.log('🏗️ Building test image...');
-        execSync(`${this.containerCmd} build -t pdf-tei-editor-test:latest --target test .`, {
-            stdio: 'inherit',
-            cwd: projectRoot
-        });
+        // Build test image with consistent name for layer caching (unless skipping rebuild)
+        if (noRebuild) {
+            console.log('⏭️ Skipping image build (using existing image)...');
+            // Check if the image exists
+            try {
+                execSync(`${this.containerCmd} image exists pdf-tei-editor-test:latest`, { stdio: 'ignore' });
+                console.log('✅ Found existing pdf-tei-editor-test:latest image');
+            } catch {
+                throw new Error('No existing pdf-tei-editor-test:latest image found. Run without --no-rebuild first.');
+            }
+        } else {
+            console.log('🏗️ Building test image...');
+            execSync(`${this.containerCmd} build -t pdf-tei-editor-test:latest --target test .`, {
+                stdio: 'inherit',
+                cwd: projectRoot
+            });
 
-        // Clean up dangling images to prevent accumulation while preserving cache
-        await this.cleanupStaleImages();
+            // Clean up dangling images to prevent accumulation while preserving cache
+            await this.cleanupStaleImages();
+        }
 
         // Start container with test environment
         console.log('🚀 Starting test container...');
@@ -187,7 +198,7 @@ class E2ERunner {
     /**
      * Start container using compose commands
      */
-    async startComposeContainer() {
+    async startComposeContainer(noRebuild = false) {
         console.log('🏗️ Using compose commands...');
 
         // Clean up any existing containers
@@ -201,14 +212,22 @@ class E2ERunner {
         }
 
         // Start the test environment
-        console.log('🚀 Starting test environment with compose...');
-        execSync(`${this.composeCmd} -f docker-compose.test.yml up --build -d`, {
-            stdio: 'inherit',
-            cwd: projectRoot
-        });
+        if (noRebuild) {
+            console.log('🚀 Starting test environment with compose (no rebuild)...');
+            execSync(`${this.composeCmd} -f docker-compose.test.yml up --no-build -d`, {
+                stdio: 'inherit',
+                cwd: projectRoot
+            });
+        } else {
+            console.log('🚀 Starting test environment with compose...');
+            execSync(`${this.composeCmd} -f docker-compose.test.yml up --build -d`, {
+                stdio: 'inherit',
+                cwd: projectRoot
+            });
 
-        // Clean up dangling images to prevent accumulation while preserving cache
-        await this.cleanupStaleImages();
+            // Clean up dangling images to prevent accumulation while preserving cache
+            await this.cleanupStaleImages();
+        }
     }
 
     /**
@@ -429,6 +448,7 @@ class E2ERunner {
         console.log(`🆔 Test Run ID: ${this.testRunId}`);
         console.log(`🌐 Browser: ${options.browser || 'chromium'}`);
         console.log(`👁️ Mode: ${options.headed ? 'headed' : 'headless'}`);
+        console.log(`🏗️ Environment: ${options.mode || 'production'}`);
 
         try {
             // Check if npx is available
@@ -438,8 +458,22 @@ class E2ERunner {
                 throw new Error('Node.js/npm is required but not installed');
             }
 
+            // Check if Playwright is installed before building container
+            console.log('🔍 Checking Playwright installation...');
+            try {
+                execSync('npx playwright --version', { stdio: 'pipe' });
+                console.log('✅ Playwright is available');
+            } catch (error) {
+                throw new Error(
+                    'Playwright is not installed. Please install it first:\n' +
+                    '  npm install @playwright/test\n' +
+                    '  npx playwright install\n' +
+                    'Or run: npm install'
+                );
+            }
+
             // Start containerized environment
-            await this.startContainer();
+            await this.startContainer(options.noRebuild);
 
             // Build Playwright command
             let cmd = ['playwright', 'test'];
@@ -453,6 +487,19 @@ class E2ERunner {
             if (options.debug) {
                 cmd.push('--debug');
             }
+            // Add test filtering based on mode
+            const mode = options.mode || 'production';
+
+            if (mode === 'production') {
+                // In production mode, skip development-only tests using --grep-invert
+                cmd.push('--grep-invert', '@dev-only');
+                console.log(`📋 Filtering tests: Skipping @dev-only tests (production mode)`);
+            } else if (mode === 'development') {
+                // In development mode, run all tests (no additional filtering)
+                console.log(`📋 Filtering tests: Running all tests (development mode)`);
+            }
+
+            // Add user's grep pattern if specified
             if (options.grep) {
                 cmd.push('--grep', options.grep);
             }
@@ -590,7 +637,9 @@ function parseArgs(args) {
         debug: false,
         grep: null,
         testFile: null,
-        help: false
+        help: false,
+        noRebuild: false,
+        mode: 'production'  // default to production mode
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -611,6 +660,18 @@ function parseArgs(args) {
                 break;
             case '--grep':
                 parsed.grep = args[++i];
+                break;
+            case '--no-rebuild':
+                parsed.noRebuild = true;
+                break;
+            case '--mode':
+                parsed.mode = args[++i];
+                break;
+            case '--development':
+                parsed.mode = 'development';
+                break;
+            case '--production':
+                parsed.mode = 'production';
                 break;
             case '--help':
             case '-h':
@@ -646,6 +707,10 @@ function showHelp() {
     console.log('  --headed           Run tests in headed mode (show browser)');
     console.log('  --debug            Enable debug mode');
     console.log('  --grep <pattern>   Run tests matching pattern');
+    console.log('  --no-rebuild       Use existing container image without rebuilding');
+    console.log('  --mode <mode>      Environment mode (production|development) [default: production]');
+    console.log('  --production       Use production mode (skip @dev-only tests)');
+    console.log('  --development      Use development mode (run all tests)');
     console.log('');
     console.log('Environment Variables:');
     console.log('  E2E_HOST           Host to bind container (default: localhost)');
@@ -656,6 +721,15 @@ function showHelp() {
     console.log('  # Run Playwright tests');
     console.log('  node tests/e2e-runner.js --playwright');
     console.log('  node tests/e2e-runner.js --playwright --browser firefox --headed');
+    console.log('');
+    console.log('  # Run with existing image (faster)');
+    console.log('  node tests/e2e-runner.js --playwright --no-rebuild');
+    console.log('');
+    console.log('  # Run development mode tests (includes @dev-only tests)');
+    console.log('  node tests/e2e-runner.js --playwright --development');
+    console.log('');
+    console.log('  # Run production mode tests only (default, skips @dev-only)');
+    console.log('  node tests/e2e-runner.js --playwright --production');
     console.log('');
     console.log('  # Run backend integration test');
     console.log('  node tests/e2e-runner.js tests/e2e/test-extractors.js');
@@ -683,7 +757,9 @@ async function main() {
                 browser: args.browser,
                 headed: args.headed,
                 debug: args.debug,
-                grep: args.grep
+                grep: args.grep,
+                noRebuild: args.noRebuild,
+                mode: args.mode
             });
         } else if (args.testFile) {
             // Run backend integration test

@@ -1,0 +1,74 @@
+# Simple optimizations to existing Dockerfile
+FROM python:3.13-slim as base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies - combine with Node.js
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    libmagic1 \
+    libmagic-dev \
+    # Install Node.js 20 directly from Debian repos (smaller than nvm)
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    # Clean up in same layer
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Install uv
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+
+# Stage 2: Dependencies installation
+FROM base as deps
+
+# Copy dependency files
+COPY package.json package-lock.json* ./
+COPY pyproject.toml uv.lock ./
+
+# Install Python dependencies (production only)
+RUN uv sync --no-dev
+
+# Install Node.js dependencies (production only)
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+
+# Stage 3: Build stage (temporarily add dev deps)
+FROM deps as builder
+
+# Add dev dependencies for build
+RUN uv sync
+RUN npm ci --no-audit --no-fund
+
+# Copy source code
+COPY . .
+
+# Build and clean up
+RUN npm run postinstall && \
+    npm run build && \
+    # Remove dev dependencies after build
+    npm prune --omit=dev && \
+    npm cache clean --force && \
+    uv sync --no-dev
+
+# Stage 4: Application (production)
+FROM builder as app
+
+# Expose port for waitress server
+EXPOSE 8000
+
+# Create entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Stage 5: Test-optimized variant
+FROM builder as test
+
+# Override entrypoint for test environment
+COPY docker/entrypoint-test.sh /entrypoint-test.sh
+RUN chmod +x /entrypoint-test.sh
+
+ENTRYPOINT ["/entrypoint-test.sh"]

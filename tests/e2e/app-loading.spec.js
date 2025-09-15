@@ -10,7 +10,13 @@ import { test, expect } from '@playwright/test';
 test.describe('Application Loading', () => {
   test('should load application without critical console errors', async ({ page }) => {
     // Set up console error tracking
+    /**
+     * @type {any[]}
+     */
     const consoleErrors = [];
+    /**
+     * @type {string[]}
+     */
     const consoleWarnings = [];
 
     page.on('console', msg => {
@@ -28,6 +34,9 @@ test.describe('Application Loading', () => {
     });
 
     // Track uncaught exceptions
+    /**
+     * @type {any[]}
+     */
     const pageErrors = [];
     page.on('pageerror', error => {
       pageErrors.push(error.message);
@@ -61,8 +70,11 @@ test.describe('Application Loading', () => {
     }
   });
 
-  test('should load development mode without critical console errors', async ({ page }) => {
+  test('should load development mode without critical console errors @dev-only', async ({ page }) => {
     // Set up console error tracking
+    /**
+     * @type {any[]}
+     */
     const consoleErrors = [];
 
     page.on('console', msg => {
@@ -78,6 +90,9 @@ test.describe('Application Loading', () => {
     });
 
     // Track uncaught exceptions
+    /**
+     * @type {any[]}
+     */
     const pageErrors = [];
     page.on('pageerror', error => {
       pageErrors.push(error.message);

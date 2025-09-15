@@ -31,7 +31,9 @@
       "Bash(./bin/test-e2e)",
       "Bash(podman images:*)",
       "Bash(./bin/manage.py config set:*)",
-      "Bash(./bin/manage.py config:*)"
+      "Bash(./bin/manage.py config:*)",
+      "Bash(podman:*)",
+      "Bash(npx playwright test:*)"
     ],
     "deny": []
   }

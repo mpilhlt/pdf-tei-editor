@@ -1,0 +1,96 @@
+# Optimized Multi-stage Dockerfile for smaller image sizes
+# Stage 1: Base system with Node.js from official package (smaller than nvm)
+FROM python:3.13-slim as base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies and Node.js in one layer, clean up caches
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    libmagic1 \
+    libmagic-dev \
+    ca-certificates \
+    xz-utils \
+    && curl -fsSL https://nodejs.org/dist/v20.18.0/node-v20.18.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1 \
+    # Clean up apt caches and temporary files
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && rm -rf /tmp/* /var/tmp/*
+
+# Install uv in same layer to avoid extra layer
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+
+# Stage 2: Dependencies installation (production only)
+FROM base as deps
+
+# Copy dependency files
+COPY package.json package-lock.json* ./
+COPY pyproject.toml uv.lock ./
+
+# Install Python dependencies (production only) and clean up
+RUN uv sync --no-dev --no-cache \
+    && uv cache clean
+
+# Install Node.js dependencies without dev dependencies and clean up
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && npm cache clean --force
+
+# Stage 3: Build stage (includes dev dependencies temporarily)
+FROM deps as builder
+
+# Install dev dependencies needed for build
+RUN uv sync --no-cache \
+    && npm ci --no-audit --no-fund
+
+# Copy source code
+COPY . .
+
+# Run build process and clean up dev dependencies
+RUN npm run postinstall \
+    && npm run build \
+    # Clean up dev dependencies and caches
+    && npm prune --omit=dev \
+    && npm cache clean --force \
+    && uv sync --no-dev --no-cache \
+    && uv cache clean \
+    # Remove build-only files
+    && rm -rf .git \
+    && rm -rf tests \
+    && rm -rf node_modules/.cache \
+    && rm -rf /root/.cache \
+    && rm -rf /tmp/* /var/tmp/*
+
+# Stage 4: Production runtime (smallest final image)
+FROM base as production
+
+# Copy only production dependencies and built application
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/app /app/app
+COPY --from=builder /app/server /app/server
+COPY --from=builder /app/config /app/config
+COPY --from=builder /app/bin /app/bin
+COPY --from=builder /app/schema /app/schema
+COPY --from=builder /app/package.json /app/package.json
+COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+
+# Expose port
+EXPOSE 8000
+
+# Create entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Stage 5: Test-optimized variant (inherits from builder for dev tools)
+FROM builder as test
+
+# Override entrypoint for test environment
+COPY docker/entrypoint-test.sh /entrypoint-test.sh
+RUN chmod +x /entrypoint-test.sh
+
+ENTRYPOINT ["/entrypoint-test.sh"]
