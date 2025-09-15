@@ -689,3 +689,69 @@ const originalMethods = {};
 - `"Received validation results for document version 1: 3 errors."`
 - `"Validation took 22 seconds, disabling it."`
 - `"DEBUG Sending heartbeat to server to keep file lock alive"`
+
+### Test Logging for E2E Tests
+
+The application includes a structured test logging system for E2E tests that provides fast state and flow verification without relying on DOM queries:
+
+#### Implementation
+
+- **Test Logger Factory**: `app/src/modules/test-logging.js` exports `createTestLogger(applicationMode)`
+- **Application Integration**: `app/src/app.js` exports `testLog` function configured during startup
+- **Configuration**: Only active when `application.mode === "testing"`
+- **Docker Integration**: `docker/entrypoint-test.sh` automatically enables testing mode
+
+#### Usage in Plugins
+
+```javascript
+import { testLog } from '../app.js';
+
+// Log state transitions and business logic flow
+testLog('PDF_LOADED', { filename, user: this.state.user });
+testLog('VALIDATION_STARTED', { documentVersion: this.state.documentVersion });
+testLog('VALIDATION_COMPLETED', { errors: results.errors.length, warnings: results.warnings.length });
+```
+
+#### E2E Test Best Practices
+
+**Use testLog for State Verification (Preferred)**:
+```javascript
+const testMessages = [];
+page.on('console', msg => {
+  if (msg.text().startsWith('TEST:')) {
+    testMessages.push(msg.text());
+  }
+});
+
+// Verify specific events occurred - FAST and reliable
+expect(testMessages.find(msg => msg.includes('USER_AUTHENTICATED'))).toBeTruthy();
+```
+
+**Use window.ui for UI Interactions (Required)**:
+```javascript
+// Import the UI type at the top of E2E test files
+/** @import { namedElementsTree } from '../../app/src/ui.js' */
+
+// Use JSDoc type casting for clean, typed access to window.ui
+await page.evaluate(() => {
+  /** @type {namedElementsTree} */
+  const ui = /** @type {any} */(window).ui;
+  ui.loginDialog.username.value = 'testuser';
+  ui.loginDialog.password.value = 'testpass';
+  ui.loginDialog.submit.click();
+});
+
+// Benefits: Full autocompletion, no null checks needed, clean syntax
+// The typed UI structure guarantees child elements exist
+
+// NOT this - avoid DOM selectors
+// await page.locator('sl-input[name="username"]').fill('testuser');
+```
+
+#### Performance and Reliability Benefits
+
+- **10-100x faster than DOM queries** for state verification
+- **Less flaky** than UI element timing dependencies
+- **Clear failure reasons** through structured logging
+- **Maintainable** - CSS changes don't break tests
+- **Type-safe UI access** through window.ui navigation system

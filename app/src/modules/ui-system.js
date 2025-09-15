@@ -9,11 +9,20 @@
 
 import { updateUi } from '../ui.js';
 
+/**
+ * @typedef {object} Template
+ * @property {string} id,
+ * @property {string} pathOrHtml,
+ * @property {boolean} cached,
+ * @property {string} html
+ */
+
 
 // Template registry for caching
 const templateRegistry = new Map();
 const isDev = new URLSearchParams(window.location.search).has('dev');
-let templatesJson = null;
+/** @type {object} */
+let templatesJson;
 
 /**
  * Registers a template with the system. In development mode, this loads
@@ -29,6 +38,7 @@ export async function registerTemplate(id, pathOrHtml) {
     console.warn(`Template '${id}' is already registered, overwriting`);
   }
   
+  /** @type {Template} */
   const template = {
     id,
     pathOrHtml,
@@ -63,14 +73,15 @@ async function loadTemplatesJson() {
   return templatesJson;
 }
 
+
 /**
  * Gets HTML content for a template, handling both dev and production modes
  * 
  * @param {string} id - Template identifier
- * @param {object} [template] - Template object (if not provided, looks up in registry)
+ * @param {Template} [template] - Template object (if not provided, looks up in registry)
  * @returns {Promise<string>} The HTML content
  */
-async function getTemplateHtml(id, template = null) {
+async function getTemplateHtml(id, template) {
   if (!template) {
     template = templateRegistry.get(id);
   }
@@ -107,6 +118,7 @@ async function getTemplateHtml(id, template = null) {
   } else {
     // Production mode: load from bundled JSON
     const templates = await loadTemplatesJson();
+    // @ts-ignore
     html = templates[id];
     
     if (!html) {
@@ -131,6 +143,7 @@ function replaceTemplateParameters(html, params = {}) {
   
   return html.replace(/\$\{(\w+)\}/g, (match, paramName) => {
     if (params.hasOwnProperty(paramName)) {
+      // @ts-ignore
       return String(params[paramName]);
     }
     console.warn(`Template parameter '${paramName}' not provided, leaving as-is`);
@@ -167,7 +180,7 @@ export function createFromTemplate(id, parentNode = null, params = {}) {
   const nodes = Array.from(div.childNodes);
   
   // If a parent node has been given, add nodes to it and update UI
-  if (parentNode instanceof Element) {
+  if (parentNode instanceof Element || parentNode instanceof Document) {
     parentNode.append(...nodes);
     updateUi();
   }
@@ -263,6 +276,7 @@ function findNamedDescendants(node) {
         const nameAttribute = childNode.getAttribute("name");
 
         if (nameAttribute && !results.hasOwnProperty(nameAttribute)) {
+          // @ts-ignore
           results[nameAttribute] = childNode;
         } else {
           // Only recurse if the current node doesn't have a name attribute
@@ -311,5 +325,6 @@ export function clearTemplateCache() {
     template.cached = false;
     template.html = null;
   }
+  // @ts-ignore
   templatesJson = null;
 }

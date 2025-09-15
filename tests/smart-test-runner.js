@@ -37,7 +37,8 @@ class SmartTestRunner {
     try {
       writeFileSync(cacheFile, JSON.stringify(this.cache, null, 2));
     } catch (error) {
-      console.warn('Could not save dependency cache:', error.message);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn('Could not save dependency cache:', errorMessage);
     }
   }
 
@@ -85,6 +86,9 @@ class SmartTestRunner {
     return { js: jsTests, py: pyTests, e2e: e2eTests };
   }
 
+  /**
+   * @param {string} filePath
+   */
   parseTestCoversAnnotations(filePath) {
     try {
       const content = readFileSync(filePath, 'utf8');
@@ -144,9 +148,14 @@ class SmartTestRunner {
     }
   }
 
+  /**
+   * @param {string[]} testFiles
+   */
   async analyzeJSDependencies(testFiles) {
     if (!process.argv.includes('--tap')) console.log('🔍 Analyzing JavaScript dependencies...');
+    /** @type {Record<string, {dependencies: string[], alwaysRun: boolean}>} */
     const jsDeps = {};
+    /** @type {string[]} */
     const alwaysRunTests = [];
 
     for (const testFile of testFiles) {
@@ -192,7 +201,8 @@ class SmartTestRunner {
         const alwaysRunFlag = alwaysRun ? ' (always run)' : '';
         if (!process.argv.includes('--tap')) console.log(`  ${testFile}: ${depCount} dependencies${alwaysRunFlag}`);
       } catch (error) {
-        console.warn(`  Could not analyze ${testFile}:`, error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`  Could not analyze ${testFile}:`, errorMessage);
         jsDeps[testFile] = { dependencies: [], alwaysRun: false };
       }
     }
@@ -200,9 +210,14 @@ class SmartTestRunner {
     return { dependencies: jsDeps, alwaysRunTests };
   }
 
+  /**
+   * @param {string[]} testFiles
+   */
   async analyzePyDependencies(testFiles) {
     if (!process.argv.includes('--tap')) console.log('🔍 Analyzing Python dependencies...');
+    /** @type {Record<string, {dependencies: string[], alwaysRun: boolean}>} */
     const pyDeps = {};
+    /** @type {string[]} */
     const alwaysRunTests = [];
 
     for (const testFile of testFiles) {
@@ -241,7 +256,8 @@ class SmartTestRunner {
         const alwaysRunFlag = alwaysRun ? ' (always run)' : '';
         if (!process.argv.includes('--tap')) console.log(`  ${testFile}: ${depCount} dependencies${alwaysRunFlag}`);
       } catch (error) {
-        console.warn(`  Could not analyze ${testFile}:`, error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`  Could not analyze ${testFile}:`, errorMessage);
         pyDeps[testFile] = { dependencies: [], alwaysRun: false };
       }
     }
@@ -249,9 +265,14 @@ class SmartTestRunner {
     return { dependencies: pyDeps, alwaysRunTests };
   }
 
+  /**
+   * @param {string[]} testFiles
+   */
   async analyzeE2EDependencies(testFiles) {
     if (!process.argv.includes('--tap')) console.log('📱 Analyzing E2E test dependencies...');
+    /** @type {Record<string, {dependencies: string[], alwaysRun: boolean}>} */
     const e2eDeps = {};
+    /** @type {string[]} */
     const alwaysRunTests = [];
 
     for (const testFile of testFiles) {
@@ -275,7 +296,8 @@ class SmartTestRunner {
         const alwaysRunFlag = alwaysRun ? ' (always run)' : '';
         if (!process.argv.includes('--tap')) console.log(`  ${testFile}: ${depCount} dependencies${alwaysRunFlag}`);
       } catch (error) {
-        console.warn(`  Could not analyze ${testFile}:`, error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`  Could not analyze ${testFile}:`, errorMessage);
         e2eDeps[testFile] = { dependencies: [], alwaysRun: false };
       }
     }
@@ -283,6 +305,9 @@ class SmartTestRunner {
     return { dependencies: e2eDeps, alwaysRunTests };
   }
 
+  /**
+   * @param {{tap?: boolean, all?: boolean, changedFiles?: string[] | null}} options
+   */
   async analyzeDependencies(options = {}) {
     if (options.tap) {
         // No analysis needed for TAP mode, but we need to discover tests
@@ -320,6 +345,10 @@ class SmartTestRunner {
     return result;
   }
 
+  /**
+   * @param {string[] | null} customFiles
+   * @returns {string[]}
+   */
   getChangedFiles(customFiles = null) {
     if (customFiles) {
       return customFiles;
@@ -343,6 +372,11 @@ class SmartTestRunner {
     }
   }
 
+  /**
+   * @param {string} testFile
+   * @param {string[]} changedFiles
+   * @param {{dependencies: Record<string, {dependencies: string[], alwaysRun: boolean}>}} analysisResult
+   */
   shouldRunTest(testFile, changedFiles, analysisResult) {
     const testData = analysisResult.dependencies[testFile];
     if (!testData) return false;
@@ -354,8 +388,8 @@ class SmartTestRunner {
 
     const testDeps = testData.dependencies || [];
     
-    return changedFiles.some(changedFile => {
-      return testDeps.some(dep => {
+    return changedFiles.some((/** @type {string} */ changedFile) => {
+      return testDeps.some((/** @type {string} */ dep) => {
         // Support directory matches (ending with /)
         if (dep.endsWith('/')) {
           return changedFile.startsWith(dep);
@@ -376,6 +410,9 @@ class SmartTestRunner {
     });
   }
 
+  /**
+   * @param {{all?: boolean, tap?: boolean, changedFiles?: string[] | null}} options
+   */
   async getTestsToRun(options = {}) {
     const testFiles = this.discoverTestFiles();
 
@@ -418,6 +455,9 @@ class SmartTestRunner {
     return { js: jsTests, py: pyTests, e2e: e2eTests };
   }
 
+  /**
+   * @param {{tap?: boolean, dryRun?: boolean, all?: boolean, changedFiles?: string[] | null}} options
+   */
   async run(options = {}) {
     const isTap = options.tap;
     const dryRun = options.dryRun;
@@ -495,10 +535,12 @@ class SmartTestRunner {
     for (const suite of testSuites) {
         try {
             if (!isTap) console.log(`\nRunning ${suite.name}...`);
-            execSync(suite.command, {
-              stdio: 'inherit',
-              cwd: projectRoot
-            });
+            if (suite.command) {
+              execSync(suite.command, {
+                stdio: 'inherit',
+                cwd: projectRoot
+              });
+            }
             if (isTap && !suite.tap) {
                 console.log(`ok ${testCounter++} - ${suite.name}`);
             }
@@ -519,12 +561,16 @@ class SmartTestRunner {
   }
 }
 
+/**
+ * @param {string[]} args
+ */
 function parseArgs(args) {
     const parsed = {
         all: false,
         help: false,
         tap: false,
         dryRun: false,
+        /** @type {string[] | null} */
         changedFiles: null
     };
 
@@ -547,7 +593,7 @@ function parseArgs(args) {
                 break;
             case '--changed-files':
                 if (i + 1 < args.length) {
-                    parsed.changedFiles = args[i + 1].split(',').map(f => f.trim());
+                    parsed.changedFiles = args[i + 1].split(',').map((/** @type {string} */ f) => f.trim());
                     i++; // Skip the next argument as it's the file list
                 }
                 break;

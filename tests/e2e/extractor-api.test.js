@@ -71,6 +71,7 @@ describe('Extractor API E2E Tests', () => {
     assert.strictEqual(response.status, 200, 'Discovery endpoint should be accessible');
 
     const extractors = await response.json();
+    // @ts-ignore
     const extractorIds = extractors.map(e => e.id);
 
     // Verify at least one expected extractor is discovered

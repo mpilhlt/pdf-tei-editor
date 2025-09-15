@@ -28,6 +28,9 @@ fi
 echo "Creating test user..."
 uv run python bin/manage.py user add testuser --password testpass --fullname "Test User" 2>/dev/null || echo "Test user testuser/testpass ready"
 
+echo "Enabling testing mode..."
+uv run python bin/manage.py config set application.mode '"testing"'
+
 # Create test configuration
 cat > config/test.json << EOF
 {

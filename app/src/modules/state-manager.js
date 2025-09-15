@@ -207,7 +207,7 @@ export class StateManager {
   /**
    * Load state from sessionStorage
    * 
-   * @returns {Object|null} Saved state or null if none found
+   * @returns {ApplicationState|null} Saved state or null if none found
    */
   getStateFromSessionStorage() {
     try {

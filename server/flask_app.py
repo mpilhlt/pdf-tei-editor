@@ -70,13 +70,14 @@ def configure_logger_with_colors(target_logger, level=logging.DEBUG):
     """Configure a logger with colorized output for development and file logging"""
     # Always configure for development since we're using this in dev mode
     target_logger.handlers.clear()
-    
-    # Console handler with colors
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(ColoredFormatter(
-        '[%(asctime)s] %(levelname)s in %(name)s: %(message)s'
-    ))
-    target_logger.addHandler(console_handler)
+
+    # Console handler with colors (skip in test environment to keep console clean)
+    if not os.environ.get('TEST_IN_PROGRESS'):
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(ColoredFormatter(
+            '[%(asctime)s] %(levelname)s in %(name)s: %(message)s'
+        ))
+        target_logger.addHandler(console_handler)
     
     # File handler for log/server.log
     log_dir = project_root / 'log'

@@ -75,6 +75,7 @@ class ExtractorTest {
                         resolve(extractors);
                         
                     } catch (error) {
+                        // @ts-ignore
                         console.error('❌ Failed to parse API response:', error.message);
                         console.error('Raw response:', data);
                         reject(error);
@@ -100,6 +101,7 @@ class ExtractorTest {
     /**
      * Analyze the extractors returned by the API
      */
+    // @ts-ignore
     analyzeExtractors(extractors) {
         console.log('🔬 Analyzing extractors...');
         
@@ -187,6 +189,7 @@ class ExtractorTest {
             process.exit(allPassed ? 0 : 1);
 
         } catch (error) {
+            // @ts-ignore
             console.error('💥 Test failed with error:', error.message);
             this.printResults();
             process.exit(1);

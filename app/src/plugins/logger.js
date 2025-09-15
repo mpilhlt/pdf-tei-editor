@@ -3,8 +3,12 @@
  * console.* methods
  */
 
+/**
+ * @import { ApplicationState } from '../state.js'
+ */
+
 import ep from '../endpoints.js'
-import { pluginManager } from '../app.js'
+import { app, pluginManager } from '../app.js'
 
 // name of the plugin
 const name = "logger"
@@ -35,7 +39,7 @@ const api = {
   /**
    * Sets the log level {@see logLevel}
    * @param {Number} level The log level
-   * @returns {Promise}
+   * @returns {Promise<void>}
    */
   setLogLevel: level => pluginManager.invoke(ep.log.setLogLevel, {level}),
 
@@ -43,33 +47,40 @@ const api = {
    * Logs a debug message, with varying levels of verbosity
    * @param {string} message The debug message
    * @param {Number} level The log level, which is normally either DEBUG (4) or VERBOSE (5)
-   * @returns {Promise}
+   * @returns {Promise<void>}
    */
   debug: (message, level = logLevel.DEBUG) => pluginManager.invoke(ep.log.debug, {message, level}),
 
   /**
    * Logs an informational message
    * @param {string} message 
-   * @returns {Promise}
+   * @returns {Promise<void>}
    */
   info: message => pluginManager.invoke(ep.log.info, {message}),
 
   /**
    * Logs an warning message
    * @param {string} message 
-   * @returns {Promise}
+   * @returns {Promise<void>}
    */
   warn: message => pluginManager.invoke(ep.log.warn, {message}),
 
   /**
    * Logs an message about a critical or fatal error
    * @param {string} message 
-   * @returns {Promise}
+   * @returns {Promise<void>}
    */
-  critical: message => pluginManager.invoke(ep.log.critical, {message})
+  critical: message => pluginManager.invoke(ep.log.critical, {message}),
+
+  /**
+   * Logs an message about a severe error
+   * @param {string} message 
+   * @returns {Promise<void>}
+   */
+  error: message => pluginManager.invoke(ep.log.critical, {message}),
+
 }
 
-api.error = api.critical // alias for critical
 
 /**
  * component plugin
@@ -93,6 +104,10 @@ export default plugin
 // implementation
 //
 
+/**
+ * 
+ * @param {ApplicationState} state 
+ */
 async function install(state) {
   console.log(`Installing plugin "${plugin.name}"`)
 }

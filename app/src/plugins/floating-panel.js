@@ -5,7 +5,7 @@
 import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
 import { $$ } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
-import { createHtmlElements, updateUi } from '../ui.js'
+import { registerTemplate, createFromTemplate, updateUi } from '../ui.js'
 import ui from '../ui.js'
 
 /**
@@ -47,8 +47,11 @@ export default plugin
  * @property {UIPart<HTMLDivElement, diffNavigationPart>} diffNavigation
  * 
  */
+// Register template at module level
+await registerTemplate('floating-panel', 'floating-panel.html');
+
 /** @type {ChildNode[]} */
-const floatingPanelControls = await createHtmlElements('floating-panel.html')
+const floatingPanelControls = createFromTemplate('floating-panel')
 
 /**
  * Diff Navigation navigation properties

@@ -11,7 +11,7 @@
 import ui from '../ui.js'
 import {
   endpoints as ep, app, logger, services, dialog, validation, floatingPanel, xmlEditor,
-  config, authentication, heartbeat, sync
+  config, authentication, heartbeat, sync, testLog
 } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
@@ -75,10 +75,17 @@ async function start() {
   // async operations
   try {
 
+    testLog('APP_START_INITIATED', { timestamp: new Date().toISOString() })
+
     // Authenticate user, otherwise we don't proceed further
     const userData = await authentication.ensureAuthenticated()
     logger.info(`${userData.fullname} has logged in.`)
     notify(`Welcome back, ${userData.fullname}!`)
+
+    testLog('USER_AUTHENTICATED', {
+      username: userData.username,
+      fullname: userData.fullname
+    })
 
     // load config data
     await config.load()
@@ -157,9 +164,15 @@ async function start() {
     xmlEditor.setLineWrapping(true)
     logger.info("Application ready.")
 
+    testLog('APP_START_COMPLETED', {
+      pdf: currentState.pdf,
+      xml: currentState.xml,
+      diff: currentState.diff
+    })
+
   } catch (error) {
     ui.spinner.hide();
-    dialog.error(error.message)
+    dialog.error(error instanceof Error ? error.message : String(error))
     throw error
   }
 }

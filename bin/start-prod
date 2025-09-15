@@ -37,8 +37,14 @@ if __name__ == '__main__':
     
     # Open log file and redirect both stdout and stderr
     with open(log_file, 'w', buffering=1) as log_f:
-        sys.stdout = TeeOutput(original_stdout, log_f)
-        sys.stderr = TeeOutput(original_stderr, log_f)
+        # In test environment, log only to file to keep console clean
+        if os.environ.get('TEST_IN_PROGRESS'):
+            sys.stdout = log_f
+            sys.stderr = log_f
+        else:
+            # In normal production, tee to both console and file
+            sys.stdout = TeeOutput(original_stdout, log_f)
+            sys.stderr = TeeOutput(original_stderr, log_f)
         
         print()
         print("===================================================================================")

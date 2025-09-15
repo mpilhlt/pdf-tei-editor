@@ -129,6 +129,7 @@ class AuthenticationPlugin extends Plugin {
     // Only update sessionId if userData contains one (from login), not from status check
     const stateUpdate = { user: userData };
     if (userData.sessionId) {
+      // @ts-ignore
       stateUpdate.sessionId = userData.sessionId;
     }
     
@@ -176,7 +177,7 @@ class AuthenticationPlugin extends Plugin {
       // re-login
       await this.showLoginDialog();
     } catch (error) {
-      logger.error('Logout failed:' + error);
+      logger.critical('Logout failed:' + error);
     }
   }
 

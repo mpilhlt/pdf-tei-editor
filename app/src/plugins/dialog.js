@@ -2,7 +2,7 @@
  * This application plugin implements a dialog registered as the "diaolog" property of the app
  */
 
-import { SlButton, SlDialog, createHtmlElements, updateUi } from '../ui.js'
+import { SlButton, SlDialog, registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js'
 import ui from '../ui.js'
 import { logger } from '../app.js'
 
@@ -41,13 +41,16 @@ export default plugin
 // implementation
 //
 
+// Register template at module level
+await registerTemplate('dialog-template', 'dialog.html');
+
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} app The main application
  */
 async function install(app) {
   logger.debug(`Installing plugin "${plugin.name}"`)
-  await createHtmlElements("dialog.html", document.body)
+  createSingleFromTemplate('dialog-template', document.body);
   updateUi();
   ui.dialog.closeBtn.addEventListener('click', () => ui.dialog.hide());
 }

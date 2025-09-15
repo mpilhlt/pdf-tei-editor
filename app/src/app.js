@@ -28,6 +28,7 @@ import initialState from './state.js'
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
+import { createTestLogger } from './modules/test-logging.js'
 
 //
 // Application bootstrapping
@@ -70,8 +71,12 @@ if (sessionState) {
 // this is a workaround to be fixed
 sessionState.webdavEnabled = serverState.webdavEnabled
 
-// Apply session state to current state 
+// Apply session state to current state
 Object.assign(state, sessionState)
+
+// Create test logger based on configuration
+const applicationMode = await config.get("application.mode")
+export const testLog = createTestLogger(applicationMode)
 
 // URL hash params override properties 
 const allowSetFromUrl = (await config.get("state.allowSetFromUrl") || [])
@@ -79,6 +84,7 @@ const urlHashState = {}
 const urlParams = new URLSearchParams(window.location.hash.slice(1));
 for (const [key, value] of urlParams.entries()) {
   if (allowSetFromUrl.includes(key)) {
+    // @ts-ignore
     urlHashState[key] = value
   }
 }

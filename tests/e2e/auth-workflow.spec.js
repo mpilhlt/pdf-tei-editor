@@ -5,6 +5,8 @@
  * @testCovers server/api/auth.py
  */
 
+/** @import { namedElementsTree } from '../../app/src/ui.js' */
+
 import { test, expect } from '@playwright/test';
 
 // Configuration from environment variables
@@ -16,6 +18,9 @@ test.describe('Authentication Workflow', () => {
 
   test('should complete full login and logout cycle', async ({ page }) => {
     // Set up console logging capture
+    /**
+     * @type {any[]}
+     */
     const consoleLogs = [];
     page.on('console', msg => {
       if (msg.type() === 'log' || msg.type() === 'info') {
@@ -34,27 +39,37 @@ test.describe('Authentication Workflow', () => {
 
     // Verify login dialog is visible using UI navigation system
     const loginDialogVisible = await page.evaluate(() => {
-      return window.ui && window.ui.loginDialog && window.ui.loginDialog.open === true;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.open === true;
     });
     expect(loginDialogVisible).toBe(true);
 
     // Fill in login credentials using UI navigation system
     await page.evaluate(() => {
-      window.ui.loginDialog.username.value = 'testuser';
-      window.ui.loginDialog.password.value = 'testpass';
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      ui.loginDialog.username.value = 'testuser';
+      ui.loginDialog.password.value = 'testpass';
     });
 
     // Verify credentials were set
-    const credentials = await page.evaluate(() => ({
-      username: window.ui.loginDialog.username.value,
-      password: window.ui.loginDialog.password.value
-    }));
+    const credentials = await page.evaluate(() => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return {
+        username: ui.loginDialog.username.value,
+        password: ui.loginDialog.password.value
+      };
+    });
     expect(credentials.username).toBe('testuser');
     expect(credentials.password).toBe('testpass');
 
     // Submit login form
     await page.evaluate(() => {
-      window.ui.loginDialog.submit.click();
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      ui.loginDialog.submit.click();
     });
 
     // Wait for login to complete and dialog to hide
@@ -62,7 +77,9 @@ test.describe('Authentication Workflow', () => {
 
     // Verify login dialog is now hidden
     const loginDialogHidden = await page.evaluate(() => {
-      return window.ui && window.ui.loginDialog && window.ui.loginDialog.open === false;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.open === false;
     });
     expect(loginDialogHidden).toBe(true);
 
@@ -78,8 +95,9 @@ test.describe('Authentication Workflow', () => {
 
     // Verify logout button is now enabled
     const logoutButtonEnabled = await page.evaluate(() => {
-      return window.ui && window.ui.toolbar && window.ui.toolbar.logoutButton &&
-             !window.ui.toolbar.logoutButton.disabled;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return !ui.toolbar.logoutButton.disabled;
     });
     expect(logoutButtonEnabled).toBe(true);
 
@@ -88,7 +106,9 @@ test.describe('Authentication Workflow', () => {
 
     // Perform logout using UI navigation system
     await page.evaluate(() => {
-      window.ui.toolbar.logoutButton.click();
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      ui.toolbar.logoutButton.click();
     });
 
     // Wait for logout to complete and login dialog to reappear
@@ -96,7 +116,9 @@ test.describe('Authentication Workflow', () => {
 
     // Verify login dialog is visible again after logout
     const loginDialogVisibleAgain = await page.evaluate(() => {
-      return window.ui && window.ui.loginDialog && window.ui.loginDialog.open === true;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.open === true;
     });
     expect(loginDialogVisibleAgain).toBe(true);
 
@@ -109,14 +131,16 @@ test.describe('Authentication Workflow', () => {
 
     // Verify logout button is disabled after logout
     const logoutButtonDisabled = await page.evaluate(() => {
-      return window.ui && window.ui.toolbar && window.ui.toolbar.logoutButton &&
-             window.ui.toolbar.logoutButton.disabled;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.toolbar.logoutButton.disabled;
     });
     expect(logoutButtonDisabled).toBe(true);
   });
 
   test('should handle invalid login credentials', async ({ page }) => {
     // Set up console logging capture
+    /** @type {{type:string,text:string}[]} */
     const consoleLogs = [];
     page.on('console', msg => {
       if (msg.type() === 'error') {
@@ -135,13 +159,17 @@ test.describe('Authentication Workflow', () => {
 
     // Fill in invalid credentials
     await page.evaluate(() => {
-      window.ui.loginDialog.username.value = 'invaliduser';
-      window.ui.loginDialog.password.value = 'invalidpass';
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      ui.loginDialog.username.value = 'invaliduser';
+      ui.loginDialog.password.value = 'invalidpass';
     });
 
     // Submit login form
     await page.evaluate(() => {
-      window.ui.loginDialog.submit.click();
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      ui.loginDialog.submit.click();
     });
 
     // Wait for error message to appear
@@ -149,14 +177,17 @@ test.describe('Authentication Workflow', () => {
 
     // Verify error message is displayed
     const errorMessage = await page.evaluate(() => {
-      return window.ui && window.ui.loginDialog && window.ui.loginDialog.message &&
-             window.ui.loginDialog.message.textContent;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.message.textContent;
     });
     expect(errorMessage).toBe('Wrong username or password');
 
     // Verify login dialog remains open
     const loginDialogStillOpen = await page.evaluate(() => {
-      return window.ui && window.ui.loginDialog && window.ui.loginDialog.open === true;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.open === true;
     });
     expect(loginDialogStillOpen).toBe(true);
 
@@ -176,32 +207,42 @@ test.describe('Authentication Workflow', () => {
 
     // Focus on username field and enter username
     await page.evaluate(() => {
-      window.ui.loginDialog.username.focus();
-      window.ui.loginDialog.username.value = 'testuser';
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      ui.loginDialog.username.focus();
+      ui.loginDialog.username.value = 'testuser';
     });
 
     // Press Enter to move to password field
     await page.evaluate(() => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
       const event = new KeyboardEvent('keydown', { key: 'Enter' });
-      window.ui.loginDialog.username.dispatchEvent(event);
+      ui.loginDialog.username.dispatchEvent(event);
     });
 
     // Verify focus moved to password field
     await page.waitForTimeout(100);
     const passwordFocused = await page.evaluate(() => {
-      return document.activeElement === window.ui.loginDialog.password;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return document.activeElement === ui.loginDialog.password;
     });
     expect(passwordFocused).toBe(true);
 
     // Enter password
     await page.evaluate(() => {
-      window.ui.loginDialog.password.value = 'testpass';
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      ui.loginDialog.password.value = 'testpass';
     });
 
     // Press Enter to submit form
     await page.evaluate(() => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
       const event = new KeyboardEvent('keydown', { key: 'Enter' });
-      window.ui.loginDialog.password.dispatchEvent(event);
+      ui.loginDialog.password.dispatchEvent(event);
     });
 
     // Wait for login to complete
@@ -209,7 +250,9 @@ test.describe('Authentication Workflow', () => {
 
     // Verify login was successful
     const loginDialogHidden = await page.evaluate(() => {
-      return window.ui && window.ui.loginDialog && window.ui.loginDialog.open === false;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.open === false;
     });
     expect(loginDialogHidden).toBe(true);
   });
@@ -223,31 +266,41 @@ test.describe('Authentication Workflow', () => {
 
     // Try to close dialog (should be prevented)
     await page.evaluate(() => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
       const event = new CustomEvent('sl-request-close');
-      window.ui.loginDialog.dispatchEvent(event);
+      ui.loginDialog.dispatchEvent(event);
     });
 
     // Verify dialog remains open
     const dialogStillOpen = await page.evaluate(() => {
-      return window.ui && window.ui.loginDialog && window.ui.loginDialog.open === true;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.open === true;
     });
     expect(dialogStillOpen).toBe(true);
 
     // Attempt login with invalid credentials
     await page.evaluate(() => {
-      window.ui.loginDialog.username.value = 'wrong';
-      window.ui.loginDialog.password.value = 'wrong';
-      window.ui.loginDialog.submit.click();
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      ui.loginDialog.username.value = 'wrong';
+      ui.loginDialog.password.value = 'wrong';
+      ui.loginDialog.submit.click();
     });
 
     // Wait for error message
     await page.waitForTimeout(2000);
 
     // Verify form fields are cleared after failed attempt
-    const fieldValues = await page.evaluate(() => ({
-      username: window.ui.loginDialog.username.value,
-      password: window.ui.loginDialog.password.value
-    }));
+    const fieldValues = await page.evaluate(() => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return {
+        username: ui.loginDialog.username.value,
+        password: ui.loginDialog.password.value
+      };
+    });
 
     // Note: Fields should remain with values for user to retry
     expect(fieldValues.username).toBe('wrong');
@@ -255,7 +308,9 @@ test.describe('Authentication Workflow', () => {
 
     // Verify dialog is still open for retry
     const dialogOpenForRetry = await page.evaluate(() => {
-      return window.ui && window.ui.loginDialog && window.ui.loginDialog.open === true;
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return ui.loginDialog.open === true;
     });
     expect(dialogOpenForRetry).toBe(true);
   });

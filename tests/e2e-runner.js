@@ -26,6 +26,8 @@
 import { spawn, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import fs from 'fs';
+import path from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
@@ -35,7 +37,9 @@ const projectRoot = dirname(__dirname);
  */
 class E2ERunner {
     constructor() {
+        /** @type {string | null} */
         this.containerCmd = null;
+        /** @type {string | null} */
         this.composeCmd = null;
         this.usePodman = false;
         this.testRunId = `test-${Date.now()}-${process.pid}`;
@@ -132,7 +136,8 @@ class E2ERunner {
             await this.waitForApplicationReady();
 
         } catch (error) {
-            console.error('❌ Failed to start container:', error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('❌ Failed to start container:', errorMessage);
             throw error;
         }
     }
@@ -189,10 +194,11 @@ class E2ERunner {
         // Start container with test environment
         console.log('🚀 Starting test container...');
         const portMapping = `${this.config.port}:${this.config.containerPort}`;
-        execSync(`${this.containerCmd} run -d --name ${this.containerName} -p ${portMapping} --env FLASK_ENV=testing --env PYTHONPATH=/app --env TEST_IN_PROGRESS=1 --env KISSKI_API_KEY=dummy-key-for-testing pdf-tei-editor-test:latest`, {
-            stdio: 'inherit',
+        const containerId = execSync(`${this.containerCmd} run -d --name ${this.containerName} -p ${portMapping} --env FLASK_ENV=testing --env PYTHONPATH=/app --env TEST_IN_PROGRESS=1 --env KISSKI_API_KEY=dummy-key-for-testing pdf-tei-editor-test:latest`, {
+            encoding: 'utf8',
             cwd: projectRoot
-        });
+        }).trim();
+        console.log(containerId);
     }
 
     /**
@@ -215,13 +221,13 @@ class E2ERunner {
         if (noRebuild) {
             console.log('🚀 Starting test environment with compose (no rebuild)...');
             execSync(`${this.composeCmd} -f docker-compose.test.yml up --no-build -d`, {
-                stdio: 'inherit',
+                stdio: 'pipe',
                 cwd: projectRoot
             });
         } else {
             console.log('🚀 Starting test environment with compose...');
             execSync(`${this.composeCmd} -f docker-compose.test.yml up --build -d`, {
-                stdio: 'inherit',
+                stdio: 'pipe',
                 cwd: projectRoot
             });
 
@@ -292,21 +298,59 @@ class E2ERunner {
     }
 
     /**
-     * Show container logs for debugging
+     * Save container logs to test results for debugging
      */
     async showContainerLogs() {
-        console.log('📋 Container logs:');
+        const logDir = path.join(projectRoot, 'tests', 'e2e', 'test-results');
+        const containerLogFile = path.join(logDir, `container-logs-${this.testRunId}.txt`);
+        const serverLogFile = path.join(logDir, `server-logs-${this.testRunId}.txt`);
+
+        console.log(`📋 Container logs saved to: ${path.relative(projectRoot, containerLogFile)}`);
+        console.log(`📋 Server logs saved to: ${path.relative(projectRoot, serverLogFile)}`);
+
         try {
+            // Ensure test results directory exists
+            fs.mkdirSync(logDir, { recursive: true });
+
+            // Get container logs (startup script output)
+            let containerLogs;
             if (this.usePodman) {
-                execSync(`${this.containerCmd} logs ${this.containerName}`, { stdio: 'inherit' });
+                containerLogs = execSync(`${this.containerCmd} logs ${this.containerName}`, {
+                    encoding: 'utf8',
+                    cwd: projectRoot
+                });
             } else {
-                execSync(`${this.composeCmd} -f docker-compose.test.yml logs`, {
-                    stdio: 'inherit',
+                containerLogs = execSync(`${this.composeCmd} -f docker-compose.test.yml logs`, {
+                    encoding: 'utf8',
                     cwd: projectRoot
                 });
             }
+
+            // Get server logs (Flask application logs from inside container)
+            let serverLogs = '';
+            try {
+                if (this.usePodman) {
+                    serverLogs = execSync(`${this.containerCmd} exec ${this.containerName} cat /app/log/server.log`, {
+                        encoding: 'utf8',
+                        cwd: projectRoot
+                    });
+                } else {
+                    // For compose, we need to get the service name
+                    serverLogs = execSync(`${this.composeCmd} -f docker-compose.test.yml exec -T pdf-tei-editor-test cat /app/log/server.log`, {
+                        encoding: 'utf8',
+                        cwd: projectRoot
+                    });
+                }
+            } catch (serverLogError) {
+                const errorMessage = serverLogError instanceof Error ? serverLogError.message : String(serverLogError);
+                serverLogs = `Could not retrieve server logs: ${errorMessage}`;
+            }
+
+            fs.writeFileSync(containerLogFile, containerLogs);
+            fs.writeFileSync(serverLogFile, serverLogs);
         } catch (error) {
-            console.error('Could not retrieve container logs:', error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('Could not save container logs:', errorMessage);
         }
     }
 
@@ -383,7 +427,8 @@ class E2ERunner {
 
         } catch (error) {
             // Don't fail the build if cleanup fails
-            console.log('⚠️ Image cleanup failed (continuing anyway):', error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.log('⚠️ Image cleanup failed (continuing anyway):', errorMessage);
         }
     }
 
@@ -431,7 +476,8 @@ class E2ERunner {
                 }
             }
         } catch (error) {
-            console.log('⚠️ Error during cleanup (may be expected):', error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.log('⚠️ Error during cleanup (may be expected):', errorMessage);
         }
 
         console.log('✅ Cleanup completed');
@@ -441,6 +487,12 @@ class E2ERunner {
     /**
      * Run Playwright browser tests
      * @param {Object} options - Playwright options
+     * @param {string} [options.browser] - Browser to use
+     * @param {boolean} [options.headed] - Run in headed mode
+     * @param {boolean} [options.debug] - Run in debug mode
+     * @param {string} [options.mode] - Test mode
+     * @param {boolean} [options.noRebuild] - Skip rebuild
+     * @param {string} [options.grep] - Grep pattern
      */
     async runPlaywrightTests(options = {}) {
         console.log('🧪 Unified E2E Runner - Playwright Browser Tests');
@@ -517,29 +569,30 @@ class E2ERunner {
             });
 
             return new Promise((resolve, reject) => {
-                testProcess.on('exit', async (code) => {
+                testProcess.on('exit', async (/** @type {number | null} */ code) => {
                     if (code === 0) {
                         console.log('🎉 All tests passed!');
                         await this.cleanup();
                         resolve(code);
                     } else {
                         console.log('💥 Some tests failed!');
-                        console.log('📋 Application logs for debugging:');
                         await this.showContainerLogs();
                         await this.cleanup();
                         reject(new Error(`Tests failed with exit code ${code}`));
                     }
                 });
 
-                testProcess.on('error', async (error) => {
-                    console.error('💥 Playwright process error:', error.message);
+                testProcess.on('error', async (/** @type {Error} */ error) => {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.error('💥 Playwright process error:', errorMessage);
                     await this.cleanup();
                     reject(error);
                 });
             });
 
         } catch (error) {
-            console.error('💥 Playwright runner failed:', error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('💥 Playwright runner failed:', errorMessage);
             await this.cleanup();
             throw error;
         }
@@ -570,7 +623,7 @@ class E2ERunner {
             });
 
             return new Promise((resolve, reject) => {
-                testProcess.on('exit', async (code) => {
+                testProcess.on('exit', async (/** @type {number | null} */ code) => {
                     // Cleanup container
                     await this.cleanup();
 
@@ -583,15 +636,17 @@ class E2ERunner {
                     }
                 });
 
-                testProcess.on('error', async (error) => {
-                    console.error('💥 Test process error:', error.message);
+                testProcess.on('error', async (/** @type {Error} */ error) => {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.error('💥 Test process error:', errorMessage);
                     await this.cleanup();
                     reject(error);
                 });
             });
 
         } catch (error) {
-            console.error('💥 Backend test runner failed:', error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('💥 Backend test runner failed:', errorMessage);
             await this.cleanup();
             throw error;
         }
@@ -606,7 +661,7 @@ class E2ERunner {
             E2E_HOST: this.config.host,
             E2E_PORT: this.config.port.toString(),
             E2E_CONTAINER_NAME: this.containerName,
-            E2E_CONTAINER_CMD: this.containerCmd
+            E2E_CONTAINER_CMD: this.containerCmd || undefined
         };
     }
 
@@ -629,14 +684,17 @@ class E2ERunner {
 /**
  * Parse command line arguments
  */
+/**
+ * @param {string[]} args
+ */
 function parseArgs(args) {
     const parsed = {
         playwright: false,
         browser: 'chromium',
         headed: false,
         debug: false,
-        grep: null,
-        testFile: null,
+        grep: /** @type {string | null} */ (null),
+        testFile: /** @type {string | null} */ (null),
         help: false,
         noRebuild: false,
         mode: 'production'  // default to production mode
@@ -659,7 +717,7 @@ function parseArgs(args) {
                 parsed.debug = true;
                 break;
             case '--grep':
-                parsed.grep = args[++i];
+                parsed.grep = args[++i] || '';
                 break;
             case '--no-rebuild':
                 parsed.noRebuild = true;
@@ -757,7 +815,7 @@ async function main() {
                 browser: args.browser,
                 headed: args.headed,
                 debug: args.debug,
-                grep: args.grep,
+                grep: args.grep || undefined,
                 noRebuild: args.noRebuild,
                 mode: args.mode
             });
@@ -773,7 +831,8 @@ async function main() {
 
         process.exit(0);
     } catch (error) {
-        console.error('💥 Runner failed:', error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('💥 Runner failed:', errorMessage);
         process.exit(1);
     }
 }
@@ -784,7 +843,8 @@ export { E2ERunner };
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
     main().catch(error => {
-        console.error('Unexpected error:', error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Unexpected error:', errorMessage);
         process.exit(1);
     });
 }

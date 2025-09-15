@@ -91,7 +91,7 @@ test.describe('Application Loading', () => {
 
     // Track uncaught exceptions
     /**
-     * @type {any[]}
+     * @type {string[]}
      */
     const pageErrors = [];
     page.on('pageerror', error => {

@@ -10,6 +10,7 @@ __pycache__
 ._*
 *.backup
 nohup.out
+off/
 
 # installation artifacts
 node_modules

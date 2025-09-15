@@ -398,7 +398,7 @@ async function createVersionFromUpload(tempFilename, filePath) {
 
 /**
  * Retrieves the server application state
- * @returns {Promise<Object>}
+ * @returns {Promise<ApplicationState>}
  */
 async function state() {
   return await callApi('/config/state')

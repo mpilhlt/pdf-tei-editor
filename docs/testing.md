@@ -48,6 +48,7 @@ npm run test:e2e:firefox            # Test with Firefox browser
 npm run test:e2e:webkit             # Test with WebKit browser
 npm run test:e2e:headed             # Show browser UI for debugging
 npm run test:e2e:debug              # Debug mode with inspector
+npm run test:e2e:headed-debug       # Headed mode with Playwright step-through debugging
 npm run test:e2e:backend            # Backend integration tests only
 
 # Run smart test selection (used by pre-push hooks)
@@ -146,6 +147,7 @@ npm run test:e2e:firefox            # Firefox browser
 npm run test:e2e:webkit             # WebKit/Safari browser
 npm run test:e2e:headed             # Show browser UI
 npm run test:e2e:debug              # Debug mode with inspector
+npm run test:e2e:headed-debug       # Headed mode with Playwright step-through debugging
 
 # Backend Integration Tests
 npm run test:e2e:backend            # All backend tests
@@ -247,17 +249,56 @@ def test_file_processing():
 
 The application exposes a typed UI navigation system via `window.ui` that provides efficient access to DOM elements:
 
+#### JSDoc Type Casting for E2E Tests
+
+To get full TypeScript autocompletion and eliminate null checks in E2E tests, use JSDoc type casting:
+
+```javascript
+// 1. Import the UI type at the top of your E2E test file
+/** @import { namedElementsTree } from '../../app/src/ui.js' */
+
+// 2. Use JSDoc type casting inside page.evaluate()
+test('should interact with UI elements', async ({ page }) => {
+  await page.evaluate(() => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+
+    // Now you get full autocompletion and type safety
+    ui.loginDialog.username.value = 'testuser';
+    ui.loginDialog.password.value = 'testpass';
+    ui.loginDialog.submit.click();
+
+    // No null checks needed - the typed structure guarantees existence
+    return ui.loginDialog.open; // TypeScript knows this exists
+  });
+});
+```
+
+#### Benefits of JSDoc Type Casting
+
+- **Full autocompletion**: IDE knows the entire UI structure
+- **Type safety**: Catch errors at development time
+- **No null checks**: Typed structure guarantees element existence
+- **Clean syntax**: No `@ts-ignore` comments cluttering the code
+- **Maintainable**: UI structure changes are caught by TypeScript
+
 ```javascript
 // Access UI elements through the navigation system
 test('should open login dialog', async ({ page }) => {
-  // Use the UI navigation system (preferred)
+  // Use the UI navigation system with type casting (preferred)
   await page.evaluate(() => {
-    window.ui.toolbar.loginButton.click();
-    return window.ui.loginDialog.show();
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    ui.toolbar.loginButton.click();
+    return ui.loginDialog.show();
   });
 
   // Verify dialog is open
-  const isOpen = await page.evaluate(() => window.ui.loginDialog.open);
+  const isOpen = await page.evaluate(() => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    return ui.loginDialog.open;
+  });
   expect(isOpen).toBe(true);
 });
 ```
@@ -277,13 +318,84 @@ window.ui.xmlEditor.editor         // XML editor instance
 window.ui.floatingPanel.status     // Status display
 ```
 
-### When to Use Selectors
+### Test Logging for State Verification
 
-Use CSS selectors when:
+The application includes a specialized test logging system that provides fast, reliable state verification for E2E tests:
 
-- Elements are not part of the named UI system
-- Testing dynamic content
-- Verifying specific styling or attributes
+#### How It Works
+
+When `application.mode` is set to `"testing"` (automatically configured in E2E test containers), plugins can log structured messages to the console using `testLog()`:
+
+```javascript
+// In plugin code
+import { testLog } from '../app.js';
+
+testLog('USER_AUTHENTICATED', { username: 'testuser', fullname: 'Test User' });
+testLog('PDF_LOADED', { filename: 'document.pdf', pages: 10 });
+testLog('VALIDATION_COMPLETED', { errors: 2, warnings: 5 });
+```
+
+#### Capturing Test Logs in E2E Tests
+
+```javascript
+test('should complete application startup', async ({ page }) => {
+  // Set up console capture for test messages
+  /** @type {string[]} */
+  const testMessages = [];
+  page.on('console', msg => {
+    if (msg.text().startsWith('TEST:')) {
+      testMessages.push(msg.text());
+    }
+  });
+
+  // Perform test actions...
+  await page.goto('http://localhost:8000');
+
+  // Login using window.ui (preferred for UI interactions)
+  await page.evaluate(() => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    ui.loginDialog.username.value = 'testuser';
+    ui.loginDialog.password.value = 'testpass';
+    ui.loginDialog.submit.click();
+  });
+
+  // Verify state transitions occurred (fast and reliable)
+  expect(testMessages.find(msg => msg.includes('USER_AUTHENTICATED'))).toBeTruthy();
+
+  // Parse and verify data structures
+  const authMsg = testMessages.find(msg => msg.includes('USER_AUTHENTICATED'));
+  if (authMsg) {
+    const userData = JSON.parse(authMsg.match(/TEST: USER_AUTHENTICATED (.+)/)[1]);
+    expect(userData.username).toBe('testuser');
+  }
+});
+```
+
+#### Benefits of Test Logging
+
+- **Performance**: 10-100x faster than DOM queries for state verification
+- **Reliability**: Not affected by UI timing issues or CSS changes
+- **Debugging**: Clear insight into application flow and state transitions
+- **Maintainability**: Tests don't break when UI styling changes
+
+#### When to Use Each Approach
+
+**Use testLog for** (Preferred):
+- State transitions and business logic verification
+- API call results and data flow
+- Plugin lifecycle events
+- Performance measurements
+
+**Use window.ui for** (Required for UI):
+- Form interactions and button clicks
+- UI state verification (dialog open/closed)
+- Navigation and user workflows
+
+**Use CSS selectors only for** (Fallback):
+- Elements not in the named UI system
+- Dynamic content testing
+- Styling and attribute verification
 
 ```javascript
 // Fallback to selectors when needed
@@ -363,27 +475,36 @@ tests/
  * @testCovers app/src/plugins/authentication.js
  * @testCovers server/api/auth.py
  */
+
+/** @import { namedElementsTree } from '../../app/src/ui.js' */
+
 test('complete authentication workflow', async ({ page }) => {
   // Navigate to application
   await page.goto('http://localhost:8000');
 
   // Open login dialog using UI navigation
   await page.evaluate(() => {
-    window.ui.toolbar.loginButton.click();
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    ui.toolbar.loginButton.click();
   });
 
   // Fill login form
   await page.evaluate(() => {
-    window.ui.loginDialog.username.value = 'testuser';
-    window.ui.loginDialog.password.value = 'testpass';
-    window.ui.loginDialog.submitBtn.click();
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    ui.loginDialog.username.value = 'testuser';
+    ui.loginDialog.password.value = 'testpass';
+    ui.loginDialog.submitBtn.click();
   });
 
   // Verify successful login
   await page.waitForSelector('[data-testid="user-menu"]');
 
   const isLoggedIn = await page.evaluate(() => {
-    return window.ui.toolbar.userMenu.style.display !== 'none';
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    return ui.toolbar.userMenu.style.display !== 'none';
   });
 
   expect(isLoggedIn).toBe(true);
@@ -450,11 +571,27 @@ docker stop $(docker ps -q --filter "publish=8000")
 
 ### Debug Tips
 
-1. **Use headed mode**: `npm run test:e2e -- --headed`
-2. **Enable debug logging**: `npm run test:e2e -- --debug`
-3. **Check container logs**: `docker logs <container-id>`
-4. **Inspect UI structure**: `console.log(window.ui)` in browser
-5. **Use Playwright inspector**: `npx playwright test --debug`
+1. **Use headed mode**: `npm run test:e2e:headed` or `npm run test:e2e -- --headed`
+2. **Step-through debugging**: `npm run test:e2e:headed-debug` - enables Playwright's step-through debugger
+3. **Enable debug logging**: `npm run test:e2e -- --debug`
+4. **Check saved logs**: Container and server logs are saved to `tests/e2e/test-results/` when tests fail
+5. **Inspect UI structure**: `console.log(window.ui)` in browser
+6. **Use Playwright inspector**: `npx playwright test --debug`
+
+### Debugging Modes Explained
+
+**For keeping browser windows open on failures:**
+- Use `npm run test:e2e:headed` - shows browser UI, windows close after tests complete
+- Container stops after tests, so browser windows will close regardless of debug flags
+
+**For interactive step-through debugging:**
+- Use `npm run test:e2e:headed-debug` - activates Playwright's debugger with pause/step controls
+- Use `await page.pause()` in test code to add breakpoints
+- Use Playwright inspector: `npx playwright test --debug --headed`
+
+**For log analysis:**
+- Check `tests/e2e/test-results/container-logs-*.txt` for container startup logs
+- Check `tests/e2e/test-results/server-logs-*.txt` for Flask application logs with DEBUG/INFO/ERROR messages
 
 ## Best Practices Summary
 
