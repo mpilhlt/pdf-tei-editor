@@ -8,6 +8,7 @@
  * Options:
  *   --no-build      Skip build step and push only existing image
  *   --build-only    Build image locally without pushing to registry
+ *   --help          Show this help message
  * Example: node bin/image-build-and-push.js v1.0.0
  * Example: node bin/image-build-and-push.js --no-build v1.0.0
  * Example: node bin/image-build-and-push.js --build-only v1.0.0
@@ -301,6 +302,37 @@ function cleanup() {
     }
 }
 
+// Show help message
+function showHelp() {
+    console.log('PDF TEI Editor - Docker Hub Build & Push');
+    console.log('=======================================');
+    console.log();
+    console.log('USAGE:');
+    console.log('  node bin/image-build-and-push.js [OPTIONS] [TAG]');
+    console.log();
+    console.log('OPTIONS:');
+    console.log('  --no-build      Skip build step and push only existing image');
+    console.log('  --build-only    Build image locally without pushing to registry');
+    console.log('  --help          Show this help message');
+    console.log();
+    console.log('ARGUMENTS:');
+    console.log('  TAG             Version tag for the image (optional)');
+    console.log('                  If not provided, will auto-generate from git or use "latest"');
+    console.log();
+    console.log('EXAMPLES:');
+    console.log('  node bin/image-build-and-push.js v1.0.0');
+    console.log('  node bin/image-build-and-push.js --no-build v1.0.0');
+    console.log('  node bin/image-build-and-push.js --build-only v1.0.0');
+    console.log('  node bin/image-build-and-push.js --build-only');
+    console.log('  node bin/image-build-and-push.js --help');
+    console.log();
+    console.log('ENVIRONMENT VARIABLES:');
+    console.log('  DOCKER_HUB_USERNAME    Docker Hub username (required for push)');
+    console.log('  DOCKER_HUB_TOKEN       Docker Hub access token (required for push)');
+    console.log();
+    console.log('NOTE: Environment variables can be set in a .env file');
+}
+
 // Prompt user for confirmation
 /** @param {string} question */
 function askForConfirmation(question) {
@@ -347,6 +379,12 @@ async function main() {
         // Parse command line arguments
         const args = process.argv.slice(2);
         let providedTag;
+
+        // Check for help option first
+        if (args.includes('--help') || args.includes('-h')) {
+            showHelp();
+            process.exit(0);
+        }
 
         // Check for options
         if (args.includes('--no-build')) {
