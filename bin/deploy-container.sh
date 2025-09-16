@@ -369,7 +369,16 @@ deploy_container() {
     # Show full command if verbose
     if [ "$VERBOSE" = true ]; then
         log_verbose "Full container command:"
-        echo "    $CONTAINER_CMD ${cmd_args[*]}"
+        # Use printf to properly quote arguments that contain spaces
+        printf "    %s" "$CONTAINER_CMD"
+        for arg in "${cmd_args[@]}"; do
+            if [[ "$arg" == *" "* ]] || [[ "$arg" == *"'"* ]]; then
+                printf " '%s'" "$arg"
+            else
+                printf " %s" "$arg"
+            fi
+        done
+        printf "\n"
     fi
 
     # Run container

@@ -12,7 +12,9 @@ cd /app
 # Set login message if APP_LOGIN_MESSAGE is provided
 if [ -n "$APP_LOGIN_MESSAGE" ]; then
     echo "Setting login message from environment variable..."
-    .venv/bin/python bin/manage.py config set application.login-message "\"$APP_LOGIN_MESSAGE\"" 2>/dev/null || echo "Warning: Failed to set login message"
+    # Use Python to properly escape the message for JSON
+    ESCAPED_MESSAGE=$(.venv/bin/python -c "import json, os; print(json.dumps(os.environ.get('APP_LOGIN_MESSAGE', '')))")
+    .venv/bin/python bin/manage.py config set application.login-message "$ESCAPED_MESSAGE" 2>/dev/null || echo "Warning: Failed to set login message"
 fi
 
 # Update admin password if APP_ADMIN_PASSWORD is set
@@ -55,8 +57,10 @@ if [ -z "$APP_ADMIN_PASSWORD" ] && [ -z "$APP_DEMO_PASSWORD" ]; then
     echo "No custom passwords provided, setting up default demo accounts..."
 
     # Set default login message with security warning
-    DEFAULT_LOGIN_MESSAGE="<h2>⚠️ Demo Installation</h2><p>Default accounts: <code>admin/admin</code> and <code>demo/demo</code>. For testing purposes only. <a href='https://github.com/mpilhlt/pdf-tei-editor/blob/main/docs/testdrive-docker.md' target=_blank>Configure real passwords in production!</a></p>"
-    .venv/bin/python bin/manage.py config set application.login-message "\"$DEFAULT_LOGIN_MESSAGE\"" 2>/dev/null || echo "Warning: Failed to set default login message"
+    export DEFAULT_LOGIN_MESSAGE="<h2>⚠️ Demo Installation</h2><p>Default accounts: <code>admin/admin</code> and <code>demo/demo</code>. For testing purposes only. <a href='https://github.com/mpilhlt/pdf-tei-editor/blob/main/docs/testdrive-docker.md' target='_blank'>Configure real passwords in production!</a></p>"
+    # Use Python to properly escape the message for JSON
+    ESCAPED_DEFAULT_MESSAGE=$(.venv/bin/python -c "import json, os; print(json.dumps(os.environ.get('DEFAULT_LOGIN_MESSAGE', '')))")
+    .venv/bin/python bin/manage.py config set application.login-message "$ESCAPED_DEFAULT_MESSAGE" 2>/dev/null || echo "Warning: Failed to set default login message"
 
     # Create default admin user
     echo "Creating default admin user (admin/admin)..."
