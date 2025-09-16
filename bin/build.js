@@ -24,4 +24,4 @@ runCommand('node bin/bundle-templates.js', 'Bundling templates');
 
 // Bundle application
 const rollupPath = path.join('node_modules', '.bin', 'rollup');
-runCommand(`"${rollupPath}" app/src/app.js -f es -o app/web/app.js -p @rollup/plugin-node-resolve`, 'Bundling application');
+runCommand(`"${rollupPath}" -c rollup.config.js`, 'Bundling application');
