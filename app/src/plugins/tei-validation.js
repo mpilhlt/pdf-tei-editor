@@ -1,12 +1,13 @@
 /**
  * @import { Diagnostic } from '@codemirror/lint'
  * @import { ApplicationState } from '../state.js'
+ * @import { ValidationError } from './client.js'
+ * @import { PluginConfig } from '../modules/plugin-manager.js'
  */
 
 import { EditorView, ViewUpdate } from '@codemirror/view';
 import { client, xmlEditor, pluginManager, logger, endpoints } from '../app.js'
 import { linter, lintGutter, forEachDiagnostic, setDiagnostics } from "@codemirror/lint";
-import { XMLEditor } from './xmleditor.js';
 
 const api = {
   configure,
@@ -15,6 +16,7 @@ const api = {
   isDisabled
 }
 
+/** @type {PluginConfig} */
 const plugin = {
   name: "tei-validation",
   deps: ['xmleditor', 'client'],
@@ -37,7 +39,9 @@ export default plugin
 let validatedVersion = null;
 let _isDisabled = false;
 let validationInProgress = false;
+/** @type {Promise<Diagnostic[]>|null} */
 let validationPromise = null;
+/** @type {Diagnostic[]} */
 let lastDiagnostics = [];
 
 /**
@@ -54,9 +58,8 @@ async function install(state) {
     }),
     lintGutter()
   ])
-  // listen for delayed editor updates
-  // @ts-ignore
-  xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, (updateData) => removeDiagnosticsInChangedRanges(updateData));
+  // remove diagnostics in diffs 
+  xmlEditor.on("editorUpdateDelayed", (updateData) => removeDiagnosticsInChangedRanges(updateData));
 }
 
 let modeCache;
@@ -65,13 +68,12 @@ let modeCache;
  * @param {ApplicationState} state 
  */
 async function update(state) {
+  // if we are offline, readonly or have no xml doc,  disable validation
   if (state.offline || state.editorReadOnly || !state.xml ) {
-    // if we are offline, disable validation
     configure({ mode: "off" })
   } else {
     configure({ mode: "auto" })
   }
-  //console.warn(plugin.name,"done") 
 } 
 
 /**
@@ -84,7 +86,8 @@ function isDisabled() {
 
 /**
  * Invoked when this or another plugin starts a validation
- * @param {Promise} validationPromise 
+ * @param {Promise<Diagnostic[]>} validationPromise 
+ * @return {Promise<void>}
  */
 async function inProgress(validationPromise) {
   // do not start validation if another one is going on
@@ -131,6 +134,8 @@ async function lintSource(view) {
   validationInProgress = true;
   // promise that will resolve when the validation results are back from the server and the validation source is not outdated
   validationPromise = new Promise(async (resolve, reject) => {
+    
+    /** @type {ValidationError[]} */
     let validationErrors;
     while (true) {
       validatedVersion = xmlEditor.getDocumentVersion(); // rewrite this!
@@ -149,7 +154,7 @@ async function lintSource(view) {
         logger.debug("Document has changed, restarting validation...")
       } else {
         // convert xmllint errors to Diagnostic objects
-        const diagnostics = validationErrors.map(/** @type {object} */ error => {
+        const diagnostics = validationErrors.map(error => {
           let from, to;
           if (error.line !== undefined && error.column !== undefined) {
             // Ensure line number is valid (1-based from validation, but doc.line expects 1-based)
@@ -175,11 +180,12 @@ async function lintSource(view) {
               to = Math.min(1, doc.length);
             }
           } else {
-            throw new Error("Invalid response from remote validation:", error)
+            throw new Error("Invalid response from remote validation:" + JSON.stringify(error) )
           }
           const severity = "error"
-          return { from, to, severity, message: error.message };
+          return { from, to, severity, message: error.message, column: error.column };
         }).filter(Boolean);
+        // @ts-ignore
         return resolve(diagnostics)
       }
     }
@@ -190,8 +196,8 @@ async function lintSource(view) {
     diagnostics = await validationPromise;
   } catch (error) {
     // stop querying
-    if (client.lastHttpStatus >= 400) {
-      console.debug("Disabling validation because of server error " + client.lastHttpStatus)
+    if (client.lastHttpStatus && client.lastHttpStatus >= 400) {
+      logger.warn("Disabling validation because of server error " + client.lastHttpStatus)
       configure({mode: "off"})
     }
     return lastDiagnostics
@@ -252,7 +258,7 @@ async function validate() {
 
   // await the new validation promise once it is available
   const diagnostics = await new Promise(resolve => {
-    console.log("Waiting for validation to start...")
+    logger.debug("Waiting for validation to start...")
     function checkIfValidating() {
       if (isValidating()) {
         let validationPromise = anyCurrentValidation();
@@ -287,16 +293,16 @@ function isValidating() {
 /**
  * Returns a promise that resolves when an ongoing validation finishes with the result of that validation, 
  * or immediately with an empty array if no validation is currently taking place
- * @returns {Promise<Array>} An array of Diagnostic objects
+ * @returns {Promise<Diagnostic[]>} An array of Diagnostic objects
  */
 async function anyCurrentValidation() {
   //console.log("Current validation promise", validationPromise)
-  return isValidating() ? validationPromise : Promise.resolve([])
+  return validationInProgress && validationPromise ? validationPromise : Promise.resolve([])
 }
 
 /**
  * Update the diagnostics list that is returned when the editor reqests a validation and the validation is disabled
- * @param {Array<Object>} diagnostics The updated list of diagnostics
+ * @param {Diagnostic[]} diagnostics The updated list of diagnostics
  */
 function updateCachedDiagnostics(diagnostics) {
   lastDiagnostics = diagnostics;
@@ -308,6 +314,7 @@ function updateCachedDiagnostics(diagnostics) {
  */
 function removeDiagnosticsInChangedRanges(update) {
   const viewState = xmlEditor.getView().state
+  /** @type {Diagnostic[]} */
   const diagnostics = []
   // @ts-ignore
   // update.changedRanges is not in the documentation but exists in the object
@@ -324,6 +331,7 @@ function removeDiagnosticsInChangedRanges(update) {
       
       if (validFrom < validTo && validFrom < docLength) {
         diagnostics.push({
+          column: null,
           from: validFrom,
           to: validTo,
           severity: d.severity,
@@ -341,7 +349,7 @@ function removeDiagnosticsInChangedRanges(update) {
   try {
     xmlEditor.getView().dispatch(setDiagnostics(viewState, diagnostics));
   } catch (error) {
-    logger.warn("Error setting diagnostics after range change:", error);
+    logger.warn("Error setting diagnostics after range change:" + String(error));
     // Clear all diagnostics if there's an error
     xmlEditor.getView().dispatch(setDiagnostics(viewState, []));
     lastDiagnostics = [];

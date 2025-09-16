@@ -80,7 +80,9 @@ class ServerError extends Error {
 }
 
 // Current sessionId stored locally for API requests (updated when state changes)
+/** @type {string|null} */
 let sessionId = null;
+/** @type {number|null} */
 let lastHttpStatus = null;
 
 const api_base_url = '/api';
@@ -158,20 +160,21 @@ async function update(state) {
  *
  * @param {string} endpoint - The API endpoint to call.
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
- * @param {object} body - The request body (optional).  Will be stringified to JSON.
+ * @param {object|null} body - The request body (optional).  Will be stringified to JSON.
  * @param {Number} [retryAttempts] - The number of retry attempts after a timeout
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
 async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
   const url = `${api_base_url}${endpoint}`;
+  /** @type {RequestInit} */
   const options = {
     method,
     headers: {
       'Content-Type': 'application/json',
-      'X-Session-ID': sessionId,
+      'X-Session-ID': sessionId || '',
     },
-    keepAlive: true
+    keepalive: true
   };
   if (body) {
     options.body = JSON.stringify(body);
@@ -234,16 +237,19 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000))
       } else {
-        // throw the error 
+        // throw the error
         break;
       }
     }
   } while (retryAttempts-- > 0);
 
   // notify the user about the error
-  logger.warn([error.statusCode, error.name, error.message].toString())
-  if (!(error instanceof LockedError)) {
-    notify(error.message, 'error');
+  if (error instanceof Error) {
+    const statusCode = error instanceof ApiError ? error.statusCode : 'unknown';
+    logger.warn([statusCode, error.name, error.message].toString())
+    if (!(error instanceof LockedError)) {
+      notify(error.message, 'error');
+    }
   }
   throw error
 }
@@ -294,10 +300,17 @@ async function getFileList(variant = null, refresh = false) {
 }
 
 /**
+ * @typedef {object} ValidationError
+ * @property {number} line
+ * @property {number} column
+ * @property {string} message
+ */
+
+/**
  * Lints a TEI XML string against the Flask API endpoint.
  *
  * @param {string} xmlString - The TEI XML string to validate.
- * @returns {Promise<object[]>} - A promise that resolves to an array of XML validation error messages,
+ * @returns {Promise<ValidationError[]>} - A promise that resolves to an array of XML validation error messages,
  */
 async function validateXml(xmlString) {
   return await callApi('/validate', 'POST', { xml_string: xmlString });
@@ -328,7 +341,7 @@ async function saveXml(xmlString, filePath, saveAsNewVersion) {
 
 /**
  * Gets a list of available extraction engines
- * @returns {Promise<Array>} Array of extractor information objects
+ * @returns {Promise<any[]>} Array of extractor information objects
  */
 async function getExtractorList() {
   return await callApi('/extract/list', 'GET');
@@ -337,7 +350,7 @@ async function getExtractorList() {
 /**
  * Extracts the references from the given PDF and returns the XML with the extracted data
  * @param {string} filename The filename of the PDF to extract
- * @param {Object} options The options for the extractions, such as DOI, additional instructions, etc. 
+ * @param {any} options The options for the extractions, such as DOI, additional instructions, etc. 
  * @returns {Promise<Object>}
  */
 async function extractReferences(filename, options) {
@@ -378,6 +391,9 @@ async function saveInstructions(instructions) {
 /**
  * Deletes all extraction document versions with the given timestamps 
  * @returns {Promise<Object>} The result object
+ */
+/**
+ * @param {string[]} filePaths
  */
 async function deleteFiles(filePaths) {
   if (!Array.isArray(filePaths)) {
@@ -437,6 +453,8 @@ async function getConfigData() {
 
 /**
  * Sets a configuration value on the server.
+ * @param {string} key
+ * @param {any} value
  */
 async function setConfigValue(key, value) {
   if (typeof key !== "string" || key.length === 0) {
@@ -479,6 +497,9 @@ async function checkLock(filePath) {
   return await callApi('/files/check_lock', 'POST', { file_path: filePath });
 }
 
+/**
+ * @param {string} filePath
+ */
 async function acquireLock(filePath) {
   if (!filePath) {
     throw new Error("File path is required to check lock");
@@ -486,7 +507,9 @@ async function acquireLock(filePath) {
   return await callApi('/files/acquire_lock', 'POST', { file_path: filePath });
 }
 
-
+/**
+ * @param {string} filePath
+ */
 async function releaseLock(filePath) {
   if (!filePath) {
     throw new Error("File path is required to release lock");
@@ -587,7 +610,7 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
         body: formData,
         headers: {
           ...headers,
-          'X-Session-ID': sessionId
+          'X-Session-ID': sessionId || ''
         }
       };
       try {
