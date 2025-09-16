@@ -29,6 +29,12 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+log_verbose() {
+    if [ "$VERBOSE" = true ]; then
+        echo -e "${BLUE}[VERBOSE]${NC} $1"
+    fi
+}
+
 # Default values
 PORT=8001
 CONTAINER_NAME=""
@@ -37,6 +43,7 @@ FQDN=""
 DEPLOYMENT_TYPE="production"
 NGINX_ENABLED=true
 SSL_ENABLED=true
+VERBOSE=false
 EMAIL=""
 ADMIN_PASSWORD=""
 DEMO_PASSWORD=""
@@ -47,11 +54,16 @@ DATA_DIR=""
 CONFIG_DIR=""
 DB_DIR=""
 
+# Array to store additional environment variables
+CUSTOM_ENV_VARS=()
+
 # Container command detection
 detect_container_cmd() {
     if command -v podman &> /dev/null; then
+        log_verbose "Found container command: podman"
         echo "podman"
     elif command -v docker &> /dev/null; then
+        log_verbose "Found container command: docker"
         echo "docker"
     else
         log_error "Neither podman nor docker found"
@@ -88,6 +100,8 @@ OPTIONS:
     --data-dir <DIR>       External data directory (production only)
     --config-dir <DIR>     External config directory (production only)
     --db-dir <DIR>         External database directory (production only)
+    --env KEY=VALUE        Add custom environment variable (can be used multiple times)
+    --verbose              Enable verbose output
     --help                 Show this help message
 
 EXAMPLES:
@@ -110,6 +124,13 @@ EXAMPLES:
        --fqdn local.test \\
        --no-ssl \\
        --port 8080
+
+    # With custom environment variables and verbose output
+    $0 --image pdf-tei-editor:latest \\
+       --fqdn app.example.com \\
+       --env CUSTOM_VAR=value1 \\
+       --env ANOTHER_VAR=value2 \\
+       --verbose
 EOF
 }
 
@@ -181,6 +202,19 @@ parse_args() {
                 DB_DIR="$2"
                 shift 2
                 ;;
+            --env)
+                if [[ "$2" == *"="* ]]; then
+                    CUSTOM_ENV_VARS+=("$2")
+                    shift 2
+                else
+                    log_error "Invalid --env format. Use --env KEY=VALUE"
+                    exit 1
+                fi
+                ;;
+            --verbose)
+                VERBOSE=true
+                shift
+                ;;
             --help)
                 usage
                 exit 0
@@ -235,9 +269,15 @@ validate_args() {
 # Check if image exists
 check_image() {
     log_info "Checking if image exists: $IMAGE"
+    log_verbose "Running: $CONTAINER_CMD image inspect $IMAGE"
 
     if $CONTAINER_CMD image inspect "$IMAGE" &> /dev/null; then
         log_success "Image found: $IMAGE"
+        if [ "$VERBOSE" = true ]; then
+            log_verbose "Image details:"
+            $CONTAINER_CMD image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null | head -1 | sed 's/^/    Image ID: /'
+            $CONTAINER_CMD image inspect "$IMAGE" --format '{{.Created}}' 2>/dev/null | head -1 | sed 's/^/    Created: /'
+        fi
     else
         log_error "Image not found: $IMAGE"
         log_info "Available images:"
@@ -248,10 +288,15 @@ check_image() {
 
 # Stop and remove existing container
 stop_existing_container() {
+    log_verbose "Checking for existing container: $CONTAINER_NAME"
     if $CONTAINER_CMD ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
         log_info "Stopping existing container: $CONTAINER_NAME"
+        log_verbose "Running: $CONTAINER_CMD stop $CONTAINER_NAME"
         $CONTAINER_CMD stop "$CONTAINER_NAME" || true
+        log_verbose "Running: $CONTAINER_CMD rm $CONTAINER_NAME"
         $CONTAINER_CMD rm "$CONTAINER_NAME" || true
+    else
+        log_verbose "No existing container found with name: $CONTAINER_NAME"
     fi
 }
 
@@ -289,6 +334,12 @@ deploy_container() {
         cmd_args+=("-e" "GROBID_SERVER_URL=$GROBID_SERVER_URL")
     fi
 
+    # Add custom environment variables
+    for env_var in "${CUSTOM_ENV_VARS[@]}"; do
+        cmd_args+=("-e" "$env_var")
+        log_verbose "Added custom environment variable: $env_var"
+    done
+
     # Add volume mounts for production
     if [ "$DEPLOYMENT_TYPE" = "production" ]; then
         if [ -n "$DATA_DIR" ]; then
@@ -315,6 +366,12 @@ deploy_container() {
     # Add image name
     cmd_args+=("$IMAGE")
 
+    # Show full command if verbose
+    if [ "$VERBOSE" = true ]; then
+        log_verbose "Full container command:"
+        echo "    $CONTAINER_CMD ${cmd_args[*]}"
+    fi
+
     # Run container
     $CONTAINER_CMD "${cmd_args[@]}"
 
@@ -324,11 +381,13 @@ deploy_container() {
 # Wait for container to be ready
 wait_for_container() {
     log_info "Waiting for container to be ready..."
+    log_verbose "Health check URL: http://localhost:$PORT"
 
     local max_attempts=30
     local attempt=1
 
     while [ $attempt -le $max_attempts ]; do
+        log_verbose "Health check attempt $attempt/$max_attempts"
         if curl -s "http://localhost:$PORT" > /dev/null 2>&1; then
             log_success "Container is ready"
             return 0
@@ -350,8 +409,9 @@ setup_nginx() {
     fi
 
     log_info "Setting up nginx configuration..."
-
+    
     local nginx_config="/etc/nginx/sites-available/pdf-tei-editor-$FQDN"
+    log_verbose "Creating nginx config file: $nginx_config"
 
     cat > "$nginx_config" << EOF
 # PDF TEI Editor configuration for $FQDN ($DEPLOYMENT_TYPE)
@@ -387,10 +447,13 @@ server {
 EOF
 
     # Enable the site
+    log_verbose "Enabling site: ln -sf $nginx_config /etc/nginx/sites-enabled/"
     ln -sf "$nginx_config" "/etc/nginx/sites-enabled/"
 
     # Test and reload nginx
+    log_verbose "Testing nginx configuration: nginx -t"
     if nginx -t; then
+        log_verbose "Reloading nginx: systemctl reload nginx"
         systemctl reload nginx || systemctl restart nginx
         log_success "Nginx configured and reloaded"
     else
@@ -407,6 +470,7 @@ setup_ssl() {
     fi
 
     log_info "Setting up SSL certificate with Let's Encrypt..."
+    log_verbose "Running certbot: certbot --nginx -d $FQDN --non-interactive --agree-tos --email $EMAIL"
 
     if certbot --nginx -d "$FQDN" --non-interactive --agree-tos --email "$EMAIL"; then
         log_success "SSL certificate configured successfully"
@@ -444,6 +508,14 @@ main() {
     log_info "  Type: $DEPLOYMENT_TYPE"
     log_info "  Nginx: $NGINX_ENABLED"
     log_info "  SSL: $SSL_ENABLED"
+    log_info "  Verbose: $VERBOSE"
+    
+    if [ ${#CUSTOM_ENV_VARS[@]} -gt 0 ]; then
+        log_info "  Custom environment variables:"
+        for env_var in "${CUSTOM_ENV_VARS[@]}"; do
+            log_info "    $env_var"
+        done
+    fi
 
     if [ "$DEPLOYMENT_TYPE" = "production" ]; then
         log_info "  Data directory: ${DATA_DIR:-'(container internal)'}"
