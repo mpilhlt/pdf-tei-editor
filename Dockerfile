@@ -13,20 +13,24 @@ ARG NODE_VERSION=20.18.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies and Node.js in one optimized layer
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     libmagic1 \
     libmagic-dev \
     ca-certificates \
-    xz-utils \
-    # Install Node.js directly (smaller than nvm) with permission workaround
-    && curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz -o /tmp/node.tar.xz \
-    && tar -xJ -f /tmp/node.tar.xz -C /tmp --no-same-permissions \
-    && cp -r /tmp/node-v${NODE_VERSION}-linux-x64/* /usr/local/ \
-    && rm -rf /tmp/node-v${NODE_VERSION}-linux-x64 /tmp/node.tar.xz \
-    # Clean up all caches and temporary files in same layer
+    gnupg \
+    # Clean up package cache
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Install Node.js via NodeSource repository (avoids tar permission issues)
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update \
+    && apt-get install -y nodejs \
+    # Clean up
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && rm -rf /tmp/* /var/tmp/*
