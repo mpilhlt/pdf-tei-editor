@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y \
     xz-utils \
     # Install Node.js directly (smaller than nvm) with permission workaround
     && curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz -o /tmp/node.tar.xz \
-    && tar -xJ -f /tmp/node.tar.xz -C /tmp \
+    && tar -xJ -f /tmp/node.tar.xz -C /tmp --no-same-permissions \
     && cp -r /tmp/node-v${NODE_VERSION}-linux-x64/* /usr/local/ \
     && rm -rf /tmp/node-v${NODE_VERSION}-linux-x64 /tmp/node.tar.xz \
     # Clean up all caches and temporary files in same layer
