@@ -16,7 +16,7 @@ import { app, services, authentication, fileselection } from '../app.js'
 import { FiledataPlugin } from '../plugins.js'
 import ui from '../ui.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import { api as logger } from './logger.js'
+import { logger } from '../app.js'
 import { api as xmlEditor } from './xmleditor.js'
 import { prettyPrintNode, ensureRespStmtForUser } from '../modules/tei-utils.js'
 

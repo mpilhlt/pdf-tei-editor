@@ -1,17 +1,14 @@
 /**
- * This plugin provides logging endpoints and an API to invoke them. The implementation uses
- * console.* methods
+ * Logger plugin providing logging functionality with caller context detection.
+ * This plugin uses console.* methods and provides hierarchical log level filtering.
  */
 
 /**
  * @import { ApplicationState } from '../state.js'
+ * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
-import ep from '../endpoints.js'
-import { app, pluginManager } from '../app.js'
-
-// name of the plugin
-const name = "logger"
+import { Plugin } from '../modules/plugin-base.js'
 
 /**
  * A object mapping human readable log level names to numbers
@@ -21,175 +18,184 @@ const logLevel = {
   CRITICAL: 1,
   WARN: 2,
   INFO: 3,
-  DEBUG: 4,
-  VERBOSE: 5
+  LOG: 4,
+  DEBUG: 5,
+  VERBOSE: 6
 }
 
 /**
- * The current logging level.
- * @type {number}
- * @global
+ * Logger Plugin Class
+ * Provides logging functionality with caller context detection
  */
-let currentLogLevel = logLevel.INFO 
-
-/**
- * Easy to use logging API which will  send log events to all registered log plugins 
- */
-const api = {
+class LoggerPlugin extends Plugin {
   /**
-   * Sets the log level {@see logLevel}
-   * @param {Number} level The log level
-   * @returns {Promise<void>}
+   * @param {PluginContext} context
    */
-  setLogLevel: level => pluginManager.invoke(ep.log.setLogLevel, {level}),
+  constructor(context) {
+    super(context, {
+      name: 'logger',
+      deps: []
+    });
 
-  /**
-   * Logs a debug message, with varying levels of verbosity
-   * @param {string} message The debug message
-   * @param {Number} level The log level, which is normally either DEBUG (4) or VERBOSE (5)
-   * @returns {Promise<void>}
-   */
-  debug: (message, level = logLevel.DEBUG) => pluginManager.invoke(ep.log.debug, {message, level}),
+    /** @type {number} */
+    this.currentLogLevel = logLevel.INFO;
+  }
 
   /**
-   * Logs an informational message
-   * @param {string} message 
-   * @returns {Promise<void>}
+   * @param {ApplicationState} state
    */
-  info: message => pluginManager.invoke(ep.log.info, {message}),
+  async install(state) {
+    await super.install(state);
+    console.log(`Installing plugin "${this.name}"`);
+  }
 
   /**
-   * Logs an warning message
-   * @param {string} message 
-   * @returns {Promise<void>}
+   * Get caller information from the error stack
+   * @returns {string|null} Formatted caller info or null if not found
    */
-  warn: message => pluginManager.invoke(ep.log.warn, {message}),
+  getCallerInfo() {
+    const stack = new Error().stack;
+    if (!stack) return null;
+
+    const lines = stack.split('\n');
+
+    // Skip more frames and look for meaningful caller
+    for (let i = 3; i < Math.min(lines.length, 8); i++) {
+      const line = lines[i];
+      if (!line) continue;
+
+      // Skip internal logger and plugin manager frames
+      if (line.includes('logger.js') ||
+          line.includes('plugin-manager.js') ||
+          line.includes('plugin-base.js') ||
+          line.includes('at invoke') ||
+          line.includes('at async invoke')) {
+        continue;
+      }
+
+      // Match different stack trace formats
+      const match = line.match(/at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/) ||
+                   line.match(/at\s+(.+?):(\d+):(\d+)/) ||
+                   line.match(/(.+?)@(.+?):(\d+):(\d+)/);
+
+      if (match) {
+        let functionName = match[1] || 'anonymous';
+        const filePath = match[2] || '';
+        const fileName = filePath.split('/').pop() || 'unknown';
+        const lineNumber = match[3] || '?';
+
+        // Clean up function name - remove async indicators and generators
+        functionName = functionName
+          .replace(/^async\s*/, '')      // Remove "async" prefix (with optional space)
+          .replace(/\*/, '')             // Remove generator "*"
+          .replace(/^Object\./, '')      // Remove "Object." prefix
+          .trim();
+
+        // Skip generic names and prefer more meaningful ones
+        if (functionName === 'anonymous' || functionName === '') {
+          continue;
+        }
+
+        return `${functionName} (${fileName}:${lineNumber})`;
+      }
+    }
+    return null;
+  }
 
   /**
-   * Logs an message about a critical or fatal error
-   * @param {string} message 
-   * @returns {Promise<void>}
+   * Sets the global debugging level.
+   * Only debug messages with a level less than or equal to this value will be displayed.
+   * @param {number} level The new debugging level.
    */
-  critical: message => pluginManager.invoke(ep.log.critical, {message}),
+  setLogLevel(level) {
+    this.currentLogLevel = level;
+  }
 
   /**
-   * Logs an message about a severe error
-   * @param {string} message 
-   * @returns {Promise<void>}
+   * Logs a debug message if the message's level is less than or equal to the current global log level.
+   * @param {any} message - The message or object to log.
+   * @param {number} [level=logLevel.DEBUG] - The level of this debug message.
    */
-  error: message => pluginManager.invoke(ep.log.critical, {message}),
-
-}
-
-
-/**
- * component plugin
- */
-const plugin = {
-  name,
-  install,
-  log: {
-    setLogLevel,
-    debug,
-    info,
-    warn,
-    critical
+  debug(message, level = logLevel.DEBUG) {
+    if (level <= this.currentLogLevel) {
+      const caller = this.getCallerInfo();
+      if (caller) {
+        console.debug(`%c${message}\n%c[${caller}]`, 'color: #1e3a8a;', 'color: #999; font-size: 0.9em;');
+      } else {
+        console.debug(`%c${message}`, 'color: #1e3a8a;');
+      }
+    }
   }
-}
 
-export { api, plugin, logLevel, setLogLevel }
-export default plugin
+  /**
+   * Logs an informational message using console.info.
+   * @param {any} message - The message or object to log.
+   */
+  log(message) {
+    if (this.currentLogLevel >= logLevel.LOG) {
+      const caller = this.getCallerInfo();
+      if (caller) {
+        console.log(`${message}\n%c[${caller}]`, 'color: #999; font-size: 0.9em;');
+      } else {
+        console.log(message);
+      }
+    }
+  }  
 
-//
-// implementation
-//
-
-/**
- * 
- * @param {ApplicationState} state 
- */
-async function install(state) {
-  console.log(`Installing plugin "${plugin.name}"`)
-}
-
-/**
- * Returns the current stack trace 
- * @returns {String}
- */
-function getStack() {
-  const obj = {};
-  if ("captureStackTrace" in Error) {
-    // Avoid getStack itself in the stack trace
-    Error.captureStackTrace(obj, getStack);
+  /**
+   * Logs an informational message using console.info.
+   * @param {any} message - The message or object to log.
+   */
+  info(message) {
+    if (this.currentLogLevel >= logLevel.INFO) {
+      const caller = this.getCallerInfo();
+      if (caller) {
+        console.info(`${message}\n%c[${caller}]`, 'color: #999; font-size: 0.9em;');
+      } else {
+        console.info(message);
+      }
+    }
   }
-  return obj.stack;
-}
 
-function getLocation() {
-  return getStack()
-}
-
-
-
-/**
- * Sets the global debugging level.
- * Only debug messages with a level less than or equal to this value will be displayed.
- * @param {object} options - An object containing the message and level.
- * @param {number} options.level The new debugging level.
- * @returns {void}
- */
-function setLogLevel({level}) {
-  currentLogLevel = level
-}
-
-/**
- * Logs a debug message if the message's level is less than or equal to the current global log level.
- * The message will be prefixed with "DEBUG: ".
- * @param {object} options - An object containing the message and level.
- * @param {any} options.message - The message or object to log.
- * @param {number} [options.level=1] - The level of this debug message. Defaults to 1.
- * @returns {void}
- */
-function debug({message, level = logLevel.DEBUG}) {
-  if (level >= currentLogLevel) {
-    console.groupCollapsed(`DEBUG`, message)
-    console.trace()
-    console.groupEnd()
+  /**
+   * Logs a warning message using console.warn.
+   * @param {any} message - The message or object to log.
+   */
+  warn(message) {
+    if (this.currentLogLevel >= logLevel.WARN) {
+      const caller = this.getCallerInfo();
+      if (caller) {
+        console.warn(`${message}\n%c[${caller}]`, 'color: #999; font-size: 0.9em;');
+      } else {
+        console.warn(message);
+      }
+    }
   }
+
+  /**
+   * Logs a critical error message using console.error.
+   * @param {any} message - The message or object to log.
+   */
+  critical(message) {
+    if (this.currentLogLevel >= logLevel.CRITICAL) {
+      const caller = this.getCallerInfo();
+      if (caller) {
+        console.error(`${message}\n%c[${caller}]`, 'color: #999; font-size: 0.9em;');
+      } else {
+        console.error(message);
+      }
+    }
+  }
+
+  /**
+   * Alias for critical() for backward compatibility
+   * @param {any} message - The message or object to log.
+   */
+  error(message) {
+    this.critical(message);
+  }
+
 }
 
-/**
- * Logs an informational message using console.info.
- * @param {object} options - An object containing the message and level.
- * @param {any} options.message - The message or object to log.
- * @returns {void}
- */
-function info({message}) {
-  if (currentLogLevel >= logLevel.INFO) {
-    console.info(message)
-  }
-}
-
-/**
- * Logs a warning message using console.warn.
- * @param {object} options - An object containing the message and level.
- * @param {any} options.message - The message or object to log.
- * @returns {void}
- */
-function warn({message}) {
-  if (currentLogLevel >= logLevel.WARN) {
-    console.warn(message)
-  }
-}
-
-/**
- * Logs a fatal error message using console.error.
- * @param {object} options - An object containing the message and level.
- * @param {any} options.message - The message or object to log.
- * @returns {void}
- */
-function critical({message}) {
-  if (currentLogLevel >= logLevel.CRITICAL) {
-    console.error(message)
-  }
-}
+export { logLevel, LoggerPlugin }
+export default LoggerPlugin
