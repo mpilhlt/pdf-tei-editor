@@ -8,9 +8,11 @@
  * Options:
  *   --no-build      Skip build step and push only existing image
  *   --build-only    Build image locally without pushing to registry
+ *   --no-cache      Force rebuild all layers (ignore Docker cache)
  * Example: node bin/image-build-and-push.js v1.0.0
  * Example: node bin/image-build-and-push.js --no-build v1.0.0
  * Example: node bin/image-build-and-push.js --build-only v1.0.0
+ * Example: node bin/image-build-and-push.js --no-cache v1.0.0
  */
 
 import { execSync, spawn } from 'child_process';
@@ -20,7 +22,7 @@ import readline from 'readline';
 /** @type {string|null} */
 let containerCmd = null;
 
-/** @type {{username?: string, token?: string, versionTag?: string, noBuild?: boolean, buildOnly?: boolean}} */
+/** @type {{username?: string, token?: string, versionTag?: string, noBuild?: boolean, buildOnly?: boolean, noCache?: boolean}} */
 let config = {};
 
 // Detect container tool (podman or docker)
@@ -163,9 +165,15 @@ async function buildImage() {
         // Build with both version tag and latest (using production target)
         const buildArgs = [
             'build',
-            '--target', 'production',  // Use production target
-            '-t', fullTag
+            '--target', 'production'  // Use production target
         ];
+
+        // Add no-cache flag if requested
+        if (config.noCache) {
+            buildArgs.push('--no-cache');
+        }
+
+        buildArgs.push('-t', fullTag);
 
         // Add latest tag if not already latest
         if (config.versionTag !== 'latest') {
@@ -359,9 +367,19 @@ async function main() {
             console.log('[INFO] --build-only option detected, skipping push step');
         }
 
+        if (args.includes('--no-cache')) {
+            config.noCache = true;
+            console.log('[INFO] --no-cache option detected, will rebuild all layers');
+        }
+
         // Validate mutually exclusive options
         if (config.noBuild && config.buildOnly) {
             console.log('[ERROR] --no-build and --build-only options are mutually exclusive');
+            process.exit(1);
+        }
+
+        if (config.noBuild && config.noCache) {
+            console.log('[ERROR] --no-build and --no-cache options are mutually exclusive (no build means no cache usage)');
             process.exit(1);
         }
 
@@ -389,6 +407,12 @@ async function main() {
             console.log(`[INFO]   Build Target: production`);
         } else {
             console.log(`[INFO]   Mode: Push only (--no-build)`);
+        }
+
+        if (config.noCache) {
+            console.log(`[INFO]   Cache: Disabled (--no-cache - will rebuild all layers)`);
+        } else if (!config.noBuild) {
+            console.log(`[INFO]   Cache: Enabled (use --no-cache to force rebuild)`);
         }
         console.log();
 
