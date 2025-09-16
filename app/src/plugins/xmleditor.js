@@ -17,6 +17,7 @@ import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
 import { getDocumentTitle } from '../modules/file-data-utils.js'
+import FiledataPlugin from './filedata.js'
 
 //
 // UI
@@ -405,9 +406,10 @@ async function saveIfDirty() {
 
   try {
     hashBeingSaved = fileHash
-    const result = await app.invokePluginEndpoint(ep.filedata.saveXml, fileHash, {result:"first"})
+    const filedata = FiledataPlugin.getInstance()
+    const result = await filedata.saveXml(fileHash)
     if (!result|| typeof result != "object" || !result.status)  {
-      logger.warn("Invalid invocation result for " + ep.filedata.saveXml)
+      logger.warn("Invalid result from filedata.saveXml: " + result)
       return
     }
     hashBeingSaved = null

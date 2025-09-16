@@ -247,9 +247,15 @@ def save():
     """
     data = request.get_json()
     xml_string = data.get("xml_string")
-    file_path_or_hash = data.get("file_path") 
+    encoding = data.get("encoding")
+    file_path_or_hash = data.get("hash", None) or data.get("file_path")
     save_as_new_version = data.get("new_version", False)
     session_id = get_session_id(request)
+
+    # Decode base64 if needed
+    if encoding == "base64":
+        import base64
+        xml_string = base64.b64decode(xml_string).decode('utf-8')
 
     if not xml_string or not file_path_or_hash:
         raise ApiError("XML content and file path are required.")

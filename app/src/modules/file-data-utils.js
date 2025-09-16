@@ -71,11 +71,12 @@ export function createHashLookupIndex(fileData) {
  */
 export function getDocumentTitle(hash) {
   if (!hash) return '';
-  
+
   if (!hashLookupIndex || hashLookupIndex.size === 0) {
-    throw new Error('Hash lookup index not initialized. Call createHashLookupIndex() first.');
+    console.warn('Hash lookup index not initialized. Call createHashLookupIndex() first.');
+    return ''; // Return empty string instead of throwing
   }
-  
+
   const entry = hashLookupIndex.get(hash);
   return entry?.label || '';
 }

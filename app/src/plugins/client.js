@@ -332,8 +332,21 @@ async function getAutocompleteData(xmlString) {
  * @returns {Promise<Object>}
  */
 async function saveXml(xmlString, filePath, saveAsNewVersion) {
-  return await callApi('/files/save', 'POST',
-    { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
+  try {
+    // Try normal JSON encoding first
+    return await callApi('/files/save', 'POST',
+      { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion, encoding: "utf-8" });
+  } catch (error) {
+    // If we get a TypeError (likely request construction failure), try base64 encoding
+    if (error instanceof TypeError && error.message.includes('NetworkError')) {
+      console.log('Retrying save with base64 encoding due to content encoding issues');
+      const encodedXml = btoa(unescape(encodeURIComponent(xmlString))); // UTF-8 safe base64 encoding
+      return await callApi('/files/save', 'POST',
+        { xml_string: encodedXml, file_path: filePath, new_version: saveAsNewVersion, encoding: 'base64' });
+    }
+    // Re-throw other errors
+    throw error;
+  }
 }
 
 /**

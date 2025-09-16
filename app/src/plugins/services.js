@@ -14,10 +14,11 @@ import { app, endpoints as ep } from '../app.js'
 import ui, { updateUi } from '../ui.js'
 import {
   client, logger, dialog, config,
-  fileselection, xmlEditor, pdfViewer, 
-  services, validation, authentication, 
+  fileselection, xmlEditor, pdfViewer,
+  services, validation, authentication,
   sync, accessControl
 } from '../app.js'
+import FiledataPlugin from './filedata.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
@@ -741,7 +742,8 @@ async function saveRevision(state) {
     await addTeiHeaderInfo(respStmt, undefined, revisionChange)
     if (!state.xml) throw new Error('No XML file loaded')
     
-    await app.invokePluginEndpoint(ep.filedata.saveXml, state.xml)
+    const filedata = FiledataPlugin.getInstance()
+    await filedata.saveXml(state.xml)
     
     sync.syncFiles(state)
       .then(summary => summary && console.debug(summary))
@@ -804,11 +806,8 @@ async function createNewVersion(state) {
     if (!state.xml) throw new Error('No XML file loaded');
     
     // save new version first
-    let { hash } = await app.invokePluginEndpoint(
-      ep.filedata.saveXml, 
-      [state.xml, /* save as new version */ true], 
-      {result:"first"}
-    )
+    const filedata = FiledataPlugin.getInstance()
+    let { hash } = await filedata.saveXml(state.xml, /* save as new version */ true)
 
     // update the state to load the new document
     await load({ xml: hash })
@@ -817,7 +816,7 @@ async function createNewVersion(state) {
     await addTeiHeaderInfo(respStmt, editionStmt)
 
     // save the modified content back to the same timestamped version file
-    await app.invokePluginEndpoint(ep.filedata.saveXml, hash)
+    await filedata.saveXml(hash)
     xmlEditor.markAsClean() 
 
     // reload the file data to display the new name and inform the user

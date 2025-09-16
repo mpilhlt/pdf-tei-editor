@@ -8,6 +8,7 @@
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
+ * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
 import { endpoints as ep } from '../app.js'
@@ -21,16 +22,22 @@ import ui from '../ui.js'
  * File data management plugin
  */
 class FiledataPlugin extends Plugin {
+  /**
+   * @param {PluginContext} context 
+   */  
   constructor(context) {
     super(context, { 
       name: 'filedata',
       deps: ['logger', 'client', 'dialog', 'xmleditor'] 
     });
     
-    /** @type {StatusText} */
+    /** @type {StatusText | null} */
     this.savingStatusWidget = null;
   }
 
+  /**
+   * @param {ApplicationState} state
+   */
   async install(state) {
     await super.install(state);
     logger.debug(`Installing plugin "${this.name}"`);
@@ -92,17 +99,23 @@ class FiledataPlugin extends Plugin {
     }
     try {
       // Show saving status
-      ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
+      if (this.savingStatusWidget) {
+        ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
+      }
       const xmlContent = xmlEditor.getXML()
-      return await client.saveXml(xmlContent, fileHash, saveAsNewVersion);
+      const result = await client.saveXml(xmlContent, fileHash, saveAsNewVersion);
+      return /** @type {{hash: string, status: string}} */ (result);
     } catch (e) {
-      console.error("Error while saving XML:", e.message);
-      dialog.error(`Could not save XML: ${e.message}`);
-      throw new Error(`Could not save XML: ${e.message}`);
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      console.error("Error while saving XML:", errorMessage);
+      dialog.error(`Could not save XML: ${errorMessage}`);
+      throw new Error(`Could not save XML: ${errorMessage}`);
     } finally {
-      // clear status message after 1 second 
+      // clear status message after 1 second
       setTimeout(() => {
-        ui.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
+        if (this.savingStatusWidget) {
+          ui.xmlEditor.statusbar.removeById(this.savingStatusWidget.id);
+        }
       }, 1000);
     }
   }
