@@ -21,7 +21,7 @@ export { ep as endpoints }
 
 // plugins
 import plugins from './plugins.js'
-import { logLevel, client, logger, config, AuthenticationPlugin } from './plugins.js'
+import { logLevel, client, config, AuthenticationPlugin, LoggerPlugin } from './plugins.js'
 import initialState from './state.js'
 
 // core application orchestration classes
@@ -51,11 +51,12 @@ export { app }
 // Register plugins
 app.registerPlugins(plugins)
 
-// Create authentication API export after plugin registration
+// Create plugin API exports after plugin registration
 export const authentication = AuthenticationPlugin.getInstance()
+export const logger = LoggerPlugin.getInstance()
 
 // Set log level after registration
-await pluginManager.invoke(ep.log.setLogLevel, {level: logLevel.DEBUG})
+logger.setLogLevel(logLevel.DEBUG)
 
 // Compose initial application state from various sources
 let serverState = await client.state()

@@ -13,9 +13,10 @@
 // class-based plugins
 import AuthenticationPlugin from './plugins/authentication.js'
 import FiledataPlugin from './plugins/filedata.js'
+import LoggerPlugin from './plugins/logger.js'
+import { logLevel} from './plugins/logger.js'
 
 // legacy plugins
-import { plugin as loggerPlugin, api as logger, logLevel} from './plugins/logger.js'
 import { plugin as configPlugin, api as config } from './plugins/config.js'
 import { plugin as urlHashStatePlugin, api as urlHash } from './plugins/url-hash-state.js'
 import { plugin as ssePlugin, api as sse} from './plugins/sse.js'
@@ -44,9 +45,9 @@ const plugins = [
   // class-based
   AuthenticationPlugin,
   FiledataPlugin,
+  LoggerPlugin,
 
-  // modules with config object
-  loggerPlugin, 
+  // modules with config object 
   urlHashStatePlugin, 
   clientPlugin, 
   configPlugin, 
@@ -75,12 +76,12 @@ const plugins = [
 export default plugins
 
 // Export individual plugin APIs for backward compatibility
-export { 
+export {
   // class-based plugins
   AuthenticationPlugin,
-  
+  LoggerPlugin,
+
   // legacy plugin APIs
-  logger, 
   logLevel,
   config,
   urlHash,

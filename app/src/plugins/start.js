@@ -145,7 +145,7 @@ async function start() {
 
       // synchronize in the background
       sync.syncFiles(currentState).then(async (summary) => {
-        logger.info(summary)
+        logger.info(JSON.stringify(summary))
         if (summary && !summary.skipped) {
           await app.invokePluginEndpoint(ep.filedata.reload, {refresh:true})
         }
@@ -181,6 +181,7 @@ async function start() {
  * Add behavior that looks up the content of the current node in the PDF
  */
 function configureFindNodeInPdf() {
+  /** @type {Node | null} */
   let lastNode = null;
 
   // Cross-plugin coordination: Find the currently selected node's contents in the PDF

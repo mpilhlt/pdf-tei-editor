@@ -70,7 +70,7 @@ async function install(state) {
   sse.addEventListener('syncMessage', (event) => {
     const message = event.data
     // Log sync messages to console instead of displaying in widget
-    console.log(`Sync: ${message}`)
+    logger.log(`Sync: ${message}`)
   })
 
   // Create sync progress widget for XML editor statusbar
