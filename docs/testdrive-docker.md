@@ -7,7 +7,7 @@ The fastest way to try PDF TEI Editor is using the pre-built Docker container. T
 Pull and run the latest version:
 
 ```bash
-# Basic usage - uses default passwords
+# Basic usage - uses default demo accounts (admin/admin, demo/demo)
 docker run -p 8000:8000 cboulanger/pdf-tei-editor:latest
 
 # With custom admin password
@@ -17,6 +17,12 @@ docker run -p 8000:8000 -e APP_ADMIN_PASSWORD=mysecurepassword cboulanger/pdf-te
 docker run -p 8000:8000 \
   -e APP_ADMIN_PASSWORD=admin123 \
   -e APP_DEMO_PASSWORD=demo123 \
+  cboulanger/pdf-tei-editor:latest
+
+# With custom login message
+docker run -p 8000:8000 \
+  -e APP_LOGIN_MESSAGE="<strong>Welcome to Company PDF Editor</strong><br>Contact IT for credentials" \
+  -e APP_ADMIN_PASSWORD=secure_password \
   cboulanger/pdf-tei-editor:latest
 ```
 
@@ -31,7 +37,10 @@ The container automatically configures user accounts based on environment variab
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `APP_ADMIN_PASSWORD` | Password for admin user (full access) | `admin` (if not set) |
-| `APP_DEMO_PASSWORD` | Password for demo user (limited access) | Not created if not set |
+| `APP_DEMO_PASSWORD` | Password for demo user (limited access) | `demo` (if not set) |
+| `APP_LOGIN_MESSAGE` | Custom HTML message shown on login dialog | Demo warning (if defaults used) |
+
+**Note**: When no custom passwords are provided, the container creates default demo accounts (`admin/admin` and `demo/demo`) with a security warning displayed on the login screen.
 
 ### AI Services (Optional)
 
@@ -62,6 +71,7 @@ services:
     environment:
       - APP_ADMIN_PASSWORD=secure_admin_password
       - APP_DEMO_PASSWORD=demo123
+      - APP_LOGIN_MESSAGE="<h3>Production PDF TEI Editor</h3><p>Use your company credentials to access the system.</p>"
       - GEMINI_API_KEY=your_gemini_api_key_here
       - GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
     volumes:
@@ -87,13 +97,13 @@ After starting the container:
 ### Admin User
 - **Username**: `admin`
 - **Password**: Value of `APP_ADMIN_PASSWORD` or `admin` if not set
-- **Permissions**: Full access to all features, user management, configuration
+- **Permissions**: Full access to all features
 
-### Demo User (Optional)
+### Demo User
 - **Username**: `demo`
-- **Password**: Value of `APP_DEMO_PASSWORD`
-- **Permissions**: Standard user access, cannot manage other users
-- **Created only if**: `APP_DEMO_PASSWORD` environment variable is set
+- **Password**: Value of `APP_DEMO_PASSWORD` or `demo` if not set
+- **Permissions**: Standard user access
+
 
 ## Persistent Data
 
@@ -105,6 +115,7 @@ docker run -p 8000:8000 \
   -v $(pwd)/config:/app/config \
   -v $(pwd)/db:/app/db \
   -e APP_ADMIN_PASSWORD=mysecurepassword \
+  -e APP_DEMO_PASSWORD=mydemopassword \
   cboulanger/pdf-tei-editor:latest
 ```
 

@@ -4,15 +4,23 @@
  * Docker Hub Build and Push Script for PDF TEI Editor
  * Cross-platform Node.js version with ESM syntax
  *
- * Usage: node bin/build-and-push.js [TAG]
- * Example: node bin/build-and-push.js v1.0.0
+ * Usage: node bin/image-build-and-push.js [OPTIONS] [TAG]
+ * Options:
+ *   --no-build      Skip build step and push only existing image
+ *   --build-only    Build image locally without pushing to registry
+ * Example: node bin/image-build-and-push.js v1.0.0
+ * Example: node bin/image-build-and-push.js --no-build v1.0.0
+ * Example: node bin/image-build-and-push.js --build-only v1.0.0
  */
 
 import { execSync, spawn } from 'child_process';
 import fs from 'fs';
 import readline from 'readline';
 
+/** @type {string|null} */
 let containerCmd = null;
+
+/** @type {{username?: string, token?: string, versionTag?: string, noBuild?: boolean, buildOnly?: boolean}} */
 let config = {};
 
 // Detect container tool (podman or docker)
@@ -88,6 +96,7 @@ function validateEnv() {
 }
 
 // Get version tag
+/** @param {string|undefined} providedTag */
 function getVersion(providedTag) {
     if (providedTag) {
         config.versionTag = providedTag;
@@ -115,6 +124,11 @@ function getVersion(providedTag) {
 }
 
 // Execute command with live output
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{silent?: boolean}} options
+ */
 function executeCommand(command, args, options = {}) {
     return new Promise((resolve, reject) => {
         const childProcess = spawn(command, args, {
@@ -124,7 +138,7 @@ function executeCommand(command, args, options = {}) {
 
         childProcess.on('close', (code) => {
             if (code === 0) {
-                resolve();
+                resolve(undefined);
             } else {
                 reject(new Error(`Command failed with exit code ${code}`));
             }
@@ -138,7 +152,8 @@ function executeCommand(command, args, options = {}) {
 
 // Build container image
 async function buildImage() {
-    const imageName = `${config.username}/pdf-tei-editor`;
+    // For build-only mode, use local image name without registry prefix
+    const imageName = config.buildOnly ? 'pdf-tei-editor' : `${config.username}/pdf-tei-editor`;
     const fullTag = `${imageName}:${config.versionTag}`;
     const latestTag = `${imageName}:latest`;
 
@@ -159,12 +174,18 @@ async function buildImage() {
 
         buildArgs.push('.');
 
+        if (!containerCmd) {
+            throw new Error('Container command not available');
+        }
         await executeCommand(containerCmd, buildArgs);
         console.log('[SUCCESS] Container image built successfully');
 
         // Show image details
         console.log('[INFO] Image details:');
         try {
+            if (!containerCmd) {
+                throw new Error('Container command not available');
+            }
             execSync(`${containerCmd} images "${imageName}" --format "table {{.Repository}}\\t{{.Tag}}\\t{{.Size}}\\t{{.CreatedSince}}"`, { stdio: 'inherit' });
         } catch (err) {
             console.log('[WARNING] Could not display image details');
@@ -173,7 +194,7 @@ async function buildImage() {
         return true;
     } catch (err) {
         console.log('[ERROR] Container image build failed');
-        console.log('[ERROR]', err.message);
+        console.log('[ERROR]', err instanceof Error ? err.message : String(err));
         return false;
     }
 }
@@ -182,18 +203,29 @@ async function buildImage() {
 async function registryLogin() {
     console.log(`[INFO] Logging in to Docker Hub as ${config.username}...`);
 
+    // Debug credential availability
+    console.log(`[DEBUG] Username available: ${!!config.username}`);
+    console.log(`[DEBUG] Token available: ${!!config.token}`);
+    console.log(`[DEBUG] Token length: ${config.token ? config.token.length : 0}`);
+
     try {
-        const childProcess = spawn(containerCmd, ['login', '--username', config.username, '--password-stdin', 'docker.io'], {
+        if (!containerCmd) {
+            throw new Error('Container command not available');
+        }
+
+        const childProcess = spawn(containerCmd, ['login', '--username', config.username || '', '--password-stdin', 'docker.io'], {
             stdio: ['pipe', 'inherit', 'inherit']
         });
 
-        childProcess.stdin.write(config.token);
-        childProcess.stdin.end();
+        if (childProcess.stdin) {
+            childProcess.stdin.write(config.token || '');
+            childProcess.stdin.end();
+        }
 
         await new Promise((resolve, reject) => {
-            childProcess.on('close', (code) => {
+            childProcess.on('close', (/** @type {number|null} */ code) => {
                 if (code === 0) {
-                    resolve();
+                    resolve(undefined);
                 } else {
                     reject(new Error('Login failed'));
                 }
@@ -204,7 +236,7 @@ async function registryLogin() {
         return true;
     } catch (err) {
         console.log('[ERROR] Docker Hub login failed');
-        console.log('[ERROR]', err.message);
+        console.log('[ERROR]', err instanceof Error ? err.message : String(err));
         return false;
     }
 }
@@ -218,6 +250,10 @@ async function pushImage() {
     console.log('[INFO] Pushing image to Docker Hub...');
 
     try {
+        if (!containerCmd) {
+            throw new Error('Container command not available');
+        }
+
         // Push version-specific tag
         console.log(`[INFO] Pushing ${fullTag}...`);
         await executeCommand(containerCmd, ['push', fullTag]);
@@ -248,7 +284,7 @@ async function pushImage() {
         return true;
     } catch (err) {
         console.log('[ERROR] Failed to push images');
-        console.log('[ERROR]', err.message);
+        console.log('[ERROR]', err instanceof Error ? err.message : String(err));
         return false;
     }
 }
@@ -257,13 +293,16 @@ async function pushImage() {
 function cleanup() {
     console.log('[INFO] Logging out of Docker Hub...');
     try {
-        execSync(`${containerCmd} logout docker.io`, { stdio: 'ignore' });
+        if (containerCmd) {
+            execSync(`${containerCmd} logout docker.io`, { stdio: 'ignore' });
+        }
     } catch {
         // Ignore cleanup errors
     }
 }
 
 // Prompt user for confirmation
+/** @param {string} question */
 function askForConfirmation(question) {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -295,55 +334,135 @@ async function main() {
             process.exit(0);
         });
 
-        // Load and validate environment
+        // Load environment variables and validate if needed
         loadEnv();
-        validateEnv();
+
+        // Skip credential validation for build-only mode
+        if (!config.buildOnly) {
+            validateEnv();
+        } else {
+            console.log('[INFO] Skipping Docker Hub credential validation (build-only mode)');
+        }
+
+        // Parse command line arguments
+        const args = process.argv.slice(2);
+        let providedTag;
+
+        // Check for options
+        if (args.includes('--no-build')) {
+            config.noBuild = true;
+            console.log('[INFO] --no-build option detected, skipping build step');
+        }
+
+        if (args.includes('--build-only')) {
+            config.buildOnly = true;
+            console.log('[INFO] --build-only option detected, skipping push step');
+        }
+
+        // Validate mutually exclusive options
+        if (config.noBuild && config.buildOnly) {
+            console.log('[ERROR] --no-build and --build-only options are mutually exclusive');
+            process.exit(1);
+        }
+
+        // Get remaining tag argument (filter out all option flags)
+        const filteredArgs = args.filter(arg => !arg.startsWith('--'));
+        providedTag = filteredArgs[0];
 
         // Get version tag
-        const providedTag = process.argv[2];
         getVersion(providedTag);
 
         // Confirm before proceeding
         console.log();
         console.log('[INFO] Configuration:');
-        console.log(`[INFO]   Docker Hub User: ${config.username}`);
+        if (!config.buildOnly) {
+            console.log(`[INFO]   Docker Hub User: ${config.username}`);
+        }
         console.log(`[INFO]   Version Tag: ${config.versionTag}`);
-        console.log(`[INFO]   Image Name: ${config.username}/pdf-tei-editor:${config.versionTag}`);
-        console.log(`[INFO]   Build Target: production (optimized, no node_modules)`);
+        const imageName = config.buildOnly ? 'pdf-tei-editor' : `${config.username}/pdf-tei-editor`;
+        console.log(`[INFO]   Image Name: ${imageName}:${config.versionTag}`);
+
+        if (config.buildOnly) {
+            console.log(`[INFO]   Mode: Build only (--build-only)`);
+            console.log(`[INFO]   Build Target: production`);
+        } else if (!config.noBuild) {
+            console.log(`[INFO]   Build Target: production`);
+        } else {
+            console.log(`[INFO]   Mode: Push only (--no-build)`);
+        }
         console.log();
 
-        const confirmed = await askForConfirmation('Continue with build and push? (y/N): ');
+        let action;
+        if (config.buildOnly) {
+            action = 'build';
+        } else if (config.noBuild) {
+            action = 'push';
+        } else {
+            action = 'build and push';
+        }
+
+        const confirmed = await askForConfirmation(`Continue with ${action}? (y/N): `);
         if (!confirmed) {
-            console.log('[INFO] Build cancelled by user');
+            console.log(`[INFO] ${action.charAt(0).toUpperCase() + action.slice(1)} cancelled by user`);
             process.exit(0);
         }
 
         console.log();
-        console.log('[INFO] Starting build and push process...');
+        console.log(`[INFO] Starting ${action} process...`);
 
-        // Build the image
-        if (!(await buildImage())) {
-            process.exit(1);
+        // Build the image (unless --no-build is specified)
+        if (!config.noBuild) {
+            if (!(await buildImage())) {
+                process.exit(1);
+            }
+        } else {
+            console.log('[INFO] Skipping build step (--no-build option)');
+
+            // Verify that the image exists when skipping build
+            const imageName = `${config.username}/pdf-tei-editor:${config.versionTag}`;
+            try {
+                if (!containerCmd) {
+                    throw new Error('Container command not available');
+                }
+                execSync(`${containerCmd} image inspect ${imageName}`, { stdio: 'ignore' });
+                console.log(`[INFO] Image ${imageName} found locally`);
+            } catch {
+                console.log(`[ERROR] Image ${imageName} not found locally. Please build it first or remove --no-build option.`);
+                process.exit(1);
+            }
         }
 
-        console.log();
-        // Login to Docker Hub
-        if (!(await registryLogin())) {
-            process.exit(1);
-        }
+        // Skip registry operations for build-only mode
+        if (!config.buildOnly) {
+            console.log();
+            // Login to Docker Hub
+            if (!(await registryLogin())) {
+                process.exit(1);
+            }
 
-        console.log();
-        // Push to Docker Hub
-        if (!(await pushImage())) {
-            process.exit(1);
-        }
+            console.log();
+            // Push to Docker Hub
+            if (!(await pushImage())) {
+                process.exit(1);
+            }
 
-        console.log();
-        console.log('[SUCCESS] 🎉 Build and push completed successfully!');
+            console.log();
+            if (config.noBuild) {
+                console.log('[SUCCESS] 🎉 Push completed successfully!');
+            } else {
+                console.log('[SUCCESS] 🎉 Build and push completed successfully!');
+            }
+        } else {
+            console.log();
+            console.log('[SUCCESS] 🎉 Build completed successfully!');
+            console.log('[INFO] Image available locally for testing:');
+            console.log(`[INFO]   ${containerCmd} run -p 8000:8000 pdf-tei-editor:${config.versionTag}`);
+            console.log(`[INFO] When ready to push, run without --build-only flag.`);
+        }
 
     } catch (err) {
         console.log('[ERROR] Unexpected error occurred:');
-        console.log('[ERROR]', err.message);
+        console.log('[ERROR]', err instanceof Error ? err.message : String(err));
         process.exit(1);
     }
 }

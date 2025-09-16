@@ -129,6 +129,7 @@ access_logger.propagate = False
 
 # Dir to place app data in
 app_db_dir = project_root / 'db'
+os.makedirs(app_db_dir, exist_ok=True)
 app.config['DB_DIR'] = app_db_dir
 
 # Initialize configuration and user management

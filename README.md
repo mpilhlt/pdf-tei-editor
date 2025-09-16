@@ -40,7 +40,8 @@ This section provides comprehensive documentation for developers working on the 
 - **[Testing Guide](docs/testing.md)** - Comprehensive testing infrastructure including unit, integration, and E2E tests
 
 ### Deployment
-- **[Docker Deployment](docs/docker-deployment.md)** - Containerized deployment options and production setup
+- **[Deployment Guide](docs/deployment.md)** - Comprehensive deployment guide for Docker, production servers, and development workflows
+- **[Docker Testdrive](docs/testdrive-docker.md)** - Quick Docker setup and configuration options
 - **[User Management](docs/user-management.md)** - Authentication system and user account management
 
 ### Technical Features

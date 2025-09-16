@@ -1,8 +1,8 @@
-# Installation
+# Installation Overview
 
-This guide covers installation and setup for development and production deployment of the PDF-TEI Editor.
+This guide provides an overview of different installation and setup options for the PDF-TEI Editor.
 
-## Quick Start with Docker
+## 🚀 Quick Testdrive with Docker
 
 **The fastest way to try PDF TEI Editor:**
 
@@ -51,68 +51,20 @@ npm run build
 # Development server (Python/Flask backend + JS frontend)
 npm start
 
-# Access at http://localhost:3001
+# Access at http://localhost:3001?dev
 ```
 
-**Development Mode**: For faster iteration, use `http://localhost:3001?dev` to load source files directly instead of the built bundle.
+**Development Mode**: `http://localhost:3001?dev`  loads source files directly instead of the built bundle.
 
-### Update Dependencies
+### Next Steps for Development
 
-When you change NPM dependencies:
+- **[Development Guide](development.md)** - Application architecture, plugin system, and development workflows
+- **[Testing Guide](testing.md)** - Running tests and validation
 
-```bash
-npm run update-importmap
-```
+## Production and Container Deployment
 
-After working on source code:
+For production deployments, containerized deployments, and comprehensive deployment options, see the [**→ Deployment Guide**](deployment.md).
 
-```bash
-npm run build
-```
-
-## Production Deployment
-
-### Local Production Server
-
-```bash
-# Start production server
-npm run start:prod
-
-# Or directly:
-./bin/start-prod 127.0.0.1 3001
-```
-
-Uses waitress WSGI server optimized for production with multiple threads.
-
-### Docker Deployment
-
-For containerized deployments, see [Docker Deployment Guide](docker-deployment.md).
-
-### Interactive Demo Setup
-
-For a complete demo deployment with automatic configuration:
-
-```bash
-# Run interactive setup (prompts for domain, SSL, admin password, API keys)
-sudo ./docker/setup-demo.sh
-```
-
-This script will:
-
-- Configure nginx with SSL certificates via Let's Encrypt
-- Set up persistent data directories per domain in `/opt/pdf-tei-editor-data/$FQDN/`
-- Create admin user with specified password
-- Configure API keys for LLamore (Gemini) and Grobid services
-- Deploy the application with production settings
-
-## Git Hooks Setup
-
-The project uses a "pre-push" git hook via [Husky](https://typicode.github.io/husky/).
-
-```bash
-npx husky init
-mkdir -p ~/.config/husky/ && echo "source .venv/bin/activate" > ~/.config/husky/init.sh && chmod +x ~/.config/husky/init.sh
-```
 
 ## LLamore Extraction Engine
 
@@ -124,15 +76,30 @@ To extract references from PDF, the [LLamore library](https://github.com/mpilhlt
 
 ## Security Considerations
 
-- **Application mode**: For production deployments, set `"application.mode": "production"` in `config/config.json`. This disables access to development files (`/src/` and `/node_modules/`) that should not be exposed in production.
-- **File uploads**: Are checked using the libmagic package to prevent malicious file content. This package depends on the native libmagic library:
-  - **Linux**: Available via package manager
-  - **Intel MacOS and Windows**: Use `uv add python-magic-bin`
-  - **Apple Silicon Macs**: Use Homebrew and `brew install libmagic`
-- **HTTPS middleware**: The application includes proper handling of X-Forwarded-Proto headers from reverse proxies.
+### File Upload Security
 
-## Next Steps
+File uploads are validated using the libmagic package to prevent malicious content. This requires the native libmagic library:
 
-- [Development Guide](development.md) - Application architecture and plugin development
-- [User Management](user-management.md) - Managing users and authentication
-- [Docker Deployment](docker-deployment.md) - Containerized deployment options
+- **Linux**: Available via package manager (`apt install libmagic1` or `yum install file-libs`)
+- **Intel MacOS and Windows**: Use `uv add python-magic-bin`
+- **Apple Silicon Macs**: Use Homebrew: `brew install libmagic`
+
+### Development vs Production
+
+- **Development mode**: Access to source files and node_modules for debugging
+- **Production mode**: Set `"application.mode": "production"` in `config/config.json` to disable development file access
+
+For comprehensive security considerations in deployment scenarios, see the [**→ Deployment Guide**](deployment.md#security-considerations).
+
+## Installation Options Summary
+
+| Option | Purpose | Guide |
+|--------|---------|-------|
+| **Docker Testdrive** | Quick evaluation and testing | [Docker Testdrive Guide](testdrive-docker.md) |
+| **Local Development** | Code development and contributions | See above + [Development Guide](development.md) |
+| **Production Deployment** | Live server deployment | [Deployment Guide](deployment.md) |
+
+## Additional Resources
+
+- **[User Management](user-management.md)** - Managing users and authentication
+- **[XML Validation](xml-validation.md)** - Schema validation system

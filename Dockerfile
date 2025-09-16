@@ -49,11 +49,15 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 # Copy source code
 COPY . .
 
-# Now install dev dependencies and run build process once
+# Now install dev dependencies and run optimized build process once
 RUN uv sync --no-cache \
     && npm install --no-audit --no-fund \
-    && npm run postinstall \
-    && npm run build \
+    # Run postinstall components that aren't covered by main build
+    && node bin/generate-importmap.js \
+    && uv run python bin/compile-sl-icons.py \
+    && uv run python bin/download-pdfjs \
+    # Run full build process (templates + bundle only, since importmap/icons done above)
+    && node bin/build.js --steps=templates,bundle \
     # Remove dev dependencies immediately after build
     && npm prune --omit=dev \
     && npm cache clean --force \

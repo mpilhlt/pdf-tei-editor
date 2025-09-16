@@ -5,12 +5,13 @@
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { SlButton, SlInput } from '../ui.js'
+ * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
 import ui, { updateUi } from '../ui.js';
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 import Plugin from '../modules/plugin-base.js';
-import { logger, client } from '../app.js';
+import { logger, client, config } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
 
 // 
@@ -25,6 +26,7 @@ import { UrlHash } from '../modules/browser-utils.js';
  * @property {SlButton} submit
  * @property {SlButton} [aboutBtn]
  * @property {HTMLDivElement} message
+ * @property {HTMLDivElement} loginMessage
  */
 
 /**
@@ -44,6 +46,9 @@ await registerTemplate('logout-button', 'logout-button.html');
 //
 
 class AuthenticationPlugin extends Plugin {
+  /**
+   * @param {PluginContext} context 
+   */
   constructor(context) {
     super(context, { 
       name: 'authentication', 
@@ -61,8 +66,6 @@ class AuthenticationPlugin extends Plugin {
     
     // Create UI elements
     createFromTemplate('login-dialog', document.body);
-    
-
     
     // Prevent dialog from closing
     ui.loginDialog.addEventListener('sl-request-close', (event) => event.preventDefault());
@@ -192,6 +195,17 @@ class AuthenticationPlugin extends Plugin {
    */
   async _showLoginDialog() {
     const dialog = ui.loginDialog;
+
+    // Load and display login message if configured
+    const loginMessage = await config.get("application.login-message")
+    if (loginMessage) {
+      dialog.loginMessage.innerHTML = loginMessage;
+      dialog.loginMessage.style.display = 'block';
+    } else {
+      dialog.loginMessage.innerHTML = '';
+      dialog.loginMessage.style.display = 'none';
+    }
+
     return new Promise((resolve, reject) => {
       dialog.submit.addEventListener('click', async () => {
         const username = dialog.username.value;
@@ -207,7 +221,7 @@ class AuthenticationPlugin extends Plugin {
           resolve(userData);
         } catch (error) {
           dialog.message.textContent = 'Wrong username or password';
-          logger.error('Login failed:', error.message);
+          logger.error('Login failed: ' + String(error))
           reject(error);
         }
       }, {once: true});

@@ -353,9 +353,19 @@ export const myPlugin = MyPlugin.getInstance();
 5. **Never call updateState() in state update endpoints** - this will raise an exception
 
 
+## Git Hooks Setup
+
+The project uses a "pre-push" git hook via [Husky](https://typicode.github.io/husky/).
+
+```bash
+npx husky init
+mkdir -p ~/.config/husky/ && echo "source .venv/bin/activate" > ~/.config/husky/init.sh && chmod +x ~/.config/husky/init.sh
+```
+
 ## Related Documentation
 
 - [Installation Guide](installation.md) - Setup and installation instructions
+- [Deployment Guide](deployment.md) - Production and containerized deployment
 - [User Management](user-management.md) - Authentication and user handling
 - [XML Validation](xml-validation.md) - Schema validation system
-- [Docker Deployment](docker-deployment.md) - Containerized deployment
+- [Testing Guide](testing.md) - Comprehensive testing infrastructure

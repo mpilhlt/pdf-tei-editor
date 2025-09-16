@@ -220,5 +220,5 @@ npm run manage user remove oldadmin
 ## Related Documentation
 
 - [Installation Guide](installation.md) - Setting up the application
-- [Docker Deployment](docker-deployment.md) - Container-based user configuration
+- [Deployment Guide](deployment.md) - Container-based user configuration and deployment
 - [Development Guide](development.md) - Technical architecture details

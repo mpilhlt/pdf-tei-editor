@@ -34,5 +34,7 @@
     "development",
     "production",
     "testing"
-  ]
+  ],
+  "application.login-message": "",
+  "application.login-message.type": "string"
 }

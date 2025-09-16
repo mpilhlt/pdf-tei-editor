@@ -19,12 +19,6 @@ cd /app
 # Create data directories
 mkdir -p data/pdf data/tei config db
 
-# Initialize database and create test user
-if [ ! -f "db/users.json" ]; then
-    echo "Initializing test database..."
-    echo '{}' > db/users.json
-fi
-
 echo "Creating test user..."
 uv run python bin/manage.py user add testuser --password testpass --fullname "Test User" 2>/dev/null || echo "Test user testuser/testpass ready"
 

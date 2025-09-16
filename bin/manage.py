@@ -23,8 +23,13 @@ def get_project_paths(args=None):
 
 def get_users_data(users_file):
     if not users_file.exists():
-        print(f"Error: {users_file} not found. Please start the application first to create it.")
-        return None
+        # Create the directory if it doesn't exist
+        users_file.parent.mkdir(parents=True, exist_ok=True)
+        # Create an empty users file
+        with open(users_file, 'w', encoding='utf-8') as f:
+            json.dump([], f, indent=2)
+        print(f"Created new users file: {users_file}")
+        return []
 
     with open(users_file, 'r', encoding='utf-8') as f:
         try:
@@ -231,8 +236,13 @@ def set_user_property(args):
 def get_config_data(config_file):
     """Gets configuration data from config.json file."""
     if not config_file.exists():
-        print(f"Error: {config_file} not found.")
-        return None
+        # Create the directory if it doesn't exist
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        # Create an empty config file
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump({}, f, indent=2)
+        print(f"Created new config file: {config_file}")
+        return {}
 
     with open(config_file, 'r', encoding='utf-8') as f:
         try:
