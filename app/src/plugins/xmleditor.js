@@ -11,7 +11,6 @@
 
 import ui from '../ui.js'
 import { endpoints as ep, app, validation, logger } from '../app.js'
-import { FiledataPlugin } from '../plugins.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'

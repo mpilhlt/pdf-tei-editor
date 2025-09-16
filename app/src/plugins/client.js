@@ -197,7 +197,8 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     }
 
     if (response.status === 200) {
-      // simple error protocol if the server doesn't return a special status code
+      // simple legacy error protocol if the server doesn't return a special status code
+      // this is deprecated and should be removed
       if (result && typeof result === "object" && result.error) {
         throw new Error(result.error);
       }
@@ -243,13 +244,9 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     }
   } while (retryAttempts-- > 0);
 
-  // notify the user about the error
-  if (error instanceof Error) {
-    const statusCode = error instanceof ApiError ? error.statusCode : 'unknown';
-    logger.warn([statusCode, error.name, error.message].toString())
-    if (!(error instanceof LockedError)) {
-      notify(error.message, 'error');
-    }
+  // notify the user about server errors
+  if (error instanceof ServerError) {
+    notify(error.message, 'error');
   }
   throw error
 }

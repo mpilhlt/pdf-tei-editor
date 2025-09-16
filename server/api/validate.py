@@ -175,7 +175,7 @@ def autocomplete_data_route():
     schema_locations = extract_schema_locations(xml_string)
     if not schema_locations:
         logger.debug('No schema location found in XML, cannot generate autocomplete data.')
-        return jsonify({"error": "No schema location found in XML document"})
+        raise ApiError("No schema location found in XML document")
     
     # For autocomplete, prioritize RelaxNG schemas, fall back to first available
     schema_info = None

@@ -363,15 +363,19 @@ async function startAutocomplete() {
     logger.debug("Loading autocomplete data for XML document")
     const xmlContent = xmlEditor.getEditorContent()
     if (xmlContent) {
-      const autocompleteData = await client.getAutocompleteData(xmlContent)
-      if (autocompleteData && !(/** @type {any} */ (autocompleteData).error)) {
-        // Resolve deduplicated references
+      try {
+        const autocompleteData = await client.getAutocompleteData(xmlContent)
+          // Resolve deduplicated references
         const resolvedData = resolveDeduplicated(autocompleteData)
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData)
         logger.debug("Autocomplete data loaded and applied")
-      } else if (autocompleteData && /** @type {any} */ (autocompleteData).error) {
-        logger.debug("No autocomplete data available: " + /** @type {any} */ (autocompleteData).error)
+      } catch (error) {
+        if (error instanceof ApiError) {
+          logger.info("No autocomplete data available: " + error.message)
+        } else {
+          throw error
+        }
       }
     }
     return true 
