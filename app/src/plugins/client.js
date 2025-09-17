@@ -417,8 +417,20 @@ async function state() {
 }
 
 /**
+ * @typedef {{
+ *  conflicts_resolved:Number,
+ *  downloads: Number,
+ *  local_deletes: Number,
+ *  local_markers_cleaned_up: Number,
+ *  remote_deletes: Number,
+ *  stale_locks_purged: Number,
+ *  uploads: Number
+ * } | { skipped: true}} ResponseType_files_sync
+ */
+
+/**
  * Synchronizes the files on the server with a (WebDav) Backend, if exists
- * @returns {Promise<Object>}
+ * @returns {Promise<ResponseType_files_sync>}
  */
 async function syncFiles() {
   return await callApi('/files/sync')

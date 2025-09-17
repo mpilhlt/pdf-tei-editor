@@ -5,11 +5,12 @@
  * Integrates with xmleditor plugin to enforce read-only state based on permissions.
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { UIPart, SlDropdown } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
+ * @import { UserData } from './authentication.js'
  */
 
 import { app, services, authentication, fileselection } from '../app.js'
@@ -54,6 +55,7 @@ let currentPermissions = {
 }
 
 // Application state reference for internal use
+/** @type {ApplicationState | null} */
 let pluginState = null
 
 
@@ -115,6 +117,7 @@ async function start(state) {
   logger.debug(`Starting plugin "${plugin.name}"`)
 }
 
+/** @type {string | null} */
 let state_xml_cache;
 let isUpdatingState = false; // Guard to prevent infinite loops 
 
@@ -240,7 +243,7 @@ async function handlePermissionChange(event) {
     await updateDocumentStatus(newVisibility, newEditability, owner || undefined)
     logger.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`)
   } catch (error) {
-    logger.error(`Failed to update document status: ${error.message}`)
+    logger.error(`Failed to update document status: ${error instanceof Error ? error.message : String(error)}`)
     // Revert dropdown to previous state
     updateStatusDropdownDisplay()
   }
