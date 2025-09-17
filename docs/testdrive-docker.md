@@ -71,7 +71,7 @@ services:
     environment:
       - APP_ADMIN_PASSWORD=secure_admin_password
       - APP_DEMO_PASSWORD=demo123
-      - APP_LOGIN_MESSAGE="<h3>Production PDF TEI Editor</h3><p>Use your company credentials to access the system.</p>"
+      - APP_LOGIN_MESSAGE="<h3>PDF TEI Editor</h3><p>Contact administrator to create an account.</p>"
       - GEMINI_API_KEY=your_gemini_api_key_here
       - GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
     volumes:
@@ -112,7 +112,6 @@ To persist your data across container restarts, mount these directories:
 ```bash
 docker run -p 8000:8000 \
   -v $(pwd)/data:/app/data \
-  -v $(pwd)/config:/app/config \
   -v $(pwd)/db:/app/db \
   -e APP_ADMIN_PASSWORD=mysecurepassword \
   -e APP_DEMO_PASSWORD=mydemopassword \
@@ -122,18 +121,9 @@ docker run -p 8000:8000 \
 ### Data Directories
 
 - **`/app/data`**: Uploaded PDFs, extracted TEI files, processed documents
-- **`/app/config`**: Application configuration files, prompts, settings
-- **`/app/db`**: User accounts, sessions, application metadata
+- **`/app/db`**: Application database files
 
 ## Production Deployment
-
-For production use, consider:
-
-1. **Use HTTPS**: Deploy behind a reverse proxy (nginx, Traefik) with SSL
-2. **Persistent Volumes**: Mount data directories to preserve work
-3. **Backup Strategy**: Regularly backup the `/app/db` and `/app/data` directories
-4. **Security**: Use strong passwords and restrict network access
-5. **Resource Limits**: Set appropriate CPU/memory limits
 
 Example with nginx reverse proxy:
 
@@ -154,35 +144,7 @@ server {
     }
 }
 ```
-
-## Available Tags
-
-| Tag | Description |
-|-----|-------------|
-| `latest` | Latest stable version from main branch |
-| `v1.x.x` | Specific version releases |
-| `branch-hash` | Development builds from feature branches |
-
-## Troubleshooting
-
-### Container Won't Start
-- Check if port 8000 is available: `lsof -i :8000`
-- Verify environment variables are set correctly
-- Check container logs: `docker logs <container_name>`
-
-### Cannot Login
-- Verify `APP_ADMIN_PASSWORD` was set when starting container
-- Try restarting container with a new password
-- Check logs for user creation messages
-
-### AI Features Not Working
-- Verify `GEMINI_API_KEY` is valid and has quota
-- Check if `GROBID_SERVER_URL` is accessible
-- Look for API error messages in container logs
-
 ## Docker Hub Repository
 
 The official Docker images are available at:
 **https://hub.docker.com/r/cboulanger/pdf-tei-editor**
-
-For issues, feature requests, or contributions, visit the GitHub repository linked on Docker Hub.
