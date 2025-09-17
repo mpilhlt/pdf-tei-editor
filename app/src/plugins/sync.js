@@ -88,6 +88,7 @@ async function install(state) {
   syncProgressWidget.style.maxWidth = '75px'
 
   // Create clickable icon element for the progress widget
+  // <sl-icon name="arrow-repeat"></sl-icon>
   syncIcon = document.createElement('sl-icon')
   syncIcon.name = 'arrow-repeat'
   syncIcon.style.marginRight = '4px'

@@ -65,7 +65,7 @@ class TestConfigCLI(unittest.TestCase):
     def run_config_command(self, *args, expect_success=True):
         """Run a config command and return the result."""
         cmd = [
-            str(self.manage_py),
+            'uv', 'run', 'python', str(self.manage_py),
             '--db-path', str(self.db_dir),
             '--config-path', str(self.config_dir),
             'config'
@@ -292,7 +292,7 @@ class TestConfigCLI(unittest.TestCase):
         """Test that help commands work properly."""
         # Main config help
         result = subprocess.run([
-            str(self.manage_py),
+            'uv', 'run', 'python', str(self.manage_py),
             '--db-path', str(self.db_dir),
             '--config-path', str(self.config_dir),
             'config', '--help'
@@ -303,7 +303,7 @@ class TestConfigCLI(unittest.TestCase):
         # Subcommand help
         for subcmd in ['get', 'set', 'delete']:
             result = subprocess.run([
-                str(self.manage_py),
+                'uv', 'run', 'python', str(self.manage_py),
                 '--db-path', str(self.db_dir),
                 '--config-path', str(self.config_dir),
                 'config', subcmd, '--help'

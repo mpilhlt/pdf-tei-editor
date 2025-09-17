@@ -8,7 +8,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert';
 import { execSync } from 'child_process';
 import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 import SmartTestRunner from '../smart-test-runner.js';
 
 const testBranch = 'test-smart-runner-' + Date.now();
@@ -156,9 +156,10 @@ test('dummy test', () => {
     writeFileSync(testFile, testContent);
     
     const runner = new SmartTestRunner();
-    const result = await runner.analyzeJSDependencies([`tests/js/${testFile.split('/').pop()}`]);
-    
-    const testKey = `tests/js/${testFile.split('/').pop()}`;
+    const testFileName = basename(testFile);
+    const result = await runner.analyzeJSDependencies([`tests/js/${testFileName}`]);
+
+    const testKey = `tests/js/${testFileName}`;
     assert(result.dependencies[testKey], 'Should analyze test file dependencies');
     
     const deps = result.dependencies[testKey].dependencies;
@@ -196,7 +197,7 @@ test('dummy test', () => {});
     try {
       const testsToRun = await runner.getTestsToRun();
       
-      const testFileName = `tests/js/${testFile.split('/').pop()}`;
+      const testFileName = `tests/js/${basename(testFile)}`;
       assert(testsToRun.js.includes(testFileName), 'Should include test that covers changed file');
       
       // Should also include always-run tests
@@ -289,9 +290,10 @@ class TestExample(unittest.TestCase):
     writeFileSync(testFile, testContent);
     
     const runner = new SmartTestRunner();
-    const result = await runner.analyzePyDependencies([`tests/py/${testFile.split('/').pop()}`]);
-    
-    const testKey = `tests/py/${testFile.split('/').pop()}`;
+    const testFileName = basename(testFile);
+    const result = await runner.analyzePyDependencies([`tests/py/${testFileName}`]);
+
+    const testKey = `tests/py/${testFileName}`;
     const testData = result.dependencies[testKey];
     
     assert(testData, 'Should analyze Python test file');
