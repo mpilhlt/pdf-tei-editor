@@ -7,7 +7,6 @@
  * @import { PluginConfig } from '../modules/plugin-manager.js'
  * @import { SlButton, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
- * @import { UserData } from '../plugins/authentication.js'
  */
 
 import { app, endpoints as ep } from '../app.js'
@@ -195,7 +194,6 @@ async function install(state) {
 async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
-  //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
@@ -210,10 +208,10 @@ async function update(state) {
     return
   }
 
-  da.deleteAll.disabled = fileselection.fileData.length < 2 // at least on PDF must be present
-  da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2
-  // @ts-ignore
-  da.deleteCurrentVersion.disabled = ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
+  da.deleteAll.disabled = !Boolean(state.pdf && state.xml) // Disable if no pdf and no xml
+  da.deleteAllVersions.disabled = ui.toolbar.xml.querySelectorAll("sl-option").length  < 2 // disable if only one document left (gold version)
+  da.deleteCurrentVersion.disabled = state.xml === ui.toolbar.xml.querySelectorAll("sl-option")?.[0].value // disable if the xml is the gold version
+
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
   // Allow duplicate only if we have an xml path
@@ -334,8 +332,8 @@ async function load({ xml, pdf }) {
   }
 
   // Set collection based on loaded documents if not already set
-  if ((pdf || xml) && !currentState.collection) {
-    for (const file of fileselection.fileData) {
+  if (currentState.fileData && (pdf || xml) && !currentState.collection) {
+    for (const file of currentState.fileData) {
       const fileData = /** @type {any} */ (file);
       // Check PDF hash
       if (pdf && fileData.pdf && fileData.pdf.hash === pdf) {
@@ -473,25 +471,27 @@ async function deleteCurrentVersion(state) {
  * @param {ApplicationState} state
  */
 async function deleteAllVersions(state) {
+  if (!currentState?.fileData) {
+    throw new Error("No file data");
+  }
   // Get the current PDF to find all its versions
   const currentPdf = ui.toolbar.pdf.value;
-  const selectedFile = fileselection.fileData.find(/** @param {any} file */ file => file.pdf.hash === currentPdf);
+  const selectedFile = currentState.fileData.find(file => file.pdf.hash === currentPdf);
 
-  const selectedFileData = /** @type {any} */ (selectedFile);
-  if (!selectedFile || !selectedFileData.versions) {
+  if (!selectedFile || !selectedFile.versions) {
     return; // No versions to delete
   }
 
   // Filter versions based on current variant selection (same logic as file-selection.js)
-  let versionsToDelete = selectedFileData.versions;
+  let versionsToDelete = selectedFile.versions;
   const { variant } = state;
 
   if (variant === "none") {
     // Delete only versions without variant_id
-    versionsToDelete = selectedFileData.versions.filter(/** @param {any} version */ version => !version.variant_id);
+    versionsToDelete = selectedFile.versions.filter(/** @param {any} version */ version => !version.variant_id);
   } else if (variant && variant !== "") {
     // Delete only versions with the selected variant_id
-    versionsToDelete = selectedFileData.versions.filter(/** @param {any} version */ version => version.variant_id === variant);
+    versionsToDelete = selectedFile.versions.filter(/** @param {any} version */ version => version.variant_id === variant);
   }
   // If variant is "" (All), delete all versions
 
@@ -519,16 +519,16 @@ async function deleteAllVersions(state) {
     
     // Find and load the appropriate gold version for the current variant
     let goldToLoad = null;
-    if (selectedFileData.gold) {
+    if (selectedFile.gold) {
       if (variant === "none") {
         // Load gold version without variant_id
-        goldToLoad = selectedFileData.gold.find(/** @param {any} gold */ gold => !gold.variant_id);
+        goldToLoad = selectedFile.gold.find(/** @param {any} gold */ gold => !gold.variant_id);
       } else if (variant && variant !== "") {
         // Load gold version with matching variant_id
-        goldToLoad = selectedFileData.gold.find(/** @param {any} gold */ gold => gold.variant_id === variant);
+        goldToLoad = selectedFile.gold.find(/** @param {any} gold */ gold => gold.variant_id === variant);
       } else {
         // Load first available gold version
-        goldToLoad = selectedFileData.gold[0];
+        goldToLoad = selectedFile.gold[0];
       }
     }
     
@@ -898,11 +898,11 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
   }
 
   // update document: <edition>
-  if (edition) {
+  if (edition && currentState?.fileData) {
     const versionName = edition.title
     const editionTitleElements = xmlDoc.querySelectorAll('edition > title')
     const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName)
-    const nameExistsInVersions = fileselection.fileData.some(/** @param {any} file */ file => file.label === versionName)
+    const nameExistsInVersions = currentState.fileData.some(file => file.label === versionName)
     if (nameExistsInDoc || nameExistsInVersions) {
       throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
     }

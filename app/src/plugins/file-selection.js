@@ -37,11 +37,7 @@ const plugin = {
 
   install,
   state: {
-    update,
-    /** @type {(data: FileListItem[]) => void} */
-    changeFileData: data => {
-      fileData = data;
-    }
+    update
   }
 }
 
