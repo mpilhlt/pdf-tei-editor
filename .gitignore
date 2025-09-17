@@ -19,13 +19,6 @@ pdfjs
 # Debug logs
 log/
 
-# Ignore data files by default
-data/*
-# But not these specific directories/files
-!data/pdf/example/
-!data/tei/example/
-!data/versions/.gitignore
-
 # Smart test runner cache
 tests/test-dependencies.json
 

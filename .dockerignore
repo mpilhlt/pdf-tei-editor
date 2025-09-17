@@ -46,6 +46,7 @@ gunicorn.txt
 data/webdav-data/
 data/webdav-data/**
 data/versions/
+data/versions/**
 schema/cache/
 
 # Temporary and backup files
