@@ -100,7 +100,7 @@ COPY --from=builder /app/config /app/config
 RUN sed -i 's/"application.mode": "development"/"application.mode": "production"/' /app/config/config.json
 COPY --from=builder /app/bin /app/bin
 COPY --from=builder /app/schema /app/schema
-COPY --from=builder /app/data /app/data
+COPY --from=builder /app/demo/data /app/data
 COPY --from=builder /app/package.json /app/package.json
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 
