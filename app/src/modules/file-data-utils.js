@@ -72,13 +72,21 @@
  * @property {VersionFileData[]} versions - Array of version files
  */
 
+/**
+ * @typedef {object} LookupItem
+ * @property {"version" | "gold"} type
+ * @property {TeiFileData} item
+ * @property {FileListItem} file
+ * @property {string} label
+ */
+
 // Global lookup index for efficient hash-based queries
 let hashLookupIndex = new Map();
 
 /**
  * Creates a lookup index that maps hash values directly to items
  * @param {FileListItem[]} fileData - The file data array
- * @returns {Map<string, Object>} Map of hash to item with metadata
+ * @returns {Map<string, LookupItem>} Map of hash to item with metadata
  */
 export function createHashLookupIndex(fileData) {
   const index = new Map();
@@ -129,20 +137,27 @@ export function createHashLookupIndex(fileData) {
 }
 
 /**
+ * Gets file data entry from hashLookupIndex based on any hash (PDF or XML)
+ * @param {string} hash - Hash of any file (PDF, gold, or version)
+ * @returns {LookupItem|null} Entry object with {type, item, file, label} or null if not found
+ */
+export function getFileDataByHash(hash) {
+  if (!hash) return null;
+
+  if (!hashLookupIndex || hashLookupIndex.size === 0) {
+    throw new Error('Hash lookup index not initialized. Call createHashLookupIndex() first.');
+  }
+
+  return hashLookupIndex.get(hash) || null;
+}
+
+/**
  * Gets document title/label from fileData based on any hash (PDF or XML)
  * @param {string} hash - Hash of any file (PDF, gold, or version)
  * @returns {string} Document title/label or empty string if not found
- * @throws {Error} If hash lookup index has not been created
  */
 export function getDocumentTitle(hash) {
-  if (!hash) return '';
-
-  if (!hashLookupIndex || hashLookupIndex.size === 0) {
-    console.warn('Hash lookup index not initialized. Call createHashLookupIndex() first.');
-    return ''; // Return empty string instead of throwing
-  }
-
-  const entry = hashLookupIndex.get(hash);
+  const entry = getFileDataByHash(hash);
   return entry?.label || '';
 }
 

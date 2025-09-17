@@ -6,7 +6,7 @@
 /** @import { UIPart } from '../ui.js' */
 /** @import { StatusBar } from '../modules/panels/status-bar.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
-import { PanelUtils } from '../modules/panels/index.js'
+import { PanelUtils, StatusText } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor, hasStateChanged } from '../app.js'
 import { getDocumentTitle } from '../modules/file-data-utils.js'
@@ -44,6 +44,7 @@ const pdfViewer = new PDFJSViewer('pdf-viewer')
 pdfViewer.hide()
 
 // Note: currentFile state tracking now handled via state.previousState instead of local variable
+/** @type {StatusText} */
 let titleWidget;
 
 /**
@@ -122,7 +123,8 @@ async function update(state) {
       const title = getDocumentTitle(state.pdf);
       titleWidget.text = title || 'PDF Document';
     } catch (error) {
-      logger.warn("Could not get document title:"+ String(error));
+      // ignore error
+      //logger.warn("Could not get document title:"+ String(error));
       titleWidget.text = 'PDF Document';
     }
   } else if (titleWidget) {

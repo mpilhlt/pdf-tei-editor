@@ -25,6 +25,7 @@ import * as tei_utils from '../modules/tei-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror_utils.js'
 import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 import { ApiError } from '../modules/utils.js'
+import { getFileDataByHash } from '../modules/file-data-utils.js'
 
 /**
  * plugin API
@@ -219,7 +220,6 @@ async function update(state) {
 
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xml)
-
 
   // no uploads if editor is readonly
   da.upload.disabled = state.editorReadOnly
@@ -610,7 +610,12 @@ async function downloadXml(state) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = state.xml.split('/').pop() || 'document.xml'
+
+  const fileData = getFileDataByHash(state.xml);
+  console.warn(fileData)
+  const filename = fileData?.file?.fileref || state.xml;
+  a.download = `${filename}.tei.xml`;
+
   a.click()
   URL.revokeObjectURL(url)
 }

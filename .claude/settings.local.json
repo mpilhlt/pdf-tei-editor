@@ -37,7 +37,8 @@
       "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast)",
       "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast -- --grep \"should load application without critical console errors\")",
       "Bash(xargs cat:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebSearch"
     ],
     "deny": []
   }

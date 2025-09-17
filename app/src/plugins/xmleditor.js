@@ -310,7 +310,8 @@ async function update(state) {
       titleWidget.text = title || 'XML Document';
       titleWidget.style.display = 'inline-flex';
     } catch (error) {
-      logger.warn("Could not get document title: "+ String(error));
+      // ignore error
+      //logger.warn("Could not get document title: "+ String(error));
       titleWidget.text = 'XML Document';
       titleWidget.style.display = 'inline-flex';
     }
