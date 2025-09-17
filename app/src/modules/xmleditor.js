@@ -888,7 +888,7 @@ export class XMLEditor extends EventEmitter {
           }
         }
       } catch (error) {
-        console.warn(`Error getting syntax node for DOM node: ${error.message}`);
+        console.warn(`Error getting syntax node for DOM node: ${String(error)}`);
       }
     }
 
@@ -929,7 +929,7 @@ export class XMLEditor extends EventEmitter {
           }
         }
       } catch (error) {
-        console.warn(`Error getting syntax node for DOM node: ${error.message}`);
+        console.warn(`Error getting syntax node for DOM node: ${String(error)}`);
       }
     }
 
@@ -1014,7 +1014,7 @@ export class XMLEditor extends EventEmitter {
         this.#updateMaps()
       }
     } catch (error) {
-      console.warn("Linking DOM and syntax tree failed:", error.message)
+      console.warn("Linking DOM and syntax tree failed:", String(error))
     }
 
     // once we at least tried to synchronize, we can mark the editor as ready
@@ -1075,7 +1075,7 @@ export class XMLEditor extends EventEmitter {
         }
         xml = await response.text();
       } catch (error) {
-        throw new Error('Error loading XML: ' + error.message);
+        throw new Error('Error loading XML: ' + String(error));
       }
     } else {
       // treat argument as xml string

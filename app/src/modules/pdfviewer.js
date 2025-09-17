@@ -393,7 +393,7 @@ export class PDFJSViewer {
           this.findController._selected.pageIdx = pageIndex;
           this.findController.scrollMatchIntoView({ element, pageIndex, matchIndex });
         } catch (error) {
-          reject("Error computing the best match:" + error.message)
+          reject("Error computing the best match:" + String(error))
         }
         resolve(true)
       }, 100)

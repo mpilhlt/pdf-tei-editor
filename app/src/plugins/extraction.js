@@ -148,7 +148,7 @@ async function extractFromPDF(state, defaultOptions={}) {
           doi = metadata.doi;
         }
       } catch (error) {
-        console.warn("Cannot get DOI from document:", error.message)
+        console.warn("Cannot get DOI from document:", String(error))
       }
       
       // Fallback to extracting DOI from filename (use state.pdf or uploaded filename)
@@ -191,11 +191,11 @@ async function extractFromPDF(state, defaultOptions={}) {
     }
     
   } catch (error) {
-    console.error(error.message);
+    console.error(String(error));
     if (error instanceof UserAbortException) {
       return // do nothing
     }
-    dialog.error(error.message)
+    dialog.error(String(error))
   }
 }
 
@@ -218,7 +218,7 @@ async function promptForExtractionOptions(options={}) {
       documentMetadata = getDocumentMetadata(xmlDoc);
     }
   } catch (error) {
-    console.warn("Could not extract document metadata:", error.message);
+    console.warn("Could not extract document metadata:", String(error));
   }
 
   // use doi if available - prioritize options parameter, then document metadata
@@ -288,7 +288,7 @@ async function promptForExtractionOptions(options={}) {
     }
   } catch (error) {
     // Handle extractor list loading gracefully
-    logger.warn("Could not load extraction engines:", error.message)
+    logger.warn("Could not load extraction engines:", String(error))
     // Disable extraction functionality when extractors can't be loaded
     modelSelectBox.disabled = true
     availableExtractors = []

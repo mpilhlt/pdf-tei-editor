@@ -31,10 +31,13 @@ import { UrlHash } from '../modules/browser-utils.js';
 
 /**
  * @typedef {Object} UserData 
- * @param {string} username
- * @param {string} fullname
- * @param {string[]} roles
- * @param {string} [sessionId]
+ * @property {string} username
+ * @property {string} fullname
+ * @property {string[]} roles
+ */
+
+/**
+ * @typedef { UserData & {sessionId: string} } AuthenticationData
  */
 
 // Register templates
@@ -118,26 +121,27 @@ class AuthenticationPlugin extends Plugin {
   /**
    * Checks if the user is authenticated. If not, shows a login dialog
    * and returns a promise that resolves only after a successful login.
-   * @returns {Promise<UserData>} the userdata
+   * @returns {Promise<UserData>} the authentication status data
    */
   async ensureAuthenticated() {
-    let userData;
+    /** @type {AuthenticationData} */
+    let authData;
     try {
-      userData = await client.status();
+      authData = await client.status();
     } catch (error) {
       // Not authenticated, proceed to show login dialog
-      userData = await this._showLoginDialog();
+       authData = await this._showLoginDialog();
     }
     
     // Only update sessionId if userData contains one (from login), not from status check
-    const stateUpdate = { user: userData };
-    if (userData.sessionId) {
+    const stateUpdate = { user: authData };
+    if (authData.sessionId) {
       // @ts-ignore
-      stateUpdate.sessionId = userData.sessionId;
+      stateUpdate.sessionId = authData.sessionId;
     }
     
     await this.dispatchStateChange(stateUpdate);
-    return userData;
+    return authData;
   }
 
   /**
@@ -145,7 +149,7 @@ class AuthenticationPlugin extends Plugin {
    * @returns {UserData|null}
    */
   getUser() {
-    return this.state?.user;
+    return this.state?.user || null;
   }
 
   /**
@@ -159,7 +163,7 @@ class AuthenticationPlugin extends Plugin {
         user: userData
       });
     } catch (error) {
-      logger.error("Error logging in: " + error.message);
+      logger.error("Error logging in: " + String(error));
     }
   }
 
@@ -190,8 +194,7 @@ class AuthenticationPlugin extends Plugin {
 
   /**
    * Creates and displays the login dialog.
-   * @returns {Promise<UserData>} A promise that resolves on successful login with the user data.
-   * @private
+   * @returns {Promise<AuthenticationData>} A promise that resolves on successful login with the user data.
    */
   async _showLoginDialog() {
     const dialog = ui.loginDialog;
@@ -213,12 +216,12 @@ class AuthenticationPlugin extends Plugin {
         dialog.message.textContent = '';
         const passwd_hash = await this._hashPassword(password);
         try {
-          const userData = await client.login(username, passwd_hash);
-          logger.info(`Login successful for user: ${userData.username}`);
+          const authData = await client.login(username, passwd_hash);
+          logger.info(`Login successful for user: ${authData.username}`);
           dialog.hide();
           dialog.username.value = "";
           dialog.password.value = "";
-          resolve(userData);
+          resolve(authData);
         } catch (error) {
           dialog.message.textContent = 'Wrong username or password';
           logger.error('Login failed: ' + String(error))

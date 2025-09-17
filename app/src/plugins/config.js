@@ -6,7 +6,7 @@
  */
 
 /** 
- * @import { ApplicationState, Plugin } from '../app.js' 
+ * @import { PluginConfig } from '../modules/plugin-manager.js'
  */
 
 import { logger, client } from '../app.js';
@@ -23,7 +23,7 @@ const api = {
 
 /**
  * The configuration plugin definition.
- * @type {Plugin}
+ * @type {PluginConfig}
  */
 const plugin = {
   name: "config",

@@ -150,7 +150,7 @@ export class NavXmlEditor extends XMLEditor {
       this.selectByXpath(newXpath);
     } catch (error) {
       // this sometimes fails for unknown reasons
-      console.warn(error.message)
+      console.warn(String(error))
     }
   }
 

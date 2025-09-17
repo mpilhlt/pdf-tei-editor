@@ -6,13 +6,16 @@
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem } from '../ui.js'
+ * @import { FileListItem } from '../modules/file-data-utils.js'
  */
 
 /**
+ * The button to trigger the file drawer 
  * @typedef {object} fileDrawerTriggerPart
  */
 
 /**
+ * The file drawer 
  * @typedef {object} fileDrawerPart  
  * @property {SlSelect} variantSelect
  * @property {SlInput} labelFilter
@@ -21,7 +24,7 @@
  */
 import ui, { updateUi, SlOption } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import { logger, updateState, hasStateChanged, services } from '../app.js'
+import { app, logger, updateState, hasStateChanged, services } from '../app.js'
 import {
   extractVariants,
   filterFileDataByVariant,
@@ -61,7 +64,8 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 // Internal state
 let currentLabelFilter = '';
 let needsTreeUpdate = false;
-let currentState = null;
+/** @type {ApplicationState} */
+let currentState;
 let isUpdatingProgrammatically = false;
 
 //
@@ -276,6 +280,7 @@ async function populateFileTree(state) {
   fileTree.innerHTML = '';
 
   // Find which nodes should be expanded based on current selections
+  /** @type { (collection:string) => boolean} */
   const shouldExpandCollection = (collectionName) => {
     if (!state.pdf && !state.xml) return false;
     const files = groupedFiles[collectionName];
@@ -291,6 +296,7 @@ async function populateFileTree(state) {
     });
   };
 
+  /** @type { (file:FileListItem) => boolean} */
   const shouldExpandPdf = (file) => {
     if (!state.pdf && !state.xml) return false;
     // Expand if this is the current PDF
@@ -521,9 +527,9 @@ async function onFileTreeSelection(event, state) {
     try {
       await services.load(filesToLoad);
     } catch (error) {
-      console.error("Error loading files:", error.message);
+      logger.error("Error loading files:" + String(error));
       // On error, reset state and reload file data (similar to file-selection.js)
-      await updateState({ collection: null, pdf: null, xml: null });
+      await app.updateState({ collection: null, pdf: null, xml: null });
       // Note: fileselection.reload() would be called here, but we don't have access to that plugin
       // The error will be handled by services.load() internally
     }

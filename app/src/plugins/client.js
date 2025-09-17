@@ -2,10 +2,18 @@
  * Plugin providing a link to server-side methods
  */
 
+/**
+ * @typedef {object} ErrorResponse 
+ * @property {string} error
+ */
+
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { PluginConfig } from '../modules/plugin-manager.js'
+ * @import { AuthenticationData } from './authentication.js'
  */
+
+
 
 import { logger, hasStateChanged } from '../app.js';
 import { notify } from '../modules/sl-utils.js';
@@ -233,7 +241,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       error = e
       if (error instanceof ConnectionError) {
         // retry in case of ConnectionError
-        logger.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`)
+        logger.warn(`Connection error: ${String(error)}. ${retryAttempts} retries remainig..`)
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000))
       } else {
@@ -245,7 +253,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 
   // notify the user about server errors
   if (error instanceof ServerError) {
-    notify(error.message, 'error');
+    notify(String(error), 'error');
   }
   throw error
 }
@@ -255,7 +263,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
  * Logs in a user
  * @param {string} username
  * @param {string} passwd_hash
- * @returns {Promise<import('./authentication.js').UserData>}
+ * @returns {Promise<AuthenticationData>}
  */
 async function login(username, passwd_hash) {
   return await callApi('/auth/login', 'POST', { username, passwd_hash });
@@ -269,21 +277,23 @@ async function logout() {
   return await callApi('/auth/logout', 'POST', {});
 }
 
+
 /**
  * Checks the authentication status of the current user
- * @returns {Promise<any>}
+ * @returns {Promise<AuthenticationData>}
  */
 async function status() {
   return await callApi('/auth/status', 'GET');
 }
 
+
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
  *
+ * @import { FileListItem } from '../modules/file-data-utils.js'
  * @param {string|null} variant - Optional variant filter to apply
  * @param {boolean} refresh - Whether to force refresh of server cache
- * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
- *  objects with keys "id", "pdf", and "tei".
+ * @returns {Promise<FileListItem[]>} - A promise that resolves to an array of file list items
  */
 async function getFileList(variant = null, refresh = false) {
   const params = {};
@@ -316,7 +326,7 @@ async function validateXml(xmlString) {
  * Gets autocomplete data for the XML schema associated with the given XML string.
  *
  * @param {string} xmlString - The XML string containing schema information.
- * @returns {Promise<object>} - A promise that resolves to the autocomplete data object,
+ * @returns {Promise<Record<string, any>>} - A promise that resolves to the autocomplete data object,
  *   which may be in a deduplicated format requiring resolution with resolveDeduplicated().
  */
 async function getAutocompleteData(xmlString) {
@@ -416,21 +426,10 @@ async function state() {
   return await callApi('/config/state')
 }
 
-/**
- * @typedef {{
- *  conflicts_resolved:Number,
- *  downloads: Number,
- *  local_deletes: Number,
- *  local_markers_cleaned_up: Number,
- *  remote_deletes: Number,
- *  stale_locks_purged: Number,
- *  uploads: Number
- * } | { skipped: true}} ResponseType_files_sync
- */
 
 /**
  * Synchronizes the files on the server with a (WebDav) Backend, if exists
- * @returns {Promise<ResponseType_files_sync>}
+ * @returns {Promise<import('./sync.js').SyncResult>}
  */
 async function syncFiles() {
   return await callApi('/files/sync')

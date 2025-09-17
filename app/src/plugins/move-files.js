@@ -134,7 +134,7 @@ async function showMoveFilesDialog(state) {
     await services.load({ pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
-    dialog.error(`Error moving files: ${error.message}`);
+    dialog.error(`Error moving files: ${String(error)}`);
   } finally {
     ui.spinner.hide();
   }

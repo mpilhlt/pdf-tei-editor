@@ -6,16 +6,18 @@
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { SlSelect } from '../ui.js'
+ * @import { FileListItem, TeiFileData } from '../modules/file-data-utils.js'
  */
 import ui from '../ui.js'
 import { SlOption, SlDivider, updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import { app, logger, services, dialog, updateState, hasStateChanged } from '../app.js'
 import { FiledataPlugin } from '../plugins.js'
+import { groupFilesByCollection } from '../modules/file-data-utils.js'
 
 /**
  * The data about the pdf and xml files on the server
- * @type {Array<object>}
+ * @type {FileListItem[]}
  */
 let fileData = [];
 
@@ -36,6 +38,7 @@ const plugin = {
   install,
   state: {
     update,
+    /** @type {(data: FileListItem[]) => void} */
     changeFileData: data => {
       fileData = data;
     }
@@ -56,6 +59,9 @@ await registerTemplate('file-selection', 'file-selection.html');
 // Implementation
 //
 
+/** @type {ApplicationState} */
+let currentState;
+
 // API
 
 /**
@@ -70,6 +76,7 @@ async function install(state) {
   const fileSelectionControls = createFromTemplate('file-selection');
 
   // Add file selection controls to toolbar with specified priorities
+  /** @type { Record<string, Number>} */
   const controlPriorities = {
     'pdf': 10,    // High priority - essential
     'xml': 10,    // High priority - essential  
@@ -81,7 +88,7 @@ async function install(state) {
     // Ensure we're working with HTMLElement
     if (control instanceof HTMLElement) {
       const name = control.getAttribute('name');
-      const priority = controlPriorities[name] || 1;
+      const priority = (name && controlPriorities[name]) || 1;
       ui.toolbar.add(control, priority);
     }
   });
@@ -218,10 +225,9 @@ async function reload(options = {}) {
   // when reloadFileData() triggers a state update with new fileData
 }
 
-
+/** @type {Set<string>} */
 let variants
 let collections
-let currentState = null
 let isUpdatingProgrammatically = false
 let isInStateUpdateCycle = false
 
@@ -317,6 +323,7 @@ async function populateSelectboxes(state) {
 
   // Clear existing options
   for (const name of ["pdf", "xml", "diff"]) {
+    // @ts-ignore
     ui.toolbar[name].innerHTML = ""
   }
 
@@ -342,11 +349,7 @@ async function populateSelectboxes(state) {
   // If variant is "" (All), show all files
 
   // sort into groups by collection (now directly from server data)
-  const grouped_files = filteredFileData.reduce((groups, file) => {
-    const collection_name = file.collection;
-    (groups[collection_name] = groups[collection_name] || []).push(file)
-    return groups
-  }, {})
+  const grouped_files = groupFilesByCollection(filteredFileData)
 
   // save the collections in closure variable
   collections = Object.keys(grouped_files).sort()
@@ -391,6 +394,7 @@ async function populateSelectboxes(state) {
           // If variant is "" (All), show all versions
 
           // Also add gold entries if they match the variant filter
+          /** @type {TeiFileData[]} */
           let goldToShow = [];
           if (file.gold) {
             if (variant === "none") {
@@ -453,6 +457,7 @@ async function populateSelectboxes(state) {
               option.size = "small"
               option.value = version.hash;  // Use document identifier
               option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+              // @ts-ignore
               option.disabled = version.is_locked;
               ui.toolbar.diff.appendChild(option)
             });
@@ -478,7 +483,11 @@ async function onChangePdfSelection() {
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
+  /** @type {FileListItem | undefined} */
   const selectedFile = state.fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
+  if (!selectedFile) {
+    return 
+  }
   const pdf = selectedFile.pdf.hash  // Use document identifier
   const collection = selectedFile.collection
 
@@ -513,12 +522,12 @@ async function onChangePdfSelection() {
 
   if (Object.keys(filesToLoad).length > 0) {
     try {
-      await services.removeMergeView(state)
+      await services.removeMergeView()
       await app.updateState({ collection })
       await services.load(filesToLoad)
     }
     catch (error) {
-      logger.error(error.message)
+      logger.error(String(error))
       await app.updateState({ collection: null, pdf: null, xml: null })
       await reload({ refresh: true })
     }
@@ -549,13 +558,13 @@ async function onChangeXmlSelection() {
       }
 
 
-      await services.removeMergeView(state)
+      await services.removeMergeView()
       await services.load({ xml })
     } catch (error) {
-      console.error(error.message)
+      console.error(String(error))
       await reload({ refresh: true })
-      await updateState({ xml: null })
-      dialog.error(error.message)
+      await app.updateState({ xml: null })
+      dialog.error(String(error))
     }
   }
 }
@@ -565,7 +574,7 @@ async function onChangeXmlSelection() {
  */
 async function onChangeDiffSelection() {
   const state = app.getCurrentState()
-  const diff = ui.toolbar.diff.value
+  const diff = String(ui.toolbar.diff.value)
   if (diff && typeof diff == "string" && diff !== ui.toolbar.xml.value) {
     try {
       await services.showMergeView(state, diff)
@@ -573,16 +582,15 @@ async function onChangeDiffSelection() {
       console.error(error)
     }
   } else {
-    await services.removeMergeView(state)
+    await services.removeMergeView()
   }
   await app.updateState({ diff: diff })
 }
 
 /**
  * Called when the selection in the variant selectbox changes
- * @param {ApplicationState} state
  */
 async function onChangeVariantSelection() {
-  const variant = ui.toolbar.variant.value
+  const variant = String(ui.toolbar.variant.value)
   await app.updateState({ variant, xml: null })
 }

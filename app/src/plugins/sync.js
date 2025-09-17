@@ -5,7 +5,6 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { SlIcon } from '../ui.js'
- * @import { ResponseType_files_sync } from './client.js'
  */
 import ui from '../ui.js'
 import {
@@ -52,6 +51,21 @@ let syncIcon;
 //
 // Implementation
 //
+
+/**
+ * @typedef {{
+ *  conflicts_resolved?:Number,
+ *  downloads?: Number,
+ *  local_deletes?: Number,
+ *  local_markers_cleaned_up?: Number,
+ *  remote_deletes?: Number,
+ *  stale_locks_purged?: Number,
+ *  uploads?: Number,
+ *  message?: String,
+ *  skipped?: boolean
+ * }} SyncResult
+ */
+
 
 /**
  * @param {ApplicationState} state
@@ -127,7 +141,7 @@ async function update(state) {
 /**
  * Synchronizes the files on the server with the WebDAV backend, if so configured
  * @param {ApplicationState} state
- * @returns {Promise<ResponseType_files_sync|false>}
+ * @returns {Promise<SyncResult>}
  */
 async function syncFiles(state) {
   if (state.webdavEnabled) {
@@ -141,7 +155,7 @@ async function syncFiles(state) {
     try {
       const summary = await client.syncFiles()
       if ('skipped' in summary && summary.skipped) {
-        logger.debug("Sync skipped - no changes detected")
+        logger.debug(`Sync skipped: ${summary.message}`)
       } else {
         logger.log(`Sync completed: ${JSON.stringify(summary)}`)
       }
@@ -155,7 +169,7 @@ async function syncFiles(state) {
       }
     }
   }
-  return false
+  return {skipped: true, message: "WebDav not enabled"}
 }
 
 /**

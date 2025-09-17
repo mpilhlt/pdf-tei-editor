@@ -107,10 +107,10 @@ async function start() {
     if (pdf !== null) {
       // lod the documents
       try {
-        await services.load({ pdf, xml, diff })
+        await services.load({ pdf, xml })
       } catch (error) {
-        dialog.error(error.message)
-        logger.critical(error.message)
+        dialog.error(String(error))
+        logger.critical(String(error))
       }
     }
 
@@ -122,7 +122,7 @@ async function start() {
       try {
         await services.showMergeView(currentState, diff)
       } catch (error) {
-        logger.warn("Error loading diff view: " + error.message)
+        logger.warn("Error loading diff view: " + String(error))
       }
     } else {
       // b) validation & xpath selection
@@ -145,7 +145,6 @@ async function start() {
 
       // synchronize in the background
       sync.syncFiles(currentState).then(async (summary) => {
-        logger.info(JSON.stringify(summary))
         if (summary && !summary.skipped) {
           await app.invokePluginEndpoint(ep.filedata.reload, {refresh:true})
         }
@@ -172,7 +171,7 @@ async function start() {
 
   } catch (error) {
     ui.spinner.hide();
-    dialog.error(error instanceof Error ? error.message : String(error))
+    dialog.error(String(error))
     throw error
   }
 }

@@ -157,7 +157,7 @@ async function update(state) {
         extractorsJustCached = true
         logger.debug('Cached extractor list for floating panel')
       } catch (error) {
-        logger.warn('Failed to load extractor list:' +  error.message || error)
+        logger.warn('Failed to load extractor list:' +  String(error) || error)
         cachedExtractors = []
       }
     }
@@ -316,7 +316,7 @@ function onClickSelectionIndex() {
   try {
     xmlEditor.selectByIndex(parseInt(index))
   } catch (error) {
-    dialog.error(error.message)
+    dialog.error(String(error))
   }
 }
 

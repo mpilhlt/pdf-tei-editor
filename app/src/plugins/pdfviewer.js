@@ -111,7 +111,7 @@ async function update(state) {
       try {
         await pdfViewer.clear();
       } catch (error) {
-        logger.warn("Error clearing PDF viewer:" + error.message);
+        logger.warn("Error clearing PDF viewer:" + String(error));
       }
     }
   }
@@ -122,7 +122,7 @@ async function update(state) {
       const title = getDocumentTitle(state.pdf);
       titleWidget.text = title || 'PDF Document';
     } catch (error) {
-      logger.warn("Could not get document title:"+ error.message);
+      logger.warn("Could not get document title:"+ String(error));
       titleWidget.text = 'PDF Document';
     }
   } else if (titleWidget) {

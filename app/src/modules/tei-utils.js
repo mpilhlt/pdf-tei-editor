@@ -460,7 +460,7 @@ export function ensureRespStmtForUser(xmlDoc, username, fullName, responsibility
     }
     return created;
   } catch (error) {
-    throw new Error(`ensureRespStmtForUser failed for user ${username}: ${error.message}`);
+    throw new Error(`ensureRespStmtForUser failed for user ${username}: ${String(error)}`);
   }
 }
 

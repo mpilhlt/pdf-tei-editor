@@ -125,7 +125,7 @@ function start(state, timeoutSeconds = 60) {
         await updateState({ offline: false, editorReadOnly: editorReadOnlyState });
       }
     } catch (error) {
-      console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
+      console.warn("Error during heartbeat:", error.name, String(error), error.statusCode);
       // Handle different types of errors
       if (error instanceof TypeError) {
         // This is likely a network error (client is offline)

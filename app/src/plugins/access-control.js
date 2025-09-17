@@ -243,7 +243,7 @@ async function handlePermissionChange(event) {
     await updateDocumentStatus(newVisibility, newEditability, owner || undefined)
     logger.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`)
   } catch (error) {
-    logger.error(`Failed to update document status: ${error instanceof Error ? error.message : String(error)}`)
+    logger.error(`Failed to update document status: ${String(error)}`)
     // Revert dropdown to previous state
     updateStatusDropdownDisplay()
   }
@@ -281,7 +281,7 @@ async function computeDocumentPermissions() {
     
     logger.debug('Parsed document permissions:' + JSON.stringify(currentPermissions) )
   } catch (error) {
-    logger.error(`Error parsing document permissions: ${error.message}`)
+    logger.error(`Error parsing document permissions: ${String(error)}`)
     // Use defaults on error
     currentPermissions = {
       visibility: 'public', 
@@ -359,7 +359,7 @@ function parsePermissionsFromXmlTree(xmlTree) {
       owner
     }
   } catch (error) {
-    logger.warn(`Error parsing permissions from XML tree: ${error.message}`)
+    logger.warn(`Error parsing permissions from XML tree: ${String(error)}`)
     return {
       visibility: 'public',
       editability: 'editable',
@@ -487,7 +487,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
       owner: currentPermissions.owner
     }
   } catch (error) {
-    logger.error(`Failed to update document permissions: ${error.message}`)
+    logger.error(`Failed to update document permissions: ${String(error)}`)
     throw error
   }
 }
@@ -773,7 +773,7 @@ function checkCanEditFile(fileId) {
     
     return true
   } catch (error) {
-    logger.warn(`Error checking file access permissions: ${error.message}`)
+    logger.warn(`Error checking file access permissions: ${String(error)}`)
     // Default to allowing edit on error to avoid breaking functionality
     return true
   }

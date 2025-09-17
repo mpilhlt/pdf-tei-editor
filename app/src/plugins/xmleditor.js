@@ -172,7 +172,7 @@ async function install(state) {
         })
         view.dispatch(setDiagnostics(view.state, validDiagnostics))
       } catch (error) {
-        logger.warn("Error setting diagnostics: " + error.message)
+        logger.warn("Error setting diagnostics: " + String(error))
         // Clear diagnostics on error
         try {
           view.dispatch(setDiagnostics(view.state, []))
@@ -213,7 +213,7 @@ async function install(state) {
           teiHeaderVisible = false // Reset state after document load
           updateTeiHeaderToggleWidget()
         } catch (error) {
-          logger.debug(`Error folding teiHeader: ${error.message}`)
+          logger.debug(`Error folding teiHeader: ${String(error)}`)
         }
       } else {
         teiHeaderToggleWidget.style.display = 'none'
@@ -260,7 +260,7 @@ async function start(state) {
       })
       view.dispatch(setDiagnostics(view.state, validDiagnostics))
     } catch (error) {
-      logger.warn("Error setting XML not well-formed diagnostics: " + error.message)
+      logger.warn("Error setting XML not well-formed diagnostics: " + String(error))
       // Clear diagnostics on error
       try {
         view.dispatch(setDiagnostics(view.state, []))
@@ -283,7 +283,7 @@ async function start(state) {
     try {
       xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
     } catch (error) {
-      logger.warn("Error clearing diagnostics on well-formed XML: " + error.message)
+      logger.warn("Error clearing diagnostics on well-formed XML: " + String(error))
     }
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
@@ -310,7 +310,7 @@ async function update(state) {
       titleWidget.text = title || 'XML Document';
       titleWidget.style.display = 'inline-flex';
     } catch (error) {
-      logger.warn("Could not get document title: "+ error.message);
+      logger.warn("Could not get document title: "+ String(error));
       titleWidget.text = 'XML Document';
       titleWidget.style.display = 'inline-flex';
     }
@@ -424,7 +424,7 @@ async function saveIfDirty() {
     }
     xmlEditor.markAsClean()
   } catch (error) {
-    logger.warn(`Save failed: ${error.message}`)
+    logger.warn(`Save failed: ${String(error)}`)
   }
 
 }
@@ -482,7 +482,7 @@ function toggleTeiHeaderVisibility() {
     }
     updateTeiHeaderToggleWidget()
   } catch (error) {
-    logger.warn(`Error toggling teiHeader visibility: ${error.message}`)
+    logger.warn(`Error toggling teiHeader visibility: ${String(error)}`)
   }
 }
 

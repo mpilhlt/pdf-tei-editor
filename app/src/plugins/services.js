@@ -242,7 +242,7 @@ async function inProgress(validationPromise) {
 
 /**
  * Loads the given XML and/or PDF file(s) into the editor and viewer 
- * @param {{xml?: string, pdf?: string}} files An Object with one or more of the keys "xml" and "pdf"
+ * @param {{xml?: string | null, pdf?: string | null}} files An Object with one or more of the keys "xml" and "pdf"
  */
 async function load({ xml, pdf }) {
 
@@ -288,7 +288,7 @@ async function load({ xml, pdf }) {
               notify(`File is being edited by another user, loading in read-only mode`)
               file_is_locked = true
             } else {
-              const errorMessage = error instanceof Error ? error.message : String(error);
+              const errorMessage = String(error);
               dialog.error(errorMessage)
               throw error
             }
@@ -314,7 +314,7 @@ async function load({ xml, pdf }) {
     if (error instanceof ApiError) {
       // @ts-ignore
       if (error.status === 404) {
-        logger.warn(error.message)
+        logger.warn(String(error))
         await fileselection.reload()
         return
       }
@@ -366,14 +366,14 @@ async function startAutocomplete() {
     if (xmlContent) {
       try {
         const autocompleteData = await client.getAutocompleteData(xmlContent)
-          // Resolve deduplicated references
+        // Resolve deduplicated references
         const resolvedData = resolveDeduplicated(autocompleteData)
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData)
         logger.debug("Autocomplete data loaded and applied")
       } catch (error) {
         if (error instanceof ApiError) {
-          logger.info("No autocomplete data available: " + error.message)
+          logger.info("No autocomplete data available: " + String(error))
         } else {
           throw error
         }
@@ -381,7 +381,7 @@ async function startAutocomplete() {
     }
     return true 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = String(error);
     logger.warn("Failed to load autocomplete data: " + errorMessage)
     return false
   }
@@ -461,7 +461,7 @@ async function deleteCurrentVersion(state) {
         .catch(e => console.error(e))
     } catch (error) {
       console.error(error)
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = String(error);
       dialog.error(errorMessage)
     }
   }
@@ -544,7 +544,7 @@ async function deleteAllVersions(state) {
       .catch(e => console.error(e))
   } catch (error) {
     console.error(error)
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = String(error);
     dialog.error(errorMessage)
   } 
 }
@@ -582,7 +582,7 @@ async function deleteAll(state) {
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = String(error);
     console.error(errorMessage)
     notify(errorMessage, "warning")
   } finally {
