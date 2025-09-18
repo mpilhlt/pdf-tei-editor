@@ -16,11 +16,14 @@ export function createTestLogger(applicationMode) {
   if (isTestingMode) {
     /**
      * Logs messages for E2E testing
-     * @param {string} message - Test message identifier
+     * @param {string} message - Test message identifier (must match [A-Z_][A-Z0-9_]* pattern)
      * @param {any} [data] - Optional data to include
      */
     return function testLog(message, data = {}) {
-      console.log(`TEST: ${message}`, JSON.stringify(data));
+      if (typeof message !== 'string' || !/^[A-Z_][A-Z0-9_]*$/.test(message)) {
+        throw new Error(`testLog message must match pattern [A-Z_][A-Z0-9_]* (uppercase letters, numbers, underscores only, starting with letter or underscore): "${message}"`);
+      }
+      console.log(`TEST: ${message} ${JSON.stringify(data)}`);
     };
   } else {
     // Return no-op function for production
@@ -28,4 +31,96 @@ export function createTestLogger(applicationMode) {
       // No logging in non-test mode
     };
   }
+}
+
+/**
+ * @typedef {object} LogEntry
+ * @property {string} type
+ * @property {string} text
+ * @property {string} [message]
+ * @property {string} [value]
+ */
+
+/**
+ * Sets up enhanced console log capture for E2E tests with TEST message parsing
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @returns {any[]} Array of captured console logs with parsed TEST messages
+ */
+export function setupTestConsoleCapture(page) {
+  /** @type {LogEntry[]} */
+  const consoleLogs = [];
+
+  page.on('console', msg => {
+    if (msg.type() === 'log' || msg.type() === 'info') {
+      const text = msg.text();
+      /** @type {LogEntry} */
+      const logEntry = {
+        type: msg.type(),
+        text: text
+      };
+
+      // Parse TEST messages using regex: "TEST: MESSAGE_NAME JSON_DATA"
+      if (text.startsWith('TEST: ')) {
+        // Match pattern: TEST: followed by word characters (message), optional space and JSON data
+        const match = text.match(/^TEST:\s+([A-Z_][A-Z0-9_]*)\s*(.*)?$/);
+        if (match) {
+          logEntry.message = match[1]; // Message name (group 1)
+
+          // If there's JSON data (group 2), try to parse it
+          if (match[2] && match[2].trim()) {
+            try {
+              logEntry.value = JSON.parse(match[2].trim());
+            } catch (error) {
+              // If JSON parsing fails, store as string
+              logEntry.value = match[2].trim();
+            }
+          }
+        }
+      }
+
+      consoleLogs.push(logEntry);
+    }
+  });
+
+  return consoleLogs;
+}
+
+/**
+ * Helper function to wait for a specific TEST console message
+ * @param {any[]} consoleLogs - Array of captured console logs
+ * @param {string} message - Message to wait for (without "TEST: " prefix)
+ * @param {number} timeout - Timeout in milliseconds
+ * @returns {Promise<any>} The log entry with parsed value if available
+ */
+export async function waitForTestMessage(consoleLogs, message, timeout = 10000) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const found = consoleLogs.find(log => log.message === message);
+    if (found) {
+      return found;
+    }
+    // Poll every 100ms
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  const availableMessages = consoleLogs
+    .filter(log => log.message)
+    .map(log => `${log.message}${log.value ? ` (with value)` : ''}`);
+
+  throw new Error(`Timeout waiting for TEST message: ${message}. Available TEST messages: ${JSON.stringify(availableMessages, null, 2)}`);
+}
+
+/**
+ * Helper function to find a TEST message with specific value
+ * @param {any[]} consoleLogs - Array of captured console logs
+ * @param {string} message - Message to search for
+ * @param {any} expectedValue - Expected value to match
+ * @returns {any|null} The log entry if found, null otherwise
+ */
+export function findTestMessageWithValue(consoleLogs, message, expectedValue) {
+  return consoleLogs.find(log =>
+    log.message === message &&
+    JSON.stringify(log.value) === JSON.stringify(expectedValue)
+  ) || null;
 }

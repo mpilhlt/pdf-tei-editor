@@ -15,7 +15,7 @@ import {
   client, logger, dialog, config,
   fileselection, xmlEditor, pdfViewer,
   services, validation, authentication,
-  sync, accessControl
+  sync, accessControl, testLog
 } from '../app.js'
 import FiledataPlugin from './filedata.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
@@ -91,7 +91,7 @@ let currentState = null
 
 /**
  * Dialog for creating a new version
- * @typedef {object} newVersionDialog
+ * @typedef {object} newVersionDialogPart
  * @property {SlInput} versionName 
  * @property {SlInput} persName 
  * @property {SlInput} persId 
@@ -704,43 +704,45 @@ function getIdFromUser(userData) {
  * @param {ApplicationState} state
  */
 async function saveRevision(state) {
+  testLog('REVISION_DIALOG_OPENED');
+
   // @ts-ignore
-  const dialog = ui.newRevisionChangeDialog;
-  dialog.changeDesc.value = "Corrections"
+  const revDlg = ui.newRevisionChangeDialog;
+  revDlg.changeDesc.value = "Corrections"
   try {
     const user = authentication.getUser()
     if (user) {
       const userData = /** @type {any} */ (user);
-      dialog.persId.value = dialog.persId.value || userData.username
-      dialog.persName.value = dialog.persName.value || userData.fullname
+      revDlg.persId.value = revDlg.persId.value || userData.username
+      revDlg.persName.value = revDlg.persName.value || userData.fullname
     }
-    dialog.show()
+    revDlg.show()
     await new Promise((resolve, reject) => {
-      dialog.submit.addEventListener('click', resolve, { once: true })
-      dialog.cancel.addEventListener('click', reject, { once: true })
-      dialog.addEventListener('sl-hide', reject, { once: true })
+      revDlg.submit.addEventListener('click', resolve, { once: true })
+      revDlg.cancel.addEventListener('click', reject, { once: true })
+      revDlg.addEventListener('sl-hide', reject, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
     return
   } finally {
-    dialog.hide()
+    revDlg.hide()
   }
 
-  dialog.hide()
+  revDlg.hide()
 
   /** @type {RespStmt} */
   const respStmt = {
-    persId: dialog.persId.value,
-    persName: dialog.persName.value,
+    persId: revDlg.persId.value,
+    persName: revDlg.persName.value,
     resp: "Annotator"
   }
 
   /** @type {RevisionChange} */
   const revisionChange = {
     status: "draft",
-    persId: dialog.persId.value,
-    desc: dialog.changeDesc.value
+    persId: revDlg.persId.value,
+    desc: revDlg.changeDesc.value
   }
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
@@ -749,17 +751,24 @@ async function saveRevision(state) {
     
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
-    
+
+    testLog('REVISION_SAVED', { changeDescription: revDlg.changeDesc.value });
+
+    // Verify revision was added to XML content (self-contained for bundle removal)
+    testLog('REVISION_IN_XML_VERIFIED', {
+      changeDescription: revDlg.changeDesc.value,
+      xmlContainsRevision: xmlEditor.getXML().includes(revDlg.changeDesc.value)
+    });
+
     sync.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
 
     // dirty state
     xmlEditor.markAsClean()
-  } catch (e) {
-    console.error(e)
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    dialog.error(errorMessage)
+  } catch (error) {
+    console.error(error)
+    dialog.error(String(error))
   } finally {
     ui.toolbar.documentActions.saveRevision.disabled = false
   }
@@ -770,6 +779,7 @@ async function saveRevision(state) {
  * @param {ApplicationState} state
  */
 async function createNewVersion(state) {
+  testLog('NEW_VERSION_DIALOG_OPENED');
 
   // @ts-ignore
   const newVersiondialog = ui.newVersionDialog;
@@ -813,6 +823,8 @@ async function createNewVersion(state) {
     // save new version first
     const filedata = FiledataPlugin.getInstance()
     let { hash } = await filedata.saveXml(state.xml, /* save as new version */ true)
+
+    testLog('NEW_VERSION_CREATED', { oldHash: state.xml, newHash: hash });
 
     // update the state to load the new document
     await load({ xml: hash })

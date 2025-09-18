@@ -383,7 +383,7 @@ const saveBtn = createSingleFromTemplate('button', null, {
 - **Production**: `bin/bundle-templates.js` analyzes code and generates `templates.json`
 - **Build process**: Template bundling runs automatically during `npm run build`
 
-#### Migration from Legacy System
+#### Migration from Plugin Objects to Plugin Classes
 
 When converting existing plugins:
 
@@ -630,65 +630,7 @@ class MyPlugin extends Plugin {
 ## Browser Automation and Testing
 
 ### MCP Browser Integration
-
-The application can be automated using MCP (Model Context Protocol) browser tools for testing and interaction:
-
-- **Login credentials**: Use "user" / "user" for development testing
-- **Session persistence**: Check `sessionStorage.getItem("pdf-tei-editor.state")` - if user property is not null, already logged in
-- **Application URL**: `http://localhost:3001/index.html?dev` for development mode
-- **Shoelace components**: The UI uses Shoelace web components (`@shoelace-style/shoelace`)
-  - Form inputs are `<sl-input>` elements, not standard HTML `<input>`
-  - Buttons are `<sl-button>` elements
-  - Access form values via JavaScript: `document.querySelector('sl-input[name="username"]').value`
-  - Login form elements: `sl-input[name="username"]` and `sl-input[name="password"]`
-  - Login button: `sl-button[variant="primary"]` with text "Login"
-
-### Browser Automation Best Practices
-
-- Use JavaScript evaluation to interact with Shoelace components rather than standard form filling
-- After successful login, application shows information dialog: "Load a PDF from the dropdown on the top left"
-- Standard HTML selectors may not work with web components - use component-specific selectors
-- **Console monitoring**: The application generates detailed debug logs visible in browser dev tools, including:
-  - XML editor navigation issues (`navigatable-xmleditor.js`)
-  - TEI validation performance and errors (`tei-validation.js`)
-  - Application lifecycle events (`Logger.js`)
-  - Heartbeat system for server communication
-
-### Console Capture with MCP Browser
-
-The MCP browser tools can programmatically capture console output for debugging:
-
-```javascript
-// Set up console capture (run immediately after page load)
-window.consoleLogs = [];
-const originalMethods = {};
-['log', 'warn', 'error', 'info', 'debug'].forEach(level => {
-  originalMethods[level] = console[level];
-  console[level] = function(...args) {
-    window.consoleLogs.push({
-      level,
-      timestamp: new Date().toISOString(),
-      message: args.map(arg => 
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ')
-    });
-    originalMethods[level].apply(console, args);
-  };
-});
-```
-
-**Limitations:**
-
-- ❌ Cannot read existing console history (messages logged before capture setup)
-- ✅ Can capture new console messages after setup
-- ✅ Successfully captures application messages like validation results, performance warnings
-- ✅ Eliminates need to copy/paste console output from screenshots
-
-**Typical captured messages:**
-
-- `"Received validation results for document version 1: 3 errors."`
-- `"Validation took 22 seconds, disabling it."`
-- `"DEBUG Sending heartbeat to server to keep file lock alive"`
+Don't use MCP Browser Integration tools, they are too slow to be functional. Suggest to create a E2E test instead (see below)
 
 ### Test Logging for E2E Tests
 
@@ -714,7 +656,52 @@ testLog('VALIDATION_COMPLETED', { errors: results.errors.length, warnings: resul
 
 #### E2E Test Best Practices
 
-**Use testLog for State Verification (Preferred)**:
+**Enhanced Console Log Handling with JSON Values (Recommended)**:
+```javascript
+// Import the test logging helper functions
+import { setupTestConsoleCapture, waitForTestMessage } from '../../app/src/modules/test-logging.js';
+
+// Set up enhanced console log capture for TEST messages
+const consoleLogs = setupTestConsoleCapture(page);
+
+// Usage - wait for events and validate state data
+const uploadLog = await waitForTestMessage(consoleLogs, 'PDF_UPLOAD_COMPLETED');
+expect(uploadLog.value).toHaveProperty('filename');
+expect(uploadLog.value).toHaveProperty('originalFilename');
+
+const versionLog = await waitForTestMessage(consoleLogs, 'NEW_VERSION_CREATED');
+expect(versionLog.value.newHash).not.toBe(versionLog.value.oldHash);
+```
+
+**In Plugin Code - Pass State Through testLog**:
+```javascript
+import { testLog } from '../app.js';
+
+// Pass state data through console for test verification
+// IMPORTANT: Message names must match pattern [A-Z_][A-Z0-9_]*
+// (uppercase letters, numbers, underscores only, starting with letter or underscore)
+testLog('NEW_VERSION_CREATED', { oldHash: state.xml, newHash: hash });
+testLog('STATE_AFTER_LOGIN', currentState);
+testLog('EXTRACTION_COMPLETED', { resultHash, pdfFilename, metadata });
+
+// Format: "TEST: MESSAGE_NAME JSON_DATA"
+// Parsed with regex: /^TEST:\s+([A-Z_][A-Z0-9_]*)\s*(.*)?$/
+// Result: message=group1, value=parsed group2
+
+// CRITICAL: All data must be computed within the testLog() expression
+// This allows the entire testLog() call to be removed from production bundles
+testLog('REVISION_IN_XML_VERIFIED', {
+  changeDescription: dialog.changeDesc.value,
+  xmlContainsRevision: xmlEditor.getXML().includes(dialog.changeDesc.value)
+});
+
+// NOT this - creates dependencies that can't be easily removed:
+// const xmlContent = xmlEditor.getXML();
+// const hasRevision = xmlContent.includes(description);
+// testLog('REVISION_VERIFIED', { hasRevision });
+```
+
+**Legacy Simple Pattern**:
 ```javascript
 const testMessages = [];
 page.on('console', msg => {
@@ -752,6 +739,28 @@ await page.evaluate(() => {
 
 - **10-100x faster than DOM queries** for state verification
 - **Less flaky** than UI element timing dependencies
-- **Clear failure reasons** through structured logging
+- **Clear failure reasons** through structured logging with JSON values
 - **Maintainable** - CSS changes don't break tests
 - **Type-safe UI access** through window.ui navigation system
+- **Rich state validation** - Pass complex state objects through testLog for verification
+- **Precise timing** - Wait for specific events rather than arbitrary timeouts
+- **Better debugging** - Structured log entries with parsed values for easier troubleshooting
+
+#### Key Testing Principles
+
+1. **Never try to access browser state directly** - State objects are not exposed as globals on `window`
+2. **Use testLog to pass state data** - Plugin code can pass `currentState` or specific values through console
+3. **Use helper functions from test-logging.js** - Import `setupTestConsoleCapture` and `waitForTestMessage` for consistent parsing
+4. **Message names must match [A-Z_][A-Z0-9_]* pattern** - testLog enforces this with regex validation for reliable parsing
+5. **Wait for specific TEST messages** - More reliable than polling DOM or using fixed timeouts
+6. **Validate state transitions** - Check oldHash vs newHash to verify state changes occurred
+7. **Scope isolation** - Console logs captured in Node.js scope, browser state passed through testLog system
+8. **Self-contained testLog expressions** - All data must be computed within testLog() calls for easy bundle removal from production code
+
+## JSDoc/TypeScript Best Practices
+
+The application uses plain javascript to avoid transpilation. It stores all its type annotations in JSDOC annotations. 
+
+In order to avoid typescript errors, follow these best practices:
+
+- In `catch` blocks, use `String(error)` instead of `error.message` when the error message should be used in console messages etc. in order to avoid to have to do a type check first. 

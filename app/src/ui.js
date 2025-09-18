@@ -40,7 +40,7 @@ import './modules/panels/index.js';
  * @import {dialogPart} from './plugins/dialog.js'
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {floatingPanelPart} from './plugins/floating-panel.js'
- * @import {documentActionsPart, teiServicesPart} from './plugins/services.js'
+ * @import {newVersionDialogPart, newRevisionChangeDialogPart } from './plugins/services.js'
  * @import {extractionActionsPart} from './plugins/extraction.js' 
  * @import {infoDrawerPart} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
@@ -58,6 +58,7 @@ import './modules/panels/index.js';
  * @typedef {T & N} UIPart
  */
 
+
 /**
  * The top-level UI parts
  * @typedef {object} namedElementsTree
@@ -66,13 +67,15 @@ import './modules/panels/index.js';
  * @property {UIPart<HTMLDivElement, pdfViewerPart>} pdfViewer - The PDFJS-based PDF viewer with statusbar
  * @property {UIPart<HTMLDivElement, xmlEditorPart>} xmlEditor - The codemirror-based xml editor with statusbar
  * @property {Spinner} spinner - A spinner/blocker to inform the user about long-running processes
+ * @property {UIPart<SlDrawer, infoDrawerPart>} infoDrawer - A drawer component to display information and help
+ * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
  * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
  * @property {UIPart<SlDialog, extractionActionsPart>} extractionOptions - A dialog to choose extraction options
- * @property {UIPart<SlDrawer, infoDrawerPart>} infoDrawer - A drawer component to display information and help
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
- * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
+ * @property {UIPart<SlDialog, newVersionDialogPart>} newVersionDialog
+ * @property {UIPart<SlDialog, newRevisionChangeDialogPart>} newRevisionChangeDialog
  */
 
 /**
@@ -101,4 +104,3 @@ export default ui;
 
 // @ts-ignore
 window.ui = ui; // for debugging
-

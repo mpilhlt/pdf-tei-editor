@@ -19,7 +19,7 @@ test.describe('Authentication Workflow', () => {
   test('should complete full login and logout cycle', async ({ page }) => {
     // Set up console logging capture
     /**
-     * @type {any[]}
+     * @type {Record<string,string>[]}
      */
     const consoleLogs = [];
     page.on('console', msg => {

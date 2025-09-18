@@ -554,7 +554,7 @@ async function getCacheStatus() {
  *    The function receives a progress event object as an argument.
  * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
  *    This is a string that will be set as the `accept` attribute of the file
- * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
+ * @returns {Promise<{ type:string, filename:string, originalFilename:string } >} - A Promise that resolves with the json-deserialized result
  *    from the `fetch()` call, which must be an object, or rejects with an error.
  *    The object should contain the uploaded file's metadata, such as its path or ID.
  *    It will always contain a key "originalFilename" with the original name of the file,

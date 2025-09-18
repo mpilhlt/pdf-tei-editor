@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../state.js' 
  * @import { SlButton, SlButtonGroup, SlDialog } from '../ui.js'
  */
-import { app, client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
+import { app, client, services, dialog, fileselection, xmlEditor, updateState, testLog } from '../app.js'
 import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ui from '../ui.js'
@@ -38,7 +38,8 @@ export { api, plugin }
 export default plugin
 
 // Current state for use in event handlers
-let currentState = null
+/** @type {ApplicationState} */
+let currentState;
 
 //
 // UI
@@ -57,7 +58,7 @@ await registerTemplate('extraction-dialog', 'extraction-dialog.html');
 
 /**
  * @typedef {Object} ExtractionOptions
- * @property {string} [doi] 
+ * @property {string|null} [doi] 
  * @property {string} [filename]
  * @property {string} [collection]
  */
@@ -121,6 +122,8 @@ async function extractFromNewPdf(state) {
     return
   }
 
+  testLog('PDF_UPLOAD_COMPLETED', { originalFilename, filename, type });
+
   const doi = getDoiFromFilename(originalFilename)
   await extractFromPDF(state, { doi, filename })
 }
@@ -135,6 +138,8 @@ async function extractFromNewPdf(state) {
  */
 async function extractFromPDF(state, defaultOptions={}) {
   try {
+    testLog('EXTRACTION_STARTED', { filename: defaultOptions.filename || state.pdf, doi: defaultOptions.doi });
+
     // Check if we have either a PDF in state or a filename in options
     if(!state.pdf && !defaultOptions.filename) throw new Error("Missing PDF path")
 
@@ -185,7 +190,9 @@ async function extractFromPDF(state, defaultOptions={}) {
       
       // Load the extracted result (server now returns hashes)
       await services.load(result)
-      
+
+      testLog('EXTRACTION_COMPLETED', { resultHash: result.xml, pdfFilename: filename });
+
     } finally {
       ui.spinner.hide()
     }
@@ -205,6 +212,7 @@ async function extractFromPDF(state, defaultOptions={}) {
  * @returns {Promise<ExtractionOptions|null>}
  */
 async function promptForExtractionOptions(options={}) {
+  testLog('EXTRACTION_DIALOG_OPENED');
 
   // load instructions
   const instructionsData = await client.loadInstructions()
