@@ -246,6 +246,12 @@ def serve_src(path):
         return jsonify({"error": "Not found"}), 404
     return send_from_directory(src_root, path)
 
+# Serve from /tests during development only
+@app.route('/tests/<path:path>')
+def serve_tests(path):
+    if not is_development_mode():
+        return jsonify({"error": "Not found"}), 404
+    return send_from_directory(project_root / 'tests', path)
 
 # Serve documentation
 @app.route('/docs/<path:path>')

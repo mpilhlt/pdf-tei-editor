@@ -577,6 +577,7 @@ class E2ERunner {
      * @param {string} [options.mode] - Test mode
      * @param {boolean} [options.noRebuild] - Skip rebuild
      * @param {string} [options.grep] - Grep pattern
+     * @param {string} [options.grepInvert] - Grep invert pattern
      * @param {string[]} [options.envVars] - Environment variables for container
      * @param {Number} [options.workers] - Number of workers for parallel execution
      */
@@ -629,21 +630,14 @@ class E2ERunner {
             if (options.workers) {
                 cmd.push('--workers', String(options.workers));
             }
-            // Add test filtering based on mode
-            const mode = options.mode || 'production';
-
-            if (mode === 'production') {
-                // In production mode, skip development-only tests using --grep-invert
-                cmd.push('--grep-invert', '@dev-only');
-                console.log(`📋 Filtering tests: Skipping @dev-only tests (production mode)`);
-            } else if (mode === 'development') {
-                // In development mode, run all tests (no additional filtering)
-                console.log(`📋 Filtering tests: Running all tests (development mode)`);
-            }
-
             // Add user's grep pattern if specified
             if (options.grep) {
                 cmd.push('--grep', options.grep);
+            }
+
+            // Add user's grep-invert pattern if specified
+            if (options.grepInvert) {
+                cmd.push('--grep-invert', options.grepInvert);
             }
 
             console.log(`🚀 Executing: npx ${cmd.join(' ')}`);
@@ -692,6 +686,174 @@ class E2ERunner {
      * Run a backend test file with the containerized environment
      * @param {string} testFile - Path to the test file to run
      */
+    /**
+     * Collect all backend API test files recursively from tests/e2e
+     * @param {string} [grep] - Grep pattern to filter test names
+     * @param {string} [grepInvert] - Grep invert pattern to exclude test names
+     * @returns {Promise<string[]>} Array of test file paths
+     */
+    async collectBackendTests(grep, grepInvert) {
+        const { glob } = await import('glob');
+        const testPattern = path.join(__dirname, 'e2e', '**/*-api.test.js');
+
+        let testFiles = await glob(testPattern);
+
+        // Apply grep filtering if specified
+        if (grep) {
+            const grepRegex = new RegExp(grep, 'i');
+            testFiles = testFiles.filter(file => grepRegex.test(path.basename(file)));
+        }
+
+        // Apply grep-invert filtering if specified
+        if (grepInvert) {
+            const grepInvertRegex = new RegExp(grepInvert, 'i');
+            testFiles = testFiles.filter(file => !grepInvertRegex.test(path.basename(file)));
+        }
+
+        return testFiles;
+    }
+
+    /**
+     * Run all backend API tests in a single container session
+     * @param {Object} options - Backend test options
+     * @param {string} [options.grep] - Grep pattern to filter tests
+     * @param {string} [options.grepInvert] - Grep invert pattern to exclude tests
+     * @param {string[]} [options.envVars] - Environment variables for container
+     * @param {boolean} [options.noRebuild] - Skip container rebuild
+     */
+    async runBackendTests(options = {}) {
+        console.log('🧪 Unified E2E Runner - Backend API Tests');
+        console.log('==========================================\n');
+        console.log(`🆔 Test Run ID: ${this.testRunId}`);
+
+        try {
+            // Collect all backend test files
+            const testFiles = await this.collectBackendTests(options.grep, options.grepInvert);
+
+            if (testFiles.length === 0) {
+                console.log('⚠️ No backend test files found matching the criteria');
+                return;
+            }
+
+            console.log(`📋 Found ${testFiles.length} backend test file(s):`);
+            testFiles.forEach(file => {
+                console.log(`  - ${path.relative(projectRoot, file)}`);
+            });
+
+            if (options.grep) {
+                console.log(`🔍 Grep filter: ${options.grep}`);
+            }
+            if (options.grepInvert) {
+                console.log(`🚫 Grep invert filter: ${options.grepInvert}`);
+            }
+
+            // Start containerized environment once
+            await this.startContainer(options.noRebuild, options.envVars || []);
+
+            let passedTests = 0;
+            let failedTests = 0;
+            const failedTestDetails = [];
+
+            // Run each test file sequentially
+            for (const testFile of testFiles) {
+                const relativePath = path.relative(projectRoot, testFile);
+                console.log(`\n🧪 Running: ${relativePath}`);
+
+                try {
+                    const testProcess = spawn('node', [testFile], {
+                        stdio: 'pipe', // Capture output instead of inherit
+                        cwd: projectRoot,
+                        env: {
+                            ...process.env,
+                            ...this.getEnvironmentVars()
+                        }
+                    });
+
+                    const testResult = await new Promise((resolve) => {
+                        let stdout = '';
+                        let stderr = '';
+
+                        testProcess.stdout.on('data', (data) => {
+                            stdout += data.toString();
+                        });
+
+                        testProcess.stderr.on('data', (data) => {
+                            stderr += data.toString();
+                        });
+
+                        testProcess.on('exit', (code) => {
+                            resolve({ code, stdout, stderr });
+                        });
+
+                        testProcess.on('error', (error) => {
+                            resolve({ code: 1, stdout, stderr: error.message });
+                        });
+                    });
+
+                    // Always show test output
+                    if (testResult.stdout) {
+                        console.log(testResult.stdout);
+                    }
+                    if (testResult.stderr) {
+                        console.error(testResult.stderr);
+                    }
+
+                    if (testResult.code === 0) {
+                        passedTests++;
+                        console.log(`✅ ${relativePath} - PASSED`);
+                    } else {
+                        failedTests++;
+                        console.log(`❌ ${relativePath} - FAILED`);
+                        failedTestDetails.push({
+                            file: relativePath,
+                            exitCode: testResult.code,
+                            stderr: testResult.stderr
+                        });
+                    }
+
+                } catch (error) {
+                    failedTests++;
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.log(`❌ ${relativePath} - ERROR: ${errorMessage}`);
+                    failedTestDetails.push({
+                        file: relativePath,
+                        exitCode: 1,
+                        stderr: errorMessage
+                    });
+                }
+            }
+
+            // Cleanup container after all tests
+            await this.cleanup();
+
+            // Report final results
+            console.log('\n📊 Backend Test Results Summary');
+            console.log('==============================');
+            console.log(`✅ Passed: ${passedTests}`);
+            console.log(`❌ Failed: ${failedTests}`);
+            console.log(`📊 Total:  ${passedTests + failedTests}`);
+
+            if (failedTests > 0) {
+                console.log('\n💥 Failed Tests:');
+                failedTestDetails.forEach(failure => {
+                    console.log(`  - ${failure.file} (exit code: ${failure.exitCode})`);
+                    if (failure.stderr) {
+                        console.log(`    Error: ${failure.stderr.trim()}`);
+                    }
+                });
+                throw new Error(`${failedTests} backend test(s) failed`);
+            } else {
+                console.log('\n🎉 All backend tests passed!');
+            }
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('💥 Backend test runner failed:', errorMessage);
+            await this.cleanup();
+            throw error;
+        }
+    }
+
     async runBackendTest(testFile) {
         console.log('🧪 Unified E2E Runner - Backend Integration Test');
         console.log('=================================================\n');
@@ -780,10 +942,12 @@ class E2ERunner {
 function parseArgs(args) {
     const parsed = {
         playwright: false,
+        backend: false,
         browser: 'chromium',
         headed: false,
         debug: false,
         grep: /** @type {string | null} */ (null),
+        grepInvert: /** @type {string | null} */ (null),
         testFile: /** @type {string | null} */ (null),
         help: false,
         noRebuild: false,
@@ -803,6 +967,9 @@ function parseArgs(args) {
             case '--playwright':
                 parsed.playwright = true;
                 break;
+            case '--backend':
+                parsed.backend = true;
+                break;
             case '--browser':
                 parsed.browser = args[++i];
                 break;
@@ -814,6 +981,9 @@ function parseArgs(args) {
                 break;
             case '--grep':
                 parsed.grep = args[++i] || '';
+                break;
+            case '--grep-invert':
+                parsed.grepInvert = args[++i] || '';
                 break;
             case '--no-rebuild':
                 parsed.noRebuild = true;
@@ -865,24 +1035,30 @@ function showHelp() {
     console.log('======================================');
     console.log('');
     console.log('Usage:');
-    console.log('  # Playwright browser tests (replaces bin/test-e2e)');
+    console.log('  # Playwright browser tests');
     console.log('  node tests/e2e-runner.js --playwright [options]');
     console.log('');
-    console.log('  # Backend integration tests');
+    console.log('  # Backend API tests (all *-api.test.js files)');
+    console.log('  node tests/e2e-runner.js --backend [options]');
+    console.log('');
+    console.log('  # Single backend integration test');
     console.log('  node tests/e2e-runner.js <test-file>');
     console.log('');
-    console.log('Playwright Options:');
-    console.log('  --browser <name>   Browser to use (chromium|firefox|webkit) [default: chromium]');
-    console.log('  --headed           Run tests in headed mode (show browser)');
-    console.log('  --debug            Enable debug mode');
-    console.log('  --grep <pattern>   Run tests matching pattern');
-    console.log('  --no-rebuild       Use existing container image without rebuilding');
-    console.log('  --mode <mode>      Environment mode (production|development) [default: production]');
-    console.log('  --production       Use production mode (skip @dev-only tests)');
-    console.log('  --development      Use development mode (run all tests)');
-    console.log('  --env <var>        Environment variable to pass to container (can be used multiple times)');
+    console.log('Common Options:');
+    console.log('  --grep <pattern>     Run tests matching pattern');
+    console.log('  --grep-invert <pattern> Exclude tests matching pattern');
+    console.log('  --no-rebuild         Use existing container image without rebuilding');
+    console.log('  --env <var>          Environment variable to pass to container (can be used multiple times)');
     console.log('  --dotenv-path <path> Path to .env file to load (default: .env)');
-    console.log('  --workers <number> Number of workers (default:1, which runs the tests in sequence)');
+    console.log('');
+    console.log('Playwright Options:');
+    console.log('  --browser <name>     Browser to use (chromium|firefox|webkit) [default: chromium]');
+    console.log('  --headed             Run tests in headed mode (show browser)');
+    console.log('  --debug              Enable debug mode');
+    console.log('  --mode <mode>        Environment mode (production|development) [default: production]');
+    console.log('  --production         Use production mode');
+    console.log('  --development        Use development mode');
+    console.log('  --workers <number>   Number of workers (default:1, which runs the tests in sequence)');
     console.log('');
     console.log('Environment Variables:');
     console.log('  E2E_HOST           Host to bind container (default: localhost)');
@@ -893,24 +1069,25 @@ function showHelp() {
     console.log('  # Run Playwright tests');
     console.log('  node tests/e2e-runner.js --playwright');
     console.log('  node tests/e2e-runner.js --playwright --browser firefox --headed');
+    console.log('  node tests/e2e-runner.js --playwright --grep-invert @dev-only');
+    console.log('');
+    console.log('  # Run backend API tests');
+    console.log('  node tests/e2e-runner.js --backend');
+    console.log('  node tests/e2e-runner.js --backend --grep "file-locks"');
+    console.log('  node tests/e2e-runner.js --backend --grep-invert "extractor"');
     console.log('');
     console.log('  # Run with existing image (faster)');
     console.log('  node tests/e2e-runner.js --playwright --no-rebuild');
+    console.log('  node tests/e2e-runner.js --backend --no-rebuild');
     console.log('');
-    console.log('  # Run development mode tests (includes @dev-only tests)');
-    console.log('  node tests/e2e-runner.js --playwright --development');
-    console.log('');
-    console.log('  # Run production mode tests only (default, skips @dev-only)');
-    console.log('  node tests/e2e-runner.js --playwright --production');
-    console.log('');
-    console.log('  # Run backend integration test');
-    console.log('  node tests/e2e-runner.js tests/e2e/test-extractors.js');
+    console.log('  # Run single backend integration test');
+    console.log('  node tests/e2e-runner.js tests/e2e/file-locks-api.test.js');
     console.log('');
     console.log('  # Custom port');
     console.log('  E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug');
     console.log('');
     console.log('  # Custom environment file');
-    console.log('  node tests/e2e-runner.js --playwright --dotenv-path .env.testing');
+    console.log('  node tests/e2e-runner.js --backend --dotenv-path .env.testing');
     console.log('');
 }
 
@@ -938,16 +1115,25 @@ async function main() {
                 headed: args.headed,
                 debug: args.debug,
                 grep: args.grep || undefined,
+                grepInvert: args.grepInvert || undefined,
                 noRebuild: args.noRebuild,
                 mode: args.mode,
                 envVars: args.envVars,
                 workers: args.workers
             });
+        } else if (args.backend) {
+            // Run all backend API tests
+            await runner.runBackendTests({
+                grep: args.grep || undefined,
+                grepInvert: args.grepInvert || undefined,
+                noRebuild: args.noRebuild,
+                envVars: args.envVars
+            });
         } else if (args.testFile) {
-            // Run backend integration test
+            // Run single backend integration test
             await runner.runBackendTest(args.testFile);
         } else {
-            console.error('❌ Either --playwright or a test file must be specified');
+            console.error('❌ Either --playwright, --backend, or a test file must be specified');
             console.log('');
             showHelp();
             process.exit(1);

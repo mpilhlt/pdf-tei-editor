@@ -41,21 +41,16 @@ def session_required(f):
     """
     Decorator to ensure a session ID is present and corresponds to a valid user session.
     Also refreshes the session access time.
-    Can be bypassed during testing by setting TEST_IN_PROGRESS environment variable.
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Skip session validation during testing
-        if os.getenv('TEST_IN_PROGRESS'):
-            return f(*args, **kwargs)
-            
         session_id = get_session_id(request)
         if not session_id or not auth.get_user_by_session_id(session_id):
             return jsonify(error="Access denied: session ID missing or invalid."), 403
-        
+
         # Refresh session access time for valid sessions
         auth.update_session_access_time(session_id)
-        
+
         return f(*args, **kwargs)
     return decorated_function
 
