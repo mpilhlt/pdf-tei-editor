@@ -54,7 +54,8 @@ const plugin = {
   deps: ['file-selection'],
   install,
   state: { update },
-  validation: { inProgress }
+  validation: { inProgress },
+  shutdown
 }
 
 export { plugin, api }
@@ -238,7 +239,23 @@ async function inProgress(validationPromise) {
 }
 
 /**
- * Loads the given XML and/or PDF file(s) into the editor and viewer 
+ * Called when the application is shutting down (beforeunload)
+ * Release any file locks held by this session
+ */
+async function shutdown() {
+  if (currentState?.xml && !currentState?.editorReadOnly) {
+    try {
+      await client.releaseLock(currentState.xml);
+      logger.debug(`Released lock for file ${currentState.xml} during shutdown`);
+    } catch (error) {
+      // Don't throw during shutdown - just log the error
+      console.warn('Failed to release lock during shutdown:', String(error));
+    }
+  }
+}
+
+/**
+ * Loads the given XML and/or PDF file(s) into the editor and viewer
  * @param {{xml?: string | null, pdf?: string | null}} files An Object with one or more of the keys "xml" and "pdf"
  */
 async function load({ xml, pdf }) {

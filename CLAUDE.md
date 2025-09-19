@@ -794,6 +794,8 @@ npm run test:e2e -- --grep "failing test name"
 # 5. Keep only essential testLog() calls for test assertions (no TEST_ prefix)
 ```
 
+**Note**: HTML reports are disabled by default in this project, so no need to prepend `PLAYWRIGHT_HTML_REPORT=off` to E2E test commands.
+
 **testLog() Call Categories:**
 
 - **Essential calls**: Used by tests for validation (e.g., `PDF_UPLOAD_COMPLETED`, `NEW_VERSION_CREATED`) - keep these
