@@ -71,6 +71,13 @@ npm run test:e2e:headed     # Show browser UI
 npm run test:e2e:debug      # Debug mode
 npm run test:e2e:backend    # Backend integration tests only
 
+# Pass environment variables to E2E test containers
+npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
+npm run test:e2e -- --grep "extraction" --env GROBID_SERVER_URL
+
+# Use custom .env file for E2E tests
+npm run test:e2e -- --dotenv-path .env.testing
+
 # Run smart test runner (selects tests based on file changes)
 node tests/smart-test-runner.js --changed-files <files>
 
@@ -82,11 +89,13 @@ node tests/smart-test-runner.js --changed-files <files>
 **Smart Test Runner**: Automatically selects relevant tests based on file dependencies using `@testCovers` annotations. Supports wildcard patterns like `@testCovers app/src/*` for frontend-wide coverage.
 
 **End-to-End Tests**: Unified cross-platform E2E testing using Node.js runner (`tests/e2e-runner.js`) that handles both Playwright browser tests and backend integration tests. Features:
+
 - **Containerized testing**: Docker/Podman with multi-stage builds and layer caching
 - **Cross-platform support**: Works on Windows, macOS, and Linux (replaces Linux-only bash script)
 - **Dual test modes**: Playwright browser tests (`--playwright` flag) and backend integration tests
 - **Automatic cleanup**: Containers cleaned up, images preserved for cache efficiency
 - **Environment variables**: `E2E_HOST`, `E2E_PORT`, `E2E_CONTAINER_PORT` for flexible configuration
+- **Test environment configuration**: Support for `@env` annotations and `--env` flags to pass environment variables to test containers
 - **Integration**: Works with smart test runner via `@testCovers` annotations
 
 **UI Testing Guidelines**: E2E tests should use the UI navigation system exposed via `window.ui` (see `app/src/ui.js:103`) to efficiently access UI parts documented via JSDoc. This provides type-safe access to named DOM elements like `ui.toolbar.pdf`, `ui.dialog.message`, etc. For custom selectors, the navigation system helps identify paths to named descendants.
@@ -437,7 +446,7 @@ When converting existing plugins:
 
 - **Shoelace Component Registration**: When using new Shoelace components, ensure they are properly imported and exported in `app/src/ui.js`. Components not properly registered will have `visibility: hidden` due to the `:not(:defined)` CSS rule. Example: if using `sl-tree-item`, import `SlTreeItem` from `@shoelace-style/shoelace/dist/components/tree-item/tree-item.js` and add it to the export list. This is critical for proper component rendering.
 - **Shoelace Icon Resources**: When using Shoelace icons programmatically (via `icon` attribute or StatusText widget) where the literal `<sl-icon name="icon-name"></sl-icon>` is not present in the codebase, add a comment with the HTML literal to ensure the build system includes the icon resource: `// <sl-icon name="icon-name"></sl-icon>`. This is not needed when the icon tag already exists verbatim in templates or HTML.
-- **Debug Logging**: When adding temporary debug statements, use `console.log("DEBUG ...")` instead of `logger.debug()`. Always prefix the message with "DEBUG" to make them easily searchable and removable. Example: `console.log("DEBUG Collection in options:", options.collection);`. This allows easy filtering with browser dev tools and quick cleanup using search/replace.
+- **Debug Logging**: When adding temporary debug statements in the source code so that the user can test interactively, use `console.log("DEBUG ...")` instead of `logger.debug()`. Always prefix the message with "DEBUG" to make them easily searchable and removable. Example: `console.log("DEBUG Collection in options:", options.collection);`. This allows easy filtering with browser dev tools and quick cleanup using search/replace.
 
 ### Plugin Development Guidelines
 
@@ -630,6 +639,7 @@ class MyPlugin extends Plugin {
 ## Browser Automation and Testing
 
 ### MCP Browser Integration
+
 Don't use MCP Browser Integration tools, they are too slow to be functional. Suggest to create a E2E test instead (see below)
 
 ### Test Logging for E2E Tests
@@ -638,7 +648,7 @@ The application includes a structured test logging system for E2E tests that pro
 
 #### Implementation
 
-- **Test Logger Factory**: `app/src/modules/test-logging.js` exports `createTestLogger(applicationMode)`
+- **Test Logger Factory**: `tests/e2e/helpers/test-logging.js` exports `createTestLogger(applicationMode)`
 - **Application Integration**: `app/src/app.js` exports `testLog` function configured during startup
 - **Configuration**: Only active when `application.mode === "testing"`
 - **Docker Integration**: `docker/entrypoint-test.sh` automatically enables testing mode
@@ -657,9 +667,10 @@ testLog('VALIDATION_COMPLETED', { errors: results.errors.length, warnings: resul
 #### E2E Test Best Practices
 
 **Enhanced Console Log Handling with JSON Values (Recommended)**:
+
 ```javascript
 // Import the test logging helper functions
-import { setupTestConsoleCapture, waitForTestMessage } from '../../app/src/modules/test-logging.js';
+import { setupTestConsoleCapture, waitForTestMessage } from './helpers/test-logging.js';
 
 // Set up enhanced console log capture for TEST messages
 const consoleLogs = setupTestConsoleCapture(page);
@@ -674,6 +685,7 @@ expect(versionLog.value.newHash).not.toBe(versionLog.value.oldHash);
 ```
 
 **In Plugin Code - Pass State Through testLog**:
+
 ```javascript
 import { testLog } from '../app.js';
 
@@ -701,20 +713,8 @@ testLog('REVISION_IN_XML_VERIFIED', {
 // testLog('REVISION_VERIFIED', { hasRevision });
 ```
 
-**Legacy Simple Pattern**:
-```javascript
-const testMessages = [];
-page.on('console', msg => {
-  if (msg.text().startsWith('TEST:')) {
-    testMessages.push(msg.text());
-  }
-});
-
-// Verify specific events occurred - FAST and reliable
-expect(testMessages.find(msg => msg.includes('USER_AUTHENTICATED'))).toBeTruthy();
-```
-
 **Use window.ui for UI Interactions (Required)**:
+
 ```javascript
 // Import the UI type at the top of E2E test files
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
@@ -735,32 +735,120 @@ await page.evaluate(() => {
 // await page.locator('sl-input[name="username"]').fill('testuser');
 ```
 
-#### Performance and Reliability Benefits
+**Enable debug output from test files with E2E_DEBUG environment variable:**
 
-- **10-100x faster than DOM queries** for state verification
-- **Less flaky** than UI element timing dependencies
-- **Clear failure reasons** through structured logging with JSON values
-- **Maintainable** - CSS changes don't break tests
-- **Type-safe UI access** through window.ui navigation system
-- **Rich state validation** - Pass complex state objects through testLog for verification
-- **Precise timing** - Wait for specific events rather than arbitrary timeouts
-- **Better debugging** - Structured log entries with parsed values for easier troubleshooting
+You can use debug output liberally in the test files themselves, but output must be suppressed unless the E2E_DEBUG environment variable is set. For example, create a little helper function at the beginning of the test files:
+
+```javascript
+// 
+const DEBUG = process.env.E2E_DEBUG === 'true';
+const debugLog = (...args) => {
+  if (DEBUG) {
+    console.log('[DEBUG]', ...args);
+  }
+};
+```
+
+When debugging test failures, you can then call tests with that variable set and analyze the output:
+
+```shell
+E2E_DEBUG=true npm run test:e2e -- --grep "extraction"
+```
 
 #### Key Testing Principles
 
 1. **Never try to access browser state directly** - State objects are not exposed as globals on `window`
 2. **Use testLog to pass state data** - Plugin code can pass `currentState` or specific values through console
-3. **Use helper functions from test-logging.js** - Import `setupTestConsoleCapture` and `waitForTestMessage` for consistent parsing
+      3. **Use helper functions from tests/e2e/helpers/test-logging.js** - Import `setupTestConsoleCapture` and `waitForTestMessage` for consistent parsing
 4. **Message names must match [A-Z_][A-Z0-9_]* pattern** - testLog enforces this with regex validation for reliable parsing
 5. **Wait for specific TEST messages** - More reliable than polling DOM or using fixed timeouts
 6. **Validate state transitions** - Check oldHash vs newHash to verify state changes occurred
 7. **Scope isolation** - Console logs captured in Node.js scope, browser state passed through testLog system
 8. **Self-contained testLog expressions** - All data must be computed within testLog() calls for easy bundle removal from production code
 
+#### Debugging E2E Test Failures
+
+When fixing failing E2E tests or creating new ones:
+
+1. **Add temporary testLog() calls** to trace workflow execution and identify where tests are failing
+2. **Use TEST_ prefix for debugging calls** - All debugging testLog() calls should use message names starting with "TEST_" (e.g., `testLog('TEST_BUTTON_STATE', {...})`) to make them easily identifiable and removable after debugging
+3. **🚨 CRITICAL: Rebuild the image** using `npm run test:e2e` (not `npm run test:e2e:fast`) to include new testLog calls
+   **ANY changes to source code (including adding testLog calls) REQUIRE a full rebuild - :fast will NOT pick up source changes!**
+4. **Use extensive logging during debugging** to understand the exact failure point and state transitions
+5. **Clean up after success** - Once tests pass, remove all testLog() calls with "TEST_" prefix and keep only the minimum required for test validation
+6. **Avoid source pollution** - Don't leave debugging testLog() calls in the source code permanently
+7. **Use E2E_DEBUG environment variable in test files**  Enable debug output in E2E tests (verbose logging)
+
+**Debugging Workflow:**
+
+```bash
+# 1. Add testLog() calls to plugin source files using TEST_ prefix
+# Example: testLog('TEST_BUTTON_CLICKED', { buttonId, disabled })
+# 2. Rebuild image with new logging
+npm run test:e2e
+
+# 3. Run specific failing test with full output
+npm run test:e2e -- --grep "failing test name"
+
+# 4. Once fixed, remove all testLog() calls with TEST_ prefix
+# 5. Keep only essential testLog() calls for test assertions (no TEST_ prefix)
+```
+
+**testLog() Call Categories:**
+
+- **Essential calls**: Used by tests for validation (e.g., `PDF_UPLOAD_COMPLETED`, `NEW_VERSION_CREATED`) - keep these
+- **Debugging calls**: Use `TEST_` prefix (e.g., `TEST_STATE_UPDATE`, `TEST_BUTTON_CLICKED`) - remove after debugging
+
+**Note**: Adding `@env` annotations to test files does NOT require rebuilding the image - these are processed at runtime by the E2E runner. Only changes to application source code require rebuilding.
+
+#### Environment Variable Configuration for Tests
+
+E2E tests can specify required environment variables using `@env` annotations, which are automatically passed to the test container:
+
+```javascript
+/**
+ * E2E test requiring external services
+ * @testCovers app/src/plugins/extraction.js
+ * @testCovers server/extractors/grobid.py
+ * @env GROBID_SERVER_URL
+ * @env GEMINI_API_KEY
+ */
+test('should complete extraction workflow', async ({ page }) => {
+  // Test extraction functionality that requires external APIs
+});
+```
+
+**Command Line Usage:**
+
+```bash
+# Pass specific environment variables to test containers
+npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
+
+# Combine with test filtering
+npm run test:e2e -- --grep "extraction" --env GROBID_SERVER_URL
+
+# Environment variables are read from host environment and passed to container
+GROBID_SERVER_URL="https://api.example.com" npm run test:e2e
+
+# Enable debug output in E2E tests (verbose logging)
+E2E_DEBUG=true npm run test:e2e -- --grep "extraction"
+
+# Configure parallel vs sequential test execution
+npm run test:e2e -- --workers=1                    # Force sequential execution
+npm run test:e2e -- --workers=4                    # Force parallel execution (4 workers)
+```
+
+**Supported Formats:**
+
+- `@env VARIABLE_NAME` - Pass environment variable from host to container
+- `--env VARIABLE_NAME` - Command line equivalent for manual testing
+- Variables are automatically processed and injected into both Docker and Podman containers
+- Missing environment variables are logged as warnings but don't fail the test setup
+
 ## JSDoc/TypeScript Best Practices
 
-The application uses plain javascript to avoid transpilation. It stores all its type annotations in JSDOC annotations. 
+The application uses plain javascript to avoid transpilation. It stores all its type annotations in JSDOC annotations.
 
 In order to avoid typescript errors, follow these best practices:
 
-- In `catch` blocks, use `String(error)` instead of `error.message` when the error message should be used in console messages etc. in order to avoid to have to do a type check first. 
+- In `catch` blocks, use `String(error)` instead of `error.message` when the error message should be used in console messages etc. in order to avoid to have to do a type check first.

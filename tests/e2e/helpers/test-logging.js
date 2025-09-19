@@ -51,7 +51,8 @@ export function setupTestConsoleCapture(page) {
   const consoleLogs = [];
 
   page.on('console', msg => {
-    if (msg.type() === 'log' || msg.type() === 'info') {
+    // Capture log, info, warn, and error messages
+    if (['log', 'info', 'warn', 'error'].includes(msg.type())) {
       const text = msg.text();
       /** @type {LogEntry} */
       const logEntry = {
@@ -83,6 +84,81 @@ export function setupTestConsoleCapture(page) {
   });
 
   return consoleLogs;
+}
+
+/**
+ * Searches for error messages in console logs
+ * @param {LogEntry[]} consoleLogs - Array of captured console logs
+ * @param {string} [pattern] - Optional regex pattern to match against error text
+ * @returns {LogEntry[]} Array of error log entries matching the pattern
+ */
+export function findErrorLogs(consoleLogs, pattern) {
+  const errorLogs = consoleLogs.filter(log => log.type === 'error');
+
+  if (pattern) {
+    const regex = new RegExp(pattern, 'i');
+    return errorLogs.filter(log => regex.test(log.text));
+  }
+
+  return errorLogs;
+}
+
+/**
+ * Searches for warning messages in console logs
+ * @param {LogEntry[]} consoleLogs - Array of captured console logs
+ * @param {string} [pattern] - Optional regex pattern to match against warning text
+ * @returns {LogEntry[]} Array of warning log entries matching the pattern
+ */
+export function findWarningLogs(consoleLogs, pattern) {
+  const warningLogs = consoleLogs.filter(log => log.type === 'warn');
+
+  if (pattern) {
+    const regex = new RegExp(pattern, 'i');
+    return warningLogs.filter(log => regex.test(log.text));
+  }
+
+  return warningLogs;
+}
+
+/**
+ * Sets up automatic test failure on unexpected console errors
+ * @param {LogEntry[]} consoleLogs - Array of captured console logs
+ * @param {string[]} allowedErrorPatterns - Array of regex patterns for expected/ignorable errors
+ * @returns {() => void} Cleanup function to stop error monitoring
+ */
+export function setupErrorFailure(consoleLogs, allowedErrorPatterns = []) {
+  const checkedErrors = new Set();
+
+  // Check for unexpected errors every 500ms
+  const checkInterval = setInterval(() => {
+    const errorLogs = findErrorLogs(consoleLogs);
+
+    for (const errorLog of errorLogs) {
+      // Skip if already checked
+      if (checkedErrors.has(errorLog.text)) continue;
+
+      // Check if this error matches any allowed patterns
+      const isAllowed = allowedErrorPatterns.some(pattern => {
+        const regex = new RegExp(pattern, 'i');
+        return regex.test(errorLog.text);
+      });
+
+      if (!isAllowed) {
+        // Mark as checked to avoid duplicate failures
+        checkedErrors.add(errorLog.text);
+        clearInterval(checkInterval);
+
+        // Force test failure with detailed error info
+        throw new Error(`Unexpected console error detected: ${errorLog.text}\n\nAllowed patterns: ${JSON.stringify(allowedErrorPatterns, null, 2)}`);
+      } else {
+        // Mark allowed errors as checked too
+        checkedErrors.add(errorLog.text);
+      }
+    }
+  }, 500);
+
+  // Return cleanup function
+  return () => clearInterval(checkInterval);
 }
 
 /**

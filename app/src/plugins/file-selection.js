@@ -556,6 +556,7 @@ async function onChangeXmlSelection() {
 
       await services.removeMergeView()
       await services.load({ xml })
+      await app.updateState({ xml })
     } catch (error) {
       console.error(String(error))
       await reload({ refresh: true })

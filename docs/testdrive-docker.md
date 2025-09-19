@@ -26,7 +26,7 @@ docker run -p 8000:8000 \
   cboulanger/pdf-tei-editor:latest
 ```
 
-The application will be available at: http://localhost:8000
+The application will be available at: <http://localhost:8000>, but no ai-powered extractors are enabled, for this, see below. 
 
 ## Configuration Options
 
@@ -73,7 +73,7 @@ services:
       - APP_DEMO_PASSWORD=demo123
       - APP_LOGIN_MESSAGE="<h3>Production PDF TEI Editor</h3><p>Use your company credentials to access the system.</p>"
       - GEMINI_API_KEY=your_gemini_api_key_here
-      - GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
+      - GROBID_SERVER_URL=https://example.com/grobid
     volumes:
       - pdf_data:/app/data
       - pdf_config:/app/config
@@ -86,6 +86,7 @@ volumes:
 ```
 
 Run with:
+
 ```bash
 docker-compose up -d
 ```
@@ -95,15 +96,16 @@ docker-compose up -d
 After starting the container:
 
 ### Admin User
+
 - **Username**: `admin`
 - **Password**: Value of `APP_ADMIN_PASSWORD` or `admin` if not set
 - **Permissions**: Full access to all features
 
 ### Demo User
+
 - **Username**: `demo`
 - **Password**: Value of `APP_DEMO_PASSWORD` or `demo` if not set
 - **Permissions**: Standard user access
-
 
 ## Persistent Data
 
@@ -155,34 +157,7 @@ server {
 }
 ```
 
-## Available Tags
-
-| Tag | Description |
-|-----|-------------|
-| `latest` | Latest stable version from main branch |
-| `v1.x.x` | Specific version releases |
-| `branch-hash` | Development builds from feature branches |
-
-## Troubleshooting
-
-### Container Won't Start
-- Check if port 8000 is available: `lsof -i :8000`
-- Verify environment variables are set correctly
-- Check container logs: `docker logs <container_name>`
-
-### Cannot Login
-- Verify `APP_ADMIN_PASSWORD` was set when starting container
-- Try restarting container with a new password
-- Check logs for user creation messages
-
-### AI Features Not Working
-- Verify `GEMINI_API_KEY` is valid and has quota
-- Check if `GROBID_SERVER_URL` is accessible
-- Look for API error messages in container logs
-
 ## Docker Hub Repository
 
 The official Docker images are available at:
-**https://hub.docker.com/r/cboulanger/pdf-tei-editor**
-
-For issues, feature requests, or contributions, visit the GitHub repository linked on Docker Hub.
+**<https://hub.docker.com/r/cboulanger/pdf-tei-editor>**

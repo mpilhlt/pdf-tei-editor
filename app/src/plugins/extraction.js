@@ -116,16 +116,22 @@ async function extractFromCurrentPDF(state) {
  * @param {ApplicationState} state
  */
 async function extractFromNewPdf(state) {
-  const { type, filename, originalFilename } = await client.uploadFile();
-  if (type !== "pdf") {
-    dialog.error("Extraction is only possible from PDF files")
-    return
+  try {
+    const { type, filename, originalFilename } = await client.uploadFile();
+
+    if (type !== "pdf") {
+      dialog.error("Extraction is only possible from PDF files")
+      return
+    }
+
+    testLog('PDF_UPLOAD_COMPLETED', { originalFilename, filename, type });
+
+    const doi = getDoiFromFilename(originalFilename)
+
+    await extractFromPDF(state, { doi, filename })
+  } catch (error) {
+    throw error;
   }
-
-  testLog('PDF_UPLOAD_COMPLETED', { originalFilename, filename, type });
-
-  const doi = getDoiFromFilename(originalFilename)
-  await extractFromPDF(state, { doi, filename })
 }
 
 /**
@@ -138,8 +144,6 @@ async function extractFromNewPdf(state) {
  */
 async function extractFromPDF(state, defaultOptions={}) {
   try {
-    testLog('EXTRACTION_STARTED', { filename: defaultOptions.filename || state.pdf, doi: defaultOptions.doi });
-
     // Check if we have either a PDF in state or a filename in options
     if(!state.pdf && !defaultOptions.filename) throw new Error("Missing PDF path")
 
@@ -155,14 +159,14 @@ async function extractFromPDF(state, defaultOptions={}) {
       } catch (error) {
         console.warn("Cannot get DOI from document:", String(error))
       }
-      
+
       // Fallback to extracting DOI from filename (use state.pdf or uploaded filename)
       const filenameForDoi = state.pdf || defaultOptions.filename
       if (filenameForDoi) {
         doi = doi || getDoiFromFilename(filenameForDoi)
       }
     }
-    
+
     // Add collection, DOI, and variant to options
     const enhancedOptions = {
       collection: state.collection,
@@ -172,6 +176,7 @@ async function extractFromPDF(state, defaultOptions={}) {
     }
 
     // get DOI and instructions from user
+    testLog('EXTRACTION_OPTIONS_DIALOG_STARTING', { enhancedOptions });
     const options = await promptForExtractionOptions(enhancedOptions)
 
     ui.spinner.show('Extracting, please wait')
@@ -179,15 +184,15 @@ async function extractFromPDF(state, defaultOptions={}) {
     try {
       const filename = options.filename || state.pdf
       result = await client.extractReferences(filename, options)
-      
+
       // Force reload of file list since server has updated cache
       await fileselection.reload({refresh:true})
-      
+
       // Update state.variant with the variant_id that was used for extraction
       if (options.variant_id) {
         await app.updateState({ variant: options.variant_id })
       }
-      
+
       // Load the extracted result (server now returns hashes)
       await services.load(result)
 
@@ -196,7 +201,7 @@ async function extractFromPDF(state, defaultOptions={}) {
     } finally {
       ui.spinner.hide()
     }
-    
+
   } catch (error) {
     console.error(String(error));
     if (error instanceof UserAbortException) {
@@ -212,7 +217,6 @@ async function extractFromPDF(state, defaultOptions={}) {
  * @returns {Promise<ExtractionOptions|null>}
  */
 async function promptForExtractionOptions(options={}) {
-  testLog('EXTRACTION_DIALOG_OPENED');
 
   // load instructions
   const instructionsData = await client.loadInstructions()

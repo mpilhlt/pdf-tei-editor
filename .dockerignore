@@ -8,16 +8,12 @@ __pycache__
 *.pyo
 *.pyd
 .Python
-.venv
-venv/
 pip-log.txt
 pip-delete-this-directory.txt
 
 # Node.js
 node_modules
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # IDE and editor files
 .vscode/
@@ -37,17 +33,13 @@ Thumbs.db
 
 # Application specific
 log/
-.env
+.env*
 *.log
 nohup.out
-gunicorn.txt
 
 # Data directories (exclude user data and cache)
-data/webdav-data/
-data/webdav-data/**
-data/versions/
-data/versions/**
-schema/cache/
+data/
+db/
 
 # Temporary and backup files
 *.tmp
@@ -59,9 +51,4 @@ schema/cache/
 README.md
 docs/
 .github/
-*.md
 LICENSE
-
-# Build artifacts that will be recreated
-app/web/app.js
-app/web/templates.json

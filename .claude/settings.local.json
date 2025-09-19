@@ -39,7 +39,15 @@
       "Bash(xargs cat:*)",
       "Bash(npx tsc:*)",
       "WebSearch",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast -- --grep \"should complete full extraction workflow\" --headed)",
+      "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast -- --grep \"should complete full extraction workflow\")",
+      "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast -- --grep \"should complete full extraction workflow\" --env GROBID_SERVER_URL --env GEMINI_API_KEY)",
+      "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast -- --grep \"should create new version from existing document\")",
+      "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e -- --grep \"should create new version from existing document\")",
+      "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast -- --grep \"should save revision for existing document\")",
+      "Bash(PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast -- --grep \"Extraction Workflow\")",
+      "Bash(E2E_DEBUG=true PLAYWRIGHT_HTML_REPORT=off npm run test:e2e:fast -- --grep \"should create new version from existing document\")"
     ],
     "deny": []
   }

@@ -215,15 +215,14 @@ async function update(state) {
 
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
-  // Allow duplicate only if we have an xml path
-  da.createNewVersion.disabled = !Boolean(state.xml)
-
+  // Allow new version or revisions only if we have an xml path
+  da.saveRevision.disabled = da.createNewVersion.disabled = !Boolean(state.xml)
+  
   // Allow download only if we have an xml path
   da.download.disabled = !Boolean(state.xml)
 
   // no uploads if editor is readonly
   da.upload.disabled = state.editorReadOnly
-  //console.warn(plugin.name,"done")
 }
 
 
@@ -704,7 +703,6 @@ function getIdFromUser(userData) {
  * @param {ApplicationState} state
  */
 async function saveRevision(state) {
-  testLog('REVISION_DIALOG_OPENED');
 
   // @ts-ignore
   const revDlg = ui.newRevisionChangeDialog;
@@ -748,7 +746,7 @@ async function saveRevision(state) {
   try {
     await addTeiHeaderInfo(respStmt, undefined, revisionChange)
     if (!state.xml) throw new Error('No XML file loaded')
-    
+
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
 
@@ -779,7 +777,6 @@ async function saveRevision(state) {
  * @param {ApplicationState} state
  */
 async function createNewVersion(state) {
-  testLog('NEW_VERSION_DIALOG_OPENED');
 
   // @ts-ignore
   const newVersiondialog = ui.newVersionDialog;

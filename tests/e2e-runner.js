@@ -12,7 +12,7 @@
  *   E2E_CONTAINER_PORT - Port inside container (default: 8000)
  *
  * Usage:
- *   # Playwright browser tests (replaces bin/test-e2e)
+ *   # Playwright browser tests 
  *   node tests/e2e-runner.js --playwright [options]
  *   node tests/e2e-runner.js --playwright --browser firefox --headed
  *
@@ -28,6 +28,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
@@ -53,6 +54,10 @@ class E2ERunner {
             containerPort: parseInt(process.env.E2E_CONTAINER_PORT || '8000')
         };
 
+        // Load environment variables from .env file (will be updated by setDotenvPath if needed)
+        this.dotenvPath = path.join(projectRoot, '.env');
+        this.loadDotenv();
+
         // Detect container tool
         this.detectContainerTool();
 
@@ -60,6 +65,57 @@ class E2ERunner {
         process.on('SIGINT', () => this.cleanup());
         process.on('SIGTERM', () => this.cleanup());
         process.on('exit', () => this.cleanup());
+    }
+
+    /**
+     * Load environment variables from the configured dotenv path
+     */
+    loadDotenv() {
+        if (fs.existsSync(this.dotenvPath)) {
+            console.log(`📋 Loading environment variables from ${path.relative(projectRoot, this.dotenvPath)}...`);
+            dotenv.config({ path: this.dotenvPath });
+        } else {
+            console.log(`⚠️ Dotenv file not found at ${path.relative(projectRoot, this.dotenvPath)} - AI extraction tests may be skipped`);
+        }
+    }
+
+    /**
+     * Set a custom dotenv file path and reload environment variables
+     * @param {string} customPath - Path to the .env file to use
+     */
+    setDotenvPath(customPath) {
+        this.dotenvPath = path.isAbsolute(customPath) ? customPath : path.join(projectRoot, customPath);
+        this.loadDotenv();
+    }
+
+    /**
+     * Process environment variable specifications from @env annotations
+     * @param {string[]} envSpecs - Array of environment variable specifications
+     * @returns {string[]} Array of processed environment variables for container
+     */
+    processEnvironmentVariables(envSpecs) {
+        const envVars = [];
+
+        for (const spec of envSpecs) {
+            if (spec.includes('=')) {
+                // Assignment format: VAR_NAME="value"
+                const [varName, ...valueParts] = spec.split('=');
+                const value = valueParts.join('=').replace(/^["']|["']$/g, ''); // Remove quotes
+                envVars.push(`${varName}=${value}`);
+                console.log(`📋 Setting environment variable: ${varName}=${value}`);
+            } else {
+                // Variable name only - pass through from environment
+                const varName = spec.trim();
+                if (process.env[varName]) {
+                    envVars.push(`${varName}=${process.env[varName]}`);
+                    console.log(`📋 Passing environment variable: ${varName}`);
+                } else {
+                    console.log(`⚠️ Environment variable ${varName} not found - test may be skipped`);
+                }
+            }
+        }
+
+        return envVars;
     }
 
     /**
@@ -117,16 +173,18 @@ class E2ERunner {
 
     /**
      * Start the containerized test environment
+     * @param {boolean} noRebuild - Skip rebuilding the container image
+     * @param {string[]} envVars - Environment variables to pass to container
      */
-    async startContainer(noRebuild = false) {
+    async startContainer(noRebuild = false, envVars = []) {
         console.log('🚀 Starting containerized test environment...');
         console.log(`🆔 Test Run ID: ${this.testRunId}`);
 
         try {
             if (this.usePodman) {
-                await this.startDirectContainer(noRebuild);
+                await this.startDirectContainer(noRebuild, envVars);
             } else {
-                await this.startComposeContainer(noRebuild);
+                await this.startComposeContainer(noRebuild, envVars);
             }
 
             this.isContainerStarted = true;
@@ -144,8 +202,10 @@ class E2ERunner {
 
     /**
      * Start container using direct container commands
+     * @param {boolean} noRebuild - Skip rebuilding the container image
+     * @param {string[]} envVars - Environment variables to pass to container
      */
-    async startDirectContainer(noRebuild = false) {
+    async startDirectContainer(noRebuild = false, envVars = []) {
         // Clean up any existing containers using the configured port
         console.log('🧹 Cleaning up existing containers...');
         try {
@@ -194,7 +254,14 @@ class E2ERunner {
         // Start container with test environment
         console.log('🚀 Starting test container...');
         const portMapping = `${this.config.port}:${this.config.containerPort}`;
-        const containerId = execSync(`${this.containerCmd} run -d --name ${this.containerName} -p ${portMapping} --env FLASK_ENV=testing --env PYTHONPATH=/app --env TEST_IN_PROGRESS=1 --env KISSKI_API_KEY=dummy-key-for-testing pdf-tei-editor-test:latest`, {
+
+        // Build environment arguments from @env annotations
+        // Always set TEST_IN_PROGRESS to suppress server logs to console
+        const testEnvVars = ['TEST_IN_PROGRESS=1', ...envVars];
+        const envArgs = testEnvVars.length > 0 ? testEnvVars.map(env => `--env ${env}`).join(' ') : '';
+
+        const runCmd = `${this.containerCmd} run -d --name ${this.containerName} -p ${portMapping} ${envArgs} pdf-tei-editor-test:latest`;
+        const containerId = execSync(runCmd, {
             encoding: 'utf8',
             cwd: projectRoot
         }).trim();
@@ -203,8 +270,10 @@ class E2ERunner {
 
     /**
      * Start container using compose commands
+     * @param {boolean} noRebuild - Skip rebuilding the container image
+     * @param {string[]} envVars - Environment variables to pass to container
      */
-    async startComposeContainer(noRebuild = false) {
+    async startComposeContainer(noRebuild = false, envVars = []) {
         console.log('🏗️ Using compose commands...');
 
         // Clean up any existing containers
@@ -217,18 +286,33 @@ class E2ERunner {
             // Ignore cleanup errors
         }
 
+        // Prepare environment variables for compose
+        // Always set TEST_IN_PROGRESS to suppress server logs to console
+        const testEnvVars = ['TEST_IN_PROGRESS=1', ...envVars];
+        const env = { ...process.env };
+
+        // Set environment variables that will be passed to the container
+        for (const envVar of testEnvVars) {
+            const [key, value] = envVar.split('=', 2);
+            if (key && value !== undefined) {
+                env[key] = value;
+            }
+        }
+
         // Start the test environment
         if (noRebuild) {
             console.log('🚀 Starting test environment with compose (no rebuild)...');
             execSync(`${this.composeCmd} -f docker-compose.test.yml up --no-build -d`, {
                 stdio: 'pipe',
-                cwd: projectRoot
+                cwd: projectRoot,
+                env
             });
         } else {
             console.log('🚀 Starting test environment with compose...');
             execSync(`${this.composeCmd} -f docker-compose.test.yml up --build -d`, {
                 stdio: 'pipe',
-                cwd: projectRoot
+                cwd: projectRoot,
+                env
             });
 
             // Clean up dangling images to prevent accumulation while preserving cache
@@ -493,6 +577,8 @@ class E2ERunner {
      * @param {string} [options.mode] - Test mode
      * @param {boolean} [options.noRebuild] - Skip rebuild
      * @param {string} [options.grep] - Grep pattern
+     * @param {string[]} [options.envVars] - Environment variables for container
+     * @param {Number} [options.workers] - Number of workers for parallel execution
      */
     async runPlaywrightTests(options = {}) {
         console.log('🧪 Unified E2E Runner - Playwright Browser Tests');
@@ -524,8 +610,9 @@ class E2ERunner {
                 );
             }
 
-            // Start containerized environment
-            await this.startContainer(options.noRebuild);
+            // Process environment variables and start containerized environment
+            const processedEnvVars = this.processEnvironmentVariables(options.envVars || []);
+            await this.startContainer(options.noRebuild, processedEnvVars);
 
             // Build Playwright command
             let cmd = ['playwright', 'test'];
@@ -538,6 +625,9 @@ class E2ERunner {
             }
             if (options.debug) {
                 cmd.push('--debug');
+            }
+            if (options.workers) {
+                cmd.push('--workers', String(options.workers));
             }
             // Add test filtering based on mode
             const mode = options.mode || 'production';
@@ -697,7 +787,13 @@ function parseArgs(args) {
         testFile: /** @type {string | null} */ (null),
         help: false,
         noRebuild: false,
-        mode: 'production'  // default to production mode
+        mode: 'production',  // default to production mode
+        /** @type {string[]} */
+        envVars: [],
+        /** @type {string | null} */
+        dotenvPath: null,
+        /** @type {Number} */
+        workers: 1
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -730,6 +826,21 @@ function parseArgs(args) {
                 break;
             case '--production':
                 parsed.mode = 'production';
+                break;
+            case '--workers':
+                parsed.workers = Number(args[++i]);
+                if (isNaN(parsed.workers)) {
+                    throw new Error("--workers option must be a number")
+                }
+                break;
+            case '--env':
+                const envVar = args[++i];
+                if (envVar) {
+                    parsed.envVars.push(envVar);
+                }
+                break;
+            case '--dotenv-path':
+                parsed.dotenvPath = args[++i];
                 break;
             case '--help':
             case '-h':
@@ -769,6 +880,9 @@ function showHelp() {
     console.log('  --mode <mode>      Environment mode (production|development) [default: production]');
     console.log('  --production       Use production mode (skip @dev-only tests)');
     console.log('  --development      Use development mode (run all tests)');
+    console.log('  --env <var>        Environment variable to pass to container (can be used multiple times)');
+    console.log('  --dotenv-path <path> Path to .env file to load (default: .env)');
+    console.log('  --workers <number> Number of workers (default:1, which runs the tests in sequence)');
     console.log('');
     console.log('Environment Variables:');
     console.log('  E2E_HOST           Host to bind container (default: localhost)');
@@ -795,6 +909,9 @@ function showHelp() {
     console.log('  # Custom port');
     console.log('  E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug');
     console.log('');
+    console.log('  # Custom environment file');
+    console.log('  node tests/e2e-runner.js --playwright --dotenv-path .env.testing');
+    console.log('');
 }
 
 // Main execution
@@ -808,6 +925,11 @@ async function main() {
 
     const runner = new E2ERunner();
 
+    // Set custom dotenv path if provided
+    if (args.dotenvPath) {
+        runner.setDotenvPath(args.dotenvPath);
+    }
+
     try {
         if (args.playwright) {
             // Run Playwright browser tests
@@ -817,7 +939,9 @@ async function main() {
                 debug: args.debug,
                 grep: args.grep || undefined,
                 noRebuild: args.noRebuild,
-                mode: args.mode
+                mode: args.mode,
+                envVars: args.envVars,
+                workers: args.workers
             });
         } else if (args.testFile) {
             // Run backend integration test

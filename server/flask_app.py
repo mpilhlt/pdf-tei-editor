@@ -224,12 +224,9 @@ logger.info(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
 def log_session_id():
     if request.endpoint and request.endpoint.startswith("serve_"):
         return
-    current_app.logger.debug(f"===========================================")
-    current_app.logger.debug(f"Request: {request.endpoint} ")
-    if 'X-Session-ID' in request.headers:
-        session_id = request.headers.get('X-Session-ID')
-        current_app.logger.debug(f"Session {session_id}")
-    current_app.logger.debug(f"===========================================")
+    
+    session_id = request.headers.get('X-Session-ID', None)
+    current_app.logger.debug(f"Request: {request.endpoint}{" from session " + session_id if session_id else ''}")
 
 # Helper function to check if we're in development mode
 def is_development_mode():
