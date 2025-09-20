@@ -336,13 +336,13 @@ async function getAutocompleteData(xmlString) {
 /**
  * Saves the XML string to a file on the server, optionally as a new version
  * @param {string} xmlString 
- * @param {string} filePath 
+ * @param {string} fileId 
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<Object>}
  */
-async function saveXml(xmlString, filePath, saveAsNewVersion) {
+async function saveXml(xmlString, fileId, saveAsNewVersion) {
   return await callApi('/files/save', 'POST',
-    { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
+    { xml_string: xmlString, file_path: fileId, new_version: saveAsNewVersion });
 }
 
 /**
@@ -397,25 +397,23 @@ async function saveInstructions(instructions) {
 /**
  * Deletes all extraction document versions with the given timestamps 
  * @returns {Promise<Object>} The result object
+ * @param {string[]} fileIds
  */
-/**
- * @param {string[]} filePaths
- */
-async function deleteFiles(filePaths) {
-  if (!Array.isArray(filePaths)) {
+async function deleteFiles(fileIds) {
+  if (!Array.isArray(fileIds)) {
     throw new Error("Timestamps must be an array");
   }
-  return await callApi('/files/delete', 'POST', filePaths);
+  return await callApi('/files/delete', 'POST', fileIds);
 }
 
 /**
  * Creates a new version of a file from an uploaded file.
  * @param {string} tempFilename 
- * @param {string} filePath 
+ * @param {string} fileId 
  * @returns {Promise<Object>}
  */
-async function createVersionFromUpload(tempFilename, filePath) {
-  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
+async function createVersionFromUpload(tempFilename, fileId) {
+  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: fileId });
 }
 
 /**
@@ -480,48 +478,48 @@ async function setConfigValue(key, value) {
 
 /**
  * Sends a heartbeat to the server to keep the file lock alive.
- * @param {string} filePath The file path to send the heartbeat for
+ * @param {string} fileId The file path to send the heartbeat for
  * @returns {Promise<{status:string, cache_status:{dirty:boolean, last_modified:number|null, last_checked:number|null}}>} The response from the server 
  * @throws {Error} If the file path is not provided or if the heartbeat fails
  */
-async function sendHeartbeat(filePath) {
-  if (!filePath) {
+async function sendHeartbeat(fileId) {
+  if (!fileId) {
     throw new Error("File path is required for heartbeat");
   }
-  return await callApi('/files/heartbeat', 'POST', { file_path: filePath });
+  return await callApi('/files/heartbeat', 'POST', { file_path: fileId });
 }
 
 /**
  * Checks if a file is locked by another user.
- * @param {string} filePath The file path to check the lock for
+ * @param {string} fileId The file id to check the lock for
  * @returns {Promise<{is_locked: boolean}>} The response from the server indicating if the file is locked
  * @throws {Error} If the file path is not provided or if the lock check fails
  */
-async function checkLock(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required to check lock");
+async function checkLock(fileId) {
+  if (!fileId) {
+    throw new Error("File id is required to check lock");
   }
-  return await callApi('/files/check_lock', 'POST', { file_path: filePath });
+  return await callApi('/files/check_lock', 'POST', { file_id: fileId });
 }
 
 /**
- * @param {string} filePath
+ * @param {string} fileId
  */
-async function acquireLock(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required to check lock");
+async function acquireLock(fileId) {
+  if (!fileId) {
+    throw new Error("File id is required to check lock");
   }
-  return await callApi('/files/acquire_lock', 'POST', { file_path: filePath });
+  return await callApi('/files/acquire_lock', 'POST', { file_id: fileId });
 }
 
 /**
- * @param {string} filePath
+ * @param {string} fileId
  */
-async function releaseLock(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required to release lock");
+async function releaseLock(fileId) {
+  if (!fileId) {
+    throw new Error("File id is required to release lock");
   }
-  return await callApi('/files/release_lock', 'POST', { file_path: filePath });
+  return await callApi('/files/release_lock', 'POST', { file_id: fileId });
 }
 
 
@@ -544,7 +542,6 @@ async function getCacheStatus() {
 /**
  * Uploads a file selected by the user to a specified URL using `fetch()`.
  *
- * @author Gemini 2.0
  * @param {string} uploadUrl - The URL to which the file will be uploaded.
  * @param {object} [options={}] - Optional configuration options.
  * @param {string} [options.method='POST'] - The HTTP method to use for the upload.
@@ -554,7 +551,7 @@ async function getCacheStatus() {
  *    The function receives a progress event object as an argument.
  * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
  *    This is a string that will be set as the `accept` attribute of the file
- * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
+ * @returns {Promise<{ type:string, filename:string, originalFilename:string } >} - A Promise that resolves with the json-deserialized result
  *    from the `fetch()` call, which must be an object, or rejects with an error.
  *    The object should contain the uploaded file's metadata, such as its path or ID.
  *    It will always contain a key "originalFilename" with the original name of the file,

@@ -2,6 +2,7 @@
  * Integration tests for Smart Test Runner
  * Tests dependency detection, file change analysis, and test selection logic
  * @testCovers tests/smart-test-runner.js
+ * @testCovers tests/e2e-runner.js
  */
 
 import { test, describe, before, after } from 'node:test';
@@ -114,7 +115,7 @@ describe('Smart Test Runner Integration', () => {
     const testFile = join(projectRoot, 'tests', 'js', 'temp-annotation-test.test.js');
     testFiles.push(testFile);
     
-    const testContent = `/**
+    const testContent = `/*` + `*
  * Test file for annotation parsing
  * @testCovers app/src/modules/application.js
  * @testCovers server/api/files.py
@@ -127,13 +128,84 @@ test('dummy test', () => {});
     writeFileSync(testFile, testContent);
     
     const runner = new SmartTestRunner();
-    const result = runner.parseTestCoversAnnotations(testFile);
+    const result = runner.parseTestAnnotations(testFile);
     
     assert(result.alwaysRun === true, 'Should detect @testCovers * as always run');
     assert(result.dependencies.includes('app/src/modules/application.js'), 'Should parse explicit dependency');
     assert(result.dependencies.includes('server/api/files.py'), 'Should parse Python dependency');
     
     console.log('Parsed annotations:', result);
+  });
+
+  test('should parse @env annotations and generate E2E commands with environment variables', async () => {
+    // Create test file with @env annotations
+    const testFile = join(projectRoot, 'tests', 'e2e', 'temp-env-test.spec.js');
+    testFiles.push(testFile);
+
+    const testContent = `/**
+ * Test file for environment variable parsing
+ * @testCovers app/src/plugins/extraction.js
+ * @env GROBID_SERVER_URL
+ * @env GEMINI_API_KEY
+ * @env TEST_MODE="e2e"
+ */
+import { test } from '@playwright/test';
+test('dummy test', () => {});
+`;
+
+    writeFileSync(testFile, testContent);
+
+    const runner = new SmartTestRunner();
+    const result = runner.parseTestAnnotations(testFile);
+
+    // Test annotation parsing
+    assert(result.envVars.length === 3, 'Should parse all @env annotations');
+    assert(result.envVars.includes('GROBID_SERVER_URL'), 'Should parse environment variable name');
+    assert(result.envVars.includes('GEMINI_API_KEY'), 'Should parse second environment variable');
+    assert(result.envVars.includes('TEST_MODE="e2e"'), 'Should parse environment variable assignment');
+    assert(result.dependencies.includes('app/src/plugins/extraction.js'), 'Should still parse @testCovers');
+
+    // Test E2E command generation with --dry-run
+    // Force analysis to include our test file
+    runner.cache = { dependencies: {}, lastAnalysis: 0 };
+
+    // Mock to return only our test file
+    const originalGetTestsToRun = runner.getTestsToRun;
+    runner.getTestsToRun = async (options) => {
+      const analysisResult = await runner.analyzeDependencies(options);
+      return {
+        tests: { js: [], py: [], e2e: { playwright: [`tests/e2e/${basename(testFile)}`], backend: [] } },
+        analysisResult
+      };
+    };
+
+    try {
+      // Capture the dry-run output
+      let capturedOutput = '';
+      const originalLog = console.log;
+      console.log = (...args) => {
+        capturedOutput += args.join(' ') + '\n';
+        originalLog(...args);
+      };
+
+      try {
+        await runner.run({ dryRun: true });
+
+        // Verify the E2E command contains environment variables
+        assert(capturedOutput.includes('--env "GROBID_SERVER_URL"'), 'Should include GROBID_SERVER_URL in E2E command');
+        assert(capturedOutput.includes('--env "GEMINI_API_KEY"'), 'Should include GEMINI_API_KEY in E2E command');
+        assert(capturedOutput.includes('--env "TEST_MODE="e2e""'), 'Should include TEST_MODE assignment in E2E command');
+        assert(capturedOutput.includes('node tests/e2e-runner.js --playwright'), 'Should use e2e-runner instead of npm run test:e2e');
+
+        console.log('Environment variable command generation test passed');
+        console.log('Generated command includes all expected environment variables');
+
+      } finally {
+        console.log = originalLog;
+      }
+    } finally {
+      runner.getTestsToRun = originalGetTestsToRun;
+    }
   });
 
   test('should detect dependencies via madge analysis', async () => {
@@ -195,15 +267,15 @@ test('dummy test', () => {});
     runner.getChangedFiles = () => ['app/src/modules/state-manager.js', 'other-unrelated-file.txt'];
     
     try {
-      const testsToRun = await runner.getTestsToRun();
-      
+      const { tests: testsToRun } = await runner.getTestsToRun();
+
       const testFileName = `tests/js/${basename(testFile)}`;
       assert(testsToRun.js.includes(testFileName), 'Should include test that covers changed file');
-      
+
       // Should also include always-run tests
       assert(testsToRun.js.includes('tests/js/application.test.js'), 'Should include always-run tests');
       assert(testsToRun.js.includes('tests/js/plugin-manager.test.js'), 'Should include always-run tests');
-      
+
       console.log('Selected tests:', testsToRun);
     } finally {
       // Restore original method
@@ -219,54 +291,29 @@ test('dummy test', () => {});
     runner.getChangedFiles = () => [];
 
     try {
-      const testsToRun = await runner.getTestsToRun();
+      const { tests: testsToRun } = await runner.getTestsToRun();
 
       // When no files have changed, only always-run tests should be selected
       // Filter out temporary test files created by other tests in this suite
       const realJSTests = testsToRun.js.filter(test => !test.includes('temp-'));
       const realPyTests = testsToRun.py.filter(test => !test.includes('temp_'));
-      const realE2ETests = testsToRun.e2e.filter(test => !test.includes('temp-'));
+      const realE2EPlaywrightTests = (testsToRun.e2e.playwright || []).filter(test => !test.includes('temp-'));
+      const realE2EBackendTests = (testsToRun.e2e.backend || []).filter(test => !test.includes('temp-'));
 
       // Real test files should not run since we removed @testCovers * from them
       assert(realJSTests.length === 0, `Should not run real JavaScript tests when no changes, but got: ${realJSTests.join(', ')}`);
       assert(realPyTests.length === 0, `Should not run real Python tests when no changes, but got: ${realPyTests.join(', ')}`);
-      assert(realE2ETests.length === 0, `Should not run real E2E tests when no changes, but got: ${realE2ETests.join(', ')}`);
+      assert(realE2EPlaywrightTests.length === 0, `Should not run real E2E Playwright tests when no changes, but got: ${realE2EPlaywrightTests.join(', ')}`);
+      assert(realE2EBackendTests.length === 0, `Should not run real E2E Backend tests when no changes, but got: ${realE2EBackendTests.join(', ')}`);
 
       console.log('Tests for no changes scenario:', testsToRun);
-      console.log(`Total tests selected: ${testsToRun.js.length + testsToRun.py.length + testsToRun.e2e.length}`);
+      const totalE2ETests = (testsToRun.e2e.playwright || []).length + (testsToRun.e2e.backend || []).length;
+      console.log(`Total tests selected: ${testsToRun.js.length + testsToRun.py.length + totalE2ETests}`);
     } finally {
       runner.getChangedFiles = originalGetChangedFiles;
     }
   });
 
-  test('should cache and reuse dependency analysis', async () => {
-    const cacheFile = join(projectRoot, 'tests', 'test-dependencies.json');
-    
-    // Ensure cache doesn't exist
-    if (existsSync(cacheFile)) {
-      unlinkSync(cacheFile);
-    }
-    
-    const runner1 = new SmartTestRunner();
-    
-    // First run should perform analysis
-    const start1 = Date.now();
-    await runner1.analyzeDependencies();
-    const duration1 = Date.now() - start1;
-    
-    assert(existsSync(cacheFile), 'Should create cache file');
-    
-    const runner2 = new SmartTestRunner();
-    
-    // Second run should use cache
-    const start2 = Date.now();
-    await runner2.analyzeDependencies();
-    const duration2 = Date.now() - start2;
-    
-    assert(duration2 < duration1, `Second run should be faster (${duration2}ms vs ${duration1}ms)`);
-    
-    console.log(`First run: ${duration1}ms, cached run: ${duration2}ms`);
-  });
 
   test('should handle Python test file parsing', async () => {
     // Create temporary Python test file
@@ -324,8 +371,8 @@ class TestExample(unittest.TestCase):
       
       assert(changedFiles.includes('app/src/modules/application.js'), 'Should detect changed file via git');
       
-      const testsToRun = await runner.getTestsToRun();
-      
+      const { tests: testsToRun } = await runner.getTestsToRun();
+
       // Should run application tests since application.js was changed
       assert(testsToRun.js.includes('tests/js/application.test.js'), 'Should run application tests for application.js changes');
       

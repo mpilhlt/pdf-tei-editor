@@ -3,10 +3,11 @@
  * Tests initial application startup and state transitions
  *
  * @testCovers app/src/plugins/start.js
- * @testCovers app/src/modules/test-logging.js
+ * @testCovers tests/e2e/helpers/test-logging.js
  */
 
 import { test, expect } from '@playwright/test';
+import { navigateAndLogin } from './helpers/login-helper.js';
 
 // Configuration from environment variables
 const E2E_HOST = process.env.E2E_HOST || 'localhost';
@@ -25,24 +26,8 @@ test.describe('Test Logging Functionality', () => {
       }
     });
 
-    // Navigate to the application
-    await page.goto(E2E_BASE_URL);
-
-    // Wait for login dialog to appear
-    await page.waitForSelector('sl-dialog[open]', { timeout: 10000 });
-
-    // Login using UI navigation system
-    await page.evaluate(() => {
-      // @ts-ignore - window.ui is available in browser context
-      window.ui.loginDialog.username.value = 'testuser';
-      // @ts-ignore - window.ui is available in browser context
-      window.ui.loginDialog.password.value = 'testpass';
-      // @ts-ignore - window.ui is available in browser context
-      window.ui.loginDialog.submit.click();
-    });
-
-    // Wait for login to complete and startup to finish
-    await page.waitForSelector('sl-dialog:not([open])', { timeout: 10000 });
+    // Navigate and login
+    await navigateAndLogin(page, E2E_BASE_URL);
 
     // Wait a bit more for all startup logs to complete
     await page.waitForTimeout(3000);

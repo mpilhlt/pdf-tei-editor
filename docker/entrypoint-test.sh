@@ -20,24 +20,12 @@ cd /app
 mkdir -p data/pdf data/tei config db
 
 echo "Creating test user..."
-uv run python bin/manage.py user add testuser --password testpass --fullname "Test User" 2>/dev/null || echo "Test user testuser/testpass ready"
+.venv/bin/python bin/manage.py user add testuser --password testpass --fullname "Test User" 2>/dev/null || echo "Test user testuser/testpass ready"
 
 echo "Enabling testing mode..."
-uv run python bin/manage.py config set application.mode '"testing"'
-
-# Create test configuration
-cat > config/test.json << EOF
-{
-    "debug": false,
-    "host": "0.0.0.0",
-    "port": 8000,
-    "data_dir": "./data",
-    "max_file_size": "100MB",
-    "test_mode": true
-}
-EOF
+.venv/bin/python bin/manage.py config set application.mode '"testing"'
 
 echo "Starting test server..."
 
 # Start server using the production startup script (waitress)
-exec uv run python bin/start-prod 0.0.0.0 8000
+exec .venv/bin/python bin/start-prod 0.0.0.0 8000

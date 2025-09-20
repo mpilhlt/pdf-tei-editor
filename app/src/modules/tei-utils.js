@@ -13,10 +13,8 @@ export function getTeiHeader(xmlDoc) {
   let teiHeader = xmlDoc.getElementsByTagName('teiHeader');
   if (!teiHeader.length) {
     throw new Error("TEI header not found in the document.");
-  } else {
-    teiHeader = teiHeader[0];
-  }
-  return teiHeader;
+  } 
+  return teiHeader[0];
 }
 
 /**
@@ -328,10 +326,11 @@ export function prettyPrintNode(node, spacing = '  ') {
   }
 
   // Helper function to remove existing pure whitespace text nodes
+  /** @param {ChildNode} element */
   function removeWhitespaceNodes(element) {
     const children = Array.from(element.childNodes);
     for (const child of children) {
-      if (child.nodeType === Node.TEXT_NODE) {
+      if (child.nodeType === Node.TEXT_NODE && child.nodeValue) {
         // Check if the text node consists only of whitespace
         if (/^\s*$/.test(child.nodeValue)) {
           element.removeChild(child);
@@ -342,7 +341,12 @@ export function prettyPrintNode(node, spacing = '  ') {
     }
   }
 
-  // Helper function to add indentation recursively
+  /** 
+   * Helper function to add indentation recursively
+   * @param {ChildNode} element 
+   * @param {Number} depth
+   * @param {Document} doc  
+  */
   function addIndentation(element, depth, doc) {
     if (element.nodeType !== Node.ELEMENT_NODE) {
       return;
@@ -469,14 +473,16 @@ export function ensureRespStmtForUser(xmlDoc, username, fullName, responsibility
  * This function mirrors the metadata extraction performed by the server-side file_data.py module.
  * 
  * @param {Document} xmlDoc - The XML Document object to extract metadata from
- * @returns {object} - Object containing all extracted metadata fields
+ * @returns {Record<string, string>} - Object containing all extracted metadata fields
  */
 export function getDocumentMetadata(xmlDoc) {
   if (!xmlDoc || !xmlDoc.evaluate) {
     throw new Error('Valid XML Document with XPath support is required');
   }
 
+  /** @param {string} prefix */
   const namespaceResolver = (prefix) => {
+    /** @type {Record<string, string>} */
     const namespaces = {
       'tei': 'http://www.tei-c.org/ns/1.0'
     };
@@ -507,7 +513,7 @@ export function getDocumentMetadata(xmlDoc) {
     try {
       const result = xmlDoc.evaluate(
         xpath,
-        xmlDoc,
+        xmlDoc,   
         namespaceResolver,
         XPathResult.FIRST_ORDERED_NODE_TYPE,
         null

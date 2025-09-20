@@ -3,6 +3,8 @@
  * @testCovers server/api/extract.py
  * @testCovers bin/extractors/llamore.py
  * @testCovers bin/extractors/kisski.py
+ * @env GEMINI_API_KEY
+ * @env KISSKI_API_KEY
  */
 
 import { test, describe } from 'node:test';

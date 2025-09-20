@@ -11,7 +11,7 @@ from server.api.config import read_config
 # a custom exception class is not needed since ApiError is defined in server_utils
 from .server_utils import ApiError
 
-LOCK_TIMEOUT_SECONDS = 60
+LOCK_TIMEOUT_SECONDS = 30
 
 class LockStorage(ABC):
     @abstractmethod
@@ -149,19 +149,19 @@ def acquire_lock(file_path, session_id):
     Tries to acquire a lock for a given file. Returns True on success, False on failure.
     Raises ApiError for configuration issues.
     """
-    
+
     current_app.logger.debug(f"Acquiring lock for {file_path}")
     storage = get_lock_storage()
-    
+
     # Ensure locks directory exists
     try:
         storage.mkdir()
     except Exception as e:
         current_app.logger.error(f"Could not create locks directory: {e}")
         raise RuntimeError(f"Could not create locks directory: {e}")
-    
+
     lock_path = get_lock_path(file_path)
-    
+
     def write_lock(overwrite=True):
         storage.write(lock_path, session_id, overwrite=overwrite)
 
@@ -174,7 +174,7 @@ def acquire_lock(file_path, session_id):
         # Lock exists. Check if it's ours or if it's stale.
         try:
             existing_lock_id = storage.read(lock_path)
-            
+
             if existing_lock_id == session_id:
                 # It's our own lock, just refresh it.
                 write_lock(overwrite=True)
@@ -195,16 +195,24 @@ def acquire_lock(file_path, session_id):
             
         
 def release_lock(file_path, session_id):
-    """Releases the lock for a given file if it is held by the current session."""
+    """
+    Releases the lock for a given file if it is held by the current session.
+
+    Returns:
+        dict: Structured response with status, action, and message
+            - status: "success" or "error"
+            - action: "released", "already_released", "not_owned"
+            - message: Human-readable description
+    """
     storage = get_lock_storage()
-    
+
     # Ensure locks directory exists
     try:
         storage.mkdir()
     except Exception as e:
         current_app.logger.error(f"Could not create locks directory: {e}")
         raise RuntimeError(f"Could not create locks directory: {e}")
-    
+
     lock_path = get_lock_path(file_path)
 
     try:
@@ -213,18 +221,35 @@ def release_lock(file_path, session_id):
             if existing_lock_id == session_id:
                 storage.delete(lock_path)
                 current_app.logger.info(f"Lock released for {file_path} by session {session_id}")
-                return True
+                return {
+                    "status": "success",
+                    "action": "released",
+                    "message": f"Lock successfully released for {file_path}"
+                }
             else:
                 # This is an unexpected state. Fail loudly.
                 raise ApiError(f"Session {session_id} attempted to release a lock owned by {existing_lock_id}", status_code=409)
+        else:
+            # Lock doesn't exist, which is a success state (idempotent operation)
+            current_app.logger.info(f"Attempted to release lock for {file_path}, but no lock exists (idempotent success)")
+            current_app.logger.debug(f"Session {session_id} release attempt on unlocked file - this may indicate upstream logic issues")
+            return {
+                "status": "success",
+                "action": "already_released",
+                "message": f"Lock was already released for {file_path}"
+            }
     except (FileNotFoundError, ResourceNotFound):
         # Lock already gone, which is a success state.
         current_app.logger.info(f"Attempted to release lock for {file_path}, but it was already gone.")
-        return True
+        return {
+            "status": "success",
+            "action": "already_released",
+            "message": f"Lock was already released for {file_path}"
+        }
     except Exception as e:
         message = f"Error releasing lock for {file_path}: {str(e)}"
         current_app.logger.error(message)
-        # Re-raise 
+        # Re-raise
         e.args = (message,)
         raise
     
@@ -254,7 +279,7 @@ def purge_stale_locks():
         pass
     except Exception as e:
         current_app.logger.error(f"Error listing or purging stale locks: {e}")
-    
+
     return purged_count
 
 def get_all_active_locks():
@@ -289,17 +314,18 @@ def get_all_active_locks():
 def check_lock(file_path, session_id):
     """Checks if a single file is locked by another session."""
     storage = get_lock_storage()
-    
+
     # Ensure locks directory exists
     try:
         storage.mkdir()
     except Exception as e:
         current_app.logger.error(f"Could not create locks directory: {e}")
         return { "is_locked": False }  # Assume not locked if we can't check
-    
+
     active_locks = get_all_active_locks()
-    
+
     if file_path in active_locks and active_locks[file_path] != session_id:
+        current_app.logger.debug(f"File is locked by another session: {active_locks[file_path]}")
         return { "is_locked": True }
-    
+
     return { "is_locked": False }

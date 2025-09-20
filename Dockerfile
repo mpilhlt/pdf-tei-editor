@@ -60,7 +60,6 @@ COPY . .
 RUN uv sync --no-cache \
     && npm install --no-audit --no-fund \
     # Run postinstall components that aren't covered by main build
-    && node bin/generate-importmap.js \
     && uv run python bin/compile-sl-icons.py \
     && uv run python bin/download-pdfjs \
     # Run full build process (templates + bundle only, since importmap/icons done above)
@@ -113,8 +112,8 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-# Stage 4: Test-optimized variant (inherits from builder)
-FROM builder as test
+# Stage 4: Test-optimized variant (inherits from production)
+FROM production as test
 
 # Override entrypoint for test environment
 COPY docker/entrypoint-test.sh /entrypoint-test.sh

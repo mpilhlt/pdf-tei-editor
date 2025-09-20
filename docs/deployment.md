@@ -11,10 +11,11 @@ This guide covers all deployment options for the PDF TEI Editor, from Docker con
 docker run -p 8000:8000 -e APP_ADMIN_PASSWORD=admin123 cboulanger/pdf-tei-editor:latest
 ```
 
-Then visit: **http://localhost:8000**
+Then visit: **<http://localhost:8000>**
+
 - Login: `admin` / `admin123`
 
-** For detailed Docker setup and configuration options:** [**→ Docker Testdrive Guide**](testdrive-docker.md)
+**For detailed Docker setup and configuration options:** [**→ Docker Testdrive Guide**](testdrive-docker.md)
 
 ## Container Deployment with Scripts
 
@@ -89,6 +90,7 @@ Uses waitress WSGI server optimized for production with multiple threads.
 ### Production Configuration
 
 1. **Set production mode** in `config/config.json`:
+
    ```json
    {
      "application": {
@@ -98,6 +100,7 @@ Uses waitress WSGI server optimized for production with multiple threads.
    ```
 
 2. **Configure environment variables** in `.env`:
+
    ```bash
    GEMINI_API_KEY=your_gemini_api_key_here
    GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
@@ -115,6 +118,7 @@ Uses waitress WSGI server optimized for production with multiple threads.
    ```
 
 3. **Set up reverse proxy** (nginx example):
+
    ```nginx
    server {
        listen 443 ssl;
@@ -280,6 +284,7 @@ crontab -l | grep -v 'deploy-container.sh.*--fqdn demo.example.com' | crontab -
 ### Common Issues
 
 **Container won't start:**
+
 ```bash
 # Check if port is available
 lsof -i :8000
@@ -292,6 +297,7 @@ podman images
 ```
 
 **SSL certificate issues:**
+
 ```bash
 # Test nginx configuration
 nginx -t
@@ -304,6 +310,7 @@ certbot certificates
 ```
 
 **Permission issues:**
+
 ```bash
 # Fix ownership of persistent directories
 sudo chown -R $(id -u):$(id -g) /opt/pdf-tei-editor/

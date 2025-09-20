@@ -87,12 +87,38 @@ test('frontend smoke test', async ({ page }) => {
 });
 ```
 
-### Pattern Matching
+#### Pattern Matching
 
 - **Exact matches**: `app/src/ui.js`
 - **Wildcards**: `app/src/*` (all files in directory)
 - **Glob patterns**: `**/*.js` (all JavaScript files recursively)
 - **Multiple dependencies**: Separate with commas or use multiple annotations
+
+### Environment Variable Annotations
+
+Use `@env` comments to specify environment variables required by E2E tests:
+
+```javascript
+/**
+ * Extraction workflow test requiring external services
+ * @testCovers app/src/plugins/extraction.js
+ * @testCovers server/extractors/grobid.py
+ * @env GROBID_SERVER_URL
+ * @env GEMINI_API_KEY
+ */
+test('should complete extraction workflow', async ({ page }) => {
+  // Test extraction functionality requiring external APIs
+  // Environment variables are automatically passed to test container
+});
+```
+
+**Key Features:**
+
+- **Automatic Variable Passing**: Environment variables are read from the host environment and injected into test containers
+- **Command Line Override**: Use `--env VARIABLE_NAME` flags to specify variables manually
+- **Cross-Platform Support**: Works with both Docker and Podman containers
+- **Missing Variable Handling**: Missing environment variables are logged as warnings but don't fail test setup
+- **Integration with Test Selection**: Environment requirements are considered during smart test selection
 
 ### Usage Examples
 
@@ -118,7 +144,7 @@ E2E tests use a unified cross-platform Node.js runner (`tests/e2e-runner.js`) th
 
 ### Architecture
 
-- **Unified Runner**: Single Node.js tool handles both Playwright and backend tests (replaces Linux-only bash script)
+- **Unified Runner**: Single Node.js tool handles both Playwright and backend tests 
 - **Cross-platform Support**: Works on Windows, macOS, and Linux with Docker or Podman
 - **Dual Test Modes**: Playwright browser tests (`--playwright` flag) and backend integration tests
 - **Containerized Testing**: Tests run against Docker containers for complete isolation
@@ -151,12 +177,17 @@ npm run test:e2e:headed-debug       # Headed mode with Playwright step-through d
 
 # Backend Integration Tests
 npm run test:e2e:backend            # All backend tests
-node tests/e2e-runner.js tests/e2e/extractor-api.test.js  # Individual test
 
 # Advanced Options (direct runner usage)
 node tests/e2e-runner.js --playwright --browser firefox --headed
-node tests/e2e-runner.js --playwright --grep "login"
+node tests/e2e-runner.js --playwright --grep "test login dialog"
 E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug
+node tests/e2e-runner.js --backend --grep "test login api"
+
+# Environment Variable Configuration
+npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
+npm run test:e2e -- --grep "extraction" --env GROBID_SERVER_URL
+node tests/e2e-runner.js --playwright --env GROBID_SERVER_URL --env GEMINI_API_KEY
 ```
 
 ### Test Environment
@@ -169,45 +200,70 @@ E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug
   - `E2E_HOST`: Host to bind container (default: localhost)
   - `E2E_PORT`: Port to expose container on host (default: 8000)
   - `E2E_CONTAINER_PORT`: Port inside container (default: 8000)
+- **Test-Specific Environment Variables**: Tests can specify required environment variables using `@env` annotations or `--env` command line flags. These are automatically passed from the host environment to the test container, enabling tests that require external services like GROBID servers or AI APIs.
 
 ### Backend Integration Tests
 
-Backend integration tests validate server API endpoints and backend functionality without browser interaction. These tests assume the containerized backend is running and make HTTP requests directly to the API.
+Backend integration tests are Node.js-based tests that validate server API endpoints and backend functionality directly, without involving a browser. They run inside a containerized environment, making HTTP requests to the running backend server.
+
+These tests are ideal for verifying API contracts, authentication, business logic, and database interactions.
+
+#### Key Characteristics
+
+- **Location**: `tests/e2e/`
+- **File Naming Convention**: Files must end with `.test.js` (to distinguish them from Playwright's `.spec.js` files).
+- **Test Framework**: Uses Node.js's built-in test runner (`import { test, describe } from 'node:test'`).
+- **Execution**: Run using `npm run test:e2e:backend`. The `e2e-runner.js` script handles starting the container and executing the test files.
 
 #### Writing Backend Integration Tests
 
-Located in `tests/e2e/`, backend tests use standard Node.js testing with `@testCovers` annotations:
+Backend tests are written as standard Node.js modules. The test runner provides environment variables (`E2E_HOST`, `E2E_PORT`) that allow tests to connect to the containerized API.
 
 ```javascript
 /**
  * @testCovers server/api/extract.py
- * @testCovers bin/extractors/llamore.py
+ * @testCovers server/extractors/llamore.py
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 
-// Use environment variables set by e2e-runner.js
+// Use environment variables set by e2e-runner.js to build the API URL
 const HOST = process.env.E2E_HOST || 'localhost';
 const PORT = process.env.E2E_PORT || '8000';
 const API_BASE = `http://${HOST}:${PORT}/api`;
 
-describe('API Tests', () => {
-  test('should return extractor list', async () => {
+describe('Extractor API Tests', () => {
+  test('should return a list of available extractors', async () => {
     const response = await fetch(`${API_BASE}/extract/list`);
     assert.strictEqual(response.status, 200);
 
     const extractors = await response.json();
-    assert(Array.isArray(extractors));
+    assert(Array.isArray(extractors), 'The response should be an array.');
+    assert(extractors.length > 0, 'There should be at least one extractor.');
   });
+});
+```
+
+#### Authentication
+
+For endpoints that require a logged-in user, use the authentication helpers from `tests/e2e/helpers/test-auth.js`. These helpers allow you to create test sessions and make authenticated API calls.
+
+```javascript
+import { createTestSession, authenticatedApiCall } from './helpers/test-auth.js';
+
+test('should retrieve user-specific data', async () => {
+  const session = await createTestSession(); // Logs in 'testuser'
+  const data = await authenticatedApiCall(session.sessionId, '/files/list', 'GET');
+  assert(Array.isArray(data.files));
 });
 ```
 
 #### Backend Test Features
 
-- **No server management**: Tests assume the backend container is already running
-- **Environment configuration**: Use `E2E_HOST`/`E2E_PORT` for flexible deployment
-- **Direct API testing**: Make HTTP requests directly to backend endpoints
-- **Dependency tracking**: Use `@testCovers` annotations for smart test selection
+- **No server management**: The `e2e-runner.js` script automatically manages the lifecycle of the test container.
+- **Environment configuration**: Use `E2E_HOST` and `E2E_PORT` for flexible deployment.
+- **Direct API testing**: Make standard `fetch` requests to backend endpoints.
+- **Dependency tracking**: Use `@testCovers` annotations for smart test selection with `npm run test:changed`.
 
 ## Unit Testing
 
@@ -303,21 +359,6 @@ test('should open login dialog', async ({ page }) => {
 });
 ```
 
-### UI Navigation Hierarchy
-
-The UI system provides type-safe access to named elements:
-
-```javascript
-// Examples of available UI elements
-window.ui.toolbar.pdf              // PDF selection dropdown
-window.ui.toolbar.loginButton      // Login button
-window.ui.dialog.message          // Dialog message element
-window.ui.dialog.closeBtn          // Dialog close button
-window.ui.pdfViewer.canvas         // PDF viewer canvas
-window.ui.xmlEditor.editor         // XML editor instance
-window.ui.floatingPanel.status     // Status display
-```
-
 ### Test Logging for State Verification
 
 The application includes a specialized test logging system that provides fast, reliable state verification for E2E tests:
@@ -382,17 +423,20 @@ test('should complete application startup', async ({ page }) => {
 #### When to Use Each Approach
 
 **Use testLog for** (Preferred):
+
 - State transitions and business logic verification
 - API call results and data flow
 - Plugin lifecycle events
 - Performance measurements
 
 **Use window.ui for** (Required for UI):
+
 - Form interactions and button clicks
 - UI state verification (dialog open/closed)
 - Navigation and user workflows
 
 **Use CSS selectors only for** (Fallback):
+
 - Elements not in the named UI system
 - Dynamic content testing
 - Styling and attribute verification
@@ -574,29 +618,126 @@ docker stop $(docker ps -q --filter "publish=8000")
 1. **Use headed mode**: `npm run test:e2e:headed` or `npm run test:e2e -- --headed`
 2. **Step-through debugging**: `npm run test:e2e:headed-debug` - enables Playwright's step-through debugger
 3. **Enable debug logging**: `npm run test:e2e -- --debug`
-4. **Check saved logs**: Container and server logs are saved to `tests/e2e/test-results/` when tests fail
+4. **Check saved logs**: When an E2E test run fails, the test runner automatically saves logs to the `tests/e2e/test-results/` directory. Look for `container-logs-*.txt` to debug container startup problems and `server-logs-*.txt` to inspect the Flask application's output for backend errors.
 5. **Inspect UI structure**: `console.log(window.ui)` in browser
 6. **Use Playwright inspector**: `npx playwright test --debug`
+
+### Configurable Debug Output
+
+E2E tests support configurable debug output to reduce noise during test execution while providing detailed information when needed:
+
+```bash
+# Enable verbose debug output for E2E tests
+E2E_DEBUG=true npm run test:e2e -- --grep "extraction workflow"
+
+# Normal execution without debug output (default)
+npm run test:e2e -- --grep "extraction workflow"
+
+# Debug output with specific test patterns
+E2E_DEBUG=true npm run test:e2e:headed -- --grep "test login dialog"
+
+# Backend tests with debug output
+E2E_DEBUG=true node tests/e2e-runner.js  --backend --grep "test login api"
+```
+
+**Debug Output Features:**
+
+- **Conditional Logging**: Debug messages only appear when `E2E_DEBUG=true` is set
+- **Clean Test Results**: Default execution shows minimal output for better readability
+- **Detailed Diagnostics**: Debug mode shows document selection status, button states, and application flow
+- **Test Helper Integration**: Debug logging available in all test helper modules (login-helper.js, extraction-helper.js)
+
+### Parallel vs Sequential Test Execution
+
+Control how tests execute relative to each other to optimize performance or avoid resource conflicts:
+
+#### Sequential Execution (Use for Resource-Heavy Tests)
+
+```bash
+# Force all tests to run sequentially (1 worker)
+npm run test:e2e -- --workers=1
+
+# Force sequential execution with debug output
+E2E_DEBUG=true npm run test:e2e -- --workers=1 --grep "extraction"
+
+# Run specific test suites sequentially
+npm run test:e2e -- --workers=1 --grep "Extraction Workflow"
+```
+
+#### Parallel Execution (Default, Better Performance)
+
+```bash
+# Default parallel execution (uses Playwright's default worker count)
+npm run test:e2e
+
+# Explicit parallel execution with custom worker count
+npm run test:e2e -- --workers=4
+
+# Parallel execution with specific browsers
+npm run test:e2e:firefox -- --workers=2
+```
+
+#### Test Suite Level Configuration
+
+Individual test suites can be configured for sequential execution using `test.describe.serial()`:
+
+```javascript
+// Sequential execution within this test suite
+test.describe.serial('Extraction Workflow', () => {
+  test('should complete PDF extraction workflow', async ({ page }) => {
+    // This test runs first
+  });
+
+  test('should create new version from existing document', async ({ page }) => {
+    // This test runs second, after the first completes
+  });
+
+  test('should save revision for existing document', async ({ page }) => {
+    // This test runs third, after the second completes
+  });
+});
+
+// Parallel execution (default behavior)
+test.describe('Login Tests', () => {
+  test('should login with valid credentials', async ({ page }) => {
+    // These tests can run in parallel with other test suites
+  });
+
+  test('should reject invalid credentials', async ({ page }) => {
+    // This runs in parallel with the test above
+  });
+});
+```
+
+**When to Use Sequential Execution:**
+
+- **Resource conflicts**: Tests that compete for the same external services (GROBID, AI APIs)
+- **State dependencies**: Tests that depend on previous test state or shared resources
+- **Debugging**: Sequential execution makes debugging easier by reducing complexity
+- **Heavy extraction workflows**: Tests that use significant CPU/memory/network resources
+
+**When to Use Parallel Execution:**
+
+- **Independent tests**: Tests that don't share resources or state
+- **Fast unit-style tests**: Tests that complete quickly and don't need external services
+- **Improved performance**: Parallel execution significantly reduces total test time
+- **CI/CD pipelines**: Parallel execution optimizes build times in automated environments
 
 ### Debugging Modes Explained
 
 **For keeping browser windows open on failures:**
+
 - Use `npm run test:e2e:headed` - shows browser UI, windows close after tests complete
 - Container stops after tests, so browser windows will close regardless of debug flags
 
 **For interactive step-through debugging:**
+
 - Use `npm run test:e2e:headed-debug` - activates Playwright's debugger with pause/step controls
 - Use `await page.pause()` in test code to add breakpoints
 - Use Playwright inspector: `npx playwright test --debug --headed`
 
 **For log analysis:**
+
 - Check `tests/e2e/test-results/container-logs-*.txt` for container startup logs
 - Check `tests/e2e/test-results/server-logs-*.txt` for Flask application logs with DEBUG/INFO/ERROR messages
-
-## Best Practices Summary
-
-1. ✅ **Use `@testCovers` annotations** for smart test selection
-2. ✅ **Prefer `window.ui` navigation** over CSS selectors
-3. ✅ **Write descriptive test names** and organize in logical suites
-4. ✅ **Filter expected errors** in E2E tests
 

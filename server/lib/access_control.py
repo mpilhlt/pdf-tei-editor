@@ -126,42 +126,51 @@ class AccessControlChecker:
     """Checks user access permissions against document permissions."""
     
     @staticmethod
-    def check_document_access(permissions: DocumentPermissions, user: Optional[Dict], 
+    def check_document_access(permissions: DocumentPermissions, user: Optional[Dict],
                             required_access: str = 'read') -> bool:
         """
         Check if user has required access to document.
-        
+
         Args:
             permissions: Document permissions from parse_document_permissions()
             user: User dict with username and roles, or None for anonymous
             required_access: 'read' or 'write'
-        
+
         Returns:
             True if access allowed, False otherwise
         """
+        logger.debug(f"ACCESS CONTROL DEBUG: checking access for user={user}, permissions={permissions}, required_access={required_access}")
+
         if not user:
             # Anonymous users can only read public documents
-            return permissions.visibility == 'public' and required_access == 'read'
-        
+            result = permissions.visibility == 'public' and required_access == 'read'
+            logger.debug(f"ACCESS CONTROL DEBUG: anonymous user, result={result}")
+            return result
+
         # Admin users have full access to everything
         if 'admin' in user.get('roles', []):
+            logger.debug(f"ACCESS CONTROL DEBUG: admin user, allowing access")
             return True
-        
+
         username = user.get('username')
-        
+        logger.debug(f"ACCESS CONTROL DEBUG: user={username}, roles={user.get('roles', [])}")
+
         # Check visibility permissions
         if permissions.visibility == 'private':
             # Private documents only accessible by owner
             if permissions.owner != username:
+                logger.debug(f"ACCESS CONTROL DEBUG: private document, owner={permissions.owner}, user={username}, access denied")
                 return False
-        
+
         # Check write permissions
         if required_access == 'write':
             if permissions.editability == 'protected':
                 # Protected documents only writable by owner
                 if permissions.owner != username:
+                    logger.debug(f"ACCESS CONTROL DEBUG: protected document, owner={permissions.owner}, user={username}, write access denied")
                     return False
-        
+
+        logger.debug(f"ACCESS CONTROL DEBUG: allowing access - visibility={permissions.visibility}, editability={permissions.editability}, owner={permissions.owner}")
         return True
     
     @staticmethod
@@ -336,21 +345,27 @@ class AccessControlUpdater:
 # Convenience functions for common operations
 def get_document_permissions(file_path: str) -> DocumentPermissions:
     """Get permissions for a document by file path (re-parses XML)."""
+    logger.debug(f"ACCESS CONTROL DEBUG: get_document_permissions called for file_path={file_path}")
     try:
         # Only attempt to parse XML/TEI files - PDF files don't have XML permissions
         if not (file_path.endswith('.xml') or file_path.endswith('.tei.xml')):
             # Non-XML files default to public/editable (no access control metadata)
-            logger.debug(f"Skipping XML parsing for non-XML file: {file_path}")
+            logger.debug(f"ACCESS CONTROL DEBUG: Non-XML file {file_path}, returning public/editable")
             return DocumentPermissions('public', 'editable', None, [], None)
-            
+
         full_path = os.path.join(current_app.config["DATA_ROOT"], safe_file_path(file_path))
+        logger.debug(f"ACCESS CONTROL DEBUG: Parsing XML file at full_path={full_path}")
         # Use etree.parse() directly to avoid encoding declaration issues
         tree = etree.parse(full_path)
         xml_content = etree.tostring(tree, encoding='unicode')
-        return AccessControlParser.parse_document_permissions(xml_content)
+        permissions = AccessControlParser.parse_document_permissions(xml_content)
+        logger.debug(f"ACCESS CONTROL DEBUG: Parsed permissions from XML: {permissions}")
+        return permissions
     except Exception as e:
-        logger.warning(f"Could not get permissions for {file_path}: {e}")
-        return DocumentPermissions('public', 'editable', None, [], None)
+        logger.warning(f"ACCESS CONTROL DEBUG: Could not get permissions for {file_path}: {e}")
+        fallback_permissions = DocumentPermissions('public', 'editable', None, [], None)
+        logger.debug(f"ACCESS CONTROL DEBUG: Returning fallback permissions: {fallback_permissions}")
+        return fallback_permissions
 
 def get_document_permissions_from_metadata(metadata: Dict) -> DocumentPermissions:
     """Get permissions for a document from cached metadata (preferred method)."""
@@ -370,8 +385,11 @@ def get_document_permissions_from_metadata(metadata: Dict) -> DocumentPermission
 
 def check_file_access(file_path: str, user: Optional[Dict], required_access: str = 'read') -> bool:
     """Check if user has access to a specific file (re-parses XML)."""
+    logger.debug(f"ACCESS CONTROL DEBUG: check_file_access called for file_path={file_path}, user={user}, required_access={required_access}")
     permissions = get_document_permissions(file_path)
-    return AccessControlChecker.check_document_access(permissions, user, required_access)
+    result = AccessControlChecker.check_document_access(permissions, user, required_access)
+    logger.debug(f"ACCESS CONTROL DEBUG: check_file_access result={result}")
+    return result
 
 def check_file_access_from_metadata(metadata: Dict, user: Optional[Dict], required_access: str = 'read') -> bool:
     """Check if user has access to a specific file using cached metadata (preferred method)."""

@@ -103,6 +103,7 @@ class FiledataPlugin extends Plugin {
         ui.xmlEditor.statusbar.add(this.savingStatusWidget, 'left', 10);
       }
       const xmlContent = xmlEditor.getXML()
+
       const result = await client.saveXml(xmlContent, fileHash, saveAsNewVersion);
       return /** @type {{hash: string, status: string}} */ (result);
     } catch (e) {

@@ -28,7 +28,7 @@ import initialState from './state.js'
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
-import { createTestLogger } from './modules/test-logging.js'
+import { createTestLogger } from '../../tests/e2e/helpers/test-logging.js'
 
 //
 // Application bootstrapping
@@ -113,6 +113,12 @@ await app.updateState({})
 
 // invoke the "start" endpoint
 await app.start()
+
+// Expose necessary objects to global scope for E2E testing
+if (applicationMode == 'testing') {
+  window.app = app;
+  window.client = client;
+}
 
 //
 // Legacy compatibility functions for old plugin system

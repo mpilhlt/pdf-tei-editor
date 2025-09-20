@@ -10,7 +10,7 @@
  */
 
 import ui from '../ui.js'
-import { endpoints as ep, app, validation, logger } from '../app.js'
+import { endpoints as ep, app, validation, logger, testLog } from '../app.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
@@ -51,7 +51,8 @@ import FiledataPlugin from './filedata.js'
 const xmlEditor = new NavXmlEditor('codemirror-container')
 
 // Current state for use in event handlers
-let currentState = null
+/** @type {ApplicationState} */
+let currentState;
 
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
@@ -177,7 +178,7 @@ async function install(state) {
         try {
           view.dispatch(setDiagnostics(view.state, []))
         } catch (clearError) {
-          logger.warn("Error clearing diagnostics: " + clearError.message)
+          logger.warn("Error clearing diagnostics: " + String(clearError))
         }
       }
     }
@@ -201,6 +202,8 @@ async function install(state) {
 
   // Add widget to toggle <teiHeader> visibility
   xmlEditor.on("editorAfterLoad", () => {
+    testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
+
     xmlEditor.whenReady().then(() => {
       // Restore line wrapping after XML is loaded
       xmlEditor.setLineWrapping(true)
@@ -265,7 +268,7 @@ async function start(state) {
       try {
         view.dispatch(setDiagnostics(view.state, []))
       } catch (clearError) {
-        logger.warn("Error clearing diagnostics: " + clearError.message)
+        logger.warn("Error clearing diagnostics: " + String(clearError))
       }
     }
     
@@ -384,7 +387,8 @@ async function onSelectionChange(state) {
   }
 }
 
-let hashBeingSaved = null
+/** @type {string|null} */
+let hashBeingSaved = null;
 
 /**
  * Save the current XML file if the editor is "dirty"

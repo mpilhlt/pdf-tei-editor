@@ -100,7 +100,7 @@ async function install(state) {
   
   // Create status dropdown widget 
   statusDropdownWidget = createStatusDropdown()
-  
+
   // Add widgets to left side of statusbar (lower priority = more to the left)
   ui.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1)
   ui.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3)
@@ -496,7 +496,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
  * Updates the access control UI widgets
  */
 function updateAccessControlUI() {
-  showAccessControlWidgets()
+  //showAccessControlWidgets() // disabled until actually implemented
   updatePermissionInfoDisplay()
   updateStatusDropdownDisplay()
   updateStatusDropdownVisibility()

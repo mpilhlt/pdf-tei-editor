@@ -6,7 +6,7 @@
  * @import { ApplicationState } from '../state.js' 
  * @import { SlButton, SlButtonGroup, SlDialog } from '../ui.js'
  */
-import { app, client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
+import { app, client, services, dialog, fileselection, xmlEditor, updateState, testLog } from '../app.js'
 import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ui from '../ui.js'
@@ -38,7 +38,8 @@ export { api, plugin }
 export default plugin
 
 // Current state for use in event handlers
-let currentState = null
+/** @type {ApplicationState} */
+let currentState;
 
 //
 // UI
@@ -57,7 +58,7 @@ await registerTemplate('extraction-dialog', 'extraction-dialog.html');
 
 /**
  * @typedef {Object} ExtractionOptions
- * @property {string} [doi] 
+ * @property {string|null} [doi] 
  * @property {string} [filename]
  * @property {string} [collection]
  */
@@ -115,14 +116,22 @@ async function extractFromCurrentPDF(state) {
  * @param {ApplicationState} state
  */
 async function extractFromNewPdf(state) {
-  const { type, filename, originalFilename } = await client.uploadFile();
-  if (type !== "pdf") {
-    dialog.error("Extraction is only possible from PDF files")
-    return
-  }
+  try {
+    const { type, filename, originalFilename } = await client.uploadFile();
 
-  const doi = getDoiFromFilename(originalFilename)
-  await extractFromPDF(state, { doi, filename })
+    if (type !== "pdf") {
+      dialog.error("Extraction is only possible from PDF files")
+      return
+    }
+
+    testLog('PDF_UPLOAD_COMPLETED', { originalFilename, filename, type });
+
+    const doi = getDoiFromFilename(originalFilename)
+
+    await extractFromPDF(state, { doi, filename })
+  } catch (error) {
+    throw error;
+  }
 }
 
 /**
@@ -150,14 +159,14 @@ async function extractFromPDF(state, defaultOptions={}) {
       } catch (error) {
         console.warn("Cannot get DOI from document:", String(error))
       }
-      
+
       // Fallback to extracting DOI from filename (use state.pdf or uploaded filename)
       const filenameForDoi = state.pdf || defaultOptions.filename
       if (filenameForDoi) {
         doi = doi || getDoiFromFilename(filenameForDoi)
       }
     }
-    
+
     // Add collection, DOI, and variant to options
     const enhancedOptions = {
       collection: state.collection,
@@ -167,6 +176,7 @@ async function extractFromPDF(state, defaultOptions={}) {
     }
 
     // get DOI and instructions from user
+    testLog('EXTRACTION_OPTIONS_DIALOG_STARTING', { enhancedOptions });
     const options = await promptForExtractionOptions(enhancedOptions)
 
     ui.spinner.show('Extracting, please wait')
@@ -174,22 +184,24 @@ async function extractFromPDF(state, defaultOptions={}) {
     try {
       const filename = options.filename || state.pdf
       result = await client.extractReferences(filename, options)
-      
+
       // Force reload of file list since server has updated cache
       await fileselection.reload({refresh:true})
-      
+
       // Update state.variant with the variant_id that was used for extraction
       if (options.variant_id) {
         await app.updateState({ variant: options.variant_id })
       }
-      
+
       // Load the extracted result (server now returns hashes)
       await services.load(result)
-      
+
+      testLog('EXTRACTION_COMPLETED', { resultHash: result.xml, pdfFilename: filename });
+
     } finally {
       ui.spinner.hide()
     }
-    
+
   } catch (error) {
     console.error(String(error));
     if (error instanceof UserAbortException) {
