@@ -10,6 +10,7 @@
  *   E2E_HOST - Host to bind container (default: localhost)
  *   E2E_PORT - Port to expose container on host (default: 8000)
  *   E2E_CONTAINER_PORT - Port inside container (default: 8000)
+ *   E2E_BASE_URL - If set, bypasses container management and runs tests against this URL.
  *
  * Usage:
  *   # Playwright browser tests 
@@ -38,6 +39,7 @@ const projectRoot = dirname(__dirname);
  */
 class E2ERunner {
   constructor() {
+    this.externalUrl = !!process.env.E2E_BASE_URL;
     /** @type {string | null} */
     this.containerCmd = null;
     /** @type {string | null} */
@@ -59,7 +61,9 @@ class E2ERunner {
     this.loadDotenv();
 
     // Detect container tool
-    this.detectContainerTool();
+    if (!this.externalUrl) {
+        this.detectContainerTool();
+    }
 
     // Setup cleanup handlers
     process.on('SIGINT', () => this.cleanup());
@@ -177,6 +181,13 @@ class E2ERunner {
    * @param {string[]} envVars - Environment variables to pass to container
    */
   async startContainer(noRebuild = false, envVars = []) {
+    if (this.externalUrl) {
+        console.log(`🚀 Using external server at ${process.env.E2E_BASE_URL}, skipping container start...
+`);
+        await this.waitForApplicationReady();
+        this.isContainerStarted = true;
+        return;
+    }
     console.log('🚀 Starting containerized test environment...');
     console.log(`🆔 Test Run ID: ${this.testRunId}`);
 
@@ -210,14 +221,14 @@ class E2ERunner {
     console.log('🧹 Cleaning up existing containers...');
     try {
       const existingContainers = execSync(
-        `${this.containerCmd} ps -a --format "table {{.ID}}\\t{{.Ports}}" | grep ":${this.config.port}->" | awk '{print $1}'`,
+        `${this.containerCmd} ps -a --format \"table {{.ID}}\	{{.Ports}}\" | grep ":${this.config.port}->" | awk '{print $1}'`,
         { encoding: 'utf8', stdio: 'pipe' }
       ).trim();
 
       if (existingContainers) {
         console.log(`🛑 Stopping existing containers using port ${this.config.port}...`);
-        execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} stop`, { stdio: 'ignore' });
-        execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} rm`, { stdio: 'ignore' });
+        execSync(`echo \"${existingContainers}\" | xargs -r ${this.containerCmd} stop`, { stdio: 'ignore' });
+        execSync(`echo \"${existingContainers}\" | xargs -r ${this.containerCmd} rm`, { stdio: 'ignore' });
       }
     } catch (error) {
       // Ignore cleanup errors
@@ -331,7 +342,9 @@ class E2ERunner {
 
     while (counter < timeout) {
       try {
-        if (this.usePodman) {
+        if (this.externalUrl) {
+            execSync(`curl -f ${process.env.E2E_BASE_URL}/health >/dev/null 2>&1`, { stdio: 'pipe' });
+        } else if (this.usePodman) {
           // Check if container is running and application is responding
           const healthCheckUrl = `http://${this.config.host}:${this.config.containerPort}/`;
           execSync(`${this.containerCmd} exec ${this.containerName} curl -f ${healthCheckUrl} >/dev/null 2>&1`, {
@@ -377,7 +390,9 @@ class E2ERunner {
 
     // If we get here, the application didn't start in time
     console.error(`❌ Application failed to start within ${timeout} seconds`);
-    await this.showContainerLogs();
+    if (!this.externalUrl) {
+        await this.showContainerLogs();
+    }
     throw new Error('Application startup timeout');
   }
 
@@ -385,6 +400,7 @@ class E2ERunner {
    * Save container logs to test results for debugging
    */
   async showContainerLogs() {
+    if (this.externalUrl) return;
     const logDir = path.join(projectRoot, 'tests', 'e2e', 'test-results');
     const containerLogFile = path.join(logDir, `container-logs-${this.testRunId}.txt`);
     const serverLogFile = path.join(logDir, `server-logs-${this.testRunId}.txt`);
@@ -455,7 +471,7 @@ class E2ERunner {
 
       // Remove dangling images (untagged <none> images) that are not part of build cache
       // This removes intermediate build images that are no longer needed
-      const cleanupCmd = `${this.containerCmd} image prune -f --filter "dangling=true"`;
+      const cleanupCmd = `${this.containerCmd} image prune -f --filter \"dangling=true\"`;
       const result = execSync(cleanupCmd, {
         encoding: 'utf8',
         stdio: 'pipe'
@@ -468,7 +484,7 @@ class E2ERunner {
       // Additionally, remove old untagged project-specific images
       // Get all <none> images and filter for ones that likely came from our builds
       try {
-        const listCmd = `${this.containerCmd} images --filter "dangling=true" --format "{{.ID}} {{.CreatedAt}}"`;
+        const listCmd = `${this.containerCmd} images --filter \"dangling=true\" --format \"{{.ID}} {{.CreatedAt}}\"`;
         const danglingImages = execSync(listCmd, {
           encoding: 'utf8',
           stdio: 'pipe'
@@ -520,6 +536,10 @@ class E2ERunner {
    * Build container image only (no tests)
    */
   async buildImage() {
+    if (this.externalUrl) {
+        console.log('🏗️ Build-only is not applicable when using an external server.');
+        return;
+    }
     console.log('🏗️ Building container image only...');
     console.log(`🆔 Build ID: ${this.testRunId}`);
 
@@ -553,6 +573,13 @@ class E2ERunner {
    * Stop and clean up the test container
    */
   async cleanup() {
+    if (this.externalUrl) {
+        if (this.isContainerStarted) {
+            console.log('✅ External server run finished.');
+            this.isContainerStarted = false;
+        }
+        return;
+    }
     if (!this.isContainerStarted) return;
 
     console.log('🛑 Cleaning up test environment...');
@@ -564,14 +591,14 @@ class E2ERunner {
           // Clean up any containers using the configured port
           try {
             const existingContainers = execSync(
-              `${this.containerCmd} ps -a --format "table {{.ID}}\\t{{.Ports}}" | grep ":${this.config.port}->" | awk '{print $1}'`,
+              `${this.containerCmd} ps -a --format \"table {{.ID}}\	{{.Ports}}\" | grep ":${this.config.port}->" | awk '{print $1}'`,
               { encoding: 'utf8', stdio: 'pipe' }
             ).trim();
 
             if (existingContainers) {
               console.log(`🛑 Stopping all containers using port ${this.config.port}...`);
-              execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} stop`, { stdio: 'ignore' });
-              execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} rm`, { stdio: 'ignore' });
+              execSync(`echo \"${existingContainers}\" | xargs -r ${this.containerCmd} stop`, { stdio: 'ignore' });
+              execSync(`echo \"${existingContainers}\" | xargs -r ${this.containerCmd} rm`, { stdio: 'ignore' });
             }
           } catch (error) {
             // Ignore cleanup errors
@@ -613,6 +640,7 @@ class E2ERunner {
    * @param {string} [options.grepInvert] - Grep invert pattern
    * @param {string[]} [options.envVars] - Environment variables for container
    * @param {Number} [options.workers] - Number of workers for parallel execution
+   * @param {string} [options.testDir] - Directory to run tests from
    */
   async runPlaywrightTests(options = {}) {
     console.log('🧪 Unified E2E Runner - Playwright Browser Tests');
@@ -651,6 +679,9 @@ class E2ERunner {
       // Build Playwright command
       let cmd = ['playwright', 'test'];
 
+      if (options.testDir) {
+        cmd.push(options.testDir);
+      }
       if (options.browser) {
         cmd.push(`--project=${options.browser}`);
       }
@@ -723,18 +754,23 @@ class E2ERunner {
    * Collect all backend API test files recursively from tests/e2e
    * @param {string} [grep] - Grep pattern to filter test names
    * @param {string} [grepInvert] - Grep invert pattern to exclude test names
+   * @param {string} [testDir] - Directory to search for tests
    * @returns {Promise<string[]>} Array of test file paths
    */
-  async collectBackendTests(grep, grepInvert) {
+  async collectBackendTests(grep, grepInvert, testDir) {
     const { glob } = await import('glob');
-    const testPattern = path.join(__dirname, 'e2e', '**/*.test.js');
+    const baseDir = testDir ? path.join(projectRoot, testDir) : path.join(__dirname, 'e2e');
+    const testPattern = path.join(baseDir, '**/*.test.js');
 
     let testFiles = await glob(testPattern);
 
     // Apply grep filtering if specified
     if (grep) {
       const grepRegex = new RegExp(grep, 'i');
-      testFiles = testFiles.filter(file => grepRegex.test(path.basename(file)));
+      testFiles = testFiles.filter(file => {
+        const relativeForGrep = path.relative(path.join(__dirname, 'e2e'), file).replace(/\\/g, '/').replace('.test.js', '');
+        return grepRegex.test(relativeForGrep);
+      });
     }
 
     // Apply grep-invert filtering if specified
@@ -753,6 +789,7 @@ class E2ERunner {
    * @param {string} [options.grepInvert] - Grep invert pattern to exclude tests
    * @param {string[]} [options.envVars] - Environment variables for container
    * @param {boolean} [options.noRebuild] - Skip container rebuild
+   * @param {string} [options.testDir] - Directory to run tests from
    */
   async runBackendTests(options = {}) {
     console.log('🧪 Unified E2E Runner - Backend API Tests');
@@ -761,7 +798,7 @@ class E2ERunner {
 
     try {
       // Collect all backend test files
-      const testFiles = await this.collectBackendTests(options.grep, options.grepInvert);
+      const testFiles = await this.collectBackendTests(options.grep, options.grepInvert, options.testDir);
 
       if (testFiles.length === 0) {
         console.log('⚠️ No backend test files found matching the criteria');
@@ -778,6 +815,9 @@ class E2ERunner {
       }
       if (options.grepInvert) {
         console.log(`🚫 Grep invert filter: ${options.grepInvert}`);
+      }
+      if (options.testDir) {
+        console.log(`📁 Test directory: ${options.testDir}`);
       }
 
       // Start containerized environment once
@@ -898,8 +938,16 @@ class E2ERunner {
    * Get environment variables for test processes
    */
   getEnvironmentVars() {
+    if (this.externalUrl) {
+        const url = new URL(process.env.E2E_BASE_URL);
+        return {
+            E2E_BASE_URL: process.env.E2E_BASE_URL,
+            E2E_HOST: url.hostname,
+            E2E_PORT: url.port,
+        }
+    }
     return {
-      E2E_CONTAINER_URL: `http://${this.config.host}:${this.config.port}`,
+      E2E_BASE_URL: `http://${this.config.host}:${this.config.port}`,
       E2E_HOST: this.config.host,
       E2E_PORT: this.config.port.toString(),
       E2E_CONTAINER_NAME: this.containerName,
@@ -916,7 +964,7 @@ class E2ERunner {
     return {
       host,
       port: parseInt(port),
-      url: process.env.E2E_CONTAINER_URL || `http://${host}:${port}`,
+      url: process.env.E2E_BASE_URL || `http://${host}:${port}`,
       containerName: process.env.E2E_CONTAINER_NAME,
       containerCmd: process.env.E2E_CONTAINER_CMD
     };
@@ -939,6 +987,7 @@ function parseArgs(args) {
     grep: /** @type {string | null} */ (null),
     grepInvert: /** @type {string | null} */ (null),
     testFile: /** @type {string | null} */ (null),
+    testDir: /** @type {string | null} */ (null),
     help: false,
     noRebuild: false,
     buildOnly: false,
@@ -975,6 +1024,9 @@ function parseArgs(args) {
         break;
       case '--grep-invert':
         parsed.grepInvert = args[++i] || '';
+        break;
+      case '--test-dir':
+        parsed.testDir = args[++i];
         break;
       case '--no-rebuild':
         parsed.noRebuild = true;
@@ -1039,6 +1091,7 @@ function showHelp() {
   console.log('Common Options:');
   console.log('  --grep <pattern>     Run tests matching pattern');
   console.log('  --grep-invert <pattern> Exclude tests matching pattern');
+  console.log('  --test-dir <path>    Run tests only in this directory (relative to project root)');
   console.log('  --no-rebuild         Use existing container image without rebuilding');
   console.log('  --build-only         Build container image only, do not run tests');
   console.log('  --env <var>          Environment variable to pass to container (can be used multiple times)');
@@ -1057,6 +1110,7 @@ function showHelp() {
   console.log('  E2E_HOST           Host to bind container (default: localhost)');
   console.log('  E2E_PORT           Port to expose container on host (default: 8000)');
   console.log('  E2E_CONTAINER_PORT Port inside container (default: 8000)');
+  console.log('  E2E_BASE_URL  Bypass container start and test against this URL (e.g., http://localhost:8000)');
   console.log('');
   console.log('Examples:');
   console.log('  # Run Playwright tests');
@@ -1067,11 +1121,14 @@ function showHelp() {
   console.log('  # Run backend API tests');
   console.log('  node tests/e2e-runner.js --backend');
   console.log('  node tests/e2e-runner.js --backend --grep "file-locks"');
-  console.log('  node tests/e2e-runner.js --backend --grep-invert "extractor"');
+  console.log('  node tests/e2e-runner.js --backend --test-dir tests/e2e/fastapi');
   console.log('');
   console.log('  # Run with existing image (faster)');
   console.log('  node tests/e2e-runner.js --playwright --no-rebuild');
   console.log('  node tests/e2e-runner.js --backend --no-rebuild');
+  console.log('');
+  console.log('  # Run against a local server (e.g. FastAPI dev server)');
+  console.log('  E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir tests/e2e/fastapi');
   console.log('');
   console.log('  # Build image only (no tests)');
   console.log('  node tests/e2e-runner.js --build-only');
@@ -1120,7 +1177,8 @@ async function main() {
           noRebuild: args.noRebuild,
           mode: args.mode,
           envVars: args.envVars,
-          workers: args.workers
+          workers: args.workers,
+          testDir: args.testDir || undefined
         });
       }
 
@@ -1130,7 +1188,8 @@ async function main() {
           grep: args.grep || undefined,
           grepInvert: args.grepInvert || undefined,
           noRebuild: args.noRebuild,
-          envVars: args.envVars
+          envVars: args.envVars,
+          testDir: args.testDir || undefined
         });
       }
 

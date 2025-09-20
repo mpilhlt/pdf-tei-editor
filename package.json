@@ -13,6 +13,7 @@
     "test": "npm run test:all",
     "test:all": "node tests/smart-test-runner.js --all",
     "test:changed": "node tests/smart-test-runner.js",
+    "test:fastapi:changed": "bin/test-fastapi-changed",
     "test:tap": "node tests/smart-test-runner.js --all --tap",
     "test:js": "node --test tests/js/*.test.js",
     "test:py": "uv run pytest tests/py/",
@@ -23,7 +24,8 @@
     "test:e2e:headed-debug": "PWDEBUG=1 node tests/e2e-runner.js --playwright --debug --headed --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY",
     "test:e2e:firefox": "node tests/e2e-runner.js --playwright --browser firefox --env GROBID_SERVER_URL --env GEMINI_API_KEY",
     "test:e2e:webkit": "node tests/e2e-runner.js --playwright --browser webkit --env GROBID_SERVER_URL --env GEMINI_API_KEY",
-    "test:e2e:backend": "node tests/e2e-runner.js --backend"
+    "test:e2e:backend": "node tests/e2e-runner.js --backend",
+    "dev:fastapi": "uvicorn backend.main:app --reload --port 8000"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

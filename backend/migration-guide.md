@@ -23,12 +23,15 @@ The migration will be performed in a self-contained `backend/` directory, ensuri
 
 ### Phase 1: Setup and Core Services
 
-- [ ] **1. Initial Local Setup**
-  - [ ] Add FastAPI dependencies (e.g., `fastapi`, `uvicorn`) to the root `pyproject.toml` using `uv add`.
-  - [ ] Create the directory structure: `backend/api/`, `backend/lib/`, `backend/data/`, `backend/db/`.
-  - [ ] Create `backend/main.py` with a basic FastAPI app instance and a `/health` endpoint.
-  - [ ] Create a `.env.fastapi` file and a corresponding config module (`backend/config.py`) to load settings for database paths, etc.
-  - [ ] Add a run script or update `package.json` to easily start the local FastAPI server.
+- [x] **1. Initial Local Setup**
+  - [x] Add FastAPI dependencies (e.g., `fastapi`, `uvicorn`) to the root `pyproject.toml` using `uv add`.
+  - [x] Create the directory structure: `backend/api/`, `backend/lib/`, `backend/data/`, `backend/db/`.
+  - [x] Create `backend/main.py` with a basic FastAPI app instance and a `/health` endpoint.
+  - [x] Create a `.env.fastapi` file and a corresponding config module (`backend/config.py`) to load settings for database paths, etc.
+  - [x] Add a run script or update `package.json` to easily start the local FastAPI server.
+  - [x] Adapt the e2e test runner scripts to target the local FastAPI server:
+    - [x] Support using an environment variable to override the Flask server endpoint and the ability to run tests that are in a specific directory, such as `tests/e2e/fastapi/`
+  - [x] Create `tests/e2e/fastapi/health.test.js` and ensure the test passes
 
 - [ ] **2. Build Core Library**
   - [ ] Analyze `server/lib/` to identify essential, framework-agnostic logic (e.g., for file operations, XML processing, etc.).
@@ -39,11 +42,11 @@ The migration will be performed in a self-contained `backend/` directory, ensuri
   - [ ] **Authentication (`auth.py`)**:
     - [ ] Define Pydantic models for auth requests/responses.
     - [ ] Create `backend/api/auth.py` and migrate login, logout, and session status endpoints.
-    - [ ] Create `tests/e2e/fastapi/auth.spec.js` and configure the test runner to target the local FastAPI server.
+    - [ ] Create `tests/e2e/fastapi/auth.test.js`
   - [ ] **Configuration (`config.py`)**:
     - [ ] Define Pydantic models for configuration data.
     - [ ] Create `backend/api/config.py` and migrate endpoints for managing application config.
-    - [ ] Create `tests/e2e/fastapi/config.spec.js`.
+    - [ ] Create `tests/e2e/fastapi/config.test.js`.
 
 ### Phase 2: Parallel Migration of API Modules
 
@@ -85,3 +88,37 @@ The following modules can be migrated in parallel. For each, the process is:
   - [ ] After successful deployment, remove the old `server/` directory and related configurations.
   - [ ] Remove Flask-specific dependencies (e.g., `flask`, `waitress`) from `pyproject.toml` using `uv remove`.
   - [ ] Update all project documentation (`README.md`, `docs/`, etc.) to reflect the new architecture.
+
+## Development Workflow
+
+### Running the Dev Server
+
+The FastAPI development server supports hot-reloading. To run it, use:
+
+```bash
+npm run dev:fastapi
+```
+
+The server will be available at `http://localhost:8000`.
+
+### Running Tests
+
+To run tests for the FastAPI backend, you must have the server running. The test runner connects to the running server instance to perform the tests.
+
+**1. Run all FastAPI tests:**
+
+```bash
+# Start the server in one terminal
+npm run dev:fastapi
+
+# In another terminal, run the tests
+E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir tests/e2e/fastapi
+```
+
+**2. Run tests for changed files:**
+
+A convenience script is provided to automatically test changed files in the `backend/` directory. It starts the server, finds changed files using `git`, runs the relevant tests, and stops the server.
+
+```bash
+npm run test:fastapi:changed
+```

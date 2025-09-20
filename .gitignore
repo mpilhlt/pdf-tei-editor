@@ -1,6 +1,6 @@
 # Secrets and caches
-.env
-.env.docker
+.env*
+!.env.dist
 
 # Caches and temp files
 .venv

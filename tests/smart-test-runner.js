@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import madge from 'madge';
 import { parse as parseComments } from 'comment-parser';
@@ -55,21 +55,30 @@ class SmartTestRunner {
       );
     }
 
-    // Discover e2e tests (both Playwright .spec.js and backend .test.js)
+    // Discover e2e tests recursively
     const e2eDir = join(testsDir, 'e2e');
     const playwrightTests = [];
     const backendTests = [];
-    if (existsSync(e2eDir)) {
-      const e2eFiles = readdirSync(e2eDir);
-      playwrightTests.push(...e2eFiles
-        .filter(file => file.endsWith('.spec.js'))
-        .map(file => `tests/e2e/${file}`)
-      );
-      backendTests.push(...e2eFiles
-        .filter(file => file.endsWith('.test.js'))
-        .map(file => `tests/e2e/${file}`)
-      );
+
+    function findTestsRecursive(dir) {
+        if (!existsSync(dir)) return;
+        const entries = readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = join(dir, entry.name);
+            if (entry.isDirectory()) {
+                findTestsRecursive(fullPath);
+            } else if (entry.isFile()) {
+                const relativePath = relative(projectRoot, fullPath).replace(/\\/g, '/');
+                if (entry.name.endsWith('.spec.js')) {
+                    playwrightTests.push(relativePath);
+                } else if (entry.name.endsWith('.test.js')) {
+                    backendTests.push(relativePath);
+                }
+            }
+        }
     }
+
+    findTestsRecursive(e2eDir);
 
     if (!process.argv.includes('--tap')) {
       console.log(`📋 Discovered ${jsTests.length} JS tests, ${pyTests.length} Python tests, ${playwrightTests.length} Playwright E2E tests, and ${backendTests.length} Backend E2E tests`);

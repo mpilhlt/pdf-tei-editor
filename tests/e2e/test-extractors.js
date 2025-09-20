@@ -26,7 +26,7 @@ class ExtractorTest {
         // Get configuration from environment variables
         this.host = process.env.E2E_HOST || 'localhost';
         this.port = parseInt(process.env.E2E_PORT || '8000');
-        this.containerUrl = process.env.E2E_CONTAINER_URL || `http://${this.host}:${this.port}`;
+        this.containerUrl = process.env.E2E_BASE_URL || `http://${this.host}:${this.port}`;
 
         console.log(`📡 Using container URL: ${this.containerUrl}`);
     }

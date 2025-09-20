@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+echo "🚀 Starting FastAPI server..."
+npm run dev:fastapi &
+PID=$!
+trap "kill $PID" EXIT
+echo "⏳ Waiting for server..."
+sleep 3 # Simple wait
+
+# Get staged and unstaged changed files, then filter for 'backend/'
+STAGED=$(git diff --cached --name-only | grep "^backend/" || true)
+MODIFIED=$(git diff --name-only | grep "^backend/" || true)
+
+# Combine, deduplicate, and format for the command line
+CHANGED_FILES=$(echo -e "$STAGED\n$MODIFIED" | sort -u | paste -s -d, -)
+
+if [ -z "$CHANGED_FILES" ]; then
+    echo "🤷 No changed files in backend/. Exiting."
+    exit 0
+fi
+
+echo "🔍 Testing changes in:"
+echo "$CHANGED_FILES"
+
+# Pass the correct list of files to the runner
+E2E_BASE_URL=http://localhost:8000 node tests/smart-test-runner.js --changed-files "$CHANGED_FILES"
