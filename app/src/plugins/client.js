@@ -542,7 +542,6 @@ async function getCacheStatus() {
 /**
  * Uploads a file selected by the user to a specified URL using `fetch()`.
  *
- * @author Gemini 2.0
  * @param {string} uploadUrl - The URL to which the file will be uploaded.
  * @param {object} [options={}] - Optional configuration options.
  * @param {string} [options.method='POST'] - The HTTP method to use for the upload.

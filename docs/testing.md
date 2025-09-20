@@ -204,42 +204,66 @@ node tests/e2e-runner.js --playwright --env GROBID_SERVER_URL --env GEMINI_API_K
 
 ### Backend Integration Tests
 
-Backend integration tests validate server API endpoints and backend functionality without browser interaction. These tests assume the containerized backend is running and make HTTP requests directly to the API.
+Backend integration tests are Node.js-based tests that validate server API endpoints and backend functionality directly, without involving a browser. They run inside a containerized environment, making HTTP requests to the running backend server.
+
+These tests are ideal for verifying API contracts, authentication, business logic, and database interactions.
+
+#### Key Characteristics
+
+- **Location**: `tests/e2e/`
+- **File Naming Convention**: Files must end with `.test.js` (to distinguish them from Playwright's `.spec.js` files).
+- **Test Framework**: Uses Node.js's built-in test runner (`import { test, describe } from 'node:test'`).
+- **Execution**: Run using `npm run test:e2e:backend`. The `e2e-runner.js` script handles starting the container and executing the test files.
 
 #### Writing Backend Integration Tests
 
-Located in `tests/e2e/`, backend tests use standard Node.js testing with `@testCovers` annotations:
+Backend tests are written as standard Node.js modules. The test runner provides environment variables (`E2E_HOST`, `E2E_PORT`) that allow tests to connect to the containerized API.
 
 ```javascript
 /**
  * @testCovers server/api/extract.py
- * @testCovers bin/extractors/llamore.py
+ * @testCovers server/extractors/llamore.py
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 
-// Use environment variables set by e2e-runner.js
+// Use environment variables set by e2e-runner.js to build the API URL
 const HOST = process.env.E2E_HOST || 'localhost';
 const PORT = process.env.E2E_PORT || '8000';
 const API_BASE = `http://${HOST}:${PORT}/api`;
 
-describe('API Tests', () => {
-  test('should return extractor list', async () => {
+describe('Extractor API Tests', () => {
+  test('should return a list of available extractors', async () => {
     const response = await fetch(`${API_BASE}/extract/list`);
     assert.strictEqual(response.status, 200);
 
     const extractors = await response.json();
-    assert(Array.isArray(extractors));
+    assert(Array.isArray(extractors), 'The response should be an array.');
+    assert(extractors.length > 0, 'There should be at least one extractor.');
   });
+});
+```
+
+#### Authentication
+
+For endpoints that require a logged-in user, use the authentication helpers from `tests/e2e/helpers/test-auth.js`. These helpers allow you to create test sessions and make authenticated API calls.
+
+```javascript
+import { createTestSession, authenticatedApiCall } from './helpers/test-auth.js';
+
+test('should retrieve user-specific data', async () => {
+  const session = await createTestSession(); // Logs in 'testuser'
+  const data = await authenticatedApiCall(session.sessionId, '/files/list', 'GET');
+  assert(Array.isArray(data.files));
 });
 ```
 
 #### Backend Test Features
 
-- **No server management**: Tests assume the backend container is already running
-- **Environment configuration**: Use `E2E_HOST`/`E2E_PORT` for flexible deployment
-- **Direct API testing**: Make HTTP requests directly to backend endpoints
-- **Dependency tracking**: Use `@testCovers` annotations for smart test selection
+- **No server management**: The `e2e-runner.js` script automatically manages the lifecycle of the test container.
+- **Environment configuration**: Use `E2E_HOST` and `E2E_PORT` for flexible deployment.
+- **Direct API testing**: Make standard `fetch` requests to backend endpoints.
+- **Dependency tracking**: Use `@testCovers` annotations for smart test selection with `npm run test:changed`.
 
 ## Unit Testing
 
@@ -594,7 +618,7 @@ docker stop $(docker ps -q --filter "publish=8000")
 1. **Use headed mode**: `npm run test:e2e:headed` or `npm run test:e2e -- --headed`
 2. **Step-through debugging**: `npm run test:e2e:headed-debug` - enables Playwright's step-through debugger
 3. **Enable debug logging**: `npm run test:e2e -- --debug`
-4. **Check saved logs**: Container and server logs are saved to `tests/e2e/test-results/` when tests fail
+4. **Check saved logs**: When an E2E test run fails, the test runner automatically saves logs to the `tests/e2e/test-results/` directory. Look for `container-logs-*.txt` to debug container startup problems and `server-logs-*.txt` to inspect the Flask application's output for backend errors.
 5. **Inspect UI structure**: `console.log(window.ui)` in browser
 6. **Use Playwright inspector**: `npx playwright test --debug`
 

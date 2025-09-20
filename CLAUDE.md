@@ -92,13 +92,53 @@ node tests/smart-test-runner.js --changed-files <files>
 
 - **Containerized testing**: Docker/Podman with multi-stage builds and layer caching
 - **Cross-platform support**: Works on Windows, macOS, and Linux (replaces Linux-only bash script)
-- **Dual test modes**: Playwright browser tests (`--playwright` flag) and backend integration tests
+- **Dual test modes**: Playwright browser tests (`--playwright` flag) and backend integration tests (`--backend` flag)
 - **Automatic cleanup**: Containers cleaned up, images preserved for cache efficiency
 - **Environment variables**: `E2E_HOST`, `E2E_PORT`, `E2E_CONTAINER_PORT` for flexible configuration
 - **Test environment configuration**: Support for `@env` annotations and `--env` flags to pass environment variables to test containers
 - **Integration**: Works with smart test runner via `@testCovers` annotations
 
 **UI Testing Guidelines**: E2E tests should use the UI navigation system exposed via `window.ui` (see `app/src/ui.js:103`) to efficiently access UI parts documented via JSDoc. This provides type-safe access to named DOM elements like `ui.toolbar.pdf`, `ui.dialog.message`, etc. For custom selectors, the navigation system helps identify paths to named descendants.
+
+#### Backend tests
+
+Backend tests are Node.js-based integration tests that run against the containerized server API without a browser. They are used to validate API endpoints and server-side logic.
+
+- **Location**: `tests/e2e/`
+- **File Naming**: `*.test.js`
+- **Test Runner**: Node.js built-in test runner (`node:test`)
+- **Execution Command**: `npm run test:e2e:backend` or `node tests/e2e-runner.js --backend`
+- **Dependency Tracking**: Use `@testCovers` annotations to link tests to the backend source files they cover (e.g., `server/api/auth.py`).
+
+Tests make direct HTTP requests to the API endpoints exposed by the running container. The test runner provides the following environment variables to construct the base URL:
+- `E2E_HOST`: The host where the container is exposed (e.g., `localhost`).
+- `E2E_PORT`: The port on which the container is exposed (e.g., `8000`).
+
+**Example Backend Test:**
+```javascript
+/**
+ * @testCovers server/api/files/locks.py
+ */
+import { test, describe } from 'node:test';
+import assert from 'node:assert';
+
+const HOST = process.env.E2E_HOST || 'localhost';
+const PORT = process.env.E2E_PORT || '8000';
+const API_BASE = `http://${HOST}:${PORT}/api`;
+
+describe('File Locks API', () => {
+  test('should return active locks', async () => {
+    // Assumes authentication helpers are available
+    const response = await fetch(`${API_BASE}/files/locks`);
+    assert.strictEqual(response.status, 200);
+    const locks = await response.json();
+    assert(typeof locks === 'object');
+  });
+});
+```
+
+- **Authentication**: For endpoints that require authentication, use the helpers provided in `tests/e2e/helpers/test-auth.js` to create authenticated sessions and make API calls.
+
 
 ### User Management
 
@@ -775,9 +815,10 @@ When fixing failing E2E tests or creating new ones:
 3. **🚨 CRITICAL: Rebuild the image** using `npm run test:e2e` (not `npm run test:e2e:fast`) to include new testLog calls
    **ANY changes to source code (including adding testLog calls) REQUIRE a full rebuild - :fast will NOT pick up source changes!**
 4. **Use extensive logging during debugging** to understand the exact failure point and state transitions
-5. **Clean up after success** - Once tests pass, remove all testLog() calls with "TEST_" prefix and keep only the minimum required for test validation
-6. **Avoid source pollution** - Don't leave debugging testLog() calls in the source code permanently
-7. **Use E2E_DEBUG environment variable in test files**  Enable debug output in E2E tests (verbose logging)
+5. **Check saved logs**: When E2E tests fail, the test runner saves container and server logs to `tests/e2e/test-results/`. Inspect `container-logs-*.txt` for startup issues and `server-logs-*.txt` for backend errors.
+6. **Clean up after success** - Once tests pass, remove all testLog() calls with "TEST_" prefix and keep only the minimum required for test validation
+7. **Avoid source pollution** - Don't leave debugging testLog() calls in the source code permanently
+8. **Use E2E_DEBUG environment variable in test files**  Enable debug output in E2E tests (verbose logging)
 
 **Debugging Workflow:**
 

@@ -23,7 +23,7 @@
     "test:e2e:headed-debug": "PWDEBUG=1 node tests/e2e-runner.js --playwright --debug --headed --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY",
     "test:e2e:firefox": "node tests/e2e-runner.js --playwright --browser firefox --env GROBID_SERVER_URL --env GEMINI_API_KEY",
     "test:e2e:webkit": "node tests/e2e-runner.js --playwright --browser webkit --env GROBID_SERVER_URL --env GEMINI_API_KEY",
-    "test:e2e:backend": "node tests/e2e-runner.js"
+    "test:e2e:backend": "node tests/e2e-runner.js --backend"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.6",

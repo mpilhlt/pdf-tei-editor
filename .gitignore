@@ -19,8 +19,6 @@ pdfjs
 # Debug logs
 log/
 
-# Smart test runner cache
-tests/test-dependencies.json
 
 # Playwright test artifacts
 tests/e2e/test-results/

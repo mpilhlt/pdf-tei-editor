@@ -115,7 +115,7 @@ describe('Smart Test Runner Integration', () => {
     const testFile = join(projectRoot, 'tests', 'js', 'temp-annotation-test.test.js');
     testFiles.push(testFile);
     
-    const testContent = `/**
+    const testContent = `/*` + `*
  * Test file for annotation parsing
  * @testCovers app/src/modules/application.js
  * @testCovers server/api/files.py
@@ -174,7 +174,7 @@ test('dummy test', () => {});
     runner.getTestsToRun = async (options) => {
       const analysisResult = await runner.analyzeDependencies(options);
       return {
-        tests: { js: [], py: [], e2e: [`tests/e2e/${basename(testFile)}`] },
+        tests: { js: [], py: [], e2e: { playwright: [`tests/e2e/${basename(testFile)}`], backend: [] } },
         analysisResult
       };
     };
@@ -297,48 +297,23 @@ test('dummy test', () => {});
       // Filter out temporary test files created by other tests in this suite
       const realJSTests = testsToRun.js.filter(test => !test.includes('temp-'));
       const realPyTests = testsToRun.py.filter(test => !test.includes('temp_'));
-      const realE2ETests = testsToRun.e2e.filter(test => !test.includes('temp-'));
+      const realE2EPlaywrightTests = (testsToRun.e2e.playwright || []).filter(test => !test.includes('temp-'));
+      const realE2EBackendTests = (testsToRun.e2e.backend || []).filter(test => !test.includes('temp-'));
 
       // Real test files should not run since we removed @testCovers * from them
       assert(realJSTests.length === 0, `Should not run real JavaScript tests when no changes, but got: ${realJSTests.join(', ')}`);
       assert(realPyTests.length === 0, `Should not run real Python tests when no changes, but got: ${realPyTests.join(', ')}`);
-      assert(realE2ETests.length === 0, `Should not run real E2E tests when no changes, but got: ${realE2ETests.join(', ')}`);
+      assert(realE2EPlaywrightTests.length === 0, `Should not run real E2E Playwright tests when no changes, but got: ${realE2EPlaywrightTests.join(', ')}`);
+      assert(realE2EBackendTests.length === 0, `Should not run real E2E Backend tests when no changes, but got: ${realE2EBackendTests.join(', ')}`);
 
       console.log('Tests for no changes scenario:', testsToRun);
-      console.log(`Total tests selected: ${testsToRun.js.length + testsToRun.py.length + testsToRun.e2e.length}`);
+      const totalE2ETests = (testsToRun.e2e.playwright || []).length + (testsToRun.e2e.backend || []).length;
+      console.log(`Total tests selected: ${testsToRun.js.length + testsToRun.py.length + totalE2ETests}`);
     } finally {
       runner.getChangedFiles = originalGetChangedFiles;
     }
   });
 
-  test('should cache and reuse dependency analysis', async () => {
-    const cacheFile = join(projectRoot, 'tests', 'test-dependencies.json');
-    
-    // Ensure cache doesn't exist
-    if (existsSync(cacheFile)) {
-      unlinkSync(cacheFile);
-    }
-    
-    const runner1 = new SmartTestRunner();
-    
-    // First run should perform analysis
-    const start1 = Date.now();
-    await runner1.analyzeDependencies();
-    const duration1 = Date.now() - start1;
-    
-    assert(existsSync(cacheFile), 'Should create cache file');
-    
-    const runner2 = new SmartTestRunner();
-    
-    // Second run should use cache
-    const start2 = Date.now();
-    await runner2.analyzeDependencies();
-    const duration2 = Date.now() - start2;
-    
-    assert(duration2 < duration1, `Second run should be faster (${duration2}ms vs ${duration1}ms)`);
-    
-    console.log(`First run: ${duration1}ms, cached run: ${duration2}ms`);
-  });
 
   test('should handle Python test file parsing', async () => {
     // Create temporary Python test file
