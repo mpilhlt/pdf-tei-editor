@@ -177,12 +177,12 @@ npm run test:e2e:headed-debug       # Headed mode with Playwright step-through d
 
 # Backend Integration Tests
 npm run test:e2e:backend            # All backend tests
-node tests/e2e-runner.js tests/e2e/extractor-api.test.js  # Individual test
 
 # Advanced Options (direct runner usage)
 node tests/e2e-runner.js --playwright --browser firefox --headed
-node tests/e2e-runner.js --playwright --grep "login"
+node tests/e2e-runner.js --playwright --grep "test login dialog"
 E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug
+node tests/e2e-runner.js --backend --grep "test login api"
 
 # Environment Variable Configuration
 npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
@@ -610,10 +610,10 @@ E2E_DEBUG=true npm run test:e2e -- --grep "extraction workflow"
 npm run test:e2e -- --grep "extraction workflow"
 
 # Debug output with specific test patterns
-E2E_DEBUG=true npm run test:e2e:headed -- --grep "login"
+E2E_DEBUG=true npm run test:e2e:headed -- --grep "test login dialog"
 
 # Backend tests with debug output
-E2E_DEBUG=true node tests/e2e-runner.js tests/e2e/extractor-api.test.js
+E2E_DEBUG=true node tests/e2e-runner.js  --backend --grep "test login api"
 ```
 
 **Debug Output Features:**

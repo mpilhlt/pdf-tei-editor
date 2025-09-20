@@ -195,16 +195,24 @@ def acquire_lock(file_path, session_id):
             
         
 def release_lock(file_path, session_id):
-    """Releases the lock for a given file if it is held by the current session."""
+    """
+    Releases the lock for a given file if it is held by the current session.
+
+    Returns:
+        dict: Structured response with status, action, and message
+            - status: "success" or "error"
+            - action: "released", "already_released", "not_owned"
+            - message: Human-readable description
+    """
     storage = get_lock_storage()
-    
+
     # Ensure locks directory exists
     try:
         storage.mkdir()
     except Exception as e:
         current_app.logger.error(f"Could not create locks directory: {e}")
         raise RuntimeError(f"Could not create locks directory: {e}")
-    
+
     lock_path = get_lock_path(file_path)
 
     try:
@@ -213,18 +221,35 @@ def release_lock(file_path, session_id):
             if existing_lock_id == session_id:
                 storage.delete(lock_path)
                 current_app.logger.info(f"Lock released for {file_path} by session {session_id}")
-                return True
+                return {
+                    "status": "success",
+                    "action": "released",
+                    "message": f"Lock successfully released for {file_path}"
+                }
             else:
                 # This is an unexpected state. Fail loudly.
                 raise ApiError(f"Session {session_id} attempted to release a lock owned by {existing_lock_id}", status_code=409)
+        else:
+            # Lock doesn't exist, which is a success state (idempotent operation)
+            current_app.logger.info(f"Attempted to release lock for {file_path}, but no lock exists (idempotent success)")
+            current_app.logger.debug(f"Session {session_id} release attempt on unlocked file - this may indicate upstream logic issues")
+            return {
+                "status": "success",
+                "action": "already_released",
+                "message": f"Lock was already released for {file_path}"
+            }
     except (FileNotFoundError, ResourceNotFound):
         # Lock already gone, which is a success state.
         current_app.logger.info(f"Attempted to release lock for {file_path}, but it was already gone.")
-        return True
+        return {
+            "status": "success",
+            "action": "already_released",
+            "message": f"Lock was already released for {file_path}"
+        }
     except Exception as e:
         message = f"Error releasing lock for {file_path}: {str(e)}"
         current_app.logger.error(message)
-        # Re-raise 
+        # Re-raise
         e.args = (message,)
         raise
     

@@ -517,6 +517,39 @@ class E2ERunner {
     }
 
     /**
+     * Build container image only (no tests)
+     */
+    async buildImage() {
+        console.log('🏗️ Building container image only...');
+        console.log(`🆔 Build ID: ${this.testRunId}`);
+
+        try {
+            if (this.usePodman) {
+                console.log('🏗️ Building test image with podman...');
+                execSync(`${this.containerCmd} build -t pdf-tei-editor-test:latest --target test .`, {
+                    stdio: 'inherit',
+                    cwd: projectRoot
+                });
+            } else {
+                console.log('🏗️ Building test image with docker...');
+                execSync(`${this.containerCmd} build -t pdf-tei-editor-test:latest --target test .`, {
+                    stdio: 'inherit',
+                    cwd: projectRoot
+                });
+            }
+
+            // Clean up dangling images to prevent accumulation while preserving cache
+            await this.cleanupStaleImages();
+
+            console.log('✅ Image built successfully: pdf-tei-editor-test:latest');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('❌ Failed to build image:', errorMessage);
+            throw error;
+        }
+    }
+
+    /**
      * Stop and clean up the test container
      */
     async cleanup() {
@@ -823,9 +856,6 @@ class E2ERunner {
                 }
             }
 
-            // Cleanup container after all tests
-            await this.cleanup();
-
             // Report final results
             console.log('\n📊 Backend Test Results Summary');
             console.log('==============================');
@@ -841,60 +871,20 @@ class E2ERunner {
                         console.log(`    Error: ${failure.stderr.trim()}`);
                     }
                 });
+
+                // Save container and server logs for debugging
+                await this.showContainerLogs();
+
+                // Cleanup container after saving logs
+                await this.cleanup();
+
                 throw new Error(`${failedTests} backend test(s) failed`);
             } else {
                 console.log('\n🎉 All backend tests passed!');
+
+                // Cleanup container for successful tests
+                await this.cleanup();
             }
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            console.error('💥 Backend test runner failed:', errorMessage);
-            await this.cleanup();
-            throw error;
-        }
-    }
-
-    async runBackendTest(testFile) {
-        console.log('🧪 Unified E2E Runner - Backend Integration Test');
-        console.log('=================================================\n');
-        console.log(`🆔 Test Run ID: ${this.testRunId}`);
-
-        try {
-            // Start containerized environment
-            await this.startContainer();
-
-            // Run the test file
-            console.log(`🧪 Running test: ${testFile}`);
-            const testProcess = spawn('node', [testFile], {
-                stdio: 'inherit',
-                cwd: projectRoot,
-                env: {
-                    ...process.env,
-                    ...this.getEnvironmentVars()
-                }
-            });
-
-            return new Promise((resolve, reject) => {
-                testProcess.on('exit', async (/** @type {number | null} */ code) => {
-                    // Cleanup container
-                    await this.cleanup();
-
-                    if (code === 0) {
-                        console.log('🎉 Test passed!');
-                        resolve(code);
-                    } else {
-                        console.log('💥 Test failed!');
-                        reject(new Error(`Test failed with exit code ${code}`));
-                    }
-                });
-
-                testProcess.on('error', async (/** @type {Error} */ error) => {
-                    const errorMessage = error instanceof Error ? error.message : String(error);
-                    console.error('💥 Test process error:', errorMessage);
-                    await this.cleanup();
-                    reject(error);
-                });
-            });
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -951,6 +941,7 @@ function parseArgs(args) {
         testFile: /** @type {string | null} */ (null),
         help: false,
         noRebuild: false,
+        buildOnly: false,
         mode: 'production',  // default to production mode
         /** @type {string[]} */
         envVars: [],
@@ -987,6 +978,9 @@ function parseArgs(args) {
                 break;
             case '--no-rebuild':
                 parsed.noRebuild = true;
+                break;
+            case '--build-only':
+                parsed.buildOnly = true;
                 break;
             case '--mode':
                 parsed.mode = args[++i];
@@ -1041,13 +1035,12 @@ function showHelp() {
     console.log('  # Backend API tests (all *-api.test.js files)');
     console.log('  node tests/e2e-runner.js --backend [options]');
     console.log('');
-    console.log('  # Single backend integration test');
-    console.log('  node tests/e2e-runner.js <test-file>');
     console.log('');
     console.log('Common Options:');
     console.log('  --grep <pattern>     Run tests matching pattern');
     console.log('  --grep-invert <pattern> Exclude tests matching pattern');
     console.log('  --no-rebuild         Use existing container image without rebuilding');
+    console.log('  --build-only         Build container image only, do not run tests');
     console.log('  --env <var>          Environment variable to pass to container (can be used multiple times)');
     console.log('  --dotenv-path <path> Path to .env file to load (default: .env)');
     console.log('');
@@ -1080,8 +1073,8 @@ function showHelp() {
     console.log('  node tests/e2e-runner.js --playwright --no-rebuild');
     console.log('  node tests/e2e-runner.js --backend --no-rebuild');
     console.log('');
-    console.log('  # Run single backend integration test');
-    console.log('  node tests/e2e-runner.js tests/e2e/file-locks-api.test.js');
+    console.log('  # Build image only (no tests)');
+    console.log('  node tests/e2e-runner.js --build-only');
     console.log('');
     console.log('  # Custom port');
     console.log('  E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug');
@@ -1108,7 +1101,10 @@ async function main() {
     }
 
     try {
-        if (args.playwright) {
+        if (args.buildOnly) {
+            // Build image only
+            await runner.buildImage();
+        } else if (args.playwright) {
             // Run Playwright browser tests
             await runner.runPlaywrightTests({
                 browser: args.browser,
@@ -1129,11 +1125,8 @@ async function main() {
                 noRebuild: args.noRebuild,
                 envVars: args.envVars
             });
-        } else if (args.testFile) {
-            // Run single backend integration test
-            await runner.runBackendTest(args.testFile);
         } else {
-            console.error('❌ Either --playwright, --backend, or a test file must be specified');
+            console.error('❌ Either --build-only, --playwright or --backend must be specified');
             console.log('');
             showHelp();
             process.exit(1);

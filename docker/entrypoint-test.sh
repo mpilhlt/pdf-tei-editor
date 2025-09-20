@@ -20,10 +20,10 @@ cd /app
 mkdir -p data/pdf data/tei config db
 
 echo "Creating test user..."
-exec .venv/bin/python bin/manage.py user add testuser --password testpass --fullname "Test User" 2>/dev/null || echo "Test user testuser/testpass ready"
+.venv/bin/python bin/manage.py user add testuser --password testpass --fullname "Test User" 2>/dev/null || echo "Test user testuser/testpass ready"
 
 echo "Enabling testing mode..."
-exec .venv/bin/python bin/manage.py config set application.mode '"testing"'
+.venv/bin/python bin/manage.py config set application.mode '"testing"'
 
 echo "Starting test server..."
 

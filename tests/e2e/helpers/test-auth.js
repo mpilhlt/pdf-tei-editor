@@ -69,7 +69,7 @@ async function logout(sessionId) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': `session_id=${sessionId}`
+      'Cookie': `sessionId=${sessionId}`
     }
   });
 
@@ -87,7 +87,7 @@ async function checkStatus(sessionId) {
   const response = await fetch(`${API_BASE}/auth/status`, {
     method: 'GET',
     headers: {
-      'Cookie': `session_id=${sessionId}`
+      'Cookie': `sessionId=${sessionId}`
     }
   });
 
@@ -113,7 +113,7 @@ async function authenticatedRequest(sessionId, endpoint, method = 'GET', body = 
     method,
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': `session_id=${sessionId}`
+      'Cookie': `sessionId=${sessionId}`
     }
   };
 

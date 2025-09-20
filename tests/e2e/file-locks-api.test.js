@@ -45,7 +45,7 @@ describe('File Locks API E2E Tests', () => {
   test('POST /api/files/check_lock should return not locked for non-existent file', async () => {
     const session = await getPrimarySession();
     const result = await authenticatedApiCall(session.sessionId, '/files/check_lock', 'POST', {
-      file_path: '/data/non-existent-file.pdf'
+      file_id: '/data/non-existent-file.pdf'
     });
 
     assert(typeof result === 'object', 'Should return an object');
@@ -60,7 +60,7 @@ describe('File Locks API E2E Tests', () => {
     const session = await getPrimarySession();
 
     const result = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
     assert.strictEqual(result, 'OK', 'Should return OK for successful lock acquisition');
@@ -81,7 +81,7 @@ describe('File Locks API E2E Tests', () => {
 
     // Check lock from same session (should not be locked for owner)
     const result = await authenticatedApiCall(session.sessionId, '/files/check_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
     assert.strictEqual(result.is_locked, false, 'File should not be locked for the owner session');
@@ -95,7 +95,7 @@ describe('File Locks API E2E Tests', () => {
 
     // Check lock from different session (should be locked)
     const result = await authenticatedApiCall(secondarySession.sessionId, '/files/check_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
     assert.strictEqual(result.is_locked, true, 'File should be locked for other sessions');
@@ -109,7 +109,7 @@ describe('File Locks API E2E Tests', () => {
 
     // Try to acquire lock from different session - should fail with 423
     const response = await authenticatedRequest(secondarySession.sessionId, '/files/acquire_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
     assert.strictEqual(response.status, 423, 'Should return 423 LOCKED when file is already locked');
@@ -126,7 +126,7 @@ describe('File Locks API E2E Tests', () => {
 
     // Try to acquire the same lock again from the same session
     const result = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
     assert.strictEqual(result, 'OK', 'Should return OK for lock refresh');
@@ -139,12 +139,16 @@ describe('File Locks API E2E Tests', () => {
     const session = await getPrimarySession();
 
     const result = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
-    assert.strictEqual(result.status, 'lock_released', 'Should confirm lock release');
+    // New structured response - detailed action information
+    assert.strictEqual(result.action, 'released', 'Should indicate lock was actively released');
+    assert(result.message, 'Should provide descriptive message');
+    assert(result.message.includes('successfully released'), 'Message should indicate successful release');
 
     console.log('✓ Successfully released lock');
+    console.log(`✓ Action: ${result.action}, Message: ${result.message}`);
 
     // Verify lock is no longer active
     const locks = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET');
@@ -161,12 +165,12 @@ describe('File Locks API E2E Tests', () => {
 
     // First acquire lock with primary session
     await authenticatedApiCall(primarySession.sessionId, '/files/acquire_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
     // Try to release lock from secondary session - should fail with 409
     const response = await authenticatedRequest(secondarySession.sessionId, '/files/release_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
     assert.strictEqual(response.status, 409, 'Should return 409 CONFLICT when trying to release non-owned lock');
@@ -178,7 +182,7 @@ describe('File Locks API E2E Tests', () => {
 
     // Clean up: release the lock properly
     await authenticatedApiCall(primarySession.sessionId, '/files/release_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
   });
 
@@ -188,21 +192,25 @@ describe('File Locks API E2E Tests', () => {
 
     // Try to release a lock that doesn't exist
     const result = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_path: testFilePath
+      file_id: testFilePath
     });
 
-    assert.strictEqual(result.status, 'lock_released', 'Should report lock as released');
+    // New structured response - detailed action information
+    assert.strictEqual(result.action, 'already_released', 'Should indicate lock was already released');
+    assert(result.message, 'Should provide descriptive message');
+    assert(result.message.includes('already released'), 'Message should indicate already released state');
 
     console.log('✓ Releasing non-existent lock handled gracefully');
+    console.log(`✓ Action: ${result.action}, Message: ${result.message}`);
   });
 
   test('API should handle malformed requests gracefully', async () => {
     const session = await getPrimarySession();
 
-    // Test missing file_path parameter
+    // Test missing file_id parameter
     const response1 = await authenticatedRequest(session.sessionId, '/files/acquire_lock', 'POST', {});
 
-    assert.strictEqual(response1.status, 400, 'Should return 400 for missing file_path');
+    assert.strictEqual(response1.status, 400, 'Should return 400 for missing file_id');
 
     console.log('✓ Malformed requests handled gracefully');
   });
@@ -215,10 +223,10 @@ describe('File Locks API E2E Tests', () => {
 
     // Acquire locks for multiple files
     const result1 = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_path: file1
+      file_id: file1
     });
     const result2 = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_path: file2
+      file_id: file2
     });
 
     assert.strictEqual(result1, 'OK', 'Should acquire first lock');
@@ -235,14 +243,14 @@ describe('File Locks API E2E Tests', () => {
 
     // Release both locks
     const release1 = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_path: file1
+      file_id: file1
     });
     const release2 = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_path: file2
+      file_id: file2
     });
 
-    assert.strictEqual(release1.status, 'lock_released', 'Should release first lock');
-    assert.strictEqual(release2.status, 'lock_released', 'Should release second lock');
+    assert.strictEqual(release1.action, 'released', 'Should release first lock');
+    assert.strictEqual(release2.action, 'released', 'Should release second lock');
 
     // Verify both locks are gone
     const finalLocks = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET');

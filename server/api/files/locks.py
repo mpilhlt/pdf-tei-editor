@@ -24,10 +24,10 @@ def get_all_locks_route():
 def check_lock_route():
     """Checks if a single file is locked."""
     data = request.get_json()
-    file_path_or_hash = data.get("file_path")
-    if not file_path_or_hash:
-        raise ApiError("File path is required.")
-    file_path = resolve_document_identifier(file_path_or_hash)
+    file_id = data.get("file_id")
+    if not file_id:
+        raise ApiError("File ID is required.")
+    file_path = resolve_document_identifier(file_id)
     session_id = get_session_id(request)
     return jsonify(check_lock(file_path, session_id))
 
@@ -37,17 +37,17 @@ def check_lock_route():
 def acquire_lock_route():
     """Acquire a lock for this file."""
     data = request.get_json()
-    file_path_or_hash = data.get("file_path")
-    if not file_path_or_hash:
-        raise ApiError("File path is required.")
-    file_path = resolve_document_identifier(file_path_or_hash)
+    file_id = data.get("file_id")
+    if not file_id:
+        raise ApiError("File ID is required.")
+    file_path = resolve_document_identifier(file_id)
     session_id = get_session_id(request)
-    
+
     # Check access control - user must have edit permissions to acquire lock
     user = get_user_by_session_id(session_id)
     if not check_file_access(file_path, user, 'edit'):
         raise ApiError("Access denied: You don't have permission to edit this document", status_code=403)
-    
+
     if acquire_lock(file_path, session_id):
         return jsonify("OK")
     # could not acquire lock
@@ -57,14 +57,22 @@ def acquire_lock_route():
 @handle_api_errors
 @session_required
 def release_lock_route():
-    """Releases the lock for a given file path."""
+    """Releases the lock for a given file ID."""
     data = request.get_json()
-    file_path_or_hash = data.get("file_path")
-    if not file_path_or_hash:
-        raise ApiError("File path is required.")
-    file_path = resolve_document_identifier(file_path_or_hash)
+    file_id = data.get("file_id")
+    if not file_id:
+        raise ApiError("File ID is required.")
+    file_path = resolve_document_identifier(file_id)
     session_id = get_session_id(request)
-    if release_lock(file_path, session_id):
-        return jsonify({"status": "lock_released"})
+
+    result = release_lock(file_path, session_id)
+
+    if result["status"] == "success":
+        # Return structured response
+        return jsonify({
+            "action": result["action"],
+            "message": result["message"]
+        })
     else:
-        raise ApiError("Failed to release lock. It may have been acquired by another session.", status_code=409)
+        # This should not happen with current implementation, but handle gracefully
+        raise ApiError(f"Failed to release lock: {result.get('message', 'Unknown error')}", status_code=409)

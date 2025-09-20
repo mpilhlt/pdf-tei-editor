@@ -88,7 +88,7 @@ node tests/smart-test-runner.js --changed-files <files>
 
 **Smart Test Runner**: Automatically selects relevant tests based on file dependencies using `@testCovers` annotations. Supports wildcard patterns like `@testCovers app/src/*` for frontend-wide coverage.
 
-**End-to-End Tests**: Unified cross-platform E2E testing using Node.js runner (`tests/e2e-runner.js`) that handles both Playwright browser tests and backend integration tests. Features:
+**End-to-End Tests**: Unified cross-platform E2E testing using Node.js runner (`tests/e2e-runner.js`) that handles both Playwright browser tests and backend integration tests. Run `tests/e2e-runner.js --help` for a list of options. Features:
 
 - **Containerized testing**: Docker/Podman with multi-stage builds and layer caching
 - **Cross-platform support**: Works on Windows, macOS, and Linux (replaces Linux-only bash script)

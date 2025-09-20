@@ -499,7 +499,7 @@ async function checkLock(fileId) {
   if (!fileId) {
     throw new Error("File id is required to check lock");
   }
-  return await callApi('/files/check_lock', 'POST', { file_path: fileId });
+  return await callApi('/files/check_lock', 'POST', { file_id: fileId });
 }
 
 /**
@@ -509,7 +509,7 @@ async function acquireLock(fileId) {
   if (!fileId) {
     throw new Error("File id is required to check lock");
   }
-  return await callApi('/files/acquire_lock', 'POST', { file_path: fileId });
+  return await callApi('/files/acquire_lock', 'POST', { file_id: fileId });
 }
 
 /**
@@ -519,7 +519,7 @@ async function releaseLock(fileId) {
   if (!fileId) {
     throw new Error("File id is required to release lock");
   }
-  return await callApi('/files/release_lock', 'POST', { file_path: fileId });
+  return await callApi('/files/release_lock', 'POST', { file_id: fileId });
 }
 
 
