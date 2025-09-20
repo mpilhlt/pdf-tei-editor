@@ -114,6 +114,12 @@ await app.updateState({})
 // invoke the "start" endpoint
 await app.start()
 
+// Expose necessary objects to global scope for E2E testing
+if (applicationMode == 'testing') {
+  window.app = app;
+  window.client = client;
+}
+
 //
 // Legacy compatibility functions for old plugin system
 //

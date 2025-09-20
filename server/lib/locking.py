@@ -11,7 +11,7 @@ from server.api.config import read_config
 # a custom exception class is not needed since ApiError is defined in server_utils
 from .server_utils import ApiError
 
-LOCK_TIMEOUT_SECONDS = 60
+LOCK_TIMEOUT_SECONDS = 30
 
 class LockStorage(ABC):
     @abstractmethod
@@ -149,19 +149,19 @@ def acquire_lock(file_path, session_id):
     Tries to acquire a lock for a given file. Returns True on success, False on failure.
     Raises ApiError for configuration issues.
     """
-    
+
     current_app.logger.debug(f"Acquiring lock for {file_path}")
     storage = get_lock_storage()
-    
+
     # Ensure locks directory exists
     try:
         storage.mkdir()
     except Exception as e:
         current_app.logger.error(f"Could not create locks directory: {e}")
         raise RuntimeError(f"Could not create locks directory: {e}")
-    
+
     lock_path = get_lock_path(file_path)
-    
+
     def write_lock(overwrite=True):
         storage.write(lock_path, session_id, overwrite=overwrite)
 
@@ -174,7 +174,7 @@ def acquire_lock(file_path, session_id):
         # Lock exists. Check if it's ours or if it's stale.
         try:
             existing_lock_id = storage.read(lock_path)
-            
+
             if existing_lock_id == session_id:
                 # It's our own lock, just refresh it.
                 write_lock(overwrite=True)
@@ -279,7 +279,7 @@ def purge_stale_locks():
         pass
     except Exception as e:
         current_app.logger.error(f"Error listing or purging stale locks: {e}")
-    
+
     return purged_count
 
 def get_all_active_locks():
@@ -314,17 +314,18 @@ def get_all_active_locks():
 def check_lock(file_path, session_id):
     """Checks if a single file is locked by another session."""
     storage = get_lock_storage()
-    
+
     # Ensure locks directory exists
     try:
         storage.mkdir()
     except Exception as e:
         current_app.logger.error(f"Could not create locks directory: {e}")
         return { "is_locked": False }  # Assume not locked if we can't check
-    
+
     active_locks = get_all_active_locks()
-    
+
     if file_path in active_locks and active_locks[file_path] != session_id:
+        current_app.logger.debug(f"File is locked by another session: {active_locks[file_path]}")
         return { "is_locked": True }
-    
+
     return { "is_locked": False }

@@ -29,9 +29,6 @@ test.describe('Test Logging Functionality', () => {
     // Navigate and login
     await navigateAndLogin(page, E2E_BASE_URL);
 
-    // Wait for login to complete and startup to finish
-    await page.waitForSelector('sl-dialog:not([open])', { timeout: 10000 });
-
     // Wait a bit more for all startup logs to complete
     await page.waitForTimeout(3000);
 

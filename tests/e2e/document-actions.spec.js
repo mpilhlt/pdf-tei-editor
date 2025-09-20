@@ -9,7 +9,7 @@
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
 
 import { test, expect } from '@playwright/test';
-import { setupTestConsoleCapture, waitForTestMessage, findErrorLogs, setupErrorFailure } from './helpers/test-logging.js';
+import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin } from './helpers/login-helper.js';
 import { selectFirstDocuments } from './helpers/extraction-helper.js';
 
@@ -103,7 +103,7 @@ test.describe('Document Actions', () => {
       expect(newVersionLog.value.newHash).not.toBe(newVersionLog.value.oldHash);
 
       debugLog('New version creation test completed successfully');
-      
+
     } finally {
       // Clean up error monitoring
       stopErrorMonitoring();
@@ -112,8 +112,7 @@ test.describe('Document Actions', () => {
   });
 
   test('should save revision for existing document', async ({ page }) => {
-    // Add delay to allow any file locks from previous test to be released
-    await page.waitForTimeout(3000);
+
     // Set up enhanced console log capture for TEST messages
     const consoleLogs = setupTestConsoleCapture(page);
 

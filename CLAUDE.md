@@ -806,6 +806,24 @@ E2E_DEBUG=true npm run test:e2e -- --grep "extraction"
 7. **Scope isolation** - Console logs captured in Node.js scope, browser state passed through testLog system
 8. **Self-contained testLog expressions** - All data must be computed within testLog() calls for easy bundle removal from production code
 
+#### E2E Test Authentication and API Access
+
+When making API calls from E2E tests in the browser context:
+
+1. **Never make direct fetch() calls to API endpoints** - Authentication requires the `X-Session-ID` header which must match the browser session
+2. **Use the client API through window.client** - The client object handles proper authentication headers automatically
+3. **Temporary global exposure**: If needed, expose objects to global scope in `app/src/app.js` for E2E testing, but add TODO comments to remove them later
+4. **Example proper API usage**:
+   ```javascript
+   await page.evaluate(async () => {
+     // CORRECT: Use client API with proper authentication
+     await window.client.releaseLock(fileId);
+
+     // WRONG: Direct fetch without proper session headers
+     // await fetch('/api/files/release_lock', { ... })
+   });
+   ```
+
 #### Debugging E2E Test Failures
 
 When fixing failing E2E tests or creating new ones:

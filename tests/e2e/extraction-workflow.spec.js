@@ -12,7 +12,7 @@
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
 
 import { test, expect } from '@playwright/test';
-import { setupTestConsoleCapture, waitForTestMessage } from './helpers/test-logging.js';
+import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin } from './helpers/login-helper.js';
 
 // Define allowed error patterns for document actions
