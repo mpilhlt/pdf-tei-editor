@@ -14,7 +14,6 @@ Tests all config management functionality including:
 
 import unittest
 import tempfile
-import os
 import json
 import subprocess
 import shutil

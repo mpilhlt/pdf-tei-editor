@@ -17,7 +17,7 @@ from server.lib.cache_manager import mark_cache_clean
 from server.lib.hash_utils import generate_file_hash, create_hash_mapping
 
 # File type mappings
-FILE_TYPES = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
+FILE_TYPES = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml", ".rng": "xml", ".xsd": "xml"}
 
 # Metadata cache to avoid repeated XML parsing
 _metadata_cache = {}
@@ -418,9 +418,25 @@ def _build_file_list(file_id_data):
     
     for file_id, file_type_data in file_id_data.items():
         file_dict = {
-            "id": file_id, 
+            "id": file_id,
             "versions": []
         }
+
+        # Determine file classification based on available file types
+        has_pdf = 'pdf' in file_type_data
+        has_xml = 'xml' in file_type_data
+
+        if has_pdf and has_xml:
+            file_dict['file_type'] = 'pdf-xml'
+        elif has_xml:
+            # Check if this is a schema file by examining file extensions
+            is_schema = any(
+                Path(f['path']).suffix.lower() in ['.rng', '.xsd']
+                for f in file_type_data['xml']
+            )
+            file_dict['file_type'] = 'schema' if is_schema else 'xml-only'
+        else:
+            file_dict['file_type'] = 'unknown'
         
         # Process each file type
         for file_type, files in file_type_data.items():
@@ -459,12 +475,13 @@ def _build_file_list(file_id_data):
         # Sort versions and add Gold entry if main XML exists
         _finalize_versions(file_dict)
         
-        # Only include files that have PDF and at least one XML (gold or version)
+        # Include files that have PDF and at least one XML, OR standalone XML files
         has_pdf = 'pdf' in file_dict
-        has_xml = ((file_dict.get('gold') and len(file_dict['gold']) > 0) or 
+        has_xml = ((file_dict.get('gold') and len(file_dict['gold']) > 0) or
                   (file_dict.get('versions') and len(file_dict['versions']) > 0))
-        
-        if has_pdf and has_xml:
+
+        # Allow standalone XML files (without PDF) - useful for schema generation and XML-only workflows
+        if (has_pdf and has_xml) or (not has_pdf and has_xml):
             file_list.append(file_dict)
     
     # Sort by ID
