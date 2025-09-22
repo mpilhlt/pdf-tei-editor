@@ -74,8 +74,8 @@ async function install(state) {
   // Add file selection controls to toolbar with specified priorities
   /** @type { Record<string, Number>} */
   const controlPriorities = {
-    'pdf': 10,    // High priority - essential
-    'xml': 10,    // High priority - essential  
+    'pdf': 10,    // High priority - essential (source file)
+    'xml': 10,    // High priority - essential (target file)
     'variant': 5, // Medium priority
     'diff': 3     // Lower priority
   };
@@ -159,7 +159,23 @@ async function update(state) {
 
     isUpdatingProgrammatically = true;
     try {
-      ui.toolbar.pdf.value = state.pdf || ""
+      // For XML-only files where pdf is null, find the correct source identifier
+      let sourceValue = state.pdf || "";
+      if (!state.pdf && state.xml && state.fileData) {
+        // Find the file that contains this XML and get its identifier
+        const xmlFile = state.fileData.find(file =>
+          (file.gold && file.gold.some(g => g.hash === state.xml)) ||
+          (file.versions && file.versions.some(v => v.hash === state.xml))
+        );
+        if (xmlFile) {
+          // For XML-only files, the source identifier is the XML hash itself
+          if (!xmlFile.pdf) {
+            sourceValue = state.xml;
+          }
+        }
+      }
+
+      ui.toolbar.pdf.value = sourceValue;
       ui.toolbar.xml.value = state.xml || ""
       ui.toolbar.diff.value = state.diff || ""
     } finally {
@@ -361,10 +377,29 @@ async function populateSelectboxes(state) {
       .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0)
 
     for (const file of files) {
-      // populate pdf select box 
+      // Determine file identifier and label based on file type
+      let fileIdentifier, displayLabel;
+
+      if (file.pdf) {
+        // Traditional PDF-XML workflow
+        fileIdentifier = file.pdf.hash;
+        displayLabel = file.label;
+      } else if (file.gold && file.gold.length > 0) {
+        // XML-only file - use first gold file as identifier
+        fileIdentifier = file.gold[0].hash;
+        displayLabel = `📄 ${file.label}`;
+      } else if (file.versions && file.versions.length > 0) {
+        // XML-only file with only versions - use first version as identifier
+        fileIdentifier = file.versions[0].hash;
+        displayLabel = `📄 ${file.label}`;
+      } else {
+        continue; // Skip files without identifiable content
+      }
+
+      // populate pdf/source select box
       const option = Object.assign(new SlOption, {
-        value: file.pdf.hash,  // Use document identifier
-        textContent: file.label,
+        value: fileIdentifier,
+        textContent: displayLabel,
         size: "small",
       })
 
@@ -375,7 +410,7 @@ async function populateSelectboxes(state) {
       ui.toolbar.pdf.hoist = true
       ui.toolbar.pdf.appendChild(option);
 
-      if (file.pdf.hash === state.pdf) {
+      if (fileIdentifier === state.pdf) {
         // populate the version and diff selectboxes depending on the selected file
         if (file.versions) {
           // Filter versions based on variant selection
@@ -471,7 +506,7 @@ async function populateSelectboxes(state) {
 // Event handlers
 
 /**
- * Called when the selection in the PDF selectbox changes
+ * Called when the selection in the PDF/source file selectbox changes
  */
 async function onChangePdfSelection() {
   let state = app.getCurrentState()
@@ -480,16 +515,42 @@ async function onChangePdfSelection() {
     throw new Error("fileData hasn't been loaded yet")
   }
   /** @type {FileListItem | undefined} */
-  const selectedFile = state.fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
-  if (!selectedFile) {
-    return 
-  }
-  const pdf = selectedFile.pdf.hash  // Use document identifier
-  const collection = selectedFile.collection
+  const selectedIdentifier = ui.toolbar.pdf.value;
+  const selectedFile = state.fileData.find(file => {
+    // Check if it matches PDF hash (traditional workflow)
+    if (file.pdf && file.pdf.hash === selectedIdentifier) {
+      return true;
+    }
+    // Check if it matches any gold file hash (XML-only workflow)
+    if (file.gold && file.gold.some(g => g.hash === selectedIdentifier)) {
+      return true;
+    }
+    // Check if it matches any version file hash (XML-only workflow)
+    if (file.versions && file.versions.some(v => v.hash === selectedIdentifier)) {
+      return true;
+    }
+    return false;
+  });
 
-  // Find gold file matching current variant selection
+  if (!selectedFile) {
+    return;
+  }
+
+  const collection = selectedFile.collection;
+  let pdf = null;
   let xml = null;
-  if (selectedFile.gold) {
+
+  // Determine if this is a PDF-XML file or XML-only file
+  if (selectedFile.pdf && selectedFile.pdf.hash === selectedIdentifier) {
+    // Traditional PDF-XML workflow
+    pdf = selectedIdentifier;
+  } else {
+    // XML-only file - the selected identifier is actually an XML file
+    xml = selectedIdentifier;
+  }
+
+  // For PDF-XML files, find the appropriate XML file
+  if (pdf && selectedFile.gold) {
     const { variant } = state;
     let matchingGold;
 
@@ -519,7 +580,14 @@ async function onChangePdfSelection() {
   if (Object.keys(filesToLoad).length > 0) {
     try {
       await services.removeMergeView()
-      await app.updateState({ collection })
+      // For XML-only files, clear PDF state but keep collection and XML
+      const stateUpdate = { collection };
+      if (pdf) {
+        stateUpdate.pdf = pdf;
+      } else {
+        stateUpdate.pdf = null; // Clear PDF for XML-only files
+      }
+      await app.updateState(stateUpdate)
       await services.load(filesToLoad)
     }
     catch (error) {
@@ -532,7 +600,7 @@ async function onChangePdfSelection() {
 
 
 /**
- * Called when the selection in the XML selectbox changes
+ * Called when the selection in the XML/target selectbox changes
  */
 async function onChangeXmlSelection() {
   const state = app.getCurrentState()

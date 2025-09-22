@@ -41,7 +41,7 @@ import './modules/panels/index.js';
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {floatingPanelPart} from './plugins/floating-panel.js'
  * @import {newVersionDialogPart, newRevisionChangeDialogPart } from './plugins/services.js'
- * @import {extractionActionsPart} from './plugins/extraction.js' 
+ * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js' 
  * @import {infoDrawerPart} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
@@ -71,7 +71,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
  * @property {UIPart<SlDialog, promptEditorPart>} promptEditor - A dialog to edit the prompt instructions
- * @property {UIPart<SlDialog, extractionActionsPart>} extractionOptions - A dialog to choose extraction options
+ * @property {UIPart<SlDialog, extractionDialogPart>} extractionOptions - A dialog to choose extraction options
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  * @property {UIPart<SlDialog, newVersionDialogPart>} newVersionDialog

@@ -18,6 +18,7 @@ import {
   sync, accessControl, testLog
 } from '../app.js'
 import FiledataPlugin from './filedata.js'
+import { getFileDataByHash } from '../modules/file-data-utils.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
@@ -25,7 +26,6 @@ import * as tei_utils from '../modules/tei-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror_utils.js'
 import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 import { ApiError } from '../modules/utils.js'
-import { getFileDataByHash } from '../modules/file-data-utils.js'
 
 /**
  * plugin API
@@ -212,7 +212,7 @@ async function update(state) {
 
   da.deleteAll.disabled = !Boolean(state.pdf && state.xml) // Disable if no pdf and no xml
   da.deleteAllVersions.disabled = ui.toolbar.xml.querySelectorAll("sl-option").length  < 2 // disable if only one document left (gold version)
-  da.deleteCurrentVersion.disabled = state.xml === ui.toolbar.xml.querySelectorAll("sl-option")?.[0].value // disable if the xml is the gold version
+  //da.deleteCurrentVersion.disabled = state.xml === ui.toolbar.xml.querySelectorAll("sl-option")?.[0].value // disable if the xml is the gold version
 
   da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
 
@@ -447,14 +447,36 @@ async function removeMergeView() {
  * @param {ApplicationState} state
  */
 async function deleteCurrentVersion(state) {
-  // @ts-ignore
-  if (ui.toolbar.xml.value.startsWith("/data/tei")) {
-    dialog.error("You cannot delete the gold version")
+  // Handle both PDF-XML files and XML-only files
+  let xmlValue = ui.toolbar.xml.value;
+  let selectedOption = ui.toolbar.xml.selectedOptions[0];
+
+  // For XML-only files, the XML might be selected in the PDF dropdown instead
+  if (!xmlValue && state.xml && !state.pdf) {
+    xmlValue = state.xml;
+    // Find the option in the PDF dropdown that corresponds to this XML file
+    selectedOption = ui.toolbar.pdf.selectedOptions[0];
+  }
+
+  if (!xmlValue) {
+    dialog.error("No file selected for deletion")
     return
   }
-  const filePathsToDelete = [ui.toolbar.xml.value]
+
+  // Use helper function to check if this is a gold file
+  // XML-only files (where state.pdf is null) can always be deleted
+  if (state.pdf && typeof xmlValue === 'string') {
+    // Only check for gold status if this is a PDF-XML file
+    const fileData = getFileDataByHash(xmlValue);
+    if (fileData && fileData.type === 'gold') {
+      dialog.error("You cannot delete the gold version")
+      return
+    }
+  }
+
+  const filePathsToDelete = [xmlValue]
   if (filePathsToDelete.length > 0) {
-    const versionName = ui.toolbar.xml.selectedOptions[0].textContent
+    const versionName = selectedOption ? selectedOption.textContent : 'current version';
     const msg = `Are you sure you want to delete the current version "${versionName}"?`
     if (!confirm(msg)) return; // todo use dialog
     services.removeMergeView()

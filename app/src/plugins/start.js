@@ -104,10 +104,13 @@ async function start() {
     const xml = currentState.xml || null
     const diff = currentState.diff
 
-    if (pdf !== null) {
-      // lod the documents
+    if (pdf !== null || xml !== null) {
+      // load the documents (PDF-XML pairs or XML-only files)
       try {
-        await services.load({ pdf, xml })
+        const filesToLoad = {};
+        if (pdf) filesToLoad.pdf = pdf;
+        if (xml) filesToLoad.xml = xml;
+        await services.load(filesToLoad)
       } catch (error) {
         dialog.error(String(error))
         logger.critical(String(error))

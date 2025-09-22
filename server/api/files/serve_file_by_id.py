@@ -46,8 +46,18 @@ def serve_file_by_id(document_id):
             if not os.path.exists(absolute_path):
                 raise ApiError(f"File not found for identifier: {document_id}", status_code=404)
         
-        # Serve the file
-        return send_file(absolute_path)
+        # Determine MIME type based on file extension - only serve allowed file types
+        if absolute_path.endswith('.rng'):
+            mimetype = 'application/xml'
+        elif absolute_path.endswith('.xml'):
+            mimetype = 'application/xml'
+        elif absolute_path.endswith('.pdf'):
+            mimetype = 'application/pdf'
+        else:
+            raise ApiError(f"File type not allowed for serving: {absolute_path}", status_code=403)
+
+        # Serve the file with appropriate content type
+        return send_file(absolute_path, mimetype=mimetype)
         
     except ApiError:
         # Re-raise API errors as-is
