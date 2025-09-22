@@ -38,7 +38,8 @@
       "Bash(npx tsc:*)",
       "WebSearch",
       "Bash(git check-ignore:*)",
-      "Bash(npm run test:py:*)"
+      "Bash(npm run test:py:*)",
+      "Bash(python:*)"
     ],
     "deny": []
   }

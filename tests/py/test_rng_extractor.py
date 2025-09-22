@@ -248,6 +248,51 @@ class TestRelaxNGExtractor(unittest.TestCase):
         self.assertLessEqual(strict_optional_count, balanced_optional_count,
                              "Strict mode should have fewer optional attributes")
 
+    def test_content_model_accuracy(self):
+        """Test that content models are generated accurately based on actual XML content."""
+        xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<root xmlns="http://www.tei-c.org/ns/1.0">
+  <date when="2025-01-01">2025-01-01</date>
+  <idno type="DOI">10.1000/example</idno>
+  <page>84 <lb/></page>
+  <empty-elem/>
+  <container>
+    <child1>content</child1>
+    <child2>more content</child2>
+  </container>
+</root>'''
+
+        schema = self.extractor.extract(xml_content=xml_content, options=self.options)
+
+        # Elements with only text content should use <text/>
+        self.assertIn('<define name="date">', schema)
+        self.assertIn('<text/>', schema)  # date element should have text content
+
+        self.assertIn('<define name="idno">', schema)
+        # idno should also have text content, not be empty
+
+        # Elements with mixed content should use interleave
+        self.assertIn('<define name="page">', schema)
+        page_def_start = schema.find('<define name="page">')
+        page_def_end = schema.find('</define>', page_def_start)
+        page_definition = schema[page_def_start:page_def_end]
+        self.assertIn('<interleave>', page_definition, "Page should have mixed content model")
+        self.assertIn('<text/>', page_definition, "Page should allow text content")
+
+        # Empty elements should use <empty/>
+        self.assertIn('<define name="empty-elem">', schema)
+        empty_def_start = schema.find('<define name="empty-elem">')
+        empty_def_end = schema.find('</define>', empty_def_start)
+        empty_definition = schema[empty_def_start:empty_def_end]
+        self.assertIn('<empty/>', empty_definition, "Empty element should use empty content model")
+
+        # Elements with only child elements should use choice patterns
+        self.assertIn('<define name="container">', schema)
+        container_def_start = schema.find('<define name="container">')
+        container_def_end = schema.find('</define>', container_def_start)
+        container_definition = schema[container_def_start:container_def_end]
+        self.assertIn('<choice>', container_definition, "Container should use choice pattern for multiple children")
+
 
 if __name__ == '__main__':
     unittest.main()

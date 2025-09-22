@@ -234,12 +234,13 @@ class RelaxNGParser:
             if child_name:
                 children.add(child_name)
         
-        # Look for child elements in choice/group/optional/zeroOrMore/oneOrMore
+        # Look for child elements in choice/group/optional/zeroOrMore/oneOrMore/interleave
         for container in element.findall('./{http://relaxng.org/ns/structure/1.0}choice') + \
                          element.findall('./{http://relaxng.org/ns/structure/1.0}group') + \
                          element.findall('./{http://relaxng.org/ns/structure/1.0}optional') + \
                          element.findall('./{http://relaxng.org/ns/structure/1.0}zeroOrMore') + \
-                         element.findall('./{http://relaxng.org/ns/structure/1.0}oneOrMore'):
+                         element.findall('./{http://relaxng.org/ns/structure/1.0}oneOrMore') + \
+                         element.findall('./{http://relaxng.org/ns/structure/1.0}interleave'):
             container_children = self._extract_child_elements(container, visited)
             children.update(container_children)
         
@@ -310,7 +311,8 @@ class RelaxNGParser:
                          element.findall('./{http://relaxng.org/ns/structure/1.0}group') + \
                          element.findall('./{http://relaxng.org/ns/structure/1.0}optional') + \
                          element.findall('./{http://relaxng.org/ns/structure/1.0}zeroOrMore') + \
-                         element.findall('./{http://relaxng.org/ns/structure/1.0}oneOrMore'):
+                         element.findall('./{http://relaxng.org/ns/structure/1.0}oneOrMore') + \
+                         element.findall('./{http://relaxng.org/ns/structure/1.0}interleave'):
             container_attrs = self._extract_attributes(container, visited)
             # Merge attributes, preserving documentation
             for attr_name, attr_data in container_attrs.items():

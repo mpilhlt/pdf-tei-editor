@@ -184,8 +184,41 @@ class SchemaAnalyzer:
 
             elements[tag]['occurrences'] += 1
 
-            # Check if element has text content
+            # Check if element has meaningful text content
+            has_meaningful_text = False
+
+            # Collect all text content from the element
+            all_text_parts = []
             if elem.text and elem.text.strip():
+                all_text_parts.append(elem.text.strip())
+
+            # Also check tail text of children (text after child elements)
+            for child in elem:
+                if hasattr(child, 'tail') and child.tail and child.tail.strip():
+                    all_text_parts.append(child.tail.strip())
+
+            # Determine if there's meaningful text
+            for text_part in all_text_parts:
+                if text_part:
+                    # Check for meaningful text content
+                    has_letters = any(c.isalpha() for c in text_part)
+                    has_digits = any(c.isdigit() for c in text_part)
+                    has_meaningful_chars = any(c.isalnum() or c in '.-_:/' for c in text_part)
+                    is_substantial = len(text_part.strip()) > 0
+
+                    # Consider it text content if:
+                    # 1. Has letters (words), OR
+                    # 2. Has digits with meaningful characters (dates, IDs, page numbers), OR
+                    # 3. Any substantial alphanumeric content
+                    if is_substantial and (has_letters or
+                                         (has_digits and has_meaningful_chars) or
+                                         has_meaningful_chars):
+                        # Exclude pure whitespace patterns
+                        if not all(c in ' \n\t\r' for c in text_part):
+                            has_meaningful_text = True
+                            break
+
+            if has_meaningful_text:
                 elements[tag]['text_content'] = True
 
             # Collect attributes (safely handle potential Cython functions)
@@ -384,13 +417,15 @@ class RelaxNGGenerator:
                     else:
                         definitions.append(f'      {attr_element}')
 
-            # Add content model
-            if element_info['children'] or element_info['text_content']:
-                if element_info['text_content'] and element_info['children']:
-                    # Mixed content
+            # Add content model with improved logic
+            has_children = bool(element_info['children'])
+            has_text = element_info.get('text_content', False)
+
+            if has_children or has_text:
+                if has_text and has_children:
+                    # True mixed content - text and elements can be interleaved
                     definitions.append('      <interleave>')
-                    if element_info['text_content']:
-                        definitions.append('        <text/>')
+                    definitions.append('        <text/>')
                     # Ensure all child keys are strings before sorting
                     str_children = [str(child) for child in element_info['children'].keys() if child is not None]
                     for child in sorted(str_children):
@@ -399,24 +434,27 @@ class RelaxNGGenerator:
                         definitions.append(f'          <ref name="{child_local}"/>')
                         definitions.append(f'        </zeroOrMore>')
                     definitions.append('      </interleave>')
-                elif element_info['children']:
-                    # Element content only
-                    if len(element_info['children']) == 1:
-                        child = list(element_info['children'].keys())[0]
+                elif has_children:
+                    # Element content only - use structured patterns
+                    str_children = [str(child) for child in element_info['children'].keys() if child is not None]
+
+                    if len(str_children) == 1:
+                        # Single child type - simple pattern
+                        child = str_children[0]
                         child_local = child.split('}')[-1] if '}' in child else child
                         definitions.append(f'      <zeroOrMore>')
                         definitions.append(f'        <ref name="{child_local}"/>')
                         definitions.append(f'      </zeroOrMore>')
                     else:
-                        definitions.append('      <interleave>')
-                        # Ensure all child keys are strings before sorting
-                        str_children = [str(child) for child in element_info['children'].keys() if child is not None]
+                        # Multiple child types - use choice pattern instead of interleave
+                        # This is more restrictive but more accurate for most XML structures
+                        definitions.append('      <zeroOrMore>')
+                        definitions.append('        <choice>')
                         for child in sorted(str_children):
                             child_local = child.split('}')[-1] if '}' in child else child
-                            definitions.append(f'        <zeroOrMore>')
                             definitions.append(f'          <ref name="{child_local}"/>')
-                            definitions.append(f'        </zeroOrMore>')
-                        definitions.append('      </interleave>')
+                        definitions.append('        </choice>')
+                        definitions.append('      </zeroOrMore>')
                 else:
                     # Text content only
                     definitions.append('      <text/>')
