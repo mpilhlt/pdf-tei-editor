@@ -20,6 +20,7 @@ import { PanelUtils } from '../modules/panels/index.js'
 import { logger } from '../app.js'
 import { api as xmlEditor } from './xmleditor.js'
 import { prettyPrintNode, ensureRespStmtForUser } from '../modules/tei-utils.js'
+import { getFileDataByHash } from '../modules/file-data-utils.js'
 
 // TEI namespace constant
 const TEI_NS = 'http://www.tei-c.org/ns/1.0'
@@ -602,33 +603,96 @@ function hideAccessControlWidgets() {
 }
 
 /**
+ * Checks if a file hash represents a gold file
+ * @param {string} hash - The file hash identifier
+ * @returns {boolean}
+ */
+function isGoldFile(hash) {
+  if (!hash) return false
+  try {
+    const fileData = getFileDataByHash(hash)
+    return fileData?.type === 'gold'
+  } catch (error) {
+    logger.warn(`Error checking if file is gold: ${String(error)}`)
+    return false
+  }
+}
+
+/**
+ * Checks if a file hash represents a version file
+ * @param {string} hash - The file hash identifier
+ * @returns {boolean}
+ */
+function isVersionFile(hash) {
+  if (!hash) return false
+  try {
+    const fileData = getFileDataByHash(hash)
+    return fileData?.type === 'version'
+  } catch (error) {
+    logger.warn(`Error checking if file is version: ${String(error)}`)
+    return false
+  }
+}
+
+/**
+ * Checks if user has reviewer role
+ * @param {Object} user - User object
+ * @returns {boolean}
+ */
+function userHasReviewerRole(user) {
+  return user && user.roles && user.roles.includes('reviewer')
+}
+
+/**
+ * Checks if user has annotator role
+ * @param {Object} user - User object
+ * @returns {boolean}
+ */
+function userHasAnnotatorRole(user) {
+  return user && user.roles && user.roles.includes('annotator')
+}
+
+/**
  * Checks if current user can edit the document
  * @param {Object} user - Current user object
  * @returns {boolean}
  */
 function canEditDocument(user) {
   const { visibility, editability, owner } = currentPermissions
-  
+
   if (!user) {
     // Anonymous users cannot edit anything
     return false
   }
-  
+
   // Admin users can edit everything
   if (user.roles && user.roles.includes('admin')) {
     return true
   }
-  
+
+  // Check role-based file type restrictions
+  if (pluginState && pluginState.xml) {
+    // Gold files require reviewer role
+    if (isGoldFile(pluginState.xml) && !userHasReviewerRole(user)) {
+      return false
+    }
+
+    // Version files require annotator role (or reviewer role)
+    if (isVersionFile(pluginState.xml) && !userHasAnnotatorRole(user) && !userHasReviewerRole(user)) {
+      return false
+    }
+  }
+
   // Check visibility permissions
   if (visibility === 'private' && owner !== user.username) {
     return false
   }
-  
+
   // Check editability permissions
   if (editability === 'protected' && owner !== user.username) {
     return false
   }
-  
+
   return true
 }
 
@@ -682,14 +746,22 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
     logger.debug('Read-only widget not available, skipping context update')
     return
   }
-  
+
   const { visibility, editability, owner } = currentPermissions
   const currentUser = authentication.getUser()
-  
+
   let contextText = 'Read-only'
-  
+
+  // Check role-based file type restrictions
+  if (pluginState && pluginState.xml) {
+    if (isGoldFile(pluginState.xml) && !userHasReviewerRole(currentUser)) {
+      contextText = 'Read-only (gold file - reviewer role required)'
+    } else if (isVersionFile(pluginState.xml) && !userHasAnnotatorRole(currentUser) && !userHasReviewerRole(currentUser)) {
+      contextText = 'Read-only (version file - annotator role required)'
+    }
+  }
   // Determine the reason for read-only state
-  if (editability === 'protected' && owner && owner !== currentUser?.username) {
+  else if (editability === 'protected' && owner && owner !== currentUser?.username) {
     // Document is protected and user is not the owner
     contextText = `Read-only (owned by ${owner})`
   } else if (visibility === 'private' && owner && owner !== currentUser?.username) {
@@ -699,7 +771,7 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
     // Default case with owner information
     contextText = `Read-only (owned by ${owner})`
   }
-  
+
   // Update the widget text
   readOnlyWidget.text = contextText
   logger.debug(`Updated read-only context: ${contextText}`)
@@ -707,70 +779,52 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
 
 /**
  * Checks if the current user can edit the given file based on access control metadata
- * @param {string} fileId - The file identifier (hash or path)
+ * @param {string} fileId - The file identifier (hash)
  * @returns {boolean} - True if user can edit, false otherwise
  */
 function checkCanEditFile(fileId) {
   try {
     const currentUser = authentication.getUser()
-    
-    // Find the file metadata in fileselection data
-    const fileData = fileselection.fileData
-    let fileMetadata = null
-    
-    // Search through all files and their versions for matching ID
-    for (const file of fileData) {
-      // Check gold versions
-      if (file.gold) {
-        for (const version of file.gold) {
-          if (version.hash === fileId || version.path === fileId) {
-            fileMetadata = version
-            break
-          }
-        }
-      }
-      
-      // Check other versions
-      if (!fileMetadata && file.versions) {
-        for (const version of file.versions) {
-          if (version.hash === fileId || version.path === fileId) {
-            fileMetadata = version
-            break
-          }
-        }
-      }
-      
-      if (fileMetadata) break
-    }
-    
-    if (!fileMetadata || !fileMetadata.access_control) {
-      // No metadata found or no access control info - default to allow editing
-      logger.debug('No access control metadata found, allowing edit')
-      return true
-    }
-    
-    const { visibility, editability, owner } = fileMetadata.access_control
-    
+
     if (!currentUser) {
       // Anonymous users cannot edit anything
       return false
     }
-    
+
     // Admin users can edit everything
     if (currentUser.roles && currentUser.roles.includes('admin')) {
       return true
     }
-    
+
+    // Check role-based file type restrictions using hash lookup
+    if (isGoldFile(fileId) && !userHasReviewerRole(currentUser)) {
+      return false
+    }
+
+    if (isVersionFile(fileId) && !userHasAnnotatorRole(currentUser) && !userHasReviewerRole(currentUser)) {
+      return false
+    }
+
+    // Get file metadata for additional access control checks
+    const fileData = getFileDataByHash(fileId)
+    if (!fileData || !fileData.item.metadata?.access_control) {
+      // No metadata found or no access control info - role-based restrictions already checked above
+      logger.debug('No access control metadata found for file')
+      return true
+    }
+
+    const { visibility, editability, owner } = fileData.item.metadata.access_control
+
     // Check visibility permissions
     if (visibility === 'private' && owner !== currentUser.username) {
       return false
     }
-    
+
     // Check editability permissions
     if (editability === 'protected' && owner !== currentUser.username) {
       return false
     }
-    
+
     return true
   } catch (error) {
     logger.warn(`Error checking file access permissions: ${String(error)}`)

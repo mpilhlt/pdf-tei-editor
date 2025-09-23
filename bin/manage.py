@@ -1,52 +1,55 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import hashlib
+import sys
 from pathlib import Path
 import getpass
 
-def get_project_paths(args=None):
-    """Get project paths from command line arguments or defaults."""
-    if args and hasattr(args, 'db_path') and args.db_path:
-        db_dir = Path(args.db_path)
-    else:
-        project_root = Path(__file__).resolve().parent.parent
-        db_dir = project_root / 'db'
+def setup_imports():
+    """Setup imports for the utility modules."""
+    # Add the server directory to the Python path for imports
+    server_path = Path(__file__).resolve().parent.parent / 'server'
+    if str(server_path) not in sys.path:
+        sys.path.insert(0, str(server_path))
 
-    if args and hasattr(args, 'config_path') and args.config_path:
-        config_dir = Path(args.config_path)
-    else:
-        project_root = Path(__file__).resolve().parent.parent
-        config_dir = project_root / 'config'
+# Setup imports
+setup_imports()
 
-    return db_dir, config_dir
+# Import utility modules
+# type: ignore comments help Pylance understand these are valid imports
+from lib.data_utils import get_project_paths  # type: ignore
+from lib.user_utils import (  # type: ignore
+    add_user as user_add_user, remove_user as user_remove_user,
+    update_user_password, add_role_to_user, remove_role_from_user,
+    set_user_property as user_set_property, list_users as user_list_users
+)
+from lib.role_utils import get_roles_with_details, get_available_roles  # type: ignore
+from lib.config_utils import (  # type: ignore
+    get_config_value, set_config_value, delete_config_key,
+    set_config_constraint, get_config_data
+)
 
-def get_users_data(users_file):
-    if not users_file.exists():
-        # Create the directory if it doesn't exist
-        users_file.parent.mkdir(parents=True, exist_ok=True)
-        # Create an empty users file
-        with open(users_file, 'w', encoding='utf-8') as f:
-            json.dump([], f, indent=2)
-        print(f"Created new users file: {users_file}")
-        return []
-
-    with open(users_file, 'r', encoding='utf-8') as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
-
-def save_users_data(users_file, data):
-    with open(users_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
-        f.truncate()
+def list_available_roles(db_dir):
+    """Lists all available roles with their descriptions."""
+    try:
+        roles_data = get_roles_with_details(db_dir)
+        print("Available roles:")
+        for role in roles_data:
+            if isinstance(role, dict) and 'id' in role:
+                role_id = role['id']
+                role_name = role.get('roleName', 'No description')
+                description = role.get('description', '')
+                if description:
+                    print(f"  {role_id} ({role_name}: {description})")
+                else:
+                    print(f"  {role_id}: {role_name}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error: {e}")
 
 def add_user(args):
     """Adds a new user to the users.json file."""
-    db_dir, _ = get_project_paths(args)
-    users_file = db_dir / 'users.json'
-    
+    db_dir, _ = get_project_paths(args.db_path, args.config_path)
+
     password = args.password
     if not password:
         password = getpass.getpass("Enter password: ")
@@ -55,54 +58,18 @@ def add_user(args):
             print("Passwords do not match.")
             return
 
-    users_data = get_users_data(users_file)
-    if users_data is None:
-        return
-
-    # Check if user already exists
-    if any(user.get('username') == args.username for user in users_data):
-        print(f"Error: User '{args.username}' already exists.")
-        return
-
-    # Hash the password
-    passwd_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
-
-    # Add new user
-    users_data.append({
-        "username": args.username,
-        "fullname": args.fullname or "",
-        "email": args.email or "",
-        "roles": ["user"],
-        "passwd_hash": passwd_hash,
-        "session_id": None
-    })
-
-    save_users_data(users_file, users_data)
-    print(f"User '{args.username}' added successfully.")
+    success, message = user_add_user(db_dir, args.username, password, args.fullname or "", args.email or "")
+    print(message)
 
 def remove_user(args):
     """Removes a user from the users.json file."""
-    db_dir, _ = get_project_paths(args)
-    users_file = db_dir / 'users.json'
-
-    users_data = get_users_data(users_file)
-    if users_data is None:
-        return
-
-    user_exists = any(user.get('username') == args.username for user in users_data)
-    if not user_exists:
-        print(f"Error: User '{args.username}' not found.")
-        return
-
-    users_data = [user for user in users_data if user.get('username') != args.username]
-    
-    save_users_data(users_file, users_data)
-    print(f"User '{args.username}' removed successfully.")
+    db_dir, _ = get_project_paths(args.db_path, args.config_path)
+    success, message = user_remove_user(db_dir, args.username)
+    print(message)
 
 def update_password(args):
     """Updates a user's password."""
-    db_dir, _ = get_project_paths(args)
-    users_file = db_dir / 'users.json'
+    db_dir, _ = get_project_paths(args.db_path, args.config_path)
 
     password = args.password
     if not password:
@@ -112,84 +79,45 @@ def update_password(args):
             print("Passwords do not match.")
             return
 
-    users_data = get_users_data(users_file)
-    if users_data is None:
-        return
-
-    user_found = False
-    for user in users_data:
-        if user.get('username') == args.username:
-            user['passwd_hash'] = hashlib.sha256(password.encode('utf-8')).hexdigest()
-            user_found = True
-            break
-    
-    if not user_found:
-        print(f"Error: User '{args.username}' not found.")
-        return
-
-    save_users_data(users_file, users_data)
-    print(f"Password for user '{args.username}' updated successfully.")
+    success, message = update_user_password(db_dir, args.username, password)
+    print(message)
 
 def add_role(args):
     """Adds a role to a user."""
-    db_dir, _ = get_project_paths(args)
-    users_file = db_dir / 'users.json'
+    db_dir, _ = get_project_paths(args.db_path, args.config_path)
 
-    users_data = get_users_data(users_file)
-    if users_data is None:
+    # If no role is provided, list available roles
+    if not args.rolename:
+        list_available_roles(db_dir)
         return
 
-    user_found = False
-    for user in users_data:
-        if user.get('username') == args.username:
-            if args.rolename not in user['roles']:
-                user['roles'].append(args.rolename)
-                print(f"Role '{args.rolename}' added to user '{args.username}'.")
-            else:
-                print(f"User '{args.username}' already has the role '{args.rolename}'.")
-            user_found = True
-            break
-
-    if not user_found:
-        print(f"Error: User '{args.username}' not found.")
-        return
-
-    save_users_data(users_file, users_data)
+    success, message = add_role_to_user(db_dir, args.username, args.rolename)
+    if not success and "not a valid role" in message:
+        print(message)
+        list_available_roles(db_dir)
+    else:
+        print(message)
 
 def remove_role(args):
     """Removes a role from a user."""
-    db_dir, _ = get_project_paths(args)
-    users_file = db_dir / 'users.json'
+    db_dir, _ = get_project_paths(args.db_path, args.config_path)
 
-    users_data = get_users_data(users_file)
-    if users_data is None:
+    # If no role is provided, list available roles
+    if not args.rolename:
+        list_available_roles(db_dir)
         return
 
-    user_found = False
-    for user in users_data:
-        if user.get('username') == args.username:
-            if args.rolename in user['roles']:
-                user['roles'].remove(args.rolename)
-                print(f"Role '{args.rolename}' removed from user '{args.username}'.")
-            else:
-                print(f"User '{args.username}' does not have the role '{args.rolename}'.")
-            user_found = True
-            break
-
-    if not user_found:
-        print(f"Error: User '{args.username}' not found.")
-        return
-
-    save_users_data(users_file, users_data)
+    success, message = remove_role_from_user(db_dir, args.username, args.rolename)
+    if not success and "not a valid role" in message:
+        print(message)
+        list_available_roles(db_dir)
+    else:
+        print(message)
 
 def list_users(args):
     """Lists all users in the format 'Fullname (username) [email]: Role1, Role2'."""
-    db_dir, _ = get_project_paths(args)
-    users_file = db_dir / 'users.json'
-
-    users_data = get_users_data(users_file)
-    if users_data is None:
-        return
+    db_dir, _ = get_project_paths(args.db_path, args.config_path)
+    users_data = user_list_users(db_dir)
 
     if not users_data:
         print("No users found.")
@@ -205,111 +133,19 @@ def list_users(args):
 
 def set_user_property(args):
     """Sets a scalar, unencrypted property for a user."""
-    db_dir, _ = get_project_paths(args)
-    users_file = db_dir / 'users.json'
+    db_dir, _ = get_project_paths(args.db_path, args.config_path)
+    success, message = user_set_property(db_dir, args.username, args.property, args.value)
+    print(message)
 
-    users_data = get_users_data(users_file)
-    if users_data is None:
-        return
-
-    if args.property == 'username':
-        if any(u.get('username') == args.value for u in users_data):
-            print(f"Error: User with username '{args.value}' already exists.")
-            return
-
-    user_found = False
-    for user in users_data:
-        if user.get('username') == args.username:
-            user[args.property] = args.value
-            print(f"Property '{args.property}' for user '{args.username}' set to '{args.value}'.")
-            if args.property == 'username':
-                print(f"User '{args.username}' is now '{args.value}'.")
-            user_found = True
-            break
-
-    if not user_found:
-        print(f"Error: User '{args.username}' not found.")
-        return
-
-    save_users_data(users_file, users_data)
-
-def get_config_data(config_file):
-    """Gets configuration data from config.json file."""
-    if not config_file.exists():
-        # Create the directory if it doesn't exist
-        config_file.parent.mkdir(parents=True, exist_ok=True)
-        # Create an empty config file
-        with open(config_file, 'w', encoding='utf-8') as f:
-            json.dump({}, f, indent=2)
-        print(f"Created new config file: {config_file}")
-        return {}
-
-    with open(config_file, 'r', encoding='utf-8') as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            print(f"Error: Invalid JSON in {config_file}")
-            return None
-
-def save_config_data(config_file, data):
-    """Saves configuration data to config.json file."""
-    with open(config_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
-
-def get_json_type(value):
-    """Returns the JSON type name for a Python value."""
-    if isinstance(value, bool):
-        return "boolean"
-    elif isinstance(value, int):
-        return "number"
-    elif isinstance(value, float):
-        return "number"
-    elif isinstance(value, str):
-        return "string"
-    elif isinstance(value, list):
-        return "array"
-    elif isinstance(value, dict):
-        return "object"
-    elif value is None:
-        return "null"
-    else:
-        return "unknown"
-
-def validate_config_value(config_data, key, value):
-    """Validates a config value against constraints."""
-    values_key = f"{key}.values"
-    type_key = f"{key}.type"
-
-    # Check if value must be one of specific values
-    if values_key in config_data:
-        allowed_values = config_data[values_key]
-        if value not in allowed_values:
-            print(f"Error: Value must be one of {allowed_values}")
-            return False
-
-    # Check if value must be of specific type
-    if type_key in config_data:
-        required_type = config_data[type_key]
-        actual_type = get_json_type(value)
-        if actual_type != required_type:
-            print(f"Error: Value must be of type {required_type}, got {actual_type}")
-            return False
-
-    return True
 
 def set_config(args):
     """Sets a configuration value."""
-    db_dir, config_dir = get_project_paths(args)
+    db_dir, config_dir = get_project_paths(args.db_path, args.config_path)
 
     # Determine which config files to update
     config_files = [db_dir / 'config.json']
     if args.default:
         config_files.append(config_dir / 'config.json')
-
-    # Load the primary config data for validation
-    primary_config_data = get_config_data(config_files[0])
-    if primary_config_data is None:
-        return
 
     key = args.key
 
@@ -323,10 +159,10 @@ def set_config(args):
 
             # Update all config files
             for config_file in config_files:
-                config_data = get_config_data(config_file)
-                if config_data is not None:
-                    config_data[f"{key}.values"] = values_list
-                    save_config_data(config_file, config_data)
+                success, message = set_config_constraint(config_file, key, "values", values_list)
+                if not success:
+                    print(f"Error updating {config_file}: {message}")
+                    return
 
             locations = "db and default config" if args.default else "db config"
             print(f"Set {key}.values to {values_list} in {locations}")
@@ -337,17 +173,12 @@ def set_config(args):
 
     # Handle shorthand for setting type
     if args.type is not None:
-        valid_types = ["string", "number", "boolean", "array", "object", "null"]
-        if args.type not in valid_types:
-            print(f"Error: Type must be one of {valid_types}")
-            return
-
         # Update all config files
         for config_file in config_files:
-            config_data = get_config_data(config_file)
-            if config_data is not None:
-                config_data[f"{key}.type"] = args.type
-                save_config_data(config_file, config_data)
+            success, message = set_config_constraint(config_file, key, "type", args.type)
+            if not success:
+                print(f"Error: {message}")
+                return
 
         locations = "db and default config" if args.default else "db config"
         print(f"Set {key}.type to {args.type} in {locations}")
@@ -365,43 +196,19 @@ def set_config(args):
         print("Error: Value must be valid JSON")
         return
 
-    # Special validation for *.values keys
-    if key.endswith(".values") and not isinstance(value, list):
-        print("Error: Values keys must be arrays")
-        return
-
-    # Special validation for *.type keys
-    if key.endswith(".type"):
-        valid_types = ["string", "number", "boolean", "array", "object", "null"]
-        if value not in valid_types:
-            print(f"Error: Type must be one of {valid_types}")
-            return
-
-    # Validate against existing constraints
-    if not validate_config_value(primary_config_data, key, value):
-        return
-
     # Update all config files
     for config_file in config_files:
-        config_data = get_config_data(config_file)
-        if config_data is not None:
-            # Set the value
-            config_data[key] = value
-
-            # Auto-set type for new keys (not ending in .values or .type)
-            if not key.endswith(".values") and not key.endswith(".type"):
-                type_key = f"{key}.type"
-                if type_key not in config_data:
-                    config_data[type_key] = get_json_type(value)
-
-            save_config_data(config_file, config_data)
+        success, message = set_config_value(config_file, key, value)
+        if not success:
+            print(f"Error: {message}")
+            return
 
     locations = "db and default config" if args.default else "db config"
     print(f"Set {key} to {json.dumps(value)} in {locations}")
 
 def get_config(args):
     """Gets a configuration value."""
-    db_dir, config_dir = get_project_paths(args)
+    db_dir, config_dir = get_project_paths(args.db_path, args.config_path)
 
     # Determine which config file to read from
     if args.default:
@@ -411,19 +218,15 @@ def get_config(args):
         config_file = db_dir / 'config.json'
         location = "db config"
 
-    config_data = get_config_data(config_file)
-    if config_data is None:
-        return
-
-    key = args.key
-    if key in config_data:
-        print(json.dumps(config_data[key]))
+    value = get_config_value(config_file, args.key)
+    if value is not None:
+        print(json.dumps(value))
     else:
-        print(f"Error: Key '{key}' not found in {location}")
+        print(f"Error: Key '{args.key}' not found in {location}")
 
 def delete_config(args):
     """Deletes a configuration key."""
-    db_dir, config_dir = get_project_paths(args)
+    db_dir, config_dir = get_project_paths(args.db_path, args.config_path)
 
     # Determine which config files to delete from
     config_files = [db_dir / 'config.json']
@@ -436,16 +239,13 @@ def delete_config(args):
 
     # Delete from all specified config files
     for config_file in config_files:
-        config_data = get_config_data(config_file)
-        if config_data is not None:
-            if key in config_data:
-                del config_data[key]
-                save_config_data(config_file, config_data)
-                location = "default config" if config_file.parent.name == "config" else "db config"
-                deleted_from.append(location)
-            else:
-                location = "default config" if config_file.parent.name == "config" else "db config"
-                not_found_in.append(location)
+        success, message = delete_config_key(config_file, key)
+        location = "default config" if config_file.parent.name == "config" else "db config"
+
+        if success:
+            deleted_from.append(location)
+        elif "not found" in message:
+            not_found_in.append(location)
 
     # Report results
     if deleted_from:
@@ -508,13 +308,13 @@ if __name__ == '__main__':
     # user add role
     parser_add_role = user_subparsers.add_parser('add-role', help='Add a role to a user', description=add_role.__doc__)
     parser_add_role.add_argument('username', help='The username of the user.')
-    parser_add_role.add_argument('rolename', help='The role to add.')
+    parser_add_role.add_argument('rolename', nargs='?', help='The role to add. If not provided, lists available roles.')
     parser_add_role.set_defaults(func=add_role)
 
     # user remove role
     parser_remove_role = user_subparsers.add_parser('remove-role', help='Remove a role from a user', description=remove_role.__doc__)
     parser_remove_role.add_argument('username', help='The username of the user.')
-    parser_remove_role.add_argument('rolename', help='The role to remove.')
+    parser_remove_role.add_argument('rolename', nargs='?', help='The role to remove. If not provided, lists available roles.')
     parser_remove_role.set_defaults(func=remove_role)
 
     # --- Config management ---

@@ -17,6 +17,7 @@ import tempfile
 import json
 import subprocess
 import shutil
+import os
 from pathlib import Path
 
 
@@ -24,56 +25,49 @@ class TestConfigCLI(unittest.TestCase):
     """Integration tests for the config CLI commands."""
 
     def setUp(self):
-        """Set up test environment with temporary directories."""
-        self.test_root = tempfile.mkdtemp()
-        self.db_dir = Path(self.test_root) / 'db'
-        self.config_dir = Path(self.test_root) / 'config'
-        self.db_dir.mkdir(parents=True)
-        self.config_dir.mkdir(parents=True)
+        """Set up test environment with test data directory."""
+        # Use test data directory
+        self.test_data_dir = Path(__file__).parent / 'data'
+        self.db_dir = self.test_data_dir / 'db'
+        self.config_dir = self.test_data_dir / 'config'
 
-        # Create initial config files
-        self.db_config_file = self.db_dir / 'config.json'
-        self.default_config_file = self.config_dir / 'config.json'
+        # Create temporary working directory for tests that modify files
+        self.temp_root = tempfile.mkdtemp()
+        self.temp_db_dir = Path(self.temp_root) / 'db'
+        self.temp_config_dir = Path(self.temp_root) / 'config'
+        self.temp_db_dir.mkdir(parents=True)
+        self.temp_config_dir.mkdir(parents=True)
 
-        # Initial db config
-        self.db_config_file.write_text(json.dumps({
-            "existing.key": "db_value",
-            "heartbeat.interval": 10,
-            "application.mode": "development",
-            "application.mode.values": ["development", "production"],
-            "constrained.key": "valid1",
-            "constrained.key.values": ["valid1", "valid2"],
-            "typed.key": "string_value",
-            "typed.key.type": "string"
-        }, indent=2))
+        # Copy test data to temporary directory
+        shutil.copytree(self.db_dir, self.temp_db_dir, dirs_exist_ok=True)
+        shutil.copytree(self.config_dir, self.temp_config_dir, dirs_exist_ok=True)
 
-        # Initial default config
-        self.default_config_file.write_text(json.dumps({
-            "existing.key": "default_value",
-            "heartbeat.interval": 30,
-            "default.only": "default_only_value"
-        }, indent=2))
+        # Set environment variable to use temporary directory
+        os.environ['PDF_TEI_EDITOR_BASE_DIR'] = str(self.temp_root)
 
         # Path to manage.py script
         self.manage_py = Path(__file__).parent.parent.parent / 'bin' / 'manage.py'
 
     def tearDown(self):
         """Clean up test environment."""
-        shutil.rmtree(self.test_root)
+        # Remove environment variable
+        if 'PDF_TEI_EDITOR_BASE_DIR' in os.environ:
+            del os.environ['PDF_TEI_EDITOR_BASE_DIR']
+        # Clean up temporary directory
+        shutil.rmtree(self.temp_root)
 
     def run_config_command(self, *args, expect_success=True):
         """Run a config command and return the result."""
         cmd = [
             'uv', 'run', 'python', str(self.manage_py),
-            '--db-path', str(self.db_dir),
-            '--config-path', str(self.config_dir),
             'config'
         ] + list(args)
 
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True
+            text=True,
+            env=os.environ.copy()
         )
 
         if expect_success and result.returncode != 0:
@@ -81,26 +75,33 @@ class TestConfigCLI(unittest.TestCase):
 
         return result
 
-    def load_config_file(self, config_file):
+    def load_config_file(self, filename):
         """Load a config file and return the parsed JSON."""
+        if filename == 'db':
+            config_file = self.temp_db_dir / 'config.json'
+        elif filename == 'config':
+            config_file = self.temp_config_dir / 'config.json'
+        else:
+            config_file = Path(filename)
+
         if not config_file.exists():
-            return None
+            raise RuntimeError(f"Config file does not exist: {config_file}")
         return json.loads(config_file.read_text())
 
     def test_config_get_db_default(self):
         """Test config get command reading from db config."""
         result = self.run_config_command('get', 'heartbeat.interval')
-        self.assertEqual(result.stdout.strip(), '10')
+        self.assertEqual(result.stdout.strip(), '30')
 
     def test_config_get_default_flag(self):
         """Test config get command with --default flag."""
         result = self.run_config_command('get', 'heartbeat.interval', '--default')
-        self.assertEqual(result.stdout.strip(), '30')
+        self.assertEqual(result.stdout.strip(), '60')
 
     def test_config_get_default_only_key(self):
         """Test getting a key that only exists in default config."""
-        result = self.run_config_command('get', 'default.only', '--default')
-        self.assertEqual(result.stdout.strip(), '"default_only_value"')
+        result = self.run_config_command('get', 'default.only.setting', '--default')
+        self.assertEqual(result.stdout.strip(), '"default_value"')
 
     def test_config_get_nonexistent_key(self):
         """Test getting a nonexistent key."""
@@ -113,12 +114,12 @@ class TestConfigCLI(unittest.TestCase):
         self.assertIn("Set test.new to \"test_value\"", result.stdout)
 
         # Verify the value was set in db config
-        db_config = self.load_config_file(self.db_config_file)
+        db_config = self.load_config_file('db')
         self.assertEqual(db_config['test.new'], 'test_value')
         self.assertEqual(db_config['test.new.type'], 'string')  # Auto-typing
 
         # Verify it was NOT set in default config
-        default_config = self.load_config_file(self.default_config_file)
+        default_config = self.load_config_file('config')
         self.assertNotIn('test.new', default_config)
 
     def test_config_set_with_default_flag(self):
@@ -127,8 +128,8 @@ class TestConfigCLI(unittest.TestCase):
         self.assertIn("Set test.both to \"dual_value\" in db and default config", result.stdout)
 
         # Verify the value was set in both configs
-        db_config = self.load_config_file(self.db_config_file)
-        default_config = self.load_config_file(self.default_config_file)
+        db_config = self.load_config_file('db')
+        default_config = self.load_config_file('config')
 
         self.assertEqual(db_config['test.both'], 'dual_value')
         self.assertEqual(default_config['test.both'], 'dual_value')
@@ -151,7 +152,7 @@ class TestConfigCLI(unittest.TestCase):
                 result = self.run_config_command('set', key, json_value)
                 self.assertIn(f"Set {key} to", result.stdout)
 
-                db_config = self.load_config_file(self.db_config_file)
+                db_config = self.load_config_file('db')
                 self.assertEqual(db_config[key], expected_value)
                 self.assertEqual(db_config[f"{key}.type"], expected_type)
 
@@ -160,7 +161,7 @@ class TestConfigCLI(unittest.TestCase):
         result = self.run_config_command('set', 'new.constrained', '--values', '["option1", "option2", "option3"]')
         self.assertIn("Set new.constrained.values to ['option1', 'option2', 'option3']", result.stdout)
 
-        db_config = self.load_config_file(self.db_config_file)
+        db_config = self.load_config_file('db')
         self.assertEqual(db_config['new.constrained.values'], ["option1", "option2", "option3"])
 
     def test_config_set_type_constraint(self):
@@ -168,28 +169,28 @@ class TestConfigCLI(unittest.TestCase):
         result = self.run_config_command('set', 'new.typed', '--type', 'number')
         self.assertIn("Set new.typed.type to number", result.stdout)
 
-        db_config = self.load_config_file(self.db_config_file)
+        db_config = self.load_config_file('db')
         self.assertEqual(db_config['new.typed.type'], "number")
 
     def test_config_set_constraint_validation_values(self):
         """Test that values constraint validation works."""
         # Try to set an invalid value
-        result = self.run_config_command('set', 'constrained.key', '"invalid"', expect_success=False)
-        self.assertIn("Error: Value must be one of", result.stdout)
+        result = self.run_config_command('set', 'constrained.setting', '"invalid"', expect_success=False)
+        self.assertIn("Error: Value does not meet validation constraints", result.stdout)
 
         # Set a valid value
-        result = self.run_config_command('set', 'constrained.key', '"valid2"')
-        self.assertIn("Set constrained.key to \"valid2\"", result.stdout)
+        result = self.run_config_command('set', 'constrained.setting', '"option2"')
+        self.assertIn("Set constrained.setting to \"option2\"", result.stdout)
 
     def test_config_set_constraint_validation_type(self):
         """Test that type constraint validation works."""
-        # Try to set wrong type
-        result = self.run_config_command('set', 'typed.key', '123', expect_success=False)
-        self.assertIn("Error: Value must be of type string", result.stdout)
+        # Try to set wrong type (session.timeout expects number)
+        result = self.run_config_command('set', 'session.timeout', '"not_a_number"', expect_success=False)
+        self.assertIn("Error: Value does not meet validation constraints", result.stdout)
 
         # Set correct type
-        result = self.run_config_command('set', 'typed.key', '"valid_string"')
-        self.assertIn("Set typed.key to \"valid_string\"", result.stdout)
+        result = self.run_config_command('set', 'session.timeout', '7200')
+        self.assertIn("Set session.timeout to 7200", result.stdout)
 
     def test_config_set_invalid_json(self):
         """Test setting invalid JSON value."""
@@ -203,36 +204,36 @@ class TestConfigCLI(unittest.TestCase):
 
     def test_config_delete_basic(self):
         """Test basic config delete operation."""
-        result = self.run_config_command('delete', 'existing.key')
-        self.assertIn("Deleted key 'existing.key'", result.stdout)
+        result = self.run_config_command('delete', 'test.array')
+        self.assertIn("Deleted key 'test.array'", result.stdout)
 
         # Verify key was deleted from db config
-        db_config = self.load_config_file(self.db_config_file)
-        self.assertNotIn('existing.key', db_config)
+        db_config = self.load_config_file('db')
+        self.assertNotIn('test.array', db_config)
 
-        # Verify key still exists in default config
-        default_config = self.load_config_file(self.default_config_file)
-        self.assertIn('existing.key', default_config)
+        # Verify heartbeat.interval exists in both configs (different values)
+        default_config = self.load_config_file('config')
+        self.assertIn('heartbeat.interval', default_config)
 
     def test_config_delete_with_default_flag(self):
         """Test config delete with --default flag."""
-        result = self.run_config_command('delete', 'existing.key', '--default')
-        self.assertIn("Deleted key 'existing.key' from db config and default config", result.stdout)
+        result = self.run_config_command('delete', 'heartbeat.interval', '--default')
+        self.assertIn("Deleted key 'heartbeat.interval' from db config and default config", result.stdout)
 
         # Verify key was deleted from both configs
-        db_config = self.load_config_file(self.db_config_file)
-        default_config = self.load_config_file(self.default_config_file)
+        db_config = self.load_config_file('db')
+        default_config = self.load_config_file('config')
 
-        self.assertNotIn('existing.key', db_config)
-        self.assertNotIn('existing.key', default_config)
+        self.assertNotIn('heartbeat.interval', db_config)
+        self.assertNotIn('heartbeat.interval', default_config)
 
     def test_config_delete_partial_existence(self):
         """Test deleting key that exists in only one config file."""
         # Key only exists in default config
-        result = self.run_config_command('delete', 'default.only', '--default')
+        result = self.run_config_command('delete', 'default.only.setting', '--default')
 
-        self.assertIn("Deleted key 'default.only' from default config", result.stdout)
-        self.assertIn("Key 'default.only' not found in db config", result.stdout)
+        self.assertIn("Deleted key 'default.only.setting' from default config", result.stdout)
+        self.assertIn("Key 'default.only.setting' not found in db config", result.stdout)
 
     def test_config_delete_nonexistent_key(self):
         """Test deleting a nonexistent key."""
@@ -292,10 +293,8 @@ class TestConfigCLI(unittest.TestCase):
         # Main config help
         result = subprocess.run([
             'uv', 'run', 'python', str(self.manage_py),
-            '--db-path', str(self.db_dir),
-            '--config-path', str(self.config_dir),
             'config', '--help'
-        ], capture_output=True, text=True)
+        ], capture_output=True, text=True, env=os.environ.copy())
         self.assertEqual(result.returncode, 0)
         self.assertIn("config management", result.stdout.lower())
 
@@ -303,10 +302,8 @@ class TestConfigCLI(unittest.TestCase):
         for subcmd in ['get', 'set', 'delete']:
             result = subprocess.run([
                 'uv', 'run', 'python', str(self.manage_py),
-                '--db-path', str(self.db_dir),
-                '--config-path', str(self.config_dir),
                 'config', subcmd, '--help'
-            ], capture_output=True, text=True)
+            ], capture_output=True, text=True, env=os.environ.copy())
             self.assertEqual(result.returncode, 0)
             self.assertIn(subcmd, result.stdout.lower())
 
@@ -327,7 +324,7 @@ class TestConfigCLI(unittest.TestCase):
             with self.subTest(key=key, expected_type=expected_type):
                 self.run_config_command('set', key, json_value)
 
-                db_config = self.load_config_file(self.db_config_file)
+                db_config = self.load_config_file('db')
                 self.assertEqual(db_config[f'{key}.type'], expected_type)
 
     def test_special_keys_validation(self):

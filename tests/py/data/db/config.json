@@ -1,0 +1,18 @@
+{
+    "session.timeout": 3600,
+    "session.timeout.type": "number",
+    "application.mode": "testing",
+    "application.mode.type": "string",
+    "application.mode.values": ["development", "testing", "production"],
+    "heartbeat.interval": 30,
+    "heartbeat.interval.type": "number",
+    "debug.enabled": true,
+    "debug.enabled.type": "boolean",
+    "constrained.setting": "option1",
+    "constrained.setting.type": "string",
+    "constrained.setting.values": ["option1", "option2", "option3"],
+    "test.array": [1, 2, 3],
+    "test.array.type": "array",
+    "test.object": {"nested": "value"},
+    "test.object.type": "object"
+}
