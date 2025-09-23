@@ -39,7 +39,8 @@
       "WebSearch",
       "Bash(git check-ignore:*)",
       "Bash(npm run test:py:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(set PDF_TEI_EDITOR_BASE_DIR=tests\\py\\data)"
     ],
     "deny": []
   }

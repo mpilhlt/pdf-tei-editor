@@ -11,6 +11,7 @@
  * @import { UIPart, SlDropdown } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { UserData } from './authentication.js'
+ * @import { LookupItem, FileMetadata, AccessControl } from '../modules/file-data-utils.js'
  */
 
 import { app, services, authentication, fileselection } from '../app.js'
@@ -20,6 +21,7 @@ import { PanelUtils } from '../modules/panels/index.js'
 import { logger } from '../app.js'
 import { api as xmlEditor } from './xmleditor.js'
 import { prettyPrintNode, ensureRespStmtForUser } from '../modules/tei-utils.js'
+import { getFileDataByHash } from '../modules/file-data-utils.js'
 
 // TEI namespace constant
 const TEI_NS = 'http://www.tei-c.org/ns/1.0'
@@ -88,6 +90,7 @@ export default plugin
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
+ * @returns {Promise<void>}
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
@@ -112,6 +115,7 @@ async function install(state) {
 /**
  * Runs after all plugins are installed
  * @param {ApplicationState} state
+ * @returns {Promise<void>}
  */
 async function start(state) {
   logger.debug(`Starting plugin "${plugin.name}"`)
@@ -124,6 +128,7 @@ let isUpdatingState = false; // Guard to prevent infinite loops
 /**
  * Called when application state changes
  * @param {ApplicationState} state
+ * @returns {Promise<void>}
  */
 async function update(state) {
   // Store state reference for internal use
@@ -177,6 +182,7 @@ async function update(state) {
 
 /**
  * Creates the status dropdown widget
+ * @returns {SlDropdown} The created dropdown element
  */
 function createStatusDropdown() {
   const dropdown = document.createElement('sl-dropdown')
@@ -221,6 +227,7 @@ function createStatusDropdown() {
 /**
  * Handles status dropdown selection changes
  * @param {CustomEvent} event
+ * @returns {Promise<void>}
  */
 async function handlePermissionChange(event) {
   const selectedItem = event.detail.item
@@ -251,6 +258,7 @@ async function handlePermissionChange(event) {
 
 /**
  * Parses document permissions from current XML DOM tree
+ * @returns {Promise<void>}
  */
 async function computeDocumentPermissions() {
   try {
@@ -295,7 +303,7 @@ async function computeDocumentPermissions() {
 /**
  * Parses permissions from XML DOM tree
  * @param {Document} xmlTree
- * @returns {object} Permissions object
+ * @returns {{visibility: string, editability: string, owner: string|null}} Permissions object
  */
 function parsePermissionsFromXmlTree(xmlTree) {
   try {
@@ -374,6 +382,7 @@ function parsePermissionsFromXmlTree(xmlTree) {
  * @param {string} editability - 'editable' or 'protected'
  * @param {string} [owner] - Optional new owner
  * @param {string} [description] - Optional change description
+ * @returns {Promise<{visibility: string, editability: string, owner: string|null}>} Updated permissions
  */
 async function updateDocumentStatus(visibility, editability, owner, description) {
   try {
@@ -494,6 +503,7 @@ async function updateDocumentStatus(visibility, editability, owner, description)
 
 /**
  * Updates the access control UI widgets
+ * @returns {void}
  */
 function updateAccessControlUI() {
   //showAccessControlWidgets() // disabled until actually implemented
@@ -504,6 +514,7 @@ function updateAccessControlUI() {
 
 /**
  * Updates the permission info text display
+ * @returns {void}
  */
 function updatePermissionInfoDisplay() {
   if (!permissionInfoWidget) return
@@ -531,6 +542,7 @@ function updatePermissionInfoDisplay() {
 
 /**
  * Updates the status dropdown display
+ * @returns {void}
  */
 function updateStatusDropdownDisplay() {
   if (!statusDropdownWidget) return
@@ -550,7 +562,10 @@ function updateStatusDropdownDisplay() {
     buttonText = 'Private • Protected'
   }
   
-  trigger.textContent = buttonText
+  if (trigger) {
+    trigger.textContent = buttonText
+  }
+  
   
   // Update selected menu item
   const currentValue = `${visibility}-${editability}`
@@ -562,6 +577,7 @@ function updateStatusDropdownDisplay() {
 
 /**
  * Shows or hides the status dropdown based on user permissions
+ * @returns {void}
  */
 function updateStatusDropdownVisibility() {
   if (!statusDropdownWidget || !permissionInfoWidget) return
@@ -579,6 +595,7 @@ function updateStatusDropdownVisibility() {
 
 /**
  * Shows access control widgets
+ * @returns {void}
  */
 function showAccessControlWidgets() {
   if (permissionInfoWidget && !permissionInfoWidget.isConnected) {
@@ -591,6 +608,7 @@ function showAccessControlWidgets() {
 
 /**
  * Hides access control widgets
+ * @returns {void}
  */
 function hideAccessControlWidgets() {
   if (permissionInfoWidget && permissionInfoWidget.isConnected) {
@@ -602,39 +620,106 @@ function hideAccessControlWidgets() {
 }
 
 /**
+ * Checks if a file hash represents a gold file
+ * @param {string} hash - The file hash identifier
+ * @returns {boolean}
+ */
+function isGoldFile(hash) {
+  if (!hash) return false
+  try {
+    /** @type {LookupItem|null} */
+    const fileData = getFileDataByHash(hash)
+    return fileData?.type === 'gold'
+  } catch (error) {
+    logger.warn(`Error checking if file is gold: ${String(error)}`)
+    return false
+  }
+}
+
+/**
+ * Checks if a file hash represents a version file
+ * @param {string} hash - The file hash identifier
+ * @returns {boolean}
+ */
+function isVersionFile(hash) {
+  if (!hash) return false
+  try {
+    /** @type {LookupItem|null} */
+    const fileData = getFileDataByHash(hash)
+    return fileData?.type === 'version'
+  } catch (error) {
+    logger.warn(`Error checking if file is version: ${String(error)}`)
+    return false
+  }
+}
+
+/**
+ * Checks if user has reviewer role
+ * @param {UserData|null} user - User object
+ * @returns {boolean}
+ */
+function userHasReviewerRole(user) {
+  if (!user) throw new Error("No user");
+  return user.roles && user.roles.includes('reviewer')
+}
+
+/**
+ * Checks if user has annotator role
+ * @param {UserData|null} user - User object
+ * @returns {boolean}
+ */
+function userHasAnnotatorRole(user) {
+  if (!user) throw new Error("No user");
+  return user.roles && user.roles.includes('annotator')
+}
+
+/**
  * Checks if current user can edit the document
- * @param {Object} user - Current user object
+ * @param {UserData|null} user - Current user object
  * @returns {boolean}
  */
 function canEditDocument(user) {
   const { visibility, editability, owner } = currentPermissions
-  
+
   if (!user) {
     // Anonymous users cannot edit anything
     return false
   }
-  
+
   // Admin users can edit everything
   if (user.roles && user.roles.includes('admin')) {
     return true
   }
-  
+
+  // Check role-based file type restrictions
+  if (pluginState && pluginState.xml) {
+    // Gold files require reviewer role
+    if (isGoldFile(pluginState.xml) && !userHasReviewerRole(user)) {
+      return false
+    }
+
+    // Version files require annotator role (or reviewer role)
+    if (isVersionFile(pluginState.xml) && !userHasAnnotatorRole(user) && !userHasReviewerRole(user)) {
+      return false
+    }
+  }
+
   // Check visibility permissions
   if (visibility === 'private' && owner !== user.username) {
     return false
   }
-  
+
   // Check editability permissions
   if (editability === 'protected' && owner !== user.username) {
     return false
   }
-  
+
   return true
 }
 
 /**
  * Checks if current user can view the document
- * @param {Object} user - Current user object  
+ * @param {UserData|null} user - Current user object
  * @returns {boolean}
  */
 function canViewDocument(user) {
@@ -652,7 +737,8 @@ function canViewDocument(user) {
   
   // Private documents only viewable by owner
   if (visibility === 'private') {
-    return user && owner === user.username
+    if (!user) throw new Error("No user");
+    return owner === user.username
   }
   
   return false
@@ -662,6 +748,7 @@ function canViewDocument(user) {
  * Updates the xmleditor's read-only widget with context-specific information
  * @param {boolean} editorReadOnly - Current editor read-only state
  * @param {boolean} accessControlReadOnly - Whether read-only is due to access control
+ * @returns {void}
  */
 function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
   // Only update if editor is read-only and it's due to access control
@@ -676,20 +763,29 @@ function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
 /**
  * Updates the read-only widget text with access control context
  * @param {StatusText} readOnlyWidget - The read-only status widget
+ * @returns {void}
  */
 function updateReadOnlyWidgetText(readOnlyWidget) {
   if (!readOnlyWidget) {
     logger.debug('Read-only widget not available, skipping context update')
     return
   }
-  
+
   const { visibility, editability, owner } = currentPermissions
   const currentUser = authentication.getUser()
-  
+
   let contextText = 'Read-only'
-  
+
+  // Check role-based file type restrictions
+  if (pluginState && pluginState.xml) {
+    if (isGoldFile(pluginState.xml) && !userHasReviewerRole(currentUser)) {
+      contextText = 'Read-only (gold file - reviewer role required)'
+    } else if (isVersionFile(pluginState.xml) && !userHasAnnotatorRole(currentUser) && !userHasReviewerRole(currentUser)) {
+      contextText = 'Read-only (version file - annotator role required)'
+    }
+  }
   // Determine the reason for read-only state
-  if (editability === 'protected' && owner && owner !== currentUser?.username) {
+  else if (editability === 'protected' && owner && owner !== currentUser?.username) {
     // Document is protected and user is not the owner
     contextText = `Read-only (owned by ${owner})`
   } else if (visibility === 'private' && owner && owner !== currentUser?.username) {
@@ -699,7 +795,7 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
     // Default case with owner information
     contextText = `Read-only (owned by ${owner})`
   }
-  
+
   // Update the widget text
   readOnlyWidget.text = contextText
   logger.debug(`Updated read-only context: ${contextText}`)
@@ -707,70 +803,53 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
 
 /**
  * Checks if the current user can edit the given file based on access control metadata
- * @param {string} fileId - The file identifier (hash or path)
+ * @param {string} fileId - The file identifier (hash)
  * @returns {boolean} - True if user can edit, false otherwise
  */
 function checkCanEditFile(fileId) {
   try {
     const currentUser = authentication.getUser()
-    
-    // Find the file metadata in fileselection data
-    const fileData = fileselection.fileData
-    let fileMetadata = null
-    
-    // Search through all files and their versions for matching ID
-    for (const file of fileData) {
-      // Check gold versions
-      if (file.gold) {
-        for (const version of file.gold) {
-          if (version.hash === fileId || version.path === fileId) {
-            fileMetadata = version
-            break
-          }
-        }
-      }
-      
-      // Check other versions
-      if (!fileMetadata && file.versions) {
-        for (const version of file.versions) {
-          if (version.hash === fileId || version.path === fileId) {
-            fileMetadata = version
-            break
-          }
-        }
-      }
-      
-      if (fileMetadata) break
-    }
-    
-    if (!fileMetadata || !fileMetadata.access_control) {
-      // No metadata found or no access control info - default to allow editing
-      logger.debug('No access control metadata found, allowing edit')
-      return true
-    }
-    
-    const { visibility, editability, owner } = fileMetadata.access_control
-    
+
     if (!currentUser) {
       // Anonymous users cannot edit anything
       return false
     }
-    
+
     // Admin users can edit everything
     if (currentUser.roles && currentUser.roles.includes('admin')) {
       return true
     }
-    
+
+    // Check role-based file type restrictions using hash lookup
+    if (isGoldFile(fileId) && !userHasReviewerRole(currentUser)) {
+      return false
+    }
+
+    if (isVersionFile(fileId) && !userHasAnnotatorRole(currentUser) && !userHasReviewerRole(currentUser)) {
+      return false
+    }
+
+    // Get file metadata for additional access control checks
+    /** @type {LookupItem|null} */
+    const fileData = getFileDataByHash(fileId)
+    if (!fileData || fileData.type === 'pdf' || !('metadata' in fileData.item) || !fileData.item.metadata?.access_control) {
+      // No metadata found or no access control info - role-based restrictions already checked above
+      logger.debug('No access control metadata found for file')
+      return true
+    }
+
+    const { visibility, editability, owner } = fileData.item.metadata.access_control
+
     // Check visibility permissions
     if (visibility === 'private' && owner !== currentUser.username) {
       return false
     }
-    
+
     // Check editability permissions
     if (editability === 'protected' && owner !== currentUser.username) {
       return false
     }
-    
+
     return true
   } catch (error) {
     logger.warn(`Error checking file access permissions: ${String(error)}`)

@@ -21,9 +21,44 @@ from server.api.config import read_config
 from server.lib.auth import get_user_by_session_id
 from server.lib.access_control import check_file_access
 from server.lib.hash_utils import add_path_to_lookup
+from server.lib.data_utils import get_project_paths
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("files_save", __name__, url_prefix="/api/files")
+
+
+def _is_gold_file(file_path_rel):
+    """
+    Check if a file path represents a gold file.
+    Gold files are stored in /data/tei/ directories.
+    """
+    return file_path_rel.startswith('tei/') or file_path_rel.startswith('/data/tei/')
+
+
+def _is_version_file(file_path_rel):
+    """
+    Check if a file path represents a version file.
+    Version files are stored in /data/versions/ directories.
+    """
+    return file_path_rel.startswith('versions/') or file_path_rel.startswith('/data/versions/')
+
+
+def _user_has_reviewer_role(user):
+    """
+    Check if a user has the reviewer role.
+    """
+    if not user or 'roles' not in user:
+        return False
+    return 'reviewer' in user.get('roles', [])
+
+
+def _user_has_annotator_role(user):
+    """
+    Check if a user has the annotator role.
+    """
+    if not user or 'roles' not in user:
+        return False
+    return 'annotator' in user.get('roles', [])
 
 
 def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, session_id):
@@ -38,6 +73,15 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
     user = get_user_by_session_id(session_id)
     if not check_file_access(file_path_rel, user, 'write'):
         raise ApiError("Insufficient permissions to modify this document", status_code=403)
+
+    # Check role-based file access restrictions
+    if _is_gold_file(file_path_rel) and not _user_has_reviewer_role(user):
+        # Allow annotators to create versions from gold files
+        if not (save_as_new_version and _user_has_annotator_role(user)):
+            raise ApiError("Only users with reviewer role can edit gold files", status_code=403)
+
+    if _is_version_file(file_path_rel) and not _user_has_annotator_role(user) and not _user_has_reviewer_role(user):
+        raise ApiError("Only users with annotator or reviewer role can edit version files", status_code=403)
     
     # encode xml entities as per configuration
     if read_config().get("xml.encode-entities.server", False) == True:
@@ -153,6 +197,9 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
     
     # Determine the final save path
     if version_to_gold_promotion:
+        # Check if user has reviewer role for gold file promotion
+        if not _user_has_reviewer_role(user):
+            raise ApiError("Only users with reviewer role can promote files to gold status", status_code=403)
         # Promote version to gold
         variant_filename = construct_variant_filename(file_id, variant)
         final_file_rel = f"tei/{promotion_collection}/{variant_filename}"
@@ -168,6 +215,9 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
         # Check if gold file exists with matching file_id and variant
         if os.path.exists(expected_gold_path):
             # Gold file exists - create version in versions directory
+            # Check if user has annotator or reviewer role for creating versions
+            if not _user_has_annotator_role(user) and not _user_has_reviewer_role(user):
+                raise ApiError("Only users with annotator or reviewer role can create version files", status_code=403)
             timestamp = make_version_timestamp()
             if variant:
                 # Directory named after base file_id, filename includes variant
@@ -179,6 +229,9 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
             logger.info(f"Gold file exists at {expected_gold_path}, creating version: {final_file_rel}")
         else:
             # No gold file exists - ignore "new version" instruction and create gold file without timestamp
+            # Check if user has reviewer role for creating new gold files
+            if not _user_has_reviewer_role(user):
+                raise ApiError("Only users with reviewer role can create new gold files", status_code=403)
             final_file_rel = f"tei/{collection}/{variant_filename}"
             status = "new_gold"
             logger.info(f"No gold file found at {expected_gold_path}, creating as gold file: {final_file_rel}")
@@ -204,6 +257,14 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
                 original_dir = Path(file_path_safe).parent
                 gold_filename = construct_variant_filename(file_id, None)  # file-id.tei.xml
                 final_file_rel = (original_dir / gold_filename).as_posix()
+
+            # Additional role-based checks for regular saves
+            if _is_gold_file(final_file_rel) and not _user_has_reviewer_role(user):
+                raise ApiError("Only users with reviewer role can edit gold files", status_code=403)
+
+            if _is_version_file(final_file_rel) and not _user_has_annotator_role(user) and not _user_has_reviewer_role(user):
+                raise ApiError("Only users with annotator or reviewer role can edit version files", status_code=403)
+
             status = "saved"
 
     # Get a file lock for this path

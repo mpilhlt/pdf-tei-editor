@@ -1,0 +1,12 @@
+{
+    "session.timeout": 7200,
+    "session.timeout.type": "number",
+    "application.mode": "production",
+    "application.mode.type": "string",
+    "heartbeat.interval": 60,
+    "heartbeat.interval.type": "number",
+    "debug.enabled": false,
+    "debug.enabled.type": "boolean",
+    "default.only.setting": "default_value",
+    "default.only.setting.type": "string"
+}

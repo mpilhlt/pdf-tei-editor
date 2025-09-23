@@ -136,7 +136,7 @@ class AuthenticationPlugin extends Plugin {
       authData = await client.status();
     } catch (error) {
       // Not authenticated, proceed to show login dialog
-       authData = await this._showLoginDialog();
+       authData = await this.showLoginDialog();
     }
     
     // Only update sessionId if userData contains one (from login), not from status check
@@ -159,18 +159,25 @@ class AuthenticationPlugin extends Plugin {
   }
 
   /**
-   * Shows the login dialog and updates state if login was successful
+   * Shows the login dialog and updates state if login was successful,
+   * otherwise shows it again in a loop until correct authentication data is supplied
+   * @returns {Promise<AuthenticationData>}
    */
   async showLoginDialog() {
-    try {
-      const userData = await this._showLoginDialog();
-      await this.dispatchStateChange({
-        sessionId: userData.sessionId, 
-        user: userData
-      });
-    } catch (error) {
-      logger.error("Error logging in: " + String(error));
+    let authData
+    while (true) {
+      try {
+        authData = await this._showLoginDialog();
+        await this.dispatchStateChange({
+          sessionId: authData.sessionId, 
+          user: authData
+        });
+        break;
+      } catch (error) {
+        logger.error("Error logging in: " + String(error));
+      }
     }
+    return authData
   }
 
   /**
@@ -199,8 +206,9 @@ class AuthenticationPlugin extends Plugin {
   //
 
   /**
-   * Creates and displays the login dialog.
-   * @returns {Promise<AuthenticationData>} A promise that resolves on successful login with the user data.
+   * Creates and displays the login dialog for one login attenpt
+   * @returns {Promise<AuthenticationData>} A promise that resolves on successful login with 
+   * the user data or rejects in case the credentials are wrong
    */
   async _showLoginDialog() {
     const dialog = ui.loginDialog;
@@ -226,12 +234,13 @@ class AuthenticationPlugin extends Plugin {
           logger.info(`Login successful for user: ${authData.username}`);
           dialog.hide();
           dialog.username.value = "";
-          dialog.password.value = "";
           resolve(authData);
         } catch (error) {
           dialog.message.textContent = 'Wrong username or password';
           logger.error('Login failed: ' + String(error))
           reject(error);
+        } finally {
+          dialog.password.value = "";
         }
       }, {once: true});
       dialog.show();
