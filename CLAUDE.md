@@ -473,6 +473,59 @@ When converting existing plugins:
 - Build script: `bin/build`
 - User management: `bin/manage.py`
 
+## 🚨 CRITICAL: JSDoc Type Annotation Requirements
+
+**ALWAYS create comprehensive JSDoc headers for ALL functions and use specific types instead of generic "object".**
+
+When creating or modifying JavaScript functions, you MUST:
+
+1. **Add JSDoc headers to ALL functions** - No exceptions, even simple utility functions
+2. **Use specific types instead of "object"** - TypeScript can infer most types; leverage this
+3. **Import types from relevant modules** - Use `@import` statements for external types
+4. **Add @param annotations with union types** - E.g., `@param {UserData|null}` not `@param {Object}`
+5. **Add @returns annotations with specific types** - E.g., `@returns {Promise<void>}` not just `@returns`
+6. **Type-cast variables when needed** - Use `/** @type {SpecificType|null} */` for variable declarations
+
+**Examples of CORRECT JSDoc annotations:**
+
+```javascript
+/**
+ * @import { UserData } from './authentication.js'
+ * @import { LookupItem } from '../modules/file-data-utils.js'
+ */
+
+/**
+ * Checks if user has specific role
+ * @param {UserData|null} user - User object or null
+ * @param {string} role - Role name to check
+ * @returns {boolean} True if user has role
+ */
+function userHasRole(user, role) {
+  return user && user.roles && user.roles.includes(role)
+}
+
+/**
+ * Gets file metadata by hash
+ * @param {string} hash - File hash identifier
+ * @returns {LookupItem|null} File data or null if not found
+ */
+function getFileData(hash) {
+  /** @type {LookupItem|null} */
+  const fileData = getFileDataByHash(hash)
+  return fileData
+}
+```
+
+**AVOID these patterns:**
+- `@param {Object}` - Too generic, use specific interface types
+- `@param {object}` - Same issue, specify the actual structure
+- Missing `@returns` on functions - Always specify return types
+- Untyped variables - Use `@type` comments for complex assignments
+
+This ensures TypeScript error-free code and provides excellent IDE autocompletion support.
+
+---
+
 ## Best Practices and Code Conventions
 
 ### Python Development

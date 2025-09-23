@@ -74,8 +74,8 @@
 
 /**
  * @typedef {object} LookupItem
- * @property {"version" | "gold"} type
- * @property {TeiFileData} item
+ * @property {"version" | "gold" | "pdf"} type
+ * @property {TeiFileData | PdfFileData} item
  * @property {FileListItem} file
  * @property {string} label
  */
