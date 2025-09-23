@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 @testCovers bin/manage.py
+@testCovers server/lib/role_utils.py
 
 Integration tests for role-related CLI functionality in manage.py.
 

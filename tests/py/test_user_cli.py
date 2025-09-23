@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 @testCovers bin/manage.py
+@testCovers server/lib/user_utils.py
 
 Integration tests for the user CLI commands in manage.py.
 
@@ -116,7 +117,7 @@ class TestUserCLI(unittest.TestCase):
         users = self.load_users_file()
         new_user = next((u for u in users if u['username'] == 'newuser'), None)
         self.assertIsNotNone(new_user)
-        self.assertEqual(new_user['fullname'], 'New Test User')
+        self.assertEqual(new_user['fullname'], 'New Test User') 
         self.assertEqual(new_user['email'], 'new@example.com')
         self.assertEqual(new_user['roles'], ['user'])
         self.assertIsNotNone(new_user['passwd_hash'])
@@ -393,6 +394,118 @@ class TestUserCLI(unittest.TestCase):
         # Clean up - remove user
         result = self.run_user_command('remove', 'workflowuser')
         self.assertIn("User 'workflowuser' removed successfully", result.stdout)
+
+    def test_user_add_with_single_role(self):
+        """Test adding a user with a single role via --roles parameter."""
+        result = self.run_user_command('add', 'testrolesuser', '--password', 'testpass', '--roles', 'annotator')
+
+        self.assertIn("User 'testrolesuser' added successfully", result.stdout)
+        self.assertIn("Added role 'annotator' to user 'testrolesuser'", result.stdout)
+
+        # Verify user was created with correct roles
+        users = self.load_users_file()
+        user = next((u for u in users if u['username'] == 'testrolesuser'), None)
+        self.assertIsNotNone(user)
+        self.assertIn('user', user['roles'])  # Default role
+        self.assertIn('annotator', user['roles'])  # Added role
+
+    def test_user_add_with_multiple_roles(self):
+        """Test adding a user with multiple roles via --roles parameter."""
+        result = self.run_user_command('add', 'testmultiroles', '--password', 'testpass',
+                                       '--fullname', 'Multi Role User', '--roles', 'annotator,reviewer')
+
+        self.assertIn("User 'testmultiroles' added successfully", result.stdout)
+        self.assertIn("Added role 'annotator' to user 'testmultiroles'", result.stdout)
+        self.assertIn("Added role 'reviewer' to user 'testmultiroles'", result.stdout)
+
+        # Verify user was created with correct roles
+        users = self.load_users_file()
+        user = next((u for u in users if u['username'] == 'testmultiroles'), None)
+        self.assertIsNotNone(user)
+        self.assertIn('user', user['roles'])  # Default role
+        self.assertIn('annotator', user['roles'])  # Added role
+        self.assertIn('reviewer', user['roles'])  # Added role
+        self.assertEqual(user['fullname'], 'Multi Role User')
+
+    def test_user_add_with_invalid_roles(self):
+        """Test that adding a user with invalid roles fails with appropriate error."""
+        result = self.run_user_command('add', 'testinvalidroles', '--password', 'testpass',
+                                       '--roles', 'user,invalidrole', expect_success=False)
+
+        self.assertIn("Error: Invalid role(s): invalidrole", result.stdout)
+        self.assertIn("Available roles:", result.stdout)
+
+        # Verify user was not created
+        users = self.load_users_file()
+        user = next((u for u in users if u['username'] == 'testinvalidroles'), None)
+        self.assertIsNone(user)
+
+    def test_user_add_with_mixed_valid_invalid_roles(self):
+        """Test that adding a user with mix of valid and invalid roles fails completely."""
+        result = self.run_user_command('add', 'testmixedroles', '--password', 'testpass',
+                                       '--roles', 'annotator,invalidrole,reviewer', expect_success=False)
+
+        self.assertIn("Error: Invalid role(s): invalidrole", result.stdout)
+
+        # Verify user was not created (transaction should be atomic)
+        users = self.load_users_file()
+        user = next((u for u in users if u['username'] == 'testmixedroles'), None)
+        self.assertIsNone(user)
+
+    def test_user_add_with_duplicate_role(self):
+        """Test adding a user with duplicate roles (user role is added by default)."""
+        result = self.run_user_command('add', 'testduproles', '--password', 'testpass', '--roles', 'user,annotator')
+
+        self.assertIn("User 'testduproles' added successfully", result.stdout)
+        self.assertIn("already has the role 'user'", result.stdout)  # Should warn about duplicate
+        self.assertIn("Added role 'annotator' to user 'testduproles'", result.stdout)
+
+        # Verify user has both roles (no duplicates)
+        users = self.load_users_file()
+        user = next((u for u in users if u['username'] == 'testduproles'), None)
+        self.assertIsNotNone(user)
+        role_count = user['roles'].count('user')
+        self.assertEqual(role_count, 1, "User role should not be duplicated")
+        self.assertIn('annotator', user['roles'])
+
+    def test_user_add_with_empty_roles(self):
+        """Test that adding a user with empty roles string works (no roles added)."""
+        result = self.run_user_command('add', 'testemptyroles', '--password', 'testpass', '--roles', '')
+
+        self.assertIn("User 'testemptyroles' added successfully", result.stdout)
+
+        # Verify user was created with only default role
+        users = self.load_users_file()
+        user = next((u for u in users if u['username'] == 'testemptyroles'), None)
+        self.assertIsNotNone(user)
+        self.assertEqual(user['roles'], ['user'])  # Only default role
+
+    def test_user_add_with_whitespace_in_roles(self):
+        """Test that roles with whitespace are handled correctly."""
+        result = self.run_user_command('add', 'testwhitespace', '--password', 'testpass',
+                                       '--roles', ' annotator , reviewer ')
+
+        self.assertIn("User 'testwhitespace' added successfully", result.stdout)
+        self.assertIn("Added role 'annotator' to user 'testwhitespace'", result.stdout)
+        self.assertIn("Added role 'reviewer' to user 'testwhitespace'", result.stdout)
+
+        # Verify roles were added correctly (whitespace stripped)
+        users = self.load_users_file()
+        user = next((u for u in users if u['username'] == 'testwhitespace'), None)
+        self.assertIsNotNone(user)
+        self.assertIn('annotator', user['roles'])
+        self.assertIn('reviewer', user['roles'])
+
+    def test_user_add_roles_parameter_in_help(self):
+        """Test that the --roles parameter appears in help text."""
+        result = subprocess.run([
+            'uv', 'run', 'python', str(self.manage_py),
+            'user', 'add', '--help'
+        ], capture_output=True, text=True, env=os.environ.copy())
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('--roles', result.stdout)
+        self.assertIn('Comma-separated list of roles', result.stdout)
 
     def test_user_help_commands(self):
         """Test that help commands work properly."""

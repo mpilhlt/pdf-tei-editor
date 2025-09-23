@@ -58,8 +58,41 @@ def add_user(args):
             print("Passwords do not match.")
             return
 
+    # Parse roles if provided
+    roles_to_add = []
+    if hasattr(args, 'roles') and args.roles:
+        # Split comma-separated roles and validate them
+        roles_to_add = [role.strip() for role in args.roles.split(',') if role.strip()]
+
+        # Validate roles exist
+        available_roles = get_available_roles(db_dir)
+        if available_roles is None:
+            print("Error: Could not load available roles")
+            return
+
+        invalid_roles = [role for role in roles_to_add if role not in available_roles]
+        if invalid_roles:
+            print(f"Error: Invalid role(s): {', '.join(invalid_roles)}")
+            print("Available roles:")
+            list_available_roles(db_dir)
+            return
+
+    # Create user first
     success, message = user_add_user(db_dir, args.username, password, args.fullname or "", args.email or "")
+    if not success:
+        print(message)
+        return
+
     print(message)
+
+    # Add roles if specified
+    if roles_to_add:
+        for role in roles_to_add:
+            success, role_message = add_role_to_user(db_dir, args.username, role)
+            if success:
+                print(f"Added role '{role}' to user '{args.username}'")
+            else:
+                print(f"Failed to add role '{role}': {role_message}")
 
 def remove_user(args):
     """Removes a user from the users.json file."""
@@ -285,6 +318,7 @@ if __name__ == '__main__':
     parser_add.add_argument('--password', help='The password for the new user. If not provided, it will be asked for interactively.', nargs='?', default=None)
     parser_add.add_argument('--fullname', help='The full name of the user.', default="")
     parser_add.add_argument('--email', help='The email address of the user.', default="")
+    parser_add.add_argument('--roles', help='Comma-separated list of roles to assign to the user (e.g., "user,annotator").', default="")
     parser_add.set_defaults(func=add_user)
 
     # user remove
