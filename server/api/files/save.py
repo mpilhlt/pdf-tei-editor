@@ -76,7 +76,9 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
 
     # Check role-based file access restrictions
     if _is_gold_file(file_path_rel) and not _user_has_reviewer_role(user):
-        raise ApiError("Only users with reviewer role can edit gold files", status_code=403)
+        # Allow annotators to create versions from gold files
+        if not (save_as_new_version and _user_has_annotator_role(user)):
+            raise ApiError("Only users with reviewer role can edit gold files", status_code=403)
 
     if _is_version_file(file_path_rel) and not _user_has_annotator_role(user) and not _user_has_reviewer_role(user):
         raise ApiError("Only users with annotator or reviewer role can edit version files", status_code=403)
