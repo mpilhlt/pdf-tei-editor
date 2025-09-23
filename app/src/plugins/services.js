@@ -7,6 +7,7 @@
  * @import { PluginConfig } from '../modules/plugin-manager.js'
  * @import { SlButton, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
+ * @import { UserData } from './authentication.js'
  */
 
 import { app, endpoints as ep } from '../app.js'
@@ -26,6 +27,7 @@ import * as tei_utils from '../modules/tei-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror_utils.js'
 import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 import { ApiError } from '../modules/utils.js'
+import { userHasRole } from '../modules/acl-utils.js'
 
 /**
  * plugin API
@@ -466,11 +468,11 @@ async function deleteCurrentVersion(state) {
   // Use helper function to check if this is a gold file
   // XML-only files (where state.pdf is null) can always be deleted
   if (state.pdf && typeof xmlValue === 'string') {
+
     // Only check for gold status if this is a PDF-XML file
     const fileData = getFileDataByHash(xmlValue);
-    if (fileData && fileData.type === 'gold') {
+    if (fileData && fileData.type === 'gold' && !userHasRole(state.user, ['admin', 'reviewer'])) {
       dialog.error("You cannot delete the gold version")
-      return
     }
   }
 
@@ -820,11 +822,10 @@ async function createNewVersion(state) {
   // @ts-ignore
   const newVersiondialog = ui.newVersionDialog;
   try {
-    const user = authentication.getUser()
-    if (user) {
-      const userData = /** @type {any} */ (user);
-      newVersiondialog.persId.value = newVersiondialog.persId.value || userData.username
-      newVersiondialog.persName.value = newVersiondialog.persName.value || userData.fullname
+    const userData = authentication.getUser()
+    if (userData) {
+      newVersiondialog.persId.value =  userData.username
+      newVersiondialog.persName.value = userData.fullname
     }    
     newVersiondialog.show()
     await new Promise((resolve, reject) => {
