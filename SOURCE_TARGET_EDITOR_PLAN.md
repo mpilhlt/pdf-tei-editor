@@ -37,7 +37,10 @@ This plan implements a comprehensive dual-editor system that transforms the appl
 
 ## Phase 1: Source Editor Implementation 🔄
 
-### 1.1 PDF/XML Source Detection
+### 1.1 Preparatory steps: refactor state properties, PDF/XML Source Detection
+- [ ] Rename state properties "xml" and "pdf" to "source" and "target" throughout the codebase.
+- [ ] Prefix the source or target type to the file id hash, e.g. "source=pdf:d8e2a" or "target=xml:hff54e"
+- [ ] Thoroughly test that nothing has broken.
 - [ ] Detect source type from loaded file (PDF vs XML)
 - [ ] Add source type indicators to UI
 - [ ] Update file selection to show source compatibility

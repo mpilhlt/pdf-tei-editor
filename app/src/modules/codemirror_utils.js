@@ -22,12 +22,14 @@ import { syntaxTree } from "@codemirror/language";
  * @param {SyntaxNode} syntaxNode The root syntax node of the CodeMirror XML editor's syntax tree.
  * @param {Element|Document} domNode The (root) DOM element parsed by DOMParser.
  * @throws {Error} If the tags of the syntax tree node and the DOM node do not match.
- * @returns {Object} An object containing two WeakMaps: syntaxToDom and domToSyntax.
+ * @returns {{syntaxToDom: Map<number, Node>, domToSyntax: Map<Node, number> }} An object containing two WeakMaps: syntaxToDom and domToSyntax.
  *                  - syntaxToDom: Maps the position of syntax tree nodes to DOM nodes.
  *                  - domToSyntax: Maps DOM nodes to syntax tree nodes' positions.
  */
 export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
+  /** @type {Map<number, Node>} */
   const syntaxToDom = new Map();
+  /** @type {Map<Node, number>} */
   const domToSyntax = new Map();
 
   /**
