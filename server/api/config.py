@@ -115,5 +115,5 @@ def save_instructions():
 def state():
     return {
         "webdavEnabled": os.environ.get('WEBDAV_ENABLED') == "1",
-        "hasInternet": has_internet
+        "hasInternet": has_internet()
     }
