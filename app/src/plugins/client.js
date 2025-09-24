@@ -326,11 +326,12 @@ async function validateXml(xmlString) {
  * Gets autocomplete data for the XML schema associated with the given XML string.
  *
  * @param {string} xmlString - The XML string containing schema information.
+ * @param {boolean} [invalidateCache] - Whether to use cached data (false, default) or reload any required data (true)
  * @returns {Promise<Record<string, any>>} - A promise that resolves to the autocomplete data object,
  *   which may be in a deduplicated format requiring resolution with resolveDeduplicated().
  */
-async function getAutocompleteData(xmlString) {
-  return await callApi('/validate/autocomplete-data', 'POST', { xml_string: xmlString });
+async function getAutocompleteData(xmlString, invalidateCache ) {
+  return await callApi('/validate/autocomplete-data', 'POST', { xml_string: xmlString, invalidate_cache: invalidateCache });
 }
 
 /**

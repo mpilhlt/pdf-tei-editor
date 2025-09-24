@@ -7,8 +7,8 @@ import threading
 import json
 import logging
 
-from server.lib.decorators import handle_api_errors, session_required
-from server.lib.server_utils import ApiError
+from ..lib.decorators import handle_api_errors, session_required
+from ..lib.server_utils import has_internet
 
 logger = logging.getLogger(__name__)
 
@@ -114,5 +114,6 @@ def save_instructions():
 @handle_api_errors
 def state():
     return {
-        "webdavEnabled": os.environ.get('WEBDAV_ENABLED') == "1"
+        "webdavEnabled": os.environ.get('WEBDAV_ENABLED') == "1",
+        "hasInternet": has_internet
     }

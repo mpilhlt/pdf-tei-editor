@@ -68,9 +68,9 @@ if (sessionState) {
   sessionState = serverState
 }
 
-// special case where server state overrides saved state on reload
-// this is a workaround to be fixed
+// server state overrides saved state on reload
 sessionState.webdavEnabled = serverState.webdavEnabled
+sessionState.hasInternet = serverState.hasInternet
 
 // Apply session state to current state
 Object.assign(state, sessionState)
@@ -116,7 +116,9 @@ await app.start()
 
 // Expose necessary objects to global scope for E2E testing
 if (applicationMode == 'testing') {
+  // @ts-ignore
   window.app = app;
+  // @ts-ignore
   window.client = client;
 }
 

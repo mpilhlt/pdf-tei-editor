@@ -7,7 +7,6 @@
  * @import { PluginConfig } from '../modules/plugin-manager.js'
  * @import { SlButton, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
- * @import { UserData } from './authentication.js'
  */
 
 import { app, endpoints as ep } from '../app.js'
@@ -122,6 +121,7 @@ await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
 //
 // Implementation
 //
+
 
 /**
  * @param {ApplicationState} state
@@ -381,9 +381,12 @@ async function startAutocomplete() {
     const xmlContent = xmlEditor.getEditorContent()
     if (xmlContent) {
       try {
-        const autocompleteData = await client.getAutocompleteData(xmlContent)
+        const invalidateCache = currentState?.hasInternet
+        const autocompleteData = await client.getAutocompleteData(xmlContent, invalidateCache)
+        
         // Resolve deduplicated references
         const resolvedData = resolveDeduplicated(autocompleteData)
+        
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData)
         logger.debug("Autocomplete data loaded and applied")

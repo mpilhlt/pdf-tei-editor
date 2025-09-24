@@ -1,21 +1,19 @@
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request
 import os
 import re
 import json
 import subprocess
 import tempfile
-import signal
-import time
 import logging
-from lxml import etree
-from lxml.etree import XMLSyntaxError, XMLSchema, RelaxNG, XMLSchemaParseError, DocumentInvalid
+from lxml import etree # type: ignore
+from lxml.etree import XMLSyntaxError
 import xmlschema # too slow for validation but has some nice features like exporting a local copy of the schema
 from urllib.error import HTTPError
 import requests
 
-from server.lib.decorators import handle_api_errors
-from server.lib.server_utils import ApiError
-from server.lib.relaxng_to_codemirror import generate_autocomplete_map
+from ..lib.decorators import handle_api_errors
+from ..lib.server_utils import ApiError
+from ..lib.relaxng_to_codemirror import generate_autocomplete_map
 
 logger = logging.getLogger(__name__)
 
@@ -110,11 +108,15 @@ def validate_with_timeout(schema_file, validation_xml_bytes, namespace_type, tim
         # to avoid dependency on uv being in PATH (e.g., in production systemd service)
         import sys
         result = subprocess.run([
-            sys.executable, script_path, schema_file, xml_path, namespace_type
-        ], 
-        capture_output=True, 
-        text=True, 
-        timeout=timeout
+                sys.executable, 
+                script_path, 
+                schema_file, 
+                xml_path, 
+                namespace_type
+            ], 
+            capture_output=True, 
+            text=True, 
+            timeout=timeout
         )
         
         if result.returncode != 0:
@@ -167,9 +169,16 @@ def autocomplete_data_route():
     """
     data = request.get_json()
     xml_string = data.get('xml_string')
-    
+    invalidate_cache = data.get('invalidate_cache', False)
+
     if not xml_string:
         raise ApiError("xml_string parameter is required")
+
+    # Check internet connectivity if cache invalidation is requested
+    if invalidate_cache:
+        from ..lib.server_utils import has_internet
+        if not has_internet():
+            raise ApiError("Cannot invalidate cache without internet connection. Schema re-download requires network access.", status_code=503)
     
     # Get the schema locations from the XML
     schema_locations = extract_schema_locations(xml_string)
@@ -200,13 +209,13 @@ def autocomplete_data_route():
     autocomplete_cache_file = os.path.join(schema_cache_dir, 'codemirror-autocomplete.json')
     
     # Check if autocomplete data is already cached
-    if os.path.isfile(autocomplete_cache_file):
+    if os.path.isfile(autocomplete_cache_file) and not invalidate_cache:
         logger.debug(f"Using cached autocomplete data at {autocomplete_cache_file}")
         with open(autocomplete_cache_file, 'r', encoding='utf-8') as f:
             return jsonify(json.load(f))
     
     # Download schema if it doesn't exist
-    if not os.path.isfile(schema_cache_file):
+    if not os.path.isfile(schema_cache_file) or invalidate_cache:
         download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
     else:
         logger.debug(f"Using cached schema at {schema_cache_file}")
@@ -322,10 +331,10 @@ def validate(xml_string):
     try:
         # Convert string to bytes to handle encoding declarations properly
         xml_bytes = xml_string.encode('utf-8') if isinstance(xml_string, str) else xml_string
-        xmldoc = etree.XML(xml_bytes, parser)
+        etree.XML(xml_bytes, parser)
     except XMLSyntaxError as e:
         # if xml is invalid, return right away
-        for error in e.error_log:
+        for error in e.error_log: # type: ignore
             errors.append({
                 "message": error.message,
                 "line": error.line,
@@ -357,7 +366,7 @@ def validate(xml_string):
             validation_timeout = schema_config.get("timeout", VALIDATION_TIMEOUT)
             logger.debug(f"Using custom timeout {validation_timeout}s for {schema_location}: {schema_config.get('reason', '')}")
         
-        schema_cache_dir, schema_cache_file, schema_file_name = get_schema_cache_info(schema_location)
+        schema_cache_dir, schema_cache_file, _ = get_schema_cache_info(schema_location)
         
         # Download schema if not cached
         if not os.path.isfile(schema_cache_file):

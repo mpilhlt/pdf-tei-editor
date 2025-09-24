@@ -1,6 +1,13 @@
 /**
- * @import { Extension } from '@codemirror/state'
- * @import {SyntaxNode, Tree} from '@lezer/common'
+ * @import {SyntaxNode} from '@lezer/common'
+ * @import {ViewUpdate} from '@codemirror/view'
+ */
+
+/**
+ * @typedef {Object.<string, any>} ReferenceMap
+ * A recursive map structure that can contain references to other parts of itself.
+ * Used for resolving deduplicated autocomplete data with "#x" and "#Mx" references.
+ * Values can be strings, numbers, booleans, arrays, or other ReferenceMap objects.
  */
 
 import { EditorView, ViewPlugin } from "@codemirror/view";
@@ -23,25 +30,31 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
   const syntaxToDom = new Map();
   const domToSyntax = new Map();
 
+  /**
+   * @param {SyntaxNode} node
+   */
   const getText = node => view.state.doc.sliceString(node.from, node.to);
 
   /**
    * Helper to find the first element node in a tree
    * @param {SyntaxNode|Node} node Starting node
-   * @param {boolean} isDOM Whether this is a DOM node (true) or syntax node (false)
-   * @returns {SyntaxNode|Node|null} First element node found or null
+   * @param {boolean} [isDOM=false] Whether this is a DOM node (true) or syntax node (false)
+   * @returns {SyntaxNode|Element|null} First element node found or null
    */
   function findFirstElement(node, isDOM = false) {
     while (node) {
       if (isDOM) {
-        // @ts-ignore - node is a DOM Node when isDOM is true
-        if (node.nodeType === Node.ELEMENT_NODE) return node;
+        /** @type {Node} */
+        const domNode = /** @type {Node} */ (node);
+        if (domNode.nodeType === Node.ELEMENT_NODE) return /** @type {Element} */ (domNode);
       } else {
-        // @ts-ignore - node is a SyntaxNode when isDOM is false
-        if (node.name === "Element") return node;
+        /** @type {SyntaxNode} */
+        const syntaxNode = /** @type {SyntaxNode} */ (node);
+        if (syntaxNode.name === "Element") return syntaxNode;
       }
-      // @ts-ignore - both Node and SyntaxNode have nextSibling
-      node = node.nextSibling;
+      const nextNode = node.nextSibling;
+      if (!nextNode) break;
+      node = nextNode;
     }
     return null;
   }
@@ -49,8 +62,8 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
   /**
    * Collects all element children from a parent node
    * @param {SyntaxNode|Node} parent Parent node
-   * @param {boolean} isDOM Whether this is a DOM node (true) or syntax node (false) 
-   * @returns {Array} Array of element nodes
+   * @param {boolean} [isDOM=false] Whether this is a DOM node (true) or syntax node (false)
+   * @returns {Array<SyntaxNode|Element>} Array of element nodes
    */
   function collectElementChildren(parent, isDOM = false) {
     const elements = [];
@@ -68,6 +81,10 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     return elements;
   }
 
+  /**
+   * @param {SyntaxNode} syntaxNode
+   * @param {Element} domNode
+   */
   function recursiveLink(syntaxNode, domNode) {
 
     if (!syntaxNode || !domNode) {
@@ -75,8 +92,8 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     }
 
     // Enhanced: Find the first element in each tree, handling processing instructions
-    const syntaxElement = findFirstElement(syntaxNode, false);
-    const domElement = findFirstElement(domNode, true);
+    const syntaxElement = /** @type {SyntaxNode|null} */ (findFirstElement(syntaxNode, false));
+    const domElement = /** @type {Element|null} */ (findFirstElement(domNode, true));
 
     // If we couldn't find matching element nodes, return empty maps
     if (!syntaxElement || !domElement) {
@@ -87,8 +104,8 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     }
 
     // Check if the found elements are valid
-    if (syntaxElement.name !== "Element") {
-      throw new Error(`Unexpected node type: ${syntaxElement.name}. Expected "Element".`);
+    if (!syntaxElement || syntaxElement.name !== "Element") {
+      throw new Error(`Unexpected node type: ${syntaxElement?.name}. Expected "Element".`);
     }
 
     // make sure we have a tag name child
@@ -97,24 +114,27 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
       const text = getText(syntaxElement);
       if (text === "<") {
         // hack
-        syntaxTagNode = syntaxTagNode.nextSibling
+        syntaxTagNode = syntaxTagNode?.nextSibling
       } else {
         throw new Error(`Expected a TagName child node in syntax tree. Found: ${text}`);
       }
     }
 
-    const syntaxTagName = getText(syntaxTagNode)
-    const domTagName = domElement.tagName;
+    if (!syntaxTagNode) {
+      throw new Error('Could not find TagName node after processing');
+    }
+    const syntaxTagName = getText(syntaxTagNode);
+    const domTagName = /** @type {Element} */ (domElement).tagName;
 
     // Verify that the tag names match
     if (syntaxTagName !== domTagName) {
       throw new Error(`Tag mismatch: Syntax tree has ${syntaxTagName}, DOM has ${domTagName}`);
     }
 
-    // Store references to each other - since the syntax tree is regenerated on each lookup, 
+    // Store references to each other - since the syntax tree is regenerated on each lookup,
     // we need to store the unique positions of each node as reference
-    syntaxToDom.set(syntaxElement.from, domElement);
-    domToSyntax.set(domElement, syntaxElement.from);
+    syntaxToDom.set(/** @type {SyntaxNode} */ (syntaxElement).from, domElement);
+    domToSyntax.set(domElement, /** @type {SyntaxNode} */ (syntaxElement).from);
 
     // Enhanced: Use robust child collection and pairing
     const syntaxChildren = collectElementChildren(syntaxElement, false);
@@ -123,17 +143,17 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
     // Recursively link the children by pairs
     const minChildren = Math.min(syntaxChildren.length, domChildren.length);
     for (let i = 0; i < minChildren; i++) {
-      recursiveLink(syntaxChildren[i], domChildren[i]);
+      recursiveLink(/** @type {SyntaxNode} */ (syntaxChildren[i]), /** @type {Element} */ (domChildren[i]));
     }
 
     // Check for mismatched child counts
     if (syntaxChildren.length > domChildren.length) {
       const extraSyntax = syntaxChildren.slice(domChildren.length);
-      throw new Error(`Syntax tree has more child elements than the DOM tree: ${extraSyntax.map(n => getText(n)).join(', ')}`);
+      throw new Error(`Syntax tree has more child elements than the DOM tree: ${extraSyntax.map(n => getText(/** @type {SyntaxNode} */ (n))).join(', ')}`);
     }
     if (domChildren.length > syntaxChildren.length) {
       const extraDOM = domChildren.slice(syntaxChildren.length);
-      throw new Error(`DOM tree has more child elements than the syntax tree: ${extraDOM.map(n => n.tagName).join(', ')}`);
+      throw new Error(`DOM tree has more child elements than the syntax tree: ${extraDOM.map(n => /** @type {Element} */ (n).tagName).join(', ')}`);
     }
     return {
       syntaxToDom,
@@ -147,8 +167,8 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
   }
   
   // Enhanced: Find root elements, skipping processing instructions and other non-element nodes
-  const syntaxRoot = syntaxNode.firstChild ? findFirstElement(syntaxNode.firstChild, false) : null;
-  const domRoot = domNode.firstChild ? findFirstElement(domNode.firstChild, true) : null;
+  const syntaxRoot = syntaxNode.firstChild ? /** @type {SyntaxNode|null} */ (findFirstElement(syntaxNode.firstChild, false)) : null;
+  const domRoot = domNode.firstChild ? /** @type {Element|null} */ (findFirstElement(domNode.firstChild, true)) : null;
   
   if (!syntaxRoot || !domRoot) {
     console.warn("Could not find root elements in one or both trees");
@@ -161,20 +181,33 @@ export function linkSyntaxTreeWithDOM(view, syntaxNode, domNode) {
   return recursiveLink(syntaxRoot, domRoot);
 }
 
-// Function to install the selection change listener
+/**
+ * Function to install the selection change listener
+ * @param {function} onSelectionChange
+ */
 export function selectionChangeListener(onSelectionChange) {
   return ViewPlugin.fromClass(
     class {
-      constructor(view) {
+      /**
+       * @param {EditorView} _view
+       */
+      constructor(_view) {
+        /** @type {function} */
         this.onSelectionChange = onSelectionChange;
       }
 
+      /**
+       * @param {ViewUpdate} update
+       */
       update(update) {
         if (update.selectionSet) {
           const selection = update.state.selection;
           const ranges = selection.ranges;
 
           // Convert ranges to plain JavaScript objects if needed, or pass them directly
+          /**
+           * @param {any} range
+           */
           const selectionInfo = ranges.map(range => {
             return {
               view: update.view,
@@ -200,10 +233,10 @@ export function selectionChangeListener(onSelectionChange) {
  *
  * The XPath only supports direct and indexed children (e.g., "/TEI/standOff/listBibl/biblStruct[8]/monogr").
  * TODO this can be replaced with xmlEditor::
- * 
- * @param view {EditorView} The CodeMirror 6 EditorView
- * @param xpath The XPath-like expression to resolve.
- * @returns The `from` and `to` positions of the matching node, or null if not found.
+ *
+ * @param {EditorView} view The CodeMirror 6 EditorView
+ * @param {string} xpath The XPath-like expression to resolve.
+ * @returns {{from: number, to: number}|null} The `from` and `to` positions of the matching node, or null if not found.
  */
 export function resolveXPath(view, xpath) {
   const tree = syntaxTree(view.state);
@@ -214,8 +247,8 @@ export function resolveXPath(view, xpath) {
   let foundNode = null;
 
   /**
-   * @param {SyntaxNode} node 
-   * @param {Number?} length 
+   * @param {SyntaxNode} node
+   * @param {number|null} [length=null]
    * @returns {string}
    */
   function text(node, length = null) {
@@ -282,8 +315,8 @@ export function resolveXPath(view, xpath) {
 
 /**
  * Checks if an object has the Extension interface (not really doing that currently)
- * @param {Extension} extension 
- * @returns {Boolean}
+ * @param {any} extension
+ * @returns {boolean}
  */
 export function isExtension(extension){
   return extension && typeof extension == "object"
@@ -299,13 +332,13 @@ export function isExtension(extension){
  * @param {string} [defaultIndentation="  "] The default indentation to return if the XML cannot be reliably analyzed.
  *                                          Defaults to two spaces.
  * @returns {string} '\t' if the majority of indents are tabs, or a number of space characters (2, 4, etc.) if spaces are used.
- * If the indentation cannot be reliably determined, it returns 2.
- * 
+ * If the indentation cannot be reliably determined, it returns the default indentation.
  */
 export function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
   const lines = xmlString.split('\n');
   let tabIndentedLines = 0;
   let spaceIndentedLines = 0;
+  /** @type {number[]} */
   const spaceIndentations = [];
 
   for (const line of lines) {
@@ -348,6 +381,11 @@ export function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
     }
 
     if(differences.length > 0) {
+        /**
+         * @param {number} a
+         * @param {number} b
+         * @returns {number}
+         */
         const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
         let result = differences[0];
         for (let i = 1; i < differences.length; i++) {
@@ -376,51 +414,59 @@ export function detectXmlIndentation(xmlString, defaultIndentation = "  ") {
  * by the server, which uses "#x" references which are reused at different places. This
  * includes "#Mx" references which are macros containing references. Returns the resolved version
  * with the string references replaced by the actual object references.
- * 
- * Code generated by Claude Code with instructions by @cboulanger
- * 
- * @param {Object} data Map to be resolved
- * @returns {Object} Resolved map
+ *
+ * @param {ReferenceMap} data Map to be resolved
+ * @returns {ReferenceMap} Resolved map
  */
 export function resolveDeduplicated(data) {
   // Create a copy to avoid modifying the original
   const resolved = JSON.parse(JSON.stringify(data));
 
   // Extract and resolve reference definitions (keys starting with #)
+  /** @type {ReferenceMap} */
   const refs = {};
   Object.keys(resolved).forEach(key => {
     if (key.startsWith('#')) {
-      refs[key] = resolved[key];
-      delete resolved[key];
+      const resolvedObj = /** @type {ReferenceMap} */ (resolved);
+      const refsObj = /** @type {ReferenceMap} */ (refs);
+      refsObj[key] = resolvedObj[key];
+      delete resolvedObj[key];
     }
   });
 
   // Pre-resolve all references to create shared objects
+  /** @type {ReferenceMap} */
   const resolvedRefs = {};
 
   // First pass: resolve simple references and macros
   Object.keys(refs).forEach(refId => {
+    const refsTyped = /** @type {ReferenceMap} */ (refs);
+
     if (refId.startsWith('#M')) {
       // Macro reference - resolve to composite pattern
-      const macroContent = refs[refId];
+      const macroContent = refsTyped[refId];
       if (typeof macroContent === 'string' && macroContent.includes(' ')) {
         const refIds = macroContent.split(' ').filter(id => id.startsWith('#'));
         resolvedRefs[refId] = mergeReferences(refIds, refs);
       } else {
-        resolvedRefs[refId] = refs[refId];
+        resolvedRefs[refId] = refsTyped[refId];
       }
     } else {
       // Simple reference - use as-is (will be shared)
-      resolvedRefs[refId] = refs[refId];
+      resolvedRefs[refId] = refsTyped[refId];
     }
   });
 
-  // Recursive function to resolve references using shared objects
+  /**
+   * Recursive function to resolve references using shared objects
+   * @param {any} obj
+   * @returns {any}
+   */
   function resolveRefs(obj) {
     if (typeof obj === 'string' && obj.includes('#')) {
       if (obj.startsWith('#') && !obj.includes(' ')) {
         // Simple reference - return shared object and recursively resolve its contents
-        const resolved = resolvedRefs[obj];
+        const resolved = /** @type {ReferenceMap} */ (resolvedRefs)[obj];
         if (resolved) {
           return resolveRefs(resolved); // Recursively resolve the contents
         }
@@ -434,18 +480,27 @@ export function resolveDeduplicated(data) {
     } else if (Array.isArray(obj)) {
       return obj.map(resolveRefs);
     } else if (obj && typeof obj === 'object') {
+      /** @type {ReferenceMap} */
       const result = {};
       Object.keys(obj).forEach(key => {
-        result[key] = resolveRefs(obj[key]);
+        /** @type {ReferenceMap} */ (result)[key] = resolveRefs(/** @type {ReferenceMap} */ (obj)[key]);
       });
       return result;
     }
     return obj;
   }
 
-  // Function to merge multiple references into a single object/array
+  /**
+   * Function to merge multiple references into a single object/array
+   * @param {string[]} refIds
+   * @param {ReferenceMap} refSource
+   * @returns {any}
+   */
   function mergeReferences(refIds, refSource) {
-    const resolved = refIds.map(id => refSource[id]).filter(Boolean);
+    /**
+     * @param {string} id
+     */
+    const resolved = refIds.map(id => /** @type {ReferenceMap} */ (refSource)[id]).filter(Boolean);
 
     if (resolved.length === 0) return null;
     if (resolved.length === 1) return resolved[0]; // Share the single object
@@ -453,23 +508,33 @@ export function resolveDeduplicated(data) {
     // Determine merge strategy based on types
     const firstType = Array.isArray(resolved[0]) ? 'array' : typeof resolved[0];
 
+    /**
+     * @param {any} r
+     */
     if (firstType === 'object' && resolved.every(r => typeof r === 'object' && !Array.isArray(r))) {
       // Merge objects - create new object but reference shared values where possible
       const merged = {};
+      /**
+       * @param {ReferenceMap} obj
+       */
       resolved.forEach(obj => {
         Object.keys(obj).forEach(key => {
-          if (key === 'doc' && merged[key]) {
+          if (key === 'doc' && /** @type {ReferenceMap} */ (merged)[key]) {
             // Merge documentation fields by concatenating with separator
-            merged[key] = merged[key] + ' | ' + obj[key];
+            /** @type {ReferenceMap} */ (merged)[key] = /** @type {ReferenceMap} */ (merged)[key] + ' | ' + /** @type {ReferenceMap} */ (obj)[key];
           } else {
-            merged[key] = obj[key]; // This shares the value reference
+            /** @type {ReferenceMap} */ (merged)[key] = /** @type {ReferenceMap} */ (obj)[key]; // This shares the value reference
           }
         });
       });
       return merged;
+    /**
+     * @param {any} r
+     */
     } else if (firstType === 'array' && resolved.every(r => Array.isArray(r))) {
       // Concatenate arrays and deduplicate
-      const concatenated = [].concat(...resolved);
+      /** @type {any[]} */
+      const concatenated = /** @type {any[]} */ ([].concat(.../** @type {any[]} */ (resolved)));
       const seen = new Set();
       return concatenated.filter(item => {
         if (seen.has(item)) return false;
@@ -482,7 +547,11 @@ export function resolveDeduplicated(data) {
     }
   }
 
-  // Helper function to deduplicate arrays, preserving order
+  /**
+   * Helper function to deduplicate arrays, preserving order
+   * @param {any} arr
+   * @returns {any}
+   */
   function deduplicateArray(arr) {
     if (!Array.isArray(arr)) return arr;
     const seen = new Set();
@@ -493,18 +562,22 @@ export function resolveDeduplicated(data) {
     });
   }
 
-  // Helper function to recursively deduplicate values arrays in objects
+  /**
+   * Helper function to recursively deduplicate values arrays in objects
+   * @param {any} obj
+   * @returns {any}
+   */
   function deduplicateValues(obj) {
     if (Array.isArray(obj)) {
       return obj.map(deduplicateValues);
     } else if (obj && typeof obj === 'object') {
       const result = {};
       Object.keys(obj).forEach(key => {
-        if (key === 'values' && Array.isArray(obj[key])) {
+        if (key === 'values' && Array.isArray(/** @type {ReferenceMap} */ (obj)[key])) {
           // Deduplicate values arrays specifically
-          result[key] = deduplicateArray(obj[key]);
+          /** @type {ReferenceMap} */ (result)[key] = deduplicateArray(/** @type {ReferenceMap} */ (obj)[key]);
         } else {
-          result[key] = deduplicateValues(obj[key]);
+          /** @type {ReferenceMap} */ (result)[key] = deduplicateValues(/** @type {ReferenceMap} */ (obj)[key]);
         }
       });
       return result;
@@ -514,7 +587,7 @@ export function resolveDeduplicated(data) {
 
   // Resolve all references in the main data
   Object.keys(resolved).forEach(key => {
-    resolved[key] = resolveRefs(resolved[key]);
+    /** @type {ReferenceMap} */ (resolved)[key] = resolveRefs(/** @type {ReferenceMap} */ (resolved)[key]);
   });
   
   // Deduplicate all values arrays in the resolved data

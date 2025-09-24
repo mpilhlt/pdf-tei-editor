@@ -177,12 +177,11 @@ def load_blueprints_from_directory(directory, prefix=""):
         
         if os.path.isfile(item_path) and item.endswith('.py') and item != '__init__.py':
             # Load .py files as modules
-            module_name = f"{prefix}{item[:-3]}" if prefix else item[:-3]  # Remove ".py" extension
-            
+            module_name = f"server.api.{prefix}{item[:-3]}" if prefix else f"server.api.{item[:-3]}"  # Remove ".py" extension
+
             # Use importlib to dynamically import the module
-            spec = importlib.util.spec_from_file_location(module_name, item_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            import importlib
+            module = importlib.import_module(module_name)
 
             # Dynamically register the blueprint if it exists
             if hasattr(module, 'bp'):
