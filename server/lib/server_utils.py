@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import json
 import re
+import socket
 from pathlib import Path
 from flask import current_app
 import logging
@@ -18,6 +19,22 @@ class ApiError(RuntimeError):
     def __init__(self, message, status_code=400):
         super().__init__(message)
         self.status_code = status_code
+
+
+def has_internet():
+    """
+    Test internet connectivity by attempting to connect to Google's DNS server.
+    This is faster than HTTP requests as it only checks connectivity without data transfer.
+
+    Returns:
+        bool: True if internet connection is available, False otherwise
+    """
+    try:
+        socket.setdefaulttimeout(3)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("8.8.8.8", 53))
+        return True
+    except socket.error:
+        return False
 
 
 def make_timestamp():
@@ -56,7 +73,7 @@ def resolve_document_identifier(path_or_hash) -> str | None:
     Raises:
         ApiError: If hash cannot be resolved or identifier is invalid
     """
-    from server.lib.hash_utils import resolve_hash_to_path
+    from ..lib.hash_utils import resolve_hash_to_path
     
     if not path_or_hash:
         raise ApiError("Document identifier is empty", status_code=400)
