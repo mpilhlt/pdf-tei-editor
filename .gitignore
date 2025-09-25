@@ -1,6 +1,6 @@
 # Secrets and caches
-.env
-.env.docker
+.env*
+!.env.dist
 
 # Caches and temp files
 .venv
@@ -11,6 +11,7 @@ __pycache__
 *.backup
 nohup.out
 off/
+*.stackdump
 
 # installation artifacts
 node_modules
