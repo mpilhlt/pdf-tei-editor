@@ -115,6 +115,10 @@ ENTRYPOINT ["/entrypoint.sh"]
 # Stage 4: Test-optimized variant (inherits from production)
 FROM production as test
 
+# Copy test fixtures for E2E tests
+COPY tests/e2e/fixtures /app/tests/e2e/fixtures
+COPY tests/py/fixtures /app/tests/py/fixtures
+
 # Override entrypoint for test environment
 COPY docker/entrypoint-test.sh /entrypoint-test.sh
 RUN chmod +x /entrypoint-test.sh

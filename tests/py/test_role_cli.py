@@ -28,7 +28,7 @@ class TestRoleCLI(unittest.TestCase):
     def setUp(self):
         """Set up test environment with test data directory."""
         # Use test data directory
-        self.test_data_dir = Path(__file__).parent / 'data'
+        self.test_data_dir = Path(__file__).parent / 'fixtures'
         self.db_dir = self.test_data_dir / 'db'
         self.config_dir = self.test_data_dir / 'config'
 

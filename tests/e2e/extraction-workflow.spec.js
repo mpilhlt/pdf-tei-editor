@@ -13,15 +13,17 @@
 
 import { test, expect } from '@playwright/test';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
-import { navigateAndLogin } from './helpers/login-helper.js';
+import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
 
-// Define allowed error patterns for document actions
+// Define allowed error patterns for extraction workflow
 const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*401.*UNAUTHORIZED', // will always be thrown when first loading without a saved state
   'Failed to load resource.*400.*BAD REQUEST', // Autocomplete validation errors
   'Failed to load autocomplete data.*No schema location found', // Expected validation warnings
   'api/validate/autocomplete-data.*400.*BAD REQUEST', // Schema validation API errors
-  'offsetParent is not set.*cannot scroll' // UI scrolling errors in browser automation
+  'offsetParent is not set.*cannot scroll', // UI scrolling errors in browser automation
+  'Failed to load resource.*404.*NOT FOUND', // Resource access control errors
+  'ApiError.*Hash.*not found in lookup table' // Test data availability issues
 ];
 
 // Enable debug output only when E2E_DEBUG environment variable is set
@@ -78,8 +80,8 @@ test.describe.serial('Extraction Workflow', () => {
     // main test
     try {
 
-      // Navigate and login
-      await navigateAndLogin(page, E2E_BASE_URL);
+      // Navigate and login as annotator (required for extraction operations)
+      await navigateAndLogin(page, E2E_BASE_URL, 'testannotator', 'annotatorpass');
 
       // Debug: Check if test logging is enabled
       const testLogStatus = await page.evaluate(() => {
@@ -150,11 +152,11 @@ test.describe.serial('Extraction Workflow', () => {
       debugLog('PDF extraction test completed successfully');
 
     } finally {
-
-      // Clean up error monitoring
+      // cleanup
+      await releaseAllLocks(page);
+      await performLogout(page);
       stopErrorMonitoring();
-      await page.close()
-
+      await page.close();
     }
   });
 

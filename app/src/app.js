@@ -20,7 +20,7 @@ import ep from './endpoints.js'
 export { ep as endpoints }
 
 // plugins
-import plugins from './plugins.js'
+import plugins, { services } from './plugins.js'
 import { logLevel, client, config, AuthenticationPlugin, LoggerPlugin } from './plugins.js'
 import initialState from './state.js'
 
@@ -114,13 +114,19 @@ await app.updateState({})
 // invoke the "start" endpoint
 await app.start()
 
+// @test-start
 // Expose necessary objects to global scope for E2E testing
-if (applicationMode == 'testing') {
+if (applicationMode == 'testing' || applicationMode == 'development' ) {
   // @ts-ignore
   window.app = app;
   // @ts-ignore
   window.client = client;
+  // @ts-ignore
+  window.services = services;
+  // @ts-ignore
+  window.testLog = testLog;
 }
+// @test-end
 
 //
 // Legacy compatibility functions for old plugin system

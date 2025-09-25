@@ -103,12 +103,12 @@ node tests/smart-test-runner.js --changed-files <files>
 
 ```bash
 available via `npm run-script`:
+  ci
+    uv sync && npm install
   start:dev
     uv run python bin/start-dev
   start:prod
     uv run python bin/start-prod
-  update-importmap
-    node bin/generate-importmap.js
   build
     node bin/build.js
   manage
@@ -133,11 +133,9 @@ available via `npm run-script`:
     node tests/e2e-runner.js --playwright --headed --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY
   test:e2e:headed-debug
     PWDEBUG=1 node tests/e2e-runner.js --playwright --debug --headed --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY
-  test:e2e:firefox
-    node tests/e2e-runner.js --playwright --browser firefox --env GROBID_SERVER_URL --env GEMINI_API_KEY
-  test:e2e:webkit
-    node tests/e2e-runner.js --playwright --browser webkit --env GROBID_SERVER_URL --env GEMINI_API_KEY
   test:e2e:backend
-    node tests/e2e-runner.js --backend
+    node tests/e2e-runner.js --backend --env GROBID_SERVER_URL --env GEMINI_API_KEY
+  test:e2e:backend:fast
+    node tests/e2e-runner.js --backend --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY
 ```
 

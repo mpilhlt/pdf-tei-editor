@@ -9,6 +9,7 @@
  * @import { ApplicationState } from '../state.js' 
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { FileListItem } from '../modules/file-data-utils.js'
  */
 
 import { endpoints as ep } from '../app.js'
@@ -64,6 +65,7 @@ class FiledataPlugin extends Plugin {
   async reload(options = {}) {
     logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
     
+    /** @type {FileListItem[]} */
     let data = await client.getFileList(null, options.refresh);
     if (!data || data.length === 0) {
       dialog.error("No files found");

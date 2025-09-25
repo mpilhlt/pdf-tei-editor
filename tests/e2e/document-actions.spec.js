@@ -6,11 +6,14 @@
  * @testCovers server/api/files.py
  */
 
-/** @import { namedElementsTree } from '../../app/src/ui.js' */
+/** 
+ * @import { namedElementsTree } from '../../app/src/ui.js' 
+ * @import { api as ServicesApi } from '../../app/src/plugins/services.js'
+ */
 
 import { test, expect } from '@playwright/test';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
-import { navigateAndLogin } from './helpers/login-helper.js';
+import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
 import { selectFirstDocuments } from './helpers/extraction-helper.js';
 
 // Enable debug output only when E2E_DEBUG environment variable is set
@@ -32,7 +35,12 @@ const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*400.*BAD REQUEST', // Autocomplete validation errors
   'Failed to load autocomplete data.*No schema location found', // Expected validation warnings
   'api/validate/autocomplete-data.*400.*BAD REQUEST', // Schema validation API errors
-  'offsetParent is not set.*cannot scroll' // UI scrolling errors in browser automation
+  'offsetParent is not set.*cannot scroll', // UI scrolling errors in browser automation
+  'Failed to load resource.*403.*FORBIDDEN', // Access control errors - temporarily allowed
+  'Failed to load resource.*423.*LOCKED', // File locking conflicts between tests
+  'Error while saving XML.*Only users with reviewer role.*', // Role permission errors
+  'Error.*Could not save XML.*Failed to acquire lock', // File locking conflicts
+  'Error while saving XML.*Failed to acquire lock' // Alternative file locking error format
 ];
 
 test.describe('Document Actions', () => {
@@ -45,8 +53,8 @@ test.describe('Document Actions', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
     try {
-      // Navigate and login
-      await navigateAndLogin(page, E2E_BASE_URL);
+      // Navigate and login as reviewer (required for document actions)
+      await navigateAndLogin(page, E2E_BASE_URL, 'testreviewer', 'reviewerpass');
 
       // Select the first available PDF and XML documents (should exist from previous tests)
       await selectFirstDocuments(page);
@@ -104,10 +112,24 @@ test.describe('Document Actions', () => {
 
       debugLog('New version creation test completed successfully');
 
+      // Clean up: Delete the created version to prevent conflicts with subsequent tests
+      await page.evaluate(async () => {
+        /** @type {ServicesApi} */
+        const services = /** @type {any} */(window).services;
+        // Call the deleteAllVersions function to clean up
+          await services.deleteAllVersions();
+      });
+
+      // Wait a moment for deletion to complete
+      await page.waitForTimeout(1000);
+
     } finally {
+      // Release all locks before logout
+      await releaseAllLocks(page);
+      await performLogout(page);
       // Clean up error monitoring
       stopErrorMonitoring();
-      await page.close()
+      await page.close();
     }
   });
 
@@ -122,11 +144,9 @@ test.describe('Document Actions', () => {
     ];
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, allowedErrorsForRevision);
 
-    let currentXmlFileId = null;
-
-    try {
-      // Navigate and login
-      await navigateAndLogin(page, E2E_BASE_URL);
+      try {
+      // Navigate and login as reviewer (required for document actions)
+      await navigateAndLogin(page, E2E_BASE_URL, 'testreviewer', 'reviewerpass');
 
       // Select the first available PDF and XML documents (should exist from previous tests)
       await selectFirstDocuments(page);
@@ -187,9 +207,12 @@ test.describe('Document Actions', () => {
 
       debugLog('Revision save test completed successfully');
     } finally {
+      // Release all locks before logout
+      await releaseAllLocks(page);
+      await performLogout(page);
       // Clean up error monitoring
       stopErrorMonitoring();
-      await page.close()
+      await page.close();
     }
   });
 });

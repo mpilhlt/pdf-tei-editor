@@ -128,7 +128,7 @@ const api = {
   checkLock,
   acquireLock,
   releaseLock,
-  getAllLocks,
+  getAllLockedFileIds,
   getCacheStatus,
   login,
   logout,
@@ -528,7 +528,7 @@ async function releaseLock(fileId) {
  * Retrieves an object mapping all currently locked files to the session id that locked them.
  * @returns {Promise<{[key:string]:Number}>} An object mapping locked file paths to session ids 
  */
-async function getAllLocks() {
+async function getAllLockedFileIds() {
   return await callApi('/files/locks', 'GET');
 }
 

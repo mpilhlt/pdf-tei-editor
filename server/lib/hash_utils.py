@@ -165,6 +165,26 @@ def resolve_hash_to_path(file_hash: str) -> str:
     
     return lookup_table[file_hash]
 
+def resolve_path_to_hash(file_path:str):
+    """
+    Get the hash that belongs to a path using the lookup table.
+    
+    Args:
+        file_path (str): File path relative to data root
+        
+    Returns:
+        str: hash
+        
+    Raises:
+        KeyError: If path is not found in lookup table
+    """
+    inverse_lookup_table = {v: k for k, v in load_hash_lookup().items()} 
+    
+    if file_path not in inverse_lookup_table:
+        raise KeyError(f"File path '{file_path}' not found in lookup table")
+    
+    return inverse_lookup_table[file_path]    
+
 
 def add_path_to_lookup(file_path: str) -> str:
     """

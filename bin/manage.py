@@ -51,7 +51,7 @@ def add_user(args):
     db_dir, _ = get_project_paths(args.db_path, args.config_path)
 
     password = args.password
-    if not password:
+    if password is None:
         password = getpass.getpass("Enter password: ")
         password_confirm = getpass.getpass("Confirm password: ")
         if password != password_confirm:

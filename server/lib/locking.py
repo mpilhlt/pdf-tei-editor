@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from flask import current_app
 from webdav4.client import Client, ResourceAlreadyExists, ResourceNotFound
-from server.api.config import read_config
+from .hash_utils import resolve_path_to_hash
 
 # a custom exception class is not needed since ApiError is defined in server_utils
 from .server_utils import ApiError
@@ -310,6 +310,19 @@ def get_all_active_locks():
         raise e
     
     return active_locks
+
+
+def get_locked_file_ids(session_id=None) -> list:
+    """Returns a list of file ids which are currently locked"""
+    active_locks = get_all_active_locks()
+    locked_file_ids = []
+    for file_path, lock_session_id in active_locks.items():
+        if session_id and lock_session_id != session_id:
+            continue
+        file_path = file_path.removeprefix("/data/")
+        file_id = resolve_path_to_hash(file_path)
+        locked_file_ids.append(file_id)
+    return locked_file_ids
 
 def check_lock(file_path, session_id):
     """Checks if a single file is locked by another session."""

@@ -170,7 +170,8 @@ E2E_DEBUG=true npm run test:e2e -- --grep "extraction"
 
 ### Key Testing Principles
 
-1. **Never try to access browser state directly** - State objects are not exposed as globals on `window`
+0. **Absolutely prefer adapting tests over changing source code to avoid costly rebuilds** - especially when debugging
+1. **Avoid to access client objects directly** - they are not exposed as globals on `window` by default. You can expose them specifically for testing purposes in `app/src/app.js`, especially to avoid to have to interact with the UI, unless the UI is explicitly the testing target.
 2. **Use testLog to pass state data** - Plugin code can pass `currentState` or specific values through console
 3. **Use helper functions from tests/e2e/helpers/test-logging.js** - Import `setupTestConsoleCapture` and `waitForTestMessage` for consistent parsing
 4. **Message names must match [A-Z_][A-Z0-9_]* pattern** - testLog enforces this with regex validation for reliable parsing
@@ -234,6 +235,21 @@ npm run test:e2e -- --grep "failing test name"
 - **Debugging calls**: Use `TEST_` prefix (e.g., `TEST_STATE_UPDATE`, `TEST_BUTTON_CLICKED`) - remove after debugging
 
 **Note**: Adding `@env` annotations to test files does NOT require rebuilding the image - these are processed at runtime by the E2E runner. Only changes to application source code require rebuilding.
+
+## Test Fixtures Configuration
+
+When setting up test fixtures for E2E tests:
+
+- **Database vs Config files**: You only need to prepare either `db/` directory OR `config/` directory, not both:
+  - If you preconfigure `db/` directory with test data, files in `config/` will be ignored
+  - If you prepare files in `config/`, they will be copied to an empty `db/` directory on startup
+  - Choose the approach that makes most sense for your test scenario
+
+- **Incremental testing**: When developing new tests, start with testing only the specific functionality you created:
+  - Use `npm run test:e2e -- --grep "your-test-name"` to run specific tests
+  - Verify individual test files work before running comprehensive test suites
+  - Only run full `npm run test:e2e:backend` or `npm run test:e2e` after individual tests pass
+  - This approach saves time and makes debugging easier
 
 ### Environment Variable Configuration for Tests
 
