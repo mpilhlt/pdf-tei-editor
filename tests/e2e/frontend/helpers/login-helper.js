@@ -38,7 +38,7 @@ export async function performLogin(page, username = 'testuser', password = 'test
 
 /**
  * Performs logout flow for E2E tests
- * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {Page} page - Playwright page object
  */
 export async function performLogout(page) {
   try {
@@ -85,7 +85,7 @@ export async function performLogout(page) {
 
 /**
  * Ensures clean test state by clearing browser storage and logging out
- * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {Page} page - Playwright page object
  */
 export async function ensureCleanState(page) {
   // Clear browser storage (handle SecurityErrors gracefully)
@@ -119,7 +119,7 @@ export async function ensureCleanState(page) {
 
 /**
  * Releases all locks held by the current user session
- * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {Page} page - Playwright page object
  */
 export async function releaseAllLocks(page) {
   try {
@@ -143,7 +143,7 @@ export async function releaseAllLocks(page) {
 
 /**
  * Navigates to application and performs login
- * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {import('Page} page - Playwright page object
  * @param {string} baseUrl - Base URL of the application
  * @param {string} username - Username to login with
  * @param {string} password - Password to login with

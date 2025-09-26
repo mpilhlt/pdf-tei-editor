@@ -28,7 +28,7 @@ import initialState from './state.js'
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
-import { createTestLogger } from '../../tests/e2e/helpers/test-logging.js'
+import { createTestLogger } from '../../tests/e2e/frontend/helpers/test-logging.js'
 
 //
 // Application bootstrapping

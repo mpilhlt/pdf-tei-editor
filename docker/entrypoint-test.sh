@@ -16,8 +16,26 @@ export NVM_DIR="/root/.nvm"
 
 cd /app
 
-# Create data directories
-mkdir -p data/pdf data/tei data/versions config db
+# Create data directories (preserve existing demo data)
+mkdir -p data/versions config db
+# Only create pdf/tei subdirectories if they don't already exist with data
+[ ! -d "data/pdf" ] && mkdir -p data/pdf
+[ ! -d "data/tei" ] && mkdir -p data/tei
+
+echo "Checking demo data availability..."
+if [ -d "data/tei/example" ] && [ -f "data/tei/example/10.5771__2699-1284-2024-3-149.tei.xml" ]; then
+    echo "✓ Demo TEI file found: data/tei/example/10.5771__2699-1284-2024-3-149.tei.xml"
+else
+    echo "⚠ Demo TEI file NOT found, listing data directory contents:"
+    ls -la data/ || echo "data directory does not exist"
+    ls -la data/tei/ || echo "data/tei directory does not exist"
+fi
+
+if [ -d "data/pdf/example" ] && [ -f "data/pdf/example/10.5771__2699-1284-2024-3-149.pdf" ]; then
+    echo "✓ Demo PDF file found: data/pdf/example/10.5771__2699-1284-2024-3-149.pdf"
+else
+    echo "⚠ Demo PDF file NOT found"
+fi
 
 echo "Setting up test fixtures..."
 # Copy test fixtures to application directories if they exist

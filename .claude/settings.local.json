@@ -46,7 +46,9 @@
       "Bash(npm run test:js:*)",
       "Bash(npm run test:e2e:fast:*)",
       "Bash(npm run test:e2e:backend:*)",
-      "Bash(E2E_DEBUG=true npm run test:e2e:fast -- --grep \"document-actions\")"
+      "Bash(E2E_DEBUG=true npm run test:e2e:fast -- --grep \"document-actions\")",
+      "Bash(tree:*)",
+      "Bash(npm run test:e2e:backend:fast:*)"
     ],
     "deny": []
   }

@@ -12,9 +12,9 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
-import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
-import { selectFirstDocuments } from './helpers/extraction-helper.js';
+import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from '../helpers/test-logging.js';
+import { navigateAndLogin, performLogout, releaseAllLocks } from '../helpers/login-helper.js';
+import { selectFirstDocuments } from '../helpers/extraction-helper.js';
 
 // Enable debug output only when E2E_DEBUG environment variable is set
 const DEBUG = process.env.E2E_DEBUG === 'true';

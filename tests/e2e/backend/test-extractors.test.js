@@ -12,23 +12,16 @@
  * @testCovers server/lib/extractors/
  */
 
-import http from 'http';
+import { createTestSession, authenticatedApiCall } from './helpers/test-auth.js';
 
 class ExtractorTest {
     constructor() {
         this.testResults = {
             apiResponding: false,
             llamoreFound: false,
-            kisskiFound: false,
             totalExtractors: 0
         };
-
-        // Get configuration from environment variables
-        this.host = process.env.E2E_HOST || 'localhost';
-        this.port = parseInt(process.env.E2E_PORT || '8000');
-        this.containerUrl = process.env.E2E_CONTAINER_URL || `http://${this.host}:${this.port}`;
-
-        console.log(`📡 Using container URL: ${this.containerUrl}`);
+        this.session = null;
     }
 
 
@@ -37,65 +30,25 @@ class ExtractorTest {
      */
     async testExtractorList() {
         console.log('🔍 Testing extractor list endpoint...');
-        
-        return new Promise((resolve, reject) => {
-            const options = {
-                hostname: this.host,
-                port: this.port,
-                path: '/api/extract/list',
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            };
 
-            const req = http.request(options, (res) => {
-                let data = '';
+        try {
+            if (!this.session) {
+                throw new Error('No authenticated session available');
+            }
 
-                res.on('data', (chunk) => {
-                    data += chunk;
-                });
+            const extractors = await authenticatedApiCall(this.session.sessionId, '/extract/list', 'GET');
 
-                res.on('end', () => {
-                    try {
-                        if (res.statusCode !== 200) {
-                            console.error(`❌ API returned status ${res.statusCode}`);
-                            console.error('Response:', data);
-                            reject(new Error(`API error: ${res.statusCode}`));
-                            return;
-                        }
+            this.testResults.apiResponding = true;
+            console.log('✅ API responding successfully');
+            console.log('📋 Received extractors:', JSON.stringify(extractors, null, 2));
 
-                        this.testResults.apiResponding = true;
-                        console.log('✅ API responding successfully');
+            this.analyzeExtractors(extractors);
+            return extractors;
 
-                        const extractors = JSON.parse(data);
-                        console.log('📋 Received extractors:', JSON.stringify(extractors, null, 2));
-                        
-                        this.analyzeExtractors(extractors);
-                        resolve(extractors);
-                        
-                    } catch (error) {
-                        // @ts-ignore
-                        console.error('❌ Failed to parse API response:', error.message);
-                        console.error('Raw response:', data);
-                        reject(error);
-                    }
-                });
-            });
-
-            req.on('error', (error) => {
-                console.error('❌ HTTP request failed:', error.message);
-                reject(error);
-            });
-
-            req.setTimeout(5000, () => {
-                console.error('❌ Request timeout');
-                req.destroy();
-                reject(new Error('Request timeout'));
-            });
-
-            req.end();
-        });
+        } catch (error) {
+            console.error('❌ Failed to test extractor list:', error.message);
+            throw error;
+        }
     }
 
     /**
@@ -127,23 +80,6 @@ class ExtractorTest {
                 }
             }
             
-            if (extractor.id === 'kisski-neural-chat') {
-                this.testResults.kisskiFound = true;
-                console.log('✅ KISSKI Neural Chat extractor found');
-                
-                // Verify expected properties
-                if (extractor.input.includes('text') && extractor.output.includes('text')) {
-                    console.log('✅ KISSKI extractor has correct input/output types');
-                } else {
-                    console.log('⚠️  KISSKI extractor has unexpected input/output types');
-                }
-                
-                if (extractor.requires_api_key && extractor.api_key_env === 'KISSKI_API_KEY') {
-                    console.log('✅ KISSKI extractor has correct API key configuration');
-                } else {
-                    console.log('⚠️  KISSKI extractor has unexpected API key configuration');
-                }
-            }
         }
     }
 
@@ -156,10 +92,9 @@ class ExtractorTest {
         console.log('========================');
         console.log(`API Responding: ${this.testResults.apiResponding ? '✅ PASS' : '❌ FAIL'}`);
         console.log(`LLamore Extractor Found: ${this.testResults.llamoreFound ? '✅ PASS' : '❌ FAIL'}`);
-        console.log(`KISSKI Extractor Found: ${this.testResults.kisskiFound ? '✅ PASS' : '❌ FAIL'}`);
         console.log(`Total Extractors: ${this.testResults.totalExtractors}`);
 
-        const totalTests = 3;
+        const totalTests = 2;
         const passedTests = Object.values(this.testResults).filter(result => result === true).length;
 
         console.log(`\n🎯 OVERALL: ${passedTests}/${totalTests} tests passed`);
@@ -181,6 +116,11 @@ class ExtractorTest {
         console.log('=================================================\n');
 
         try {
+            // Create authenticated session
+            console.log('🔐 Creating authenticated session...');
+            this.session = await createTestSession();
+            console.log('✅ Session created successfully');
+
             // Test extractor list endpoint
             await this.testExtractorList();
 

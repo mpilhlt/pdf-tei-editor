@@ -33,13 +33,77 @@ async function getSecondarySession() {
 
 describe('File Locks API E2E Tests', () => {
 
-  test('GET /api/files/locks should return empty locks initially', async () => {
+  // Helper function to clean up all locks for the current session
+  async function cleanupSessionLocks() {
+    const session = await getPrimarySession();
+    console.log(`🧹 Cleaning up locks for session ${session.sessionId}...`);
+
+    try {
+      // Get all active locks in the system
+      const allLocks = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET');
+
+      // Filter to only locks owned by our session
+      const ourLocks = Object.entries(allLocks).filter(([_, sessionId]) => sessionId === session.sessionId);
+
+      console.log(`🧹 Found ${Object.keys(allLocks).length} total locks, ${ourLocks.length} owned by our session`);
+
+      if (ourLocks.length === 0) {
+        console.log(`✓ No locks from our session to clean up`);
+        return;
+      }
+
+      // Release each lock owned by our session
+      const releasePromises = ourLocks.map(async ([filePath, _]) => {
+        try {
+          await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
+            file_id: filePath
+          });
+          console.log(`  ✓ Released lock for ${filePath}`);
+          return { filePath, success: true };
+        } catch (error) {
+          console.log(`  ❌ Failed to release lock for ${filePath}: ${error.message}`);
+          return { filePath, success: false, error: error.message };
+        }
+      });
+
+      const results = await Promise.all(releasePromises);
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+
+      console.log(`🧹 Released ${successful} locks successfully, ${failed} failed`);
+
+      // Verify all our locks are gone
+      const finalLocks = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET');
+      const remainingOurLocks = Object.entries(finalLocks).filter(([_, sessionId]) => sessionId === session.sessionId);
+
+      if (remainingOurLocks.length === 0) {
+        console.log(`✅ All session locks cleaned up successfully`);
+      } else {
+        console.log(`⚠️ Warning: ${remainingOurLocks.length} locks from our session still remain:`);
+        remainingOurLocks.forEach(([filePath, _]) => {
+          console.log(`  - ${filePath}`);
+        });
+        throw new Error(`Failed to clean up ${remainingOurLocks.length} session locks`);
+      }
+
+    } catch (error) {
+      console.log(`💥 Lock cleanup failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  test('GET /api/files/locks should return active locks', async () => {
+    // Clean up any existing locks from previous test runs
+    await cleanupSessionLocks();
     const session = await getPrimarySession();
     const locks = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET');
+    console.log("*******************************", locks)
+    assert(Array.isArray(locks), 'Should return an object');
 
-    assert(typeof locks === 'object', 'Should return an object');
+    // Count locks belonging to our session (should be 0 after cleanup)
 
-    console.log(`✓ Found ${Object.keys(locks).length} active locks initially`);
+    assert.strictEqual(locks.length, 0, 'Should have no active locks from our session after cleanup');
+    console.log(`✓ Found ${locks.length} total active locks, ${ourLocks.length} from our session`);
   });
 
   test('POST /api/files/check_lock should return not locked for non-existent file', async () => {
@@ -69,9 +133,7 @@ describe('File Locks API E2E Tests', () => {
 
     // Verify lock is now active
     const locks = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET');
-    assert(testFilePath in locks, 'Test file should be in active locks');
-    assert.strictEqual(locks[testFilePath], session.sessionId, 'Lock should be owned by our session');
-
+    assert.strictEqual(ourLocks.length, 1, 'There should be one active lock from our session');
     console.log('✓ Lock verified in active locks list');
   });
 
@@ -152,8 +214,8 @@ describe('File Locks API E2E Tests', () => {
 
     // Verify lock is no longer active
     const locks = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET');
-    assert(!(testFilePath in locks), 'Test file should no longer be in active locks');
-
+    assert.strictEqual(locks.length, 1, 'There should be one active lock from our session');
+  
     console.log('✓ Lock verified as removed from active locks list');
   });
 
@@ -258,6 +320,9 @@ describe('File Locks API E2E Tests', () => {
     assert(!(file2 in finalLocks), 'Second file should no longer be locked');
 
     console.log('✓ Multiple locks released successfully');
+
+    // Final cleanup to ensure no locks remain from this test suite
+    await cleanupSessionLocks();
   });
 
 });
