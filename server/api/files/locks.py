@@ -5,7 +5,7 @@ import logging
 
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import ApiError, get_session_id, resolve_document_identifier
-from server.lib.locking import acquire_lock, release_lock, check_lock, get_all_active_locks
+from server.lib.locking import acquire_lock, release_lock, check_lock, get_locked_file_ids
 from server.lib.auth import get_user_by_session_id
 from server.lib.access_control import check_file_access
 
@@ -15,9 +15,9 @@ bp = Blueprint("files_locks", __name__, url_prefix="/api/files")
 @bp.route("/locks", methods=["GET"])
 @handle_api_errors
 @session_required
-def get_all_locks_route():
+def get_all_locked_file_ids_route():
     """Fetches all active locks and returns a map of locked_file_path -> session_id"""
-    active_locks = get_all_active_locks()
+    active_locks = get_locked_file_ids()
     return jsonify(active_locks)
 
 @bp.route("/check_lock", methods=["POST"])

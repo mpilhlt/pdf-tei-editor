@@ -2,8 +2,6 @@
  * E2E test login helper functions
  */
 
-import Application from '../../../app/src/modules/application';
-
 /**
  * @import {Page} from '@playwright/test'
  * @import {api as ClientApi} from '../../../app/src/plugins/client'

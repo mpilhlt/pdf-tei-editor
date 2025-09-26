@@ -12,8 +12,8 @@
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
 
 import { test, expect } from '@playwright/test';
-import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from '../helpers/test-logging.js';
-import { navigateAndLogin, performLogout, releaseAllLocks } from '../helpers/login-helper.js';
+import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
+import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
 
 // Define allowed error patterns for extraction workflow
 const ALLOWED_ERROR_PATTERNS = [

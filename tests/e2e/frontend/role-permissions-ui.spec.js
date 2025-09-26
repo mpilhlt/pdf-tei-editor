@@ -5,9 +5,8 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { navigateAndLogin, performLogout, releaseAllLocks } from '../helpers/login-helper.js';
-import { setupTestConsoleCapture, setupErrorFailure } from '../helpers/test-logging.js';
-import Application from '../../app/src/modules/application.js';
+import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
+import { setupTestConsoleCapture, setupErrorFailure } from './helpers/test-logging.js';
 
 // Configuration from environment variables
 const E2E_HOST = process.env.E2E_HOST || 'localhost';

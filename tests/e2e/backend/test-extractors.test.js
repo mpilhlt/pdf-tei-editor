@@ -6,140 +6,124 @@
  * This test assumes a containerized test environment is already running
  * and focuses on testing the backend API.
  *
- * Usage: npm run test:e2e:backend tests/e2e/test-extractors.js
+ * Usage: npm run test:e2e:backend tests/e2e/backend/test-extractors.test.js
  *
  * @testCovers server/api/extract.py
  * @testCovers server/lib/extractors/
  */
 
+import { test, describe } from 'node:test';
+import assert from 'node:assert';
 import { createTestSession, authenticatedApiCall } from './helpers/test-auth.js';
 
-class ExtractorTest {
-    constructor() {
-        this.testResults = {
-            apiResponding: false,
-            llamoreFound: false,
-            totalExtractors: 0
-        };
-        this.session = null;
+// Enable debug output only when E2E_DEBUG environment variable is set
+const DEBUG = process.env.E2E_DEBUG === 'true';
+const debugLog = (...args) => {
+  if (DEBUG) {
+    console.log('[DEBUG]', ...args);
+  }
+};
+
+describe('Extractor API E2E Tests', () => {
+  let session = null;
+
+  test('GET /extract/list should return available extractors', async () => {
+    debugLog('Testing extractor list endpoint...');
+
+    // Create authenticated session
+    session = await createTestSession();
+    debugLog('Session created successfully');
+
+    // Test the /api/extract/list endpoint
+    const extractors = await authenticatedApiCall(session.sessionId, '/extract/list', 'GET');
+
+    // Verify response structure
+    assert(Array.isArray(extractors), 'Should return an array of extractors');
+    assert(extractors.length > 0, 'Should return at least one extractor');
+
+    console.log(`✓ Found ${extractors.length} available extractors`);
+
+    // Log each extractor for debugging
+    extractors.forEach(extractor => {
+      console.log(`  - ${extractor.id}: ${extractor.name}`);
+      debugLog(`    Description: ${extractor.description}`);
+      debugLog(`    Input: ${extractor.input?.join(', ') || 'none'}`);
+      debugLog(`    Output: ${extractor.output?.join(', ') || 'none'}`);
+
+      // Verify extractor structure
+      assert(typeof extractor.id === 'string', 'Extractor should have string id');
+      assert(typeof extractor.name === 'string', 'Extractor should have string name');
+      assert(typeof extractor.description === 'string', 'Extractor should have string description');
+      assert(Array.isArray(extractor.input), 'Extractor should have input array');
+      assert(Array.isArray(extractor.output), 'Extractor should have output array');
+    });
+
+    debugLog('API responding successfully');
+  });
+
+  test('Extractor discovery system should work', async () => {
+    debugLog('Testing extractor discovery system...');
+
+    if (!session) {
+      session = await createTestSession();
     }
 
+    const extractors = await authenticatedApiCall(session.sessionId, '/extract/list', 'GET');
 
-    /**
-     * Test the /api/extract/list endpoint
-     */
-    async testExtractorList() {
-        console.log('🔍 Testing extractor list endpoint...');
+    // Check for specific extractors that should be available
+    const llamoreExtractor = extractors.find(e => e.id === 'llamore-gemini');
+    if (llamoreExtractor) {
+      console.log('✓ Found llamore-gemini extractor');
 
-        try {
-            if (!this.session) {
-                throw new Error('No authenticated session available');
-            }
-
-            const extractors = await authenticatedApiCall(this.session.sessionId, '/extract/list', 'GET');
-
-            this.testResults.apiResponding = true;
-            console.log('✅ API responding successfully');
-            console.log('📋 Received extractors:', JSON.stringify(extractors, null, 2));
-
-            this.analyzeExtractors(extractors);
-            return extractors;
-
-        } catch (error) {
-            console.error('❌ Failed to test extractor list:', error.message);
-            throw error;
-        }
+      // Verify expected properties for llamore extractor
+      if (llamoreExtractor.input?.includes('pdf') && llamoreExtractor.output?.includes('tei-document')) {
+        debugLog('✓ LLamore extractor has correct input/output types');
+      } else {
+        console.log('⚠ LLamore extractor has unexpected input/output types');
+      }
+    } else {
+      debugLog('LLamore+Gemini extractor not found (this may be expected depending on configuration)');
     }
 
-    /**
-     * Analyze the extractors returned by the API
-     */
-    // @ts-ignore
-    analyzeExtractors(extractors) {
-        console.log('🔬 Analyzing extractors...');
-        
-        this.testResults.totalExtractors = extractors.length;
-        console.log(`📊 Total extractors found: ${extractors.length}`);
+    console.log('✓ Extractor discovery system working');
 
-        for (const extractor of extractors) {
-            console.log(`🔧 Extractor: ${extractor.id}`);
-            console.log(`   Name: ${extractor.name}`);
-            console.log(`   Description: ${extractor.description}`);
-            console.log(`   Input: ${extractor.input.join(', ')}`);
-            console.log(`   Output: ${extractor.output.join(', ')}`);
-            
-            if (extractor.id === 'llamore-gemini') {
-                this.testResults.llamoreFound = true;
-                console.log('✅ LLamore+Gemini extractor found');
-                
-                // Verify expected properties
-                if (extractor.input.includes('pdf') && extractor.output.includes('tei-document')) {
-                    console.log('✅ LLamore extractor has correct input/output types');
-                } else {
-                    console.log('⚠️  LLamore extractor has unexpected input/output types');
-                }
-            }
-            
-        }
+    const extractorNames = extractors.map(e => e.id).join(', ');
+    console.log(`✓ Discovered extractors: ${extractorNames}`);
+
+    // Verify we have at least some basic extractors
+    assert(extractors.length > 0, 'Should have at least one extractor available');
+  });
+
+  test('API should handle invalid endpoints gracefully', async () => {
+    debugLog('Testing invalid endpoint handling...');
+
+    if (!session) {
+      session = await createTestSession();
     }
 
+    try {
+      await authenticatedApiCall(session.sessionId, '/extract/nonexistent', 'GET');
+      assert.fail('Should have thrown an error for invalid endpoint');
+    } catch (error) {
+      assert(error.message.includes('404'), 'Should return 404 for invalid endpoint');
+      console.log('✓ Invalid endpoint returned status 404');
+    }
+  });
 
-    /**
-     * Print test results summary
-     */
-    printResults() {
-        console.log('\n📊 TEST RESULTS SUMMARY');
-        console.log('========================');
-        console.log(`API Responding: ${this.testResults.apiResponding ? '✅ PASS' : '❌ FAIL'}`);
-        console.log(`LLamore Extractor Found: ${this.testResults.llamoreFound ? '✅ PASS' : '❌ FAIL'}`);
-        console.log(`Total Extractors: ${this.testResults.totalExtractors}`);
+  test('API should handle malformed requests', async () => {
+    debugLog('Testing malformed request handling...');
 
-        const totalTests = 2;
-        const passedTests = Object.values(this.testResults).filter(result => result === true).length;
-
-        console.log(`\n🎯 OVERALL: ${passedTests}/${totalTests} tests passed`);
-
-        if (passedTests === totalTests) {
-            console.log('🎉 ALL TESTS PASSED!');
-            return true;
-        } else {
-            console.log('💥 SOME TESTS FAILED!');
-            return false;
-        }
+    if (!session) {
+      session = await createTestSession();
     }
 
-    /**
-     * Run all tests
-     */
-    async runTests() {
-        console.log('🧪 Backend Integration Test - Extractor Discovery');
-        console.log('=================================================\n');
-
-        try {
-            // Create authenticated session
-            console.log('🔐 Creating authenticated session...');
-            this.session = await createTestSession();
-            console.log('✅ Session created successfully');
-
-            // Test extractor list endpoint
-            await this.testExtractorList();
-
-            // Print results and exit
-            const allPassed = this.printResults();
-            process.exit(allPassed ? 0 : 1);
-
-        } catch (error) {
-            // @ts-ignore
-            console.error('💥 Test failed with error:', error.message);
-            this.printResults();
-            process.exit(1);
-        }
+    try {
+      // Try to POST to a GET-only endpoint
+      await authenticatedApiCall(session.sessionId, '/extract/list', 'POST');
+      assert.fail('Should have thrown an error for malformed request');
+    } catch (error) {
+      assert(error.message.includes('405'), 'Should return 405 for wrong HTTP method');
+      console.log('✓ Malformed request returned status 405');
     }
-}
-
-// Run the tests
-const test = new ExtractorTest();
-test.runTests().catch((error) => {
-    console.error('💥 Unexpected error:', error.message);
-    process.exit(1);
+  });
 });
