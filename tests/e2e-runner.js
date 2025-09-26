@@ -687,7 +687,8 @@ class E2ERunner {
         cwd: projectRoot,
         env: {
           ...process.env,
-          ...this.getEnvironmentVars()
+          ...this.getEnvironmentVars(),
+          E2E_DEBUG: options.debug ? "true" : "false"
         }
       });
 
@@ -1110,7 +1111,7 @@ function showHelp() {
   console.log('Playwright Options:');
   console.log('  --browser <name>     Browser to use (chromium|firefox|webkit) [default: chromium]');
   console.log('  --headed             Run tests in headed mode (show browser)');
-  console.log('  --debug              Enable debug mode');
+  console.log('  --debug              Enable debug mode, will trigger Playwright\'s debugger and sets environment variable E2E_DEBUG="true"');
   console.log('  --mode <mode>        Environment mode (production|development) [default: production]');
   console.log('  --production         Use production mode');
   console.log('  --development        Use development mode');

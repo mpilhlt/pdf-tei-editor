@@ -192,7 +192,7 @@ def resolve_path_to_hash(file_path:str):
     inverse_lookup_table = {v: k for k, v in load_hash_lookup().items()} 
     
     if file_path not in inverse_lookup_table:
-        raise KeyError(f"File path '{file_path}' not found in lookup table" + json.dumps(inverse_lookup_table))
+        raise KeyError(f"File path '{file_path}' not found in lookup table")
     
     return inverse_lookup_table[file_path]    
 

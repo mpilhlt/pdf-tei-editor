@@ -320,7 +320,11 @@ def get_locked_file_ids(session_id=None) -> list:
         if session_id and lock_session_id != session_id:
             continue
         file_path = file_path.removeprefix("/data/")
-        file_id = resolve_path_to_hash(file_path)
+        try:
+            file_id = resolve_path_to_hash(file_path)
+        except KeyError as e:
+            current_app.logger.exception(str(e))
+            continue
         locked_file_ids.append(file_id)
     return locked_file_ids
 

@@ -386,7 +386,7 @@ Common Options:
 Playwright Options:
   --browser <name>     Browser to use (chromium|firefox|webkit) [default: chromium]
   --headed             Run tests in headed mode (show browser)
-  --debug              Enable debug mode
+  --debug              Enable debug mode, will trigger Playwright\'s debugger and sets environment variable E2E_DEBUG="true"
   --mode <mode>        Environment mode (production|development) [default: production]
   --production         Use production mode
   --development        Use development mode

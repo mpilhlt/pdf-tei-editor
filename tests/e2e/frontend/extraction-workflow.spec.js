@@ -66,7 +66,7 @@ test.describe.serial('Extraction Workflow', () => {
       test.skip();
       return;
     } else {
-      console.log('Grobid server version:', grobidResponse.data);
+      debugLog('Grobid server version:', grobidResponse.data);
       expect(grobidResponse.data).toHaveProperty('version');
       expect(grobidResponse.data).toHaveProperty('revision');
     }

@@ -125,7 +125,7 @@ export async function releaseAllLocks(page) {
       try {
         /** @type {ClientApi} */
         const client = /** @type {any} */(window).client;
-        for (fileId in await client.getAllLockedFileIds()) {
+        for (fileId of await client.getAllLockedFileIds()) {
           await client.releaseLock(fileId)
         }
       } catch (error) {
