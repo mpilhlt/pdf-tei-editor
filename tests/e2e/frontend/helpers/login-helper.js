@@ -4,7 +4,9 @@
 
 /**
  * @import {Page} from '@playwright/test'
- * @import {api as ClientApi} from '../../../app/src/plugins/client'
+ * @import {api as ClientApi} from '../../../../app/src/plugins/client'
+ * @import {namedElementsTree} from '../../../../app/src/ui.js'
+ * @import {Application} from '../../../../app/src/modules/application.js'
  */
 
 
@@ -43,9 +45,9 @@ export async function performLogout(page) {
     // Check if user is logged in by looking for logout button
     const loggedIn = await page.evaluate(() => {
       try {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        return ui.logoutButton && ui.logoutButton.style.display !== 'none';
+        /** @type {Application} */
+        const app = /** @type {any} */(window).app;
+        return app.getCurrentState().user !== null
       } catch (error) {
         return false;
       }
@@ -56,9 +58,7 @@ export async function performLogout(page) {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        if (ui.logoutButton) {
-          ui.logoutButton.click();
-        }
+        ui.toolbar.logoutButton.click();
       });
 
       // Wait for logout to complete - login dialog should appear
@@ -121,21 +121,40 @@ export async function ensureCleanState(page) {
  */
 export async function releaseAllLocks(page) {
   try {
-    await page.evaluate(async () => {
-      try {
-        /** @type {ClientApi} */
-        const client = /** @type {any} */(window).client;
-        for (fileId of await client.getAllLockedFileIds()) {
-          await client.releaseLock(fileId)
+    console.log('Starting lock cleanup...');
+    // Add timeout to prevent hanging
+    await Promise.race([
+      page.evaluate(async () => {
+        try {
+          console.log('Getting client object...');
+          /** @type {ClientApi} */
+          const client = /** @type {any} */(window).client;
+          if (!client) {
+            console.log('No client object found');
+            return;
+          }
+
+          console.log('Getting locked file IDs...');
+          const lockedFileIds = await client.getAllLockedFileIds();
+          console.log('Found locked files:', lockedFileIds);
+
+          for (const fileId of lockedFileIds) {
+            console.log('Releasing lock for:', fileId);
+            await client.releaseLock(fileId);
+            console.log('Released lock for:', fileId);
+          }
+          console.log('All locks released successfully');
+        } catch (error) {
+          // Ignore all errors during lock cleanup
+          console.debug('Lock cleanup failed:', error);
         }
-      } catch (error) {
-        // Ignore all errors during lock cleanup
-        console.debug('Lock cleanup failed:', error);
-      }
-    });
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Lock cleanup timeout after 10 seconds')), 10000))
+    ]);
+    console.log('Lock cleanup completed');
   } catch (evalError) {
     // Even page.evaluate might fail, just continue
-    console.debug('Lock cleanup evaluation failed:', evalError);
+    console.log('Lock cleanup evaluation failed:', evalError.message);
   }
 }
 
@@ -147,12 +166,9 @@ export async function releaseAllLocks(page) {
  * @param {string} password - Password to login with
  */
 export async function navigateAndLogin(page, baseUrl, username = 'testuser', password = 'testpass') {
-  // Ensure clean state before starting
-  await ensureCleanState(page);
-
-  // Navigate to application
+  // Navigate to application first
   await page.goto(baseUrl);
 
-  // Perform login
+  // Perform login (app will handle if already logged in)
   await performLogin(page, username, password);
 }

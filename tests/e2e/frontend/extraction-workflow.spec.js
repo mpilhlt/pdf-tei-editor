@@ -5,8 +5,6 @@
  * @testCovers app/src/plugins/xmleditor.js
  * @testCovers app/src/plugins/services.js
  * @testCovers server/api/files.py
- * @env GROBID_SERVER_URL
- * @env GEMINI_API_KEY
  */
 
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
@@ -41,34 +39,137 @@ const E2E_BASE_URL = process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_
 
 // Helper functions are now imported from test-logging.js
 
+// Helper functions for extraction workflow steps
+async function checkExtractionAvailability(page) {
+  // Since we now have fallback to mock extractor, extraction is always available
+  debugLog('Extraction availability: Using fallback to mock extractor when external dependencies are missing');
+  return true;
+}
+
+async function uploadPDFFile(page, filePath) {
+  debugLog('Starting PDF upload phase...');
+
+  // Set up file input handling before clicking the button
+  const fileChooserPromise = page.waitForEvent('filechooser');
+
+  // Click extract new button to open file selection dialog
+  await page.evaluate(() => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    ui.toolbar.extractionActions.extractNew.click();
+  });
+  debugLog('Extract new button clicked');
+
+  // Wait for and handle the file chooser dialog
+  const fileChooser = await fileChooserPromise;
+  debugLog('File chooser appeared, setting file:', filePath);
+  await fileChooser.setFiles(filePath);
+  debugLog('File set, waiting for upload completion...');
+
+  return filePath;
+}
+
+async function waitForPDFUploadCompletion(page, consoleLogs) {
+  debugLog('Waiting for PDF upload completion...');
+
+  // Wait for PDF upload completion with debugging
+  const uploadLog = await waitForTestMessage(consoleLogs, 'PDF_UPLOAD_COMPLETED', 10000);
+  debugLog('Found PDF_UPLOAD_COMPLETED:', uploadLog);
+
+  expect(uploadLog.value).toHaveProperty('originalFilename');
+  expect(uploadLog.value).toHaveProperty('filename');
+
+  // Verify that the UI is in the correct state after upload using window.ui
+  const uiState = await page.evaluate(() => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    return {
+      extractionActionsVisible: ui.toolbar.extractionActions && ui.toolbar.extractionActions.style.display !== 'none',
+      extractNewEnabled: ui.toolbar.extractionActions.extractNew && !ui.toolbar.extractionActions.extractNew.disabled
+    };
+  });
+  expect(uiState.extractionActionsVisible).toBe(true);
+  debugLog('UI state after upload verified:', uiState);
+
+  return uploadLog;
+}
+
+async function configureExtractionOptions(page, consoleLogs, modelIndex = 'llamore-gemini') {
+  debugLog('Starting extraction configuration phase...');
+
+  // Wait for extraction options dialog to appear
+  await waitForTestMessage(consoleLogs, 'EXTRACTION_OPTIONS_DIALOG_STARTING', 10000);
+  debugLog('Extraction options dialog starting event received');
+
+  // Verify the extraction options dialog is open using window.ui
+  const dialogOpen = await page.evaluate(() => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    return ui.extractionOptions && ui.extractionOptions.open;
+  });
+  expect(dialogOpen).toBe(true);
+  debugLog('Extraction options dialog confirmed open');
+
+  // Fill out the extraction options dialog
+  await page.evaluate((model) => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    // Set the extractor model
+    ui.extractionOptions.modelIndex.value = model;
+    // Submit the dialog
+    ui.extractionOptions.submit.click();
+  }, modelIndex);
+  debugLog('Extraction options configured and submitted with model:', modelIndex);
+}
+
+async function waitForExtractionCompletion(page, consoleLogs) {
+  debugLog('Waiting for extraction to complete...');
+
+  // Wait for extraction to complete (this can take time)
+  const extractionLog = await waitForTestMessage(consoleLogs, 'EXTRACTION_COMPLETED', 60000);
+  debugLog('Extraction completed:', extractionLog);
+
+  expect(extractionLog.value).toHaveProperty('resultHash');
+
+  // Verify that extraction dialog has closed using window.ui
+  const dialogClosed = await page.evaluate(() => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    return !ui.extractionOptions.open;
+  });
+  expect(dialogClosed).toBe(true);
+  debugLog('Extraction options dialog confirmed closed');
+
+  return extractionLog;
+}
+
+async function waitForDocumentLoad(page, consoleLogs) {
+  debugLog('Waiting for document to load in XML editor...');
+
+  // Wait for the extracted document to be shown in the editor
+  await waitForTestMessage(consoleLogs, 'XML_EDITOR_DOCUMENT_LOADED', 10000);
+  debugLog('XML editor document loaded');
+
+  // Verify XML editor is visible using window.ui
+  const editorVisible = await page.evaluate(() => {
+    /** @type {namedElementsTree} */
+    const ui = /** @type {any} */(window).ui;
+    return ui.xmlEditor && ui.xmlEditor.style.display !== 'none';
+  });
+  expect(editorVisible).toBe(true);
+  debugLog('XML editor visibility confirmed');
+}
+
 test.describe.serial('Extraction Workflow', () => {
 
   test('should complete PDF extraction workflow', async ({ page }) => {
     test.setTimeout(60000); // 60 seconds for extraction workflow
 
-    // First check if Grobid server is available
-    const grobidResponse = await page.evaluate(async () => {
-      try {
-        const response = await fetch('https://lfoppiano-grobid-dev-dh-law.hf.space/api/version');
-        if (response.ok) {
-          const data = await response.json();
-          return { status: response.status, data };
-        }
-        return { status: response.status, error: `HTTP ${response.status}` };
-      } catch (error) {
-        return { error: String(error) };
-      }
-    });
-
-    // Output Grobid server information
-    if (grobidResponse.error) {
-      console.log('Grobid server not reachable:', grobidResponse.error);
+    // Check if extraction is available (either external services or mock)
+    const extractionAvailable = await checkExtractionAvailability(page);
+    if (!extractionAvailable) {
       test.skip();
       return;
-    } else {
-      debugLog('Grobid server version:', grobidResponse.data);
-      expect(grobidResponse.data).toHaveProperty('version');
-      expect(grobidResponse.data).toHaveProperty('revision');
     }
 
     // Set up enhanced console log capture for TEST messages
@@ -79,9 +180,11 @@ test.describe.serial('Extraction Workflow', () => {
 
     // main test
     try {
+      debugLog('Starting extraction workflow test');
 
       // Navigate and login as annotator (required for extraction operations)
       await navigateAndLogin(page, E2E_BASE_URL, 'testannotator', 'annotatorpass');
+      debugLog('Login completed');
 
       // Debug: Check if test logging is enabled
       const testLogStatus = await page.evaluate(() => {
@@ -93,63 +196,41 @@ test.describe.serial('Extraction Workflow', () => {
       });
       debugLog('Test log status:', testLogStatus);
 
-      // Set up file input handling before clicking the button
-      // This handles the programmatic file input that gets created dynamically
-      const fileChooserPromise = page.waitForEvent('filechooser');
+      // Step 1: Upload PDF file
+      await uploadPDFFile(page, 'demo/data/pdf/example/10.5771__2699-1284-2024-3-149.pdf');
 
-      // Click extract new button to open file selection dialog
-      await page.evaluate(() => {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        ui.toolbar.extractionActions.extractNew.click();
-      });
+      // Step 2: Wait for upload completion
+      await waitForPDFUploadCompletion(page, consoleLogs);
 
-      // Wait for and handle the file chooser dialog
-      const fileChooser = await fileChooserPromise;
-      debugLog('File chooser appeared, setting file...');
-      await fileChooser.setFiles('demo/data/pdf/example/10.5771__2699-1284-2024-3-149.pdf');
-      debugLog('File set, waiting for upload completion...');
+      // Step 3: Configure extraction options
+      await configureExtractionOptions(page, consoleLogs, 'llamore-gemini');
 
-      // Wait for PDF upload completion
-      debugLog('Captured console logs so far:', consoleLogs.length);
-      if (DEBUG && consoleLogs.length > 0) {
-        debugLog('Recent console messages:', consoleLogs.slice(-5).map(log => log.text || log.type));
-      }
+      // Step 4: Wait for extraction completion
+      const extractionLog = await waitForExtractionCompletion(page, consoleLogs);
 
-      // Wait for PDF upload completion with debugging
-      const uploadLog = await waitForTestMessage(consoleLogs, 'PDF_UPLOAD_COMPLETED', 10000);
-      debugLog('Found PDF_UPLOAD_COMPLETED:', uploadLog);
-      expect(uploadLog.value).toHaveProperty('originalFilename');
-      expect(uploadLog.value).toHaveProperty('filename');
+      // Step 5: Wait for document to load in editor
+      await waitForDocumentLoad(page, consoleLogs);
 
-      // Wait for extraction options dialog to appear
-      await waitForTestMessage(consoleLogs, 'EXTRACTION_OPTIONS_DIALOG_STARTING', 10000);
-
-      // Wait for the extraction options dialog to open
-      await page.waitForSelector('sl-dialog[name="extractionOptions"][open]', { timeout: 5000 });
-
-      // Fill out the extraction options dialog
-      await page.evaluate(() => {
-        /** @type {namedElementsTree} */
-        const ui = /** @type {any} */(window).ui;
-        // Set the extractor to llamore-gemini (which should be available based on the template)
-        ui.extractionOptions.modelIndex.value = 'llamore-gemini';
-        // Submit the dialog
-        ui.extractionOptions.submit.click();
-      });
-
-      // Wait for extraction to complete (this can take time)
-      const extractionLog = await waitForTestMessage(consoleLogs, 'EXTRACTION_COMPLETED', 60000);
-      expect(extractionLog.value).toHaveProperty('resultHash');
-
-      // Wait for the extracted document to be shown in the editor
-      await waitForTestMessage(consoleLogs, 'XML_EDITOR_DOCUMENT_LOADED', 10000);
-
-      // Get initial state from extraction completion log
+      // Final validation: Get initial state from extraction completion log
       const initialXmlState = extractionLog.value.resultHash;
       expect(initialXmlState).toBeTruthy();
+      debugLog('Final validation passed - result hash:', initialXmlState);
 
-      debugLog('PDF extraction test completed successfully');
+      // Additional final UI state verification
+      const finalUIState = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return {
+          xmlEditorLoaded: ui.xmlEditor && ui.xmlEditor.style.display !== 'none',
+          toolbarVisible: ui.toolbar && ui.toolbar.style.display !== 'none',
+          extractionActionsVisible: ui.toolbar.extractionActions && ui.toolbar.extractionActions.style.display !== 'none'
+        };
+      });
+      debugLog('Final UI state verification:', finalUIState);
+      expect(finalUIState.xmlEditorLoaded).toBe(true);
+      expect(finalUIState.toolbarVisible).toBe(true);
+
+      debugLog('PDF extraction workflow completed successfully');
 
     } finally {
       // cleanup

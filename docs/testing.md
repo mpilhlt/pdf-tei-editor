@@ -47,7 +47,7 @@ npm run test:e2e                    # Playwright browser tests (default)
 npm run test:e2e:firefox            # Test with Firefox browser
 npm run test:e2e:webkit             # Test with WebKit browser
 npm run test:e2e:headed             # Show browser UI for debugging
-npm run test:e2e:debug              # Debug mode with inspector
+npm run test:e2e:debug     # Enable verbose debug output (headless)
 npm run test:e2e:headed-debug       # Headed mode with Playwright step-through debugging
 npm run test:e2e:backend            # Backend integration tests only
 
@@ -172,7 +172,7 @@ npm run test:e2e                    # All browsers (default: chromium)
 npm run test:e2e:firefox            # Firefox browser
 npm run test:e2e:webkit             # WebKit/Safari browser
 npm run test:e2e:headed             # Show browser UI
-npm run test:e2e:debug              # Debug mode with inspector
+npm run test:e2e:debug     # Enable verbose debug output (headless)
 npm run test:e2e:headed-debug       # Headed mode with Playwright step-through debugging
 
 # Backend Integration Tests
@@ -183,13 +183,14 @@ node tests/e2e-runner.js --playwright --browser firefox --headed
 node tests/e2e-runner.js --playwright --grep "test login dialog"
 node tests/e2e-runner.js --playwright --fail-fast         # Stop on first failure
 node tests/e2e-runner.js --backend --fail-fast            # Stop on first backend test failure
-E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug
+E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug-messages
 node tests/e2e-runner.js --backend --grep "test login api"
+node tests/e2e-runner.js --playwright --debugger --headed # Playwright step-through debugging
 
 # Environment Variable Configuration
-npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
-npm run test:e2e -- --grep "extraction" --env GROBID_SERVER_URL
-node tests/e2e-runner.js --playwright --env GROBID_SERVER_URL --env GEMINI_API_KEY
+npm run test:e2e -- --env SOME_ENVIRONMENT_VAR
+npm run test:e2e -- --grep "extraction" --env SOME_ENVIRONMENT_VAR
+node tests/e2e-runner.js --playwright --env SOME_ENVIRONMENT_VAR
 ```
 
 ### Test Environment
@@ -616,17 +617,20 @@ docker stop $(docker ps -q --filter "publish=8000")
 E2E tests support configurable debug output to reduce noise during test execution while providing detailed information when needed:
 
 ```bash
-# Enable verbose debug output for E2E tests
-E2E_DEBUG=true npm run test:e2e -- --grep "extraction workflow"
+# Enable verbose debug output for E2E tests (headless)
+npm run test:e2e:debug -- --grep "extraction workflow"
 
 # Normal execution without debug output (default)
 npm run test:e2e -- --grep "extraction workflow"
 
-# Debug output with specific test patterns
-E2E_DEBUG=true npm run test:e2e:headed -- --grep "test login dialog"
+# Debug output with specific test patterns (headless)
+node tests/e2e-runner.js --playwright --debug-messages --grep "test login dialog"
 
 # Backend tests with debug output
-E2E_DEBUG=true node tests/e2e-runner.js  --backend --grep "test login api"
+node tests/e2e-runner.js --backend --debug-messages --grep "test login api"
+
+# Playwright step-through debugging (headed)
+node tests/e2e-runner.js --playwright --debugger --headed --grep "test login dialog"
 ```
 
 **Debug Output Features:**
@@ -647,7 +651,7 @@ Control how tests execute relative to each other to optimize performance or avoi
 npm run test:e2e -- --workers=1
 
 # Force sequential execution with debug output
-E2E_DEBUG=true npm run test:e2e -- --workers=1 --grep "extraction"
+node tests/e2e-runner.js --playwright --debug-messages --workers=1 --grep "extraction"
 
 # Run specific test suites sequentially
 npm run test:e2e -- --workers=1 --grep "Extraction Workflow"
@@ -719,6 +723,7 @@ node tests/e2e-runner.js --backend --fail-fast
 
 # Combine with other options
 node tests/e2e-runner.js --playwright --fail-fast --headed --grep "login"
+node tests/e2e-runner.js --playwright --fail-fast --debug-messages --grep "extraction"
 ```
 
 **Benefits of Fail-Fast Mode:**
@@ -749,8 +754,14 @@ node tests/e2e-runner.js --playwright --fail-fast --headed --grep "login"
 **For interactive step-through debugging:**
 
 - Use `npm run test:e2e:headed-debug` - activates Playwright's debugger with pause/step controls
+- Use `node tests/e2e-runner.js --playwright --debugger --headed` - Playwright debugger mode
 - Use `await page.pause()` in test code to add breakpoints
 - Use Playwright inspector: `npx playwright test --debug --headed`
+
+**For verbose debug output (headless):**
+
+- Use `npm run test:e2e:debug` - shows detailed debug messages without opening browser
+- Use `node tests/e2e-runner.js --playwright --debug-messages` - equivalent direct command
 
 **For log analysis:**
 

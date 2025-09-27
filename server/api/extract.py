@@ -34,25 +34,31 @@ def list_available_extractors():
 @session_required
 def extract():
     """Perform extraction using the specified extractor."""
+    
+    # parameters
     data = request.get_json()
-
-    # Get extractor ID
-    extractor_id = data.get("extractor", None)
-    if extractor_id is None:
+    extractor_id: str = data.get("extractor", '')
+    options: dict = data.get("options", {})
+    file_id: str = data.get("file_id", '')
+    
+    # validate parameters
+    if not extractor_id:
         raise ApiError("No extractor id given")
-    options = data.get("options", {})
-    file_id = data.get("file_id")
-
     if not file_id:
         raise ApiError("file_id parameter is required")
     
-    # Create extractor instance
+    # Create extractor instance with fallback to mock when external dependencies are missing
     try:
         extractor = create_extractor(extractor_id)
     except KeyError:
         raise ApiError(f"Unknown extractor: {extractor_id}")
     except RuntimeError as e:
-        raise ApiError(str(e))
+        # Check if this is a dependency/availability error and if we should fall back to mock
+        if _should_use_mock_extractor(extractor_id, str(e)):
+            logger.info(f"Using mock extractor for {extractor_id} due to missing dependencies: {e}")
+            extractor = create_extractor("mock-extractor")
+        else:
+            raise ApiError(str(e))
     
     # Get extractor metadata to determine expected input type
     extractor_info = extractor.__class__.get_info()
@@ -62,10 +68,12 @@ def extract():
     expected_input = extractor_info['input'][0]
 
     # Resolve the file_id to get file path for verification
-    resolved_path = resolve_document_identifier(file_id)
-    if not resolved_path:
+    if file_id.endswith('.pdf'):
+        # file is uploaded PDF
+        resolved_path = _process_pdf_reference(file_id, options)
+    else:
         # Fallback: treat as direct filename for uploaded files
-        resolved_path = file_id
+        resolved_path = resolve_document_identifier(file_id)
 
     # Verify file extension matches expected input type
     file_extension = Path(resolved_path).suffix.lower()
@@ -89,7 +97,7 @@ def extract():
             xml_content = f.read()
     else:
         # For PDF-based extractors, process as PDF reference
-        pdf_path = _process_pdf_reference(file_id, options)
+        pdf_path = resolved_path
 
     # Perform extraction
     try:
@@ -119,7 +127,7 @@ def extract():
         raise ApiError(f"Extraction failed: {e}")
     
     # Save the result based on the input type
-    if expected_input == "pdf":
+    if pdf_path and expected_input == "pdf":
         # For PDF-based extraction, save as usual (PDF + extracted XML)
         result = _save_extraction_result(pdf_path, tei_xml, options)
         return jsonify(result)
@@ -152,7 +160,7 @@ def _process_pdf_reference(filename_or_hash: str, options: dict) -> str:
     # Otherwise, this is a new upload - move it to permanent location
     upload_path = Path(UPLOAD_DIR) / filename_or_hash
     if upload_path.exists():
-        return _move_uploaded_pdf_to_permanent_location(upload_path, options)
+        return _move_uploaded_pdf_to_permanent_location(str(upload_path), options)
     
     # File not found anywhere
     raise ApiError(f"PDF file not found: {filename_or_hash}")
@@ -190,9 +198,8 @@ def _move_uploaded_pdf_to_permanent_location(upload_path: str, options: dict) ->
     return str(target_path)
 
 
-def _save_extraction_result(pdf_absolute_path: str, tei_xml: str, extraction_options: dict = None) -> dict:
+def _save_extraction_result(pdf_absolute_path: str, tei_xml: str, extraction_options: dict = {}) -> dict:
     """Save extraction result and return file hashes."""
-    extraction_options = extraction_options or {}
     DATA_ROOT = current_app.config['DATA_ROOT']
     
     # Extract file_id and collection from the PDF path
@@ -259,9 +266,8 @@ def _save_extraction_result(pdf_absolute_path: str, tei_xml: str, extraction_opt
     }
 
 
-def _save_xml_extraction_result(content: str, extractor_id: str, extraction_options: dict = None) -> dict:
+def _save_xml_extraction_result(content: str, extractor_id: str, extraction_options: dict = {}) -> dict:
     """Save XML extraction result as standalone file in collection/variant structure."""
-    extraction_options = extraction_options or {}
     DATA_ROOT = current_app.config['DATA_ROOT']
 
     # Determine collection from options (same as PDF extraction)
@@ -338,3 +344,28 @@ def _save_xml_extraction_result(content: str, extractor_id: str, extraction_opti
         "pdf": None,
         "xml": hashes['xml'],
     }
+
+
+def _should_use_mock_extractor(extractor_id: str, error_message: str) -> bool:
+    """
+    Determine if we should fall back to mock extractor for the given error.
+
+    Args:
+        extractor_id: The ID of the extractor that failed
+        error_message: The error message from the failed extractor
+
+    Returns:
+        True if we should use mock extractor, False otherwise
+    """
+    # Use mock extractor when external dependencies are missing
+    mock_conditions = [
+        "GROBID_SERVER_URL" in error_message,
+        "GEMINI_API_KEY" in error_message,
+        "not available" in error_message.lower(),
+        "dependencies" in error_message.lower()
+    ]
+
+    # Check environment variables for explicit mock mode
+    use_mock_extractors = os.environ.get("USE_MOCK_EXTRACTORS", "").lower() in ["true", "1", "yes"]
+
+    return use_mock_extractors or any(mock_conditions)

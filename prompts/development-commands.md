@@ -47,8 +47,8 @@ npm run test:e2e:debug      # Debug mode
 npm run test:e2e:backend    # Backend integration tests only
 
 # Pass environment variables to E2E test containers
-npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
-npm run test:e2e -- --grep "extraction" --env GROBID_SERVER_URL
+npm run test:e2e -- --env SOME_ENVIRONMENT_VAR
+npm run test:e2e -- --grep "extraction" --env SOME_ENVIRONMENT_VAR
 
 # Use custom .env file for E2E tests
 npm run test:e2e -- --dotenv-path .env.testing
@@ -124,18 +124,18 @@ available via `npm run-script`:
   test:py
     uv run pytest tests/py/
   test:e2e
-    node tests/e2e-runner.js --playwright --env GROBID_SERVER_URL --env GEMINI_API_KEY
+    node tests/e2e-runner.js --playwright --env SOME_ENVIRONMENT_VAR
   test:e2e:fast
-    node tests/e2e-runner.js --playwright --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY
+    node tests/e2e-runner.js --playwright --no-rebuild --env SOME_ENVIRONMENT_VAR
   test:e2e:fast:dev
-    node tests/e2e-runner.js --playwright --no-rebuild --development --env GROBID_SERVER_URL --env GEMINI_API_KEY
+    node tests/e2e-runner.js --playwright --no-rebuild --development --env SOME_ENVIRONMENT_VAR
   test:e2e:headed
-    node tests/e2e-runner.js --playwright --headed --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY
+    node tests/e2e-runner.js --playwright --headed --no-rebuild --env SOME_ENVIRONMENT_VAR
   test:e2e:headed-debug
-    PWDEBUG=1 node tests/e2e-runner.js --playwright --debug --headed --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY
+    PWDEBUG=1 node tests/e2e-runner.js --playwright --debug --headed --no-rebuild --env SOME_ENVIRONMENT_VAR
   test:e2e:backend
-    node tests/e2e-runner.js --backend --env GROBID_SERVER_URL --env GEMINI_API_KEY
+    node tests/e2e-runner.js --backend --env SOME_ENVIRONMENT_VAR
   test:e2e:backend:fast
-    node tests/e2e-runner.js --backend --no-rebuild --env GROBID_SERVER_URL --env GEMINI_API_KEY
+    node tests/e2e-runner.js --backend --no-rebuild --env SOME_ENVIRONMENT_VAR
 ```
 

@@ -178,7 +178,7 @@ await page.evaluate(() => {
 
 **Enable debug output from test files with E2E_DEBUG environment variable:**
 
-You can use debug output liberally in the test files themselves, but output must be suppressed unless the E2E_DEBUG environment variable is set. For example, create a little helper function at the beginning of the test files:
+You can use debug output liberally in the test files themselves, but output must be suppressed unless the E2E_DEBUG environment variable is set (which is automatically set when using `--debug-messages`). For example, create a little helper function at the beginning of the test files:
 
 ```javascript
 //
@@ -193,7 +193,11 @@ const debugLog = (...args) => {
 When debugging test failures, you can then call tests with that variable set and analyze the output:
 
 ```shell
-E2E_DEBUG=true npm run test:e2e -- --grep "extraction"
+# Enable debug messages (headless)
+npm run test:e2e:debug -- --grep "extraction"
+
+# Or use the direct command
+node tests/e2e-runner.js --playwright --debug-messages --grep "extraction"
 ```
 
 ### E2E Test Authentication and API Access
@@ -239,7 +243,7 @@ When fixing failing E2E tests or creating new ones:
 5. **Check saved logs**: When E2E tests fail, the test runner saves container and server logs to `tests/e2e/test-results/`. Inspect `container-logs-*.txt` for startup issues and `server-logs-*.txt` for backend errors.
 6. **Clean up after success** - Once tests pass, remove all testLog() calls with "TEST_" prefix and keep only the minimum required for test validation
 7. **Avoid source pollution** - Don't leave debugging testLog() calls in the source code permanently
-8. **Use E2E_DEBUG environment variable in test files** Enable debug output in E2E tests (verbose logging)
+8. **Use debug message output** Enable debug output in E2E tests using `--debug-messages` flag or `npm run test:e2e:debug`
 9. **Temporary global exposure**: If needed for debugging, expose objects to global scope in `app/src/app.js` for E2E testing. If no test directly depends on that object, remove after debugging has been sucessfully concluded.
 
 **Debugging Workflow:**
@@ -250,8 +254,8 @@ When fixing failing E2E tests or creating new ones:
 # 2. Rebuild image with new logging
 npm run test:e2e
 
-# 3. Run specific failing test with full output
-npm run test:e2e -- --grep "failing test name"
+# 3. Run specific failing test with debug messages
+npm run test:e2e:debug -- --grep "failing test name"
 
 # 4. Once fixed, remove all testLog() calls with TEST_ prefix
 # 5. Keep only essential testLog() calls for test assertions (no TEST_ prefix)
@@ -327,16 +331,20 @@ test('should complete extraction workflow', async ({ page }) => {
 
 ```bash
 # Pass specific environment variables to test containers
-npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
+npm run test:e2e -- --env SOME_ENVIRONMENT_VAR
 
 # Combine with test filtering
-npm run test:e2e -- --grep "extraction" --env GROBID_SERVER_URL
+npm run test:e2e -- --grep "extraction" --env SOME_ENVIRONMENT_VAR
 
 # Environment variables are read from host environment and passed to container
 GROBID_SERVER_URL="https://api.example.com" npm run test:e2e
 
 # Enable debug output in E2E tests (verbose logging)
-E2E_DEBUG=true npm run test:e2e -- --grep "extraction"
+npm run test:e2e:debug -- --grep "extraction"
+node tests/e2e-runner.js --playwright --debug-messages --grep "extraction"
+
+# Enable Playwright step-through debugging
+node tests/e2e-runner.js --playwright --debugger --headed --grep "extraction"
 
 # Configure parallel vs sequential test execution
 npm run test:e2e -- --workers=1                    # Force sequential execution
@@ -386,7 +394,8 @@ Common Options:
 Playwright Options:
   --browser <name>     Browser to use (chromium|firefox|webkit) [default: chromium]
   --headed             Run tests in headed mode (show browser)
-  --debug              Enable debug mode, will trigger Playwright\'s debugger and sets environment variable E2E_DEBUG="true"
+  --debugger           Enable Playwright debugger mode (step-through debugging)
+  --debug-messages     Enable verbose E2E debug output (sets E2E_DEBUG="true")
   --mode <mode>        Environment mode (production|development) [default: production]
   --production         Use production mode
   --development        Use development mode

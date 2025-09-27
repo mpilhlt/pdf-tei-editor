@@ -108,12 +108,6 @@ stateManager.preserveState(true, [...persistedStateVars, 'sessionId'])
 // Install plugins with the final composed state
 await app.installPlugins(state)
 
-// Now notify plugins with the final initial state
-await app.updateState({})  
-
-// invoke the "start" endpoint
-await app.start()
-
 // @test-start
 // Expose necessary objects to global scope for E2E testing
 if (applicationMode == 'testing' || applicationMode == 'development' ) {
@@ -127,6 +121,12 @@ if (applicationMode == 'testing' || applicationMode == 'development' ) {
   window.testLog = testLog;
 }
 // @test-end
+
+// Now notify plugins with the final initial state
+await app.updateState({})  
+
+// invoke the "start" endpoint
+await app.start()
 
 //
 // Legacy compatibility functions for old plugin system

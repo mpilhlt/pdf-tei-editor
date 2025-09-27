@@ -606,7 +606,8 @@ class E2ERunner {
    * @param {Object} options - Playwright options
    * @param {string} [options.browser] - Browser to use
    * @param {boolean} [options.headed] - Run in headed mode
-   * @param {boolean} [options.debug] - Run in debug mode
+   * @param {boolean} [options.debugger] - Run in Playwright debug mode
+   * @param {boolean} [options.debugMessages] - Enable E2E debug message output
    * @param {string} [options.mode] - Test mode
    * @param {boolean} [options.noRebuild] - Skip rebuild
    * @param {string} [options.grep] - Grep pattern
@@ -622,6 +623,8 @@ class E2ERunner {
     console.log(`🌐 Browser: ${options.browser || 'chromium'}`);
     console.log(`👁️ Mode: ${options.headed ? 'headed' : 'headless'}`);
     console.log(`🏗️ Environment: ${options.mode || 'production'}`);
+    if (options.debugger) console.log('🐛 Playwright Debugger: enabled');
+    if (options.debugMessages) console.log('📝 Debug Messages: enabled');
 
     try {
       // Check if npx is available
@@ -658,7 +661,7 @@ class E2ERunner {
       if (options.headed) {
         cmd.push('--headed');
       }
-      if (options.debug) {
+      if (options.debugger) {
         cmd.push('--debug');
       }
       if (options.workers) {
@@ -688,7 +691,7 @@ class E2ERunner {
         env: {
           ...process.env,
           ...this.getEnvironmentVars(),
-          E2E_DEBUG: options.debug ? "true" : "false"
+          E2E_DEBUG: options.debugMessages ? "true" : "false"
         }
       });
 
@@ -994,7 +997,8 @@ function parseArgs(args) {
     backend: false,
     browser: 'chromium',
     headed: false,
-    debug: false,
+    debugger: false,
+    debugMessages: false,
     grep: /** @type {string | null} */ (null),
     grepInvert: /** @type {string | null} */ (null),
     testFile: /** @type {string | null} */ (null),
@@ -1027,8 +1031,11 @@ function parseArgs(args) {
       case '--headed':
         parsed.headed = true;
         break;
-      case '--debug':
-        parsed.debug = true;
+      case '--debugger':
+        parsed.debugger = true;
+        break;
+      case '--debug-messages':
+        parsed.debugMessages = true;
         break;
       case '--grep':
         parsed.grep = args[++i] || '';
@@ -1111,7 +1118,8 @@ function showHelp() {
   console.log('Playwright Options:');
   console.log('  --browser <name>     Browser to use (chromium|firefox|webkit) [default: chromium]');
   console.log('  --headed             Run tests in headed mode (show browser)');
-  console.log('  --debug              Enable debug mode, will trigger Playwright\'s debugger and sets environment variable E2E_DEBUG="true"');
+  console.log('  --debugger           Enable Playwright debugger mode (step-through debugging)');
+  console.log('  --debug-messages     Enable verbose E2E debug output (sets E2E_DEBUG="true")');
   console.log('  --mode <mode>        Environment mode (production|development) [default: production]');
   console.log('  --production         Use production mode');
   console.log('  --development        Use development mode');
@@ -1144,8 +1152,8 @@ function showHelp() {
   console.log('  # Build image only (no tests)');
   console.log('  node tests/e2e-runner.js --build-only');
   console.log('');
-  console.log('  # Custom port');
-  console.log('  E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug');
+  console.log('  # Custom port with debug messages');
+  console.log('  E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug-messages');
   console.log('');
   console.log('  # Custom environment file');
   console.log('  node tests/e2e-runner.js --backend --dotenv-path .env.testing');
@@ -1182,7 +1190,8 @@ async function main() {
         await runner.runPlaywrightTests({
           browser: args.browser,
           headed: args.headed,
-          debug: args.debug,
+          debugger: args.debugger,
+          debugMessages: args.debugMessages,
           grep: args.grep || undefined,
           grepInvert: args.grepInvert || undefined,
           noRebuild: args.noRebuild,
