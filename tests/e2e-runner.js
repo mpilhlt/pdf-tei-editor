@@ -606,13 +606,15 @@ class E2ERunner {
    * @param {Object} options - Playwright options
    * @param {string} [options.browser] - Browser to use
    * @param {boolean} [options.headed] - Run in headed mode
-   * @param {boolean} [options.debug] - Run in debug mode
+   * @param {boolean} [options.debugger] - Run in Playwright debug mode
+   * @param {boolean} [options.debugMessages] - Enable E2E debug message output
    * @param {string} [options.mode] - Test mode
    * @param {boolean} [options.noRebuild] - Skip rebuild
    * @param {string} [options.grep] - Grep pattern
    * @param {string} [options.grepInvert] - Grep invert pattern
    * @param {string[]} [options.envVars] - Environment variables for container
    * @param {Number} [options.workers] - Number of workers for parallel execution
+   * @param {boolean} [options.failFast] - Abort on first test failure
    */
   async runPlaywrightTests(options = {}) {
     console.log('🧪 Unified E2E Runner - Playwright Browser Tests');
@@ -621,6 +623,8 @@ class E2ERunner {
     console.log(`🌐 Browser: ${options.browser || 'chromium'}`);
     console.log(`👁️ Mode: ${options.headed ? 'headed' : 'headless'}`);
     console.log(`🏗️ Environment: ${options.mode || 'production'}`);
+    if (options.debugger) console.log('🐛 Playwright Debugger: enabled');
+    if (options.debugMessages) console.log('📝 Debug Messages: enabled');
 
     try {
       // Check if npx is available
@@ -657,7 +661,7 @@ class E2ERunner {
       if (options.headed) {
         cmd.push('--headed');
       }
-      if (options.debug) {
+      if (options.debugger) {
         cmd.push('--debug');
       }
       if (options.workers) {
@@ -673,6 +677,11 @@ class E2ERunner {
         cmd.push('--grep-invert', options.grepInvert);
       }
 
+      // Add fail-fast option if specified
+      if (options.failFast) {
+        cmd.push('--max-failures=1');
+      }
+
       console.log(`🚀 Executing: npx ${cmd.join(' ')}`);
 
       // Run Playwright tests
@@ -681,7 +690,8 @@ class E2ERunner {
         cwd: projectRoot,
         env: {
           ...process.env,
-          ...this.getEnvironmentVars()
+          ...this.getEnvironmentVars(),
+          E2E_DEBUG: options.debugMessages ? "true" : "false"
         }
       });
 
@@ -753,6 +763,7 @@ class E2ERunner {
    * @param {string} [options.grepInvert] - Grep invert pattern to exclude tests
    * @param {string[]} [options.envVars] - Environment variables for container
    * @param {boolean} [options.noRebuild] - Skip container rebuild
+   * @param {boolean} [options.failFast] - Abort on first test failure
    */
   async runBackendTests(options = {}) {
     console.log('🧪 Unified E2E Runner - Backend API Tests');
@@ -786,10 +797,22 @@ class E2ERunner {
       let passedTests = 0;
       let failedTests = 0;
       const failedTestDetails = [];
+      let skippedTests = 0;
+      const skippedTestFiles = [];
 
       // Run each test file sequentially
-      for (const testFile of testFiles) {
+      for (let i = 0; i < testFiles.length; i++) {
+        const testFile = testFiles[i];
         const relativePath = path.relative(projectRoot, testFile);
+
+        // If fail-fast is enabled and we've already had a failure, skip remaining tests
+        if (options.failFast && failedTests > 0) {
+          skippedTests++;
+          skippedTestFiles.push(relativePath);
+          console.log(`⏭️ ${relativePath} - SKIPPED (fail-fast enabled)`);
+          continue;
+        }
+
         console.log(`\n🧪 Running: ${relativePath}`);
 
         try {
@@ -842,6 +865,19 @@ class E2ERunner {
               exitCode: testResult.code,
               stderr: testResult.stderr
             });
+
+            // If fail-fast is enabled, stop running remaining tests
+            if (options.failFast) {
+              // Mark remaining tests as skipped
+              for (let j = i + 1; j < testFiles.length; j++) {
+                const skippedFile = testFiles[j];
+                const skippedPath = path.relative(projectRoot, skippedFile);
+                skippedTests++;
+                skippedTestFiles.push(skippedPath);
+                console.log(`⏭️ ${skippedPath} - SKIPPED (fail-fast enabled)`);
+              }
+              break;
+            }
           }
 
         } catch (error) {
@@ -853,6 +889,19 @@ class E2ERunner {
             exitCode: 1,
             stderr: errorMessage
           });
+
+          // If fail-fast is enabled, stop running remaining tests
+          if (options.failFast) {
+            // Mark remaining tests as skipped
+            for (let j = i + 1; j < testFiles.length; j++) {
+              const skippedFile = testFiles[j];
+              const skippedPath = path.relative(projectRoot, skippedFile);
+              skippedTests++;
+              skippedTestFiles.push(skippedPath);
+              console.log(`⏭️ ${skippedPath} - SKIPPED (fail-fast enabled)`);
+            }
+            break;
+          }
         }
       }
 
@@ -861,7 +910,10 @@ class E2ERunner {
       console.log('==============================');
       console.log(`✅ Passed: ${passedTests}`);
       console.log(`❌ Failed: ${failedTests}`);
-      console.log(`📊 Total:  ${passedTests + failedTests}`);
+      if (skippedTests > 0) {
+        console.log(`⏭️ Skipped: ${skippedTests}`);
+      }
+      console.log(`📊 Total:  ${passedTests + failedTests + skippedTests}`);
 
       if (failedTests > 0) {
         console.log('\n💥 Failed Tests:');
@@ -872,13 +924,23 @@ class E2ERunner {
           }
         });
 
+        if (skippedTests > 0 && options.failFast) {
+          console.log('\n⏭️ Skipped Tests (due to fail-fast):');
+          skippedTestFiles.forEach(file => {
+            console.log(`  - ${file}`);
+          });
+        }
+
         // Save container and server logs for debugging
         await this.showContainerLogs();
 
         // Cleanup container after saving logs
         await this.cleanup();
 
-        throw new Error(`${failedTests} backend test(s) failed`);
+        const errorMessage = options.failFast && skippedTests > 0
+          ? `${failedTests} backend test(s) failed, ${skippedTests} skipped (fail-fast enabled)`
+          : `${failedTests} backend test(s) failed`;
+        throw new Error(errorMessage);
       } else {
         console.log('\n🎉 All backend tests passed!');
 
@@ -935,7 +997,8 @@ function parseArgs(args) {
     backend: false,
     browser: 'chromium',
     headed: false,
-    debug: false,
+    debugger: false,
+    debugMessages: false,
     grep: /** @type {string | null} */ (null),
     grepInvert: /** @type {string | null} */ (null),
     testFile: /** @type {string | null} */ (null),
@@ -948,7 +1011,8 @@ function parseArgs(args) {
     /** @type {string | null} */
     dotenvPath: null,
     /** @type {Number} */
-    workers: 1
+    workers: 1,
+    failFast: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -967,8 +1031,11 @@ function parseArgs(args) {
       case '--headed':
         parsed.headed = true;
         break;
-      case '--debug':
-        parsed.debug = true;
+      case '--debugger':
+        parsed.debugger = true;
+        break;
+      case '--debug-messages':
+        parsed.debugMessages = true;
         break;
       case '--grep':
         parsed.grep = args[++i] || '';
@@ -1006,6 +1073,9 @@ function parseArgs(args) {
       case '--dotenv-path':
         parsed.dotenvPath = args[++i];
         break;
+      case '--fail-fast':
+        parsed.failFast = true;
+        break;
       case '--help':
       case '-h':
         parsed.help = true;
@@ -1039,6 +1109,7 @@ function showHelp() {
   console.log('Common Options:');
   console.log('  --grep <pattern>     Run tests matching pattern');
   console.log('  --grep-invert <pattern> Exclude tests matching pattern');
+  console.log('  --fail-fast          Abort on first test failure and skip remaining tests');
   console.log('  --no-rebuild         Use existing container image without rebuilding');
   console.log('  --build-only         Build container image only, do not run tests');
   console.log('  --env <var>          Environment variable to pass to container (can be used multiple times)');
@@ -1047,7 +1118,8 @@ function showHelp() {
   console.log('Playwright Options:');
   console.log('  --browser <name>     Browser to use (chromium|firefox|webkit) [default: chromium]');
   console.log('  --headed             Run tests in headed mode (show browser)');
-  console.log('  --debug              Enable debug mode');
+  console.log('  --debugger           Enable Playwright debugger mode (step-through debugging)');
+  console.log('  --debug-messages     Enable verbose E2E debug output (sets E2E_DEBUG="true")');
   console.log('  --mode <mode>        Environment mode (production|development) [default: production]');
   console.log('  --production         Use production mode');
   console.log('  --development        Use development mode');
@@ -1073,11 +1145,15 @@ function showHelp() {
   console.log('  node tests/e2e-runner.js --playwright --no-rebuild');
   console.log('  node tests/e2e-runner.js --backend --no-rebuild');
   console.log('');
+  console.log('  # Fail-fast mode (stop on first failure)');
+  console.log('  node tests/e2e-runner.js --playwright --fail-fast');
+  console.log('  node tests/e2e-runner.js --backend --fail-fast');
+  console.log('');
   console.log('  # Build image only (no tests)');
   console.log('  node tests/e2e-runner.js --build-only');
   console.log('');
-  console.log('  # Custom port');
-  console.log('  E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug');
+  console.log('  # Custom port with debug messages');
+  console.log('  E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug-messages');
   console.log('');
   console.log('  # Custom environment file');
   console.log('  node tests/e2e-runner.js --backend --dotenv-path .env.testing');
@@ -1114,13 +1190,15 @@ async function main() {
         await runner.runPlaywrightTests({
           browser: args.browser,
           headed: args.headed,
-          debug: args.debug,
+          debugger: args.debugger,
+          debugMessages: args.debugMessages,
           grep: args.grep || undefined,
           grepInvert: args.grepInvert || undefined,
           noRebuild: args.noRebuild,
           mode: args.mode,
           envVars: args.envVars,
-          workers: args.workers
+          workers: args.workers,
+          failFast: args.failFast
         });
       }
 
@@ -1130,7 +1208,8 @@ async function main() {
           grep: args.grep || undefined,
           grepInvert: args.grepInvert || undefined,
           noRebuild: args.noRebuild,
-          envVars: args.envVars
+          envVars: args.envVars,
+          failFast: args.failFast
         });
       }
 

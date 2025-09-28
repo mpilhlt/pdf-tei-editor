@@ -26,8 +26,8 @@ npm run test:e2e            # all E2E test, don't use this- always run more spec
 npm run test:e2e:backend    # Backend integration tests only
 
 # Pass environment variables to E2E test containers
-npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
-npm run test:e2e -- --grep "extraction" --env GROBID_SERVER_URL
+npm run test:e2e -- --env SOME_ENVIRONMENT_VAR
+npm run test:e2e -- --grep "extraction" --env SOME_ENVIRONMENT_VAR
 
 # Use custom .env file for E2E tests
 npm run test:e2e -- --dotenv-path .env.testing

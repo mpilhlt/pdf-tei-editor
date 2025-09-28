@@ -511,9 +511,8 @@ async function deleteCurrentVersion(state) {
 /**
  * Deletes all versions of the document, leaving only the gold standard version
  * Only deletes versions that match the current variant filter
- * @param {ApplicationState} state
  */
-async function deleteAllVersions(state) {
+async function deleteAllVersions() {
   if (!currentState?.fileData) {
     throw new Error("No file data");
   }
@@ -527,7 +526,7 @@ async function deleteAllVersions(state) {
 
   // Filter versions based on current variant selection (same logic as file-selection.js)
   let versionsToDelete = selectedFile.versions;
-  const { variant } = state;
+  const { variant } = currentState;
 
   if (variant === "none") {
     // Delete only versions without variant_id

@@ -4,6 +4,7 @@ import re
 import logging
 from lxml import etree
 from pathlib import Path
+from typing import cast
 
 from server.lib.decorators import handle_api_errors, session_required
 from server.lib.server_utils import (
@@ -21,7 +22,7 @@ from server.api.config import read_config
 from server.lib.auth import get_user_by_session_id
 from server.lib.access_control import check_file_access
 from server.lib.hash_utils import add_path_to_lookup
-from server.lib.data_utils import get_project_paths
+
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("files_save", __name__, url_prefix="/api/files")
@@ -107,13 +108,11 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
             fallback_file_id = strip_version_timestamp_prefix(fallback_file_id)
         
         # Extract variant from extractor application metadata
-        variant = None
-        extractor_apps = xml_root.xpath('.//tei:application[@type="extractor"]', namespaces=ns)
-        for app in extractor_apps:
-            variant_label = app.find('./tei:label[@type="variant-id"]', ns)
-            if variant_label is not None and variant_label.text:
-                variant = variant_label.text
-                break  # Use the first variant-id found
+        variant_xpath = 'string((.//tei:application[@type="extractor"]/tei:label[@type="variant-id"])[1])'
+        variant = cast(str, xml_root.xpath(variant_xpath, namespaces=ns)) or None
+        
+        if not variant:
+            current_app.logger.debug('No extractor information in document')
         
         # If variant exists in XML, try to strip .variant_id suffix from filename
         if variant and fallback_file_id.endswith(f'.{variant}'):
@@ -172,6 +171,7 @@ def _save_xml_content(xml_string, file_path_or_hash, save_as_new_version, sessio
     
     # Check if this is a version file that should be promoted to gold
     version_to_gold_promotion = False
+    promotion_collection = ""
     if variant and file_path_rel.startswith('/data/versions/'):
         # This is a version file with a variant - check if gold variant exists
         file_path_safe = safe_file_path(file_path_rel)
@@ -307,16 +307,19 @@ def save():
     Save the given xml as a file, with file locking.
     """
     data = request.get_json()
+    if not data:
+        raise ApiError("Invalid JSON request", status_code=400)
     xml_string = data.get("xml_string")
     encoding = data.get("encoding")
-    file_path_or_hash = data.get("hash", None) or data.get("file_path")
+    file_path_or_hash = data.get("file_id") or data.get("hash", None) or data.get("file_path") # hash and file_path are deprecated!
     save_as_new_version = data.get("new_version", False)
     session_id = get_session_id(request)
 
     # Decode base64 if needed
     if encoding == "base64":
         import base64
-        xml_string = base64.b64decode(xml_string).decode('utf-8')
+        if xml_string:
+            xml_string = base64.b64decode(xml_string).decode('utf-8')
 
     if not xml_string or not file_path_or_hash:
         raise ApiError("XML content and file path are required.")

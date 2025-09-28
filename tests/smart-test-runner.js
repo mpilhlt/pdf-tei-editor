@@ -28,7 +28,7 @@ class SmartTestRunner {
     // Removed caching system for simplicity and reliability
   }
 
-  discoverTestFiles() {
+  async discoverTestFiles() {
     const testsDir = join(projectRoot, 'tests');
     if (!existsSync(testsDir)) return { js: [], py: [], e2e: { playwright: [], backend: [] } };
 
@@ -55,20 +55,27 @@ class SmartTestRunner {
       );
     }
 
-    // Discover e2e tests (both Playwright .spec.js and backend .test.js)
+    // Discover e2e tests recursively (both Playwright .spec.js and backend .test.js)
     const e2eDir = join(testsDir, 'e2e');
     const playwrightTests = [];
     const backendTests = [];
+
     if (existsSync(e2eDir)) {
-      const e2eFiles = readdirSync(e2eDir);
-      playwrightTests.push(...e2eFiles
-        .filter(file => file.endsWith('.spec.js'))
-        .map(file => `tests/e2e/${file}`)
-      );
-      backendTests.push(...e2eFiles
-        .filter(file => file.endsWith('.test.js'))
-        .map(file => `tests/e2e/${file}`)
-      );
+      const { glob } = await import('glob');
+
+      // Use recursive glob patterns to find files in subdirectories
+      const playwrightPattern = join(e2eDir, '**/*.spec.js');
+      const backendPattern = join(e2eDir, '**/*.test.js');
+
+      const playwrightFiles = await glob(playwrightPattern);
+      const backendFiles = await glob(backendPattern);
+
+      playwrightTests.push(...playwrightFiles.map(file => {
+        return file.replace(projectRoot + '/', ''); // Make relative to project root
+      }));
+      backendTests.push(...backendFiles.map(file => {
+        return file.replace(projectRoot + '/', ''); // Make relative to project root
+      }));
     }
 
     if (!process.argv.includes('--tap')) {
@@ -330,8 +337,8 @@ class SmartTestRunner {
     }
 
     if (!process.argv.includes('--tap')) console.log('🔬 Running dependency analysis...');
-    
-    const testFiles = this.discoverTestFiles();
+
+    const testFiles = await this.discoverTestFiles();
     const allE2ETests = [...testFiles.e2e.playwright, ...testFiles.e2e.backend];
     const [jsResult, pyResult, e2eResult] = await Promise.all([
       this.analyzeJSDependencies(testFiles.js),
@@ -429,7 +436,7 @@ class SmartTestRunner {
    * @param {{all?: boolean, tap?: boolean, changedFiles?: string[] | null}}
    */
   async getTestsToRun(options = {}) {
-    const testFiles = this.discoverTestFiles();
+    const testFiles = await this.discoverTestFiles();
 
     if (options.all) {
       if (!options.tap) console.log('🏃 Running all tests...');

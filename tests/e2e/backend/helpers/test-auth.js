@@ -161,6 +161,36 @@ async function createTestSession() {
   }
 }
 
+/**
+ * Delete test files for cleanup between tests
+ * @param {string} sessionId - Session ID for authentication
+ * @param {string[]} fileIds - Array of file identifiers to delete
+ * @returns {Promise<void>}
+ */
+async function deleteTestFiles(sessionId, fileIds) {
+  if (!fileIds || fileIds.length === 0) {
+    return;
+  }
+
+  try {
+    const response = await authenticatedRequest(sessionId, '/files/delete', 'POST', fileIds);
+
+    // Don't throw on 404 or 403 - files might not exist or user might not have permission
+    if (response.ok) {
+      console.log(`✓ Cleaned up ${fileIds.length} test file(s)`);
+    } else if (response.status === 404) {
+      console.log(`⚠ Some test files were already deleted (404) - this is okay`);
+    } else if (response.status === 403) {
+      console.log(`⚠ Insufficient permissions to delete some test files (403) - this might be expected`);
+    } else {
+      console.warn(`⚠ File cleanup warning: ${response.status} ${response.statusText} - continuing anyway`);
+    }
+  } catch (error) {
+    // Log warning but don't throw - cleanup failures shouldn't break tests
+    console.warn(`⚠ File cleanup failed: ${error.message} - continuing anyway`);
+  }
+}
+
 export {
   hashPassword,
   login,
@@ -168,5 +198,6 @@ export {
   checkStatus,
   authenticatedRequest,
   authenticatedApiCall,
-  createTestSession
+  createTestSession,
+  deleteTestFiles
 };

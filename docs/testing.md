@@ -47,7 +47,7 @@ npm run test:e2e                    # Playwright browser tests (default)
 npm run test:e2e:firefox            # Test with Firefox browser
 npm run test:e2e:webkit             # Test with WebKit browser
 npm run test:e2e:headed             # Show browser UI for debugging
-npm run test:e2e:debug              # Debug mode with inspector
+npm run test:e2e:debug     # Enable verbose debug output (headless)
 npm run test:e2e:headed-debug       # Headed mode with Playwright step-through debugging
 npm run test:e2e:backend            # Backend integration tests only
 
@@ -172,7 +172,7 @@ npm run test:e2e                    # All browsers (default: chromium)
 npm run test:e2e:firefox            # Firefox browser
 npm run test:e2e:webkit             # WebKit/Safari browser
 npm run test:e2e:headed             # Show browser UI
-npm run test:e2e:debug              # Debug mode with inspector
+npm run test:e2e:debug     # Enable verbose debug output (headless)
 npm run test:e2e:headed-debug       # Headed mode with Playwright step-through debugging
 
 # Backend Integration Tests
@@ -181,13 +181,16 @@ npm run test:e2e:backend            # All backend tests
 # Advanced Options (direct runner usage)
 node tests/e2e-runner.js --playwright --browser firefox --headed
 node tests/e2e-runner.js --playwright --grep "test login dialog"
-E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug
+node tests/e2e-runner.js --playwright --fail-fast         # Stop on first failure
+node tests/e2e-runner.js --backend --fail-fast            # Stop on first backend test failure
+E2E_PORT=8001 node tests/e2e-runner.js --playwright --debug-messages
 node tests/e2e-runner.js --backend --grep "test login api"
+node tests/e2e-runner.js --playwright --debugger --headed # Playwright step-through debugging
 
 # Environment Variable Configuration
-npm run test:e2e -- --env GROBID_SERVER_URL --env GEMINI_API_KEY
-npm run test:e2e -- --grep "extraction" --env GROBID_SERVER_URL
-node tests/e2e-runner.js --playwright --env GROBID_SERVER_URL --env GEMINI_API_KEY
+npm run test:e2e -- --env SOME_ENVIRONMENT_VAR
+npm run test:e2e -- --grep "extraction" --env SOME_ENVIRONMENT_VAR
+node tests/e2e-runner.js --playwright --env SOME_ENVIRONMENT_VAR
 ```
 
 ### Test Environment
@@ -210,7 +213,7 @@ These tests are ideal for verifying API contracts, authentication, business logi
 
 #### Key Characteristics
 
-- **Location**: `tests/e2e/`
+- **Location**: `tests/e2e/backend/`
 - **File Naming Convention**: Files must end with `.test.js` (to distinguish them from Playwright's `.spec.js` files).
 - **Test Framework**: Uses Node.js's built-in test runner (`import { test, describe } from 'node:test'`).
 - **Execution**: Run using `npm run test:e2e:backend`. The `e2e-runner.js` script handles starting the container and executing the test files.
@@ -246,7 +249,7 @@ describe('Extractor API Tests', () => {
 
 #### Authentication
 
-For endpoints that require a logged-in user, use the authentication helpers from `tests/e2e/helpers/test-auth.js`. These helpers allow you to create test sessions and make authenticated API calls.
+For endpoints that require a logged-in user, use the authentication helpers from `tests/e2e/backend/helpers/test-auth.js`. These helpers allow you to create test sessions and make authenticated API calls.
 
 ```javascript
 import { createTestSession, authenticatedApiCall } from './helpers/test-auth.js';
@@ -413,13 +416,6 @@ test('should complete application startup', async ({ page }) => {
 });
 ```
 
-#### Benefits of Test Logging
-
-- **Performance**: 10-100x faster than DOM queries for state verification
-- **Reliability**: Not affected by UI timing issues or CSS changes
-- **Debugging**: Clear insight into application flow and state transitions
-- **Maintainability**: Tests don't break when UI styling changes
-
 #### When to Use Each Approach
 
 **Use testLog for** (Preferred):
@@ -440,12 +436,6 @@ test('should complete application startup', async ({ page }) => {
 - Elements not in the named UI system
 - Dynamic content testing
 - Styling and attribute verification
-
-```javascript
-// Fallback to selectors when needed
-const dynamicElements = await page.$('.dynamic-content');
-const errorMessage = await page.textContent('[data-testid="error-message"]');
-```
 
 ### Error Handling in E2E Tests
 
@@ -479,30 +469,30 @@ test('application loading', async ({ page }) => {
 
 ### Test File Organization
 
-```
+```text
 tests/
-├── js/                          # JavaScript unit tests
-│   ├── application.test.js      # Core application tests
-│   ├── plugin-manager.test.js   # Plugin system tests
-│   ├── smart-test-runner.test.js # Smart test runner tests
-│   └── sync-algorithm.test.js   # Synchronization algorithm tests
-├── py/                          # Python integration tests
-│   └── test_*.py               # Python test files
-├── e2e/                         # End-to-end tests
-│   ├── app-loading.spec.js      # Playwright: Application loading tests
-│   ├── auth-workflow.spec.js    # Playwright: Authentication workflow tests
-│   ├── extractor-api.test.js    # Backend: API endpoint tests
-│   └── test-extractors.js       # Backend: Extractor functionality tests
-└── smart-test-runner.js         # Smart test runner (moved from app/src/modules)
+├── js/                           # JavaScript unit tests
+│   └── *.test.js
+├── py/                           # Python integration tests
+│   └── test_*.py                 # Python test files
+├── e2e/                          # End-to-end tests
+│   ├── frontend/                 # Playwright browser tests
+│   │   ├── helpers/              # Test helper functions for frontend
+│   │   └── *.spec.js
+│   └── backend/                  # Backend integration tests
+│       ├── helpers/              # Test helper functions for backend
+│       └── *.test.js
+├── e2e-runner.js                 # The E2E test runner, runs playwright and backend tests
+└── smart-test-runner.js          # Smart test runner, invokes the E2E runner with test that cover changed files
 ```
 
 ### Test Naming Conventions
 
 - **JavaScript unit tests**: `tests/js/*.test.js`
 - **Python integration tests**: `tests/py/test_*.py`
-- **Playwright E2E tests**: `tests/e2e/*.spec.js`
-- **Backend integration tests**: `tests/e2e/*.test.js` (uses Node.js test runner)
-- **Test suites**: Organized in directories by type (js, py, e2e)
+- **Playwright E2E tests**: `tests/e2e/frontend/*.spec.js`
+- **Backend integration tests**: `tests/e2e/backend/*.test.js` (uses Node.js test runner)
+- **Test suites**: Organized in directories by type (js, py, e2e/frontend, e2e/backend)
 
 ### Test Coverage Guidelines
 
@@ -627,17 +617,20 @@ docker stop $(docker ps -q --filter "publish=8000")
 E2E tests support configurable debug output to reduce noise during test execution while providing detailed information when needed:
 
 ```bash
-# Enable verbose debug output for E2E tests
-E2E_DEBUG=true npm run test:e2e -- --grep "extraction workflow"
+# Enable verbose debug output for E2E tests (headless)
+npm run test:e2e:debug -- --grep "extraction workflow"
 
 # Normal execution without debug output (default)
 npm run test:e2e -- --grep "extraction workflow"
 
-# Debug output with specific test patterns
-E2E_DEBUG=true npm run test:e2e:headed -- --grep "test login dialog"
+# Debug output with specific test patterns (headless)
+node tests/e2e-runner.js --playwright --debug-messages --grep "test login dialog"
 
 # Backend tests with debug output
-E2E_DEBUG=true node tests/e2e-runner.js  --backend --grep "test login api"
+node tests/e2e-runner.js --backend --debug-messages --grep "test login api"
+
+# Playwright step-through debugging (headed)
+node tests/e2e-runner.js --playwright --debugger --headed --grep "test login dialog"
 ```
 
 **Debug Output Features:**
@@ -658,7 +651,7 @@ Control how tests execute relative to each other to optimize performance or avoi
 npm run test:e2e -- --workers=1
 
 # Force sequential execution with debug output
-E2E_DEBUG=true npm run test:e2e -- --workers=1 --grep "extraction"
+node tests/e2e-runner.js --playwright --debug-messages --workers=1 --grep "extraction"
 
 # Run specific test suites sequentially
 npm run test:e2e -- --workers=1 --grep "Extraction Workflow"
@@ -716,6 +709,34 @@ test.describe('Login Tests', () => {
 - **Debugging**: Sequential execution makes debugging easier by reducing complexity
 - **Heavy extraction workflows**: Tests that use significant CPU/memory/network resources
 
+### Fail-Fast Testing
+
+For rapid feedback during development, use the `--fail-fast` option to stop test execution on the first failure:
+
+```bash
+# Stop Playwright tests on first failure
+npm run test:e2e -- --fail-fast
+node tests/e2e-runner.js --playwright --fail-fast
+
+# Stop backend tests on first failure
+node tests/e2e-runner.js --backend --fail-fast
+
+# Combine with other options
+node tests/e2e-runner.js --playwright --fail-fast --headed --grep "login"
+node tests/e2e-runner.js --playwright --fail-fast --debug-messages --grep "extraction"
+```
+
+**Benefits of Fail-Fast Mode:**
+- **Faster feedback**: Immediate notification when tests start failing
+- **Resource efficiency**: Saves container resources by stopping early
+- **Debugging focus**: Concentrate on first failure without noise from subsequent failures
+- **Development workflow**: Ideal for TDD and fixing one issue at a time
+
+**Test Reporting with Fail-Fast:**
+- **Failed tests**: Reported with full error details
+- **Skipped tests**: Remaining tests marked as "SKIPPED (fail-fast enabled)"
+- **Summary counts**: Shows passed, failed, and skipped test counts
+
 **When to Use Parallel Execution:**
 
 - **Independent tests**: Tests that don't share resources or state
@@ -733,8 +754,14 @@ test.describe('Login Tests', () => {
 **For interactive step-through debugging:**
 
 - Use `npm run test:e2e:headed-debug` - activates Playwright's debugger with pause/step controls
+- Use `node tests/e2e-runner.js --playwright --debugger --headed` - Playwright debugger mode
 - Use `await page.pause()` in test code to add breakpoints
 - Use Playwright inspector: `npx playwright test --debug --headed`
+
+**For verbose debug output (headless):**
+
+- Use `npm run test:e2e:debug` - shows detailed debug messages without opening browser
+- Use `node tests/e2e-runner.js --playwright --debug-messages` - equivalent direct command
 
 **For log analysis:**
 

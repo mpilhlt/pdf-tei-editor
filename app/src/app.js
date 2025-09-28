@@ -20,7 +20,7 @@ import ep from './endpoints.js'
 export { ep as endpoints }
 
 // plugins
-import plugins from './plugins.js'
+import plugins, { services } from './plugins.js'
 import { logLevel, client, config, AuthenticationPlugin, LoggerPlugin } from './plugins.js'
 import initialState from './state.js'
 
@@ -28,7 +28,7 @@ import initialState from './state.js'
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
-import { createTestLogger } from '../../tests/e2e/helpers/test-logging.js'
+import { createTestLogger } from '../../tests/e2e/frontend/helpers/test-logging.js'
 
 //
 // Application bootstrapping
@@ -108,19 +108,25 @@ stateManager.preserveState(true, [...persistedStateVars, 'sessionId'])
 // Install plugins with the final composed state
 await app.installPlugins(state)
 
+// @test-start
+// Expose necessary objects to global scope for E2E testing
+if (applicationMode == 'testing' || applicationMode == 'development' ) {
+  // @ts-ignore
+  window.app = app;
+  // @ts-ignore
+  window.client = client;
+  // @ts-ignore
+  window.services = services;
+  // @ts-ignore
+  window.testLog = testLog;
+}
+// @test-end
+
 // Now notify plugins with the final initial state
 await app.updateState({})  
 
 // invoke the "start" endpoint
 await app.start()
-
-// Expose necessary objects to global scope for E2E testing
-if (applicationMode == 'testing') {
-  // @ts-ignore
-  window.app = app;
-  // @ts-ignore
-  window.client = client;
-}
 
 //
 // Legacy compatibility functions for old plugin system

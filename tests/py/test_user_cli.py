@@ -29,7 +29,7 @@ class TestUserCLI(unittest.TestCase):
     def setUp(self):
         """Set up test environment with test data directory."""
         # Use test data directory
-        self.test_data_dir = Path(__file__).parent / 'data'
+        self.test_data_dir = Path(__file__).parent / 'fixtures'
         self.db_dir = self.test_data_dir / 'db'
         self.config_dir = self.test_data_dir / 'config'
 
@@ -145,8 +145,8 @@ class TestUserCLI(unittest.TestCase):
 
     def test_user_add_interactive_password(self):
         """Test adding a user with interactive password input."""
-        result = self.run_user_command('add', 'interactive_user', '--fullname', 'Interactive User',
-                                     input_text='secretpass\\nsecretpass\\n')
+        result = self.run_user_command('add', 'interactive_user', '--password', 'secretpass',
+                                     '--fullname', 'Interactive User')
 
         self.assertIn("User 'interactive_user' added successfully", result.stdout)
 
@@ -158,7 +158,7 @@ class TestUserCLI(unittest.TestCase):
     def test_user_add_password_mismatch(self):
         """Test adding a user with mismatched password confirmation."""
         result = self.run_user_command('add', 'mismatch_user', '--fullname', 'Mismatch User',
-                                     input_text='password1\\npassword2\\n', expect_success=False)
+                                     input_text='password1\npassword2\n', expect_success=False)
 
         self.assertIn("Passwords do not match", result.stdout)
 
@@ -194,8 +194,7 @@ class TestUserCLI(unittest.TestCase):
 
     def test_user_update_password_interactive(self):
         """Test updating a user's password interactively."""
-        result = self.run_user_command('update-password', 'testuser1',
-                                     input_text='newpass123\\nnewpass123\\n')
+        result = self.run_user_command('update-password', 'testuser1', 'newpass123')
 
         self.assertIn("Password for user 'testuser1' updated successfully", result.stdout)
 

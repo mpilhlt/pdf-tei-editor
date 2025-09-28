@@ -40,7 +40,15 @@
       "Bash(git check-ignore:*)",
       "Bash(npm run test:py:*)",
       "Bash(python:*)",
-      "Bash(set PDF_TEI_EDITOR_BASE_DIR=tests\\py\\data)"
+      "Bash(set PDF_TEI_EDITOR_BASE_DIR=tests\\py\\data)",
+      "Bash(sha256sum:*)",
+      "Bash(npm run test:e2e:*)",
+      "Bash(npm run test:js:*)",
+      "Bash(npm run test:e2e:fast:*)",
+      "Bash(npm run test:e2e:backend:*)",
+      "Bash(E2E_DEBUG=true npm run test:e2e:fast -- --grep \"document-actions\")",
+      "Bash(tree:*)",
+      "Bash(npm run test:e2e:backend:fast:*)"
     ],
     "deny": []
   }

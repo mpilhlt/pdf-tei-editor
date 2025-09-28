@@ -292,7 +292,7 @@ test.describe('Authentication Workflow', () => {
     // Wait for error message
     await page.waitForTimeout(2000);
 
-    // Verify form fields are cleared after failed attempt
+    // Verify form field behavior after failed attempt
     const fieldValues = await page.evaluate(() => {
       /** @type {namedElementsTree} */
       const ui = /** @type {any} */(window).ui;
@@ -302,9 +302,9 @@ test.describe('Authentication Workflow', () => {
       };
     });
 
-    // Note: Fields should remain with values for user to retry
+    // Username should remain for user to retry, but password should be cleared for security
     expect(fieldValues.username).toBe('wrong');
-    expect(fieldValues.password).toBe('wrong');
+    expect(fieldValues.password).toBe('');
 
     // Verify dialog is still open for retry
     const dialogOpenForRetry = await page.evaluate(() => {

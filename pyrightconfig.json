@@ -1,15 +1,5 @@
 {
-    "executionEnvironments": [
-        {
-            "root": "bin",
-            "extraPaths": ["../server"]
-        },
-        {
-            "root": "server",
-            "extraPaths": [".."]
-        }
-    ],
+
     "pythonPath": ".venv/Scripts/python.exe",
-    "pythonPlatform": "Windows",
     "typeCheckingMode": "basic"
 }

@@ -129,12 +129,38 @@ export async function selectFirstDocuments(page) {
   });
   debugLog('After PDF selection:', afterPdfSelection);
 
-  // Since programmatic selection doesn't trigger proper state updates,
-  // manually enable the document action buttons for testing
-  await page.evaluate(() => {
+  // Actually load the selected documents to trigger proper state updates
+  const loadResult = await page.evaluate(async () => {
     /** @type {namedElementsTree} */
     const ui = /** @type {any} */(window).ui;
-    ui.toolbar.documentActions.createNewVersion.disabled = false;
-    ui.toolbar.documentActions.saveRevision.disabled = false;
+    const services = /** @type {any} */(window).services;
+
+    // Get the selected values
+    const pdfValue = ui.toolbar.pdf.value;
+    const xmlValue = ui.toolbar.xml.value;
+
+    console.log('[TEST DEBUG] Load attempt:', { pdfValue, xmlValue, hasServices: !!services, hasLoadFunction: !!(services?.load) });
+
+    if (pdfValue || xmlValue) {
+      // Call the load function through services
+      const loadParams = {};
+      if (pdfValue) loadParams.pdf = pdfValue;
+      if (xmlValue) loadParams.xml = xmlValue;
+
+      if (services && services.load) {
+        try {
+          await services.load(loadParams);
+          console.log('[TEST DEBUG] Load completed successfully');
+          return { success: true, loadParams };
+        } catch (error) {
+          console.log('[TEST DEBUG] Load failed:', error);
+          return { success: false, error: String(error) };
+        }
+      } else {
+        return { success: false, reason: 'services.load not available' };
+      }
+    }
+    return { success: false, reason: 'no files to load' };
   });
+  debugLog('Load result:', loadResult);
 }
