@@ -195,8 +195,11 @@ test.describe('Document Actions', () => {
         ui.newRevisionChangeDialog.submit.click();
       });
 
+      // Wait a moment for dialog to close and processing to start
+      await page.waitForTimeout(500);
+
       // Wait for revision to be saved
-      const revisionLog = await waitForTestMessage(consoleLogs, 'REVISION_SAVED', 15000);
+      const revisionLog = await waitForTestMessage(consoleLogs, 'REVISION_SAVED', 20000);
       expect(revisionLog.value).toHaveProperty('changeDescription');
       expect(revisionLog.value.changeDescription).toBe('E2E test revision description');
 

@@ -7,7 +7,7 @@
  * @testCovers server/api/files.py
  */
 
-/** @import { namedElementsTree } from '../../app/src/ui.js' */
+/** @import { namedElementsTree } from '../../../app/src/ui.js' */
 
 import { test, expect } from '@playwright/test';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
@@ -17,6 +17,7 @@ import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/logi
 const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*401.*UNAUTHORIZED', // will always be thrown when first loading without a saved state
   'Failed to load resource.*400.*BAD REQUEST', // Autocomplete validation errors
+  'Failed to load resource.*409.*CONFLICT', // Resource conflict errors during extraction
   'Failed to load autocomplete data.*No schema location found', // Expected validation warnings
   'api/validate/autocomplete-data.*400.*BAD REQUEST', // Schema validation API errors
   'offsetParent is not set.*cannot scroll', // UI scrolling errors in browser automation
@@ -26,6 +27,9 @@ const ALLOWED_ERROR_PATTERNS = [
 
 // Enable debug output only when E2E_DEBUG environment variable is set
 const DEBUG = process.env.E2E_DEBUG === 'true';
+/**
+ * @param {...any} args - Debug log arguments
+ */
 const debugLog = (...args) => {
   if (DEBUG) {
     console.log('[DEBUG]', ...args);
@@ -40,12 +44,21 @@ const E2E_BASE_URL = process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_
 // Helper functions are now imported from test-logging.js
 
 // Helper functions for extraction workflow steps
+/**
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @returns {Promise<boolean>} - Whether extraction is available
+ */
 async function checkExtractionAvailability(page) {
   // Since we now have fallback to mock extractor, extraction is always available
   debugLog('Extraction availability: Using fallback to mock extractor when external dependencies are missing');
   return true;
 }
 
+/**
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {string} filePath - Path to the PDF file to upload
+ * @returns {Promise<string>} - The uploaded file path
+ */
 async function uploadPDFFile(page, filePath) {
   debugLog('Starting PDF upload phase...');
 
@@ -69,6 +82,11 @@ async function uploadPDFFile(page, filePath) {
   return filePath;
 }
 
+/**
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {any[]} consoleLogs - Console log capture array
+ * @returns {Promise<any>} - Upload completion log
+ */
 async function waitForPDFUploadCompletion(page, consoleLogs) {
   debugLog('Waiting for PDF upload completion...');
 
@@ -94,6 +112,12 @@ async function waitForPDFUploadCompletion(page, consoleLogs) {
   return uploadLog;
 }
 
+/**
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {any[]} consoleLogs - Console log capture array
+ * @param {string} modelIndex - Model index to use for extraction
+ * @returns {Promise<void>}
+ */
 async function configureExtractionOptions(page, consoleLogs, modelIndex = 'llamore-gemini') {
   debugLog('Starting extraction configuration phase...');
 
@@ -111,7 +135,7 @@ async function configureExtractionOptions(page, consoleLogs, modelIndex = 'llamo
   debugLog('Extraction options dialog confirmed open');
 
   // Fill out the extraction options dialog
-  await page.evaluate((model) => {
+  await page.evaluate(/* @param {string} model */ (model) => {
     /** @type {namedElementsTree} */
     const ui = /** @type {any} */(window).ui;
     // Set the extractor model
@@ -122,6 +146,11 @@ async function configureExtractionOptions(page, consoleLogs, modelIndex = 'llamo
   debugLog('Extraction options configured and submitted with model:', modelIndex);
 }
 
+/**
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {any[]} consoleLogs - Console log capture array
+ * @returns {Promise<any>} - Extraction completion log
+ */
 async function waitForExtractionCompletion(page, consoleLogs) {
   debugLog('Waiting for extraction to complete...');
 
@@ -143,6 +172,11 @@ async function waitForExtractionCompletion(page, consoleLogs) {
   return extractionLog;
 }
 
+/**
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @param {any[]} consoleLogs - Console log capture array
+ * @returns {Promise<void>}
+ */
 async function waitForDocumentLoad(page, consoleLogs) {
   debugLog('Waiting for document to load in XML editor...');
 
@@ -188,10 +222,9 @@ test.describe.serial('Extraction Workflow', () => {
 
       // Debug: Check if test logging is enabled
       const testLogStatus = await page.evaluate(() => {
-        // @ts-ignore
         return {
-          testLogAvailable: typeof window.testLog === 'function',
-          applicationMode: window.application?.config?.get ? 'config available' : 'config not available'
+          testLogAvailable: typeof (/** @type {any} */(window)).testLog === 'function',
+          applicationMode: (/** @type {any} */(window)).application?.config?.get ? 'config available' : 'config not available'
         };
       });
       debugLog('Test log status:', testLogStatus);

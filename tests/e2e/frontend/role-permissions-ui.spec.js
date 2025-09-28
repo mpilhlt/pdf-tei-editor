@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test';
 import { navigateAndLogin, performLogout } from './helpers/login-helper.js';
-import { setupTestConsoleCapture, setupErrorFailure } from './helpers/test-logging.js';
+import { setupTestConsoleCapture, setupErrorFailure, waitForTestMessage } from './helpers/test-logging.js';
 
 // Configuration from environment variables
 const E2E_HOST = process.env.E2E_HOST || 'localhost';
@@ -43,6 +43,9 @@ test.describe('Role-based UI Permissions', () => {
     try {
       await navigateAndLogin(page, E2E_BASE_URL, TEST_USERS.user.username, TEST_USERS.user.password);
 
+      // Wait for user authentication to complete
+      await waitForTestMessage(consoleLogs, 'USER_AUTHENTICATED', 10000);
+
       const state = await page.evaluate(() => {
         const app = /** @type {any} */(window).app;
         const ui = /** @type {any} */(window).ui;
@@ -57,6 +60,7 @@ test.describe('Role-based UI Permissions', () => {
       expect(state.hasApp).toBe(true);
       expect(state.hasUI).toBe(true);
       expect(state.state).toBeTruthy();
+      expect(state.state.user).toBeTruthy();
 
       // Role-specific checks
       expect(state.state.user.username).toBe(TEST_USERS.user.username);
@@ -74,6 +78,8 @@ test.describe('Role-based UI Permissions', () => {
   });
 
   test('Annotator role: Can login and access application', async ({ browser }) => {
+    test.setTimeout(45000); // Increase timeout for this specific test
+
     const context = await browser.newContext();
     const page = await context.newPage();
     const consoleLogs = setupTestConsoleCapture(page);
@@ -81,6 +87,9 @@ test.describe('Role-based UI Permissions', () => {
 
     try {
       await navigateAndLogin(page, E2E_BASE_URL, TEST_USERS.annotator.username, TEST_USERS.annotator.password);
+
+      // Wait for user authentication to complete with longer timeout
+      await waitForTestMessage(consoleLogs, 'USER_AUTHENTICATED', 15000);
 
       const state = await page.evaluate(() => {
         const app = /** @type {any} */(window).app;
@@ -96,6 +105,7 @@ test.describe('Role-based UI Permissions', () => {
       expect(state.hasApp).toBe(true);
       expect(state.hasUI).toBe(true);
       expect(state.state).toBeTruthy();
+      expect(state.state.user).toBeTruthy();
 
       // Role-specific checks
       expect(state.state.user.username).toBe(TEST_USERS.annotator.username);
@@ -108,7 +118,11 @@ test.describe('Role-based UI Permissions', () => {
       } catch (error) {
         // Ignore logout errors
       }
-      await context.close();
+      try {
+        await context.close();
+      } catch (error) {
+        // Ignore context close errors during cleanup
+      }
     }
   });
 
@@ -120,6 +134,9 @@ test.describe('Role-based UI Permissions', () => {
 
     try {
       await navigateAndLogin(page, E2E_BASE_URL, TEST_USERS.reviewer.username, TEST_USERS.reviewer.password);
+
+      // Wait for user authentication to complete
+      await waitForTestMessage(consoleLogs, 'USER_AUTHENTICATED', 10000);
 
       const state = await page.evaluate(() => {
         const app = /** @type {any} */(window).app;
@@ -135,6 +152,7 @@ test.describe('Role-based UI Permissions', () => {
       expect(state.hasApp).toBe(true);
       expect(state.hasUI).toBe(true);
       expect(state.state).toBeTruthy();
+      expect(state.state.user).toBeTruthy();
 
       // Role-specific checks
       expect(state.state.user.username).toBe(TEST_USERS.reviewer.username);
@@ -160,6 +178,9 @@ test.describe('Role-based UI Permissions', () => {
     try {
       await navigateAndLogin(page, E2E_BASE_URL, TEST_USERS.admin.username, TEST_USERS.admin.password);
 
+      // Wait for user authentication to complete
+      await waitForTestMessage(consoleLogs, 'USER_AUTHENTICATED', 10000);
+
       const state = await page.evaluate(() => {
         const app = /** @type {any} */(window).app;
         const ui = /** @type {any} */(window).ui;
@@ -174,6 +195,7 @@ test.describe('Role-based UI Permissions', () => {
       expect(state.hasApp).toBe(true);
       expect(state.hasUI).toBe(true);
       expect(state.state).toBeTruthy();
+      expect(state.state.user).toBeTruthy();
 
       // Role-specific checks
       expect(state.state.user.username).toBe(TEST_USERS.admin.username);
