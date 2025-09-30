@@ -5,13 +5,17 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.116.2",
     "flask>=3.1.0",
     "llamore>=0.2.0",
     "lxml>=5.3.1",
+    "pydantic-settings>=2.10.1",
     "python-dotenv>=1.1.0",
     "python-magic>=0.4.27",
+    "python-multipart>=0.0.20",
     "requests>=2.32.3",
     "routes>=2.5.1",
+    "uvicorn[standard]>=0.36.0",
     "waitress>=3.0.2",
     "webdav4[fsspec]>=0.10.0",
     "xmlschema>=3.4.5",
