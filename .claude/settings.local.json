@@ -48,7 +48,14 @@
       "Bash(npm run test:e2e:backend:*)",
       "Bash(E2E_DEBUG=true npm run test:e2e:fast -- --grep \"document-actions\")",
       "Bash(tree:*)",
-      "Bash(npm run test:e2e:backend:fast:*)"
+      "Bash(npm run test:e2e:backend:fast:*)",
+      "Bash(npm run dev:fastapi:*)",
+      "Bash(shasum:*)",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir tests/e2e/fastapi)",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir tests/e2e/fastapi --grep \"Files List\")",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir tests/e2e/fastapi --grep \"Files Upload\")",
+      "Bash(lsof:*)",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node tests/e2e/fastapi/files-upload.test.js)"
     ],
     "deny": []
   }

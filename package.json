@@ -12,6 +12,7 @@
         "test": "npm run test:all",
         "test:all": "node tests/smart-test-runner.js --all",
         "test:changed": "node tests/smart-test-runner.js",
+        "test:fastapi:changed": "bin/test-fastapi-changed",
         "test:tap": "node tests/smart-test-runner.js --all --tap",
         "test:js": "node --test tests/js/*.test.js",
         "test:py": "uv run python -m unittest tests/py/*.py",
@@ -23,7 +24,8 @@
         "test:e2e:debug": "node tests/e2e-runner.js --playwright --debug-messages --no-rebuild",
         "test:e2e:backend": "node tests/e2e-runner.js --backend",
         "test:e2e:backend:fast": "node tests/e2e-runner.js --backend --no-rebuild",
-        "ai:gemini:flash": "gemini --model gemini-2.5-flash"
+        "ai:gemini:flash": "gemini --model gemini-2.5-flash",
+        "dev:fastapi": "uvicorn backend.main:app --reload --port 8000"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",
