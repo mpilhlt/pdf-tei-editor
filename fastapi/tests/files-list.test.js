@@ -9,7 +9,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { createTestSession } from '../helpers/test-auth.js';
+import { createTestSession } from '../backend/helpers/test-auth.js';
 
 const HOST = process.env.E2E_HOST || 'localhost';
 const PORT = process.env.E2E_PORT || '8000';

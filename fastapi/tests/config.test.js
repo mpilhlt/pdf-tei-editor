@@ -11,7 +11,7 @@ import {
   logout,
   authenticatedApiCall,
   authenticatedRequest
-} from '../helpers/test-auth.js';
+} from '../backend/helpers/test-auth.js';
 
 const E2E_BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 const API_BASE = `${E2E_BASE_URL}/api`;
