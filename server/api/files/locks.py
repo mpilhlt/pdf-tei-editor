@@ -45,14 +45,20 @@ def acquire_lock_route():
     file_path = resolve_document_identifier(file_id)
     session_id = get_session_id(request)
 
+    session_id_short = session_id[:8] if session_id else "unknown"
+    logger.debug(f"[LOCK API] Session {session_id_short}... requesting lock for file_id={file_id}, path={file_path}")
+
     # Check access control - user must have edit permissions to acquire lock
     user = get_user_by_session_id(session_id)
     if not check_file_access(file_path, user, 'edit'):
+        logger.warning(f"[LOCK API] Session {session_id_short}... DENIED due to insufficient permissions")
         raise ApiError("Access denied: You don't have permission to edit this document", status_code=403)
 
     if acquire_lock(file_path, session_id):
+        logger.info(f"[LOCK API] Session {session_id_short}... successfully acquired lock for {file_path}")
         return jsonify("OK")
     # could not acquire lock
+    logger.warning(f"[LOCK API] Session {session_id_short}... FAILED to acquire lock (423) for {file_path}")
     raise ApiError(f'Could not acquire lock for {file_path}', 423)
 
 @bp.route("/release_lock", methods=["POST"])
