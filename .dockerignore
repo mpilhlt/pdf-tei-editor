@@ -10,6 +10,8 @@ __pycache__
 .Python
 pip-log.txt
 pip-delete-this-directory.txt
+.venv
+venv
 
 # Node.js
 node_modules

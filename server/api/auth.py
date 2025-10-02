@@ -47,6 +47,12 @@ def logout():
     """Logs a user out by deleting their session."""
     session_id = get_session_id(request)
     if session_id:
+        # Close SSE connection if exists
+        if hasattr(current_app, 'message_queues') and session_id in current_app.message_queues:
+            # Send end signal to close SSE connection
+            current_app.message_queues[session_id].put((None, None))
+            current_app.logger.debug(f"Sent SSE close signal for session {session_id[:8]}...")
+
         auth.delete_user_session(session_id)
     return jsonify(status="logged_out"), 200
 
