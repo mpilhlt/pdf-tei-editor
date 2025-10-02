@@ -2,22 +2,33 @@
 
 The application is being migrated from the Flask backend to a FastAPI backend.
 
+The following plan had been partially implemented in a dev branch, which has been merged into the current branch's "fastapi" folder. The ticked-off items below show you how much has been achieved so far. 
+
+However, the plan needs to be revised, as the main branch has diverged from the dev branch to a degree that this implementation cannot be used any more and we need to start from scratch. You can look at the converted files in /fastapi/api and /fastapi/lib and reuse what makes sense. Note that the previous implementation used the "backend" folder instead of the "fastapi" folder, and might still have references to this folder in the code or this plan. The "fastapi" folder should be self-contained and have no hardcoded references.
+
+Start from the beginning and check what needs to be rewritten. After analysis, rewrite this plan accordingly.
+
 ## Goals
 
 - **API Equivalence**: Achieve a 1:1 functional equivalent of the Flask API.
 - **Robust Contracts**: Generate an OpenAPI specification from the server routes to enforce strong contracts between server and client.
 - **API Discoverability**: Provide clear, auto-generated API documentation.
-- **Simplified Testing**: Enable comprehensive, automated testing of the backend API.
+- **Simplified Testing**: Enable comprehensive, automated testing of the backend API based on the API specification
 
 ## Migration Strategy
 
 The migration will be performed in a self-contained `backend/` directory, ensuring complete isolation from the existing Flask application during development.
 
-1. **Isolated Development**: The FastAPI application will be built from scratch in the `backend/` directory. It will not be used by the client until the migration is complete and API equivalence is confirmed. This removes the need for session sharing or a reverse proxy during development.
-2. **Self-Contained Logic, Unified Environment**: All FastAPI-related logic and data directories will reside within `backend/`. However, Python dependencies for both Flask and FastAPI will be managed in the single root `pyproject.toml` to maintain a unified environment using `uv`. Configuration will be managed via a `.env.fastapi` file to ensure no conflicts with the main application.
+1. **Isolated Development**: The FastAPI application will be built from scratch in the `fastapi/` directory. It will not be used by the client until the migration is complete and API equivalence is confirmed. This removes the need for session sharing or a reverse proxy during development.
+2. **Self-Contained Logic, Unified Environment**: All FastAPI-related logic and data directories will reside within `fastapi/`. However, Python dependencies for both Flask and FastAPI will be managed in the single root `pyproject.toml` to maintain a unified environment using `uv`. Configuration will be managed via a `.env.fastapi` file to ensure no conflicts with the main application.
 3. **Local Testing**: To accelerate development cycles, the FastAPI server will be run and tested directly on the host machine, bypassing Docker for the development phase. E2E tests will be configured to run against this local server instance.
-4. **Core Library First**: Before migrating API endpoints, a framework-agnostic core library will be built in `backend/lib/` by porting and refactoring shared business logic from `server/lib/`. This avoids code duplication and separates logic from the web framework.
+4. **Core Library First**: Before migrating API endpoints, a framework-agnostic core library will be built in `fastapi/lib/` by porting and refactoring shared business logic from `server/lib/`. This avoids code duplication and separates logic from the web framework.
 5. **Final Switchover**: Once the FastAPI backend is complete and has passed all tests, the frontend will be switched to use a new, generated API client. The old Flask server will then be decommissioned.
+
+## Additional migration considerations
+
+- The new backend API should be implicitly versioned. We create a API that is backward-compatible with the flask API, but should be forward-compatible to API versioning. I.e. /api/files/list should be mapped to `/api/v1/files/list` and a allow a future "/api/v2/files/list" to co-exist.
+- the logging mechanism should allow to filter logging messages by category, so implement that and convert logging messages to have an additional category parameter which is set on the module level, and convert existing messages which have manual "[CATEGORY]" string prefixes.
 
 ## Detailed Implementation Steps
 
@@ -67,7 +78,7 @@ The following modules can be migrated in parallel. For each, the process is:
 > - Error handling works properly
 > - Authentication flows function correctly
 >
-> Use the command: `E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir tests/e2e/fastapi`
+> Use the command: `E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir fastapi/tests`
 
 - [ ] **File Management (`files/`)**
   - [x] `list.py`
