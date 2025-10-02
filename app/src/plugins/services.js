@@ -280,44 +280,48 @@ async function load({ xml, pdf }) {
 
   // XML
   if (xml) {
-    // Check for lock before loading
+    // Always check for lock before loading, even if file is already in state
+    // (e.g., when opening same URL in new tab with sessionStorage containing stale state)
+    const isNewFile = currentState.xml !== xml;
 
-    if (currentState.xml !== xml) {
-      try {
-        ui.spinner.show('Loading file, please wait...')
-        if (currentState.xml && !currentState.editorReadOnly) {
-          await client.releaseLock(currentState.xml)
-        }
-        // Check access control before attempting to acquire lock
-        const canEdit = accessControl.checkCanEditFile(xml)
-        if (!canEdit) {
-          logger.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
-          notify(`You don't have permission to edit this document, loading in read-only mode`)
-          file_is_locked = true
-        } else {
-          try {
-            await client.acquireLock(xml);
-            logger.debug(`Acquired lock for file ${xml}`);
-          } catch (error) {
-            if (error instanceof client.LockedError) {
-              logger.debug(`File ${xml} is locked, loading in read-only mode`);
-              notify(`File is being edited by another user, loading in read-only mode`)
-              file_is_locked = true
-            } else {
-              const errorMessage = String(error);
-              dialog.error(errorMessage)
-              throw error
-            }
+    try {
+      ui.spinner.show('Loading file, please wait...')
+
+      // Release previous lock if we're switching files
+      if (isNewFile && currentState.xml && !currentState.editorReadOnly) {
+        await client.releaseLock(currentState.xml)
+      }
+
+      // Check access control before attempting to acquire lock
+      const canEdit = accessControl.checkCanEditFile(xml)
+      if (!canEdit) {
+        logger.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
+        notify(`You don't have permission to edit this document, loading in read-only mode`)
+        file_is_locked = true
+      } else {
+        try {
+          await client.acquireLock(xml);
+          logger.debug(`Acquired lock for file ${xml}`);
+        } catch (error) {
+          if (error instanceof client.LockedError) {
+            logger.debug(`File ${xml} is locked, loading in read-only mode`);
+            notify(`File is being edited by another user, loading in read-only mode`)
+            file_is_locked = true
+          } else {
+            const errorMessage = String(error);
+            dialog.error(errorMessage)
+            throw error
           }
         }
-      } finally {
-        ui.spinner.hide()
       }
+    } finally {
+      ui.spinner.hide()
     }
 
+    // Always load XML content and update state
     await removeMergeView()
     await app.updateState({ xml: null, diff: null, editorReadOnly: file_is_locked })
-    logger.info("Loading XML: " + xml)
+    logger.info(`Loading XML: ${xml} (read-only: ${file_is_locked})`)
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`
     promises.push(xmlEditor.loadXml(xmlUrl))

@@ -6,7 +6,7 @@ from flask import current_app
 from .hash_utils import resolve_path_to_hash
 from .server_utils import ApiError
 
-LOCK_TIMEOUT_SECONDS = 30
+LOCK_TIMEOUT_SECONDS = 90
 
 
 def get_db_path():

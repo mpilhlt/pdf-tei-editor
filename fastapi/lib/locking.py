@@ -9,7 +9,7 @@ from webdav4.client import Client, ResourceAlreadyExists, ResourceNotFound
 # a custom exception class is not needed since ApiError is defined in server_utils
 from .server_utils import ApiError
 
-LOCK_TIMEOUT_SECONDS = 30
+LOCK_TIMEOUT_SECONDS = 90
 
 class LockStorage(ABC):
     @abstractmethod

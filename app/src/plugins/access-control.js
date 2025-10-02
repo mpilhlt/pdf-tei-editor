@@ -168,21 +168,28 @@ async function update(state) {
   
   // Check if document should be read-only based on permissions
   const shouldBeReadOnly = !canEditDocument(state.user)
-  if (shouldBeReadOnly !== state.editorReadOnly && !isUpdatingState) {
-    // Update application state to reflect access control
+
+  // Only apply access control restrictions, never relax them
+  // If editor is already read-only (e.g., due to file locking), don't override it
+  if (shouldBeReadOnly && !state.editorReadOnly && !isUpdatingState) {
+    // Document permissions require read-only - enforce it
     logger.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`)
     // Note: Defer state update to avoid circular update during reactive state cycle
     isUpdatingState = true
     setTimeout(async () => {
       try {
         // Only update if the state still needs changing (avoid race conditions)
-        if (pluginState && pluginState.editorReadOnly !== shouldBeReadOnly) {
-          await app.updateState({ editorReadOnly: shouldBeReadOnly })
+        if (pluginState && !pluginState.editorReadOnly) {
+          await app.updateState({ editorReadOnly: true })
         }
       } finally {
         isUpdatingState = false
       }
     }, 0);
+  } else if (!shouldBeReadOnly && state.editorReadOnly) {
+    // Document permissions allow editing, but editor is read-only
+    // This might be due to file locking or other reasons - don't override
+    logger.debug(`Editor is read-only despite document being editable (likely due to file lock)`)
   }
   
   // Update read-only widget context if xmleditor shows read-only status due to access control
