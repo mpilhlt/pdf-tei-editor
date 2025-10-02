@@ -43,9 +43,18 @@ const TEI_NS = 'http://www.tei-c.org/ns/1.0'
  */
 
 /**
- * Access control navigation properties  
+ * Access control navigation properties
  * @typedef {object} accessControlPart
  * @property {UIPart<StatusBar, accessControlStatusbarPart>} statusbar - The access control statusbar widgets
+ */
+
+/**
+ * Document permissions object
+ * @typedef {object} DocumentPermissions
+ * @property {string} visibility - Document visibility ('public' or 'private')
+ * @property {string} editability - Document editability ('editable' or 'protected')
+ * @property {string|null} owner - Document owner username (null if no owner)
+ * @property {boolean} can_modify - Whether current user can modify permissions
  */
 
 // Status widgets for access control
@@ -56,11 +65,11 @@ let statusDropdownWidget;
 let permissionInfoWidget;
 
 
-// Current document permissions cache  
-/** @type {{visibility: string, editability: string, owner: string|null, can_modify: boolean}} */
+// Current document permissions cache
+/** @type {DocumentPermissions} */
 let currentPermissions = {
     visibility: 'public',
-    editability: 'editable', 
+    editability: 'editable',
     owner: null,
     can_modify: false
 }
@@ -84,6 +93,12 @@ const plugin = {
 
 /**
  * Access control API
+ * @typedef {object} AccessControlAPI
+ * @property {() => DocumentPermissions} getDocumentPermissions - Gets current document permissions
+ * @property {(user: UserData|null) => boolean} canEditDocument - Checks if user can edit document
+ * @property {(user: UserData|null) => boolean} canViewDocument - Checks if user can view document
+ * @property {(visibility: string, editability: string, owner?: string, description?: string) => Promise<DocumentPermissions>} updateDocumentStatus - Updates document status
+ * @property {(fileId: string) => boolean} checkCanEditFile - Checks if user can edit file
  */
 const api = {
   getDocumentPermissions: () => currentPermissions,
@@ -319,7 +334,7 @@ async function computeDocumentPermissions() {
 /**
  * Parses permissions from XML DOM tree
  * @param {Document} xmlTree
- * @returns {{visibility: string, editability: string, owner: string|null}} Permissions object
+ * @returns {DocumentPermissions>} Permissions object
  */
 function parsePermissionsFromXmlTree(xmlTree) {
   try {
@@ -329,7 +344,8 @@ function parsePermissionsFromXmlTree(xmlTree) {
       return {
         visibility: 'public',
         editability: 'editable',
-        owner: null
+        owner: null,
+        can_modify: true
       }
     }
     
@@ -509,7 +525,8 @@ async function updateDocumentStatus(visibility, editability, owner, description)
     return {
       visibility,
       editability,
-      owner: currentPermissions.owner
+      owner: currentPermissions.owner,
+      can_modify: true
     }
   } catch (error) {
     logger.error(`Failed to update document permissions: ${String(error)}`)

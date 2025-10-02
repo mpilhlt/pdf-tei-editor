@@ -58,6 +58,22 @@ await registerTemplate('file-selection', 'file-selection.html');
 /** @type {ApplicationState} */
 let currentState;
 
+//
+// Helper functions
+//
+
+/**
+ * Creates a label for a document with optional lock icon
+ * @param {string} label - The document label
+ * @param {boolean} [isLocked] - Whether the document is locked
+ * @returns {string} HTML string with label and optional lock icon
+ */
+function createDocumentLabel(label, isLocked) {
+  return isLocked === true
+    ? `${label}<sl-icon name="file-lock2" slot="suffix"></sl-icon>`
+    : label;
+}
+
 // API
 
 /**
@@ -449,14 +465,16 @@ async function populateSelectboxes(state) {
               // @ts-ignore
               option.size = "small"
               option.value = gold.hash;  // Use document identifier
-              option.textContent = gold.label;
+              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
               ui.toolbar.xml.appendChild(option);
-              // diff 
+              // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = gold.hash;  // Use document identifier
-              option.textContent = gold.label;
+              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
+              // @ts-ignore
+              option.disabled = gold.is_locked;
               ui.toolbar.diff.appendChild(option)
             });
 
@@ -479,15 +497,14 @@ async function populateSelectboxes(state) {
               // @ts-ignore
               option.size = "small"
               option.value = version.hash;  // Use document identifier
-              option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-              //option.disabled = version.is_locked;
+              option.innerHTML = createDocumentLabel(version.label, version.is_locked);
               ui.toolbar.xml.appendChild(option);
-              // diff 
+              // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = version.hash;  // Use document identifier
-              option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
+              option.innerHTML = createDocumentLabel(version.label, version.is_locked);
               // @ts-ignore
               option.disabled = version.is_locked;
               ui.toolbar.diff.appendChild(option)

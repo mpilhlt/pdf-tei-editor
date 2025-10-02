@@ -782,7 +782,7 @@ export class XMLEditor extends EventEmitter {
   /**
    * Returns the DOM nodes that matches the given XPath expression.
    * @param {string} xpath 
-   * @returns {Array<Node>} An array of matching node snapshots.
+   * @returns {Element[]} An array of matching node snapshots.
    * @throws {Error} If the XML tree is not loaded
    */
   getDomNodesByXpath(xpath) {

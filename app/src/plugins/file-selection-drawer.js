@@ -36,6 +36,18 @@ import {
 } from '../modules/file-data-utils.js'
 
 /**
+ * Creates a label for a document with optional lock icon
+ * @param {string} label - The document label
+ * @param {boolean} [isLocked] - Whether the document is locked
+ * @returns {string} HTML string with label and optional lock icon
+ */
+function createDocumentLabel(label, isLocked) {
+  return isLocked === true
+    ? `<span>${label}</span> <sl-icon name="file-lock2"></sl-icon>`
+    : `<span>${label}</span>`;
+}
+
+/**
  * plugin API
  */
 const api = {
@@ -350,11 +362,7 @@ async function populateFileTree(state) {
           goldItem.dataset.hash = gold.hash;
           goldItem.dataset.pdfHash = file.pdf.hash;
           goldItem.dataset.collection = file.collection;
-          if (gold.is_locked) {
-            goldItem.innerHTML = `🔒 <span>${gold.label}</span>`;
-          } else {
-            goldItem.innerHTML = `<span>${gold.label}</span>`;
-          }          
+          goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
           goldSection.appendChild(goldItem);
         });
         pdfItem.appendChild(goldSection);
@@ -375,11 +383,7 @@ async function populateFileTree(state) {
           versionItem.dataset.hash = version.hash;
           versionItem.dataset.pdfHash = file.pdf.hash;
           versionItem.dataset.collection = file.collection;
-          if (version.is_locked) {
-            versionItem.innerHTML = `🔒 <span>${version.label}</span>`;
-          } else {
-            versionItem.innerHTML = `<span>${version.label}</span>`;
-          }
+          versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked);
           versionsSection.appendChild(versionItem);
         });
         pdfItem.appendChild(versionsSection);
