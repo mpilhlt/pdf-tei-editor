@@ -5,8 +5,8 @@
  * Links to external resources are opened in a new browser tab.
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import MarkdownIt from 'markdown-it'
  */
 import ui, { updateUi } from '../ui.js'
@@ -52,6 +52,7 @@ export default plugin
  * @property {SlButton} forwardBtn
  * @property {SlButton} editGitHubBtn
  * @property {SlButton} closeBtn
+ * @property {HTMLSpanElement} versionInfo
  */
 
 // Register templates
@@ -72,6 +73,26 @@ let md;
 const localDocsBasePath = "../../docs"
 const remoteDocsBasePath = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/docs"
 const githubEditBasePath = "https://github.com/mpilhlt/pdf-tei-editor/edit/main/docs"
+
+/**
+ * Loads the application version from version.js
+ * @returns {Promise<string|null>} The version string or null if unavailable
+ */
+async function loadVersion() {
+  try {
+    const response = await fetch('version.js')
+    if (!response.ok) {
+      return null
+    }
+    const text = await response.text()
+    // Parse the version from: export const version = '0.1.0';
+    const match = text.match(/export\s+const\s+version\s*=\s*['"]([^'"]+)['"]/)
+    return match ? match[1] : null
+  } catch (error) {
+    logger.debug('Could not load version.js:', error)
+    return null
+  }
+}
 
 /**
  * Checks if online connectivity is available with a short timeout
@@ -138,10 +159,19 @@ async function install(state) {
   // add About button to login dialog footer (left side)
   const aboutButton = createSingleFromTemplate('about-button');
   aboutButton.addEventListener('click', showHelpFromLoginDialog)
-  
+
   // Insert the About button after the Login button
   ui.loginDialog.insertAdjacentElement("beforeend", aboutButton)
   updateUi()
+
+  // Load and inject version information
+  loadVersion().then(version => {
+    if (version) {
+      ui.infoDrawer.versionInfo.textContent = `v${version}`
+    }
+  }).catch(error => {
+    logger.debug('Failed to load version:', error)
+  })
 
   // add a button to the command bar to show dialog
   ui.toolbar.add(button, 1) // Low priority for info button

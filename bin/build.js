@@ -12,6 +12,7 @@
  *   - importmap: Update the importmap
  *   - icons: Compile the app icons
  *   - templates: Bundle templates
+ *   - version: Generate version.js from package.json
  *   - bundle: Bundle application with Rollup
  */
 
@@ -34,7 +35,7 @@ function runCommand(command, description) {
 
 // Parse command line arguments
 const args = process.argv.slice(2);
-let stepsToRun = new Set(['importmap', 'icons', 'templates', 'bundle']);
+let stepsToRun = new Set(['importmap', 'icons', 'templates', 'version', 'bundle']);
 let stepsToSkip = new Set();
 
 args.forEach(arg => {
@@ -61,6 +62,7 @@ const buildSteps = {
   importmap: () => runCommand('node bin/generate-importmap.js', 'Updating the importmap'),
   icons: () => runCommand('uv run python bin/compile-sl-icons.py', 'Compiling the app icons'),
   templates: () => runCommand('node bin/bundle-templates.js', 'Bundling templates'),
+  version: () => runCommand('node bin/generate-version.js', 'Generating version file'),
   bundle: () => {
     const rollupPath = path.join('node_modules', '.bin', 'rollup');
     runCommand(`"${rollupPath}" -c rollup.config.js`, 'Bundling application');
@@ -68,7 +70,7 @@ const buildSteps = {
 };
 
 // Execute selected steps in order
-const stepOrder = ['importmap', 'icons', 'templates', 'bundle'];
+const stepOrder = ['importmap', 'icons', 'templates', 'version', 'bundle'];
 stepOrder.forEach(step => {
   if (stepsToRun.has(step) && buildSteps[step]) {
     buildSteps[step]();

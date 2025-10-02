@@ -1,8 +1,12 @@
 {
+    "name": "pdf-tei-editor",
+    "version": "0.5.0",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
         "postinstall": "uv run python bin/download-pdfjs && npm run build",
+        "version-patch": "npm version patch -m 'Release v%s'",
+        "version-minor": "npm version minor -m 'Release v%s'",
         "start": "uv run python bin/start-dev",
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",

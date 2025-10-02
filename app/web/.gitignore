@@ -1,0 +1,5 @@
+# Build artifacts
+assets/
+app.js
+templates.json
+version.js

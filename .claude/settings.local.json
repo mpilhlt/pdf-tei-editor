@@ -56,7 +56,8 @@
       "Bash(E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir tests/e2e/fastapi --grep \"Files Upload\")",
       "Bash(lsof:*)",
       "Bash(E2E_BASE_URL=http://localhost:8000 node tests/e2e/fastapi/files-upload.test.js)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": []
   }
