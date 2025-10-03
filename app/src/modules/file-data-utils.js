@@ -39,14 +39,16 @@
 
 
 /**
- * @typedef {BaseFileData & {
- *   is_locked?: boolean,
- *   label: string,
- *   last_status: string,
- *   last_update: string,
- *   metadata: FileMetadata,
- *   variant_id?: string
- * }} TeiFileData - TEI file with full metadata
+ * TEI file with full metadata
+ * @typedef {Object} TeiFileData
+ * @property {boolean} [is_locked] - Whether the file is locked for editing
+ * @property {string} label - Display label for the file
+ * @property {string} last_status - Most recent status of the file
+ * @property {string} last_update - Timestamp of last update
+ * @property {string} [last_updated_by] - User who last updated the file
+ * @property {FileMetadata} metadata - File metadata object
+ * @property {string} [variant_id] - Optional variant identifier
+ * @property {string} [version_name] - Optional version name
  */
 
 /**

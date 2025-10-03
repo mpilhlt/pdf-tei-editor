@@ -12,6 +12,8 @@ from server.lib.access_control import DocumentAccessFilter
 logger = logging.getLogger(__name__)
 bp = Blueprint("files_list", __name__, url_prefix="/api/files")
 
+VERBOSE = False
+
 @bp.route("/list", methods=["GET"])
 @handle_api_errors
 #@session_required
@@ -27,8 +29,9 @@ def file_list():
     active_locks = get_all_active_locks()
     session_id = get_session_id(request)
 
-    logger.debug(f"Active locks: {active_locks}")
-    logger.debug(f"Current session: {session_id}")
+    if VERBOSE: 
+        logger.debug(f"Active locks: {active_locks}")
+        logger.debug(f"Current session: {session_id}")
 
     for data in files_data:
         # Mark locked versions
@@ -36,7 +39,7 @@ def file_list():
             for version in data["versions"]:
                 is_locked = version['path'] in active_locks and active_locks.get(version['path']) != session_id
                 version['is_locked'] = is_locked
-                if is_locked:
+                if VERBOSE and is_locked:
                     logger.debug(f"Marking version as locked: {version['path']} (locked by {active_locks.get(version['path'])})")
 
         # Mark locked gold files
@@ -44,7 +47,7 @@ def file_list():
             for gold in data["gold"]:
                 is_locked = gold['path'] in active_locks and active_locks.get(gold['path']) != session_id
                 gold['is_locked'] = is_locked
-                if is_locked:
+                if VERBOSE and is_locked:
                     logger.debug(f"Marking gold as locked: {gold['path']} (locked by {active_locks.get(gold['path'])})")
     
     # Apply variant filtering if specified

@@ -16,8 +16,9 @@ import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
-import { getDocumentTitle } from '../modules/file-data-utils.js'
+import { getDocumentTitle, getFileDataByHash } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
+import { isGoldFile } from '../modules/acl-utils.js'
 
 //
 // UI
@@ -57,14 +58,22 @@ let currentState;
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
 let titleWidget;
+
+/** @type {StatusText} */
+let lastUpdatedWidget;
+
 /** @type {StatusText} */
 let readOnlyStatusWidget;
+
 /** @type {StatusText} */
 let cursorPositionWidget;
+
 /** @type {StatusText} */
 let indentationStatusWidget;
+
 /** @type {StatusText} */
 let teiHeaderToggleWidget;
+
 /** @type {StatusSeparator} */
 let statusSeparator;
 
@@ -93,7 +102,7 @@ export default plugin
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // Widget for the headerbar
+  // Widgets for the headerbar
   titleWidget = PanelUtils.createText({
     text: '',
     // <sl-icon name="file-earmark-text"></sl-icon>
@@ -103,8 +112,17 @@ async function install(state) {
   })
   titleWidget.classList.add('title-widget')
 
-  // Widgets for the statusbar
+  lastUpdatedWidget = PanelUtils.createText({
+    text: '',
+    variant: 'neutral',
+    name: 'lastUpdatedWidget'
+  })
+  lastUpdatedWidget.classList.add('title-widget')
 
+  ui.xmlEditor.headerbar.add(titleWidget, 'left', 1)
+  ui.xmlEditor.headerbar.add(lastUpdatedWidget, 'right', 1)
+
+  // Widgets for the statusbar
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
     // <sl-icon name="lock-fill"></sl-icon>
@@ -139,9 +157,6 @@ async function install(state) {
   statusSeparator = PanelUtils.createSeparator({
     variant: 'dotted'
   })
-
-  // Add title widget to headerbar
-  ui.xmlEditor.headerbar.add(titleWidget, 'left', 1)
 
   // Add widgets to right side of statusbar (higher priority = more to the right)
   ui.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1)  // leftmost - indent to left of position  
@@ -307,20 +322,21 @@ async function update(state) {
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
   // Update title widget with document title
-  if (titleWidget && state.xml) {
-    try {
-      const title = getDocumentTitle(state.xml);
-      titleWidget.text = title || 'XML Document';
-      titleWidget.style.display = 'inline-flex';
-    } catch (error) {
-      // ignore error
-      //logger.warn("Could not get document title: "+ String(error));
-      titleWidget.text = 'XML Document';
-      titleWidget.style.display = 'inline-flex';
-    }
-  } else if (titleWidget) {
+  const fileData = getFileDataByHash(state.xml)
+  if (fileData?.item) {
+    const versionType = isGoldFile(state.xml) ? "Gold" : "Version"
+    const versionName = fileData.item.version_name || fileData.item.label || '';
+    titleWidget.text = `${versionType}: ${versionName}`
+  } else {
     titleWidget.text = '';
-    titleWidget.style.display = 'none';
+  }
+  if (fileData?.item && fileData.item.last_update && fileData.item.last_updated_by) {
+    const updateDate = new Date(fileData.item.last_update).toLocaleDateString()
+    const updateTime = new Date(fileData.item.last_update).toLocaleTimeString()
+    const lastUpdatedBy = fileData.item.last_updated_by?.replace("#", '')
+    lastUpdatedWidget.text = `Last revision: ${updateDate}, ${updateTime} by ${lastUpdatedBy}` 
+  } else {
+    lastUpdatedWidget.text = ''
   }
 
   if (!state.xml) {

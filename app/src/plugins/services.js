@@ -777,8 +777,9 @@ async function saveRevision(state) {
     const user = authentication.getUser()
     if (user) {
       const userData = /** @type {any} */ (user);
-      revDlg.persId.value = revDlg.persId.value || userData.username
-      revDlg.persName.value = revDlg.persName.value || userData.fullname
+      revDlg.persId.disabled = revDlg.persName.disabled = true
+      revDlg.persId.value = userData.username
+      revDlg.persName.value = userData.fullname
     }
     revDlg.show()
     await new Promise((resolve, reject) => {

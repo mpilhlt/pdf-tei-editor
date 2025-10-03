@@ -11,6 +11,7 @@ from glob import glob
 from flask import current_app
 from datetime import datetime
 from lxml import etree
+from typing import cast
 
 from server.lib.server_utils import get_data_file_path
 from server.lib.cache_manager import mark_cache_clean
@@ -43,7 +44,7 @@ def get_tei_metadata(file_path):
     
     # Extract variant-id from extractor application metadata
     variant_id = None
-    extractor_apps = root.xpath('.//tei:application[@type="extractor"]', namespaces=ns)
+    extractor_apps = cast(list, root.xpath('.//tei:application[@type="extractor"]', namespaces=ns))
     for app in extractor_apps:
         variant_label = app.find('./tei:label[@type="variant-id"]', ns)
         if variant_label is not None:
@@ -70,7 +71,7 @@ def get_tei_metadata(file_path):
         'status_values': []
     }
     
-    change_elements = root.xpath('.//tei:revisionDesc/tei:change[@when]', namespaces=ns)
+    change_elements = cast(list, root.xpath('.//tei:revisionDesc/tei:change[@when]', namespaces=ns))
     if change_elements:
         # Get the most recent change (last in document order)
         last_change = change_elements[-1]
@@ -140,9 +141,9 @@ def get_version_name(file_path):
     root = tree.getroot()
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
     
-    edition_stmts = root.xpath("//tei:editionStmt", namespaces=ns)
+    edition_stmts = cast(list, root.xpath("//tei:editionStmt", namespaces=ns))
     if edition_stmts:
-        version_title_element = edition_stmts[-1].xpath("./tei:edition/tei:title", namespaces=ns)
+        version_title_element = cast(list, edition_stmts[-1].xpath("./tei:edition/tei:title", namespaces=ns))
         if version_title_element:
             return version_title_element[0].text
    
@@ -467,8 +468,6 @@ def _build_file_list(file_id_data):
         if gold_variants:
             file_dict['gold'] = gold_variants
             
-            
-        
         # Add top-level metadata from main XML file
         _add_top_level_metadata(file_dict)
         
@@ -515,7 +514,8 @@ def _build_entry_with_metadata(file_info, path_from_root, file_id=None, format_l
     
     # Use version name if available
     if version_name:
-        entry['label'] = version_name
+        entry['version_name'] = version_name
+        entry['label'] = version_name # default
     
     # Add TEI metadata
     if tei_metadata:
@@ -565,7 +565,7 @@ def _build_gold_variants_array(file_id, file_type_data):
             continue
         
         # Build gold entry using shared function (same label handling as versions)
-        gold_entry = _build_entry_with_metadata(file_info, path_from_root, file_id, format_label=True, is_version=False)
+        gold_entry = _build_entry_with_metadata(file_info, path_from_root, file_id, format_label=False, is_version=False)
         
         gold_variants.append(gold_entry)
     
