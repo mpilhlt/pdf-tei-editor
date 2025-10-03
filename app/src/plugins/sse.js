@@ -64,22 +64,34 @@ const api = {
 const plugin = {
   name: "sse",
   install,
+  ready,
   state: {
     update
   }
 }
 
+/**
+ * @type {ApplicationState}
+ */
+let currentState;
+
 /** @type {EventSource | null} */
 let eventSource = null;
+
 /** @type {string | null} */
 let cachedSessionId = null;
+
 /** @type {Record<string, ((event: MessageEvent) => void)[]>} */
 let queuedListeners = {};
+
 /** @type {ReturnType<typeof setTimeout> | null} */
 let reconnectTimeout = null;
+
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
+
+let appStarted = false; // Track if app startup is complete
 
 export { api, plugin }
 export default plugin
@@ -88,15 +100,15 @@ export default plugin
  * @param {ApplicationState} state
  */
 async function install(state){
-  // Unused parameter
-  void state;
+  currentState = state
   logger.debug(`Installing plugin "${plugin.name}"`)
 }
 
 /**
- * @param {ApplicationState} state 
+ * @param {ApplicationState} state
  */
 async function update(state) {
+  currentState = state;
   const { user, sessionId } = state;
 
   // Close existing connection if the session ID has changed or user logged out
@@ -106,8 +118,21 @@ async function update(state) {
   }
 
   // Open a new connection if user is logged in and there's no active connection
-  if (user && sessionId && !eventSource) {
+  // But only after app startup is complete (appStarted flag set by ready())
+  if (user && sessionId && !eventSource && appStarted) {
     establishConnection(sessionId);
+  }
+}
+
+/**
+ * Called when app startup is complete
+ */
+async function ready() {
+  appStarted = true;
+  // If user is already authenticated, establish connection now
+  if (!eventSource && currentState.sessionId) {
+    logger.debug('App ready, SSE is connecting...');
+    establishConnection(currentState.sessionId);
   }
 }
 

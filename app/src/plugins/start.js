@@ -10,7 +10,7 @@
  */
 import ui from '../ui.js'
 import {
-  endpoints as ep, app, logger, services, dialog, validation, floatingPanel, xmlEditor,
+  endpoints as ep, app, logger, services, dialog, validation, xmlEditor,
   config, authentication, heartbeat, sync, testLog
 } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
@@ -92,8 +92,8 @@ async function start() {
 
     ui.spinner.show('Loading documents, please wait...')
 
-    // update the file data
-    await app.invokePluginEndpoint(ep.filedata.reload, {refresh:true})
+    // update the file data (use cache on startup, only refresh on explicit user action)
+    await app.invokePluginEndpoint(ep.filedata.reload, {refresh:false})
 
     // disable regular validation so that we have more control over it
     validation.configure({ mode: "off" })
@@ -170,6 +170,9 @@ async function start() {
       xml: currentState.xml,
       diff: currentState.diff
     })
+
+    // Notify all plugins that app startup is complete
+    await app.invokePluginEndpoint(ep.ready)
 
   } catch (error) {
     ui.spinner.hide();

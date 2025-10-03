@@ -473,8 +473,6 @@ async function populateSelectboxes(state) {
               option.size = "small"
               option.value = gold.hash;  // Use document identifier
               option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
-              // @ts-ignore
-              option.disabled = gold.is_locked;
               ui.toolbar.diff.appendChild(option)
             });
 
@@ -505,8 +503,6 @@ async function populateSelectboxes(state) {
               option.size = "small"
               option.value = version.hash;  // Use document identifier
               option.innerHTML = createDocumentLabel(version.label, version.is_locked);
-              // @ts-ignore
-              option.disabled = version.is_locked;
               ui.toolbar.diff.appendChild(option)
             });
           }

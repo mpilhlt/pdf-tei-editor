@@ -15,6 +15,14 @@ const endpoints = {
   start: "start",
 
   /**
+   * Invoked when the application startup is complete and ready for user interaction.
+   * This fires after start() has finished, allowing plugins to defer non-critical
+   * initialization that would otherwise block the initial page load.
+   * Function signature: () => void
+   */
+  ready: "ready",
+
+  /**
    * Invoked when the application is shutting down (beforeunload).
    * Function signature: () => void
    */
