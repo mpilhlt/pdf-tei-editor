@@ -98,15 +98,15 @@ async function install(state) {
   
   // Add autosearch switch to PDF viewer statusbar
   const statusBar = ui.pdfViewer.statusbar
-  const autoSearchSwitch = PanelUtils.createSwitch({
+  const autoSearchSwitchWidget = PanelUtils.createSwitch({
     text: 'Autosearch',
     helpText: 'off',
     checked: false,
     name: 'searchSwitch'
   })
   
-  autoSearchSwitch.addEventListener('widget-change', onAutoSearchSwitchChange)
-  statusBar.add(autoSearchSwitch, 'left', 10)
+  autoSearchSwitchWidget.addEventListener('widget-change', onAutoSearchSwitchChange)
+  statusBar.add(autoSearchSwitchWidget, 'left', 10)
   
   // Update UI to register named elements
   updateUi()

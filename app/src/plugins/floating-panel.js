@@ -1,11 +1,13 @@
 /** 
  * @import { ApplicationState } from '../state.js'
  * @import { UIPart } from '../ui.js'
+ * @import { UserData } from './authentication.js'
  */
 import { updateState, client, logger, services, dialog, xmlEditor } from '../app.js'
 import { $$ } from '../modules/browser-utils.js'
 import { parseXPath } from '../modules/utils.js'
 import { registerTemplate, createFromTemplate, updateUi } from '../ui.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import ui from '../ui.js'
 
 /**
@@ -21,7 +23,7 @@ const api = {
  */
 const plugin = {
   name: "floating-panel",
-  deps: ['config'],
+  deps: ['config', 'pdfviewer'],
   install,
   state: { update }
 }
@@ -62,12 +64,16 @@ const floatingPanelControls = createFromTemplate('floating-panel')
  * @property {HTMLButtonElement} diffChangeAll
  */
 
-
 const pluginId = "floating-panel"
 
-let currentVariant = null
-let currentUser = null
-let cachedExtractors = null
+/** @type {string|null} */
+let currentVariant;
+
+/** @type {UserData} */
+let currentUser;
+
+/** @type {object[] | null} */
+let cachedExtractors = null;
 
 /** @type {ApplicationState} */
 let currentState;
@@ -114,11 +120,11 @@ async function install(state) {
   fp.diffNavigation.nextDiff.addEventListener('click', () => xmlEditor.goToNextDiff())
   fp.diffNavigation.diffKeepAll.addEventListener('click', () => {
     xmlEditor.rejectAllDiffs()
-    services.removeMergeView(currentState)
+    services.removeMergeView()
   })
   fp.diffNavigation.diffChangeAll.addEventListener('click', () => {
     xmlEditor.acceptAllDiffs()
-    services.removeMergeView(currentState)
+    services.removeMergeView()
   })
 
   fp.selectionIndex.addEventListener('click', onClickSelectionIndex) // allow to input node index
@@ -135,6 +141,23 @@ async function install(state) {
       $$('.node-status').forEach(btn => btn.disabled = false)
     }
   }))
+
+  // Add visibility toggle switch to PDF viewer statusbar
+  const pdfViewerStatusBar = ui.pdfViewer.statusbar
+  const floatingPanelToggle = PanelUtils.createSwitch({
+    text: 'Tag/Diff Navigation',
+    checked: false,
+    name: 'floatingPanelToggle'
+  })
+
+  floatingPanelToggle.addEventListener('widget-change', onFloatingPanelToggleChange)
+  pdfViewerStatusBar.add(floatingPanelToggle, 'left', 20)
+
+  // Update UI to register the new widget
+  updateUi()
+
+  // Start with floating panel hidden
+  api.hide()
 }
 
 /**
@@ -208,7 +231,7 @@ function updateCounter(xpath, index) {
   try {
     size = xmlEditor.countDomNodesByXpath(xpath)
   } catch (e) {
-    logger.warn('Cannot update counter: ' + e.message)
+    logger.warn('Cannot update counter: ' + String(e))
     size = 0
   }
   index = index || 1
@@ -216,6 +239,10 @@ function updateCounter(xpath, index) {
   ui.floatingPanel.nextNode.disabled = ui.floatingPanel.previousNode.disabled = size < 2;
 }
 
+/**
+ * @param {ApplicationState} state
+ * @param {Number} delta
+ */
 async function changeNodeIndex(state, delta) {
   if (isNaN(delta)) {
     throw new TypeError("Second argument must be a number")
@@ -317,6 +344,22 @@ function onClickSelectionIndex() {
     xmlEditor.selectByIndex(parseInt(index))
   } catch (error) {
     dialog.error(String(error))
+  }
+}
+
+/**
+ * Called when the floating panel toggle switch is changed
+ * @param {Event} evt
+ */
+function onFloatingPanelToggleChange(evt) {
+  const customEvt = /** @type {CustomEvent} */ (evt)
+  const checked = customEvt.detail.checked
+
+  // Show or hide the floating panel
+  if (checked) {
+    api.show()
+  } else {
+    api.hide()
   }
 }
 

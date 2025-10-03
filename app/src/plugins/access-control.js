@@ -11,7 +11,6 @@
  * @import { UIPart, SlDropdown } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { UserData } from './authentication.js'
- * @import { LookupItem, FileMetadata, AccessControl } from '../modules/file-data-utils.js'
  */
 
 import { app, services, authentication, fileselection } from '../app.js'
@@ -334,7 +333,7 @@ async function computeDocumentPermissions() {
 /**
  * Parses permissions from XML DOM tree
  * @param {Document} xmlTree
- * @returns {DocumentPermissions>} Permissions object
+ * @returns {DocumentPermissions} Permissions object
  */
 function parsePermissionsFromXmlTree(xmlTree) {
   try {
@@ -364,7 +363,8 @@ function parsePermissionsFromXmlTree(xmlTree) {
       return {
         visibility: 'public',
         editability: 'editable',
-        owner: null
+        owner: null,
+        can_modify: true
       }
     }
     
@@ -396,14 +396,16 @@ function parsePermissionsFromXmlTree(xmlTree) {
     return {
       visibility: visibility === 'private' ? 'private' : 'public',
       editability: editability === 'protected' ? 'protected' : 'editable',
-      owner
+      owner,
+      can_modify: true
     }
   } catch (error) {
     logger.warn(`Error parsing permissions from XML tree: ${String(error)}`)
     return {
       visibility: 'public',
       editability: 'editable',
-      owner: null
+      owner: null,
+      can_modify: true
     }
   }
 }
@@ -414,7 +416,7 @@ function parsePermissionsFromXmlTree(xmlTree) {
  * @param {string} editability - 'editable' or 'protected'
  * @param {string} [owner] - Optional new owner
  * @param {string} [description] - Optional change description
- * @returns {Promise<{visibility: string, editability: string, owner: string|null}>} Updated permissions
+ * @returns {Promise<DocumentPermissions>} Updated permissions
  */
 async function updateDocumentStatus(visibility, editability, owner, description) {
   try {

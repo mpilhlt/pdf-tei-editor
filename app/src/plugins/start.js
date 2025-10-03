@@ -162,7 +162,6 @@ async function start() {
 
     // finish initialization
     ui.spinner.hide()
-    floatingPanel.show()
     xmlEditor.setLineWrapping(true)
     logger.info("Application ready.")
 
