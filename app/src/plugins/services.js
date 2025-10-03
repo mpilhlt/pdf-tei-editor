@@ -26,7 +26,7 @@ import * as tei_utils from '../modules/tei-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror_utils.js'
 import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 import { ApiError } from '../modules/utils.js'
-import { userHasRole } from '../modules/acl-utils.js'
+import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 
 /**
  * plugin API
@@ -212,20 +212,41 @@ async function update(state) {
     return
   }
 
-  da.deleteAll.disabled = !Boolean(state.pdf && state.xml) // Disable if no pdf and no xml
-  da.deleteAllVersions.disabled = ui.toolbar.xml.querySelectorAll("sl-option").length  < 2 // disable if only one document left (gold version)
-  //da.deleteCurrentVersion.disabled = state.xml === ui.toolbar.xml.querySelectorAll("sl-option")?.[0].value // disable if the xml is the gold version
+  const isReviewer = userHasRole(currentState.user, ["admin", "reviewer"])
+  const isAnnotator = userHasRole(currentState.user, ["admin", "reviewer", "annotator"])
 
-  da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
+  // disable/enable delete buttons
+  if (isAnnotator || isReviewer) {
+    da.deleteAll.disabled = !Boolean(state.pdf && state.xml) || !isReviewer // Disable if no pdf and no xml)
+    da.deleteAllVersions.disabled = !isReviewer || ui.toolbar.xml.querySelectorAll("sl-option").length  < 2 // disable if only one document left (gold version)
+    da.deleteCurrentVersion.disabled = !state.xml || state.editorReadOnly || (isGoldFile(currentState.xml) && !isReviewer)
+  } else {
+    for (let btn of [da.deleteAll, da.deleteAllVersions, da.deleteCurrentVersion]) {
+      btn.disabled = true
+    }
+  }
+  
+  da.deleteBtn.disabled = 
+    da.deleteCurrentVersion.disabled && 
+    da.deleteAllVersions.disabled && 
+    da.deleteAll.disabled
 
   // Allow new version or revisions only if we have an xml path
-  da.saveRevision.disabled = da.createNewVersion.disabled = !Boolean(state.xml)
-  
-  // Allow download only if we have an xml path
-  da.download.disabled = !Boolean(state.xml)
+  if (isAnnotator) {
 
-  // no uploads if editor is readonly
-  da.upload.disabled = state.editorReadOnly
+    da.saveRevision.disabled =  !Boolean(state.xml) || state.editorReadOnly 
+    da.createNewVersion.disabled = !Boolean(state.xml) 
+    
+    // Allow download only if we have an xml path
+    da.download.disabled = !Boolean(state.xml)
+
+    // no uploads if editor is readonly
+    da.upload.disabled = state.editorReadOnly 
+  } else {
+    for (let btn of [da.saveRevision, da.createNewVersion, da.download, da.upload]) {
+      btn.disabled = true
+    }
+  }
 }
 
 
@@ -296,7 +317,6 @@ async function load({ xml, pdf }) {
       const canEdit = accessControl.checkCanEditFile(xml)
       if (!canEdit) {
         logger.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
-        notify(`You don't have permission to edit this document, loading in read-only mode`)
         file_is_locked = true
       } else {
         try {
@@ -305,7 +325,6 @@ async function load({ xml, pdf }) {
         } catch (error) {
           if (error instanceof client.LockedError) {
             logger.debug(`File ${xml} is locked, loading in read-only mode`);
-            notify(`File is being edited by another user, loading in read-only mode`)
             file_is_locked = true
           } else {
             const errorMessage = String(error);

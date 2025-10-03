@@ -48,8 +48,7 @@ COPY package.json package-lock.json* ./
 COPY pyproject.toml uv.lock ./
 
 # Install all dependencies (both prod and dev) - this layer is cached unless deps change
-RUN uv sync --no-cache \
-    && npm install --ignore-scripts --no-audit --no-fund
+RUN uv sync && npm install --ignore-scripts --no-audit --no-fund
 
 # Copy source code (needed for build scripts)
 COPY . .

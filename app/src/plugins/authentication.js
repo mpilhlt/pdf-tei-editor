@@ -101,7 +101,11 @@ class AuthenticationPlugin extends Plugin {
    */
   async onStateUpdate(changedKeys) {
     if (changedKeys.includes('user')) {
-      ui.toolbar.logoutButton.disabled = this.state?.user === null;
+      const user = this.state?.user;
+      ui.toolbar.logoutButton.disabled = user === null;
+      if (user) {
+        ui.toolbar.logoutButton.closest('sl-tooltip').content = `Log out ${user.username}`
+      }
     }
   }
 
