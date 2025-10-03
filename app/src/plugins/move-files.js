@@ -150,5 +150,5 @@ async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
   const isReviewer = userHasRole(currentState.user, ["admin", "reviewer"])
-  moveBtn.disabled = !state.xml || (isGoldFile(state.xml) && !isReviewer)
+  moveBtn.disabled = !state.xml || !isReviewer
 }
