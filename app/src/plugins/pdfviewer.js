@@ -9,7 +9,7 @@ import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { PanelUtils, StatusText } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor, hasStateChanged } from '../app.js'
-import { getDocumentTitle } from '../modules/file-data-utils.js'
+import { getDocumentTitle, getFileDataByHash } from '../modules/file-data-utils.js'
 
 //
 // UI Parts
@@ -19,6 +19,7 @@ import { getDocumentTitle } from '../modules/file-data-utils.js'
  * PDF viewer headerbar navigation properties
  * @typedef {object} pdfViewerHeaderbarPart
  * @property {HTMLElement} titleWidget - The document title widget
+ * @property {HTMLElement} filenameWidget - The widget for displaying the filename
  */
 
 /**
@@ -47,6 +48,9 @@ pdfViewer.hide()
 /** @type {StatusText} */
 let titleWidget;
 
+/** @type {StatusText} */
+let filenameWidget;
+
 /**
  * plugin object
  */
@@ -73,7 +77,7 @@ async function install(state) {
   logger.info("PDF Viewer ready.")
   pdfViewer.show()
   
-  // Add title widget to PDF viewer headerbar
+  // Add title and filename widgets to PDF viewer headerbar
   const headerBar = ui.pdfViewer.headerbar
   titleWidget = PanelUtils.createText({
     text: '',
@@ -84,6 +88,13 @@ async function install(state) {
   })
   titleWidget.classList.add('title-widget')
   headerBar.add(titleWidget, 'left', 1)
+
+  filenameWidget = PanelUtils.createText({
+    text: '',
+    variant: 'neutral',
+    name: 'filenameWidget'
+  })
+  headerBar.add(filenameWidget, 'right', 1)
   
   // Add autosearch switch to PDF viewer statusbar
   const statusBar = ui.pdfViewer.statusbar
@@ -117,18 +128,18 @@ async function update(state) {
     }
   }
   
-  // Update title widget with document title
-  if (titleWidget && state.pdf) {
+  // Update title and fileame widgets
+  if (state.pdf) {
+    filenameWidget.text = getFileDataByHash(state.pdf)?.file?.fileref || ''
     try {
       const title = getDocumentTitle(state.pdf);
       titleWidget.text = title || 'PDF Document';
     } catch (error) {
-      // ignore error
-      //logger.warn("Could not get document title:"+ String(error));
       titleWidget.text = 'PDF Document';
     }
   } else if (titleWidget) {
     titleWidget.text = '';
+    filenameWidget.text = '';
   }
 }
 
