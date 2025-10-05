@@ -134,21 +134,21 @@ def safe_file_path(file_path):
 
 def get_session_id(request):
     """
-    Retrieves the session ID from request cookies, falling back to headers,
-    and finally to query parameters.
+    Retrieves the session ID from request headers (for per-tab sessions),
+    falling back to query parameters, and finally to cookies.
     """
-    # 1. Try cookies (new standard method)
-    session_id = request.cookies.get('sessionId')
-    if session_id:
-        return session_id
-    
-    # 2. Fall back to headers (legacy method)
+    # 1. Try headers (primary method - supports per-tab sessions)
     session_id = request.headers.get('X-Session-ID')
     if session_id:
         return session_id
 
-    # 3. Fall back to query parameters (for EventSource)
-    return request.args.get('session_id')
+    # 2. Fall back to query parameters (for EventSource/SSE)
+    session_id = request.args.get('session_id')
+    if session_id:
+        return session_id
+
+    # 3. Fall back to cookies (shared across tabs)
+    return request.cookies.get('sessionId')
 
 
 def remove_obsolete_marker_if_exists(file_path, logger):

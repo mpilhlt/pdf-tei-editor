@@ -5,8 +5,11 @@
 This directory contains the complete plan for migrating from Flask to FastAPI.
 
 **Current State**: Flask-based backend in `server/` with JSON-cached file metadata
-**Target State**: FastAPI backend in `fastapi/` with SQLite-backed file metadata
+**Target State**: FastAPI backend in `fastapi_app/` with SQLite-backed file metadata
 **Approach**: Clean slate implementation with isolated development and comprehensive testing
+**Previous Work**: Early FastAPI implementation archived in `old-fastapi/` for reference
+
+**Note**: The directory is named `fastapi_app` (not `fastapi`) to avoid Python import conflicts with the FastAPI library. The `run_fastapi.py` wrapper module is used to launch the application.
 
 ## Goals
 
@@ -41,10 +44,12 @@ This directory contains the complete plan for migrating from Flask to FastAPI.
 ### Metadata Organization
 
 **PDF files** (document metadata):
+
 - `doc_collections`: JSON array `["corpus1", "corpus2"]` (multi-collection!)
 - `doc_metadata`: JSON object `{author, title, date, doi, ...}`
 
 **TEI files** (file-specific):
+
 - `label`: Optional custom label
 - `variant`: Variant identifier (TEI only)
 - `version`: Version number
@@ -56,6 +61,7 @@ See [schema-design.md](schema-design.md) for complete details.
 ## Migration Phases
 
 ### [Phase 0: Foundation and Infrastructure](phase-0-foundation.md)
+
 - Project setup and clean slate
 - Python dependencies
 - Basic FastAPI application
@@ -63,17 +69,22 @@ See [schema-design.md](schema-design.md) for complete details.
 - Testing infrastructure
 - API versioning setup
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
+**Summary**: [PHASE-0-COMPLETE.md](../PHASE-0-COMPLETE.md)
+**Previous Implementation**: Archived in `old-fastapi/` directory
 
 ### [Phase 1: Core Library Migration](phase-1-core-library.md)
+
 - Port utility libraries (XML, TEI, config)
 - Authentication and session management
 - Server utilities with dependency injection
 - Framework-agnostic hashing utilities
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
+**Summary**: [PHASE-1-COMPLETE.md](../PHASE-1-COMPLETE.md)
 
 ### [Phase 2: SQLite File Metadata System](phase-2-sqlite-metadata.md)
+
 - Database schema implementation
 - Database manager and transactions
 - File repository with document-centric queries
@@ -83,6 +94,7 @@ See [schema-design.md](schema-design.md) for complete details.
 **Status**: ⬜ Not started
 
 ### [Phase 3: Authentication and Configuration APIs](phase-3-auth-config.md)
+
 - Authentication API (login, logout, status)
 - Configuration API (CRUD operations)
 - OpenAPI client generation prototype
@@ -91,6 +103,7 @@ See [schema-design.md](schema-design.md) for complete details.
 **Status**: ⬜ Not started
 
 ### Phase 4: File Management APIs
+
 - File listing with SQLite backend
 - File upload with hash storage
 - File serving and version management
@@ -100,6 +113,7 @@ See [schema-design.md](schema-design.md) for complete details.
 **Status**: ⬜ Not started
 
 ### Phase 5: Validation and Extraction APIs
+
 - XML/TEI validation
 - AI-based metadata extraction
 - Extractor management
@@ -107,12 +121,14 @@ See [schema-design.md](schema-design.md) for complete details.
 **Status**: ⬜ Not started
 
 ### Phase 6: Sync and SSE APIs
+
 - Document synchronization
 - Server-sent events for real-time updates
 
 **Status**: ⬜ Not started
 
 ### Phase 7: Client Generation and Frontend Integration
+
 - Complete OpenAPI client generation
 - Build system integration
 - Frontend migration to generated client
@@ -120,6 +136,7 @@ See [schema-design.md](schema-design.md) for complete details.
 **Status**: ⬜ Not started
 
 ### Phase 8: Testing and Validation
+
 - Full E2E test suite
 - Performance testing
 - Migration script testing
@@ -127,6 +144,7 @@ See [schema-design.md](schema-design.md) for complete details.
 **Status**: ⬜ Not started
 
 ### Phase 9: Deployment and Switchover
+
 - Docker configuration
 - Production deployment
 - Flask decommissioning
@@ -134,6 +152,7 @@ See [schema-design.md](schema-design.md) for complete details.
 **Status**: ⬜ Not started
 
 ### Phase 10: Documentation and Cleanup
+
 - API documentation
 - Development guides
 - Migration cleanup
@@ -189,9 +208,10 @@ E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir
 ## Progress Tracking
 
 Track progress by updating phase status in this document:
+
 - ⬜ Not started
 - 🔄 In progress
 - ✅ Complete
 - ⚠️ Blocked
 
-Last updated: 2025-10-04
+Last updated: 2025-10-05

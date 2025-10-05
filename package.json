@@ -29,7 +29,7 @@
         "test:e2e:backend": "node tests/e2e-runner.js --backend",
         "test:e2e:backend:fast": "node tests/e2e-runner.js --backend --no-rebuild",
         "ai:gemini:flash": "gemini --model gemini-2.5-flash",
-        "dev:fastapi": "uvicorn backend.main:app --reload --port 8000"
+        "dev:fastapi": "uv run uvicorn run_fastapi:app --reload --port 8000"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",

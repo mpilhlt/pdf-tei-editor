@@ -2,11 +2,15 @@
 
 **Goal**: Implement database-backed file metadata before migrating file endpoints
 
+- The sqlite database does not contain information that cannot be reconstructed from the TEI in the filesystem, i.e. in case of corruption, deletion or just being outdated after a synchronization with the WebDAv backend, the database can be recreated from scratch.
+- this of course is costly and should be avoided - atomic updates should be preferred in order to keep information updated.
+
 **Key Design**: Document-centric model with metadata inheritance. See [schema-design.md](schema-design.md) for complete details.
 
 ## Overview
 
 Replace JSON-based file caching with SQLite database:
+
 - Document metadata stored only with PDF files
 - TEI files inherit via JOIN
 - Multi-collection support via JSON arrays
@@ -48,6 +52,7 @@ class DatabaseManager:
 - [ ] Create `fastapi/lib/file_repository.py`
 
 Core methods:
+
 ```python
 class FileRepository:
     def __init__(self, db_manager: DatabaseManager, logger=None)
@@ -73,6 +78,7 @@ class FileRepository:
 ```
 
 Key implementation details:
+
 - Serialize/deserialize JSON fields (`doc_collections`, `doc_metadata`, `file_metadata`)
 - Handle NULL values for inherited fields
 - Use JOINs for metadata inheritance queries
@@ -116,6 +122,7 @@ Example: `data/ab/abcdef123....tei.xml`
   - Test multi-collection support
 
 Python test script approach:
+
 ```javascript
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -166,9 +173,12 @@ print('OK')
 });
 ```
 
+
+
 ## Completion Criteria
 
 Phase 2 is complete when:
+
 - ✅ Database schema creates successfully
 - ✅ File repository can CRUD file metadata
 - ✅ Document-centric queries work correctly
@@ -180,6 +190,7 @@ Phase 2 is complete when:
 ## Examples
 
 See [schema-design.md](schema-design.md) for:
+
 - Complete schema with rationale
 - Example data (PDF + TEI versions + variants + gold)
 - Common query patterns

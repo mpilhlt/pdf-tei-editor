@@ -1,0 +1,297 @@
+"""
+Session management for PDF-TEI-Editor.
+
+This module provides framework-agnostic session management with dependency injection.
+No Flask or FastAPI dependencies - all parameters are explicitly passed.
+"""
+
+import json
+import sys
+import threading
+import time
+from pathlib import Path
+from typing import Optional
+
+
+# Platform-specific imports for file locking
+if sys.platform == 'win32':
+    import msvcrt
+else:
+    import fcntl
+
+
+def _lock_file(file_handle):
+    """Cross-platform file locking"""
+    if sys.platform == 'win32':
+        try:
+            msvcrt.locking(file_handle.fileno(), msvcrt.LK_LOCK, 1)
+        except OSError:
+            pass
+    else:
+        fcntl.flock(file_handle, fcntl.LOCK_EX)
+
+
+def _unlock_file(file_handle):
+    """Cross-platform file unlocking"""
+    if sys.platform == 'win32':
+        try:
+            msvcrt.locking(file_handle.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+    else:
+        fcntl.flock(file_handle, fcntl.LOCK_UN)
+
+
+class SessionManager:
+    """
+    Session manager with dependency injection.
+
+    Manages user sessions with expiration tracking.
+    """
+
+    def __init__(self, db_dir: Path, logger=None):
+        """
+        Initialize session manager.
+
+        Args:
+            db_dir: Path to the database directory containing sessions.json
+            logger: Optional logger instance for logging operations
+        """
+        self.db_dir = db_dir
+        self.logger = logger
+        self.sessions_file = db_dir / 'sessions.json'
+        self.lock = threading.Lock()
+
+    def _read_sessions(self) -> dict:
+        """
+        Read sessions from sessions.json file.
+
+        Returns:
+            Dictionary of session_id -> session data
+        """
+        with self.lock:
+            try:
+                if not self.sessions_file.exists():
+                    # Create empty sessions file
+                    self.sessions_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(self.sessions_file, 'w', encoding='utf-8') as f:
+                        json.dump({}, f, indent=2)
+                    return {}
+
+                with open(self.sessions_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (IOError, json.JSONDecodeError) as e:
+                if self.logger:
+                    self.logger.error(f"Error reading sessions file: {e}")
+                return {}
+
+    def _write_sessions(self, sessions_data: dict):
+        """
+        Write sessions to sessions.json file.
+
+        Args:
+            sessions_data: Dictionary of session data to write
+        """
+        with self.lock:
+            try:
+                self.sessions_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.sessions_file, 'w', encoding='utf-8') as f:
+                    json.dump(sessions_data, f, indent=2)
+            except IOError as e:
+                if self.logger:
+                    self.logger.error(f"Error writing sessions file: {e}")
+
+    def create_session(self, username: str) -> str:
+        """
+        Create new session for a user.
+
+        Args:
+            username: Username to create session for
+
+        Returns:
+            Generated session ID
+        """
+        import uuid
+        session_id = str(uuid.uuid4())
+
+        sessions = self._read_sessions()
+        sessions[session_id] = {
+            'username': username,
+            'created_at': time.time(),
+            'last_access': time.time()
+        }
+        self._write_sessions(sessions)
+
+        if self.logger:
+            self.logger.info(f"Created session {session_id} for user {username}")
+
+        return session_id
+
+    def get_session(self, session_id: str) -> Optional[dict]:
+        """
+        Get session data by session ID.
+
+        Args:
+            session_id: Session ID to look up
+
+        Returns:
+            Session data dictionary or None if not found
+        """
+        if not session_id:
+            return None
+
+        sessions = self._read_sessions()
+        return sessions.get(session_id)
+
+    def get_username_by_session_id(self, session_id: str) -> Optional[str]:
+        """
+        Get username associated with a session ID.
+
+        Args:
+            session_id: Session ID to look up
+
+        Returns:
+            Username or None if session not found
+        """
+        session = self.get_session(session_id)
+        return session['username'] if session else None
+
+    def is_session_valid(self, session_id: str, timeout_seconds: int) -> bool:
+        """
+        Check if a session exists and hasn't expired.
+
+        Args:
+            session_id: Session ID to check
+            timeout_seconds: Session timeout in seconds
+
+        Returns:
+            True if session is valid, False otherwise
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return False
+
+        current_time = time.time()
+        last_access = session.get('last_access', session.get('created_at', 0))
+        return current_time - last_access <= timeout_seconds
+
+    def update_session_access_time(self, session_id: str) -> bool:
+        """
+        Update last access time for a session.
+
+        Args:
+            session_id: Session ID to update
+
+        Returns:
+            True if updated, False if session not found
+        """
+        if not session_id:
+            return False
+
+        sessions = self._read_sessions()
+        if session_id in sessions:
+            sessions[session_id]['last_access'] = time.time()
+            self._write_sessions(sessions)
+            return True
+        return False
+
+    def delete_session(self, session_id: str) -> bool:
+        """
+        Delete a session.
+
+        Args:
+            session_id: Session ID to delete
+
+        Returns:
+            True if deleted, False if session not found
+        """
+        if not session_id:
+            return False
+
+        sessions = self._read_sessions()
+        if session_id in sessions:
+            username = sessions[session_id]['username']
+            del sessions[session_id]
+            self._write_sessions(sessions)
+
+            if self.logger:
+                self.logger.info(f"Deleted session {session_id} for user {username}")
+            return True
+
+        return False
+
+    def delete_all_user_sessions(self, username: str) -> int:
+        """
+        Delete all sessions for a specific user.
+
+        Args:
+            username: Username whose sessions to delete
+
+        Returns:
+            Number of sessions deleted
+        """
+        sessions = self._read_sessions()
+        sessions_to_delete = [sid for sid, session in sessions.items()
+                             if session['username'] == username]
+
+        for session_id in sessions_to_delete:
+            del sessions[session_id]
+
+        if sessions_to_delete:
+            self._write_sessions(sessions)
+            if self.logger:
+                self.logger.info(f"Deleted {len(sessions_to_delete)} sessions for user {username}")
+
+        return len(sessions_to_delete)
+
+    def cleanup_expired_sessions(self, timeout_seconds: int) -> int:
+        """
+        Remove sessions that haven't been accessed within the timeout period.
+
+        Args:
+            timeout_seconds: Session timeout in seconds
+
+        Returns:
+            Number of sessions cleaned up
+        """
+        sessions = self._read_sessions()
+        current_time = time.time()
+        expired_sessions = []
+
+        for session_id, session in sessions.items():
+            last_access = session.get('last_access', session.get('created_at', 0))
+            if current_time - last_access > timeout_seconds:
+                expired_sessions.append(session_id)
+
+        for session_id in expired_sessions:
+            username = sessions[session_id]['username']
+            del sessions[session_id]
+            if self.logger:
+                self.logger.info(f"Cleaned up expired session {session_id} for user {username}")
+
+        if expired_sessions:
+            self._write_sessions(sessions)
+
+        return len(expired_sessions)
+
+    def get_user_session_count(self, username: str) -> int:
+        """
+        Get the number of active sessions for a user.
+
+        Args:
+            username: Username to count sessions for
+
+        Returns:
+            Number of active sessions
+        """
+        sessions = self._read_sessions()
+        return sum(1 for session in sessions.values() if session['username'] == username)
+
+    def get_all_sessions(self) -> dict:
+        """
+        Get all active sessions.
+
+        Returns:
+            Dictionary of all sessions
+        """
+        return self._read_sessions()
