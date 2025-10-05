@@ -57,7 +57,12 @@
       "Bash(lsof:*)",
       "Bash(E2E_BASE_URL=http://localhost:8000 node tests/e2e/fastapi/files-upload.test.js)",
       "Bash(awk:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Read(//private/tmp/**)",
+      "Bash(xargs kill:*)",
+      "Bash(python3:*)",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node fastapi_app/tests/health.test.js)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

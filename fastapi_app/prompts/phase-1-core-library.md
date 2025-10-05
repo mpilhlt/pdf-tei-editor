@@ -4,6 +4,8 @@
 
 **Pattern**: Remove all Flask context dependencies (`current_app`, `g`, `request`) by passing configuration and resources as function parameters.
 
+**Previous Implementation**: Archived in `old-fastapi/` directory - probably alot can be reused, but check carefully
+
 ## Dependency Injection Pattern
 
 **Before (Flask-dependent)**:
@@ -74,30 +76,73 @@ class AuthManager:
         """Remove expired sessions"""
 ```
 
-### 1.4 Session Management
+### 1.4 Session Management - SQLite Based
 
-- [ ] Create `fastapi/lib/sessions.py` from `server/lib/sessions.py`
+**Important Change**: Migrate from JSON file storage to SQLite for better concurrency and performance.
+
+- [ ] Create `fastapi/lib/db_utils.py` for database utilities
+  - Database initialization
+  - Connection management with context manager
+  - Thread-safe connection pooling
+
+- [ ] Create `fastapi/lib/sessions.py` with SQLite backend
   - Create `SessionManager` class
-  - Remove Flask session dependencies
+  - SQLite-based session storage (not JSON files)
+  - Automatic session table creation
+  - Indexed queries for performance
 
+**Schema:**
+```sql
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    last_access REAL NOT NULL,
+    INDEX idx_username ON sessions(username),
+    INDEX idx_last_access ON sessions(last_access)
+);
+```
+
+**Implementation:**
 ```python
 class SessionManager:
     def __init__(self, db_dir: Path, logger=None):
         self.db_dir = db_dir
         self.logger = logger
+        self.db_path = db_dir / 'sessions.db'
+        self._init_db()
+
+    def _init_db(self):
+        """Initialize sessions table"""
 
     def create_session(self, username: str) -> str:
-        """Create new session, return session ID"""
+        """Create new session, return UUID session ID"""
 
-    def delete_session(self, session_id: str):
+    def delete_session(self, session_id: str) -> bool:
         """Remove session"""
 
     def get_session(self, session_id: str) -> Optional[dict]:
         """Get session data"""
 
-    def cleanup_expired_sessions(self, timeout_minutes: int):
-        """Remove expired sessions"""
+    def is_session_valid(self, session_id: str, timeout_seconds: int) -> bool:
+        """Check if session exists and hasn't expired"""
+
+    def cleanup_expired_sessions(self, timeout_seconds: int) -> int:
+        """Remove expired sessions, return count"""
+
+    def get_user_session_count(self, username: str) -> int:
+        """Count active sessions for user"""
+
+    def delete_all_user_sessions(self, username: str) -> int:
+        """Delete all sessions for user"""
 ```
+
+**Benefits over JSON:**
+- Thread-safe concurrent access
+- Atomic operations
+- Indexed queries (fast lookups)
+- No file locking needed
+- Scales to millions of sessions
 
 ### 1.5 Server Utilities
 
@@ -182,6 +227,7 @@ Phase 1 is complete when:
 - ✅ No references to `current_app`, `g`, or Flask's `request`
 - ✅ Code is testable without web framework
 - ✅ File extension mapping working correctly
+- ✅ SQLite session management working with proper indexing
 
 ## Testing
 
