@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Features
     WEBDAV_ENABLED: bool = False
 
+    # Session
+    SESSION_TIMEOUT: int = 3600  # Session timeout in seconds (default: 1 hour)
+
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_CATEGORIES: str = ""
@@ -56,6 +59,10 @@ class Settings(BaseSettings):
         if not self.LOG_CATEGORIES:
             return []
         return [cat.strip() for cat in self.LOG_CATEGORIES.split(',')]
+
+    @property
+    def session_timeout(self) -> int:
+        return self.SESSION_TIMEOUT
 
 @lru_cache
 def get_settings() -> Settings:

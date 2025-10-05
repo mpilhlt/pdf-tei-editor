@@ -70,7 +70,7 @@ See [schema-design.md](schema-design.md) for complete details.
 - API versioning setup
 
 **Status**: ✅ Complete
-**Summary**: [PHASE-0-COMPLETE.md](../PHASE-0-COMPLETE.md)
+**Summary**: [phase-0-completion.md](phase-0-completion.md)
 **Previous Implementation**: Archived in `old-fastapi/` directory
 
 ### [Phase 1: Core Library Migration](phase-1-core-library.md)
@@ -81,7 +81,7 @@ See [schema-design.md](schema-design.md) for complete details.
 - Framework-agnostic hashing utilities
 
 **Status**: ✅ Complete
-**Summary**: [PHASE-1-COMPLETE.md](../PHASE-1-COMPLETE.md)
+**Summary**: [phase-1-completion.md](phase-1-completion.md)
 
 ### [Phase 2: SQLite File Metadata System](phase-2-sqlite-metadata.md)
 
@@ -100,7 +100,8 @@ See [schema-design.md](schema-design.md) for complete details.
 - OpenAPI client generation prototype
 - Comprehensive E2E testing
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
+**Summary**: [phase-3-completion.md](phase-3-completion.md)
 
 ### Phase 4: File Management APIs
 
