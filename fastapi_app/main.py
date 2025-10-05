@@ -54,8 +54,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Import API routers
+from .api import auth, config
+
 # Versioned API router
 api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
+
+# Register API routers
+api_v1.include_router(auth.router)
+api_v1.include_router(config.router)
 
 # Health check endpoint (unversioned)
 @app.get("/health")
