@@ -20,6 +20,7 @@
         "test:tap": "node tests/smart-test-runner.js --all --tap",
         "test:js": "node --test tests/js/*.test.js",
         "test:py": "uv run python -m unittest tests/py/*.py",
+        "test:fastapi:py": "uv run python -m unittest fastapi_app/tests/py/*.py",
         "test:e2e": "node tests/e2e-runner.js --playwright",
         "test:e2e:fast": "node tests/e2e-runner.js --playwright --no-rebuild",
         "test:e2e:fast:dev": "node tests/e2e-runner.js --playwright --no-rebuild --development",

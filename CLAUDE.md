@@ -18,12 +18,18 @@ npm run test:changed
 # Run all JavaScript unit tests
 npm run test:js
 
-# Run all Python integration tests
-npm run test:py
+# Run all Python unit tests
+npm run test:py             # Flask unit tests
+npm run test:fastapi:py     # FastAPI unit tests
 
-# Run end-to-end tests in containerized environment, requires environment variables to work 
+# Run end-to-end tests in containerized environment, requires environment variables to work
 npm run test:e2e            # all E2E test, don't use this- always run more specific tests
 npm run test:e2e:backend    # Backend integration tests only
+
+# Run FastAPI backend tests against local server (no Docker)
+npm run dev:fastapi                                                 # Terminal 1: Start server
+E2E_BASE_URL=http://localhost:8000 node --test \
+  fastapi_app/tests/backend/*.test.js                              # Terminal 2: Run tests
 
 # Pass environment variables to E2E test containers
 npm run test:e2e -- --env SOME_ENVIRONMENT_VAR

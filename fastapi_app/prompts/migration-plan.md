@@ -175,8 +175,11 @@ npm run dev:fastapi
 # Terminal 1: Start server
 npm run dev:fastapi
 
-# Terminal 2: Run tests
-E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir fastapi/tests
+# Terminal 2: Run FastAPI backend tests
+E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/*.test.js
+
+# Or run Python unit tests
+npm run test:fastapi:py
 ```
 
 ### Migration Pattern for Each Endpoint
@@ -190,9 +193,116 @@ E2E_BASE_URL=http://localhost:8000 node tests/e2e-runner.js --backend --test-dir
 7. Regenerate API client
 8. Document changes
 
+
+## Test-Driven Development
+
+### Backend E2E Tests for FastAPI Migration
+
+During the Flask-to-FastAPI migration, backend E2E tests are used to verify the FastAPI implementation against the same test suite used for Flask, ensuring functional equivalence without requiring containerized testing during development.
+
+#### Test Organization
+
+- **Existing Flask backend tests**: `tests/e2e/backend/*.test.js` - Can be reused for FastAPI testing
+- **FastAPI-specific backend tests**: `fastapi_app/tests/backend/*.test.js` - Tests specific to FastAPI implementation
+- **Python unit tests**: `fastapi_app/tests/py/*.py` - Unit tests for FastAPI components
+
+#### Running Backend Tests Against Local FastAPI Server
+
+FastAPI backend tests run against a locally running development server, avoiding Docker overhead during development:
+
+```bash
+# Terminal 1: Start FastAPI development server
+npm run dev:fastapi
+
+# Terminal 2: Run all FastAPI backend tests
+E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/*.test.js
+
+# Run specific test file
+E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/health.test.js
+
+# Run with grep pattern to filter tests (Node.js 20.9.0+)
+E2E_BASE_URL=http://localhost:8000 node --test --test-name-pattern="health" fastapi_app/tests/backend/*.test.js
+```
+
+#### Reusing Existing Flask Backend Tests
+
+The existing Flask backend tests in `tests/e2e/backend/` can be reused to test FastAPI by ensuring fixtures match:
+
+```bash
+# Terminal 1: Start FastAPI server with appropriate fixtures
+# Ensure db/ or config/ directories are configured with same test data as Flask tests expect
+npm run dev:fastapi
+
+# Terminal 2: Run existing Flask backend tests against FastAPI server
+E2E_BASE_URL=http://localhost:8000 node --test tests/e2e/backend/*.test.js
+
+# Run specific test file
+E2E_BASE_URL=http://localhost:8000 node --test tests/e2e/backend/file-locks-api.test.js
+
+# This verifies functional equivalence: same tests, same fixtures, same results
+```
+
+**Important**: When reusing Flask tests for FastAPI validation:
+- Ensure test fixtures (data in `db/` or `config/`) match what Flask tests expect
+- The FastAPI server must expose the same API endpoints with identical behavior
+- Any test failures indicate API incompatibilities that need to be resolved
+
+#### Running Python Unit Tests
+
+Python unit tests for FastAPI components are located in `fastapi_app/tests/py/` and can be run without a server:
+
+```bash
+# Run all FastAPI Python unit tests
+npm run test:fastapi:py
+
+# Or using uv directly
+uv run python -m unittest fastapi_app/tests/py/*.py
+
+# Run specific test file
+uv run python -m unittest fastapi_app/tests/py/test_auth.py
+
+# Run specific test class
+uv run python -m unittest fastapi_app/tests/py.test_auth.TestAuth
+
+# Run with verbose output
+uv run python -m unittest -v fastapi_app/tests/py/*.py
+```
+
+**Note**: Flask Python unit tests remain at `tests/py/` and use `npm run test:py`.
+
+#### Example: Writing Backend Tests for FastAPI
+
+Backend tests should work with the `E2E_BASE_URL` environment variable:
+
+```javascript
+/**
+ * Health check endpoint test
+ *
+ * @testCovers fastapi/main.py
+ */
+import { test, describe } from 'node:test';
+import assert from 'node:assert';
+
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
+
+describe('Health Check', () => {
+    test('should return ok status', async () => {
+        const response = await fetch(`${BASE_URL}/health`);
+        assert.strictEqual(response.status, 200);
+
+        const data = await response.json();
+        assert.strictEqual(data.status, 'ok');
+    });
+});
+```
+
+This approach allows rapid iteration during FastAPI development without the overhead of container rebuilds.
+
+
+
 ## Critical Success Factors
 
-✅ **Test-Driven**: Always run tests before marking complete
+✅ **Test-Driven**: Always run tests before marking complete.
 ✅ **Incremental**: One endpoint at a time, fully tested
 ✅ **Framework-Agnostic**: All `lib/` code injectable and testable
 ✅ **Database-First**: SQLite from start, no JSON caching

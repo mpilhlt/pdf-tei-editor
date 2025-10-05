@@ -364,6 +364,7 @@ npm run test:e2e -- --workers=4                    # Force parallel execution (4
 
 Don't use MCP Browser Integration tools, they are too slow to be functional. Suggest to create a E2E test instead (see above)
 
+
 ## Annex
 
 ### e2e-runner.js CLI options
