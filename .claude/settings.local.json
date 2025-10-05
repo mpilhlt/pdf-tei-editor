@@ -62,7 +62,8 @@
       "Bash(xargs kill:*)",
       "Bash(python3:*)",
       "Bash(E2E_BASE_URL=http://localhost:8000 node fastapi_app/tests/health.test.js)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(npm run test:fastapi:py:*)"
     ],
     "deny": []
   }

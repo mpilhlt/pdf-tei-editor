@@ -180,26 +180,45 @@ class AuthManager:
         Returns:
             True if user created, False if user already exists
         """
-        users = self._read_users()
+        # Hold lock for entire check-then-create operation to prevent race conditions
+        with self.lock:
+            try:
+                # Read current users while holding the lock
+                if not self.users_file.exists():
+                    self.users_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(self.users_file, 'w', encoding='utf-8') as f:
+                        json.dump([], f, indent=2)
+                    users = []
+                else:
+                    with open(self.users_file, 'r', encoding='utf-8') as f:
+                        users = json.load(f)
 
-        # Check if user already exists
-        if any(user.get('username') == username for user in users):
-            if self.logger:
-                self.logger.warning(f"User {username} already exists")
-            return False
+                # Check if user already exists
+                if any(user.get('username') == username for user in users):
+                    if self.logger:
+                        self.logger.warning(f"User {username} already exists")
+                    return False
 
-        # Create new user
-        new_user = {
-            'username': username,
-            'passwd_hash': passwd_hash,
-            **kwargs
-        }
-        users.append(new_user)
-        self._write_users(users)
+                # Create new user
+                new_user = {
+                    'username': username,
+                    'passwd_hash': passwd_hash,
+                    **kwargs
+                }
+                users.append(new_user)
 
-        if self.logger:
-            self.logger.info(f"Created user {username}")
-        return True
+                # Write users while still holding the lock
+                self.users_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.users_file, 'w', encoding='utf-8') as f:
+                    json.dump(users, f, indent=2)
+
+                if self.logger:
+                    self.logger.info(f"Created user {username}")
+                return True
+            except (IOError, json.JSONDecodeError) as e:
+                if self.logger:
+                    self.logger.error(f"Error creating user: {e}")
+                return False
 
     def update_user(self, username: str, **kwargs) -> bool:
         """
