@@ -127,8 +127,19 @@ def load_hash_lookup():
         lookup_file = db_dir / 'lookup.json'
         
         if not lookup_file.exists():
-            current_app.logger.warning("Hash lookup table not found")
-            return {}
+            current_app.logger.info("Hash lookup table not found, building cache...")
+            # Import here to avoid circular imports
+            from server.lib.file_data import collect_and_cache_file_data
+            collect_and_cache_file_data()
+
+            # After building, the lookup file should now exist
+            if not lookup_file.exists():
+                current_app.logger.error("Failed to create hash lookup table")
+                return {}
+
+            # Reset cache variables so we reload the newly created file
+            _hash_lookup_cache = None
+            _hash_lookup_mtime = None
         
         # Check if we need to reload (file modified or not cached)
         current_mtime = lookup_file.stat().st_mtime
@@ -164,6 +175,26 @@ def resolve_hash_to_path(file_hash: str) -> str:
         raise KeyError(f"Hash '{file_hash}' not found in lookup table")
     
     return lookup_table[file_hash]
+
+def resolve_path_to_hash(file_path:str):
+    """
+    Get the hash that belongs to a path using the lookup table.
+    
+    Args:
+        file_path (str): File path relative to data root
+        
+    Returns:
+        str: hash
+        
+    Raises:
+        KeyError: If path is not found in lookup table
+    """
+    inverse_lookup_table = {v: k for k, v in load_hash_lookup().items()} 
+    
+    if file_path not in inverse_lookup_table:
+        raise KeyError(f"File path '{file_path}' not found in lookup table")
+    
+    return inverse_lookup_table[file_path]    
 
 
 def add_path_to_lookup(file_path: str) -> str:

@@ -139,7 +139,7 @@ export class PDFJSViewer {
     if (!pdfPath) {
       throw new Error("No PDF path has been given.");
     }
-    
+
     await this.isReady();
 
     if (this.loadPromise) {
@@ -150,10 +150,13 @@ export class PDFJSViewer {
 
     this.loadPromise = new Promise(async (resolve, reject) => {
       try {
-        // @ts-ignore
-        this.pdfDoc = await this.iframeWindow?.pdfjsLib.getDocument(pdfPath).promise;
-        this.pdfViewer.setDocument(this.pdfDoc);
-        this.pdfLinkService.setDocument(this.pdfDoc, null);
+        // Use PDFViewerApplication.open() to properly load the PDF with all internal references
+        // The open() method expects an object with a url property
+        await this.PDFViewerApplication.open({ url: pdfPath });
+
+        // Store reference to the loaded document
+        this.pdfDoc = this.PDFViewerApplication.pdfDocument;
+
         console.log("PDF loaded successfully.");
         this.isLoadedFlag = true;
         resolve(true);
@@ -393,7 +396,7 @@ export class PDFJSViewer {
           this.findController._selected.pageIdx = pageIndex;
           this.findController.scrollMatchIntoView({ element, pageIndex, matchIndex });
         } catch (error) {
-          reject("Error computing the best match:" + error.message)
+          reject("Error computing the best match:" + String(error))
         }
         resolve(true)
       }, 100)

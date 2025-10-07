@@ -64,33 +64,51 @@ const api = {
 const plugin = {
   name: "sse",
   install,
+  ready,
   state: {
     update
   }
 }
 
+/**
+ * @type {ApplicationState}
+ */
+let currentState;
+
+/** @type {EventSource | null} */
 let eventSource = null;
+
+/** @type {string | null} */
 let cachedSessionId = null;
+
+/** @type {Record<string, ((event: MessageEvent) => void)[]>} */
 let queuedListeners = {};
+
+/** @type {ReturnType<typeof setTimeout> | null} */
 let reconnectTimeout = null;
+
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_INTERVAL = 2000; // Start with 2 seconds
 
+let appStarted = false; // Track if app startup is complete
+
 export { api, plugin }
 export default plugin
 
-/** 
- * @param {ApplicationState} state 
+/**
+ * @param {ApplicationState} state
  */
 async function install(state){
+  currentState = state
   logger.debug(`Installing plugin "${plugin.name}"`)
 }
 
 /**
- * @param {ApplicationState} state 
+ * @param {ApplicationState} state
  */
 async function update(state) {
+  currentState = state;
   const { user, sessionId } = state;
 
   // Close existing connection if the session ID has changed or user logged out
@@ -100,8 +118,21 @@ async function update(state) {
   }
 
   // Open a new connection if user is logged in and there's no active connection
-  if (user && sessionId && !eventSource) {
+  // But only after app startup is complete (appStarted flag set by ready())
+  if (user && sessionId && !eventSource && appStarted) {
     establishConnection(sessionId);
+  }
+}
+
+/**
+ * Called when app startup is complete
+ */
+async function ready() {
+  appStarted = true;
+  // If user is already authenticated, establish connection now
+  if (!eventSource && currentState.sessionId) {
+    logger.debug('App ready, SSE is connecting...');
+    establishConnection(currentState.sessionId);
   }
 }
 
@@ -130,14 +161,14 @@ function establishConnection(sessionId) {
   // Add any queued listeners
   Object.keys(queuedListeners).forEach(type => {
     queuedListeners[type].forEach(/** @param {(event: MessageEvent) => void} listener */ listener => {
-      eventSource.addEventListener(type, listener);
+      eventSource?.addEventListener(type, listener);
     });
   });
 
   eventSource.onerror = (_event) => {
     const readyState = eventSource ? eventSource.readyState : 'unknown';
     const errorMsg = `EventSource failed (readyState: ${readyState})`;
-    
+
     // Provide more detailed error information
     if (readyState === EventSource.CONNECTING) {
       logger.warn(`${errorMsg} - Connection attempt failed`);
@@ -150,15 +181,15 @@ function establishConnection(sessionId) {
     // Close the connection
     if (eventSource) {
       eventSource.close();
+      eventSource = null;
     }
-    eventSource = null;
 
     // Attempt reconnection if we haven't exceeded the limit
     if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       const delay = RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts); // Exponential backoff
       reconnectAttempts++;
       
-      logger.info(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+      logger.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
       
       reconnectTimeout = setTimeout(() => {
         if (cachedSessionId) { // Only reconnect if we still have a session
@@ -185,7 +216,7 @@ function establishConnection(sessionId) {
 
   // Standard message channels
   eventSource.addEventListener('updateStatus', /** @param {MessageEvent} evt */ evt => {
-    logger.info('SSE Status Update:' + evt.data)
+    logger.log('SSE Status Update:' + evt.data)
   });
 }
 

@@ -1,305 +1,376 @@
 import os
-import io
-import requests
-from abc import ABC, abstractmethod
+import sqlite3
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from contextlib import contextmanager
 from flask import current_app
-from webdav4.client import Client, ResourceAlreadyExists, ResourceNotFound
-from server.api.config import read_config
-
-# a custom exception class is not needed since ApiError is defined in server_utils
+from .hash_utils import resolve_path_to_hash
 from .server_utils import ApiError
 
-LOCK_TIMEOUT_SECONDS = 60
-
-class LockStorage(ABC):
-    @abstractmethod
-    def read(self, lock_path):
-        pass
-
-    @abstractmethod
-    def write(self, lock_path, content, overwrite=True):
-        pass
-
-    @abstractmethod
-    def delete(self, lock_path):
-        pass
-
-    @abstractmethod
-    def exists(self, lock_path):
-        pass
-    
-    @abstractmethod
-    def get_mtime(self, lock_path):
-        pass
-
-    @abstractmethod
-    def list_locks(self):
-        pass
-
-    @abstractmethod
-    def mkdir(self):
-        pass
-
-class WebDavLockStorage(LockStorage):
-    def __init__(self):
-        self.client = Client(
-            base_url=os.environ['WEBDAV_HOST'],
-            auth=(os.environ['WEBDAV_USER'], os.environ['WEBDAV_PASSWORD'])
-        )
-        self.locks_dir = f"{os.environ['WEBDAV_REMOTE_ROOT'].rstrip('/')}/locks/"
-
-    def read(self, lock_path):
-        file_obj = io.BytesIO()
-        self.client.download_fileobj(lock_path, file_obj)
-        file_obj.seek(0)
-        return file_obj.read().decode('utf-8')
-
-    def write(self, lock_path, content, overwrite=True):
-        lock_content = io.BytesIO(content.encode('utf-8'))
-        self.client.upload_fileobj(lock_content, lock_path, overwrite=overwrite)
-
-    def delete(self, lock_path):
-        self.client.remove(lock_path)
-
-    def exists(self, lock_path):
-        return self.client.exists(lock_path)
-    
-    def get_mtime(self, lock_path):
-        return self.client.info(lock_path).get('modified')
-
-    def list_locks(self):
-        return self.client.ls(self.locks_dir, detail=True)
-
-    def mkdir(self):
-        if not self.client.exists(self.locks_dir):
-            self.client.mkdir(self.locks_dir)
-
-class LocalLockStorage(LockStorage):
-    def __init__(self):
-        self.locks_dir = os.path.join(current_app.config["DATA_ROOT"], "locks")
-
-    def read(self, lock_path):
-        with open(lock_path, 'r') as f:
-            return f.read()
-
-    def write(self, lock_path, content, overwrite=True):
-        if not overwrite and os.path.exists(lock_path):
-            raise FileExistsError
-        with open(lock_path, 'w') as f:
-            f.write(content)
-
-    def delete(self, lock_path):
-        os.remove(lock_path)
-
-    def exists(self, lock_path):
-        return os.path.exists(lock_path)
-    
-    def get_mtime(self, lock_path):
-        return datetime.fromtimestamp(os.path.getmtime(lock_path), tz=timezone.utc)
-
-    def list_locks(self):
-        return [
-            {
-                'name': os.path.join(self.locks_dir, f),
-                'type': 'file',
-                'modified': self.get_mtime(os.path.join(self.locks_dir, f))
-            }
-            for f in os.listdir(self.locks_dir)
-        ]
-
-    def mkdir(self):
-        os.makedirs(self.locks_dir, exist_ok=True)
-
-def get_lock_storage():
-#    if current_app.config.get('WEBDAV_ENABLED'):
-#        return WebDavLockStorage()
-#    else:
-    
-    # always use local storage at the moment
-    return LocalLockStorage()
-
-def get_lock_path(file_path):
-    """Constructs the lock file path."""
-    from .server_utils import safe_file_path
-    safe_path = safe_file_path(file_path)
-    # Convert to POSIX format to ensure consistent path separators
-    posix_path = Path(safe_path).as_posix()
-    lock_file_name = posix_path.replace('/', '$$$') + '.lock'
-    storage = get_lock_storage()
-    return os.path.join(storage.locks_dir, lock_file_name)
-
-def get_file_from_lock_path(lock_path):
-    """Extracts the original file path from a lock file path."""
-    lock_file_name = os.path.basename(lock_path)
-    return "/data/" + lock_file_name.replace('$$$', '/').replace('.lock', '')
+LOCK_TIMEOUT_SECONDS = 90
 
 
+def get_db_path():
+    """Returns the path to the locks database."""
+    db_dir = current_app.config.get("DB_ROOT", "db")
+    return os.path.join(db_dir, "locks.db")
 
-def is_lock_stale(lock_mtime):
-    """Checks if a lock's modification time is older than the timeout."""
-    if not lock_mtime:
-        return True
-    return (datetime.now(timezone.utc) - lock_mtime) > timedelta(seconds=LOCK_TIMEOUT_SECONDS)
+
+@contextmanager
+def get_db_connection():
+    """
+    Context manager for database connections with proper error handling.
+
+    Yields:
+        sqlite3.Connection: Database connection with row factory enabled
+    """
+    conn = None
+    try:
+        db_path = get_db_path()
+        conn = sqlite3.connect(db_path, timeout=10.0)
+        conn.row_factory = sqlite3.Row
+        # Enable WAL mode for better concurrent access
+        conn.execute("PRAGMA journal_mode=WAL")
+        yield conn
+        conn.commit()
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+        current_app.logger.error(f"Database error: {e}")
+        raise RuntimeError(f"Database error: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+
+def init_locks_db():
+    """
+    Initialize the locks database with the required schema.
+    Creates tables and indexes if they don't exist.
+    """
+    with get_db_connection() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS locks (
+                file_path TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_session
+            ON locks(session_id)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_updated
+            ON locks(updated_at)
+        """)
+        current_app.logger.debug(f"Locks database initialized at {get_db_path()}")
 
 
 def acquire_lock(file_path, session_id):
     """
     Tries to acquire a lock for a given file. Returns True on success, False on failure.
-    Raises ApiError for configuration issues.
+
+    This operation is atomic and handles:
+    - Creating new locks
+    - Refreshing existing locks owned by the same session
+    - Taking over stale locks
+
+    Args:
+        file_path (str): The path to the file to lock
+        session_id (str): The session ID requesting the lock
+
+    Returns:
+        bool: True if lock was acquired/refreshed, False if held by another active session
+
+    Raises:
+        RuntimeError: If database operations fail
     """
-    
-    current_app.logger.debug(f"Acquiring lock for {file_path}")
-    storage = get_lock_storage()
-    
-    # Ensure locks directory exists
-    try:
-        storage.mkdir()
-    except Exception as e:
-        current_app.logger.error(f"Could not create locks directory: {e}")
-        raise RuntimeError(f"Could not create locks directory: {e}")
-    
-    lock_path = get_lock_path(file_path)
-    
-    def write_lock(overwrite=True):
-        storage.write(lock_path, session_id, overwrite=overwrite)
+    current_app.logger.debug(f"[LOCK] Session {session_id[:8]}... attempting to acquire lock for {file_path}")
 
-    try:
-        # Atomically create the lock file. Fails if it already exists.
-        write_lock(overwrite=False)
-        current_app.logger.info(f"Lock acquired for {file_path} by session {session_id}")
-        return True
-    except (ResourceAlreadyExists, FileExistsError, requests.exceptions.HTTPError):
-        # Lock exists. Check if it's ours or if it's stale.
+    # Ensure database is initialized
+    init_locks_db()
+
+    with get_db_connection() as conn:
+        # Use IMMEDIATE transaction to get write lock upfront, preventing race conditions
+        # This ensures only one transaction can modify locks at a time
+        conn.isolation_level = None  # Auto-commit off for explicit transaction control
+        conn.execute("BEGIN IMMEDIATE")
+
         try:
-            existing_lock_id = storage.read(lock_path)
-            
-            if existing_lock_id == session_id:
-                # It's our own lock, just refresh it.
-                write_lock(overwrite=True)
-                current_app.logger.info(f"Refreshed own lock for {file_path}")
-                return True
+            cursor = conn.cursor()
 
-            if not existing_lock_id or existing_lock_id =="" or is_lock_stale(storage.get_mtime(lock_path)):
-                # Lock is empty or stale, take it over.
-                write_lock(overwrite=True)
-                current_app.logger.warning(f"Took over stale lock for {file_path} and session id {session_id} from session {existing_lock_id}")
-                return True
+            # Calculate staleness threshold
+            stale_threshold = datetime.now(timezone.utc) - timedelta(seconds=LOCK_TIMEOUT_SECONDS)
+
+            # Check if there's an existing lock
+            cursor.execute("""
+                SELECT session_id, updated_at
+                FROM locks
+                WHERE file_path = ?
+            """, (file_path,))
+
+            existing = cursor.fetchone()
+
+            if existing:
+                existing_session = existing['session_id']
+                updated_at = datetime.fromisoformat(existing['updated_at'])
+                updated_at_utc = updated_at.replace(tzinfo=timezone.utc)
+                is_stale = updated_at_utc < stale_threshold
+                age_seconds = (datetime.now(timezone.utc) - updated_at_utc).total_seconds()
+
+                current_app.logger.debug(
+                    f"[LOCK] Existing lock found: owner={existing_session[:8]}..., "
+                    f"age={age_seconds:.1f}s, stale={is_stale}, threshold={LOCK_TIMEOUT_SECONDS}s"
+                )
+
+                if existing_session == session_id:
+                    # It's our lock, refresh it
+                    cursor.execute("""
+                        UPDATE locks
+                        SET updated_at = CURRENT_TIMESTAMP
+                        WHERE file_path = ?
+                    """, (file_path,))
+                    conn.commit()
+                    current_app.logger.info(f"[LOCK] Session {session_id[:8]}... refreshed own lock for {file_path}")
+                    return True
+                elif is_stale:
+                    # Lock is stale, take it over
+                    cursor.execute("""
+                        UPDATE locks
+                        SET session_id = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE file_path = ?
+                    """, (session_id, file_path))
+                    conn.commit()
+                    current_app.logger.warning(
+                        f"[LOCK] Session {session_id[:8]}... took over stale lock for {file_path} "
+                        f"from session {existing_session[:8]}... (was {age_seconds:.1f}s old)"
+                    )
+                    return True
+                else:
+                    # Lock is held by another active session - DENY
+                    conn.rollback()
+                    current_app.logger.warning(
+                        f"[LOCK] Session {session_id[:8]}... DENIED lock for {file_path}. "
+                        f"Held by {existing_session[:8]}... (age={age_seconds:.1f}s, still fresh)"
+                    )
+                    return False
             else:
-                # Lock is held by another active session.
-                current_app.logger.warning(f"Failed to acquire lock for {file_path} and session id {session_id}. Held by {existing_lock_id}.")
-                return False
+                # No existing lock, create new one
+                current_app.logger.debug(f"[LOCK] No existing lock found for {file_path}")
+                cursor.execute("""
+                    INSERT INTO locks (file_path, session_id, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                """, (file_path, session_id))
+                conn.commit()
+                current_app.logger.info(f"[LOCK] Session {session_id[:8]}... acquired NEW lock for {file_path}")
+                return True
         except Exception as e:
-            raise RuntimeError(f"Error checking existing lock for {file_path}: {e}")
-            
-        
-def release_lock(file_path, session_id):
-    """Releases the lock for a given file if it is held by the current session."""
-    storage = get_lock_storage()
-    
-    # Ensure locks directory exists
-    try:
-        storage.mkdir()
-    except Exception as e:
-        current_app.logger.error(f"Could not create locks directory: {e}")
-        raise RuntimeError(f"Could not create locks directory: {e}")
-    
-    lock_path = get_lock_path(file_path)
+            conn.rollback()
+            current_app.logger.error(f"[LOCK] Error during lock acquisition: {e}")
+            raise
 
-    try:
-        if storage.exists(lock_path):
-            existing_lock_id = storage.read(lock_path)
-            if existing_lock_id == session_id:
-                storage.delete(lock_path)
-                current_app.logger.info(f"Lock released for {file_path} by session {session_id}")
-                return True
+
+def release_lock(file_path, session_id):
+    """
+    Releases the lock for a given file if it is held by the current session.
+
+    Args:
+        file_path (str): The path to the file to unlock
+        session_id (str): The session ID releasing the lock
+
+    Returns:
+        dict: Structured response with status, action, and message
+            - status: "success" or "error"
+            - action: "released", "already_released", "not_owned"
+            - message: Human-readable description
+
+    Raises:
+        ApiError: If attempting to release a lock owned by another session
+        RuntimeError: If database operations fail
+    """
+    current_app.logger.debug(f"[LOCK] Session {session_id[:8]}... attempting to release lock for {file_path}")
+
+    # Ensure database is initialized
+    init_locks_db()
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check if lock exists and who owns it
+        cursor.execute("""
+            SELECT session_id
+            FROM locks
+            WHERE file_path = ?
+        """, (file_path,))
+
+        existing = cursor.fetchone()
+
+        if existing:
+            existing_session = existing['session_id']
+            if existing_session == session_id:
+                # Delete the lock
+                cursor.execute("""
+                    DELETE FROM locks
+                    WHERE file_path = ?
+                """, (file_path,))
+                current_app.logger.info(f"[LOCK] Session {session_id[:8]}... released lock for {file_path}")
+                return {
+                    "status": "success",
+                    "action": "released",
+                    "message": f"Lock successfully released for {file_path}"
+                }
             else:
-                # This is an unexpected state. Fail loudly.
-                raise ApiError(f"Session {session_id} attempted to release a lock owned by {existing_lock_id}", status_code=409)
-    except (FileNotFoundError, ResourceNotFound):
-        # Lock already gone, which is a success state.
-        current_app.logger.info(f"Attempted to release lock for {file_path}, but it was already gone.")
-        return True
-    except Exception as e:
-        message = f"Error releasing lock for {file_path}: {str(e)}"
-        current_app.logger.error(message)
-        # Re-raise 
-        e.args = (message,)
-        raise
-    
+                # Attempting to release someone else's lock
+                current_app.logger.warning(
+                    f"[LOCK] Session {session_id[:8]}... DENIED release of lock for {file_path}. "
+                    f"Owned by {existing_session[:8]}..."
+                )
+                raise ApiError(
+                    f"Session {session_id} attempted to release a lock owned by {existing_session}",
+                    status_code=409
+                )
+        else:
+            # Lock doesn't exist - idempotent success
+            current_app.logger.info(
+                f"[LOCK] Session {session_id[:8]}... attempted to release lock for {file_path}, "
+                f"but no lock exists (idempotent success)"
+            )
+            return {
+                "status": "success",
+                "action": "already_released",
+                "message": f"Lock was already released for {file_path}"
+            }
+
 
 def purge_stale_locks():
-    """Removes all stale lock files."""
-    storage = get_lock_storage()
+    """
+    Removes all stale locks from the database.
+
+    Returns:
+        int: Number of stale locks purged
+    """
+    # Ensure database is initialized
     try:
-        storage.mkdir()
+        init_locks_db()
     except Exception as e:
-        current_app.logger.error(f"Could not create locks directory: {e}")
+        current_app.logger.error(f"Could not initialize locks database: {e}")
         return 0
 
-    purged_count = 0
     try:
-        lock_files = storage.list_locks()
-        for lock in lock_files:
-            if lock['type'] == 'file' and is_lock_stale(lock.get('modified')):
-                try:
-                    storage.delete(lock['name'])
-                    current_app.logger.info(f"Purged stale lock file: {lock['name']}")
-                    purged_count += 1
-                except Exception as e:
-                    current_app.logger.error(f"Failed to purge stale lock {lock['name']}: {e}")
-    except FileNotFoundError:
-        # No locks directory, nothing to purge.
-        pass
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # Calculate the staleness threshold
+            stale_threshold = datetime.now(timezone.utc) - timedelta(seconds=LOCK_TIMEOUT_SECONDS)
+
+            # Delete stale locks
+            cursor.execute("""
+                DELETE FROM locks
+                WHERE datetime(updated_at) < datetime(?)
+            """, (stale_threshold.isoformat(),))
+
+            purged_count = cursor.rowcount
+
+            if purged_count > 0:
+                current_app.logger.info(f"Purged {purged_count} stale locks")
+
+            return purged_count
     except Exception as e:
-        current_app.logger.error(f"Error listing or purging stale locks: {e}")
-    
-    return purged_count
+        current_app.logger.error(f"Error purging stale locks: {e}")
+        return 0
+
 
 def get_all_active_locks():
-    """Fetches all non-stale lock files and returns a map of locked_file_path -> session_id."""
-    storage = get_lock_storage()
+    """
+    Fetches all non-stale locks and returns a map of file_path -> session_id.
+
+    Returns:
+        dict: Dictionary mapping file paths to session IDs for all active locks
+    """
+    # Ensure database is initialized
     try:
-        storage.mkdir()
+        init_locks_db()
     except Exception as e:
-        current_app.logger.error(f"Could not create locks directory: {e}")
+        current_app.logger.error(f"Could not initialize locks database: {e}")
         return {}
-        
-    active_locks = {}
 
     try:
-        lock_files = storage.list_locks()
-        for lock in lock_files:
-            if lock['type'] == 'file' and not is_lock_stale(lock.get('modified')):
-                try:
-                    lock_file_session_id = storage.read(lock['name'])
-                    original_file_path = get_file_from_lock_path(lock['name'])
-                    active_locks[original_file_path] = lock_file_session_id
-                except Exception as e:
-                    current_app.logger.error(f"Error reading lock file {lock['name']}: {e}")
-    except FileNotFoundError:
-        current_app.logger.warning(f"Could not find locks directory")
-        return {}
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # Calculate the staleness threshold
+            stale_threshold = datetime.now(timezone.utc) - timedelta(seconds=LOCK_TIMEOUT_SECONDS)
+
+            # Get all non-stale locks
+            cursor.execute("""
+                SELECT file_path, session_id
+                FROM locks
+                WHERE datetime(updated_at) >= datetime(?)
+            """, (stale_threshold.isoformat(),))
+
+            active_locks = {row['file_path']: row['session_id'] for row in cursor.fetchall()}
+
+            return active_locks
     except Exception as e:
-        raise e
-    
-    return active_locks
+        current_app.logger.error(f"Error fetching active locks: {e}")
+        return {}
+
+
+def get_locked_file_ids(session_id=None):
+    """
+    Returns a list of file IDs (hashes) which are currently locked.
+
+    Args:
+        session_id (str, optional): If provided, only return locks for this session
+
+    Returns:
+        list: List of file ID hashes that are locked
+    """
+    active_locks = get_all_active_locks()
+    locked_file_ids = []
+
+    for file_path, lock_session_id in active_locks.items():
+        if session_id and lock_session_id != session_id:
+            continue
+
+        # Remove /data/ prefix if present
+        file_path = file_path.removeprefix("/data/")
+
+        try:
+            file_id = resolve_path_to_hash(file_path)
+            locked_file_ids.append(file_id)
+        except KeyError:
+            # File was deleted but lock remains - skip it
+            # This is normal when files are deleted - locks will be purged by cleanup job
+            current_app.logger.debug(f"Skipping lock for deleted file: {file_path}")
+            continue
+
+    return locked_file_ids
+
 
 def check_lock(file_path, session_id):
-    """Checks if a single file is locked by another session."""
-    storage = get_lock_storage()
-    
-    # Ensure locks directory exists
+    """
+    Checks if a single file is locked by another session.
+
+    Args:
+        file_path (str): The path to check
+        session_id (str): The session ID making the check
+
+    Returns:
+        dict: {"is_locked": bool} - True if locked by another session
+    """
+    # Ensure database is initialized
     try:
-        storage.mkdir()
+        init_locks_db()
     except Exception as e:
-        current_app.logger.error(f"Could not create locks directory: {e}")
-        return { "is_locked": False }  # Assume not locked if we can't check
-    
+        current_app.logger.error(f"Could not initialize locks database: {e}")
+        return {"is_locked": False}
+
     active_locks = get_all_active_locks()
-    
+
     if file_path in active_locks and active_locks[file_path] != session_id:
-        return { "is_locked": True }
-    
-    return { "is_locked": False }
+        current_app.logger.debug(f"File is locked by another session: {active_locks[file_path]}")
+        return {"is_locked": True}
+
+    return {"is_locked": False}

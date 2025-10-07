@@ -183,7 +183,7 @@ async function lintSource(view) {
             throw new Error("Invalid response from remote validation:" + JSON.stringify(error) )
           }
           const severity = "error"
-          return { from, to, severity, message: error.message, column: error.column };
+          return { from, to, severity, message: error.message || String(error), column: error.column };
         }).filter(Boolean);
         // @ts-ignore
         return resolve(diagnostics)

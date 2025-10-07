@@ -47,28 +47,19 @@ FROM base as builder
 COPY package.json package-lock.json* ./
 COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies first (no dev dependencies needed yet)
-RUN uv sync --no-dev --no-cache
+# Install all dependencies (both prod and dev) - this layer is cached unless deps change
+RUN uv sync --frozen && npm install --ignore-scripts --no-audit --no-fund
 
-# Install Node.js dependencies without postinstall (which needs source files)
-RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-
-# Copy source code
+# Copy source code (needed for build scripts)
 COPY . .
 
-# Now install dev dependencies and run optimized build process once
-RUN uv sync --no-cache \
-    && npm install --no-audit --no-fund \
-    # Run postinstall components that aren't covered by main build
-    && node bin/generate-importmap.js \
-    && uv run python bin/compile-sl-icons.py \
+# Run the build and cleanup in one layer
+RUN uv run python bin/compile-sl-icons.py \
     && uv run python bin/download-pdfjs \
-    # Run full build process (templates + bundle only, since importmap/icons done above)
     && node bin/build.js --steps=templates,bundle \
     # Remove dev dependencies immediately after build
     && npm prune --omit=dev \
     && npm cache clean --force \
-    && uv sync --no-dev --no-cache \
     && uv cache clean \
     # Remove all build-time files and directories
     && rm -rf .git \
@@ -100,7 +91,7 @@ COPY --from=builder /app/config /app/config
 RUN sed -i 's/"application.mode": "development"/"application.mode": "production"/' /app/config/config.json
 COPY --from=builder /app/bin /app/bin
 COPY --from=builder /app/schema /app/schema
-COPY --from=builder /app/data /app/data
+COPY --from=builder /app/demo/data /app/data
 COPY --from=builder /app/package.json /app/package.json
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 
@@ -113,8 +104,14 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-# Stage 4: Test-optimized variant (inherits from builder)
-FROM builder as test
+# Stage 4: Test-optimized variant (inherits from production)
+FROM production as test
+
+# Copy test fixtures and helpers for E2E tests
+COPY tests/e2e/fixtures /app/tests/e2e/fixtures
+COPY tests/e2e/backend/helpers /app/tests/e2e/backend/helpers
+COPY tests/e2e/frontend/helpers /app/tests/e2e/frontend/helpers
+COPY tests/py/fixtures /app/tests/py/fixtures
 
 # Override entrypoint for test environment
 COPY docker/entrypoint-test.sh /entrypoint-test.sh

@@ -26,7 +26,7 @@ docker run -p 8000:8000 \
   cboulanger/pdf-tei-editor:latest
 ```
 
-The application will be available at: http://localhost:8000
+The application will be available at: <http://localhost:8000>, but no ai-powered extractors are enabled, for this, see below. 
 
 ## Configuration Options
 
@@ -73,7 +73,7 @@ services:
       - APP_DEMO_PASSWORD=demo123
       - APP_LOGIN_MESSAGE="<h3>PDF TEI Editor</h3><p>Contact administrator to create an account.</p>"
       - GEMINI_API_KEY=your_gemini_api_key_here
-      - GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
+      - GROBID_SERVER_URL=https://example.com/grobid
     volumes:
       - pdf_data:/app/data
       - pdf_config:/app/config
@@ -86,6 +86,7 @@ volumes:
 ```
 
 Run with:
+
 ```bash
 docker-compose up -d
 ```
@@ -95,15 +96,16 @@ docker-compose up -d
 After starting the container:
 
 ### Admin User
+
 - **Username**: `admin`
 - **Password**: Value of `APP_ADMIN_PASSWORD` or `admin` if not set
 - **Permissions**: Full access to all features
 
 ### Demo User
+
 - **Username**: `demo`
 - **Password**: Value of `APP_DEMO_PASSWORD` or `demo` if not set
 - **Permissions**: Standard user access
-
 
 ## Persistent Data
 
@@ -144,7 +146,9 @@ server {
     }
 }
 ```
+
 ## Docker Hub Repository
 
 The official Docker images are available at:
 **https://hub.docker.com/r/cboulanger/pdf-tei-editor**
+

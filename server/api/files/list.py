@@ -12,6 +12,8 @@ from server.lib.access_control import DocumentAccessFilter
 logger = logging.getLogger(__name__)
 bp = Blueprint("files_list", __name__, url_prefix="/api/files")
 
+VERBOSE = False
+
 @bp.route("/list", methods=["GET"])
 @handle_api_errors
 #@session_required
@@ -23,16 +25,30 @@ def file_list():
     # Get file data with metadata already populated
     files_data = get_file_data(force_refresh=force_refresh or is_cache_dirty())
     
-    # Add lock information if WebDAV is enabled
-    webdav_enabled = current_app.config.get('WEBDAV_ENABLED', False)
-    if webdav_enabled:
-        active_locks = get_all_active_locks()
-        session_id = get_session_id(request)
-        
-        for data in files_data:
-            if "versions" in data:
-                for version in data["versions"]:
-                    version['is_locked'] = version['path'] in active_locks and active_locks.get(version['path']) != session_id
+    # Add lock information for all files (efficient single query)
+    active_locks = get_all_active_locks()
+    session_id = get_session_id(request)
+
+    if VERBOSE: 
+        logger.debug(f"Active locks: {active_locks}")
+        logger.debug(f"Current session: {session_id}")
+
+    for data in files_data:
+        # Mark locked versions
+        if "versions" in data:
+            for version in data["versions"]:
+                is_locked = version['path'] in active_locks and active_locks.get(version['path']) != session_id
+                version['is_locked'] = is_locked
+                if VERBOSE and is_locked:
+                    logger.debug(f"Marking version as locked: {version['path']} (locked by {active_locks.get(version['path'])})")
+
+        # Mark locked gold files
+        if "gold" in data:
+            for gold in data["gold"]:
+                is_locked = gold['path'] in active_locks and active_locks.get(gold['path']) != session_id
+                gold['is_locked'] = is_locked
+                if VERBOSE and is_locked:
+                    logger.debug(f"Marking gold as locked: {gold['path']} (locked by {active_locks.get(gold['path'])})")
     
     # Apply variant filtering if specified
     if variant_filter is not None:

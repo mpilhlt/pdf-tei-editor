@@ -1,6 +1,6 @@
 # Secrets and caches
-.env
-.env.docker
+.env*
+!.env.dist
 
 # Caches and temp files
 .venv
@@ -11,6 +11,7 @@ __pycache__
 *.backup
 nohup.out
 off/
+*.stackdump
 
 # installation artifacts
 node_modules
@@ -19,22 +20,3 @@ pdfjs
 # Debug logs
 log/
 
-# Ignore data files by default
-data/*
-# But not these specific directories/files
-!data/pdf/example/
-!data/tei/example/
-!data/versions/.gitignore
-
-# Smart test runner cache
-tests/test-dependencies.json
-
-# Playwright test artifacts
-tests/e2e/test-results/
-tests/e2e/playwright-report/
-tests/.cache/
-
-# Build artifacts
-app/web/app.js
-app/web/templates.json
-app/web/assets/

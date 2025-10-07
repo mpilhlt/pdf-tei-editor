@@ -177,12 +177,11 @@ def load_blueprints_from_directory(directory, prefix=""):
         
         if os.path.isfile(item_path) and item.endswith('.py') and item != '__init__.py':
             # Load .py files as modules
-            module_name = f"{prefix}{item[:-3]}" if prefix else item[:-3]  # Remove ".py" extension
-            
+            module_name = f"server.api.{prefix}{item[:-3]}" if prefix else f"server.api.{item[:-3]}"  # Remove ".py" extension
+
             # Use importlib to dynamically import the module
-            spec = importlib.util.spec_from_file_location(module_name, item_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            import importlib
+            module = importlib.import_module(module_name)
 
             # Dynamically register the blueprint if it exists
             if hasattr(module, 'bp'):
@@ -224,12 +223,9 @@ logger.info(f"Temporary upload dir is {app.config['UPLOAD_DIR']}")
 def log_session_id():
     if request.endpoint and request.endpoint.startswith("serve_"):
         return
-    current_app.logger.debug(f"===========================================")
-    current_app.logger.debug(f"Request: {request.endpoint} ")
-    if 'X-Session-ID' in request.headers:
-        session_id = request.headers.get('X-Session-ID')
-        current_app.logger.debug(f"Session {session_id}")
-    current_app.logger.debug(f"===========================================")
+    
+    session_id = request.headers.get('X-Session-ID', None)
+    current_app.logger.debug(f"Request: {request.endpoint}{" from session " + session_id if session_id else ''}")
 
 # Helper function to check if we're in development mode
 def is_development_mode():
@@ -249,6 +245,12 @@ def serve_src(path):
         return jsonify({"error": "Not found"}), 404
     return send_from_directory(src_root, path)
 
+# Serve from /tests during development only
+@app.route('/tests/<path:path>')
+def serve_tests(path):
+    if not is_development_mode():
+        return jsonify({"error": "Not found"}), 404
+    return send_from_directory(project_root / 'tests', path)
 
 # Serve documentation
 @app.route('/docs/<path:path>')

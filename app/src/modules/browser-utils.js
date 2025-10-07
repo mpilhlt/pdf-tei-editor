@@ -266,7 +266,7 @@ export function isValidXPath(xpathExpression, xmlDom, namespaceResolver = null) 
 
   } catch (error) {
     // An error indicates an invalid XPath expression
-    console.error("Invalid XPath:", error.message); // Optionally log the error
+    console.error("Invalid XPath:", String(error)); // Optionally log the error
     return false;
   }
 }

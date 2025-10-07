@@ -12,6 +12,7 @@ services:
     environment:
       - FLASK_ENV=testing
       - PYTHONPATH=/app
+      - TEST_IN_PROGRESS=${TEST_IN_PROGRESS:-}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
       interval: 5s

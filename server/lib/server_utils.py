@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import json
 import re
+import socket
 from pathlib import Path
 from flask import current_app
 import logging
@@ -18,6 +19,22 @@ class ApiError(RuntimeError):
     def __init__(self, message, status_code=400):
         super().__init__(message)
         self.status_code = status_code
+
+
+def has_internet():
+    """
+    Test internet connectivity by attempting to connect to Google's DNS server.
+    This is faster than HTTP requests as it only checks connectivity without data transfer.
+
+    Returns:
+        bool: True if internet connection is available, False otherwise
+    """
+    try:
+        socket.setdefaulttimeout(3)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("8.8.8.8", 53))
+        return True
+    except socket.error:
+        return False
 
 
 def make_timestamp():
@@ -43,34 +60,41 @@ def get_data_file_path(path):
     return os.path.join(data_root, safe_file_path(path))
 
 
-def resolve_document_identifier(path_or_hash) -> str | None:
+def resolve_document_identifier(file_id: str) -> str:
     """
     Resolve a document identifier that can be either a file path (starts with /data/) or a hash.
-    
+
     Args:
-        path_or_hash (str): Either a file path starting with "/data/" or a hash string
-        
+        file_id (str): Either a file path starting with "/data/" or a hash string
+
     Returns:
-        str: The resolved file path (always starts with "/data/") or None if the hash does not resolve
-        
+        str: The resolved file path (always starts with "/data/") 
+
     Raises:
         ApiError: If hash cannot be resolved or identifier is invalid
     """
-    from server.lib.hash_utils import resolve_hash_to_path
-    
-    if not path_or_hash:
+    from ..lib.hash_utils import resolve_hash_to_path
+
+    if not file_id:
         raise ApiError("Document identifier is empty", status_code=400)
-    
-    # If it starts with /data/, it's already a path
-    if path_or_hash.startswith('/data/'):
-        return path_or_hash
-    
+
+    # If it starts with /data/, it's a direct path - only allow in test mode
+    if file_id.startswith('/data/'):
+        if not os.environ.get('TEST_IN_PROGRESS'):
+            raise ApiError("Direct file paths are only allowed in test mode", status_code=400)
+        return file_id
+
     # Otherwise, treat it as a hash and resolve it
     try:
-        resolved_path = resolve_hash_to_path(path_or_hash)
-        return f"/data/{resolved_path}" if resolved_path else None
+        resolved_path = resolve_hash_to_path(file_id)
+        if resolved_path:
+            return f"/data/{resolved_path}" 
     except KeyError:
-        raise ApiError(f"Hash '{path_or_hash}' not found in lookup table", status_code=404)
+        pass
+    except Exception as e:
+        raise ApiError("Unexpected error: " + str(e))
+            
+    raise ApiError(f"Hash '{file_id}' not found in lookup table", status_code=404)
 
 
 def safe_file_path(file_path):

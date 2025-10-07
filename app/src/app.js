@@ -20,7 +20,7 @@ import ep from './endpoints.js'
 export { ep as endpoints }
 
 // plugins
-import plugins from './plugins.js'
+import plugins, { services } from './plugins.js'
 import { logLevel, client, config, AuthenticationPlugin, LoggerPlugin } from './plugins.js'
 import initialState from './state.js'
 
@@ -28,7 +28,7 @@ import initialState from './state.js'
 import PluginManager from './modules/plugin-manager.js'
 import StateManager from './modules/state-manager.js'
 import Application from './modules/application.js'
-import { createTestLogger } from './modules/test-logging.js'
+import { createTestLogger } from '../../tests/e2e/frontend/helpers/test-logging.js'
 
 //
 // Application bootstrapping
@@ -68,9 +68,9 @@ if (sessionState) {
   sessionState = serverState
 }
 
-// special case where server state overrides saved state on reload
-// this is a workaround to be fixed
+// server state overrides saved state on reload
 sessionState.webdavEnabled = serverState.webdavEnabled
+sessionState.hasInternet = serverState.hasInternet
 
 // Apply session state to current state
 Object.assign(state, sessionState)
@@ -107,6 +107,20 @@ stateManager.preserveState(true, [...persistedStateVars, 'sessionId'])
 
 // Install plugins with the final composed state
 await app.installPlugins(state)
+
+// @test-start
+// Expose necessary objects to global scope for E2E testing
+if (applicationMode == 'testing' || applicationMode == 'development' ) {
+  // @ts-ignore
+  window.app = app;
+  // @ts-ignore
+  window.client = client;
+  // @ts-ignore
+  window.services = services;
+  // @ts-ignore
+  window.testLog = testLog;
+}
+// @test-end
 
 // Now notify plugins with the final initial state
 await app.updateState({})  

@@ -5,11 +5,12 @@
  * Integrates with xmleditor plugin to enforce read-only state based on permissions.
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { UIPart, SlDropdown } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
+ * @import { UserData } from './authentication.js'
  */
 
 import { app, services, authentication, fileselection } from '../app.js'
@@ -19,6 +20,16 @@ import { PanelUtils } from '../modules/panels/index.js'
 import { logger } from '../app.js'
 import { api as xmlEditor } from './xmleditor.js'
 import { prettyPrintNode, ensureRespStmtForUser } from '../modules/tei-utils.js'
+import {
+  userHasReviewerRole,
+  userHasAnnotatorRole,
+  isGoldFile,
+  isVersionFile,
+  canEditDocumentWithPermissions,
+  canViewDocumentWithPermissions,
+  canEditFile as canEditFileFromUtils,
+  userIsAdmin
+} from '../modules/acl-utils.js'
 
 // TEI namespace constant
 const TEI_NS = 'http://www.tei-c.org/ns/1.0'
@@ -31,9 +42,18 @@ const TEI_NS = 'http://www.tei-c.org/ns/1.0'
  */
 
 /**
- * Access control navigation properties  
+ * Access control navigation properties
  * @typedef {object} accessControlPart
  * @property {UIPart<StatusBar, accessControlStatusbarPart>} statusbar - The access control statusbar widgets
+ */
+
+/**
+ * Document permissions object
+ * @typedef {object} DocumentPermissions
+ * @property {string} visibility - Document visibility ('public' or 'private')
+ * @property {string} editability - Document editability ('editable' or 'protected')
+ * @property {string|null} owner - Document owner username (null if no owner)
+ * @property {boolean} can_modify - Whether current user can modify permissions
  */
 
 // Status widgets for access control
@@ -44,16 +64,17 @@ let statusDropdownWidget;
 let permissionInfoWidget;
 
 
-// Current document permissions cache  
-/** @type {{visibility: string, editability: string, owner: string|null, can_modify: boolean}} */
+// Current document permissions cache
+/** @type {DocumentPermissions} */
 let currentPermissions = {
     visibility: 'public',
-    editability: 'editable', 
+    editability: 'editable',
     owner: null,
     can_modify: false
 }
 
 // Application state reference for internal use
+/** @type {ApplicationState | null} */
 let pluginState = null
 
 
@@ -71,6 +92,12 @@ const plugin = {
 
 /**
  * Access control API
+ * @typedef {object} AccessControlAPI
+ * @property {() => DocumentPermissions} getDocumentPermissions - Gets current document permissions
+ * @property {(user: UserData|null) => boolean} canEditDocument - Checks if user can edit document
+ * @property {(user: UserData|null) => boolean} canViewDocument - Checks if user can view document
+ * @property {(visibility: string, editability: string, owner?: string, description?: string) => Promise<DocumentPermissions>} updateDocumentStatus - Updates document status
+ * @property {(fileId: string) => boolean} checkCanEditFile - Checks if user can edit file
  */
 const api = {
   getDocumentPermissions: () => currentPermissions,
@@ -86,6 +113,7 @@ export default plugin
 /**
  * Runs when the main app starts so the plugins can register the app components they supply
  * @param {ApplicationState} state
+ * @returns {Promise<void>}
  */
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
@@ -98,7 +126,7 @@ async function install(state) {
   
   // Create status dropdown widget 
   statusDropdownWidget = createStatusDropdown()
-  
+
   // Add widgets to left side of statusbar (lower priority = more to the left)
   ui.xmlEditor.statusbar.add(permissionInfoWidget, 'left', 1)
   ui.xmlEditor.statusbar.add(statusDropdownWidget, 'left', 3)
@@ -110,17 +138,20 @@ async function install(state) {
 /**
  * Runs after all plugins are installed
  * @param {ApplicationState} state
+ * @returns {Promise<void>}
  */
 async function start(state) {
   logger.debug(`Starting plugin "${plugin.name}"`)
 }
 
+/** @type {string | null} */
 let state_xml_cache;
 let isUpdatingState = false; // Guard to prevent infinite loops 
 
 /**
  * Called when application state changes
  * @param {ApplicationState} state
+ * @returns {Promise<void>}
  */
 async function update(state) {
   // Store state reference for internal use
@@ -151,21 +182,28 @@ async function update(state) {
   
   // Check if document should be read-only based on permissions
   const shouldBeReadOnly = !canEditDocument(state.user)
-  if (shouldBeReadOnly !== state.editorReadOnly && !isUpdatingState) {
-    // Update application state to reflect access control
+
+  // Only apply access control restrictions, never relax them
+  // If editor is already read-only (e.g., due to file locking), don't override it
+  if (shouldBeReadOnly && !state.editorReadOnly && !isUpdatingState) {
+    // Document permissions require read-only - enforce it
     logger.debug(`Setting editor read-only based on access control: ${shouldBeReadOnly}`)
     // Note: Defer state update to avoid circular update during reactive state cycle
     isUpdatingState = true
     setTimeout(async () => {
       try {
         // Only update if the state still needs changing (avoid race conditions)
-        if (pluginState && pluginState.editorReadOnly !== shouldBeReadOnly) {
-          await app.updateState({ editorReadOnly: shouldBeReadOnly })
+        if (pluginState && !pluginState.editorReadOnly) {
+          await app.updateState({ editorReadOnly: true })
         }
       } finally {
         isUpdatingState = false
       }
     }, 0);
+  } else if (!shouldBeReadOnly && state.editorReadOnly) {
+    // Document permissions allow editing, but editor is read-only
+    // This might be due to file locking or other reasons - don't override
+    logger.debug(`Editor is read-only despite document being editable (likely due to file lock)`)
   }
   
   // Update read-only widget context if xmleditor shows read-only status due to access control
@@ -174,6 +212,7 @@ async function update(state) {
 
 /**
  * Creates the status dropdown widget
+ * @returns {SlDropdown} The created dropdown element
  */
 function createStatusDropdown() {
   const dropdown = document.createElement('sl-dropdown')
@@ -218,6 +257,7 @@ function createStatusDropdown() {
 /**
  * Handles status dropdown selection changes
  * @param {CustomEvent} event
+ * @returns {Promise<void>}
  */
 async function handlePermissionChange(event) {
   const selectedItem = event.detail.item
@@ -240,7 +280,7 @@ async function handlePermissionChange(event) {
     await updateDocumentStatus(newVisibility, newEditability, owner || undefined)
     logger.info(`Document status updated: ${newVisibility} ${newEditability}${owner ? ` (owner: ${owner})` : ''}`)
   } catch (error) {
-    logger.error(`Failed to update document status: ${error.message}`)
+    logger.error(`Failed to update document status: ${String(error)}`)
     // Revert dropdown to previous state
     updateStatusDropdownDisplay()
   }
@@ -248,6 +288,7 @@ async function handlePermissionChange(event) {
 
 /**
  * Parses document permissions from current XML DOM tree
+ * @returns {Promise<void>}
  */
 async function computeDocumentPermissions() {
   try {
@@ -278,7 +319,7 @@ async function computeDocumentPermissions() {
     
     logger.debug('Parsed document permissions:' + JSON.stringify(currentPermissions) )
   } catch (error) {
-    logger.error(`Error parsing document permissions: ${error.message}`)
+    logger.error(`Error parsing document permissions: ${String(error)}`)
     // Use defaults on error
     currentPermissions = {
       visibility: 'public', 
@@ -292,7 +333,7 @@ async function computeDocumentPermissions() {
 /**
  * Parses permissions from XML DOM tree
  * @param {Document} xmlTree
- * @returns {object} Permissions object
+ * @returns {DocumentPermissions} Permissions object
  */
 function parsePermissionsFromXmlTree(xmlTree) {
   try {
@@ -302,7 +343,8 @@ function parsePermissionsFromXmlTree(xmlTree) {
       return {
         visibility: 'public',
         editability: 'editable',
-        owner: null
+        owner: null,
+        can_modify: true
       }
     }
     
@@ -321,7 +363,8 @@ function parsePermissionsFromXmlTree(xmlTree) {
       return {
         visibility: 'public',
         editability: 'editable',
-        owner: null
+        owner: null,
+        can_modify: true
       }
     }
     
@@ -353,14 +396,16 @@ function parsePermissionsFromXmlTree(xmlTree) {
     return {
       visibility: visibility === 'private' ? 'private' : 'public',
       editability: editability === 'protected' ? 'protected' : 'editable',
-      owner
+      owner,
+      can_modify: true
     }
   } catch (error) {
-    logger.warn(`Error parsing permissions from XML tree: ${error.message}`)
+    logger.warn(`Error parsing permissions from XML tree: ${String(error)}`)
     return {
       visibility: 'public',
       editability: 'editable',
-      owner: null
+      owner: null,
+      can_modify: true
     }
   }
 }
@@ -371,6 +416,7 @@ function parsePermissionsFromXmlTree(xmlTree) {
  * @param {string} editability - 'editable' or 'protected'
  * @param {string} [owner] - Optional new owner
  * @param {string} [description] - Optional change description
+ * @returns {Promise<DocumentPermissions>} Updated permissions
  */
 async function updateDocumentStatus(visibility, editability, owner, description) {
   try {
@@ -481,19 +527,21 @@ async function updateDocumentStatus(visibility, editability, owner, description)
     return {
       visibility,
       editability,
-      owner: currentPermissions.owner
+      owner: currentPermissions.owner,
+      can_modify: true
     }
   } catch (error) {
-    logger.error(`Failed to update document permissions: ${error.message}`)
+    logger.error(`Failed to update document permissions: ${String(error)}`)
     throw error
   }
 }
 
 /**
  * Updates the access control UI widgets
+ * @returns {void}
  */
 function updateAccessControlUI() {
-  showAccessControlWidgets()
+  //showAccessControlWidgets() // disabled until actually implemented
   updatePermissionInfoDisplay()
   updateStatusDropdownDisplay()
   updateStatusDropdownVisibility()
@@ -501,6 +549,7 @@ function updateAccessControlUI() {
 
 /**
  * Updates the permission info text display
+ * @returns {void}
  */
 function updatePermissionInfoDisplay() {
   if (!permissionInfoWidget) return
@@ -528,6 +577,7 @@ function updatePermissionInfoDisplay() {
 
 /**
  * Updates the status dropdown display
+ * @returns {void}
  */
 function updateStatusDropdownDisplay() {
   if (!statusDropdownWidget) return
@@ -547,7 +597,10 @@ function updateStatusDropdownDisplay() {
     buttonText = 'Private • Protected'
   }
   
-  trigger.textContent = buttonText
+  if (trigger) {
+    trigger.textContent = buttonText
+  }
+  
   
   // Update selected menu item
   const currentValue = `${visibility}-${editability}`
@@ -559,6 +612,7 @@ function updateStatusDropdownDisplay() {
 
 /**
  * Shows or hides the status dropdown based on user permissions
+ * @returns {void}
  */
 function updateStatusDropdownVisibility() {
   if (!statusDropdownWidget || !permissionInfoWidget) return
@@ -576,6 +630,7 @@ function updateStatusDropdownVisibility() {
 
 /**
  * Shows access control widgets
+ * @returns {void}
  */
 function showAccessControlWidgets() {
   if (permissionInfoWidget && !permissionInfoWidget.isConnected) {
@@ -588,6 +643,7 @@ function showAccessControlWidgets() {
 
 /**
  * Hides access control widgets
+ * @returns {void}
  */
 function hideAccessControlWidgets() {
   if (permissionInfoWidget && permissionInfoWidget.isConnected) {
@@ -598,67 +654,31 @@ function hideAccessControlWidgets() {
   }
 }
 
+
 /**
  * Checks if current user can edit the document
- * @param {Object} user - Current user object
+ * @param {UserData|null} user - Current user object
  * @returns {boolean}
  */
 function canEditDocument(user) {
-  const { visibility, editability, owner } = currentPermissions
-  
-  if (!user) {
-    // Anonymous users cannot edit anything
-    return false
-  }
-  
-  // Admin users can edit everything
-  if (user.roles && user.roles.includes('admin')) {
-    return true
-  }
-  
-  // Check visibility permissions
-  if (visibility === 'private' && owner !== user.username) {
-    return false
-  }
-  
-  // Check editability permissions
-  if (editability === 'protected' && owner !== user.username) {
-    return false
-  }
-  
-  return true
+  const fileId = pluginState?.xml || undefined
+  return canEditDocumentWithPermissions(user, currentPermissions, fileId)
 }
 
 /**
  * Checks if current user can view the document
- * @param {Object} user - Current user object  
+ * @param {UserData|null} user - Current user object
  * @returns {boolean}
  */
 function canViewDocument(user) {
-  const { visibility, owner } = currentPermissions
-  
-  // Admin users can view everything
-  if (user && user.roles && user.roles.includes('admin')) {
-    return true
-  }
-  
-  // Public documents can be viewed by anyone
-  if (visibility === 'public') {
-    return true
-  }
-  
-  // Private documents only viewable by owner
-  if (visibility === 'private') {
-    return user && owner === user.username
-  }
-  
-  return false
+  return canViewDocumentWithPermissions(user, currentPermissions)
 }
 
 /**
  * Updates the xmleditor's read-only widget with context-specific information
  * @param {boolean} editorReadOnly - Current editor read-only state
  * @param {boolean} accessControlReadOnly - Whether read-only is due to access control
+ * @returns {void}
  */
 function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
   // Only update if editor is read-only and it's due to access control
@@ -673,20 +693,29 @@ function updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
 /**
  * Updates the read-only widget text with access control context
  * @param {StatusText} readOnlyWidget - The read-only status widget
+ * @returns {void}
  */
 function updateReadOnlyWidgetText(readOnlyWidget) {
   if (!readOnlyWidget) {
     logger.debug('Read-only widget not available, skipping context update')
     return
   }
-  
+
   const { visibility, editability, owner } = currentPermissions
   const currentUser = authentication.getUser()
-  
+
   let contextText = 'Read-only'
-  
+
+  // Check role-based file type restrictions
+  if (pluginState && pluginState.xml) {
+    if (isGoldFile(pluginState.xml) && !userHasReviewerRole(currentUser)) {
+      contextText = 'Read-only (gold file - reviewer role required)'
+    } else if (isVersionFile(pluginState.xml) && !userHasAnnotatorRole(currentUser) && !userHasReviewerRole(currentUser)) {
+      contextText = 'Read-only (version file - annotator role required)'
+    }
+  }
   // Determine the reason for read-only state
-  if (editability === 'protected' && owner && owner !== currentUser?.username) {
+  else if (editability === 'protected' && owner && owner !== currentUser?.username) {
     // Document is protected and user is not the owner
     contextText = `Read-only (owned by ${owner})`
   } else if (visibility === 'private' && owner && owner !== currentUser?.username) {
@@ -696,7 +725,7 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
     // Default case with owner information
     contextText = `Read-only (owned by ${owner})`
   }
-  
+
   // Update the widget text
   readOnlyWidget.text = contextText
   logger.debug(`Updated read-only context: ${contextText}`)
@@ -704,74 +733,10 @@ function updateReadOnlyWidgetText(readOnlyWidget) {
 
 /**
  * Checks if the current user can edit the given file based on access control metadata
- * @param {string} fileId - The file identifier (hash or path)
+ * @param {string} fileId - The file identifier (hash)
  * @returns {boolean} - True if user can edit, false otherwise
  */
 function checkCanEditFile(fileId) {
-  try {
-    const currentUser = authentication.getUser()
-    
-    // Find the file metadata in fileselection data
-    const fileData = fileselection.fileData
-    let fileMetadata = null
-    
-    // Search through all files and their versions for matching ID
-    for (const file of fileData) {
-      // Check gold versions
-      if (file.gold) {
-        for (const version of file.gold) {
-          if (version.hash === fileId || version.path === fileId) {
-            fileMetadata = version
-            break
-          }
-        }
-      }
-      
-      // Check other versions
-      if (!fileMetadata && file.versions) {
-        for (const version of file.versions) {
-          if (version.hash === fileId || version.path === fileId) {
-            fileMetadata = version
-            break
-          }
-        }
-      }
-      
-      if (fileMetadata) break
-    }
-    
-    if (!fileMetadata || !fileMetadata.access_control) {
-      // No metadata found or no access control info - default to allow editing
-      logger.debug('No access control metadata found, allowing edit')
-      return true
-    }
-    
-    const { visibility, editability, owner } = fileMetadata.access_control
-    
-    if (!currentUser) {
-      // Anonymous users cannot edit anything
-      return false
-    }
-    
-    // Admin users can edit everything
-    if (currentUser.roles && currentUser.roles.includes('admin')) {
-      return true
-    }
-    
-    // Check visibility permissions
-    if (visibility === 'private' && owner !== currentUser.username) {
-      return false
-    }
-    
-    // Check editability permissions
-    if (editability === 'protected' && owner !== currentUser.username) {
-      return false
-    }
-    
-    return true
-  } catch (error) {
-    logger.warn(`Error checking file access permissions: ${error.message}`)
-    // Default to allowing edit on error to avoid breaking functionality
-    return true
-  }
+  const currentUser = authentication.getUser()
+  return canEditFileFromUtils(currentUser, fileId)
 }

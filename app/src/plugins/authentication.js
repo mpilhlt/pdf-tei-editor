@@ -31,10 +31,13 @@ import { UrlHash } from '../modules/browser-utils.js';
 
 /**
  * @typedef {Object} UserData 
- * @param {string} username
- * @param {string} fullname
- * @param {string[]} roles
- * @param {string} [sessionId]
+ * @property {string} username
+ * @property {string} fullname
+ * @property {string[]} roles
+ */
+
+/**
+ * @typedef { UserData & {sessionId: string} } AuthenticationData
  */
 
 // Register templates
@@ -98,7 +101,11 @@ class AuthenticationPlugin extends Plugin {
    */
   async onStateUpdate(changedKeys) {
     if (changedKeys.includes('user')) {
-      ui.toolbar.logoutButton.disabled = this.state?.user === null;
+      const user = this.state?.user;
+      ui.toolbar.logoutButton.disabled = user === null;
+      if (user) {
+        ui.toolbar.logoutButton.closest('sl-tooltip').content = `Log out ${user.username}`
+      }
     }
   }
 
@@ -106,7 +113,13 @@ class AuthenticationPlugin extends Plugin {
    * Save session to URL hash on shutdown
    */
   async shutdown() {
+    // release lock - this really should be in xmleditor plugin but the shutdown endpoint will be called only after this
+    if (this.state?.xml) {
+      await client.releaseLock(this.state?.xml)
+    }
+    // destroy session id
     if (this.state?.sessionId) {
+      await client.logout()
       UrlHash.set('sessionId', this.state.sessionId, false);
     }
   }
@@ -118,26 +131,27 @@ class AuthenticationPlugin extends Plugin {
   /**
    * Checks if the user is authenticated. If not, shows a login dialog
    * and returns a promise that resolves only after a successful login.
-   * @returns {Promise<UserData>} the userdata
+   * @returns {Promise<UserData>} the authentication status data
    */
   async ensureAuthenticated() {
-    let userData;
+    /** @type {AuthenticationData} */
+    let authData;
     try {
-      userData = await client.status();
+      authData = await client.status();
     } catch (error) {
       // Not authenticated, proceed to show login dialog
-      userData = await this._showLoginDialog();
+       authData = await this.showLoginDialog();
     }
     
     // Only update sessionId if userData contains one (from login), not from status check
-    const stateUpdate = { user: userData };
-    if (userData.sessionId) {
+    const stateUpdate = { user: authData };
+    if (authData.sessionId) {
       // @ts-ignore
-      stateUpdate.sessionId = userData.sessionId;
+      stateUpdate.sessionId = authData.sessionId;
     }
     
     await this.dispatchStateChange(stateUpdate);
-    return userData;
+    return authData;
   }
 
   /**
@@ -145,22 +159,29 @@ class AuthenticationPlugin extends Plugin {
    * @returns {UserData|null}
    */
   getUser() {
-    return this.state?.user;
+    return this.state?.user || null;
   }
 
   /**
-   * Shows the login dialog and updates state if login was successful
+   * Shows the login dialog and updates state if login was successful,
+   * otherwise shows it again in a loop until correct authentication data is supplied
+   * @returns {Promise<AuthenticationData>}
    */
   async showLoginDialog() {
-    try {
-      const userData = await this._showLoginDialog();
-      await this.dispatchStateChange({
-        sessionId: userData.sessionId, 
-        user: userData
-      });
-    } catch (error) {
-      logger.error("Error logging in: " + error.message);
+    let authData
+    while (true) {
+      try {
+        authData = await this._showLoginDialog();
+        await this.dispatchStateChange({
+          sessionId: authData.sessionId, 
+          user: authData
+        });
+        break;
+      } catch (error) {
+        logger.error("Error logging in: " + String(error));
+      }
     }
+    return authData
   }
 
   /**
@@ -189,9 +210,9 @@ class AuthenticationPlugin extends Plugin {
   //
 
   /**
-   * Creates and displays the login dialog.
-   * @returns {Promise<UserData>} A promise that resolves on successful login with the user data.
-   * @private
+   * Creates and displays the login dialog for one login attenpt
+   * @returns {Promise<AuthenticationData>} A promise that resolves on successful login with 
+   * the user data or rejects in case the credentials are wrong
    */
   async _showLoginDialog() {
     const dialog = ui.loginDialog;
@@ -213,16 +234,17 @@ class AuthenticationPlugin extends Plugin {
         dialog.message.textContent = '';
         const passwd_hash = await this._hashPassword(password);
         try {
-          const userData = await client.login(username, passwd_hash);
-          logger.info(`Login successful for user: ${userData.username}`);
+          const authData = await client.login(username, passwd_hash);
+          logger.info(`Login successful for user: ${authData.username}`);
           dialog.hide();
           dialog.username.value = "";
-          dialog.password.value = "";
-          resolve(userData);
+          resolve(authData);
         } catch (error) {
           dialog.message.textContent = 'Wrong username or password';
           logger.error('Login failed: ' + String(error))
           reject(error);
+        } finally {
+          dialog.password.value = "";
         }
       }, {once: true});
       dialog.show();

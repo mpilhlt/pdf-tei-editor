@@ -77,7 +77,7 @@ def send_sse_message(client_id, event_type, data):
     
     if client_id in message_queues:
         message_queues[client_id].put((event_type, data))
-        logger.info(f"Sent event of type {event_type} with data '{data}' to client with id '{client_id}'")
+        logger.debug(f"Sent event of type {event_type} with data '{data}' to client with id '{client_id}'")
         return True
     else:
         # Client not connected to SSE - this is normal, just debug log it

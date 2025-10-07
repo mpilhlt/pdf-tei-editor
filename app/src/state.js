@@ -5,6 +5,11 @@
  */
 
 /**
+ * @import { FileListItem } from './modules/file-data-utils'
+ * @import { UserData } from './plugins/authentication'
+ */
+
+/**
  * The application state, which is often passed to the plugin endpoints
  * 
  * @typedef {object} ApplicationState
@@ -16,10 +21,11 @@
  * @property {string|null} variant - The variant filter to show only files with matching variant-id
  * @property {boolean} webdavEnabled - Wether we have a WebDAV backend on the server
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
- * @property {boolean} offline  - Whether the application is in offline mode
- * @property {object|null} user - The currently logged-in user
+ * @property {boolean} offline  - Whether the application is in offline mode, i.e. the backend has disconnected
+ * @property {UserData|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
- * @property {Array<object>|null} fileData - The file data loaded from the server
+ * @property {FileListItem[]|null} fileData - The file data loaded from the server
+ * @property {boolean} hasInternet - Whether the backend has internet access
  * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
  * @property {ApplicationState|null} previousState - Links to the previous state object 
  */
@@ -36,11 +42,12 @@ const initialState = {
   variant: null,
   webdavEnabled: false,
   editorReadOnly: false,
-  offline: false,
   sessionId: null,
   user: null,
   collection: null,
   fileData: null,
+  offline: false,
+  hasInternet: false,
   ext: {},
   previousState: null
 }

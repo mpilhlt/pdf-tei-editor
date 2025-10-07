@@ -6,16 +6,18 @@
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { SlSelect } from '../ui.js'
+ * @import { FileListItem, TeiFileData } from '../modules/file-data-utils.js'
  */
 import ui from '../ui.js'
 import { SlOption, SlDivider, updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import { app, logger, services, dialog, updateState, hasStateChanged } from '../app.js'
 import { FiledataPlugin } from '../plugins.js'
+import { groupFilesByCollection } from '../modules/file-data-utils.js'
 
 /**
  * The data about the pdf and xml files on the server
- * @type {Array<object>}
+ * @type {FileListItem[]}
  */
 let fileData = [];
 
@@ -35,10 +37,7 @@ const plugin = {
 
   install,
   state: {
-    update,
-    changeFileData: data => {
-      fileData = data;
-    }
+    update
   }
 }
 
@@ -56,6 +55,25 @@ await registerTemplate('file-selection', 'file-selection.html');
 // Implementation
 //
 
+/** @type {ApplicationState} */
+let currentState;
+
+//
+// Helper functions
+//
+
+/**
+ * Creates a label for a document with optional lock icon
+ * @param {string} label - The document label
+ * @param {boolean} [isLocked] - Whether the document is locked
+ * @returns {string} HTML string with label and optional lock icon
+ */
+function createDocumentLabel(label, isLocked) {
+  return isLocked === true
+    ? `${label}<sl-icon name="file-lock2" slot="suffix"></sl-icon>`
+    : label;
+}
+
 // API
 
 /**
@@ -70,9 +88,10 @@ async function install(state) {
   const fileSelectionControls = createFromTemplate('file-selection');
 
   // Add file selection controls to toolbar with specified priorities
+  /** @type { Record<string, Number>} */
   const controlPriorities = {
-    'pdf': 10,    // High priority - essential
-    'xml': 10,    // High priority - essential  
+    'pdf': 10,    // High priority - essential (source file)
+    'xml': 10,    // High priority - essential (target file)
     'variant': 5, // Medium priority
     'diff': 3     // Lower priority
   };
@@ -81,7 +100,7 @@ async function install(state) {
     // Ensure we're working with HTMLElement
     if (control instanceof HTMLElement) {
       const name = control.getAttribute('name');
-      const priority = controlPriorities[name] || 1;
+      const priority = (name && controlPriorities[name]) || 1;
       ui.toolbar.add(control, priority);
     }
   });
@@ -156,7 +175,23 @@ async function update(state) {
 
     isUpdatingProgrammatically = true;
     try {
-      ui.toolbar.pdf.value = state.pdf || ""
+      // For XML-only files where pdf is null, find the correct source identifier
+      let sourceValue = state.pdf || "";
+      if (!state.pdf && state.xml && state.fileData) {
+        // Find the file that contains this XML and get its identifier
+        const xmlFile = state.fileData.find(file =>
+          (file.gold && file.gold.some(g => g.hash === state.xml)) ||
+          (file.versions && file.versions.some(v => v.hash === state.xml))
+        );
+        if (xmlFile) {
+          // For XML-only files, the source identifier is the XML hash itself
+          if (!xmlFile.pdf) {
+            sourceValue = state.xml;
+          }
+        }
+      }
+
+      ui.toolbar.pdf.value = sourceValue;
       ui.toolbar.xml.value = state.xml || ""
       ui.toolbar.diff.value = state.diff || ""
     } finally {
@@ -218,10 +253,9 @@ async function reload(options = {}) {
   // when reloadFileData() triggers a state update with new fileData
 }
 
-
+/** @type {Set<string>} */
 let variants
 let collections
-let currentState = null
 let isUpdatingProgrammatically = false
 let isInStateUpdateCycle = false
 
@@ -317,6 +351,7 @@ async function populateSelectboxes(state) {
 
   // Clear existing options
   for (const name of ["pdf", "xml", "diff"]) {
+    // @ts-ignore
     ui.toolbar[name].innerHTML = ""
   }
 
@@ -342,11 +377,7 @@ async function populateSelectboxes(state) {
   // If variant is "" (All), show all files
 
   // sort into groups by collection (now directly from server data)
-  const grouped_files = filteredFileData.reduce((groups, file) => {
-    const collection_name = file.collection;
-    (groups[collection_name] = groups[collection_name] || []).push(file)
-    return groups
-  }, {})
+  const grouped_files = groupFilesByCollection(filteredFileData)
 
   // save the collections in closure variable
   collections = Object.keys(grouped_files).sort()
@@ -362,10 +393,29 @@ async function populateSelectboxes(state) {
       .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0)
 
     for (const file of files) {
-      // populate pdf select box 
+      // Determine file identifier and label based on file type
+      let fileIdentifier, displayLabel;
+
+      if (file.pdf) {
+        // Traditional PDF-XML workflow
+        fileIdentifier = file.pdf.hash;
+        displayLabel = file.label;
+      } else if (file.gold && file.gold.length > 0) {
+        // XML-only file - use first gold file as identifier
+        fileIdentifier = file.gold[0].hash;
+        displayLabel = `📄 ${file.label}`;
+      } else if (file.versions && file.versions.length > 0) {
+        // XML-only file with only versions - use first version as identifier
+        fileIdentifier = file.versions[0].hash;
+        displayLabel = `📄 ${file.label}`;
+      } else {
+        continue; // Skip files without identifiable content
+      }
+
+      // populate pdf/source select box
       const option = Object.assign(new SlOption, {
-        value: file.pdf.hash,  // Use document identifier
-        textContent: file.label,
+        value: fileIdentifier,
+        textContent: displayLabel,
         size: "small",
       })
 
@@ -376,7 +426,7 @@ async function populateSelectboxes(state) {
       ui.toolbar.pdf.hoist = true
       ui.toolbar.pdf.appendChild(option);
 
-      if (file.pdf.hash === state.pdf) {
+      if (fileIdentifier === state.pdf) {
         // populate the version and diff selectboxes depending on the selected file
         if (file.versions) {
           // Filter versions based on variant selection
@@ -391,6 +441,7 @@ async function populateSelectboxes(state) {
           // If variant is "" (All), show all versions
 
           // Also add gold entries if they match the variant filter
+          /** @type {TeiFileData[]} */
           let goldToShow = [];
           if (file.gold) {
             if (variant === "none") {
@@ -414,14 +465,14 @@ async function populateSelectboxes(state) {
               // @ts-ignore
               option.size = "small"
               option.value = gold.hash;  // Use document identifier
-              option.textContent = gold.label;
+              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
               ui.toolbar.xml.appendChild(option);
-              // diff 
+              // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = gold.hash;  // Use document identifier
-              option.textContent = gold.label;
+              option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
               ui.toolbar.diff.appendChild(option)
             });
 
@@ -444,16 +495,14 @@ async function populateSelectboxes(state) {
               // @ts-ignore
               option.size = "small"
               option.value = version.hash;  // Use document identifier
-              option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-              //option.disabled = version.is_locked;
+              option.innerHTML = createDocumentLabel(version.label, version.is_locked);
               ui.toolbar.xml.appendChild(option);
-              // diff 
+              // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
               option.value = version.hash;  // Use document identifier
-              option.textContent = version.is_locked ? `🔒 ${version.label}` : version.label;
-              option.disabled = version.is_locked;
+              option.innerHTML = createDocumentLabel(version.label, version.is_locked);
               ui.toolbar.diff.appendChild(option)
             });
           }
@@ -470,7 +519,7 @@ async function populateSelectboxes(state) {
 // Event handlers
 
 /**
- * Called when the selection in the PDF selectbox changes
+ * Called when the selection in the PDF/source file selectbox changes
  */
 async function onChangePdfSelection() {
   let state = app.getCurrentState()
@@ -478,13 +527,43 @@ async function onChangePdfSelection() {
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
-  const selectedFile = state.fileData.find(file => file.pdf.hash === ui.toolbar.pdf.value);
-  const pdf = selectedFile.pdf.hash  // Use document identifier
-  const collection = selectedFile.collection
+  /** @type {FileListItem | undefined} */
+  const selectedIdentifier = ui.toolbar.pdf.value;
+  const selectedFile = state.fileData.find(file => {
+    // Check if it matches PDF hash (traditional workflow)
+    if (file.pdf && file.pdf.hash === selectedIdentifier) {
+      return true;
+    }
+    // Check if it matches any gold file hash (XML-only workflow)
+    if (file.gold && file.gold.some(g => g.hash === selectedIdentifier)) {
+      return true;
+    }
+    // Check if it matches any version file hash (XML-only workflow)
+    if (file.versions && file.versions.some(v => v.hash === selectedIdentifier)) {
+      return true;
+    }
+    return false;
+  });
 
-  // Find gold file matching current variant selection
+  if (!selectedFile) {
+    return;
+  }
+
+  const collection = selectedFile.collection;
+  let pdf = null;
   let xml = null;
-  if (selectedFile.gold) {
+
+  // Determine if this is a PDF-XML file or XML-only file
+  if (selectedFile.pdf && selectedFile.pdf.hash === selectedIdentifier) {
+    // Traditional PDF-XML workflow
+    pdf = selectedIdentifier;
+  } else {
+    // XML-only file - the selected identifier is actually an XML file
+    xml = selectedIdentifier;
+  }
+
+  // For PDF-XML files, find the appropriate XML file
+  if (pdf && selectedFile.gold) {
     const { variant } = state;
     let matchingGold;
 
@@ -513,12 +592,19 @@ async function onChangePdfSelection() {
 
   if (Object.keys(filesToLoad).length > 0) {
     try {
-      await services.removeMergeView(state)
-      await app.updateState({ collection })
+      await services.removeMergeView()
+      // For XML-only files, clear PDF state but keep collection and XML
+      const stateUpdate = { collection };
+      if (pdf) {
+        stateUpdate.pdf = pdf;
+      } else {
+        stateUpdate.pdf = null; // Clear PDF for XML-only files
+      }
+      await app.updateState(stateUpdate)
       await services.load(filesToLoad)
     }
     catch (error) {
-      logger.error(error.message)
+      logger.error(String(error))
       await app.updateState({ collection: null, pdf: null, xml: null })
       await reload({ refresh: true })
     }
@@ -527,7 +613,7 @@ async function onChangePdfSelection() {
 
 
 /**
- * Called when the selection in the XML selectbox changes
+ * Called when the selection in the XML/target selectbox changes
  */
 async function onChangeXmlSelection() {
   const state = app.getCurrentState()
@@ -549,13 +635,14 @@ async function onChangeXmlSelection() {
       }
 
 
-      await services.removeMergeView(state)
+      await services.removeMergeView()
       await services.load({ xml })
+      await app.updateState({ xml })
     } catch (error) {
-      console.error(error.message)
+      console.error(String(error))
       await reload({ refresh: true })
-      await updateState({ xml: null })
-      dialog.error(error.message)
+      await app.updateState({ xml: null })
+      dialog.error(String(error))
     }
   }
 }
@@ -565,7 +652,7 @@ async function onChangeXmlSelection() {
  */
 async function onChangeDiffSelection() {
   const state = app.getCurrentState()
-  const diff = ui.toolbar.diff.value
+  const diff = String(ui.toolbar.diff.value)
   if (diff && typeof diff == "string" && diff !== ui.toolbar.xml.value) {
     try {
       await services.showMergeView(state, diff)
@@ -573,16 +660,15 @@ async function onChangeDiffSelection() {
       console.error(error)
     }
   } else {
-    await services.removeMergeView(state)
+    await services.removeMergeView()
   }
   await app.updateState({ diff: diff })
 }
 
 /**
  * Called when the selection in the variant selectbox changes
- * @param {ApplicationState} state
  */
 async function onChangeVariantSelection() {
-  const variant = ui.toolbar.variant.value
+  const variant = String(ui.toolbar.variant.value)
   await app.updateState({ variant, xml: null })
 }

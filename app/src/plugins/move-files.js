@@ -6,10 +6,11 @@
  * @import { ApplicationState } from '../state.js'
  * @import { SlButton, SlSelect, SlOption, SlDialog } from '../ui.js'
  */
-import { app, client, services, dialog, fileselection, updateState, logger } from '../app.js'
+import { app, client, services, dialog, fileselection, logger } from '../app.js'
 import { notify } from '../modules/sl-utils.js'
 import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js'
 import ui from '../ui.js'
+import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 
 const plugin = {
   name: "move-files",
@@ -83,6 +84,7 @@ async function install(state) {
   });
 }
 
+
 /**
  * @param {ApplicationState} state
  */
@@ -134,7 +136,7 @@ async function showMoveFilesDialog(state) {
     await services.load({ pdf: new_pdf_path, xml: new_xml_path });
     notify(`Files moved  to "${destinationCollection}"`);
   } catch (error) {
-    dialog.error(`Error moving files: ${error.message}`);
+    dialog.error(`Error moving files: ${String(error)}`);
   } finally {
     ui.spinner.hide();
   }
@@ -147,4 +149,6 @@ async function showMoveFilesDialog(state) {
 async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
+  const isReviewer = userHasRole(currentState.user, ["admin", "reviewer"])
+  moveBtn.disabled = !state.xml || !isReviewer
 }

@@ -105,15 +105,21 @@ function start(state, timeoutSeconds = 60) {
 
     try {
       let heartbeatResponse = null;
+      let cacheStatus = null;
+
+      // Only send heartbeat lock refresh if we're in edit mode
       if (!currentState.editorReadOnly) {
         logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
         heartbeatResponse = await client.sendHeartbeat(filePath);
+        cacheStatus = heartbeatResponse?.cache_status;
+      } else {
+        // In read-only mode, just check cache status without trying to refresh lock
+        logger.debug(`Read-only mode: checking cache status without lock refresh for ${filePath}`);
+        cacheStatus = await client.getCacheStatus();
       }
 
       // Check if file data cache is dirty and only reload if necessary
-      // For read-only editors, check cache status separately since no heartbeat was sent
-      const cacheStatus = heartbeatResponse?.cache_status || await client.getCacheStatus();
-      if (cacheStatus.dirty) {
+      if (cacheStatus?.dirty) {
         logger.debug("File data cache is dirty, reloading file list");
         await fileselection.reload({ refresh: true });
       }
@@ -125,7 +131,7 @@ function start(state, timeoutSeconds = 60) {
         await updateState({ offline: false, editorReadOnly: editorReadOnlyState });
       }
     } catch (error) {
-      console.warn("Error during heartbeat:", error.name, error.message, error.statusCode);
+      console.warn("Error during heartbeat:", error.name, String(error), error.statusCode);
       // Handle different types of errors
       if (error instanceof TypeError) {
         // This is likely a network error (client is offline)
@@ -141,10 +147,18 @@ function start(state, timeoutSeconds = 60) {
         editorReadOnlyState = currentState.editorReadOnly
         await updateState({ offline: true, editorReadOnly: true });
       } else if (error.statusCode === 409 || error.statusCode === 423) {
-        // Lock was lost or taken by another user
-        logger.critical("Lock lost for file: " + filePath);
-        dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
-        await updateState({ editorReadOnly: true });
+        // Lock conflict - either lost lock or file locked by another user
+        // Only show error dialog if we were in edit mode (i.e., we actually had the lock and lost it)
+        // Re-check editorReadOnly state in case it was updated since heartbeat started
+        const currentReadOnlyState = currentState?.editorReadOnly || false;
+        if (!currentReadOnlyState) {
+          logger.critical("Lock lost for file: " + filePath);
+          dialog.error("Your file lock has expired or was taken by another user. To prevent data loss, please save your work to a new file. Further saving to the original file is disabled.");
+          await updateState({ editorReadOnly: true });
+        } else {
+          // We're in read-only mode, so lock conflicts are expected - just log it
+          logger.debug(`Heartbeat received lock conflict for read-only file ${filePath} (expected, not showing error)`);
+        }
       } else if (error.statusCode === 504) {
         logger.warn("Temporary connection failure, will try again...")
       } else if (error.statusCode === 403) {

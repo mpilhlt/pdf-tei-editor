@@ -7,7 +7,6 @@
  * @import { PluginConfig } from '../modules/plugin-manager.js'
  * @import { SlButton, SlInput } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
- * @import { UserData } from '../plugins/authentication.js'
  */
 
 import { app, endpoints as ep } from '../app.js'
@@ -16,9 +15,10 @@ import {
   client, logger, dialog, config,
   fileselection, xmlEditor, pdfViewer,
   services, validation, authentication,
-  sync, accessControl
+  sync, accessControl, testLog
 } from '../app.js'
 import FiledataPlugin from './filedata.js'
+import { getFileDataByHash } from '../modules/file-data-utils.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
@@ -26,6 +26,7 @@ import * as tei_utils from '../modules/tei-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror_utils.js'
 import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 import { ApiError } from '../modules/utils.js'
+import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 
 /**
  * plugin API
@@ -54,7 +55,8 @@ const plugin = {
   deps: ['file-selection'],
   install,
   state: { update },
-  validation: { inProgress }
+  validation: { inProgress },
+  shutdown
 }
 
 export { plugin, api }
@@ -91,7 +93,7 @@ let currentState = null
 
 /**
  * Dialog for creating a new version
- * @typedef {object} newVersionDialog
+ * @typedef {object} newVersionDialogPart
  * @property {SlInput} versionName 
  * @property {SlInput} persName 
  * @property {SlInput} persId 
@@ -119,6 +121,7 @@ await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
 //
 // Implementation
 //
+
 
 /**
  * @param {ApplicationState} state
@@ -195,7 +198,6 @@ async function install(state) {
 async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
-  //console.warn("update", plugin.name, state)
 
   // disable deletion if there are no versions or gold is selected
   const da = ui.toolbar.documentActions
@@ -210,22 +212,41 @@ async function update(state) {
     return
   }
 
-  da.deleteAll.disabled = fileselection.fileData.length < 2 // at least on PDF must be present
-  da.deleteAllVersions.disabled = ui.toolbar.xml.childElementCount < 2
-  // @ts-ignore
-  da.deleteCurrentVersion.disabled = ui.toolbar.xml.value === ui.toolbar.xml.firstChild?.value
-  da.deleteBtn.disabled = da.deleteCurrentVersion.disabled && da.deleteAllVersions.disabled && da.deleteAll.disabled
+  const isReviewer = userHasRole(currentState.user, ["admin", "reviewer"])
+  const isAnnotator = userHasRole(currentState.user, ["admin", "reviewer", "annotator"])
 
-  // Allow duplicate only if we have an xml path
-  da.createNewVersion.disabled = !Boolean(state.xml)
+  // disable/enable delete buttons
+  if (isAnnotator || isReviewer) {
+    da.deleteAll.disabled = !Boolean(state.pdf && state.xml) || !isReviewer // Disable if no pdf and no xml)
+    da.deleteAllVersions.disabled = !isReviewer || ui.toolbar.xml.querySelectorAll("sl-option").length  < 2 // disable if only one document left (gold version)
+    da.deleteCurrentVersion.disabled = !state.xml || state.editorReadOnly || (isGoldFile(currentState.xml) && !isReviewer)
+  } else {
+    for (let btn of [da.deleteAll, da.deleteAllVersions, da.deleteCurrentVersion]) {
+      btn.disabled = true
+    }
+  }
+  
+  da.deleteBtn.disabled = 
+    da.deleteCurrentVersion.disabled && 
+    da.deleteAllVersions.disabled && 
+    da.deleteAll.disabled
 
-  // Allow download only if we have an xml path
-  da.download.disabled = !Boolean(state.xml)
+  // Allow new version or revisions only if we have an xml path
+  if (isAnnotator) {
 
+    da.saveRevision.disabled =  !Boolean(state.xml) || state.editorReadOnly 
+    da.createNewVersion.disabled = !Boolean(state.xml) 
+    
+    // Allow download only if we have an xml path
+    da.download.disabled = !Boolean(state.xml)
 
-  // no uploads if editor is readonly
-  da.upload.disabled = state.editorReadOnly
-  //console.warn(plugin.name,"done")
+    // no uploads if editor is readonly
+    da.upload.disabled = state.editorReadOnly 
+  } else {
+    for (let btn of [da.saveRevision, da.createNewVersion, da.download, da.upload]) {
+      btn.disabled = true
+    }
+  }
 }
 
 
@@ -241,8 +262,24 @@ async function inProgress(validationPromise) {
 }
 
 /**
- * Loads the given XML and/or PDF file(s) into the editor and viewer 
- * @param {{xml?: string, pdf?: string}} files An Object with one or more of the keys "xml" and "pdf"
+ * Called when the application is shutting down (beforeunload)
+ * Release any file locks held by this session
+ */
+async function shutdown() {
+  if (currentState?.xml && !currentState?.editorReadOnly) {
+    try {
+      await client.releaseLock(currentState.xml);
+      logger.debug(`Released lock for file ${currentState.xml} during shutdown`);
+    } catch (error) {
+      // Don't throw during shutdown - just log the error
+      console.warn('Failed to release lock during shutdown:', String(error));
+    }
+  }
+}
+
+/**
+ * Loads the given XML and/or PDF file(s) into the editor and viewer
+ * @param {{xml?: string | null, pdf?: string | null}} files An Object with one or more of the keys "xml" and "pdf"
  */
 async function load({ xml, pdf }) {
 
@@ -264,44 +301,46 @@ async function load({ xml, pdf }) {
 
   // XML
   if (xml) {
-    // Check for lock before loading
+    // Always check for lock before loading, even if file is already in state
+    // (e.g., when opening same URL in new tab with sessionStorage containing stale state)
+    const isNewFile = currentState.xml !== xml;
 
-    if (currentState.xml !== xml) {
-      try {
-        ui.spinner.show('Loading file, please wait...')
-        if (currentState.xml && !currentState.editorReadOnly) {
-          await client.releaseLock(currentState.xml)
-        }
-        // Check access control before attempting to acquire lock
-        const canEdit = accessControl.checkCanEditFile(xml)
-        if (!canEdit) {
-          logger.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
-          notify(`You don't have permission to edit this document, loading in read-only mode`)
-          file_is_locked = true
-        } else {
-          try {
-            await client.acquireLock(xml);
-            logger.debug(`Acquired lock for file ${xml}`);
-          } catch (error) {
-            if (error instanceof client.LockedError) {
-              logger.debug(`File ${xml} is locked, loading in read-only mode`);
-              notify(`File is being edited by another user, loading in read-only mode`)
-              file_is_locked = true
-            } else {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              dialog.error(errorMessage)
-              throw error
-            }
+    try {
+      ui.spinner.show('Loading file, please wait...')
+
+      // Release previous lock if we're switching files
+      if (isNewFile && currentState.xml && !currentState.editorReadOnly) {
+        await client.releaseLock(currentState.xml)
+      }
+
+      // Check access control before attempting to acquire lock
+      const canEdit = accessControl.checkCanEditFile(xml)
+      if (!canEdit) {
+        logger.debug(`User does not have edit permission for file ${xml}, loading in read-only mode`);
+        file_is_locked = true
+      } else {
+        try {
+          await client.acquireLock(xml);
+          logger.debug(`Acquired lock for file ${xml}`);
+        } catch (error) {
+          if (error instanceof client.LockedError) {
+            logger.debug(`File ${xml} is locked, loading in read-only mode`);
+            file_is_locked = true
+          } else {
+            const errorMessage = String(error);
+            dialog.error(errorMessage)
+            throw error
           }
         }
-      } finally {
-        ui.spinner.hide()
       }
+    } finally {
+      ui.spinner.hide()
     }
 
+    // Always load XML content and update state
     await removeMergeView()
     await app.updateState({ xml: null, diff: null, editorReadOnly: file_is_locked })
-    logger.info("Loading XML: " + xml)
+    logger.info(`Loading XML: ${xml} (read-only: ${file_is_locked})`)
     // Convert document identifier to static file URL
     const xmlUrl = `/api/files/${xml}`
     promises.push(xmlEditor.loadXml(xmlUrl))
@@ -314,7 +353,7 @@ async function load({ xml, pdf }) {
     if (error instanceof ApiError) {
       // @ts-ignore
       if (error.status === 404) {
-        logger.warn(error.message)
+        logger.warn(String(error))
         await fileselection.reload()
         return
       }
@@ -334,8 +373,8 @@ async function load({ xml, pdf }) {
   }
 
   // Set collection based on loaded documents if not already set
-  if ((pdf || xml) && !currentState.collection) {
-    for (const file of fileselection.fileData) {
+  if (currentState.fileData && (pdf || xml) && !currentState.collection) {
+    for (const file of currentState.fileData) {
       const fileData = /** @type {any} */ (file);
       // Check PDF hash
       if (pdf && fileData.pdf && fileData.pdf.hash === pdf) {
@@ -365,15 +404,18 @@ async function startAutocomplete() {
     const xmlContent = xmlEditor.getEditorContent()
     if (xmlContent) {
       try {
-        const autocompleteData = await client.getAutocompleteData(xmlContent)
-          // Resolve deduplicated references
+        const invalidateCache = currentState?.hasInternet
+        const autocompleteData = await client.getAutocompleteData(xmlContent, invalidateCache)
+        
+        // Resolve deduplicated references
         const resolvedData = resolveDeduplicated(autocompleteData)
+        
         // Start autocomplete with the resolved data
         xmlEditor.startAutocomplete(resolvedData)
         logger.debug("Autocomplete data loaded and applied")
       } catch (error) {
         if (error instanceof ApiError) {
-          logger.info("No autocomplete data available: " + error.message)
+          logger.info("No autocomplete data available: " + String(error))
         } else {
           throw error
         }
@@ -381,7 +423,7 @@ async function startAutocomplete() {
     }
     return true 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = String(error);
     logger.warn("Failed to load autocomplete data: " + errorMessage)
     return false
   }
@@ -433,14 +475,36 @@ async function removeMergeView() {
  * @param {ApplicationState} state
  */
 async function deleteCurrentVersion(state) {
-  // @ts-ignore
-  if (ui.toolbar.xml.value.startsWith("/data/tei")) {
-    dialog.error("You cannot delete the gold version")
+  // Handle both PDF-XML files and XML-only files
+  let xmlValue = ui.toolbar.xml.value;
+  let selectedOption = ui.toolbar.xml.selectedOptions[0];
+
+  // For XML-only files, the XML might be selected in the PDF dropdown instead
+  if (!xmlValue && state.xml && !state.pdf) {
+    xmlValue = state.xml;
+    // Find the option in the PDF dropdown that corresponds to this XML file
+    selectedOption = ui.toolbar.pdf.selectedOptions[0];
+  }
+
+  if (!xmlValue) {
+    dialog.error("No file selected for deletion")
     return
   }
-  const filePathsToDelete = [ui.toolbar.xml.value]
+
+  // Use helper function to check if this is a gold file
+  // XML-only files (where state.pdf is null) can always be deleted
+  if (state.pdf && typeof xmlValue === 'string') {
+
+    // Only check for gold status if this is a PDF-XML file
+    const fileData = getFileDataByHash(xmlValue);
+    if (fileData && fileData.type === 'gold' && !userHasRole(state.user, ['admin', 'reviewer'])) {
+      dialog.error("You cannot delete the gold version")
+    }
+  }
+
+  const filePathsToDelete = [xmlValue]
   if (filePathsToDelete.length > 0) {
-    const versionName = ui.toolbar.xml.selectedOptions[0].textContent
+    const versionName = selectedOption ? selectedOption.textContent : 'current version';
     const msg = `Are you sure you want to delete the current version "${versionName}"?`
     if (!confirm(msg)) return; // todo use dialog
     services.removeMergeView()
@@ -461,7 +525,7 @@ async function deleteCurrentVersion(state) {
         .catch(e => console.error(e))
     } catch (error) {
       console.error(error)
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = String(error);
       dialog.error(errorMessage)
     }
   }
@@ -470,28 +534,29 @@ async function deleteCurrentVersion(state) {
 /**
  * Deletes all versions of the document, leaving only the gold standard version
  * Only deletes versions that match the current variant filter
- * @param {ApplicationState} state
  */
-async function deleteAllVersions(state) {
+async function deleteAllVersions() {
+  if (!currentState?.fileData) {
+    throw new Error("No file data");
+  }
   // Get the current PDF to find all its versions
   const currentPdf = ui.toolbar.pdf.value;
-  const selectedFile = fileselection.fileData.find(/** @param {any} file */ file => file.pdf.hash === currentPdf);
+  const selectedFile = currentState.fileData.find(file => file.pdf.hash === currentPdf);
 
-  const selectedFileData = /** @type {any} */ (selectedFile);
-  if (!selectedFile || !selectedFileData.versions) {
+  if (!selectedFile || !selectedFile.versions) {
     return; // No versions to delete
   }
 
   // Filter versions based on current variant selection (same logic as file-selection.js)
-  let versionsToDelete = selectedFileData.versions;
-  const { variant } = state;
+  let versionsToDelete = selectedFile.versions;
+  const { variant } = currentState;
 
   if (variant === "none") {
     // Delete only versions without variant_id
-    versionsToDelete = selectedFileData.versions.filter(/** @param {any} version */ version => !version.variant_id);
+    versionsToDelete = selectedFile.versions.filter(/** @param {any} version */ version => !version.variant_id);
   } else if (variant && variant !== "") {
     // Delete only versions with the selected variant_id
-    versionsToDelete = selectedFileData.versions.filter(/** @param {any} version */ version => version.variant_id === variant);
+    versionsToDelete = selectedFile.versions.filter(/** @param {any} version */ version => version.variant_id === variant);
   }
   // If variant is "" (All), delete all versions
 
@@ -519,16 +584,16 @@ async function deleteAllVersions(state) {
     
     // Find and load the appropriate gold version for the current variant
     let goldToLoad = null;
-    if (selectedFileData.gold) {
+    if (selectedFile.gold) {
       if (variant === "none") {
         // Load gold version without variant_id
-        goldToLoad = selectedFileData.gold.find(/** @param {any} gold */ gold => !gold.variant_id);
+        goldToLoad = selectedFile.gold.find(/** @param {any} gold */ gold => !gold.variant_id);
       } else if (variant && variant !== "") {
         // Load gold version with matching variant_id
-        goldToLoad = selectedFileData.gold.find(/** @param {any} gold */ gold => gold.variant_id === variant);
+        goldToLoad = selectedFile.gold.find(/** @param {any} gold */ gold => gold.variant_id === variant);
       } else {
         // Load first available gold version
-        goldToLoad = selectedFileData.gold[0];
+        goldToLoad = selectedFile.gold[0];
       }
     }
     
@@ -544,7 +609,7 @@ async function deleteAllVersions(state) {
       .catch(e => console.error(e))
   } catch (error) {
     console.error(error)
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = String(error);
     dialog.error(errorMessage)
   } 
 }
@@ -582,7 +647,7 @@ async function deleteAll(state) {
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = String(error);
     console.error(errorMessage)
     notify(errorMessage, "warning")
   } finally {
@@ -610,7 +675,12 @@ async function downloadXml(state) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = state.xml.split('/').pop() || 'document.xml'
+
+  const fileData = getFileDataByHash(state.xml);
+  console.warn(fileData)
+  const filename = fileData?.file?.fileref || state.xml;
+  a.download = `${filename}.tei.xml`;
+
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -699,62 +769,71 @@ function getIdFromUser(userData) {
  * @param {ApplicationState} state
  */
 async function saveRevision(state) {
+
   // @ts-ignore
-  const dialog = ui.newRevisionChangeDialog;
-  dialog.changeDesc.value = "Corrections"
+  const revDlg = ui.newRevisionChangeDialog;
+  revDlg.changeDesc.value = "Corrections"
   try {
     const user = authentication.getUser()
     if (user) {
       const userData = /** @type {any} */ (user);
-      dialog.persId.value = dialog.persId.value || userData.username
-      dialog.persName.value = dialog.persName.value || userData.fullname
+      revDlg.persId.disabled = revDlg.persName.disabled = true
+      revDlg.persId.value = userData.username
+      revDlg.persName.value = userData.fullname
     }
-    dialog.show()
+    revDlg.show()
     await new Promise((resolve, reject) => {
-      dialog.submit.addEventListener('click', resolve, { once: true })
-      dialog.cancel.addEventListener('click', reject, { once: true })
-      dialog.addEventListener('sl-hide', reject, { once: true })
+      revDlg.submit.addEventListener('click', resolve, { once: true })
+      revDlg.cancel.addEventListener('click', reject, { once: true })
+      revDlg.addEventListener('sl-hide', reject, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
     return
   } finally {
-    dialog.hide()
+    revDlg.hide()
   }
 
-  dialog.hide()
+  revDlg.hide()
 
   /** @type {RespStmt} */
   const respStmt = {
-    persId: dialog.persId.value,
-    persName: dialog.persName.value,
+    persId: revDlg.persId.value,
+    persName: revDlg.persName.value,
     resp: "Annotator"
   }
 
   /** @type {RevisionChange} */
   const revisionChange = {
     status: "draft",
-    persId: dialog.persId.value,
-    desc: dialog.changeDesc.value
+    persId: revDlg.persId.value,
+    desc: revDlg.changeDesc.value
   }
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     await addTeiHeaderInfo(respStmt, undefined, revisionChange)
     if (!state.xml) throw new Error('No XML file loaded')
-    
+
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
-    
+
+    testLog('REVISION_SAVED', { changeDescription: revDlg.changeDesc.value });
+
+    // Verify revision was added to XML content (self-contained for bundle removal)
+    testLog('REVISION_IN_XML_VERIFIED', {
+      changeDescription: revDlg.changeDesc.value,
+      xmlContainsRevision: xmlEditor.getXML().includes(revDlg.changeDesc.value)
+    });
+
     sync.syncFiles(state)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
 
     // dirty state
     xmlEditor.markAsClean()
-  } catch (e) {
-    console.error(e)
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    dialog.error(errorMessage)
+  } catch (error) {
+    console.error(error)
+    dialog.error(String(error))
   } finally {
     ui.toolbar.documentActions.saveRevision.disabled = false
   }
@@ -769,11 +848,10 @@ async function createNewVersion(state) {
   // @ts-ignore
   const newVersiondialog = ui.newVersionDialog;
   try {
-    const user = authentication.getUser()
-    if (user) {
-      const userData = /** @type {any} */ (user);
-      newVersiondialog.persId.value = newVersiondialog.persId.value || userData.username
-      newVersiondialog.persName.value = newVersiondialog.persName.value || userData.fullname
+    const userData = authentication.getUser()
+    if (userData) {
+      newVersiondialog.persId.value =  userData.username
+      newVersiondialog.persName.value = userData.fullname
     }    
     newVersiondialog.show()
     await new Promise((resolve, reject) => {
@@ -808,6 +886,8 @@ async function createNewVersion(state) {
     // save new version first
     const filedata = FiledataPlugin.getInstance()
     let { hash } = await filedata.saveXml(state.xml, /* save as new version */ true)
+
+    testLog('NEW_VERSION_CREATED', { oldHash: state.xml, newHash: hash });
 
     // update the state to load the new document
     await load({ xml: hash })
@@ -898,11 +978,11 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
   }
 
   // update document: <edition>
-  if (edition) {
+  if (edition && currentState?.fileData) {
     const versionName = edition.title
     const editionTitleElements = xmlDoc.querySelectorAll('edition > title')
     const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName)
-    const nameExistsInVersions = fileselection.fileData.some(/** @param {any} file */ file => file.label === versionName)
+    const nameExistsInVersions = currentState.fileData.some(file => file.label === versionName)
     if (nameExistsInDoc || nameExistsInVersions) {
       throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
     }

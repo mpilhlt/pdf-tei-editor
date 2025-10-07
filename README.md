@@ -16,12 +16,13 @@ Related repositories:
 
 Information for end users [can be found here](./docs/index.md)
 
-## 🚀 Quick Start with Docker
+## 🚀 Quick Start with Docker/Podman
 
 **The fastest way to try PDF TEI Editor:**
 
+This shows the UI and the editing featurs of the editor (no ai-powered extractors).
+
 ```bash
-# Run with Docker (includes all dependencies)
 docker run -p 8000:8000 -e APP_ADMIN_PASSWORD=admin123 cboulanger/pdf-tei-editor:latest
 ```
 

@@ -6,7 +6,6 @@
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { SlButton } from '../ui.js'
- * @import { UIPart } from '../ui.js'
  */
 
 //
@@ -27,6 +26,7 @@ import { xmlEditor, logger } from '../app.js';
 import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
 import enhancements from './tei-wizard/enhancements.js';
 import { notify } from '../modules/sl-utils.js'
+import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
 
 
 const plugin = {
@@ -48,6 +48,11 @@ await registerTemplate('tei-wizard-button', 'tei-wizard-button.html');
 await registerTemplate('tei-wizard-dialog', 'tei-wizard-dialog.html');
 
 let teiWizardButton;
+
+/**
+ * @type {ApplicationState}
+ */
+let currentState;
 
 
 /**
@@ -94,9 +99,10 @@ async function install(state) {
  * @param {ApplicationState} state 
  */
 async function update(state) {
-  // @ts-ignore
-  teiWizardButton.disabled = state.editorReadOnly
-  //console.warn(plugin.name,"done")
+  currentState = state
+  const isAnnotator = userHasRole(state.user, ["admin", "reviewer", "annotator"]);
+  const isReviewer = userHasRole(state.user, ["admin", "reviewer"]);
+  ui.toolbar.teiActions.teiWizard.disabled = state.editorReadOnly || !isAnnotator || (isGoldFile(state.xml) && !isReviewer)
 }
 
 async function getSelectedEnhancements() {

@@ -4,9 +4,9 @@
 
 /** 
  * @import { ApplicationState } from '../state.js' 
- * @import { SlButton, SlButtonGroup, SlDialog } from '../ui.js'
+ * @import { SlButton } from '../ui.js'
  */
-import { app, client, services, dialog, fileselection, xmlEditor, updateState } from '../app.js'
+import { app, client, services, dialog, fileselection, xmlEditor, testLog } from '../app.js'
 import { SlSelect, SlOption, SlInput, updateUi } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import ui from '../ui.js'
@@ -38,7 +38,8 @@ export { api, plugin }
 export default plugin
 
 // Current state for use in event handlers
-let currentState = null
+/** @type {ApplicationState} */
+let currentState;
 
 //
 // UI
@@ -47,9 +48,83 @@ let currentState = null
 /**
  * Extraction actions button group
  * @typedef {object} extractionActionsPart
- * @property {SlButton} extractNew 
+ * @property {SlButton} extractNew
  * @property {SlButton} extractCurrent
  * @property {SlButton} editInstructions - added by prompt-editor plugin
+ */
+
+/**
+ * Extraction dialog navigation properties
+ * @typedef {object} extractionDialogPart
+ * @property {SlInput} doi - DOI input field
+ * @property {SlSelect} collectionName - Collection selection dropdown
+ * @property {SlSelect} modelIndex - Model/extractor selection dropdown
+ * @property {HTMLDivElement} dynamicOptions - Container for dynamic extractor options
+ * @property {SlButton} cancel - Cancel button
+ * @property {SlButton} submit - Submit button
+ */
+
+/**
+ * Extractor configuration object
+ * @typedef {object} ExtractorInfo
+ * @property {string} id - Unique identifier for the extractor
+ * @property {string} name - Display name for the extractor
+ * @property {string[]} input - Supported input types (e.g., ['pdf'])
+ * @property {string[]} output - Supported output types (e.g., ['tei-document'])
+ * @property {Record<string, ExtractorOption>} [options] - Configuration options for the extractor
+ */
+
+/**
+ * Extractor option configuration
+ * @typedef {object} ExtractorOption
+ * @property {string} type - Option type ('string', 'boolean', etc.)
+ * @property {string} [label] - Display label for the option
+ * @property {string} [description] - Help text for the option
+ * @property {string[]} [options] - Predefined values for select options
+ */
+
+/**
+ * Instruction data object
+ * @typedef {object} InstructionData
+ * @property {string} label - Display label for the instruction
+ * @property {string[]} text - Array of instruction text lines
+ * @property {string[]} [extractor] - Array of extractor IDs this instruction supports
+ */
+
+/**
+ * Extraction result object
+ * @typedef {object} ExtractionResult
+ * @property {string} xml - Hash or content of the extracted XML
+ * @property {string} [pdf] - Hash or path of the source PDF
+ */
+
+/**
+ * Document metadata extracted from TEI XML
+ * @typedef {object} DocumentMetadata
+ * @property {string} [doi] - Document DOI
+ * @property {string|null} [variant_id] - Extractor variant ID
+ * @property {string} [extractor_flavor] - Extractor flavor/configuration
+ * @property {string} [author] - Document author
+ * @property {string} [title] - Document title
+ * @property {string} [date] - Publication date
+ * @property {string} [fileref] - File reference
+ * @property {string} [last_update] - Last update timestamp
+ */
+
+/**
+ * Form data collected from the extraction dialog
+ * @typedef {object} ExtractionFormData
+ * @property {string|null} doi - DOI value from form
+ * @property {string} collection - Selected collection
+ * @property {string} extractor - Selected extractor ID
+ * @property {string} [variant_id] - Selected variant ID
+ * @property {string} [instructions] - Instructions text
+ * @property {string} [flavor] - Extractor flavor
+ */
+
+/**
+ * Form data with dynamic options (intersection type)
+ * @typedef {ExtractionFormData & Record<string, string|null>} DynamicExtractionFormData
  */
 // Register templates
 await registerTemplate('extraction-buttons', 'extraction-buttons.html');
@@ -57,24 +132,25 @@ await registerTemplate('extraction-dialog', 'extraction-dialog.html');
 
 /**
  * @typedef {Object} ExtractionOptions
- * @property {string} [doi] 
+ * @property {string|null} [doi]
  * @property {string} [filename]
- * @property {string} [collection]
+ * @property {string|null} [collection]
+ * @property {string|null} [variant_id]
+ * @property {string} [extractor]
+ * @property {string} [instructions]
+ * @property {Record<string, any>} [dynamicOptions] - Additional extractor-specific options
  */
 
 //
 // Implementation
 //
 
-/**
- * @param {ApplicationState} state
- */
-async function install(state) {
+async function install() {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // Create UI elements
   const extractionBtnGroup = createSingleFromTemplate('extraction-buttons');
-  const optionsDialog = createSingleFromTemplate('extraction-dialog', document.body);
+  createSingleFromTemplate('extraction-dialog', document.body);
 
   // Add extraction buttons to toolbar with medium priority
   ui.toolbar.add(extractionBtnGroup, 7);
@@ -96,8 +172,11 @@ async function update(state) {
   // Store current state for use in event handlers
   currentState = state;
   
-  // @ts-ignore
-  ui.toolbar.extractionActions.childNodes.forEach(child => child.disabled = state.offline) 
+  ui.toolbar.extractionActions.childNodes.forEach(child => {
+    if (child instanceof HTMLElement && 'disabled' in child) {
+      /** @type {HTMLButtonElement} */(child).disabled = state.offline
+    }
+  }) 
   ui.toolbar.extractionActions.extractCurrent.disabled = !state.pdf
   //console.warn(plugin.name,"done")
 }
@@ -115,18 +194,26 @@ async function extractFromCurrentPDF(state) {
  * @param {ApplicationState} state
  */
 async function extractFromNewPdf(state) {
-  const { type, filename, originalFilename } = await client.uploadFile();
-  if (type !== "pdf") {
-    dialog.error("Extraction is only possible from PDF files")
-    return
-  }
+  try {
+    const { type, filename, originalFilename } = await client.uploadFile();
 
-  const doi = getDoiFromFilename(originalFilename)
-  await extractFromPDF(state, { doi, filename })
+    if (type !== "pdf") {
+      dialog.error("Extraction is only possible from PDF files")
+      return
+    }
+
+    testLog('PDF_UPLOAD_COMPLETED', { originalFilename, filename, type });
+
+    const doi = getDoiFromFilename(originalFilename)
+
+    await extractFromPDF(state, { doi, filename })
+  } catch (error) {
+    throw error;
+  }
 }
 
 /**
- * Extracts references from the given PDF file, letting the user choose the extraction options
+ * Extracts references from the given source file (PDF or XML), letting the user choose the extraction options
  * @param {ApplicationState} state
  * @param {ExtractionOptions} [defaultOptions] Optional default option object passed to the extraction service,
  * user will be prompted to choose own ones.
@@ -135,8 +222,10 @@ async function extractFromNewPdf(state) {
  */
 async function extractFromPDF(state, defaultOptions={}) {
   try {
-    // Check if we have either a PDF in state or a filename in options
-    if(!state.pdf && !defaultOptions.filename) throw new Error("Missing PDF path")
+    // Check if we have either a PDF or XML content available
+    if(!state.pdf && !defaultOptions.filename && !state.xml) {
+      throw new Error("Missing source file: no PDF path or XML content available");
+    }
 
     // Extract DOI from document metadata or filename if not provided
     let doi = defaultOptions.doi;
@@ -148,16 +237,16 @@ async function extractFromPDF(state, defaultOptions={}) {
           doi = metadata.doi;
         }
       } catch (error) {
-        console.warn("Cannot get DOI from document:", error.message)
+        console.warn("Cannot get DOI from document:", String(error))
       }
-      
+
       // Fallback to extracting DOI from filename (use state.pdf or uploaded filename)
       const filenameForDoi = state.pdf || defaultOptions.filename
       if (filenameForDoi) {
         doi = doi || getDoiFromFilename(filenameForDoi)
       }
     }
-    
+
     // Add collection, DOI, and variant to options
     const enhancedOptions = {
       collection: state.collection,
@@ -167,40 +256,69 @@ async function extractFromPDF(state, defaultOptions={}) {
     }
 
     // get DOI and instructions from user
+    testLog('EXTRACTION_OPTIONS_DIALOG_STARTING', { enhancedOptions });
     const options = await promptForExtractionOptions(enhancedOptions)
 
     ui.spinner.show('Extracting, please wait')
     let result
     try {
-      const filename = options.filename || state.pdf
-      result = await client.extractReferences(filename, options)
-      
+      if (!options) throw new Error("Missing extraction options")
+
+      // Determine which source file to use based on extractor type
+      const extractors = await client.getExtractorList()
+      const selectedExtractor = extractors.find(e => e.id === options.extractor)
+      const needsXmlContent = selectedExtractor && selectedExtractor.input.includes("xml")
+
+      let file_id;
+      if (needsXmlContent && state.xml) {
+        // For XML-based extractors, use the XML hash
+        file_id = state.xml;
+      } else {
+        // For PDF-based extractors, use PDF hash or filename
+        file_id = options.filename || state.pdf;
+      }
+
+      if (!file_id) {
+        throw new Error("No source file available for extraction");
+      }
+
+      // Use the simplified extract API
+      result = await client.extract(file_id, options);
+
       // Force reload of file list since server has updated cache
       await fileselection.reload({refresh:true})
-      
+
       // Update state.variant with the variant_id that was used for extraction
-      if (options.variant_id) {
+      if (options && options.variant_id) {
         await app.updateState({ variant: options.variant_id })
       }
-      
+
       // Load the extracted result (server now returns hashes)
+      // For XML-only results (like schema), clear PDF state first
+      /** @type {ExtractionResult} */
+      const typedResult = /** @type {ExtractionResult} */(result)
+      if (typedResult && typedResult.pdf === null) {
+        await app.updateState({ pdf: null })
+      }
       await services.load(result)
-      
+
+      testLog('EXTRACTION_COMPLETED', { resultHash: typedResult.xml, sourceFileId: file_id });
+
     } finally {
       ui.spinner.hide()
     }
-    
+
   } catch (error) {
-    console.error(error.message);
+    console.error(String(error));
     if (error instanceof UserAbortException) {
       return // do nothing
     }
-    dialog.error(error.message)
+    dialog.error(String(error))
   }
 }
 
 /**
- * 
+ *
  * @param {ExtractionOptions} options Optional default option object
  * @returns {Promise<ExtractionOptions|null>}
  */
@@ -208,9 +326,11 @@ async function promptForExtractionOptions(options={}) {
 
   // load instructions
   const instructionsData = await client.loadInstructions()
+  /** @type {string[]} */
   const instructions = [];
 
   // Get document metadata to pre-fill form with current document values
+  /** @type {DocumentMetadata} */
   let documentMetadata = {};
   try {
     const xmlDoc = xmlEditor.getXmlTree();
@@ -218,7 +338,7 @@ async function promptForExtractionOptions(options={}) {
       documentMetadata = getDocumentMetadata(xmlDoc);
     }
   } catch (error) {
-    console.warn("Could not extract document metadata:", error.message);
+    console.warn("Could not extract document metadata:", String(error));
   }
 
   // use doi if available - prioritize options parameter, then document metadata
@@ -254,10 +374,15 @@ async function promptForExtractionOptions(options={}) {
   let availableExtractors = []
   try {
     const extractors = await client.getExtractorList()
-    // Filter extractors that support PDF input and TEI document output
-    availableExtractors = extractors.filter(extractor => 
-      extractor.input.includes("pdf") && extractor.output.includes("tei-document")
-    )
+    // Show extractors based on available content
+    availableExtractors = extractors.filter(extractor => {
+      // Show PDF extractors if we have a PDF
+      const supportsPdf = extractor.input.includes("pdf") && (currentState?.pdf || options.filename)
+      // Show XML extractors if we have XML content
+      const supportsXml = extractor.input.includes("xml") && currentState?.xml
+
+      return supportsPdf || supportsXml
+    })
     
     for (const extractor of availableExtractors) {
       const option = Object.assign(new SlOption, {
@@ -288,7 +413,7 @@ async function promptForExtractionOptions(options={}) {
     }
   } catch (error) {
     // Handle extractor list loading gracefully
-    logger.warn("Could not load extraction engines:", error.message)
+    logger.warn("Could not load extraction engines: " + String(error))
     // Disable extraction functionality when extractors can't be loaded
     modelSelectBox.disabled = true
     availableExtractors = []
@@ -296,11 +421,27 @@ async function promptForExtractionOptions(options={}) {
   
   // Add event listener to update dynamic options when model changes
   const updateDynamicOptions = () => {
-    const selectedExtractorId = modelSelectBox.value
+    const selectedExtractorId = String(modelSelectBox.value)
     if (!selectedExtractorId) return
-    
+
     const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId)
-    
+
+    // Hide DOI field for XML-based extractors (like RNG schema extractor)
+    const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes("xml")
+    if (isXmlExtractor) {
+      /** @type {any} */(ui.extractionOptions.doi).style.display = 'none';
+      const doiContainer = ui.extractionOptions.doi.closest('sl-input, .form-group, .field');
+      if (doiContainer) {
+        /** @type {HTMLElement} */(doiContainer).style.display = 'none';
+      }
+    } else {
+      /** @type {any} */(ui.extractionOptions.doi).style.display = '';
+      const doiContainer = ui.extractionOptions.doi.closest('sl-input, .form-group, .field');
+      if (doiContainer) {
+        /** @type {HTMLElement} */(doiContainer).style.display = '';
+      }
+    }
+
     // Clear existing dynamic options
     const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
     if (dynamicOptionsContainer) {
@@ -320,6 +461,12 @@ async function promptForExtractionOptions(options={}) {
   }
   
   // Helper function to create form elements for extractor options
+  /**
+   * @param {string} optionKey
+   * @param {ExtractorOption} optionConfig
+   * @param {string} extractorId
+   * @returns {SlSelect|SlInput|null}
+   */
   function createOptionElement(optionKey, optionConfig, extractorId) {
     if (optionConfig.type === 'string' && optionConfig.options) {
       // Create select dropdown for predefined options
@@ -366,7 +513,9 @@ async function promptForExtractionOptions(options={}) {
       
       let instructionIndex = 0
       for (const instructionData of instructionsData) {
-        const { label, text, extractor = [] } = instructionData
+        /** @type {InstructionData} */
+        const instructionDataTyped = /** @type {InstructionData} */(instructionData)
+        const { label, text, extractor = [] } = instructionDataTyped
         
         // Check if this instruction supports the selected extractor
         if (extractor.includes(extractorId)) {
@@ -442,37 +591,44 @@ async function promptForExtractionOptions(options={}) {
   }
 
   // Collect form data from static and dynamic fields
+  /** @type {DynamicExtractionFormData} */
   const formData = {
-    'doi': ui.extractionOptions.doi.value,
-    'collection': ui.extractionOptions.collectionName.value,
-    'extractor': ui.extractionOptions.modelIndex.value
+    'doi': ui.extractionOptions.doi.value || null,
+    'collection': String(ui.extractionOptions.collectionName.value),
+    'extractor': String(ui.extractionOptions.modelIndex.value)
   }
   
   // Collect values from dynamic options
   const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
-  // @ts-ignore
-  const dynamicInputs = dynamicOptionsContainer.querySelectorAll('sl-select, sl-input')
-  
+  /** @type {NodeListOf<SlSelect|SlInput>} */
+  const dynamicInputs = /** @type {NodeListOf<SlSelect|SlInput>} */(dynamicOptionsContainer?.querySelectorAll('sl-select, sl-input') || [])
+
   for (const input of dynamicInputs) {
-    const name = input.name
-    let value = input.value
+    /** @type {SlSelect|SlInput} */
+    const typedInput = /** @type {SlSelect|SlInput} */(input)
+    const name = typedInput.name
+    let value = typedInput.value
     
     // Special handling for instructions - convert to actual instruction text
-    if (name === 'instructions' && instructions[parseInt(value)]) {
-      value = instructions[parseInt(value)]
+    if (name === 'instructions' && instructions[parseInt(String(value))]) {
+      value = instructions[parseInt(String(value))]
     }
-    
-    formData[name] = value
+
+    formData[name] = String(value)
   }
   
-  // Validate DOI only if one is provided
-  if (formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
+  // Check if selected extractor is XML-based (doesn't need DOI)
+  const selectedExtractor = availableExtractors.find(e => e.id === formData.extractor)
+  const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes("xml")
+
+  // Validate DOI only if one is provided and we're not using an XML extractor
+  if (!isXmlExtractor && formData.doi && formData.doi !== "" && !isDoi(formData.doi)) {
     dialog.error(`"${formData.doi}" does not seem to be a DOI, please try again.`)
     return null
   }
-  
-  // If DOI is empty, set it to null for the request
-  if (!formData.doi || formData.doi === "") {
+
+  // If DOI is empty or using XML extractor, set it to null for the request
+  if (!formData.doi || formData.doi === "" || isXmlExtractor) {
     formData.doi = null
   }
 
@@ -481,6 +637,11 @@ async function promptForExtractionOptions(options={}) {
 
 
 
+/**
+ * Extract DOI from filename
+ * @param {string} filename
+ * @returns {string|null}
+ */
 function getDoiFromFilename(filename) {
   console.debug("Extracting DOI from filename:", filename);
   if (!filename) return null;

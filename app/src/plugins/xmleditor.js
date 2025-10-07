@@ -10,14 +10,15 @@
  */
 
 import ui from '../ui.js'
-import { endpoints as ep, app, validation, logger } from '../app.js'
+import { endpoints as ep, app, validation, logger, testLog } from '../app.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
-import { getDocumentTitle } from '../modules/file-data-utils.js'
+import { getDocumentTitle, getFileDataByHash } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
+import { isGoldFile } from '../modules/acl-utils.js'
 
 //
 // UI
@@ -51,19 +52,28 @@ import FiledataPlugin from './filedata.js'
 const xmlEditor = new NavXmlEditor('codemirror-container')
 
 // Current state for use in event handlers
-let currentState = null
+/** @type {ApplicationState} */
+let currentState;
 
 // Status widgets for XML editor headerbar and statusbar
 /** @type {StatusText} */
 let titleWidget;
+
+/** @type {StatusText} */
+let lastUpdatedWidget;
+
 /** @type {StatusText} */
 let readOnlyStatusWidget;
+
 /** @type {StatusText} */
 let cursorPositionWidget;
+
 /** @type {StatusText} */
 let indentationStatusWidget;
+
 /** @type {StatusText} */
 let teiHeaderToggleWidget;
+
 /** @type {StatusSeparator} */
 let statusSeparator;
 
@@ -92,7 +102,7 @@ export default plugin
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // Widget for the headerbar
+  // Widgets for the headerbar
   titleWidget = PanelUtils.createText({
     text: '',
     // <sl-icon name="file-earmark-text"></sl-icon>
@@ -102,8 +112,17 @@ async function install(state) {
   })
   titleWidget.classList.add('title-widget')
 
-  // Widgets for the statusbar
+  lastUpdatedWidget = PanelUtils.createText({
+    text: '',
+    variant: 'neutral',
+    name: 'lastUpdatedWidget'
+  })
+  lastUpdatedWidget.classList.add('title-widget')
 
+  ui.xmlEditor.headerbar.add(titleWidget, 'left', 1)
+  ui.xmlEditor.headerbar.add(lastUpdatedWidget, 'right', 1)
+
+  // Widgets for the statusbar
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
     // <sl-icon name="lock-fill"></sl-icon>
@@ -139,9 +158,6 @@ async function install(state) {
     variant: 'dotted'
   })
 
-  // Add title widget to headerbar
-  ui.xmlEditor.headerbar.add(titleWidget, 'left', 1)
-
   // Add widgets to right side of statusbar (higher priority = more to the right)
   ui.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1)  // leftmost - indent to left of position  
   ui.xmlEditor.statusbar.add(statusSeparator, 'right', 2)          // separator in middle
@@ -172,12 +188,12 @@ async function install(state) {
         })
         view.dispatch(setDiagnostics(view.state, validDiagnostics))
       } catch (error) {
-        logger.warn("Error setting diagnostics: " + error.message)
+        logger.warn("Error setting diagnostics: " + String(error))
         // Clear diagnostics on error
         try {
           view.dispatch(setDiagnostics(view.state, []))
         } catch (clearError) {
-          logger.warn("Error clearing diagnostics: " + clearError.message)
+          logger.warn("Error clearing diagnostics: " + String(clearError))
         }
       }
     }
@@ -201,6 +217,8 @@ async function install(state) {
 
   // Add widget to toggle <teiHeader> visibility
   xmlEditor.on("editorAfterLoad", () => {
+    testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
+
     xmlEditor.whenReady().then(() => {
       // Restore line wrapping after XML is loaded
       xmlEditor.setLineWrapping(true)
@@ -213,7 +231,7 @@ async function install(state) {
           teiHeaderVisible = false // Reset state after document load
           updateTeiHeaderToggleWidget()
         } catch (error) {
-          logger.debug(`Error folding teiHeader: ${error.message}`)
+          logger.debug(`Error folding teiHeader: ${String(error)}`)
         }
       } else {
         teiHeaderToggleWidget.style.display = 'none'
@@ -260,12 +278,12 @@ async function start(state) {
       })
       view.dispatch(setDiagnostics(view.state, validDiagnostics))
     } catch (error) {
-      logger.warn("Error setting XML not well-formed diagnostics: " + error.message)
+      logger.warn("Error setting XML not well-formed diagnostics: " + String(error))
       // Clear diagnostics on error
       try {
         view.dispatch(setDiagnostics(view.state, []))
       } catch (clearError) {
-        logger.warn("Error clearing diagnostics: " + clearError.message)
+        logger.warn("Error clearing diagnostics: " + String(clearError))
       }
     }
     
@@ -283,7 +301,7 @@ async function start(state) {
     try {
       xmlEditor.getView().dispatch(setDiagnostics(xmlEditor.getView().state, []))
     } catch (error) {
-      logger.warn("Error clearing diagnostics on well-formed XML: " + error.message)
+      logger.warn("Error clearing diagnostics on well-formed XML: " + String(error))
     }
     // Remove validation error from statusbar
     if (validationStatusWidget && validationStatusWidget.isConnected) {
@@ -304,19 +322,21 @@ async function update(state) {
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
   // Update title widget with document title
-  if (titleWidget && state.xml) {
-    try {
-      const title = getDocumentTitle(state.xml);
-      titleWidget.text = title || 'XML Document';
-      titleWidget.style.display = 'inline-flex';
-    } catch (error) {
-      logger.warn("Could not get document title: "+ error.message);
-      titleWidget.text = 'XML Document';
-      titleWidget.style.display = 'inline-flex';
-    }
-  } else if (titleWidget) {
+  const fileData = getFileDataByHash(state.xml)
+  if (fileData?.item) {
+    const versionType = isGoldFile(state.xml) ? "Gold" : "Version"
+    const versionName = fileData.item.version_name || fileData.item.label || '';
+    titleWidget.text = `${versionType}: ${versionName}`
+  } else {
     titleWidget.text = '';
-    titleWidget.style.display = 'none';
+  }
+  if (fileData?.item && fileData.item.last_update && fileData.item.last_updated_by) {
+    const updateDate = new Date(fileData.item.last_update).toLocaleDateString()
+    const updateTime = new Date(fileData.item.last_update).toLocaleTimeString()
+    const lastUpdatedBy = fileData.item.last_updated_by?.replace("#", '')
+    lastUpdatedWidget.text = `Last revision: ${updateDate}, ${updateTime} by ${lastUpdatedBy}` 
+  } else {
+    lastUpdatedWidget.text = ''
   }
 
   if (!state.xml) {
@@ -383,7 +403,8 @@ async function onSelectionChange(state) {
   }
 }
 
-let hashBeingSaved = null
+/** @type {string|null} */
+let hashBeingSaved = null;
 
 /**
  * Save the current XML file if the editor is "dirty"
@@ -424,7 +445,7 @@ async function saveIfDirty() {
     }
     xmlEditor.markAsClean()
   } catch (error) {
-    logger.warn(`Save failed: ${error.message}`)
+    logger.warn(`Save failed: ${String(error)}`)
   }
 
 }
@@ -482,7 +503,7 @@ function toggleTeiHeaderVisibility() {
     }
     updateTeiHeaderToggleWidget()
   } catch (error) {
-    logger.warn(`Error toggling teiHeader visibility: ${error.message}`)
+    logger.warn(`Error toggling teiHeader visibility: ${String(error)}`)
   }
 }
 

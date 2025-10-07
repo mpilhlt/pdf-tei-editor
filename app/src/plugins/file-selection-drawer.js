@@ -6,13 +6,16 @@
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem } from '../ui.js'
+ * @import { FileListItem } from '../modules/file-data-utils.js'
  */
 
 /**
+ * The button to trigger the file drawer 
  * @typedef {object} fileDrawerTriggerPart
  */
 
 /**
+ * The file drawer 
  * @typedef {object} fileDrawerPart  
  * @property {SlSelect} variantSelect
  * @property {SlInput} labelFilter
@@ -21,7 +24,7 @@
  */
 import ui, { updateUi, SlOption } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import { logger, updateState, hasStateChanged, services } from '../app.js'
+import { app, logger, updateState, hasStateChanged, services } from '../app.js'
 import {
   extractVariants,
   filterFileDataByVariant,
@@ -31,6 +34,18 @@ import {
   findMatchingGold,
   findFileByPdfHash
 } from '../modules/file-data-utils.js'
+
+/**
+ * Creates a label for a document with optional lock icon
+ * @param {string} label - The document label
+ * @param {boolean} [isLocked] - Whether the document is locked
+ * @returns {string} HTML string with label and optional lock icon
+ */
+function createDocumentLabel(label, isLocked) {
+  return isLocked === true
+    ? `<span>${label}</span> <sl-icon name="file-lock2"></sl-icon>`
+    : `<span>${label}</span>`;
+}
 
 /**
  * plugin API
@@ -61,7 +76,8 @@ await registerTemplate('file-drawer-button', 'file-drawer-button.html');
 // Internal state
 let currentLabelFilter = '';
 let needsTreeUpdate = false;
-let currentState = null;
+/** @type {ApplicationState} */
+let currentState;
 let isUpdatingProgrammatically = false;
 
 //
@@ -276,6 +292,7 @@ async function populateFileTree(state) {
   fileTree.innerHTML = '';
 
   // Find which nodes should be expanded based on current selections
+  /** @type { (collection:string) => boolean} */
   const shouldExpandCollection = (collectionName) => {
     if (!state.pdf && !state.xml) return false;
     const files = groupedFiles[collectionName];
@@ -291,6 +308,7 @@ async function populateFileTree(state) {
     });
   };
 
+  /** @type { (file:FileListItem) => boolean} */
   const shouldExpandPdf = (file) => {
     if (!state.pdf && !state.xml) return false;
     // Expand if this is the current PDF
@@ -344,11 +362,7 @@ async function populateFileTree(state) {
           goldItem.dataset.hash = gold.hash;
           goldItem.dataset.pdfHash = file.pdf.hash;
           goldItem.dataset.collection = file.collection;
-          if (gold.is_locked) {
-            goldItem.innerHTML = `🔒 <span>${gold.label}</span>`;
-          } else {
-            goldItem.innerHTML = `<span>${gold.label}</span>`;
-          }          
+          goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
           goldSection.appendChild(goldItem);
         });
         pdfItem.appendChild(goldSection);
@@ -369,11 +383,7 @@ async function populateFileTree(state) {
           versionItem.dataset.hash = version.hash;
           versionItem.dataset.pdfHash = file.pdf.hash;
           versionItem.dataset.collection = file.collection;
-          if (version.is_locked) {
-            versionItem.innerHTML = `🔒 <span>${version.label}</span>`;
-          } else {
-            versionItem.innerHTML = `<span>${version.label}</span>`;
-          }
+          versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked);
           versionsSection.appendChild(versionItem);
         });
         pdfItem.appendChild(versionsSection);
@@ -521,9 +531,9 @@ async function onFileTreeSelection(event, state) {
     try {
       await services.load(filesToLoad);
     } catch (error) {
-      console.error("Error loading files:", error.message);
+      logger.error("Error loading files:" + String(error));
       // On error, reset state and reload file data (similar to file-selection.js)
-      await updateState({ collection: null, pdf: null, xml: null });
+      await app.updateState({ collection: null, pdf: null, xml: null });
       // Note: fileselection.reload() would be called here, but we don't have access to that plugin
       // The error will be handled by services.load() internally
     }

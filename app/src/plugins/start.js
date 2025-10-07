@@ -10,7 +10,7 @@
  */
 import ui from '../ui.js'
 import {
-  endpoints as ep, app, logger, services, dialog, validation, floatingPanel, xmlEditor,
+  endpoints as ep, app, logger, services, dialog, validation, xmlEditor,
   config, authentication, heartbeat, sync, testLog
 } from '../app.js'
 import { Spinner, updateUi } from '../ui.js'
@@ -92,8 +92,8 @@ async function start() {
 
     ui.spinner.show('Loading documents, please wait...')
 
-    // update the file data
-    await app.invokePluginEndpoint(ep.filedata.reload, {refresh:true})
+    // update the file data (use cache on startup, only refresh on explicit user action)
+    await app.invokePluginEndpoint(ep.filedata.reload, {refresh:false})
 
     // disable regular validation so that we have more control over it
     validation.configure({ mode: "off" })
@@ -104,13 +104,16 @@ async function start() {
     const xml = currentState.xml || null
     const diff = currentState.diff
 
-    if (pdf !== null) {
-      // lod the documents
+    if (pdf !== null || xml !== null) {
+      // load the documents (PDF-XML pairs or XML-only files)
       try {
-        await services.load({ pdf, xml, diff })
+        const filesToLoad = {};
+        if (pdf) filesToLoad.pdf = pdf;
+        if (xml) filesToLoad.xml = xml;
+        await services.load(filesToLoad)
       } catch (error) {
-        dialog.error(error.message)
-        logger.critical(error.message)
+        dialog.error(String(error))
+        logger.critical(String(error))
       }
     }
 
@@ -122,7 +125,7 @@ async function start() {
       try {
         await services.showMergeView(currentState, diff)
       } catch (error) {
-        logger.warn("Error loading diff view: " + error.message)
+        logger.warn("Error loading diff view: " + String(error))
       }
     } else {
       // b) validation & xpath selection
@@ -145,7 +148,6 @@ async function start() {
 
       // synchronize in the background
       sync.syncFiles(currentState).then(async (summary) => {
-        logger.info(JSON.stringify(summary))
         if (summary && !summary.skipped) {
           await app.invokePluginEndpoint(ep.filedata.reload, {refresh:true})
         }
@@ -160,7 +162,6 @@ async function start() {
 
     // finish initialization
     ui.spinner.hide()
-    floatingPanel.show()
     xmlEditor.setLineWrapping(true)
     logger.info("Application ready.")
 
@@ -170,9 +171,12 @@ async function start() {
       diff: currentState.diff
     })
 
+    // Notify all plugins that app startup is complete
+    await app.invokePluginEndpoint(ep.ready)
+
   } catch (error) {
     ui.spinner.hide();
-    dialog.error(error instanceof Error ? error.message : String(error))
+    dialog.error(String(error))
     throw error
   }
 }

@@ -1,0 +1,13 @@
+{
+  "session.timeout": 86400,
+  "app.name": "PDF TEI Editor",
+  "app.version": "1.0.0",
+  "test.setting": "test_value",
+  "auth.test.setting": {
+    "complex": "object",
+    "with": [
+      "array",
+      "values"
+    ]
+  }
+}

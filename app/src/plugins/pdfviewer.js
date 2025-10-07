@@ -6,10 +6,10 @@
 /** @import { UIPart } from '../ui.js' */
 /** @import { StatusBar } from '../modules/panels/status-bar.js' */
 import { PDFJSViewer } from '../modules/pdfviewer.js'
-import { PanelUtils } from '../modules/panels/index.js'
+import { PanelUtils, StatusText } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor, hasStateChanged } from '../app.js'
-import { getDocumentTitle } from '../modules/file-data-utils.js'
+import { getDocumentTitle, getFileDataByHash } from '../modules/file-data-utils.js'
 
 //
 // UI Parts
@@ -19,6 +19,7 @@ import { getDocumentTitle } from '../modules/file-data-utils.js'
  * PDF viewer headerbar navigation properties
  * @typedef {object} pdfViewerHeaderbarPart
  * @property {HTMLElement} titleWidget - The document title widget
+ * @property {HTMLElement} filenameWidget - The widget for displaying the filename
  */
 
 /**
@@ -44,7 +45,11 @@ const pdfViewer = new PDFJSViewer('pdf-viewer')
 pdfViewer.hide()
 
 // Note: currentFile state tracking now handled via state.previousState instead of local variable
+/** @type {StatusText} */
 let titleWidget;
+
+/** @type {StatusText} */
+let filenameWidget;
 
 /**
  * plugin object
@@ -72,7 +77,7 @@ async function install(state) {
   logger.info("PDF Viewer ready.")
   pdfViewer.show()
   
-  // Add title widget to PDF viewer headerbar
+  // Add title and filename widgets to PDF viewer headerbar
   const headerBar = ui.pdfViewer.headerbar
   titleWidget = PanelUtils.createText({
     text: '',
@@ -83,18 +88,25 @@ async function install(state) {
   })
   titleWidget.classList.add('title-widget')
   headerBar.add(titleWidget, 'left', 1)
+
+  filenameWidget = PanelUtils.createText({
+    text: '',
+    variant: 'neutral',
+    name: 'filenameWidget'
+  })
+  headerBar.add(filenameWidget, 'right', 1)
   
   // Add autosearch switch to PDF viewer statusbar
   const statusBar = ui.pdfViewer.statusbar
-  const autoSearchSwitch = PanelUtils.createSwitch({
+  const autoSearchSwitchWidget = PanelUtils.createSwitch({
     text: 'Autosearch',
     helpText: 'off',
     checked: false,
     name: 'searchSwitch'
   })
   
-  autoSearchSwitch.addEventListener('widget-change', onAutoSearchSwitchChange)
-  statusBar.add(autoSearchSwitch, 'left', 10)
+  autoSearchSwitchWidget.addEventListener('widget-change', onAutoSearchSwitchChange)
+  statusBar.add(autoSearchSwitchWidget, 'left', 10)
   
   // Update UI to register named elements
   updateUi()
@@ -111,22 +123,23 @@ async function update(state) {
       try {
         await pdfViewer.clear();
       } catch (error) {
-        logger.warn("Error clearing PDF viewer:" + error.message);
+        logger.warn("Error clearing PDF viewer:" + String(error));
       }
     }
   }
   
-  // Update title widget with document title
-  if (titleWidget && state.pdf) {
+  // Update title and fileame widgets
+  if (state.pdf) {
+    filenameWidget.text = getFileDataByHash(state.pdf)?.file?.fileref || ''
     try {
       const title = getDocumentTitle(state.pdf);
       titleWidget.text = title || 'PDF Document';
     } catch (error) {
-      logger.warn("Could not get document title:"+ error.message);
       titleWidget.text = 'PDF Document';
     }
   } else if (titleWidget) {
     titleWidget.text = '';
+    filenameWidget.text = '';
   }
 }
 

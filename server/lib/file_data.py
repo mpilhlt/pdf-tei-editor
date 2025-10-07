@@ -11,13 +11,14 @@ from glob import glob
 from flask import current_app
 from datetime import datetime
 from lxml import etree
+from typing import cast
 
 from server.lib.server_utils import get_data_file_path
 from server.lib.cache_manager import mark_cache_clean
 from server.lib.hash_utils import generate_file_hash, create_hash_mapping
 
 # File type mappings
-FILE_TYPES = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml"}
+FILE_TYPES = {".pdf": "pdf", ".tei.xml": "xml", ".xml": "xml", ".rng": "xml", ".xsd": "xml"}
 
 # Metadata cache to avoid repeated XML parsing
 _metadata_cache = {}
@@ -43,7 +44,7 @@ def get_tei_metadata(file_path):
     
     # Extract variant-id from extractor application metadata
     variant_id = None
-    extractor_apps = root.xpath('.//tei:application[@type="extractor"]', namespaces=ns)
+    extractor_apps = cast(list, root.xpath('.//tei:application[@type="extractor"]', namespaces=ns))
     for app in extractor_apps:
         variant_label = app.find('./tei:label[@type="variant-id"]', ns)
         if variant_label is not None:
@@ -70,7 +71,7 @@ def get_tei_metadata(file_path):
         'status_values': []
     }
     
-    change_elements = root.xpath('.//tei:revisionDesc/tei:change[@when]', namespaces=ns)
+    change_elements = cast(list, root.xpath('.//tei:revisionDesc/tei:change[@when]', namespaces=ns))
     if change_elements:
         # Get the most recent change (last in document order)
         last_change = change_elements[-1]
@@ -140,9 +141,9 @@ def get_version_name(file_path):
     root = tree.getroot()
     ns = {"tei": "http://www.tei-c.org/ns/1.0"}
     
-    edition_stmts = root.xpath("//tei:editionStmt", namespaces=ns)
+    edition_stmts = cast(list, root.xpath("//tei:editionStmt", namespaces=ns))
     if edition_stmts:
-        version_title_element = edition_stmts[-1].xpath("./tei:edition/tei:title", namespaces=ns)
+        version_title_element = cast(list, edition_stmts[-1].xpath("./tei:edition/tei:title", namespaces=ns))
         if version_title_element:
             return version_title_element[0].text
    
@@ -418,9 +419,25 @@ def _build_file_list(file_id_data):
     
     for file_id, file_type_data in file_id_data.items():
         file_dict = {
-            "id": file_id, 
+            "id": file_id,
             "versions": []
         }
+
+        # Determine file classification based on available file types
+        has_pdf = 'pdf' in file_type_data
+        has_xml = 'xml' in file_type_data
+
+        if has_pdf and has_xml:
+            file_dict['file_type'] = 'pdf-xml'
+        elif has_xml:
+            # Check if this is a schema file by examining file extensions
+            is_schema = any(
+                Path(f['path']).suffix.lower() in ['.rng', '.xsd']
+                for f in file_type_data['xml']
+            )
+            file_dict['file_type'] = 'schema' if is_schema else 'xml-only'
+        else:
+            file_dict['file_type'] = 'unknown'
         
         # Process each file type
         for file_type, files in file_type_data.items():
@@ -451,20 +468,19 @@ def _build_file_list(file_id_data):
         if gold_variants:
             file_dict['gold'] = gold_variants
             
-            
-        
         # Add top-level metadata from main XML file
         _add_top_level_metadata(file_dict)
         
         # Sort versions and add Gold entry if main XML exists
         _finalize_versions(file_dict)
         
-        # Only include files that have PDF and at least one XML (gold or version)
+        # Include files that have PDF and at least one XML, OR standalone XML files
         has_pdf = 'pdf' in file_dict
-        has_xml = ((file_dict.get('gold') and len(file_dict['gold']) > 0) or 
+        has_xml = ((file_dict.get('gold') and len(file_dict['gold']) > 0) or
                   (file_dict.get('versions') and len(file_dict['versions']) > 0))
-        
-        if has_pdf and has_xml:
+
+        # Allow standalone XML files (without PDF) - useful for schema generation and XML-only workflows
+        if (has_pdf and has_xml) or (not has_pdf and has_xml):
             file_list.append(file_dict)
     
     # Sort by ID
@@ -498,7 +514,8 @@ def _build_entry_with_metadata(file_info, path_from_root, file_id=None, format_l
     
     # Use version name if available
     if version_name:
-        entry['label'] = version_name
+        entry['version_name'] = version_name
+        entry['label'] = version_name # default
     
     # Add TEI metadata
     if tei_metadata:
@@ -548,7 +565,7 @@ def _build_gold_variants_array(file_id, file_type_data):
             continue
         
         # Build gold entry using shared function (same label handling as versions)
-        gold_entry = _build_entry_with_metadata(file_info, path_from_root, file_id, format_label=True, is_version=False)
+        gold_entry = _build_entry_with_metadata(file_info, path_from_root, file_id, format_label=False, is_version=False)
         
         gold_variants.append(gold_entry)
     

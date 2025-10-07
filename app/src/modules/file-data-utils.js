@@ -4,7 +4,82 @@
  */
 
 /**
- * @import { ApplicationState } from '../state.js'
+ * Access control metadata
+ * @typedef {object} AccessControl
+ * @property {string} editability - Edit permissions ("editable", etc.)
+ * @property {string|null} owner - Owner of the file
+ * @property {string[]} status_values - Available status values
+ * @property {string} visibility - Visibility setting ("public", etc.)
+ */
+
+/**
+ * Metadata retrieved from the <teiHeader>
+ * @typedef {object} TeiHeaderMetaData
+ * @property {string} author - Document author
+ * @property {string} date - Publication date
+ * @property {string} doi - DOI identifier
+ * @property {string} fileref - File reference identifier
+ * @property {string} last_status - Last known status
+ * @property {string} last_update - ISO timestamp of last update
+ * @property {string|null} last_updated_by - User who last updated
+ * @property {string} title - Document title
+ * @property {string} [variant_id] - Optional variant identifier
+ */
+
+/**
+ * @typedef {TeiHeaderMetaData & {access_control: AccessControl}} FileMetadata
+ */
+
+/**
+ * @typedef {object} BaseFileData
+ * @property {string} [collection] - Collection name
+ * @property {string} hash - Unique hash identifier
+ * @property {string} [path] - File system path (only for debugging)
+ */
+
+
+/**
+ * TEI file with full metadata
+ * @typedef {Object} TeiFileData
+ * @property {boolean} [is_locked] - Whether the file is locked for editing
+ * @property {string} label - Display label for the file
+ * @property {string} last_status - Most recent status of the file
+ * @property {string} last_update - Timestamp of last update
+ * @property {string} [last_updated_by] - User who last updated the file
+ * @property {FileMetadata} metadata - File metadata object
+ * @property {string} [variant_id] - Optional variant identifier
+ * @property {string} [version_name] - Optional version name
+ */
+
+/**
+ * @typedef {BaseFileData} PdfFileData - PDF file reference (minimal structure)
+ */
+
+/**
+ * @typedef {TeiFileData} VersionFileData - Version file extends TEI file with lock status
+ */
+
+/**
+ * @typedef {object} FileListItem
+ * @property {string} author - Document author
+ * @property {string} collection - Collection name
+ * @property {string} date - Publication date
+ * @property {string} doi - DOI identifier
+ * @property {string} fileref - File reference identifier
+ * @property {TeiFileData[]} gold - Array of gold standard TEI files
+ * @property {string} id - Unique file identifier
+ * @property {string} label - Human-readable label for the file
+ * @property {PdfFileData} pdf - PDF file data
+ * @property {string} title - Document title
+ * @property {VersionFileData[]} versions - Array of version files
+ */
+
+/**
+ * @typedef {object} LookupItem
+ * @property {"version" | "gold" | "pdf"} type
+ * @property {TeiFileData | PdfFileData} item
+ * @property {FileListItem} file
+ * @property {string} label
  */
 
 // Global lookup index for efficient hash-based queries
@@ -12,8 +87,8 @@ let hashLookupIndex = new Map();
 
 /**
  * Creates a lookup index that maps hash values directly to items
- * @param {Array} fileData - The file data array
- * @returns {Map<string, Object>} Map of hash to item with metadata
+ * @param {FileListItem[]} fileData - The file data array
+ * @returns {Map<string, LookupItem>} Map of hash to item with metadata
  */
 export function createHashLookupIndex(fileData) {
   const index = new Map();
@@ -64,26 +139,33 @@ export function createHashLookupIndex(fileData) {
 }
 
 /**
+ * Gets file data entry from hashLookupIndex based on any hash (PDF or XML)
+ * @param {string} hash - Hash of any file (PDF, gold, or version)
+ * @returns {LookupItem|null} Entry object with {type, item, file, label} or null if not found
+ */
+export function getFileDataByHash(hash) {
+  if (!hash) return null;
+
+  if (!hashLookupIndex || hashLookupIndex.size === 0) {
+    throw new Error('Hash lookup index not initialized. Call createHashLookupIndex() first.');
+  }
+
+  return hashLookupIndex.get(hash) || null;
+}
+
+/**
  * Gets document title/label from fileData based on any hash (PDF or XML)
  * @param {string} hash - Hash of any file (PDF, gold, or version)
  * @returns {string} Document title/label or empty string if not found
- * @throws {Error} If hash lookup index has not been created
  */
 export function getDocumentTitle(hash) {
-  if (!hash) return '';
-
-  if (!hashLookupIndex || hashLookupIndex.size === 0) {
-    console.warn('Hash lookup index not initialized. Call createHashLookupIndex() first.');
-    return ''; // Return empty string instead of throwing
-  }
-
-  const entry = hashLookupIndex.get(hash);
+  const entry = getFileDataByHash(hash);
   return entry?.label || '';
 }
 
 /**
  * Extracts all unique variants from file data
- * @param {Array} fileData - The file data array
+ * @param {FileListItem[]} fileData - The file data array
  * @returns {Set<string>} Set of unique variant IDs
  */
 export function extractVariants(fileData) {
@@ -113,9 +195,9 @@ export function extractVariants(fileData) {
 
 /**
  * Filters file data by variant selection
- * @param {Array} fileData - The file data array
+ * @param {FileListItem[]} fileData - The file data array
  * @param {string|null} variant - Selected variant ("", "none", or variant ID)
- * @returns {Array} Filtered file data
+ * @returns {FileListItem[]} Filtered file data
  */
 export function filterFileDataByVariant(fileData, variant) {
   if (variant === "none") {
@@ -139,9 +221,9 @@ export function filterFileDataByVariant(fileData, variant) {
 
 /**
  * Filters file data by label text search
- * @param {Array} fileData - The file data array
+ * @param {FileListItem[]} fileData - The file data array
  * @param {string} searchText - Text to search for in labels
- * @returns {Array} Filtered file data
+ * @returns {FileListItem[]} Filtered file data
  */
 export function filterFileDataByLabel(fileData, searchText) {
   if (!searchText || searchText.trim() === '') {
@@ -156,22 +238,27 @@ export function filterFileDataByLabel(fileData, searchText) {
 
 /**
  * Groups file data by collection
- * @param {Array} fileData - The file data array
- * @returns {Object} Grouped files by collection name
+ * @param {FileListItem[]} fileData - The file data array
+ * @returns {Record<string, FileListItem[]>} Grouped files by collection name
  */
 export function groupFilesByCollection(fileData) {
+  /** @type Record<string, FileListItem[]> */
+  const groups = {}
   return fileData.reduce((groups, file) => {
     const collection_name = file.collection;
-    (groups[collection_name] = groups[collection_name] || []).push(file);
+    if (collection_name) {
+      groups[collection_name] ||= []
+      groups[collection_name].push(file);
+    }
     return groups;
-  }, {});
+  }, groups);
 }
 
 /**
  * Filters versions and gold entries by variant
- * @param {Object} file - File object containing versions and gold
+ * @param {FileListItem} file - File object containing versions and gold
  * @param {string|null} variant - Selected variant
- * @returns {Object} Object with filtered versions and gold arrays
+ * @returns {{ versionsToShow: TeiFileData[], goldToShow:TeiFileData[] }} Object with filtered versions and gold arrays
  */
 export function filterFileContentByVariant(file, variant) {
   let versionsToShow = file.versions || [];
@@ -193,9 +280,9 @@ export function filterFileContentByVariant(file, variant) {
 
 /**
  * Finds a matching gold file based on variant selection
- * @param {Object} file - File object containing gold entries
+ * @param {FileListItem} file - File object containing gold entries
  * @param {string|null} variant - Selected variant
- * @returns {Object|null} Matching gold entry or null
+ * @returns {TeiFileData|null} Matching gold entry or null
  */
 export function findMatchingGold(file, variant) {
   if (!file.gold) return null;
@@ -214,7 +301,7 @@ export function findMatchingGold(file, variant) {
 
 /**
  * Finds the collection for a given file hash by searching through file data
- * @param {Array} fileData - The file data array
+ * @param {FileListItem[]} fileData - The file data array
  * @param {string} hash - Hash of the file to find
  * @returns {string|null} Collection name or null if not found
  */
@@ -232,9 +319,9 @@ export function findCollectionByHash(fileData, hash) {
 
 /**
  * Finds a file object by PDF hash
- * @param {Array} fileData - The file data array  
+ * @param {FileListItem[]} fileData - The file data array  
  * @param {string} pdfHash - Hash of the PDF file
- * @returns {Object|null} File object or null if not found
+ * @returns {FileListItem|null} File object or null if not found
  */
 export function findFileByPdfHash(fileData, pdfHash) {
   return fileData.find(file => file.pdf.hash === pdfHash) || null;
@@ -242,9 +329,9 @@ export function findFileByPdfHash(fileData, pdfHash) {
 
 /**
  * Finds the corresponding PDF hash and collection for a given XML hash
- * @param {Array} fileData - The file data array
+ * @param {FileListItem[]} fileData - The file data array
  * @param {string} xmlHash - Hash of the XML file (gold or version)
- * @returns {Object|null} Object with {pdfHash, collection} or null if not found
+ * @returns {{pdfHash: string, collection: string}|null} Object with {pdfHash, collection} or null if not found
  */
 export function findCorrespondingPdf(fileData, xmlHash) {
   for (const file of fileData) {

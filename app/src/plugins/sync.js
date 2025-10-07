@@ -2,13 +2,13 @@
  * This plugin provides file synchronization functionality with WebDAV servers
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
- * @import { SlButton, SlIcon } from '../ui.js'
+/**
+ * @import { ApplicationState } from '../state.js'
+ * @import { SlIcon } from '../ui.js'
  */
-import ui, { updateUi } from '../ui.js'
+import ui from '../ui.js'
 import {
-  updateState, client, logger, fileselection, xmlEditor, sse
+  updateState, client, logger, fileselection, sse
 } from '../app.js'
 import { StatusProgress } from '../modules/panels/widgets/status-progress.js'
 
@@ -33,6 +33,7 @@ export { plugin, api }
 export default plugin
 
 // Current state for use in event handlers
+/** @type {ApplicationState | null} */
 let currentState = null
 
 //
@@ -52,9 +53,25 @@ let syncIcon;
 //
 
 /**
+ * @typedef {{
+ *  conflicts_resolved?:Number,
+ *  downloads?: Number,
+ *  local_deletes?: Number,
+ *  local_markers_cleaned_up?: Number,
+ *  remote_deletes?: Number,
+ *  stale_locks_purged?: Number,
+ *  uploads?: Number,
+ *  message?: String,
+ *  skipped?: boolean
+ * }} SyncResult
+ */
+
+
+/**
  * @param {ApplicationState} state
  */
 async function install(state) {
+  void state; // Unused parameter
   logger.debug(`Installing plugin "${plugin.name}"`)
 
   // Set up SSE listeners for sync progress and messages
@@ -70,7 +87,7 @@ async function install(state) {
   sse.addEventListener('syncMessage', (event) => {
     const message = event.data
     // Log sync messages to console instead of displaying in widget
-    logger.log(`Sync: ${message}`)
+    logger.debug(`Sync: ${message}`)
   })
 
   // Create sync progress widget for XML editor statusbar
@@ -85,6 +102,7 @@ async function install(state) {
   syncProgressWidget.style.maxWidth = '75px'
 
   // Create clickable icon element for the progress widget
+  // <sl-icon name="arrow-repeat"></sl-icon>
   syncIcon = document.createElement('sl-icon')
   syncIcon.name = 'arrow-repeat'
   syncIcon.style.marginRight = '4px'
@@ -104,7 +122,7 @@ async function install(state) {
   syncContainer.appendChild(syncProgressWidget)
 
   // Add the sync widget to the XML editor statusbar permanently
-  ui.xmlEditor.statusbar.add(syncContainer, 'left', 3)
+  ui.pdfViewer.statusbar.add(syncContainer, 'right', 3)
 
 }
 
@@ -122,7 +140,8 @@ async function update(state) {
 
 /**
  * Synchronizes the files on the server with the WebDAV backend, if so configured
- * @param {ApplicationState} state 
+ * @param {ApplicationState} state
+ * @returns {Promise<SyncResult>}
  */
 async function syncFiles(state) {
   if (state.webdavEnabled) {
@@ -135,10 +154,10 @@ async function syncFiles(state) {
     }
     try {
       const summary = await client.syncFiles()
-      if (summary.skipped) {
-        logger.debug("Sync skipped - no changes detected")
+      if ('skipped' in summary && summary.skipped) {
+        logger.debug(`Sync skipped: ${summary.message}`)
       } else {
-        logger.debug("Sync completed", summary)
+        logger.log(`Sync completed: ${JSON.stringify(summary)}`)
       }
       return summary
     } finally {
@@ -150,7 +169,7 @@ async function syncFiles(state) {
       }
     }
   }
-  return false
+  return {skipped: true, message: "WebDav not enabled"}
 }
 
 /**
@@ -158,7 +177,7 @@ async function syncFiles(state) {
  * @param {ApplicationState} state
  */
 async function onClickSyncBtn(state) {
-  let summary
+  let summary // Used in try/finally for manual sync result
 
   // Store original read-only state to restore later
   const originalReadOnly = state.editorReadOnly

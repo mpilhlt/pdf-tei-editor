@@ -2,10 +2,18 @@
  * Plugin providing a link to server-side methods
  */
 
+/**
+ * @typedef {object} ErrorResponse 
+ * @property {string} error
+ */
+
 /** 
  * @import { ApplicationState } from '../state.js' 
  * @import { PluginConfig } from '../modules/plugin-manager.js'
+ * @import { AuthenticationData } from './authentication.js'
  */
+
+
 
 import { logger, hasStateChanged } from '../app.js';
 import { notify } from '../modules/sl-utils.js';
@@ -104,7 +112,7 @@ const api = {
   validateXml,
   getAutocompleteData,
   saveXml,
-  extractReferences,
+  extract,
   getExtractorList,
   loadInstructions,
   saveInstructions,
@@ -120,7 +128,7 @@ const api = {
   checkLock,
   acquireLock,
   releaseLock,
-  getAllLocks,
+  getAllLockedFileIds,
   getCacheStatus,
   login,
   logout,
@@ -233,7 +241,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       error = e
       if (error instanceof ConnectionError) {
         // retry in case of ConnectionError
-        logger.warn(`Connection error: ${error.message}. ${retryAttempts} retries remainig..`)
+        logger.warn(`Connection error: ${String(error)}. ${retryAttempts} retries remainig..`)
         // wait one second
         await new Promise(resolve => setTimeout(resolve, 1000))
       } else {
@@ -245,7 +253,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 
   // notify the user about server errors
   if (error instanceof ServerError) {
-    notify(error.message, 'error');
+    notify(String(error), 'error');
   }
   throw error
 }
@@ -255,7 +263,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
  * Logs in a user
  * @param {string} username
  * @param {string} passwd_hash
- * @returns {Promise<import('./authentication.js').UserData>}
+ * @returns {Promise<AuthenticationData>}
  */
 async function login(username, passwd_hash) {
   return await callApi('/auth/login', 'POST', { username, passwd_hash });
@@ -269,21 +277,23 @@ async function logout() {
   return await callApi('/auth/logout', 'POST', {});
 }
 
+
 /**
  * Checks the authentication status of the current user
- * @returns {Promise<any>}
+ * @returns {Promise<AuthenticationData>}
  */
 async function status() {
   return await callApi('/auth/status', 'GET');
 }
 
+
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
  *
+ * @import { FileListItem } from '../modules/file-data-utils.js'
  * @param {string|null} variant - Optional variant filter to apply
  * @param {boolean} refresh - Whether to force refresh of server cache
- * @returns {Promise<{id:string,pdf:string,xml:string}[]>} - A promise that resolves to an array of
- *  objects with keys "id", "pdf", and "tei".
+ * @returns {Promise<FileListItem[]>} - A promise that resolves to an array of file list items
  */
 async function getFileList(variant = null, refresh = false) {
   const params = {};
@@ -316,23 +326,24 @@ async function validateXml(xmlString) {
  * Gets autocomplete data for the XML schema associated with the given XML string.
  *
  * @param {string} xmlString - The XML string containing schema information.
- * @returns {Promise<object>} - A promise that resolves to the autocomplete data object,
+ * @param {boolean} [invalidateCache] - Whether to use cached data (false, default) or reload any required data (true)
+ * @returns {Promise<Record<string, any>>} - A promise that resolves to the autocomplete data object,
  *   which may be in a deduplicated format requiring resolution with resolveDeduplicated().
  */
-async function getAutocompleteData(xmlString) {
-  return await callApi('/validate/autocomplete-data', 'POST', { xml_string: xmlString });
+async function getAutocompleteData(xmlString, invalidateCache ) {
+  return await callApi('/validate/autocomplete-data', 'POST', { xml_string: xmlString, invalidate_cache: invalidateCache });
 }
 
 /**
  * Saves the XML string to a file on the server, optionally as a new version
  * @param {string} xmlString 
- * @param {string} filePath 
+ * @param {string} fileId 
  * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
  * @returns {Promise<Object>}
  */
-async function saveXml(xmlString, filePath, saveAsNewVersion) {
+async function saveXml(xmlString, fileId, saveAsNewVersion) {
   return await callApi('/files/save', 'POST',
-    { xml_string: xmlString, file_path: filePath, new_version: saveAsNewVersion });
+    { xml_string: xmlString, file_path: fileId, new_version: saveAsNewVersion });
 }
 
 /**
@@ -344,21 +355,21 @@ async function getExtractorList() {
 }
 
 /**
- * Extracts the references from the given PDF and returns the XML with the extracted data
- * @param {string} filename The filename of the PDF to extract
- * @param {any} options The options for the extractions, such as DOI, additional instructions, etc. 
+ * Extract content from a source document using specified extractor
+ * @param {string} file_id The file ID/hash of the source document to extract from
+ * @param {any} options The options for the extraction, including extractor type and specific options
  * @returns {Promise<Object>}
  */
-async function extractReferences(filename, options) {
+async function extract(file_id, options) {
   // Extract extractor ID from options for new API format
   const extractor = options.extractor || "llamore-gemini";
   const extractionOptions = { ...options };
   delete extractionOptions.extractor; // Remove extractor from options
-  
-  return await callApi('/extract', 'POST', { 
-    pdf: filename, 
+
+  return await callApi('/extract', 'POST', {
+    file_id: file_id,
     extractor: extractor,
-    options: extractionOptions 
+    options: extractionOptions
   });
 }
 
@@ -387,25 +398,23 @@ async function saveInstructions(instructions) {
 /**
  * Deletes all extraction document versions with the given timestamps 
  * @returns {Promise<Object>} The result object
+ * @param {string[]} fileIds
  */
-/**
- * @param {string[]} filePaths
- */
-async function deleteFiles(filePaths) {
-  if (!Array.isArray(filePaths)) {
+async function deleteFiles(fileIds) {
+  if (!Array.isArray(fileIds)) {
     throw new Error("Timestamps must be an array");
   }
-  return await callApi('/files/delete', 'POST', filePaths);
+  return await callApi('/files/delete', 'POST', fileIds);
 }
 
 /**
  * Creates a new version of a file from an uploaded file.
  * @param {string} tempFilename 
- * @param {string} filePath 
+ * @param {string} fileId 
  * @returns {Promise<Object>}
  */
-async function createVersionFromUpload(tempFilename, filePath) {
-  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: filePath });
+async function createVersionFromUpload(tempFilename, fileId) {
+  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: fileId });
 }
 
 /**
@@ -416,9 +425,10 @@ async function state() {
   return await callApi('/config/state')
 }
 
+
 /**
  * Synchronizes the files on the server with a (WebDav) Backend, if exists
- * @returns {Promise<Object>}
+ * @returns {Promise<import('./sync.js').SyncResult>}
  */
 async function syncFiles() {
   return await callApi('/files/sync')
@@ -469,48 +479,48 @@ async function setConfigValue(key, value) {
 
 /**
  * Sends a heartbeat to the server to keep the file lock alive.
- * @param {string} filePath The file path to send the heartbeat for
+ * @param {string} fileId The file path to send the heartbeat for
  * @returns {Promise<{status:string, cache_status:{dirty:boolean, last_modified:number|null, last_checked:number|null}}>} The response from the server 
  * @throws {Error} If the file path is not provided or if the heartbeat fails
  */
-async function sendHeartbeat(filePath) {
-  if (!filePath) {
+async function sendHeartbeat(fileId) {
+  if (!fileId) {
     throw new Error("File path is required for heartbeat");
   }
-  return await callApi('/files/heartbeat', 'POST', { file_path: filePath });
+  return await callApi('/files/heartbeat', 'POST', { file_path: fileId });
 }
 
 /**
  * Checks if a file is locked by another user.
- * @param {string} filePath The file path to check the lock for
+ * @param {string} fileId The file id to check the lock for
  * @returns {Promise<{is_locked: boolean}>} The response from the server indicating if the file is locked
  * @throws {Error} If the file path is not provided or if the lock check fails
  */
-async function checkLock(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required to check lock");
+async function checkLock(fileId) {
+  if (!fileId) {
+    throw new Error("File id is required to check lock");
   }
-  return await callApi('/files/check_lock', 'POST', { file_path: filePath });
+  return await callApi('/files/check_lock', 'POST', { file_id: fileId });
 }
 
 /**
- * @param {string} filePath
+ * @param {string} fileId
  */
-async function acquireLock(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required to check lock");
+async function acquireLock(fileId) {
+  if (!fileId) {
+    throw new Error("File id is required to check lock");
   }
-  return await callApi('/files/acquire_lock', 'POST', { file_path: filePath });
+  return await callApi('/files/acquire_lock', 'POST', { file_id: fileId });
 }
 
 /**
- * @param {string} filePath
+ * @param {string} fileId
  */
-async function releaseLock(filePath) {
-  if (!filePath) {
-    throw new Error("File path is required to release lock");
+async function releaseLock(fileId) {
+  if (!fileId) {
+    throw new Error("File id is required to release lock");
   }
-  return await callApi('/files/release_lock', 'POST', { file_path: filePath });
+  return await callApi('/files/release_lock', 'POST', { file_id: fileId });
 }
 
 
@@ -518,7 +528,7 @@ async function releaseLock(filePath) {
  * Retrieves an object mapping all currently locked files to the session id that locked them.
  * @returns {Promise<{[key:string]:Number}>} An object mapping locked file paths to session ids 
  */
-async function getAllLocks() {
+async function getAllLockedFileIds() {
   return await callApi('/files/locks', 'GET');
 }
 
@@ -533,7 +543,6 @@ async function getCacheStatus() {
 /**
  * Uploads a file selected by the user to a specified URL using `fetch()`.
  *
- * @author Gemini 2.0
  * @param {string} uploadUrl - The URL to which the file will be uploaded.
  * @param {object} [options={}] - Optional configuration options.
  * @param {string} [options.method='POST'] - The HTTP method to use for the upload.
@@ -543,7 +552,7 @@ async function getCacheStatus() {
  *    The function receives a progress event object as an argument.
  * @param {string} [options.accept='.pdf, .xml'] - The accepted file types for the file input.
  *    This is a string that will be set as the `accept` attribute of the file
- * @returns {Promise<Object>} - A Promise that resolves with the json-deserialized result
+ * @returns {Promise<{ type:string, filename:string, originalFilename:string } >} - A Promise that resolves with the json-deserialized result
  *    from the `fetch()` call, which must be an object, or rejects with an error.
  *    The object should contain the uploaded file's metadata, such as its path or ID.
  *    It will always contain a key "originalFilename" with the original name of the file,
