@@ -71,7 +71,7 @@ services:
     environment:
       - APP_ADMIN_PASSWORD=secure_admin_password
       - APP_DEMO_PASSWORD=demo123
-      - APP_LOGIN_MESSAGE="<h3>Production PDF TEI Editor</h3><p>Use your company credentials to access the system.</p>"
+      - APP_LOGIN_MESSAGE="<h3>PDF TEI Editor</h3><p>Contact administrator to create an account.</p>"
       - GEMINI_API_KEY=your_gemini_api_key_here
       - GROBID_SERVER_URL=https://example.com/grobid
     volumes:
@@ -114,7 +114,6 @@ To persist your data across container restarts, mount these directories:
 ```bash
 docker run -p 8000:8000 \
   -v $(pwd)/data:/app/data \
-  -v $(pwd)/config:/app/config \
   -v $(pwd)/db:/app/db \
   -e APP_ADMIN_PASSWORD=mysecurepassword \
   -e APP_DEMO_PASSWORD=mydemopassword \
@@ -124,18 +123,9 @@ docker run -p 8000:8000 \
 ### Data Directories
 
 - **`/app/data`**: Uploaded PDFs, extracted TEI files, processed documents
-- **`/app/config`**: Application configuration files, prompts, settings
-- **`/app/db`**: User accounts, sessions, application metadata
+- **`/app/db`**: Application database files
 
 ## Production Deployment
-
-For production use, consider:
-
-1. **Use HTTPS**: Deploy behind a reverse proxy (nginx, Traefik) with SSL
-2. **Persistent Volumes**: Mount data directories to preserve work
-3. **Backup Strategy**: Regularly backup the `/app/db` and `/app/data` directories
-4. **Security**: Use strong passwords and restrict network access
-5. **Resource Limits**: Set appropriate CPU/memory limits
 
 Example with nginx reverse proxy:
 
@@ -160,4 +150,5 @@ server {
 ## Docker Hub Repository
 
 The official Docker images are available at:
-**<https://hub.docker.com/r/cboulanger/pdf-tei-editor>**
+**https://hub.docker.com/r/cboulanger/pdf-tei-editor**
+
