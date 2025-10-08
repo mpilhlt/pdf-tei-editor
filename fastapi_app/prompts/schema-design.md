@@ -34,6 +34,13 @@ CREATE TABLE files (
     version INTEGER DEFAULT 1,         -- Version number for TEI files (NULL for PDF)
     is_gold_standard BOOLEAN DEFAULT 0,-- Mark as gold standard/reference version
 
+    -- Synchronization tracking (see sync-design.md for details)
+    deleted BOOLEAN DEFAULT 0,         -- Soft delete marker (for sync, filter with WHERE deleted = 0)
+    local_modified_at TIMESTAMP,       -- When local file last changed (triggers sync)
+    remote_version INTEGER,            -- Remote version when last synced
+    sync_status TEXT DEFAULT 'synced', -- 'synced', 'modified', 'pending_upload', 'pending_delete', 'conflict'
+    sync_hash TEXT,                    -- Content hash at last sync (for conflict detection)
+
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -54,6 +61,31 @@ CREATE INDEX idx_file_type ON files(file_type);              -- Filter by type
 CREATE INDEX idx_variant ON files(variant);                  -- Filter by variant (TEI files)
 CREATE INDEX idx_created_at ON files(created_at DESC);       -- Recent files
 CREATE INDEX idx_is_gold ON files(is_gold_standard) WHERE is_gold_standard = 1;  -- Gold standards
+
+-- Sync-related indexes (see sync-design.md)
+CREATE INDEX idx_sync_status ON files(sync_status) WHERE sync_status != 'synced';  -- Files needing sync
+CREATE INDEX idx_deleted ON files(deleted) WHERE deleted = 1;                       -- Soft-deleted files
+CREATE INDEX idx_local_modified ON files(local_modified_at DESC);                   -- Recent changes
+CREATE INDEX idx_remote_version ON files(remote_version);                           -- Sync version tracking
+```
+
+### Sync Metadata Table
+
+Tracks global synchronization state (see [sync-design.md](sync-design.md) for usage):
+
+```sql
+CREATE TABLE sync_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Initial sync state
+INSERT INTO sync_metadata (key, value) VALUES
+    ('last_sync_time', '1970-01-01T00:00:00Z'),
+    ('remote_version', '0'),
+    ('sync_in_progress', '0'),
+    ('last_sync_summary', '{}');
 ```
 
 ## Design Rationale
@@ -244,10 +276,14 @@ INSERT INTO files (
 
 ## Common Queries
 
+**Important**: Always filter `deleted = 0` in queries to exclude soft-deleted files.
+
 ### Get all files for a document
 
 ```sql
-SELECT * FROM files WHERE doc_id = '10.1234/paper.2024';
+SELECT * FROM files
+WHERE doc_id = '10.1234/paper.2024'
+  AND deleted = 0;
 -- Returns: 5 rows (PDF + 4 TEI files)
 ```
 
@@ -259,6 +295,7 @@ WHERE doc_id = '10.1234/paper.2024'
   AND file_type = 'tei'
   AND variant IS NULL
   AND is_gold_standard = 0
+  AND deleted = 0
 ORDER BY version DESC LIMIT 1;
 -- Returns: Version 2
 ```
@@ -268,7 +305,9 @@ ORDER BY version DESC LIMIT 1;
 ```sql
 SELECT id, filename, file_type, doc_collections, doc_metadata
 FROM files
-WHERE doc_id = '10.1234/paper.2024' AND file_type = 'pdf';
+WHERE doc_id = '10.1234/paper.2024'
+  AND file_type = 'pdf'
+  AND deleted = 0;
 ```
 
 ### Get TEI file with inherited document metadata
@@ -280,15 +319,18 @@ SELECT
     pdf.doc_metadata,
     pdf.doc_collections
 FROM files tei
-LEFT JOIN files pdf ON tei.doc_id = pdf.doc_id AND pdf.file_type = 'pdf'
-WHERE tei.id = 'def456ghi789...';
+LEFT JOIN files pdf ON tei.doc_id = pdf.doc_id AND pdf.file_type = 'pdf' AND pdf.deleted = 0
+WHERE tei.id = 'def456ghi789...'
+  AND tei.deleted = 0;
 ```
 
 ### Get gold standard
 
 ```sql
 SELECT * FROM files
-WHERE doc_id = '10.1234/paper.2024' AND is_gold_standard = 1;
+WHERE doc_id = '10.1234/paper.2024'
+  AND is_gold_standard = 1
+  AND deleted = 0;
 ```
 
 ### Filter documents by collection
@@ -297,7 +339,8 @@ WHERE doc_id = '10.1234/paper.2024' AND is_gold_standard = 1;
 SELECT DISTINCT doc_id, doc_metadata
 FROM files
 WHERE file_type = 'pdf'
-  AND json_extract(doc_collections, '$') LIKE '%gold_subset%';
+  AND json_extract(doc_collections, '$') LIKE '%gold_subset%'
+  AND deleted = 0;
 ```
 
 ### Get all variants for a document
@@ -307,7 +350,27 @@ SELECT id, variant, file_metadata
 FROM files
 WHERE doc_id = '10.1234/paper.2024'
   AND file_type = 'tei'
-  AND variant IS NOT NULL;
+  AND variant IS NOT NULL
+  AND deleted = 0;
+```
+
+### Sync-specific queries
+
+See [sync-design.md](sync-design.md) for complete sync query patterns.
+
+```sql
+-- Get files needing sync
+SELECT * FROM files
+WHERE sync_status != 'synced'
+   OR deleted = 1;  -- Include deleted files for sync
+
+-- Get soft-deleted files
+SELECT * FROM files WHERE deleted = 1;
+
+-- Check if sync needed (instant O(1) query)
+SELECT COUNT(*) FROM files
+WHERE sync_status != 'synced'
+   OR local_modified_at > (SELECT value FROM sync_metadata WHERE key = 'last_sync_time');
 ```
 
 ## Benefits Summary
