@@ -2,8 +2,16 @@
 
 **Goal**: Implement database-backed file metadata before migrating file endpoints
 
-- The sqlite database does not contain information that cannot be reconstructed from the TEI in the filesystem, i.e. in case of corruption, deletion or just being outdated after a synchronization with the WebDAv backend, the database can be recreated from scratch.
-- this of course is costly and should be avoided - atomic updates should be preferred in order to keep information updated.
+## Database Design Principles
+
+- **Reconstructable**: The database does not contain information that cannot be reconstructed from the filesystem (TEI/PDF content). In case of corruption or being outdated after WebDAV sync, it can be rebuilt.
+- **Atomic updates**: Costly full rebuilds should be avoided - use atomic updates to keep information current.
+- **Sync-ready**: While sync implementation is Phase 6, the schema includes sync tracking columns now:
+  - `deleted` - Soft delete marker (replaces `.deleted` files)
+  - `local_modified_at` - Change tracking for delta sync
+  - `sync_status` - Sync state machine
+  - `sync_hash` - Conflict detection
+  - See [sync-design.md](sync-design.md) for how this enables 1000x faster sync
 
 **Key Design**: Document-centric model with metadata inheritance. See [schema-design.md](schema-design.md) for complete details.
 
@@ -21,11 +29,12 @@ Replace JSON-based file caching with SQLite database:
 ### 2.1 Database Schema
 
 - [ ] Create `fastapi/lib/db_schema.py`
-  - Define `CREATE_FILES_TABLE` SQL
-  - Define `CREATE_INDEXES` list
+  - Define `CREATE_FILES_TABLE` SQL (includes sync tracking columns)
+  - Define `CREATE_SYNC_METADATA_TABLE` SQL
+  - Define `CREATE_INDEXES` list (includes sync indexes)
   - Implement `initialize_database(conn)` function
 
-See [schema-design.md](schema-design.md) for complete schema.
+See [schema-design.md](schema-design.md) for complete schema with sync columns.
 
 ### 2.2 Database Manager
 
@@ -57,16 +66,16 @@ Core methods:
 class FileRepository:
     def __init__(self, db_manager: DatabaseManager, logger=None)
 
-    # Basic CRUD
+    # Basic CRUD (all queries filter deleted = 0 by default)
     def insert_file(self, file_data: Dict[str, Any]) -> str
     def update_file(self, file_id: str, updates: Dict[str, Any])
     def get_file_by_id(self, file_id: str) -> Optional[Dict[str, Any]]
-    def delete_file(self, file_id: str)
+    def delete_file(self, file_id: str)  # Sets deleted = 1 (soft delete)
 
-    # List and filter
+    # List and filter (exclude deleted files)
     def list_files(self, collection=None, variant=None, file_type=None) -> List[Dict]
 
-    # Document-centric queries
+    # Document-centric queries (exclude deleted files)
     def get_files_by_doc_id(self, doc_id: str) -> List[Dict]
     def get_pdf_for_document(self, doc_id: str) -> Optional[Dict]
     def get_latest_tei_version(self, doc_id: str) -> Optional[Dict]
@@ -75,6 +84,12 @@ class FileRepository:
 
     # With metadata inheritance
     def get_file_with_doc_metadata(self, file_id: str) -> Optional[Dict]
+
+    # Sync support (Phase 6, stub now)
+    def get_sync_metadata(self, key: str) -> Optional[str]
+    def set_sync_metadata(self, key: str, value: str)
+    def get_deleted_files(self) -> List[Dict]  # For sync: include deleted = 1
+    def mark_deleted(self, file_id: str)  # Soft delete with sync tracking
 ```
 
 Key implementation details:
@@ -82,6 +97,9 @@ Key implementation details:
 - Serialize/deserialize JSON fields (`doc_collections`, `doc_metadata`, `file_metadata`)
 - Handle NULL values for inherited fields
 - Use JOINs for metadata inheritance queries
+- **Always filter `deleted = 0`** in standard queries
+- Set `local_modified_at = CURRENT_TIMESTAMP` on insert/update
+- Set `sync_status = 'modified'` on content changes
 
 ### 2.4 Hash-Based File Storage
 
@@ -179,13 +197,36 @@ print('OK')
 
 Phase 2 is complete when:
 
-- ✅ Database schema creates successfully
+- ✅ Database schema creates successfully (files + sync_metadata tables)
+- ✅ All indexes created (including sync indexes)
 - ✅ File repository can CRUD file metadata
+- ✅ Soft delete works (`deleted = 1`, not hard delete)
+- ✅ All queries filter `deleted = 0` by default
 - ✅ Document-centric queries work correctly
 - ✅ Metadata inheritance via JOIN works
 - ✅ Hash-based storage saves files correctly
 - ✅ Multi-collection support validated
+- ✅ Sync tracking columns populated on insert/update
 - ✅ Integration test passes
+
+## Sync Benefits (Phase 6)
+
+The sync-ready schema enables dramatic performance improvements in Phase 6:
+
+### Current File-Based Sync Problems
+- **O(n) filesystem scan** - Must walk entire directory tree
+- **4-8 seconds** to detect "no changes" in 10,000 files
+- **30-60 seconds** for 100,000 files
+- **.deleted marker files** clutter filesystem
+
+### Database-Driven Sync Benefits
+- **O(1) change detection** - Single query: `SELECT COUNT(*) WHERE sync_status != 'synced'`
+- **1-5ms** to detect "no changes" (1000x faster)
+- **Delta sync** - Only process changed files, not all files
+- **Instant conflict detection** - Compare `sync_hash` vs current hash
+- **No marker files** - `deleted = 1` column instead
+
+See [sync-design.md](sync-design.md) for complete algorithm and implementation plan.
 
 ## Examples
 

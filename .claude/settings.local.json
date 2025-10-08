@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run generate-client:*)"
+      "Bash(npm run generate-client:*)",
+      "Bash(npm run test:fastapi:py:*)"
     ],
     "deny": [],
     "ask": []
