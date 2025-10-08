@@ -114,6 +114,9 @@ COPY tests/e2e/backend/helpers /app/tests/e2e/backend/helpers
 COPY tests/e2e/frontend/helpers /app/tests/e2e/frontend/helpers
 COPY tests/py/fixtures /app/tests/py/fixtures
 
+# Expose port
+EXPOSE 8001
+
 # Override entrypoint for test environment
 COPY docker/entrypoint-test.sh /entrypoint-test.sh
 RUN chmod +x /entrypoint-test.sh
