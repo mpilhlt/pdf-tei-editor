@@ -104,13 +104,14 @@ See [schema-design.md](schema-design.md) for complete details.
 **Status**: ✅ Complete
 **Summary**: [phase-3-completion.md](phase-3-completion.md)
 
-### Phase 4: File Management APIs
+### [Phase 4: File Management APIs](phase-4-file-management.md)
 
 - File listing with SQLite backend
 - File upload with hash storage
 - File serving and version management
 - File operations (delete, move)
 - File locking endpoints
+- Import filesystem-based data into sqlite-database and hash-sharded file storage
 
 **Status**: ⬜ Not started
 
