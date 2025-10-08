@@ -1,5 +1,7 @@
 # Collection Management
 
+(ai-generated, not very useful yet)
+
 Collections in the PDF-TEI Editor help organize documents into logical groups for better project management, access control, and workflow organization.
 
 ## Understanding Collections
