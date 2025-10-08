@@ -2,13 +2,13 @@
 
 A comprehensive viewer/editor web application for comparing PDF sources with TEI extraction and annotation results, specifically designed for creating gold standard datasets of TEI documents from legal and humanities literature.
 
+> The first draft of this documentation has been created using ai tools (Claude Code). It will be corrected and expanded incrementally. Please report any issues on the [GitHub repository](github.com/mpilhlt/pdf-tei-editor/issues).
+
 ## Overview
 
 The PDF-TEI Editor is a specialized tool that helps researchers create, validate, and refine TEI (Text Encoding Initiative) documents extracted from PDF files. It features a dual-pane interface with PDF viewer and XML editor, making it easy to compare source documents with their extracted bibliographic data.
 
 For detailed information about the project background and research context, see [About the PDF-TEI Editor](about.md).
-
-> The first draft of this documentation has been created using ai tools (Claude Code). It will be corrected and expanded incrementally. Please report any issues on the [GitHub repository](github.com/mpilhlt/pdf-tei-editor/issues).
 
 ## Table of Contents
 
@@ -29,7 +29,6 @@ For detailed information about the project background and research context, see 
 - TODO: [Document Comparison and Merging](merging-workflow.md)
 - TODO: [Access Control and Permissions](access-control.md)
 - TODO: [Collection Management](collection-management.md)
-
 
 ## Quick Start
 

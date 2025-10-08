@@ -6,4 +6,4 @@ The application will prompt for username and password automatically if no user i
 
 ## User management
 
-For details on the management of users and roles, see the [README](https://github.com/mpilhlt/pdf-tei-editor/blob/main/README.md#authentication-and-user-management).
+- [Management of users and roles](./user-management.md)
