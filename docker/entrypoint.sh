@@ -38,7 +38,7 @@ fi
 if [ -n "$APP_ADMIN_PASSWORD" ]; then
     echo "Setting up admin user from environment variable..."
     if .venv/bin/python bin/manage.py user update-password admin \
-        --password "$APP_ADMIN_PASSWORD" 2>/dev/null; \    
+        --password "$APP_ADMIN_PASSWORD" 2>/dev/null;
     then
         echo "Admin password updated successfully"
     else
@@ -53,13 +53,12 @@ if [ -n "$APP_DEMO_PASSWORD" ]; then
             --password "$APP_DEMO_PASSWORD" \
             --fullname "Demo User" \
             --roles "user,annotator,reviewer" \
-            --email "demo@localhost" 2>/dev/null; \
+            --email "demo@localhost" 2>/dev/null;
     then
         echo "Demo user created successfully"
     else
         echo "Warning: Failed to create demo user"
     fi
-
 fi
 
 
