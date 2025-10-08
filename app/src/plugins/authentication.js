@@ -103,8 +103,9 @@ class AuthenticationPlugin extends Plugin {
     if (changedKeys.includes('user')) {
       const user = this.state?.user;
       ui.toolbar.logoutButton.disabled = user === null;
-      if (user) {
-        ui.toolbar.logoutButton.closest('sl-tooltip').content = `Log out ${user.username}`
+      const tooltip = ui.toolbar.logoutButton.closest('sl-tooltip')
+      if (user && tooltip) {
+        tooltip.content = `Log out ${user.username} (${user.roles.join(", ")})`
       }
     }
   }

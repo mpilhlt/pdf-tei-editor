@@ -8,8 +8,8 @@
  *
  * Environment Variables:
  *   E2E_HOST - Host to bind container (default: localhost)
- *   E2E_PORT - Port to expose container on host (default: 8000)
- *   E2E_CONTAINER_PORT - Port inside container (default: 8000)
+ *   E2E_PORT - Port to expose container on host (default: 8001)
+ *   E2E_CONTAINER_PORT - Port inside container (default: 8001)
  *
  * Usage:
  *   # Playwright browser tests 
@@ -50,8 +50,8 @@ class E2ERunner {
     // Configuration from environment variables
     this.config = {
       host: process.env.E2E_HOST || 'localhost',
-      port: parseInt(process.env.E2E_PORT || '8000'),
-      containerPort: parseInt(process.env.E2E_CONTAINER_PORT || '8000')
+      port: parseInt(process.env.E2E_PORT || '8001'),
+      containerPort: parseInt(process.env.E2E_CONTAINER_PORT || '8001')
     };
 
     // Load environment variables from .env file (will be updated by setDotenvPath if needed)
@@ -974,7 +974,7 @@ class E2ERunner {
    */
   static getContainerInfo() {
     const host = process.env.E2E_HOST || 'localhost';
-    const port = process.env.E2E_PORT || '8000';
+    const port = process.env.E2E_PORT || '8001';
     return {
       host,
       port: parseInt(port),
@@ -1127,8 +1127,8 @@ function showHelp() {
   console.log('');
   console.log('Environment Variables:');
   console.log('  E2E_HOST           Host to bind container (default: localhost)');
-  console.log('  E2E_PORT           Port to expose container on host (default: 8000)');
-  console.log('  E2E_CONTAINER_PORT Port inside container (default: 8000)');
+  console.log('  E2E_PORT           Port to expose container on host (default: 8001)');
+  console.log('  E2E_CONTAINER_PORT Port inside container (default: 8001)');
   console.log('');
   console.log('Examples:');
   console.log('  # Run Playwright tests');

@@ -34,7 +34,9 @@ def list_available_extractors():
 @session_required
 def extract():
     """Perform extraction using the specified extractor."""
-    
+
+    DATA_ROOT = current_app.config['DATA_ROOT']
+
     # parameters
     data = request.get_json()
     extractor_id: str = data.get("extractor", '')
@@ -72,8 +74,9 @@ def extract():
         # file is uploaded PDF
         resolved_path = _process_pdf_reference(file_id, options)
     else:
-        # Fallback: treat as direct filename for uploaded files
-        resolved_path = resolve_document_identifier(file_id)
+        # Hash-based reference - resolve and convert to absolute path
+        docker_path = resolve_document_identifier(file_id)
+        resolved_path = os.path.join(DATA_ROOT, safe_file_path(docker_path))
 
     # Verify file extension matches expected input type
     file_extension = Path(resolved_path).suffix.lower()

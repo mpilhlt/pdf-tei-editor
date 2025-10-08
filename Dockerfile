@@ -86,6 +86,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/app/web /app/app/web
 COPY --from=builder /app/server /app/server
 COPY --from=builder /app/config /app/config
+COPY --from=builder /app/config /app/db
 
 # Set production mode in the container
 RUN sed -i 's/"application.mode": "development"/"application.mode": "production"/' /app/config/config.json
@@ -112,6 +113,9 @@ COPY tests/e2e/fixtures /app/tests/e2e/fixtures
 COPY tests/e2e/backend/helpers /app/tests/e2e/backend/helpers
 COPY tests/e2e/frontend/helpers /app/tests/e2e/frontend/helpers
 COPY tests/py/fixtures /app/tests/py/fixtures
+
+# Expose port
+EXPOSE 8001
 
 # Override entrypoint for test environment
 COPY docker/entrypoint-test.sh /entrypoint-test.sh
