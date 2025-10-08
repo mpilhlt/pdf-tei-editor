@@ -1,5 +1,7 @@
 # Access Control and Permissions
 
+> Note: the permission system is not fully working yet and has therefore been disabled for the moment. The following (ai-generated) document outlines its capabilities. 
+
 The PDF-TEI Editor includes an access control system that manages document ownership, permissions, and collaborative editing capabilities.
 
 ## Permission System

@@ -8,7 +8,7 @@ The PDF-TEI Editor is a specialized tool that helps researchers create, validate
 
 For detailed information about the project background and research context, see [About the PDF-TEI Editor](about.md).
 
-> This documentation has been created using ai tools (Claude Code) and contains many inaccuracies. However, it is better to have some documentation than nothing. It will be corrected and expanded incrementally. Please report any issues on the [GitHub repository](github.com/mpilhlt/pdf-tei-editor/issues).
+> The first draft of this documentation has been created using ai tools (Claude Code). It will be corrected and expanded incrementally. Please report any issues on the [GitHub repository](github.com/mpilhlt/pdf-tei-editor/issues).
 
 ## Table of Contents
 
@@ -16,22 +16,20 @@ For detailed information about the project background and research context, see 
 
 - [Authentication](authentication.md)
 - [Interface Overview](interface-overview.md)
-- [Loading Documents](loading-documents.md)
 
 ### Core Workflows  
 
-- [Data Extraction Process](extraction-workflow.md)
-- [Version Management](version-management.md)
-- [Document Editing](editing-workflow.md)
-- [Validation and Quality Control](validation-workflow.md)
+- [Main Extraction and Editing Workflow](extraction-workflow.md)
+- TODO: [Document Editing](editing-workflow.md)
+
 
 ### Advanced Features
 
-- [Document Comparison and Merging](comparison-workflow.md)
-- [Access Control and Permissions](access-control.md)
-- [Collection Management](collection-management.md)
-- [File Synchronization](sync-workflow.md)
-- [Document Revisions](revision-management.md)
+- TODO: [File Synchronization](sync-workflow.md)
+- TODO: [Document Comparison and Merging](merging-workflow.md)
+- TODO: [Access Control and Permissions](access-control.md)
+- TODO: [Collection Management](collection-management.md)
+
 
 ## Quick Start
 

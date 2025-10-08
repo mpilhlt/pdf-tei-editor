@@ -1,5 +1,7 @@
 # Document Editing
 
+(ai-generated)
+
 The PDF-TEI Editor provides powerful editing capabilities for refining TEI documents with syntax highlighting, validation, and specialized tools for bibliographic markup.
 
 ## XML Editor Features
