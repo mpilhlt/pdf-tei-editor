@@ -49,6 +49,55 @@ class FileRepository:
         self.db = db_manager
         self.logger = logger
 
+    def resolve_file_id(self, file_id: str, abbreviator=None) -> str:
+        """
+        Resolve abbreviated or full hash to full hash.
+
+        Args:
+            file_id: Abbreviated hash (5+ chars) or full hash (64 chars)
+            abbreviator: Optional HashAbbreviator instance (will be created if needed)
+
+        Returns:
+            Full SHA-256 hash (64 chars)
+
+        Raises:
+            ValueError: If hash cannot be resolved
+        """
+        # If already 64 chars, assume it's a full hash
+        if len(file_id) == 64:
+            return file_id
+
+        # Need abbreviator to resolve
+        if abbreviator is None:
+            from .hash_abbreviation import get_abbreviator
+            abbreviator = get_abbreviator(self)
+
+        try:
+            return abbreviator.resolve(file_id)
+        except KeyError:
+            raise ValueError(f"Cannot resolve file ID: {file_id}")
+
+    def get_file_by_id_or_abbreviated(
+        self,
+        file_id: str,
+        abbreviator=None
+    ) -> Optional[FileMetadata]:
+        """
+        Get file by abbreviated or full hash.
+
+        Args:
+            file_id: Abbreviated hash (5+ chars) or full hash (64 chars)
+            abbreviator: Optional HashAbbreviator instance
+
+        Returns:
+            FileMetadata if found, None otherwise
+        """
+        try:
+            full_hash = self.resolve_file_id(file_id, abbreviator)
+            return self.get_file_by_id(full_hash)
+        except ValueError:
+            return None
+
     def _row_to_model(self, row: sqlite3.Row) -> FileMetadata:
         """
         Convert database row to FileMetadata model.

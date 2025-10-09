@@ -331,3 +331,134 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
             header_lines.append('</TEI>')
 
     return '\n'.join(header_lines)
+
+
+def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
+    """
+    Extract metadata from TEI document for database storage.
+
+    Extracts:
+    - DOI or fileref as doc_id
+    - Title
+    - Authors
+    - Date
+    - Variant (from application metadata)
+    - Gold standard status
+    - Labels
+
+    Args:
+        tei_root: TEI root element
+
+    Returns:
+        Dictionary with extracted metadata
+    """
+    ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+    metadata = {}
+
+    # Extract DOI (preferred doc_id)
+    doi_elem = tei_root.find('.//tei:idno[@type="DOI"]', ns)
+    if doi_elem is not None and doi_elem.text:
+        metadata['doc_id'] = doi_elem.text.strip()
+        metadata['doc_id_type'] = 'doi'
+    else:
+        # Try fileref as fallback
+        fileref_elem = tei_root.find('.//tei:idno[@type="fileref"]', ns)
+        if fileref_elem is not None and fileref_elem.text:
+            metadata['doc_id'] = fileref_elem.text.strip()
+            metadata['doc_id_type'] = 'fileref'
+        else:
+            # No doc_id found - caller must provide fallback
+            metadata['doc_id'] = None
+            metadata['doc_id_type'] = 'custom'
+
+    # Also extract fileref separately for PDF matching (even if DOI exists)
+    fileref_elem = tei_root.find('.//tei:idno[@type="fileref"]', ns)
+    if fileref_elem is not None and fileref_elem.text:
+        metadata['fileref'] = fileref_elem.text.strip()
+
+    # Extract title
+    title_elem = tei_root.find('.//tei:titleStmt/tei:title[@level="a"]', ns)
+    if title_elem is not None and title_elem.text:
+        metadata['title'] = title_elem.text.strip()
+
+    # Extract authors
+    authors = []
+    for author_elem in tei_root.findall('.//tei:titleStmt/tei:author', ns):
+        persName = author_elem.find('tei:persName', ns)
+        if persName is not None:
+            given_elem = persName.find('tei:forename', ns)
+            family_elem = persName.find('tei:surname', ns)
+
+            author = {}
+            if given_elem is not None and given_elem.text:
+                author['given'] = given_elem.text.strip()
+            if family_elem is not None and family_elem.text:
+                author['family'] = family_elem.text.strip()
+
+            if author:
+                authors.append(author)
+
+    if authors:
+        metadata['authors'] = authors
+
+    # Extract publication date
+    date_elem = tei_root.find('.//tei:publicationStmt/tei:date[@type="publication"]', ns)
+    if date_elem is not None and date_elem.text:
+        metadata['date'] = date_elem.text.strip()
+
+    # Extract journal/publisher info
+    journal_elem = tei_root.find('.//tei:sourceDesc//tei:title[@level="j"]', ns)
+    if journal_elem is not None and journal_elem.text:
+        metadata['journal'] = journal_elem.text.strip()
+
+    publisher_elem = tei_root.find('.//tei:publicationStmt/tei:publisher', ns)
+    if publisher_elem is not None and publisher_elem.text:
+        metadata['publisher'] = publisher_elem.text.strip()
+
+    # Extract variant from GROBID application metadata
+    grobid_app = tei_root.find('.//tei:application[@ident="GROBID"]', ns)
+    if grobid_app is not None:
+        variant_label = grobid_app.find('tei:label[@type="variant-id"]', ns)
+        if variant_label is not None and variant_label.text:
+            metadata['variant'] = variant_label.text.strip()
+
+    # Check for gold standard status
+    # Gold standard files typically don't have version markers
+    # and may have specific status indicators
+    revision_desc = tei_root.find('.//tei:revisionDesc', ns)
+    is_gold = False
+    if revision_desc is not None:
+        for change in revision_desc.findall('tei:change', ns):
+            status = change.get('status', '')
+            if status in ['gold', 'final', 'published']:
+                is_gold = True
+                break
+
+    metadata['is_gold_standard'] = is_gold
+
+    # Extract labels/roles from respStmt
+    labels = []
+    for resp_stmt in tei_root.findall('.//tei:titleStmt/tei:respStmt', ns):
+        resp_elem = resp_stmt.find('tei:resp', ns)
+        if resp_elem is not None and resp_elem.text:
+            labels.append(resp_elem.text.strip())
+
+    if labels:
+        metadata['label'] = ', '.join(labels)
+
+    # Build doc_metadata dict for storage
+    doc_metadata = {}
+    if 'title' in metadata:
+        doc_metadata['title'] = metadata['title']
+    if 'authors' in metadata:
+        doc_metadata['authors'] = metadata['authors']
+    if 'date' in metadata:
+        doc_metadata['date'] = metadata['date']
+    if 'journal' in metadata:
+        doc_metadata['journal'] = metadata['journal']
+    if 'publisher' in metadata:
+        doc_metadata['publisher'] = metadata['publisher']
+
+    metadata['doc_metadata'] = doc_metadata
+
+    return metadata
