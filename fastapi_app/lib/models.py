@@ -26,7 +26,7 @@ class FileMetadata(BaseModel):
     file_size: int
     label: Optional[str] = None
     variant: Optional[str] = None
-    version: int = 1
+    version: Optional[int] = 1  # NULL for gold and variants, integer for versions
     is_gold_standard: bool = False
 
     # Document metadata (PDF files only)
@@ -74,11 +74,12 @@ class FileCreate(BaseModel):
     id: str
     filename: str
     doc_id: str
+    doc_id_type: str = 'custom'  # 'doi', 'fileref', 'custom'
     file_type: str
     file_size: int
     label: Optional[str] = None
     variant: Optional[str] = None
-    version: int = 1
+    version: Optional[int] = 1  # NULL for gold and variants, integer for versions
     is_gold_standard: bool = False
     doc_collections: list[str] = Field(default_factory=list)
     doc_metadata: dict = Field(default_factory=dict)
