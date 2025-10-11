@@ -9,15 +9,14 @@ Key changes from Flask:
 - Only updates PDF file metadata (TEI files inherit collection)
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..lib.file_repository import FileRepository
 from ..lib.models_files import MoveFilesRequest, MoveFilesResponse
 from ..lib.models import FileUpdate
 from ..lib.dependencies import (
     get_file_repository,
-    get_current_user,
-    require_session,
+    require_authenticated_user,
     get_hash_abbreviator
 )
 from ..lib.access_control import check_file_access
@@ -30,11 +29,10 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 
 @router.post("/move", response_model=MoveFilesResponse)
-@require_session
 def move_files(
-    request: MoveFilesRequest,
+    body: MoveFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_authenticated_user),
     abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
 ):
     """
@@ -58,18 +56,18 @@ def move_files(
     Raises:
         HTTPException: 403 if insufficient permissions, 404 if file not found
     """
-    logger.debug(f"Moving files to collection {request.destination_collection}, user={current_user}")
+    logger.debug(f"Moving files to collection {body.destination_collection}, user={current_user}")
 
     # Resolve PDF path/hash
     try:
-        pdf_full_hash = abbreviator.resolve(request.pdf_path)
+        pdf_full_hash = abbreviator.resolve(body.pdf_path)
     except KeyError:
-        pdf_full_hash = request.pdf_path
+        pdf_full_hash = body.pdf_path
 
     # Look up PDF file
     pdf_file = repo.get_file_by_id(pdf_full_hash)
     if not pdf_file:
-        raise HTTPException(status_code=404, detail=f"PDF file not found: {request.pdf_path}")
+        raise HTTPException(status_code=404, detail=f"PDF file not found: {body.pdf_path}")
 
     if pdf_file.file_type != 'pdf':
         raise HTTPException(status_code=400, detail=f"Expected PDF file, got {pdf_file.file_type}")
@@ -84,11 +82,11 @@ def move_files(
     # Update collections (add destination if not already present)
     current_collections = pdf_file.doc_collections or []
 
-    if request.destination_collection not in current_collections:
-        updated_collections = current_collections + [request.destination_collection]
+    if body.destination_collection not in current_collections:
+        updated_collections = current_collections + [body.destination_collection]
 
         logger.info(
-            f"Adding collection {request.destination_collection} to document {pdf_file.doc_id}: "
+            f"Adding collection {body.destination_collection} to document {pdf_file.doc_id}: "
             f"{current_collections} -> {updated_collections}"
         )
 
@@ -101,12 +99,12 @@ def move_files(
         )
     else:
         logger.info(
-            f"Document {pdf_file.doc_id} already in collection {request.destination_collection}"
+            f"Document {pdf_file.doc_id} already in collection {body.destination_collection}"
         )
 
     # Return paths (abbreviated hashes, unchanged)
     # In hash-based system, "paths" are just the hashes
     return MoveFilesResponse(
         new_pdf_path=abbreviator.abbreviate(pdf_file.id),
-        new_xml_path=request.xml_path  # XML path unchanged
+        new_xml_path=body.xml_path  # XML path unchanged
     )

@@ -28,7 +28,6 @@ from ..lib.dependencies import (
     get_file_repository,
     get_session_id,
     get_current_user,
-    require_session,
     get_hash_abbreviator
 )
 from ..lib.access_control import check_file_access
@@ -42,7 +41,6 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 
 @router.get("/locks", response_model=GetLocksResponse)
-@require_session
 def get_all_locks(
     session_id: str = Depends(get_session_id),
     abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
@@ -65,7 +63,6 @@ def get_all_locks(
 
 
 @router.post("/check_lock", response_model=CheckLockResponse)
-@require_session
 def check_lock_endpoint(
     request: CheckLockRequest,
     session_id: str = Depends(get_session_id),
@@ -95,7 +92,6 @@ def check_lock_endpoint(
 
 
 @router.post("/acquire_lock")
-@require_session
 def acquire_lock_endpoint(
     request: AcquireLockRequest,
     repo: FileRepository = Depends(get_file_repository),
@@ -158,7 +154,6 @@ def acquire_lock_endpoint(
 
 
 @router.post("/release_lock", response_model=ReleaseLockResponse)
-@require_session
 def release_lock_endpoint(
     request: ReleaseLockRequest,
     session_id: str = Depends(get_session_id),

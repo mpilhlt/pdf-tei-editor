@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..lib.locking import acquire_lock
 from ..lib.models_files import HeartbeatRequest, HeartbeatResponse
-from ..lib.dependencies import get_session_id, require_session, get_hash_abbreviator
+from ..lib.dependencies import get_session_id, get_hash_abbreviator
 from ..lib.hash_abbreviation import HashAbbreviator
 from ..config import get_settings
 from ..lib.logging_utils import get_logger
@@ -23,7 +23,6 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 
 @router.post("/heartbeat", response_model=HeartbeatResponse)
-@require_session
 def heartbeat(
     request: HeartbeatRequest,
     session_id: str = Depends(get_session_id),
