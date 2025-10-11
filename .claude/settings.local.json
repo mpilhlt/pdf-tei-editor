@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(kill:*)",
-      "Bash(uv run pytest:*)"
+      "Bash(uv run pytest:*)",
+      "Read(//tmp/**)"
     ],
     "deny": [],
     "ask": []

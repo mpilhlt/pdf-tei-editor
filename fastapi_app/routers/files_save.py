@@ -182,185 +182,195 @@ async def save_file(
     logger_inst = get_logger(__name__)
     settings = get_settings()
 
-    # Decode base64 if needed
-    xml_string = request.xml_string
-    if request.encoding == "base64":
-        xml_string = base64.b64decode(xml_string).decode('utf-8')
-
-    # Validate XML is well-formed
     try:
-        etree.fromstring(xml_string.encode('utf-8'))
-    except etree.XMLSyntaxError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid XML: {str(e)}")
+        # Decode base64 if needed
+        xml_string = request.xml_string
+        if request.encoding == "base64":
+            xml_string = base64.b64decode(xml_string).decode('utf-8')
 
-    # Extract metadata from XML
-    file_id, variant = _extract_metadata_from_xml(xml_string, request.file_id, logger_inst)
-
-    # Update fileref in XML to ensure consistency
-    xml_string = _update_fileref_in_xml(xml_string, file_id, logger_inst)
-
-    # Encode XML entities if configured
-    from ..lib.config_utils import load_full_config
-    config = load_full_config(settings.db_dir)
-    if config.get("xml.encode-entities.server", False):
-        logger_inst.debug("Encoding XML entities")
-        xml_string = encode_xml_entities(xml_string)
-
-    # For new saves, file_id becomes the doc_id (PDF and TEI share same doc_id)
-    doc_id = file_id
-
-    # Determine save strategy based on existing files in database
-    existing_gold = file_repo.get_gold_standard(doc_id)
-
-    # Check if we're updating an existing file (provided file_id is a hash)
-    existing_file = None
-    if len(request.file_id) >= 5:  # Could be abbreviated hash
+        # Validate XML is well-formed
         try:
-            full_hash = file_repo.resolve_file_id(request.file_id, abbreviator)
-            existing_file = file_repo.get_file_by_id(full_hash)
+            etree.fromstring(xml_string.encode('utf-8'))
+        except etree.XMLSyntaxError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid XML: {str(e)}")
 
-            # If found, override doc_id with the existing file's doc_id
-            if existing_file:
-                doc_id = existing_file.doc_id
-                file_id = existing_file.doc_id  # Use doc_id as file_id
-                logger_inst.info(f"Updating existing file: {full_hash[:8]}")
-        except ValueError:
-            pass  # Not a hash, treat as new file
+        # Extract metadata from XML
+        file_id, variant = _extract_metadata_from_xml(xml_string, request.file_id, logger_inst)
 
-    # Refresh existing_gold after resolving doc_id
-    if existing_file:
+        # Update fileref in XML to ensure consistency
+        xml_string = _update_fileref_in_xml(xml_string, file_id, logger_inst)
+
+        # Encode XML entities if configured
+        from ..lib.config_utils import load_full_config
+        config = load_full_config(settings.db_dir)
+        if config.get("xml.encode-entities.server", False):
+            logger_inst.debug("Encoding XML entities")
+            xml_string = encode_xml_entities(xml_string)
+
+        # For new saves, file_id becomes the doc_id (PDF and TEI share same doc_id)
+        doc_id = file_id
+
+        # Determine save strategy based on existing files in database
         existing_gold = file_repo.get_gold_standard(doc_id)
 
-    # Determine save operation
-    status = "saved"
-    is_gold_standard = False
-    version = None
+        # Check if we're updating an existing file (provided file_id is a hash)
+        existing_file = None
+        if len(request.file_id) >= 5:  # Could be abbreviated hash
+            try:
+                full_hash = file_repo.resolve_file_id(request.file_id, abbreviator)
+                existing_file = file_repo.get_file_by_id(full_hash)
 
-    if existing_file and not request.new_version:
+                # If found, override doc_id with the existing file's doc_id
+                if existing_file:
+                    doc_id = existing_file.doc_id
+                    file_id = existing_file.doc_id  # Use doc_id as file_id
+                    logger_inst.info(f"Updating existing file: {full_hash[:8]}")
+            except ValueError:
+                pass  # Not a hash, treat as new file
+
+        # Refresh existing_gold after resolving doc_id
+        if existing_file:
+            existing_gold = file_repo.get_gold_standard(doc_id)
+
+        # Determine save operation
+        status = "saved"
+        is_gold_standard = False
+        version = None
+
+        if existing_file and not request.new_version:
         # Update existing file
-        logger_inst.info(f"Updating existing file: {existing_file.id[:8]}")
+            logger_inst.info(f"Updating existing file: {existing_file.id[:8]}")
 
         # Check permissions based on file type
-        if existing_file.is_gold_standard and not _user_has_role(user, 'reviewer'):
-            raise HTTPException(
-                status_code=403,
-                detail="Only reviewers can edit gold standard files"
-            )
+            if existing_file.is_gold_standard and not _user_has_role(user, 'reviewer'):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only reviewers can edit gold standard files"
+                )
 
-        if existing_file.version is not None and not _user_has_role(user, 'annotator') and not _user_has_role(user, 'reviewer'):
-            raise HTTPException(
-                status_code=403,
-                detail="Only annotators or reviewers can edit version files"
-            )
+            if existing_file.version is not None and not _user_has_role(user, 'annotator') and not _user_has_role(user, 'reviewer'):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only annotators or reviewers can edit version files"
+                )
 
         # Acquire lock for existing file
-        if not acquire_lock(existing_file.id, session_id, settings.db_dir, logger_inst):
-            raise HTTPException(status_code=423, detail="Failed to acquire lock")
+            if not acquire_lock(existing_file.id, session_id, settings.db_dir, logger_inst):
+                raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
         # Save to storage (hash might change if content changed)
-        saved_hash, file_size = file_storage.save_file(xml_string, 'tei')
+            xml_bytes = xml_string.encode('utf-8')
+            saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
+            file_size = len(xml_bytes)
 
-        # Update database
-        file_repo.update_file(
-            existing_file.id,
-            FileUpdate(
-                id=saved_hash,  # Update hash if content changed
-                file_size=file_size,
-                file_metadata={}  # Could extract more metadata from XML
+            # Update database (FileRepository handles reference counting automatically)
+            file_repo.update_file(
+                existing_file.id,
+                FileUpdate(
+                    id=saved_hash,  # Update hash if content changed
+                    file_size=file_size,
+                    file_metadata={}  # Could extract more metadata from XML
+                )
             )
-        )
 
-        # Re-acquire lock with new hash if changed
-        if saved_hash != existing_file.id:
-            release_lock(existing_file.id, session_id, settings.db_dir, logger_inst)
-            acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst)
+            return SaveFileResponse(status="saved", hash=abbreviator.abbreviate(saved_hash))
 
-        return SaveFileResponse(status="saved", hash=abbreviator.abbreviate(saved_hash))
-
-    elif request.new_version or (existing_gold and existing_gold.variant == variant):
+        elif request.new_version or (existing_gold and existing_gold.variant == variant):
         # Create new version
-        if not _user_has_role(user, 'annotator') and not _user_has_role(user, 'reviewer'):
-            raise HTTPException(
-                status_code=403,
-                detail="Only annotators or reviewers can create version files"
-            )
+            if not _user_has_role(user, 'annotator') and not _user_has_role(user, 'reviewer'):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only annotators or reviewers can create version files"
+                )
 
         # Get next version number
-        latest_version = file_repo.get_latest_tei_version(doc_id, variant)
-        next_version = (latest_version.version + 1) if latest_version else 1
+            latest_version = file_repo.get_latest_tei_version(doc_id, variant)
+            next_version = (latest_version.version + 1) if latest_version else 1
 
-        logger_inst.info(f"Creating version {next_version} for doc_id={doc_id}, variant={variant}")
+            logger_inst.info(f"Creating version {next_version} for doc_id={doc_id}, variant={variant}")
 
         # Save to storage
-        saved_hash, file_size = file_storage.save_file(xml_string, 'tei')
+            xml_bytes = xml_string.encode('utf-8')
+            saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
+            file_size = len(xml_bytes)
 
         # Acquire lock
-        if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
-            raise HTTPException(status_code=423, detail="Failed to acquire lock")
+            if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
+                raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
         # Get PDF file to inherit collections
-        pdf_file = file_repo.get_pdf_for_document(doc_id)
-        doc_collections = pdf_file.doc_collections if pdf_file else []
+            pdf_file = file_repo.get_pdf_for_document(doc_id)
+            doc_collections = pdf_file.doc_collections if pdf_file else []
 
         # Insert new version
-        file_repo.insert_file(FileCreate(
-            id=saved_hash,
-            filename=f"{file_id}.{variant}.v{next_version}.tei.xml" if variant else f"{file_id}.v{next_version}.tei.xml",
-            doc_id=doc_id,
-            file_type='tei',
-            label=None,
-            variant=variant,
-            version=next_version,
-            is_gold_standard=False,
-            doc_collections=doc_collections,
-            doc_metadata={},
-            file_metadata={},
-            file_size=file_size
-        ))
+            file_repo.insert_file(FileCreate(
+                id=saved_hash,
+                filename=f"{file_id}.{variant}.v{next_version}.tei.xml" if variant else f"{file_id}.v{next_version}.tei.xml",
+                doc_id=doc_id,
+                file_type='tei',
+                label=None,
+                variant=variant,
+                version=next_version,
+                is_gold_standard=False,
+                doc_collections=doc_collections,
+                doc_metadata={},
+                file_metadata={},
+                file_size=file_size
+            ))
 
-        status = "new"
-        return SaveFileResponse(status=status, hash=abbreviator.abbreviate(saved_hash))
+            status = "new"
+            return SaveFileResponse(status=status, hash=abbreviator.abbreviate(saved_hash))
 
-    else:
+        else:
         # Create new gold standard file
-        if not _user_has_role(user, 'reviewer'):
-            raise HTTPException(
-                status_code=403,
-                detail="Only reviewers can create new gold standard files"
-            )
+            if not _user_has_role(user, 'reviewer'):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only reviewers can create new gold standard files"
+                )
 
-        logger_inst.info(f"Creating new gold standard for doc_id={doc_id}, variant={variant}")
+            logger_inst.info(f"Creating new gold standard for doc_id={doc_id}, variant={variant}")
 
         # Save to storage
-        saved_hash, file_size = file_storage.save_file(xml_string, 'tei')
+            xml_bytes = xml_string.encode('utf-8')
+            saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
+            file_size = len(xml_bytes)
 
         # Acquire lock
-        if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
-            raise HTTPException(status_code=423, detail="Failed to acquire lock")
+            if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
+                raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
         # Get PDF file to inherit collections
-        pdf_file = file_repo.get_pdf_for_document(doc_id)
-        doc_collections = pdf_file.doc_collections if pdf_file else []
+            pdf_file = file_repo.get_pdf_for_document(doc_id)
+            doc_collections = pdf_file.doc_collections if pdf_file else []
 
         # Insert new gold standard
-        filename = f"{file_id}.{variant}.tei.xml" if variant else f"{file_id}.tei.xml"
-        file_repo.insert_file(FileCreate(
-            id=saved_hash,
-            filename=filename,
-            doc_id=doc_id,
-            file_type='tei',
-            label=None,
-            variant=variant,
-            version=None,  # Gold files have no version
-            is_gold_standard=True,
-            doc_collections=doc_collections,
-            doc_metadata={},
-            file_metadata={},
-            file_size=file_size
-        ))
+            filename = f"{file_id}.{variant}.tei.xml" if variant else f"{file_id}.tei.xml"
+            file_repo.insert_file(FileCreate(
+                id=saved_hash,
+                filename=filename,
+                doc_id=doc_id,
+                file_type='tei',
+                label=None,
+                variant=variant,
+                version=None,  # Gold files have no version
+                is_gold_standard=True,
+                doc_collections=doc_collections,
+                doc_metadata={},
+                file_metadata={},
+                file_size=file_size
+            ))
 
-        status = "new_gold"
-        return SaveFileResponse(status=status, hash=abbreviator.abbreviate(saved_hash))
+            status = "new_gold"
+            return SaveFileResponse(status=status, hash=abbreviator.abbreviate(saved_hash))
+
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Log and convert other exceptions
+        logger_inst.error(f"Save API error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Save failed: {str(e)}")
 
 
 @router.post("/create_version_from_upload", response_model=SaveFileResponse)

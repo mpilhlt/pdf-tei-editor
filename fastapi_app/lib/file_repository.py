@@ -7,6 +7,7 @@ Provides CRUD operations and queries for the files table with:
 - Soft delete support (deleted = 1)
 - Sync tracking (for Phase 6)
 - Pydantic model integration for type safety
+- Storage reference counting for safe file cleanup
 
 All queries filter deleted = 0 by default unless explicitly requesting deleted files.
 """
@@ -16,6 +17,7 @@ import sqlite3
 from typing import Optional, List
 from datetime import datetime
 from .database import DatabaseManager
+from .storage_references import StorageReferenceManager
 from .models import (
     FileMetadata,
     FileCreate,
@@ -40,7 +42,7 @@ class FileRepository:
 
     def __init__(self, db_manager: DatabaseManager, logger=None):
         """
-        Initialize file repository.
+        Initialize file repository with storage reference counting.
 
         Args:
             db_manager: DatabaseManager instance
@@ -48,6 +50,8 @@ class FileRepository:
         """
         self.db = db_manager
         self.logger = logger
+        # Initialize reference manager for storage cleanup
+        self.ref_manager = StorageReferenceManager(db_manager.db_path, logger)
 
     def resolve_file_id(self, file_id: str, abbreviator=None) -> str:
         """
@@ -199,6 +203,9 @@ class FileRepository:
             if self.logger:
                 self.logger.debug(f"Inserted file: {file_data.id}")
 
+        # Increment storage reference count (database entry now references this file)
+        self.ref_manager.increment_reference(file_data.id, file_data.file_type)
+
         # Return the inserted file
         return self.get_file_by_id(file_data.id)
 
@@ -210,6 +217,8 @@ class FileRepository:
         - local_modified_at = CURRENT_TIMESTAMP
         - sync_status = 'modified' (if content changed)
         - updated_at = CURRENT_TIMESTAMP
+
+        Handles reference counting when file hash changes (content update).
 
         Args:
             file_id: File ID (hash)
@@ -227,6 +236,17 @@ class FileRepository:
 
         if not update_data:
             return self.get_file_by_id(file_id)
+
+        # Check if hash is changing (content update)
+        hash_changed = 'id' in update_data and update_data['id'] != file_id
+        new_hash = update_data['id'] if hash_changed else None
+
+        # Get file_type before update (needed for ref counting)
+        if hash_changed:
+            old_file = self.get_file_by_id(file_id)
+            if not old_file:
+                raise ValueError(f"File not found: {file_id}")
+            file_type = old_file.file_type
 
         # Serialize JSON fields
         if 'doc_collections' in update_data:
@@ -260,7 +280,29 @@ class FileRepository:
             if self.logger:
                 self.logger.debug(f"Updated file: {file_id}")
 
-        return self.get_file_by_id(file_id)
+        # Handle reference counting for hash change
+        if hash_changed:
+            # Increment ref for new hash
+            self.ref_manager.increment_reference(new_hash, file_type)
+            # Decrement ref for old hash and delete physical file if needed
+            old_count, should_delete = self.ref_manager.decrement_reference(file_id)
+
+            if should_delete:
+                # Physical file should be deleted - need FileStorage for this
+                # Import here to avoid circular dependency
+                from .file_storage import FileStorage
+                from ..config import get_settings
+                settings = get_settings()
+                storage = FileStorage(settings.data_root / "files", self.db.db_path, self.logger)
+                storage.delete_file(file_id, file_type, decrement_ref=False)
+
+                if self.logger:
+                    self.logger.info(f"Deleted orphaned file {file_id[:8]}... after hash change")
+
+            if self.logger:
+                self.logger.info(f"Hash changed: {file_id[:8]}... -> {new_hash[:8]}... (refs updated)")
+
+        return self.get_file_by_id(new_hash if hash_changed else file_id)
 
     def get_file_by_id(self, file_id: str, include_deleted: bool = False) -> Optional[FileMetadata]:
         """
@@ -292,6 +334,7 @@ class FileRepository:
         Also updates:
         - local_modified_at = CURRENT_TIMESTAMP
         - sync_status = 'pending_delete'
+        - Decrements storage reference count
 
         Args:
             file_id: File ID (hash)
@@ -317,6 +360,25 @@ class FileRepository:
 
             if self.logger:
                 self.logger.debug(f"Soft deleted file: {file_id}")
+
+        # Get file metadata before decrementing (need file_type for physical deletion)
+        file_metadata = self.get_file_by_id(file_id, include_deleted=True)
+        if not file_metadata:
+            return  # Already handled above, but safety check
+
+        # Decrement storage reference count and delete physical file if needed
+        ref_count, should_delete = self.ref_manager.decrement_reference(file_id)
+
+        if should_delete:
+            # Physical file should be deleted
+            from .file_storage import FileStorage
+            from ..config import get_settings
+            settings = get_settings()
+            storage = FileStorage(settings.data_root / "files", self.db.db_path, self.logger)
+            storage.delete_file(file_id, file_metadata.file_type, decrement_ref=False)
+
+            if self.logger:
+                self.logger.info(f"Deleted physical file {file_id[:8]}... (ref_count reached 0)")
 
     # List and Filter Operations
 
