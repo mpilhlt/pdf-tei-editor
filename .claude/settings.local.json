@@ -1,16 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run:*)",
-      "Bash(curl:*)",
-      "Bash(python3:*)",
-      "Bash(pkill:*)",
-      "Bash(chmod:*)",
-      "Bash(uv run:*)",
-      "Bash(sqlite3:*)",
-      "Bash(lsof:*)",
-      "Bash(E2E_BASE_URL=http://localhost:8000 node --test *)",
-      "Bash(curl *)"
+      "Bash(kill:*)",
+      "Bash(uv run pytest:*)"
     ],
     "deny": [],
     "ask": []

@@ -26,6 +26,16 @@ async def lifespan(app: FastAPI):
     logger.info(f"Data root: {settings.data_root}")
     logger.info(f"DB directory: {settings.db_dir}")
 
+    # Initialize database directory from config defaults
+    # This copies JSON files from config/ to db/ if they don't exist
+    from .lib.db_init import ensure_db_initialized
+    try:
+        ensure_db_initialized()
+        logger.info("Database configuration initialized from defaults")
+    except Exception as e:
+        logger.error(f"Error initializing database from config: {e}")
+        raise
+
     # Ensure directories exist
     settings.data_root.mkdir(parents=True, exist_ok=True)
     settings.db_dir.mkdir(parents=True, exist_ok=True)

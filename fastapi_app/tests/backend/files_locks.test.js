@@ -25,8 +25,8 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
   // Initialize one global session for consistent lock management
   async function getSession() {
     if (!globalSession) {
-      // Use annotator which has annotator role to allow file editing
-      globalSession = await login('annotator', 'annotator', BASE_URL);
+      // Use reviewer which can create gold files and edit
+      globalSession = await login('reviewer', 'reviewer', BASE_URL);
       console.log(`🔐 Created session: ${globalSession.sessionId}`);
     }
     console.log(`🔍 Using session: ${globalSession.sessionId}`);

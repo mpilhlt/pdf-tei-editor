@@ -1,9 +1,0 @@
-[
-  {
-    "username": "testuser",
-    "fullname": "Test User",
-    "roles": ["user"],
-    "passwd_hash": "13d249f2cb4127b40cfa757866850278793f814ded3c587fe5889e889a7a9f6c",
-    "session_id": null
-  }
-]
