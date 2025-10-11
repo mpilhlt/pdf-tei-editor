@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 def get_db() -> DatabaseManager:
     """Get DatabaseManager instance"""
     settings = get_settings()
-    db_path = settings.data_root / "metadata.db"
+    db_path = settings.db_dir / "metadata.db"
     return DatabaseManager(db_path)
 
 
@@ -37,10 +37,11 @@ def get_file_repository(db: DatabaseManager = Depends(get_db)) -> FileRepository
 
 
 def get_file_storage() -> FileStorage:
-    """Get FileStorage instance"""
+    """Get FileStorage instance with reference counting support"""
     settings = get_settings()
     storage_root = settings.data_root / "files"
-    return FileStorage(storage_root)
+    db_path = settings.db_dir / "metadata.db"
+    return FileStorage(storage_root, db_path)
 
 
 def get_hash_abbreviator(repo: FileRepository = Depends(get_file_repository)) -> HashAbbreviator:

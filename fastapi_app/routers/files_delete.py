@@ -15,9 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import List
 
 from ..lib.file_repository import FileRepository
+from ..lib.file_storage import FileStorage
 from ..lib.models_files import DeleteFilesRequest, DeleteFilesResponse
 from ..lib.dependencies import (
     get_file_repository,
+    get_file_storage,
     require_authenticated_user,
     get_hash_abbreviator
 )
@@ -34,19 +36,23 @@ router = APIRouter(prefix="/files", tags=["files"])
 def delete_files(
     body: DeleteFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
     current_user: dict = Depends(require_authenticated_user),
     abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
 ) -> DeleteFilesResponse:
     """
-    Delete files (soft delete).
+    Delete files (soft delete with reference counting).
 
     Sets deleted=1 and sync_status='pending_delete' in database.
-    Physical files remain in storage for sync tracking and can be
-    garbage collected later once sync is confirmed.
+
+    Reference counting ensures physical files are deleted only when:
+    - No database entries reference the file (ref_count = 0)
+    - Safe for deduplication (same content shared by multiple entries)
 
     Args:
-        request: DeleteFilesRequest with list of file IDs (abbreviated or full hashes)
+        body: DeleteFilesRequest with list of file IDs (abbreviated or full hashes)
         repo: File repository (injected)
+        storage: File storage with reference counting (injected)
         current_user: Current user dict (injected)
         abbreviator: Hash abbreviator (injected)
 
@@ -59,8 +65,8 @@ def delete_files(
     logger.debug(f"Deleting {len(body.files)} files, user={current_user}")
 
     for file_id in body.files:
-        # Skip empty identifiers
-        if not file_id:
+        # Skip empty identifiers (including whitespace-only)
+        if not file_id or not file_id.strip():
             logger.warning("Ignoring empty file identifier")
             continue
 
@@ -84,10 +90,11 @@ def delete_files(
                 detail=f"Insufficient permissions to delete {file_id}"
             )
 
-        # Soft delete
+        # Soft delete in database (FileRepository handles reference counting)
         logger.info(f"Soft deleting file: {file_id} (full hash: {full_hash[:16]}...)")
         try:
             repo.delete_file(full_hash)
+
         except ValueError as e:
             logger.error(f"Failed to delete file {file_id}: {e}")
             # Continue with other files
