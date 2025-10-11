@@ -20,3 +20,8 @@ pdfjs
 # Debug logs
 log/
 
+# FastAPI database files (runtime-generated from config/)
+fastapi_app/db/*.json
+fastapi_app/db/*.db
+fastapi_app/db/*.db-*
+

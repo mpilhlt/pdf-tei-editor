@@ -24,8 +24,8 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
   async function getSession() {
     if (!globalSession) {
-      // Use annotator which has write permissions
-      globalSession = await login('annotator', 'annotator', BASE_URL);
+      // Use reviewer which can create gold files
+      globalSession = await login('reviewer', 'reviewer', BASE_URL);
       console.log(`🔐 Created session: ${globalSession.sessionId}`);
     }
     console.log(`🔍 Using session: ${globalSession.sessionId}`);

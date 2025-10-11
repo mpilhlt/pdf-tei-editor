@@ -11,5 +11,12 @@
     "passwd_hash": "8d2797a4caea8a275cdf46871dc14cbffa3e6d4b4fc2bcaae2310a74c776873a",
     "roles": ["user", "annotator"],
     "session_id": null
+  },
+  {
+    "username": "reviewer",
+    "fullname": "Test Reviewer",
+    "passwd_hash": "2d70999ae1805e4bcef9b4ab3a4b827f578c61740f30076fcdc35c7ae7f586b3",
+    "roles": ["user", "reviewer"],
+    "session_id": null
   }
 ]
