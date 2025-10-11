@@ -475,6 +475,17 @@ Phase 4A will be considered complete when:
 - ⏸️ Lock status is included in file list
 - ⏸️ Basic integration tests pass
 
+What Works Right Now:
+✅ Import files from any directory (Flask, demo, arbitrary) ✅ Handle multiple DOI encoding formats seamlessly ✅ Match PDFs with TEIs even with different encodings ✅ Serve files via /api/files/list and /api/files/{hash} ✅ Upload files via /api/files/upload ✅ 5-character abbreviated hashes in API responses ✅ Backward compatibility with Flask $1$ encoding
+
+## What's Next (Future Session):
+
+- Write unit tests for DOI resolver, importer, hash abbreviator
+- Write E2E tests for file operations
+- Implement save/delete/move/locks/heartbeat endpoints
+- Create migration CLI tool for Flask → FastAPI
+- Write migration guide
+
 ## Conclusion
 
 Phase 4A core implementation is **complete** and ready for testing. All essential components for reading and uploading files with hash abbreviation support are in place.

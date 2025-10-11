@@ -80,7 +80,15 @@ app.add_middleware(
 
 # Import API routers
 from .api import auth, config
-from .routers import files_list, files_serve, files_upload
+from .routers import (
+    files_list,
+    files_serve,
+    files_upload,
+    files_delete,
+    files_move,
+    files_locks,
+    files_heartbeat
+)
 
 # Versioned API router (v1)
 api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
@@ -89,6 +97,10 @@ api_v1.include_router(config.router)
 api_v1.include_router(files_list.router)
 api_v1.include_router(files_serve.router)
 api_v1.include_router(files_upload.router)
+api_v1.include_router(files_delete.router)
+api_v1.include_router(files_move.router)
+api_v1.include_router(files_locks.router)
+api_v1.include_router(files_heartbeat.router)
 
 # Unversioned API router (for backward compatibility with Flask)
 api_compat = APIRouter(prefix="/api", tags=["compatibility"])
@@ -97,6 +109,10 @@ api_compat.include_router(config.router)
 api_compat.include_router(files_list.router)
 api_compat.include_router(files_serve.router)
 api_compat.include_router(files_upload.router)
+api_compat.include_router(files_delete.router)
+api_compat.include_router(files_move.router)
+api_compat.include_router(files_locks.router)
+api_compat.include_router(files_heartbeat.router)
 
 # Health check endpoint (unversioned)
 @app.get("/health")

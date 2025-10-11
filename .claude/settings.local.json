@@ -9,7 +9,10 @@
       "Read(//tmp/**)",
       "Bash(chmod:*)",
       "Bash(uv run:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(lsof:*)",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node --test *)",
+      "Bash(curl *)"
     ],
     "deny": [],
     "ask": []

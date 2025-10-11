@@ -88,6 +88,11 @@ class DeleteFilesRequest(BaseModel):
     files: List[str]    # List of file hashes or paths
 
 
+class DeleteFilesResponse(BaseModel):
+    """Response for POST /api/files/delete"""
+    result: str         # 'ok'
+
+
 class MoveFilesRequest(BaseModel):
     """Request for POST /api/files/move"""
     pdf_path: str       # Hash or path
@@ -101,9 +106,18 @@ class MoveFilesResponse(BaseModel):
     new_xml_path: str
 
 
+class GetLocksResponse(BaseModel):
+    """Response for GET /api/files/locks"""
+    locked_files: List[str]    # List of file IDs (abbreviated hashes)
+
+
 class AcquireLockRequest(BaseModel):
     """Request for POST /api/files/acquire_lock"""
     file_id: str
+
+
+# Note: acquire_lock returns plain string "OK" to match Flask API
+# No response model needed for simple string return
 
 
 class ReleaseLockRequest(BaseModel):
