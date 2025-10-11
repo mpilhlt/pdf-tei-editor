@@ -1,7 +1,7 @@
 # Phase 4 File Management - Implementation Status
 
-**Date**: 2025-10-09
-**Status**: Phase 4A Complete ✅ | Phase 4B - File Importer & DOI Resolution Complete ✅
+**Date**: 2025-01-10
+**Status**: Phase 4A Complete ✅ | Phase 4B - Partial Complete ⚠️
 
 ## Executive Summary
 
@@ -558,32 +558,37 @@ Return DocumentGroup[] with abbreviated hashes
    - Test import and verify compatibility
    - Document any issues
 
-### Phase 4B Completion (Deferred)
+### Phase 4B Basic Operations (Complete ✅)
 
-4. **File Save API** (`routers/files_save.py`)
+4. **File Delete API** (`routers/files_delete.py`) ✅
+   - Soft delete (set `deleted = 1`)
+   - Access control checks
+   - Abbreviated hash support
+
+5. **File Move API** (`routers/files_move.py`) ✅
+   - Update `doc_collections` array
+   - Multi-collection support
+   - Access control checks
+
+6. **File Locks API** (`routers/files_locks.py`) ✅
+   - GET /api/files/locks
+   - POST /api/files/check_lock
+   - POST /api/files/acquire_lock
+   - POST /api/files/release_lock
+
+7. **Heartbeat API** (`routers/files_heartbeat.py`) ✅
+   - POST /api/files/heartbeat
+   - Lock refresh/keep-alive
+
+### Phase 4B Deferred Components
+
+8. **File Save API** (`routers/files_save.py`)
    - Most complex endpoint (~400 lines)
    - Version vs gold file determination
    - Variant handling
    - Role-based access control
    - Lock acquisition
    - Metadata extraction and updates
-
-5. **File Delete API** (`routers/files_delete.py`)
-   - Soft delete (set `deleted = 1`)
-   - Access control checks
-
-6. **File Move API** (`routers/files_move.py`)
-   - Update `doc_collections` array
-   - Access control checks
-
-7. **File Locks API** (`routers/files_locks.py`)
-   - GET /api/files/locks
-   - POST /api/files/check_lock
-   - POST /api/files/acquire_lock
-   - POST /api/files/release_lock
-
-8. **Heartbeat API** (`routers/files_heartbeat.py`)
-   - POST /api/files/heartbeat
 
 9. **Migration CLI** (`bin/migrate_to_fastapi.py`)
    - One-time Flask → FastAPI migration
@@ -629,11 +634,14 @@ Return DocumentGroup[] with abbreviated hashes
 - ✅ DOI resolution handles multiple encoding formats
 - ✅ PDF-TEI matching works across encoding differences
 - ✅ CLI import tool successfully imports test data
+- ✅ Delete API implemented (soft delete)
+- ✅ Move API implemented (multi-collection)
+- ✅ Locks API implemented (all 4 endpoints)
+- ✅ Heartbeat API implemented
 - ⏸️ All Python unit tests pass (not yet written)
 - ⏸️ All JavaScript E2E tests pass (not yet written)
 - ⏸️ Migration guide written and tested (not yet written)
-- ❌ Save/delete/move APIs implemented (deferred)
-- ❌ Locks/heartbeat APIs implemented (deferred)
+- ❌ Save API implemented (complex versioning logic - deferred)
 - ❌ Migration CLI tool created (deferred)
 
 ## Conclusion
@@ -647,13 +655,18 @@ The file management system is now functional with:
 - Hash abbreviation system (5-char hashes)
 - Proper PDF-TEI matching across encoding formats
 
-**Remaining work** focuses on:
-1. Testing (unit tests, E2E tests)
-2. Advanced file operations (save, delete, move)
-3. Locking endpoints and heartbeat
-4. Migration tooling
+**Phase 4B Update (2025-01-10)**:
+- ✅ Implemented delete, move, locks, and heartbeat APIs
+- ✅ All routers registered in main.py
+- ❌ Save API deferred (most complex, ~400 lines)
+- ⚠️ All endpoints need testing
 
-The foundation is solid and production-ready for read-only operations. Write operations (save, delete, move) are deferred to next session.
+**Remaining work** focuses on:
+1. Testing (unit tests, E2E tests) for all endpoints
+2. File save API (complex versioning logic)
+3. Migration tooling
+
+The foundation is solid with full CRUD except save. Most file operations are now functional.
 
 ## References
 

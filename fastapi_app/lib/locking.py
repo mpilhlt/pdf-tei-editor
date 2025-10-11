@@ -340,6 +340,43 @@ def get_all_active_locks(db_dir: Path, logger: logging.Logger, timeout_seconds: 
         return {}
 
 
+def get_locked_file_ids(db_dir: Path, logger: logging.Logger, session_id: Optional[str] = None, abbreviator=None) -> List[str]:
+    """
+    Returns a list of file IDs (hashes) which are currently locked.
+
+    Optionally filters by session_id and can abbreviate hashes.
+
+    Args:
+        db_dir: Directory containing locks.db
+        logger: Logger instance
+        session_id: If provided, only return locks for this session
+        abbreviator: Optional HashAbbreviator instance to abbreviate hashes
+
+    Returns:
+        list: List of file ID hashes (abbreviated if abbreviator provided) that are locked
+    """
+    active_locks = get_all_active_locks(db_dir, logger)
+    locked_file_ids = []
+
+    for file_hash, lock_session_id in active_locks.items():
+        if session_id and lock_session_id != session_id:
+            continue
+
+        # Abbreviate hash if abbreviator provided
+        if abbreviator:
+            try:
+                file_id = abbreviator.abbreviate(file_hash)
+            except Exception as e:
+                logger.warning(f"Could not abbreviate hash {file_hash}: {e}")
+                file_id = file_hash
+        else:
+            file_id = file_hash
+
+        locked_file_ids.append(file_id)
+
+    return locked_file_ids
+
+
 def check_lock(file_hash: str, session_id: str, db_dir: Path, logger: logging.Logger) -> Dict[str, any]:
     """
     Checks if a single file is locked by another session.

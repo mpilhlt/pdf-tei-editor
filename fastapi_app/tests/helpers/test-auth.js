@@ -25,12 +25,14 @@ function hashPassword(password) {
  * Login with username and password, returns session ID for subsequent API calls
  * @param {string} username - Username
  * @param {string} password - Plain text password
+ * @param {string} [baseUrl] - Optional base URL override
  * @returns {Promise<{sessionId: string, user: object}>} Session ID and user data
  */
-async function login(username, password) {
+async function login(username, password, baseUrl = null) {
+  const apiBase = baseUrl ? `${baseUrl}/api/v1` : API_BASE;
   const passwd_hash = hashPassword(password);
 
-  const response = await fetch(`${API_BASE}/auth/login`, {
+  const response = await fetch(`${apiBase}/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -61,10 +63,12 @@ async function login(username, password) {
 /**
  * Logout and invalidate the session
  * @param {string} sessionId - Session ID to logout
+ * @param {string} [baseUrl] - Optional base URL override
  * @returns {Promise<void>}
  */
-async function logout(sessionId) {
-  const response = await fetch(`${API_BASE}/auth/logout`, {
+async function logout(sessionId, baseUrl = null) {
+  const apiBase = baseUrl ? `${baseUrl}/api/v1` : API_BASE;
+  const response = await fetch(`${apiBase}/auth/logout`, {
     method: 'POST',
     headers: {
       'X-Session-Id': sessionId
@@ -103,10 +107,12 @@ async function checkStatus(sessionId) {
  * @param {string} endpoint - API endpoint (e.g., '/config/list')
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {object} [body] - Request body for POST/PUT requests
+ * @param {string} [baseUrl] - Optional base URL override
  * @returns {Promise<Response>} Fetch response object
  */
-async function authenticatedRequest(sessionId, endpoint, method = 'GET', body = null) {
-  const url = `${API_BASE}${endpoint}`;
+async function authenticatedRequest(sessionId, endpoint, method = 'GET', body = null, baseUrl = null) {
+  const apiBase = baseUrl ? `${baseUrl}/api/v1` : API_BASE;
+  const url = `${apiBase}${endpoint}`;
   const options = {
     method,
     headers: {
@@ -128,10 +134,11 @@ async function authenticatedRequest(sessionId, endpoint, method = 'GET', body = 
  * @param {string} endpoint - API endpoint (e.g., '/config/list')
  * @param {string} method - HTTP method (GET, POST, etc.)
  * @param {object} [body] - Request body for POST/PUT requests
+ * @param {string} [baseUrl] - Optional base URL override
  * @returns {Promise<object>} JSON response
  */
-async function authenticatedApiCall(sessionId, endpoint, method = 'GET', body = null) {
-  const response = await authenticatedRequest(sessionId, endpoint, method, body);
+async function authenticatedApiCall(sessionId, endpoint, method = 'GET', body = null, baseUrl = null) {
+  const response = await authenticatedRequest(sessionId, endpoint, method, body, baseUrl);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -143,10 +150,22 @@ async function authenticatedApiCall(sessionId, endpoint, method = 'GET', body = 
 
 /**
  * Create a test admin session with default credentials
+ * @param {string} [baseUrl] - Optional base URL override
  * @returns {Promise<{sessionId: string, user: object}>} Session data
  */
-async function createAdminSession() {
-  return await login('admin', 'admin');
+async function createAdminSession(baseUrl = null) {
+  return await login('admin', 'admin', baseUrl);
+}
+
+/**
+ * Create a test session with specified credentials
+ * @param {string} username - Username
+ * @param {string} password - Password
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<{sessionId: string, user: object}>} Session data
+ */
+async function createTestSession(username, password, baseUrl = null) {
+  return await login(username, password, baseUrl);
 }
 
 export {
@@ -157,5 +176,6 @@ export {
   authenticatedRequest,
   authenticatedApiCall,
   createAdminSession,
+  createTestSession,
   API_BASE
 };

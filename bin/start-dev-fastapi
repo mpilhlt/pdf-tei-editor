@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+
+# CLI for running the FastAPI server in development mode with auto-reload.
+
+import os
+import sys
+import signal
+import subprocess
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+
+def check_port_in_use(port=8000):
+    """Check if the specified port is already in use."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+def get_pid_on_port(port=8000):
+    """Get the PID of the process using the specified port."""
+    try:
+        result = subprocess.run(
+            ['lsof', '-ti', f':{port}'],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if result.stdout.strip():
+            return int(result.stdout.strip().split('\n')[0])
+    except (subprocess.SubprocessError, ValueError):
+        pass
+    return None
+
+if __name__ == '__main__':
+    # host and port default to localhost:8000 unless overridden by CLI arguments
+    host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
+    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
+
+    # Check if server is already running
+    if check_port_in_use(port):
+        pid = get_pid_on_port(port)
+        print()
+        print("=" * 86)
+        print(f"FastAPI server is already running on port {port}" + (f" (PID: {pid})" if pid else ""))
+        print(f"The server automatically reloads on file changes.")
+        print(f"To restart, kill the process and run this command again.")
+        if pid:
+            print(f"  kill {pid}")
+        print("=" * 86)
+        print()
+        sys.exit(0)
+
+    # Set up logging to file while keeping console output
+    log_dir = project_root / "log"
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "fastapi-server.log"
+
+    print()
+    print("=" * 86)
+    print(f"Starting FastAPI development server on http://{host}:{port}")
+    print(f"Server output being logged to: {log_file}")
+    print(f"The server will automatically reload when files change.")
+    print(f"API docs available at: http://{host}:{port}/docs")
+    print("=" * 86)
+    print()
+
+    # Start uvicorn with auto-reload
+    # Use subprocess to run uvicorn so we can handle signals properly
+    cmd = [
+        'uv', 'run', 'uvicorn',
+        'run_fastapi:app',
+        '--reload',
+        '--host', host,
+        '--port', str(port),
+        '--log-level', 'info'
+    ]
+
+    try:
+        # Run uvicorn and tee output to log file
+        with open(log_file, 'w', buffering=1) as log_f:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                cwd=str(project_root)
+            )
+
+            # Stream output to both console and log file
+            for line in process.stdout:
+                print(line, end='')
+                log_f.write(line)
+                log_f.flush()
+
+            process.wait()
+
+    except KeyboardInterrupt:
+        print("\nShutting down FastAPI server...")
+        if process:
+            process.terminate()
+            process.wait()
+    except Exception as e:
+        print(f"Error starting FastAPI server: {e}", file=sys.stderr)
+        sys.exit(1)
