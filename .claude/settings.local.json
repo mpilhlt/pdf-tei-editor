@@ -1,12 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run generate-client:*)",
-      "Bash(npm run test:fastapi:py:*)",
-      "Bash(npm run dev:fastapi:*)",
+      "Bash(npm run:*)",
       "Bash(curl:*)",
       "Bash(python3:*)",
-      "Read(//tmp/**)",
+      "Bash(pkill:*)",
       "Bash(chmod:*)",
       "Bash(uv run:*)",
       "Bash(sqlite3:*)",

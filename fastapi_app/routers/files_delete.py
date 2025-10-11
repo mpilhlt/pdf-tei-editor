@@ -11,15 +11,14 @@ Key changes from Flask:
   (can be implemented later as administrative task)
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import List
 
 from ..lib.file_repository import FileRepository
 from ..lib.models_files import DeleteFilesRequest, DeleteFilesResponse
 from ..lib.dependencies import (
     get_file_repository,
-    get_current_user,
-    require_session,
+    require_authenticated_user,
     get_hash_abbreviator
 )
 from ..lib.access_control import check_file_access
@@ -32,11 +31,10 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 
 @router.post("/delete", response_model=DeleteFilesResponse)
-@require_session
 def delete_files(
-    request: DeleteFilesRequest,
+    body: DeleteFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_authenticated_user),
     abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
 ) -> DeleteFilesResponse:
     """
@@ -58,9 +56,9 @@ def delete_files(
     Raises:
         HTTPException: 403 if insufficient permissions
     """
-    logger.debug(f"Deleting {len(request.files)} files, user={current_user}")
+    logger.debug(f"Deleting {len(body.files)} files, user={current_user}")
 
-    for file_id in request.files:
+    for file_id in body.files:
         # Skip empty identifiers
         if not file_id:
             logger.warning("Ignoring empty file identifier")
