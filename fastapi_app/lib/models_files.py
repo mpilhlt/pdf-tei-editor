@@ -80,7 +80,7 @@ class SaveFileResponse(BaseModel):
 class CreateVersionFromUploadRequest(BaseModel):
     """Request for POST /api/files/create_version_from_upload"""
     temp_filename: str
-    file_path: str      # Hash or path
+    file_id: str        # Hash or stable_id
 
 
 class DeleteFilesRequest(BaseModel):
@@ -95,15 +95,28 @@ class DeleteFilesResponse(BaseModel):
 
 class MoveFilesRequest(BaseModel):
     """Request for POST /api/files/move"""
-    pdf_path: str       # Hash or path
-    xml_path: str       # Hash or path
+    pdf_id: str         # Hash or stable_id
+    xml_id: str         # Hash or stable_id
     destination_collection: str
 
 
 class MoveFilesResponse(BaseModel):
     """Response for POST /api/files/move"""
-    new_pdf_path: str
-    new_xml_path: str
+    new_pdf_id: str
+    new_xml_id: str
+
+
+class CopyFilesRequest(BaseModel):
+    """Request for POST /api/files/copy"""
+    pdf_id: str         # Hash or stable_id
+    xml_id: str         # Hash or stable_id
+    destination_collection: str
+
+
+class CopyFilesResponse(BaseModel):
+    """Response for POST /api/files/copy"""
+    new_pdf_id: str
+    new_xml_id: str
 
 
 class GetLocksResponse(BaseModel):
@@ -144,7 +157,7 @@ class CheckLockResponse(BaseModel):
 
 class HeartbeatRequest(BaseModel):
     """Request for POST /api/files/heartbeat"""
-    file_path: str      # Hash or path
+    file_id: str        # Hash or stable_id
 
 
 class HeartbeatResponse(BaseModel):

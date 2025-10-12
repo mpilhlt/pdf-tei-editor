@@ -55,7 +55,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
 
     // Use the hash that was captured during setup
     const result = await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-      file_path: testState.testFileHash
+      file_id: testState.testFileHash
     }, BASE_URL);
 
     assert.strictEqual(result.status, 'lock_refreshed', 'Should return lock_refreshed status');
@@ -83,7 +83,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
 
     if (abbreviatedHash) {
       const result = await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-        file_path: abbreviatedHash
+        file_id: abbreviatedHash
       }, BASE_URL);
 
       assert.strictEqual(result.status, 'lock_refreshed', 'Should refresh using abbreviated hash');
@@ -99,7 +99,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     // Send multiple heartbeats using hash
     for (let i = 0; i < 3; i++) {
       const result = await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-        file_path: testState.testFileHash
+        file_id: testState.testFileHash
       }, BASE_URL);
 
       assert.strictEqual(result.status, 'lock_refreshed', `Heartbeat ${i + 1} should succeed`);
@@ -119,7 +119,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     // Try to send heartbeat after lock is released
     try {
       await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-        file_path: testState.testFileHash
+        file_id: testState.testFileHash
       }, BASE_URL);
 
       assert.fail('Should have thrown 409 error for lost lock');
@@ -134,7 +134,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
 
     try {
       await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-        file_path: 'nonexistenthash123456'
+        file_id: 'nonexistenthash123456'
       }, BASE_URL);
 
       assert.fail('Should have thrown error for non-existent file');
@@ -145,19 +145,19 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     }
   });
 
-  test('POST /api/files/heartbeat should require file_path parameter', async () => {
+  test('POST /api/files/heartbeat should require file_id parameter', async () => {
     const session = await getSession();
 
     try {
       await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-        // Missing file_path
+        // Missing file_id
       }, BASE_URL);
 
       assert.fail('Should have thrown validation error');
     } catch (error) {
       assert(error.message.includes('400') || error.message.includes('422'),
-             'Should return validation error for missing file_path');
-      console.log('✓ Missing file_path parameter handled with validation error');
+             'Should return validation error for missing file_id');
+      console.log('✓ Missing file_id parameter handled with validation error');
     }
   });
 
@@ -170,7 +170,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     }, BASE_URL);
 
     const result = await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-      file_path: testState.testFileHash
+      file_id: testState.testFileHash
     }, BASE_URL);
 
     assert.strictEqual(result.status, 'lock_refreshed', 'Should return lock_refreshed status');

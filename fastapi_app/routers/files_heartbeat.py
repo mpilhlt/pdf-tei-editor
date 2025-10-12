@@ -37,7 +37,7 @@ def heartbeat(
     Note: No cache_status in FastAPI (deprecated - database is always current).
 
     Args:
-        request: HeartbeatRequest with file_path (abbreviated or full hash)
+        request: HeartbeatRequest with file_id (abbreviated or full hash)
         session_id: Current session ID (injected)
         abbreviator: Hash abbreviator (injected)
 
@@ -47,13 +47,13 @@ def heartbeat(
     Raises:
         HTTPException: 409 if failed to refresh lock
     """
-    # Resolve file_path
+    # Resolve file_id
     try:
-        full_hash = abbreviator.resolve(request.file_path)
+        full_hash = abbreviator.resolve(request.file_id)
     except KeyError:
-        full_hash = request.file_path
+        full_hash = request.file_id
 
-    logger.debug(f"Heartbeat for file {request.file_path} (session: {session_id[:8]}...)")
+    logger.debug(f"Heartbeat for file {request.file_id} (session: {session_id[:8]}...)")
 
     # Refresh lock using acquire_lock (it handles refresh for same session)
     settings = get_settings()

@@ -97,19 +97,25 @@ from .routers import (
     files_save,
     files_delete,
     files_move,
+    files_copy,
     files_locks,
-    files_heartbeat
+    files_heartbeat,
+    validation,
+    extraction
 )
 
 # Versioned API router (v1)
 api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 api_v1.include_router(auth.router)
 api_v1.include_router(config.router)
+api_v1.include_router(validation.router)
+api_v1.include_router(extraction.router)
 api_v1.include_router(files_list.router)
 api_v1.include_router(files_upload.router)
 api_v1.include_router(files_save.router)
 api_v1.include_router(files_delete.router)
 api_v1.include_router(files_move.router)
+api_v1.include_router(files_copy.router)
 api_v1.include_router(files_locks.router)  # Before files_serve (catch-all)
 api_v1.include_router(files_heartbeat.router)  # Before files_serve (catch-all)
 api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
@@ -118,11 +124,14 @@ api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{docu
 api_compat = APIRouter(prefix="/api", tags=["compatibility"])
 api_compat.include_router(auth.router)
 api_compat.include_router(config.router)
+api_compat.include_router(validation.router)
+api_compat.include_router(extraction.router)
 api_compat.include_router(files_list.router)
 api_compat.include_router(files_upload.router)
 api_compat.include_router(files_save.router)
 api_compat.include_router(files_delete.router)
 api_compat.include_router(files_move.router)
+api_compat.include_router(files_copy.router)
 api_compat.include_router(files_locks.router)  # Before files_serve (catch-all)
 api_compat.include_router(files_heartbeat.router)  # Before files_serve (catch-all)
 api_compat.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
