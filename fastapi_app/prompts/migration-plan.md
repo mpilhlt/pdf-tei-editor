@@ -109,19 +109,29 @@ See [schema-design.md](schema-design.md) for complete details.
 - File listing with SQLite backend
 - File upload with hash storage
 - File serving and version management
-- File operations (delete, move)
-- File locking endpoints
-- Import filesystem-based data into sqlite-database and hash-sharded file storage
+- File operations (delete, move, copy, save)
+- File locking endpoints (acquire, release, check, heartbeat)
+- Hash abbreviation system for client communication
+- Stable document IDs for persistent URLs
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
+**Summary**: [phase-4b-status.md](phase-4b-status.md)
+**Details**:
+- Phase 4A: Basic file operations (list, upload, serve)
+- Phase 4B: Advanced operations (delete, move, copy, save, locks, heartbeat)
+- 6 core endpoints implemented with 19/19 tests passing
+- Reference counting system for automatic cleanup
+- Multi-collection support for documents
+- Stable nanoid-based IDs for permanent URLs
 
 ### Phase 5: Validation and Extraction APIs
 
-- XML/TEI validation
+- XML/TEI validation endpoints
 - AI-based metadata extraction
 - Extractor management
+- Schema validation integration
 
-**Status**: ⬜ Not started
+**Status**: 🔄 In progress
 
 ### Phase 6: Sync and SSE APIs
 
@@ -331,4 +341,4 @@ Track progress by updating phase status in this document:
 - ✅ Complete
 - ⚠️ Blocked
 
-Last updated: 2025-10-08
+Last updated: 2025-10-12

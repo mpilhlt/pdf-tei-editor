@@ -12,7 +12,8 @@
       "Bash(E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/files_locks.test.js fastapi_app/tests/backend/files_heartbeat.test.js)",
       "Bash(python:*)",
       "Bash(python3:*)",
-      "Bash(npm run test:fastapi:py:*)"
+      "Bash(npm run test:fastapi:py:*)",
+      "Bash(uv run:*)"
     ],
     "deny": [],
     "ask": []

@@ -89,15 +89,15 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
     // Move files to new collection
     const result = await authenticatedApiCall(session.sessionId, '/files/move', 'POST', {
-      pdf_path: pdfHash,
-      xml_path: testState.teiHash,
+      pdf_id: pdfHash,
+      xml_id: testState.teiHash,
       destination_collection: testState.destinationCollection
     }, BASE_URL);
 
-    assert(result.new_pdf_path, 'Should return new PDF path');
-    assert(result.new_xml_path, 'Should return new XML path');
+    assert(result.new_pdf_id, 'Should return new PDF ID');
+    assert(result.new_xml_id, 'Should return new XML ID');
 
-    console.log(`✓ Files moved successfully: PDF=${result.new_pdf_path}, XML=${result.new_xml_path}`);
+    console.log(`✓ Files moved successfully: PDF=${result.new_pdf_id}, XML=${result.new_xml_id}`);
   });
 
   test('POST /api/files/move should support abbreviated hashes', async () => {
@@ -110,13 +110,13 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
     // Move using abbreviated hashes
     const result = await authenticatedApiCall(session.sessionId, '/files/move', 'POST', {
-      pdf_path: testState.pdfHash,
-      xml_path: testState.teiHash,
+      pdf_id: testState.pdfHash,
+      xml_id: testState.teiHash,
       destination_collection: 'another-collection'
     }, BASE_URL);
 
-    assert(result.new_pdf_path, 'Should return new PDF path');
-    assert(result.new_xml_path, 'Should return new XML path');
+    assert(result.new_pdf_id, 'Should return new PDF ID');
+    assert(result.new_xml_id, 'Should return new XML ID');
 
     console.log('✓ Move with abbreviated hashes successful');
   });
@@ -131,13 +131,13 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
     // Try to move to same collection again (should be idempotent)
     const result = await authenticatedApiCall(session.sessionId, '/files/move', 'POST', {
-      pdf_path: testState.pdfHash,
-      xml_path: testState.teiHash,
+      pdf_id: testState.pdfHash,
+      xml_id: testState.teiHash,
       destination_collection: 'another-collection'
     }, BASE_URL);
 
-    assert(result.new_pdf_path, 'Should return new PDF path even if already in collection');
-    assert(result.new_xml_path, 'Should return new XML path even if already in collection');
+    assert(result.new_pdf_id, 'Should return new PDF ID even if already in collection');
+    assert(result.new_xml_id, 'Should return new XML ID even if already in collection');
 
     console.log('✓ Duplicate collection move handled gracefully');
   });
@@ -147,8 +147,8 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
     try {
       await authenticatedApiCall(session.sessionId, '/files/move', 'POST', {
-        pdf_path: 'nonexistenthash123',
-        xml_path: testState.teiHash || 'somehash',
+        pdf_id: 'nonexistenthash123',
+        xml_id: testState.teiHash || 'somehash',
         destination_collection: 'test-dest'
       }, BASE_URL);
 
@@ -164,8 +164,8 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
     try {
       await authenticatedApiCall(session.sessionId, '/files/move', 'POST', {
-        pdf_path: 'somehash'
-        // Missing xml_path and destination_collection
+        pdf_id: 'somehash'
+        // Missing xml_id and destination_collection
       }, BASE_URL);
 
       assert.fail('Should have thrown validation error');

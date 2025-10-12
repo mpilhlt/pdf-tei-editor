@@ -1,18 +1,19 @@
 """
-File move API router for FastAPI.
+File copy API router for FastAPI.
 
-Implements POST /api/files/move - Move files between collections.
+Implements POST /api/files/copy - Copy files to additional collections.
 
-Key changes from Flask:
-- Updates doc_collections array (multi-collection support)
-- No physical file move (hash-sharded storage is collection-agnostic)
+Key differences from move:
+- Adds destination collection while keeping original collection(s)
+- Move replaces the collection array, copy appends to it
+- No physical file copy (hash-sharded storage handles deduplication)
 - Only updates PDF file metadata (TEI files inherit collection)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..lib.file_repository import FileRepository
-from ..lib.models_files import MoveFilesRequest, MoveFilesResponse
+from ..lib.models_files import CopyFilesRequest, CopyFilesResponse
 from ..lib.models import FileUpdate
 from ..lib.dependencies import (
     get_file_repository,
@@ -28,35 +29,35 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
 
 
-@router.post("/move", response_model=MoveFilesResponse)
-def move_files(
-    body: MoveFilesRequest,
+@router.post("/copy", response_model=CopyFilesResponse)
+def copy_files(
+    body: CopyFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
     current_user: dict = Depends(require_authenticated_user),
     abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
 ):
     """
-    Move files to a different collection.
+    Copy files to an additional collection.
 
     In the multi-collection system, this adds the destination collection
-    to the document's doc_collections array in the PDF file.
+    to the document's doc_collections array while keeping existing collections.
 
-    No physical file move occurs - hash-sharded storage is collection-agnostic.
+    No physical file copy occurs - hash-sharded storage is collection-agnostic.
     TEI files inherit collections from their associated PDF.
 
     Args:
-        request: MoveFilesRequest with pdf_path, xml_path, and destination_collection
+        body: CopyFilesRequest with pdf_path, xml_path, and destination_collection
         repo: File repository (injected)
         current_user: Current user dict (injected)
         abbreviator: Hash abbreviator (injected)
 
     Returns:
-        MoveFilesResponse with new paths (same as input in hash-based system)
+        CopyFilesResponse with paths (same as input in hash-based system)
 
     Raises:
         HTTPException: 403 if insufficient permissions, 404 if file not found
     """
-    logger.debug(f"Moving files to collection {body.destination_collection}, user={current_user}")
+    logger.debug(f"Copying files to collection {body.destination_collection}, user={current_user}")
 
     # Resolve PDF ID (hash or stable_id)
     try:
@@ -76,7 +77,7 @@ def move_files(
     if not check_file_access(pdf_file, current_user, 'write'):
         raise HTTPException(
             status_code=403,
-            detail="Insufficient permissions to move this document"
+            detail="Insufficient permissions to copy this document"
         )
 
     # Update collections (add destination if not already present)
@@ -86,7 +87,7 @@ def move_files(
         updated_collections = current_collections + [body.destination_collection]
 
         logger.info(
-            f"Adding collection {body.destination_collection} to document {pdf_file.doc_id}: "
+            f"Copying document {pdf_file.doc_id} to collection {body.destination_collection}: "
             f"{current_collections} -> {updated_collections}"
         )
 
@@ -104,7 +105,7 @@ def move_files(
 
     # Return IDs (abbreviated hashes, unchanged)
     # In hash-based system, IDs are the abbreviated hashes
-    return MoveFilesResponse(
+    return CopyFilesResponse(
         new_pdf_id=abbreviator.abbreviate(pdf_file.id),
         new_xml_id=body.xml_id  # XML ID unchanged
     )
