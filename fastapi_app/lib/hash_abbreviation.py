@@ -1,9 +1,13 @@
 """
 Hash abbreviation module for client-server communication.
 
-Database stores full SHA-256 hashes (64 characters) for integrity.
-API returns abbreviated hashes (5+ characters) for usability.
-Collision detection automatically increases hash length when needed.
+DEPRECATED: This module is being phased out in favor of stable_id system.
+stable_id provides permanent short IDs that don't change when file content changes.
+
+Legacy support maintained for backward compatibility during transition.
+
+Database stores full SHA-256 hashes (64 characters) for content addressing.
+API now returns stable_id (6+ characters) for user-facing identifiers.
 """
 
 from typing import Dict, Set, Optional
@@ -161,15 +165,49 @@ def get_abbreviator(repo: 'FileRepository') -> HashAbbreviator:
 
 
 def abbreviate_hash(full_hash: str, repo: 'FileRepository') -> str:
-    """Convenience function to abbreviate a hash"""
+    """
+    Get stable_id for a content hash (NEW BEHAVIOR).
+
+    Returns the stable_id associated with this content hash.
+    This ID remains constant even as file content changes.
+
+    Args:
+        full_hash: Full SHA-256 content hash
+        repo: FileRepository instance
+
+    Returns:
+        Stable ID (6+ chars)
+    """
+    file = repo.get_file_by_id(full_hash)
+    if file:
+        return file.stable_id
+    # Fallback to old abbreviation for non-existent files (shouldn't happen)
     abbreviator = get_abbreviator(repo)
     return abbreviator.abbreviate(full_hash)
 
 
-def resolve_hash(short_hash: str, repo: 'FileRepository') -> str:
-    """Convenience function to resolve a hash"""
+def resolve_hash(identifier: str, repo: 'FileRepository') -> str:
+    """
+    Resolve stable_id or short hash to full content hash (NEW BEHAVIOR).
+
+    Tries stable_id lookup first, falls back to legacy abbreviation resolution.
+
+    Args:
+        identifier: Stable ID (6-12 chars) or legacy abbreviated hash
+        repo: FileRepository instance
+
+    Returns:
+        Full SHA-256 content hash
+    """
+    # Try stable_id lookup first
+    try:
+        return repo.resolve_file_id(identifier)
+    except ValueError:
+        pass
+
+    # Fallback to legacy abbreviation resolution
     abbreviator = get_abbreviator(repo)
-    return abbreviator.resolve(short_hash)
+    return abbreviator.resolve(identifier)
 
 
 def reset_abbreviator() -> None:

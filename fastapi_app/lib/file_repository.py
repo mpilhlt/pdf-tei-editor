@@ -53,51 +53,49 @@ class FileRepository:
         # Initialize reference manager for storage cleanup
         self.ref_manager = StorageReferenceManager(db_manager.db_path, logger)
 
-    def resolve_file_id(self, file_id: str, abbreviator=None) -> str:
+    def resolve_file_id(self, file_id: str) -> str:
         """
-        Resolve abbreviated or full hash to full hash.
+        Resolve stable_id or full hash to full content hash.
+
+        Accepts:
+        - Full SHA-256 hash (64 chars) - returned as-is
+        - Stable ID (6-12 chars) - looked up in database
 
         Args:
-            file_id: Abbreviated hash (5+ chars) or full hash (64 chars)
-            abbreviator: Optional HashAbbreviator instance (will be created if needed)
+            file_id: Stable ID or full SHA-256 hash
 
         Returns:
             Full SHA-256 hash (64 chars)
 
         Raises:
-            ValueError: If hash cannot be resolved
+            ValueError: If ID cannot be resolved
         """
         # If already 64 chars, assume it's a full hash
         if len(file_id) == 64:
             return file_id
 
-        # Need abbreviator to resolve
-        if abbreviator is None:
-            from .hash_abbreviation import get_abbreviator
-            abbreviator = get_abbreviator(self)
+        # Try as stable_id
+        file = self.get_file_by_stable_id(file_id)
+        if file:
+            return file.id
 
-        try:
-            return abbreviator.resolve(file_id)
-        except KeyError:
-            raise ValueError(f"Cannot resolve file ID: {file_id}")
+        raise ValueError(f"Cannot resolve file ID: {file_id}")
 
-    def get_file_by_id_or_abbreviated(
+    def get_file_by_id_or_stable_id(
         self,
-        file_id: str,
-        abbreviator=None
+        file_id: str
     ) -> Optional[FileMetadata]:
         """
-        Get file by abbreviated or full hash.
+        Get file by stable_id or full content hash.
 
         Args:
-            file_id: Abbreviated hash (5+ chars) or full hash (64 chars)
-            abbreviator: Optional HashAbbreviator instance
+            file_id: Stable ID (6-12 chars) or full SHA-256 hash (64 chars)
 
         Returns:
             FileMetadata if found, None otherwise
         """
         try:
-            full_hash = self.resolve_file_id(file_id, abbreviator)
+            full_hash = self.resolve_file_id(file_id)
             return self.get_file_by_id(full_hash)
         except ValueError:
             return None
@@ -167,6 +165,7 @@ class FileRepository:
         Insert a new file record.
 
         Automatically sets:
+        - stable_id (if not provided) - generated using collision-resistant nanoid
         - local_modified_at = CURRENT_TIMESTAMP
         - sync_status = 'modified'
         - created_at, updated_at = CURRENT_TIMESTAMP
@@ -182,6 +181,14 @@ class FileRepository:
         """
         # Convert Pydantic model to dict and serialize JSON fields
         data = file_data.model_dump()
+
+        # Generate stable_id if not provided
+        if not data.get('stable_id'):
+            from .stable_id import generate_stable_id
+            # Get all existing stable IDs to avoid collisions
+            existing_ids = self._get_all_stable_ids()
+            data['stable_id'] = generate_stable_id(existing_ids)
+
         data['doc_collections'] = json.dumps(data['doc_collections'])
         data['doc_metadata'] = json.dumps(data['doc_metadata'])
         data['file_metadata'] = json.dumps(data['file_metadata'])
@@ -306,10 +313,10 @@ class FileRepository:
 
     def get_file_by_id(self, file_id: str, include_deleted: bool = False) -> Optional[FileMetadata]:
         """
-        Get file by ID.
+        Get file by ID (content hash).
 
         Args:
-            file_id: File ID (hash)
+            file_id: File ID (SHA-256 content hash)
             include_deleted: If True, include soft-deleted files
 
         Returns:
@@ -326,6 +333,44 @@ class FileRepository:
             if row:
                 return self._row_to_model(row)
             return None
+
+    def get_file_by_stable_id(self, stable_id: str, include_deleted: bool = False) -> Optional[FileMetadata]:
+        """
+        Get file by stable_id (short permanent ID).
+
+        Args:
+            stable_id: Stable ID (6+ character nanoid)
+            include_deleted: If True, include soft-deleted files
+
+        Returns:
+            FileMetadata model or None if not found
+        """
+        deleted_filter = "" if include_deleted else "AND deleted = 0"
+        query = f"SELECT * FROM files WHERE stable_id = ? {deleted_filter}"
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (stable_id,))
+            row = cursor.fetchone()
+
+            if row:
+                return self._row_to_model(row)
+            return None
+
+    def _get_all_stable_ids(self) -> set[str]:
+        """
+        Get all stable IDs currently in use (for collision detection).
+
+        Returns:
+            Set of all stable_id values in the database
+        """
+        query = "SELECT stable_id FROM files"
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            return {row['stable_id'] for row in rows}
 
     def delete_file(self, file_id: str) -> None:
         """

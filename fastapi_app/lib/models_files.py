@@ -10,7 +10,7 @@ from datetime import datetime
 # Response models
 class FileListItem(BaseModel):
     """Single file entry in list response"""
-    id: str                                    # Abbreviated hash (5+ chars) for client
+    id: str                                    # Stable ID (6+ chars, permanent) for client
     filename: str
     doc_id: str
     file_type: str
@@ -108,7 +108,7 @@ class MoveFilesResponse(BaseModel):
 
 class GetLocksResponse(BaseModel):
     """Response for GET /api/files/locks"""
-    locked_files: List[str]    # List of file IDs (abbreviated hashes)
+    locked_files: List[str]    # List of file IDs (stable IDs)
 
 
 class AcquireLockRequest(BaseModel):

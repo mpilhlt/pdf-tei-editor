@@ -12,10 +12,17 @@ Key features:
 """
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
-import magic
 import mimetypes
 from pathlib import Path
 from typing import Optional
+
+# Try to import libmagic, but make it optional
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+except (ImportError, OSError) as e:
+    MAGIC_AVAILABLE = False
+    magic = None
 
 from ..lib.file_storage import FileStorage
 from ..lib.file_repository import FileRepository
@@ -35,6 +42,14 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
 
 ALLOWED_MIME_TYPES = {'application/pdf', 'application/xml', 'text/xml'}
+
+# Log libmagic availability on module load
+if not MAGIC_AVAILABLE:
+    logger.warning(
+        "libmagic is not available. File upload will rely on file extensions only. "
+        "Install libmagic for content-based MIME type detection: "
+        "macOS: brew install libmagic, Linux: apt-get install libmagic1"
+    )
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -91,11 +106,20 @@ async def upload_file(
     elif file.filename.lower().endswith('.xml'):
         file_type = 'xml'
     else:
-        # Fallback based on content
-        mime_type = magic.from_buffer(content, mime=True)
-        if mime_type == 'application/pdf':
-            file_type = 'pdf'
+        # Fallback based on content (if libmagic available)
+        if MAGIC_AVAILABLE:
+            try:
+                mime_type = magic.from_buffer(content, mime=True)
+                if mime_type == 'application/pdf':
+                    file_type = 'pdf'
+                else:
+                    file_type = 'xml'
+            except Exception as e:
+                logger.warning(f"Error detecting MIME type with libmagic: {e}")
+                # Default to xml if detection fails
+                file_type = 'xml'
         else:
+            # Without libmagic, default to xml for files without clear extension
             file_type = 'xml'
 
     logger.debug(f"Detected file type: {file_type}")
@@ -151,7 +175,7 @@ async def upload_file(
 
 def _is_allowed_mime_type(filename: str, file_content: bytes) -> bool:
     """
-    Check file type using content (libmagic) and extension.
+    Check file type using content (libmagic if available) and extension.
 
     Args:
         filename: Original filename
@@ -160,14 +184,15 @@ def _is_allowed_mime_type(filename: str, file_content: bytes) -> bool:
     Returns:
         True if file type is allowed
     """
-    try:
-        # Check content-based MIME type
-        mime_type_by_content = magic.from_buffer(file_content, mime=True)
-        if mime_type_by_content in ALLOWED_MIME_TYPES:
-            return True
-    except Exception as e:
-        logger.warning(f"Error detecting MIME type from content: {e}")
+    # Check content-based MIME type (if libmagic available)
+    if MAGIC_AVAILABLE:
+        try:
+            mime_type_by_content = magic.from_buffer(file_content, mime=True)
+            if mime_type_by_content in ALLOWED_MIME_TYPES:
+                return True
+        except Exception as e:
+            logger.warning(f"Error detecting MIME type from content: {e}")
 
-    # Check extension-based MIME type
+    # Check extension-based MIME type (always available fallback)
     mime_type_by_extension, _ = mimetypes.guess_type(filename)
     return mime_type_by_extension in ALLOWED_MIME_TYPES

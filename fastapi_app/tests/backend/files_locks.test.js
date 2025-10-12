@@ -15,11 +15,16 @@ let globalSession = null;
 
 describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
+  // Generate unique test ID for this test run to avoid collisions
+  const testRunId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+
   // Shared test state - these tests are stateful and must run in sequence
   const testState = {
     initialLockCount: 0,
     testFilePath: '/data/versions/annotator/lock-test1.tei.xml',
-    testFilePath2: '/data/versions/annotator/lock-test2.tei.xml'
+    testFilePath2: '/data/versions/annotator/lock-test2.tei.xml',
+    testFileHash: null,   // Will store hash from save operation
+    testFileHash2: null   // Will store hash from save operation
   };
 
   // Initialize one global session for consistent lock management
@@ -86,27 +91,32 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     await cleanupSessionLocks();
     const session = await getSession();
 
-    // Create test files that we can use for locking tests
-    const testContent = '<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for file locks</text></TEI>';
+    // Create test files with unique content for this test run (to avoid hash collisions)
+    const testContent = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for file locks - Run ID: ${testRunId}</text></TEI>`;
 
-    // Save test files to ensure they exist
-    await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
+    // Save test files to ensure they exist and capture their hashes
+    const result1 = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
       file_id: testState.testFilePath,
       xml_string: testContent
     }, BASE_URL);
+    testState.testFileHash = result1.hash;
+    console.log(`✓ Created test file 1 with hash: ${testState.testFileHash} (run: ${testRunId})`);
 
-    await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
+    const testContent2 = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for file locks - FILE 2 - Run ID: ${testRunId}</text></TEI>`;
+    const result2 = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
       file_id: testState.testFilePath2,
-      xml_string: testContent
+      xml_string: testContent2 // Different content to get different hash
+    }, BASE_URL);
+    testState.testFileHash2 = result2.hash;
+    console.log(`✓ Created test file 2 with hash: ${testState.testFileHash2} (run: ${testRunId})`);
+
+    // Release the locks that were acquired during file saving (use hashes)
+    await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
+      file_id: testState.testFileHash
     }, BASE_URL);
 
-    // Release the locks that were acquired during file saving
     await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: testState.testFilePath
-    }, BASE_URL);
-
-    await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: testState.testFilePath2
+      file_id: testState.testFileHash2
     }, BASE_URL);
 
     const response = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
@@ -135,7 +145,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     const session = await getSession();
 
     const result = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_id: testState.testFilePath
+      file_id: testState.testFileHash
     }, BASE_URL);
 
     assert.strictEqual(result, 'OK', 'Should return OK for successful lock acquisition');
@@ -154,7 +164,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     // Check lock from same session (should not be locked for owner)
     const result = await authenticatedApiCall(session.sessionId, '/files/check_lock', 'POST', {
-      file_id: testState.testFilePath
+      file_id: testState.testFileHash
     }, BASE_URL);
 
     assert.strictEqual(result.is_locked, false, 'File should not be locked for the owner session');
@@ -167,7 +177,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     // Try to acquire the same lock again from same session - should succeed as refresh
     const result = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_id: testState.testFilePath
+      file_id: testState.testFileHash
     }, BASE_URL);
 
     assert.strictEqual(result, 'OK', 'Should return OK when refreshing own lock');
@@ -179,7 +189,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     const session = await getSession();
 
     const result = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: testState.testFilePath
+      file_id: testState.testFileHash
     }, BASE_URL);
 
     // Structured response with action information
@@ -202,12 +212,12 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     // First acquire lock on second file
     await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_id: testState.testFilePath2
+      file_id: testState.testFileHash2
     }, BASE_URL);
 
     // Then release it
     const result = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: testState.testFilePath2
+      file_id: testState.testFileHash2
     }, BASE_URL);
 
     assert.strictEqual(result.action, 'released', 'Should release second file lock');
@@ -252,10 +262,10 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     // Acquire locks for multiple files
     const result1 = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_id: testState.testFilePath
+      file_id: testState.testFileHash
     }, BASE_URL);
     const result2 = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_id: testState.testFilePath2
+      file_id: testState.testFileHash2
     }, BASE_URL);
 
     assert.strictEqual(result1, 'OK', 'Should acquire first lock');
@@ -268,10 +278,10 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     // Release both locks
     const release1 = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: testState.testFilePath
+      file_id: testState.testFileHash
     }, BASE_URL);
     const release2 = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: testState.testFilePath2
+      file_id: testState.testFileHash2
     }, BASE_URL);
 
     assert.strictEqual(release1.action, 'released', 'Should release first lock');
@@ -285,12 +295,12 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     // Final cleanup to ensure no locks remain from this test suite
     await cleanupSessionLocks();
 
-    // Clean up test files we created
+    // Clean up test files we created (use hashes)
     const cleanupSession = await getSession();
     try {
-      // The /files/delete API expects an array of file IDs
+      // The /files/delete API expects an array of file IDs (hashes)
       await authenticatedApiCall(cleanupSession.sessionId, '/files/delete', 'POST', {
-        files: [testState.testFilePath, testState.testFilePath2]
+        files: [testState.testFileHash, testState.testFileHash2]
       }, BASE_URL);
       console.log('✓ Test files cleaned up');
     } catch (error) {

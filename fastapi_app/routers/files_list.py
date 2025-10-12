@@ -156,21 +156,22 @@ def list_files(
 
 def _file_metadata_to_list_item(file_metadata, abbreviator: HashAbbreviator) -> FileListItem:
     """
-    Convert FileMetadata to FileListItem with abbreviated hash.
+    Convert FileMetadata to FileListItem with stable ID.
 
     Args:
         file_metadata: FileMetadata model
-        abbreviator: Hash abbreviator instance
+        abbreviator: Hash abbreviator instance (unused, kept for compatibility)
 
     Returns:
-        FileListItem with abbreviated ID
+        FileListItem with stable_id as id field
     """
-    # Abbreviate the hash
-    abbreviated_id = abbreviator.abbreviate(file_metadata.id)
+    # Use stable_id for the API response
+    # The FileMetadata has both 'id' (content hash) and 'stable_id'
+    # We expose stable_id as 'id' to the client for URL stability
 
     # Convert to FileListItem
     item_dict = file_metadata.model_dump()
-    item_dict['id'] = abbreviated_id  # Replace full hash with abbreviated
+    item_dict['id'] = file_metadata.stable_id  # Use stable_id as client-facing ID
 
     return FileListItem(**item_dict)
 

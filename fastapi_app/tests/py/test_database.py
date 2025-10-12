@@ -131,8 +131,8 @@ class TestDatabaseManager(unittest.TestCase):
         with self.db.transaction() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO files (id, filename, doc_id, file_type) VALUES (?, ?, ?, ?)",
-                ('test123', 'test123.pdf', '10.1234/test', 'pdf')
+                "INSERT INTO files (id, stable_id, filename, doc_id, file_type) VALUES (?, ?, ?, ?, ?)",
+                ('test123', 'tst123', 'test123.pdf', '10.1234/test', 'pdf')
             )
 
         # Verify data was committed
@@ -148,8 +148,8 @@ class TestDatabaseManager(unittest.TestCase):
             with self.db.transaction() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "INSERT INTO files (id, filename, doc_id, file_type) VALUES (?, ?, ?, ?)",
-                    ('test456', 'test456.pdf', '10.1234/test', 'pdf')
+                    "INSERT INTO files (id, stable_id, filename, doc_id, file_type) VALUES (?, ?, ?, ?, ?)",
+                    ('test456', 'tst456', 'test456.pdf', '10.1234/test', 'pdf')
                 )
                 # Force error
                 raise ValueError("Test error")
@@ -487,7 +487,8 @@ class TestFileStorage(unittest.TestCase):
     def setUp(self):
         """Create temporary directory for file storage."""
         self.test_dir = Path(tempfile.mkdtemp())
-        self.storage = FileStorage(self.test_dir)
+        self.db_path = self.test_dir / "test.db"
+        self.storage = FileStorage(self.test_dir, self.db_path)
 
     def tearDown(self):
         """Clean up temporary directory."""
