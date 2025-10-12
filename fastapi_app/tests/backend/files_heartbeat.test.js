@@ -14,6 +14,9 @@ let globalSession = null;
 
 describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
 
+  // Generate unique test ID for this test run to avoid collisions
+  const testRunId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+
   const testState = {
     testFilePath: '/data/versions/annotator/heartbeat-test.tei.xml',
     testFileHash: null
@@ -21,8 +24,8 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
 
   async function getSession() {
     if (!globalSession) {
-      // Use annotator which has edit permissions
-      globalSession = await login('annotator', 'annotator', BASE_URL);
+      // Use reviewer which can create all file types
+      globalSession = await login('reviewer', 'reviewer', BASE_URL);
       console.log(`🔐 Created session: ${globalSession.sessionId}`);
     }
     console.log(`🔍 Using session: ${globalSession.sessionId}`);
@@ -32,7 +35,8 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
   test('Setup: Create test file for heartbeat tests', async () => {
     const session = await getSession();
 
-    const testContent = '<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for heartbeat</text></TEI>';
+    // Use unique content for this test run to avoid hash collisions
+    const testContent = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for heartbeat - Run ID: ${testRunId}</text></TEI>`;
 
     // Save test file
     const result = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
@@ -43,14 +47,15 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     testState.testFileHash = result.hash;
 
     // The save operation acquires a lock, keep it for heartbeat tests
-    console.log('✓ Test file created with lock for heartbeat tests');
+    console.log(`✓ Test file created with lock for heartbeat tests (hash: ${testState.testFileHash}, run: ${testRunId})`);
   });
 
   test('POST /api/files/heartbeat should refresh lock', async () => {
     const session = await getSession();
 
+    // Use the hash that was captured during setup
     const result = await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-      file_path: testState.testFilePath
+      file_path: testState.testFileHash
     }, BASE_URL);
 
     assert.strictEqual(result.status, 'lock_refreshed', 'Should return lock_refreshed status');
@@ -91,10 +96,10 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
   test('POST /api/files/heartbeat should work multiple times in sequence', async () => {
     const session = await getSession();
 
-    // Send multiple heartbeats
+    // Send multiple heartbeats using hash
     for (let i = 0; i < 3; i++) {
       const result = await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-        file_path: testState.testFilePath
+        file_path: testState.testFileHash
       }, BASE_URL);
 
       assert.strictEqual(result.status, 'lock_refreshed', `Heartbeat ${i + 1} should succeed`);
@@ -106,15 +111,15 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
   test('POST /api/files/heartbeat should fail if lock is lost', async () => {
     const session = await getSession();
 
-    // Release the lock
+    // Release the lock using hash
     await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: testState.testFilePath
+      file_id: testState.testFileHash
     }, BASE_URL);
 
     // Try to send heartbeat after lock is released
     try {
       await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-        file_path: testState.testFilePath
+        file_path: testState.testFileHash
       }, BASE_URL);
 
       assert.fail('Should have thrown 409 error for lost lock');
@@ -159,13 +164,13 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
   test('POST /api/files/heartbeat should not return cache_status', async () => {
     const session = await getSession();
 
-    // Acquire lock first
+    // Acquire lock first using hash
     await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
-      file_id: testState.testFilePath
+      file_id: testState.testFileHash
     }, BASE_URL);
 
     const result = await authenticatedApiCall(session.sessionId, '/files/heartbeat', 'POST', {
-      file_path: testState.testFilePath
+      file_path: testState.testFileHash
     }, BASE_URL);
 
     assert.strictEqual(result.status, 'lock_refreshed', 'Should return lock_refreshed status');
@@ -177,16 +182,16 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
   test('Cleanup: Delete test file and logout', async () => {
     const session = await getSession();
 
-    // Release lock before delete
+    // Release lock before delete using hash
     try {
       await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-        file_id: testState.testFilePath
+        file_id: testState.testFileHash
       }, BASE_URL);
     } catch (error) {
       console.log('⚠️ Lock already released or error:', error.message);
     }
 
-    // Delete test file
+    // Delete test file using hash
     if (testState.testFileHash) {
       try {
         await authenticatedApiCall(session.sessionId, '/files/delete', 'POST', {

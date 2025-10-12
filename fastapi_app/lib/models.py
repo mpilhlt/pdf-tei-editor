@@ -20,6 +20,7 @@ class FileMetadata(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    stable_id: str  # Stable short ID for URLs (never changes)
     filename: str
     doc_id: str
     file_type: str  # 'pdf', 'tei', 'rng'
@@ -70,8 +71,10 @@ class FileCreate(BaseModel):
 
     This model is used when inserting new files into the database.
     Timestamps and sync status will be set automatically.
+    stable_id will be generated automatically if not provided.
     """
     id: str
+    stable_id: Optional[str] = None  # Auto-generated if not provided
     filename: str
     doc_id: str
     doc_id_type: str = 'custom'  # 'doi', 'fileref', 'custom'
