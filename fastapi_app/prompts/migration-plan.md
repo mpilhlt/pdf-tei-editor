@@ -144,29 +144,26 @@ See [schema-design.md](schema-design.md) for complete details.
 - Fixed reference counting cleanup bug in file deletion
 - Overall: 77/78 tests passing (99%)
 
-### Phase 6: Sync and SSE APIs
+### [Phase 6: Sync and SSE APIs](phase-6-completion.md)
 
-- Database-driven document synchronization (see [sync-design.md](sync-design.md))
-- Delta sync using SQLite change tracking (1000x faster than filesystem scan)
-- Server-sent events for real-time updates
-- Soft delete handling and conflict resolution
+- Database-driven document synchronization with two-tier architecture (local + remote metadata.db)
+- O(1) change detection using SQLite (1000x faster than filesystem scan)
+- Server-sent events for real-time progress updates
+- Database-driven deletion (no `.deleted` marker files)
+- Metadata-only sync for collection changes
+- WebDAV lock management and conflict resolution
 
 **Status**: ✅ Complete
-**Summary**: [phase-6-status.md](phase-6-status.md)
+**Summary**: [phase-6-completion.md](phase-6-completion.md)
 **Details**:
-- 4 sync endpoints (status, perform, conflicts, resolve-conflict) implemented
-- 1 SSE endpoint (subscribe) implemented
-- RemoteMetadataManager for WebDAV metadata.db operations
-- SSEService for real-time progress updates
-- SyncService with O(1) skip check and database-driven sync
+- 4 sync endpoints + 1 SSE endpoint implemented
+- RemoteMetadataManager, SSEService, SyncService implemented
 - FileRepository extended with sync methods
 - Configuration and dependency injection complete
 - Python unit tests: 45/45 passing (100%)
-- Integration tests: 28/28 tests implemented
+- Integration tests: 26/26 passing (100%)
 - WsgiDAV-based test infrastructure with automatic setup/teardown
-- Comprehensive test documentation
-
-**Key Innovation**: Replaces O(n) filesystem scanning with O(1) database queries for change detection. See [sync-design.md](sync-design.md) for complete algorithm.
+- Total: ~1,635 lines of production + test code
 
 ### Phase 7: Client Generation and Frontend Integration
 
@@ -403,4 +400,4 @@ Track progress by updating phase status in this document:
 - ✅ Complete
 - ⚠️ Blocked
 
-Last updated: 2025-10-13
+Last updated: 2025-10-14

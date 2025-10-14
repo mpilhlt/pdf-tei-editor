@@ -11,7 +11,7 @@
   - `local_modified_at` - Change tracking for delta sync
   - `sync_status` - Sync state machine
   - `sync_hash` - Conflict detection
-  - See [sync-design.md](sync-design.md) for how this enables 1000x faster sync
+  - See [phase-6-completion.md](phase-6-completion.md) for how this enables 1000x faster sync
 
 **Key Design**: Document-centric model with metadata inheritance. See [schema-design.md](schema-design.md) for complete details.
 
@@ -226,7 +226,7 @@ The sync-ready schema enables dramatic performance improvements in Phase 6:
 - **Instant conflict detection** - Compare `sync_hash` vs current hash
 - **No marker files** - `deleted = 1` column instead
 
-See [sync-design.md](sync-design.md) for complete algorithm and implementation plan.
+See [phase-6-completion.md](phase-6-completion.md) for complete algorithm and implementation.
 
 ## Examples
 

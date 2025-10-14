@@ -209,6 +209,9 @@ class SyncService:
                     # Step 9: Upload updated metadata.db
                     remote_mgr.upload(remote_db_path)
 
+                    # Step 10: Update version.txt on remote
+                    self._set_remote_version(new_version)
+
                     # Update local version
                     self.file_repo.set_sync_metadata('remote_version', str(new_version))
                     self.file_repo.set_sync_metadata(
@@ -328,7 +331,7 @@ class SyncService:
                     self.file_repo.delete_file(file_id)
 
                     # Delete physical file (handled by file_repo via reference counting)
-                    summary.deletions_local += 1
+                    summary.deleted_local += 1
 
                     if self.logger:
                         self.logger.info(f"Applied remote deletion: {file_id[:8]}...")
@@ -343,7 +346,7 @@ class SyncService:
         for local_file in local_deleted:
             try:
                 remote_mgr.mark_deleted(local_file.id, version)
-                summary.deletions_remote += 1
+                summary.deleted_remote += 1
 
                 if self.logger:
                     self.logger.info(f"Marked remote as deleted: {local_file.id[:8]}...")
@@ -395,7 +398,7 @@ class SyncService:
                 # Mark local as synced
                 self.file_repo.mark_file_synced(local_file.id, version)
 
-                summary.uploads += 1
+                summary.uploaded += 1
 
                 if self.logger:
                     self.logger.info(f"Uploaded: {local_file.filename}")
@@ -439,7 +442,7 @@ class SyncService:
                 self.file_repo.insert_file(file_create)
                 self.file_repo.mark_file_synced(file_id, version)
 
-                summary.downloads += 1
+                summary.downloaded += 1
 
                 if self.logger:
                     self.logger.info(f"Downloaded: {remote_file['filename']}")
@@ -473,7 +476,7 @@ class SyncService:
                 # Apply metadata without marking as modified
                 self.file_repo.apply_remote_metadata(file_id, remote_file)
 
-                summary.metadata_updates += 1
+                summary.metadata_synced += 1
 
                 if self.logger:
                     self.logger.info(f"Applied remote metadata: {file_id[:8]}...")
@@ -500,6 +503,22 @@ class SyncService:
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Failed to get remote version: {e}")
+            raise
+
+    def _set_remote_version(self, version: int) -> None:
+        """Set remote version number in version.txt."""
+        version_path = f"{self.remote_root}/version.txt"
+
+        try:
+            with self.fs.open(version_path, 'w') as f:
+                f.write(str(version))
+
+            if self.logger:
+                self.logger.info(f"Updated remote version to {version}")
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Failed to set remote version: {e}")
             raise
 
     def _acquire_lock(self, timeout_seconds: int = 300) -> bool:

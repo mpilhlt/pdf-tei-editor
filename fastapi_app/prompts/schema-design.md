@@ -34,7 +34,7 @@ CREATE TABLE files (
     version INTEGER DEFAULT 1,         -- Version number for TEI files (NULL for PDF)
     is_gold_standard BOOLEAN DEFAULT 0,-- Mark as gold standard/reference version
 
-    -- Synchronization tracking (see sync-design.md for details)
+    -- Synchronization tracking (see phase-6-completion.md for details)
     deleted BOOLEAN DEFAULT 0,         -- Soft delete marker (for sync, filter with WHERE deleted = 0)
     local_modified_at TIMESTAMP,       -- When local file last changed (triggers sync)
     remote_version INTEGER,            -- Remote version when last synced
@@ -62,7 +62,7 @@ CREATE INDEX idx_variant ON files(variant);                  -- Filter by varian
 CREATE INDEX idx_created_at ON files(created_at DESC);       -- Recent files
 CREATE INDEX idx_is_gold ON files(is_gold_standard) WHERE is_gold_standard = 1;  -- Gold standards
 
--- Sync-related indexes (see sync-design.md)
+-- Sync-related indexes (see phase-6-completion.md)
 CREATE INDEX idx_sync_status ON files(sync_status) WHERE sync_status != 'synced';  -- Files needing sync
 CREATE INDEX idx_deleted ON files(deleted) WHERE deleted = 1;                       -- Soft-deleted files
 CREATE INDEX idx_local_modified ON files(local_modified_at DESC);                   -- Recent changes
@@ -71,7 +71,7 @@ CREATE INDEX idx_remote_version ON files(remote_version);                       
 
 ### Sync Metadata Table
 
-Tracks global synchronization state (see [sync-design.md](sync-design.md) for usage):
+Tracks global synchronization state (see [phase-6-completion.md](phase-6-completion.md) for usage):
 
 ```sql
 CREATE TABLE sync_metadata (
@@ -356,7 +356,7 @@ WHERE doc_id = '10.1234/paper.2024'
 
 ### Sync-specific queries
 
-See [sync-design.md](sync-design.md) for complete sync query patterns.
+See [phase-6-completion.md](phase-6-completion.md) for complete sync implementation.
 
 ```sql
 -- Get files needing sync
