@@ -340,20 +340,20 @@ def get_all_active_locks(db_dir: Path, logger: logging.Logger, timeout_seconds: 
         return {}
 
 
-def get_locked_file_ids(db_dir: Path, logger: logging.Logger, session_id: Optional[str] = None, abbreviator=None) -> List[str]:
+def get_locked_file_ids(db_dir: Path, logger: logging.Logger, session_id: Optional[str] = None, repo=None) -> List[str]:
     """
-    Returns a list of file IDs (hashes) which are currently locked.
+    Returns a list of file stable_ids which are currently locked.
 
-    Optionally filters by session_id and can abbreviate hashes.
+    Optionally filters by session_id and converts hashes to stable_ids.
 
     Args:
         db_dir: Directory containing locks.db
         logger: Logger instance
         session_id: If provided, only return locks for this session
-        abbreviator: Optional HashAbbreviator instance to abbreviate hashes
+        repo: Optional FileRepository instance to get stable_ids
 
     Returns:
-        list: List of file ID hashes (abbreviated if abbreviator provided) that are locked
+        list: List of file stable_ids (or hashes if no repo provided) that are locked
     """
     active_locks = get_all_active_locks(db_dir, logger)
     locked_file_ids = []
@@ -362,12 +362,16 @@ def get_locked_file_ids(db_dir: Path, logger: logging.Logger, session_id: Option
         if session_id and lock_session_id != session_id:
             continue
 
-        # Abbreviate hash if abbreviator provided
-        if abbreviator:
+        # Get stable_id if repository provided
+        if repo:
             try:
-                file_id = abbreviator.abbreviate(file_hash)
+                file_metadata = repo.get_file_by_id(file_hash)
+                if file_metadata and file_metadata.stable_id:
+                    file_id = file_metadata.stable_id
+                else:
+                    file_id = file_hash
             except Exception as e:
-                logger.warning(f"Could not abbreviate hash {file_hash}: {e}")
+                logger.warning(f"Could not get stable_id for hash {file_hash}: {e}")
                 file_id = file_hash
         else:
             file_id = file_hash

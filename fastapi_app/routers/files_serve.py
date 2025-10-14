@@ -4,7 +4,7 @@ File serving API router for FastAPI.
 Implements GET /api/files/{document_id} - Serve file content by hash.
 
 Key features:
-- Accept abbreviated or full hash
+- Accept stable_id or full hash
 - Look up in database
 - Serve from hash-sharded storage
 - Access control enforcement
@@ -21,11 +21,9 @@ from ..lib.file_storage import FileStorage
 from ..lib.dependencies import (
     get_file_repository,
     get_file_storage,
-    get_current_user,
-    get_hash_abbreviator
+    get_current_user
 )
 from ..lib.access_control import check_file_access
-from ..lib.hash_abbreviation import HashAbbreviator
 from ..lib.logging_utils import get_logger
 
 
@@ -38,21 +36,19 @@ def serve_file_by_id(
     document_id: str,
     repo: FileRepository = Depends(get_file_repository),
     storage: FileStorage = Depends(get_file_storage),
-    current_user: Optional[dict] = Depends(get_current_user),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    current_user: Optional[dict] = Depends(get_current_user)
 ):
     """
-    Serve file content by document identifier (abbreviated or full hash).
+    Serve file content by document identifier (stable_id or full hash).
 
     Returns the actual file content with appropriate MIME type.
     Access control is enforced.
 
     Args:
-        document_id: Abbreviated hash (5+ chars) or full hash (64 chars)
+        document_id: stable_id or full hash (64 chars)
         repo: File repository (injected)
         storage: File storage (injected)
         current_user: Current user dict (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
         FileResponse with file content
@@ -69,19 +65,8 @@ def serve_file_by_id(
 
     logger.debug(f"Serving file: {document_id}")
 
-    # Resolve abbreviated hash to full hash if needed
-    try:
-        if len(document_id) < 64:
-            full_hash = abbreviator.resolve(document_id)
-            logger.debug(f"Resolved {document_id} to {full_hash[:16]}...")
-        else:
-            full_hash = document_id
-    except KeyError:
-        logger.warning(f"Could not resolve hash: {document_id}")
-        raise HTTPException(status_code=404, detail=f"File not found: {document_id}")
-
-    # Look up file in database
-    file_metadata = repo.get_file_by_id(full_hash)
+    # Look up file by ID or stable_id
+    file_metadata = repo.get_file_by_id_or_stable_id(document_id)
     if not file_metadata:
         logger.warning(f"File not in database: {document_id}")
         raise HTTPException(status_code=404, detail=f"File not found: {document_id}")

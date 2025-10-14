@@ -301,7 +301,11 @@ class FileRepository:
                 from ..config import get_settings
                 settings = get_settings()
                 storage = FileStorage(settings.data_root / "files", self.db.db_path, self.logger)
-                storage.delete_file(file_id, file_type, decrement_ref=False)
+                deleted = storage.delete_file(file_id, file_type, decrement_ref=False)
+
+                # Clean up reference entry after successful deletion
+                if deleted:
+                    self.ref_manager.remove_reference_entry(file_id)
 
                 if self.logger:
                     self.logger.info(f"Deleted orphaned file {file_id[:8]}... after hash change")
@@ -420,7 +424,11 @@ class FileRepository:
             from ..config import get_settings
             settings = get_settings()
             storage = FileStorage(settings.data_root / "files", self.db.db_path, self.logger)
-            storage.delete_file(file_id, file_metadata.file_type, decrement_ref=False)
+            deleted = storage.delete_file(file_id, file_metadata.file_type, decrement_ref=False)
+
+            # Clean up reference entry after successful deletion
+            if deleted:
+                self.ref_manager.remove_reference_entry(file_id)
 
             if self.logger:
                 self.logger.info(f"Deleted physical file {file_id[:8]}... (ref_count reached 0)")

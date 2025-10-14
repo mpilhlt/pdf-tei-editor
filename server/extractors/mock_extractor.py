@@ -52,8 +52,8 @@ class MockExtractor(BaseExtractor):
 
     @classmethod
     def is_available(cls) -> bool:
-        """Mock extractor is only available when TEST_IN_PROGRESS is set."""
-        return os.environ.get("TEST_IN_PROGRESS") == "1"
+        """Mock extractor is always available for testing and development."""
+        return True
 
     def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                 options: Dict[str, Any] = None) -> str:

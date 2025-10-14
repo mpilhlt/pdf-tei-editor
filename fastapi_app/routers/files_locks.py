@@ -8,7 +8,7 @@ Implements lock management endpoints:
 - POST /api/files/release_lock - Release lock
 
 Key changes from Flask:
-- Hash-based file identification (abbreviated or full hashes accepted)
+- Hash-based file identification (stable_id or full hashes accepted)
 - Otherwise identical to Flask (reuses lib/locking.py)
 """
 
@@ -27,11 +27,9 @@ from ..lib.models_files import (
 from ..lib.dependencies import (
     get_file_repository,
     get_session_id,
-    get_current_user,
-    get_hash_abbreviator
+    get_current_user
 )
 from ..lib.access_control import check_file_access
-from ..lib.hash_abbreviation import HashAbbreviator
 from ..config import get_settings
 from ..lib.logging_utils import get_logger
 
@@ -42,51 +40,50 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 @router.get("/locks", response_model=GetLocksResponse)
 def get_all_locks(
-    session_id: str = Depends(get_session_id),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    repo: FileRepository = Depends(get_file_repository),
+    session_id: str = Depends(get_session_id)
 ) -> GetLocksResponse:
     """
     Get all active locks for the current session.
 
-    Returns a list of file IDs (abbreviated hashes) locked by this session.
+    Returns a list of file stable_ids locked by this session.
 
     Args:
+        repo: File repository (injected)
         session_id: Current session ID (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
-        GetLocksResponse: List of abbreviated file IDs locked by this session
+        GetLocksResponse: List of file stable_ids locked by this session
     """
     settings = get_settings()
-    locked_ids = get_locked_file_ids(settings.db_dir, logger, session_id=session_id, abbreviator=abbreviator)
+    locked_ids = get_locked_file_ids(settings.db_dir, logger, session_id=session_id, repo=repo)
     return GetLocksResponse(locked_files=locked_ids)
 
 
 @router.post("/check_lock", response_model=CheckLockResponse)
 def check_lock_endpoint(
     request: CheckLockRequest,
-    session_id: str = Depends(get_session_id),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    repo: FileRepository = Depends(get_file_repository),
+    session_id: str = Depends(get_session_id)
 ):
     """
     Check if a file is locked.
 
     Args:
-        request: CheckLockRequest with file_id (abbreviated or full hash)
+        request: CheckLockRequest with file_id (stable_id or full hash)
+        repo: File repository (injected)
         session_id: Current session ID (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
         CheckLockResponse with is_locked and locked_by fields
     """
-    # Resolve file_id
-    try:
-        full_hash = abbreviator.resolve(request.file_id)
-    except KeyError:
-        full_hash = request.file_id
+    # Look up file by ID or stable_id
+    file_metadata = repo.get_file_by_id_or_stable_id(request.file_id)
+    if not file_metadata:
+        return CheckLockResponse(is_locked=False, locked_by=None)
 
     settings = get_settings()
-    lock_status = check_lock(full_hash, session_id, settings.db_dir, logger)
+    lock_status = check_lock(file_metadata.id, session_id, settings.db_dir, logger)
 
     return CheckLockResponse(**lock_status)
 
@@ -96,18 +93,16 @@ def acquire_lock_endpoint(
     request: AcquireLockRequest,
     repo: FileRepository = Depends(get_file_repository),
     session_id: str = Depends(get_session_id),
-    current_user: dict = Depends(get_current_user),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    current_user: dict = Depends(get_current_user)
 ) -> str:
     """
     Acquire a lock for editing.
 
     Args:
-        request: AcquireLockRequest with file_id (abbreviated or full hash)
+        request: AcquireLockRequest with file_id (stable_id or full hash)
         repo: File repository (injected)
         session_id: Current session ID (injected)
         current_user: Current user dict (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
         "OK" string on success (matches Flask API)
@@ -115,17 +110,11 @@ def acquire_lock_endpoint(
     Raises:
         HTTPException: 403 if insufficient permissions, 404 if file not found, 423 if cannot acquire lock
     """
-    # Resolve file_id
-    try:
-        full_hash = abbreviator.resolve(request.file_id)
-    except KeyError:
-        full_hash = request.file_id
-
     session_id_short = session_id[:8] if session_id else "unknown"
     logger.debug(f"[LOCK API] Session {session_id_short}... requesting lock for {request.file_id}")
 
-    # Look up file
-    file_metadata = repo.get_file_by_id(full_hash)
+    # Look up file by ID or stable_id
+    file_metadata = repo.get_file_by_id_or_stable_id(request.file_id)
     if not file_metadata:
         raise HTTPException(status_code=404, detail=f"File not found: {request.file_id}")
 
@@ -141,12 +130,12 @@ def acquire_lock_endpoint(
 
     # Acquire lock
     settings = get_settings()
-    if acquire_lock(full_hash, session_id, settings.db_dir, logger):
-        logger.info(f"[LOCK API] Session {session_id_short}... successfully acquired lock for {full_hash[:16]}...")
+    if acquire_lock(file_metadata.id, session_id, settings.db_dir, logger):
+        logger.info(f"[LOCK API] Session {session_id_short}... successfully acquired lock for {file_metadata.id[:16]}...")
         return "OK"
 
     # Could not acquire lock
-    logger.warning(f"[LOCK API] Session {session_id_short}... FAILED to acquire lock (423) for {full_hash[:16]}...")
+    logger.warning(f"[LOCK API] Session {session_id_short}... FAILED to acquire lock (423) for {file_metadata.id[:16]}...")
     raise HTTPException(
         status_code=423,
         detail=f'Could not acquire lock for {request.file_id}'
@@ -156,16 +145,16 @@ def acquire_lock_endpoint(
 @router.post("/release_lock", response_model=ReleaseLockResponse)
 def release_lock_endpoint(
     request: ReleaseLockRequest,
-    session_id: str = Depends(get_session_id),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    repo: FileRepository = Depends(get_file_repository),
+    session_id: str = Depends(get_session_id)
 ):
     """
     Release a lock.
 
     Args:
-        request: ReleaseLockRequest with file_id (abbreviated or full hash)
+        request: ReleaseLockRequest with file_id (stable_id or full hash)
+        repo: File repository (injected)
         session_id: Current session ID (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
         ReleaseLockResponse with action and message
@@ -173,14 +162,17 @@ def release_lock_endpoint(
     Raises:
         HTTPException: 409 if failed to release lock
     """
-    # Resolve file_id
-    try:
-        full_hash = abbreviator.resolve(request.file_id)
-    except KeyError:
-        full_hash = request.file_id
+    # Look up file by ID or stable_id
+    file_metadata = repo.get_file_by_id_or_stable_id(request.file_id)
+    if not file_metadata:
+        # If file doesn't exist, treat as already released (lenient behavior)
+        return ReleaseLockResponse(
+            action="already_released",
+            message=f"File not found - lock already released: {request.file_id}"
+        )
 
     settings = get_settings()
-    result = release_lock(full_hash, session_id, settings.db_dir, logger)
+    result = release_lock(file_metadata.id, session_id, settings.db_dir, logger)
 
     if result["status"] == "success":
         return ReleaseLockResponse(

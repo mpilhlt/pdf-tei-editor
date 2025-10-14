@@ -15,7 +15,6 @@ from .file_storage import FileStorage
 from .sessions import SessionManager
 from .auth import AuthManager
 from .server_utils import get_session_id_from_request
-from .hash_abbreviation import HashAbbreviator, get_abbreviator
 from .logging_utils import get_logger
 
 
@@ -42,11 +41,6 @@ def get_file_storage() -> FileStorage:
     storage_root = settings.data_root / "files"
     db_path = settings.db_dir / "metadata.db"
     return FileStorage(storage_root, db_path)
-
-
-def get_hash_abbreviator(repo: FileRepository = Depends(get_file_repository)) -> HashAbbreviator:
-    """Get HashAbbreviator instance loaded with all hashes"""
-    return get_abbreviator(repo)
 
 
 # Auth dependencies

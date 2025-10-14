@@ -8,6 +8,9 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { login, authenticatedApiCall } from '../helpers/test-auth.js';
 
+// Enable mock extractor for testing
+process.env.TEST_IN_PROGRESS = '1';
+
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
 // Sample TEI XML for XML-based extraction
@@ -39,9 +42,9 @@ describe('Extraction API E2E Tests', () => {
   let session = null;
   let testFileHash = null;
 
-  // Login once for all tests
-  test('Setup: login as annotator', async () => {
-    session = await login('annotator', 'annotator', BASE_URL);
+  // Login once for all tests - use reviewer to be able to save files
+  test('Setup: login as reviewer', async () => {
+    session = await login('reviewer', 'reviewer', BASE_URL);
     assert.ok(session, 'Should have a valid session');
     assert.ok(session.sessionId, 'Session should have an ID');
   });
@@ -62,9 +65,9 @@ describe('Extraction API E2E Tests', () => {
     );
 
     assert.ok(response, 'Should receive a response');
-    assert.ok(response.file_hash, 'Should have file_hash');
+    assert.ok(response.hash, 'Should have hash');
 
-    testFileHash = response.file_hash;
+    testFileHash = response.hash;
     console.log(`✓ Test file uploaded: ${testFileHash}`);
   });
 
@@ -184,18 +187,17 @@ describe('Extraction API E2E Tests', () => {
     }
   });
 
-  test('POST /api/extract with mock extractor should perform extraction', async () => {
-    // Use mock extractor which should always be available and work with any input
+  test('POST /api/extract with RNG extractor should perform extraction', async () => {
+    // Use RNG extractor which accepts XML input
     const response = await authenticatedApiCall(
       session.sessionId,
       '/extract',
       'POST',
       {
-        extractor: 'mock-extractor',
+        extractor: 'rng',
         file_id: testFileHash,
         options: {
-          collection: 'test_collection',
-          variant_id: 'mock'
+          collection: 'test_collection'
         }
       },
       BASE_URL
@@ -205,8 +207,8 @@ describe('Extraction API E2E Tests', () => {
     assert.ok(response.xml, 'Should have xml hash in response');
 
     // For PDF-based extraction, we'd also have pdf hash and id
-    // For XML-based extraction (like mock on XML), we just get xml hash
-    console.log(`✓ Mock extraction succeeded, result: ${response.xml}`);
+    // For XML-based extraction (like RNG), we just get xml hash
+    console.log(`✓ RNG extraction succeeded, result: ${response.xml}`);
 
     // Verify the extracted file was saved
     const filesResponse = await authenticatedApiCall(

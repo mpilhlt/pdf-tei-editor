@@ -20,11 +20,9 @@ from ..lib.models_files import DeleteFilesRequest, DeleteFilesResponse
 from ..lib.dependencies import (
     get_file_repository,
     get_file_storage,
-    require_authenticated_user,
-    get_hash_abbreviator
+    require_authenticated_user
 )
 from ..lib.access_control import check_file_access
-from ..lib.hash_abbreviation import HashAbbreviator
 from ..lib.logging_utils import get_logger
 
 
@@ -37,8 +35,7 @@ def delete_files(
     body: DeleteFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
     storage: FileStorage = Depends(get_file_storage),
-    current_user: dict = Depends(require_authenticated_user),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    current_user: dict = Depends(require_authenticated_user)
 ) -> DeleteFilesResponse:
     """
     Delete files (soft delete with reference counting).
@@ -50,11 +47,10 @@ def delete_files(
     - Safe for deduplication (same content shared by multiple entries)
 
     Args:
-        body: DeleteFilesRequest with list of file IDs (abbreviated or full hashes)
+        body: DeleteFilesRequest with list of file IDs (stable_id or full hash)
         repo: File repository (injected)
         storage: File storage with reference counting (injected)
         current_user: Current user dict (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
         {"result": "ok"}
@@ -70,15 +66,8 @@ def delete_files(
             logger.warning("Ignoring empty file identifier")
             continue
 
-        try:
-            # Resolve abbreviated hash to full hash if needed
-            full_hash = abbreviator.resolve(file_id)
-        except KeyError:
-            # Try as-is (might be full hash)
-            full_hash = file_id
-
-        # Look up file
-        file_metadata = repo.get_file_by_id(full_hash)
+        # Look up file by ID or stable_id
+        file_metadata = repo.get_file_by_id_or_stable_id(file_id)
         if not file_metadata:
             logger.warning(f"File not found for deletion: {file_id}")
             continue  # Skip non-existent files
@@ -91,9 +80,9 @@ def delete_files(
             )
 
         # Soft delete in database (FileRepository handles reference counting)
-        logger.info(f"Soft deleting file: {file_id} (full hash: {full_hash[:16]}...)")
+        logger.info(f"Soft deleting file: {file_id} (hash: {file_metadata.id[:16]}...)")
         try:
-            repo.delete_file(full_hash)
+            repo.delete_file(file_metadata.id)
 
         except ValueError as e:
             logger.error(f"Failed to delete file {file_id}: {e}")
