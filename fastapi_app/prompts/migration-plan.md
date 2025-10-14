@@ -151,7 +151,17 @@ See [schema-design.md](schema-design.md) for complete details.
 - Server-sent events for real-time updates
 - Soft delete handling and conflict resolution
 
-**Status**: ⬜ Not started
+**Status**: 🔄 Core Implementation Complete (Testing Pending)
+**Summary**: [phase-6-status.md](phase-6-status.md)
+**Details**:
+- 3 sync endpoints (status, perform, conflicts) implemented
+- 1 SSE endpoint (subscribe) implemented
+- RemoteMetadataManager for WebDAV metadata.db operations
+- SSEService for real-time progress updates
+- SyncService with O(1) skip check and database-driven sync
+- FileRepository extended with sync methods
+- Configuration and dependency injection complete
+- Tests pending: 0/15 integration tests, 0/20 unit tests
 
 **Key Innovation**: Replaces O(n) filesystem scanning with O(1) database queries for change detection. See [sync-design.md](sync-design.md) for complete algorithm.
 

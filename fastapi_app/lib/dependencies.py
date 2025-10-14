@@ -16,9 +16,14 @@ from .sessions import SessionManager
 from .auth import AuthManager
 from .server_utils import get_session_id_from_request
 from .logging_utils import get_logger
+from .sse_service import SSEService
+from .sync_service import SyncService
 
 
 logger = get_logger(__name__)
+
+# Global SSE service instance (singleton)
+_sse_service_instance: Optional[SSEService] = None
 
 
 # Database dependencies
@@ -149,3 +154,42 @@ def require_session(func):
         return await func(*args, **kwargs)
 
     return wrapper
+
+
+# SSE and Sync dependencies (Phase 6)
+
+def get_sse_service() -> SSEService:
+    """Get singleton SSEService instance"""
+    global _sse_service_instance
+    if _sse_service_instance is None:
+        _sse_service_instance = SSEService(logger=logger)
+    return _sse_service_instance
+
+
+def get_sync_service(
+    file_repo: FileRepository = Depends(get_file_repository),
+    file_storage: FileStorage = Depends(get_file_storage),
+    sse_service: SSEService = Depends(get_sse_service)
+) -> SyncService:
+    """Get SyncService instance with dependencies"""
+    settings = get_settings()
+
+    # Build WebDAV config
+    webdav_config = {
+        'base_url': settings.webdav_base_url,
+        'username': settings.webdav_username,
+        'password': settings.webdav_password,
+        'remote_root': settings.webdav_remote_root
+    }
+
+    return SyncService(
+        file_repo=file_repo,
+        file_storage=file_storage,
+        webdav_config=webdav_config,
+        sse_service=sse_service,
+        logger=logger
+    )
+
+
+# Alias for backward compatibility with Phase 3-5 naming
+get_session_user = require_authenticated_user
