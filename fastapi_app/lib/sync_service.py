@@ -21,6 +21,7 @@ from .remote_metadata import RemoteMetadataManager
 from .file_storage import FileStorage
 from .sse_service import SSEService
 from .models_sync import SyncSummary, ConflictInfo
+from .hash_utils import get_file_extension
 
 
 class SyncService:
@@ -505,6 +506,17 @@ class SyncService:
         """Acquire sync lock."""
         start_time = time.time()
 
+        # Ensure remote root directory exists
+        try:
+            if not self.fs.exists(self.remote_root):
+                if self.logger:
+                    self.logger.info(f"Creating remote root directory: {self.remote_root}")
+                self.fs.makedirs(self.remote_root, exist_ok=True)
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Failed to create remote root directory: {e}")
+            return False
+
         while time.time() - start_time < timeout_seconds:
             try:
                 if self.fs.exists(self.lock_path):
@@ -545,7 +557,7 @@ class SyncService:
 
     def _get_remote_file_path(self, file_id: str, file_type: str) -> str:
         """Get remote path for a file."""
-        ext = self.file_storage._get_extension(file_type)
+        ext = get_file_extension(file_type)
         shard = file_id[:2]
         return f"{self.remote_root}/{shard}/{file_id}{ext}"
 

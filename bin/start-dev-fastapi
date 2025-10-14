@@ -88,7 +88,7 @@ if __name__ == '__main__':
             )
 
             # Stream output to both console and log file
-            for line in process.stdout:
+            for line in process.stdout: # type:ignore
                 print(line, end='')
                 log_f.write(line)
                 log_f.flush()

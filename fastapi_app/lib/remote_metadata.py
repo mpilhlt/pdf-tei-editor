@@ -8,6 +8,7 @@ Manages the shared metadata.db file on the WebDAV server, enabling:
 - O(1) change detection queries
 """
 
+import json
 import sqlite3
 import tempfile
 import shutil
@@ -231,7 +232,7 @@ class RemoteMetadataManager:
             include_deleted: If True, include files with deleted=1
 
         Returns:
-            List of file metadata dictionaries
+            List of file metadata dictionaries with parsed JSON fields
         """
         if not self.local_db_conn:
             raise RuntimeError("Not connected to database")
@@ -243,14 +244,28 @@ class RemoteMetadataManager:
         cursor.execute(query)
         rows = cursor.fetchall()
 
-        return [dict(row) for row in rows]
+        # Parse JSON fields from TEXT to proper Python objects
+        result = []
+        for row in rows:
+            row_dict = dict(row)
+            # Parse JSON fields (stored as TEXT in SQLite)
+            for json_field in ['doc_collections', 'doc_metadata', 'file_metadata']:
+                if json_field in row_dict and row_dict[json_field]:
+                    try:
+                        row_dict[json_field] = json.loads(row_dict[json_field])
+                    except (json.JSONDecodeError, TypeError):
+                        # If parsing fails, use empty default
+                        row_dict[json_field] = [] if json_field == 'doc_collections' else {}
+            result.append(row_dict)
+
+        return result
 
     def get_deleted_files(self) -> List[Dict[str, Any]]:
         """
         Get files marked as deleted in remote database.
 
         Returns:
-            List of deleted file metadata dictionaries
+            List of deleted file metadata dictionaries with parsed JSON fields
         """
         if not self.local_db_conn:
             raise RuntimeError("Not connected to database")
@@ -260,7 +275,21 @@ class RemoteMetadataManager:
         cursor.execute(query)
         rows = cursor.fetchall()
 
-        return [dict(row) for row in rows]
+        # Parse JSON fields from TEXT to proper Python objects
+        result = []
+        for row in rows:
+            row_dict = dict(row)
+            # Parse JSON fields (stored as TEXT in SQLite)
+            for json_field in ['doc_collections', 'doc_metadata', 'file_metadata']:
+                if json_field in row_dict and row_dict[json_field]:
+                    try:
+                        row_dict[json_field] = json.loads(row_dict[json_field])
+                    except (json.JSONDecodeError, TypeError):
+                        # If parsing fails, use empty default
+                        row_dict[json_field] = [] if json_field == 'doc_collections' else {}
+            result.append(row_dict)
+
+        return result
 
     def get_file_by_id(self, file_id: str) -> Optional[Dict[str, Any]]:
         """

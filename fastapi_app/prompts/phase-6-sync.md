@@ -279,17 +279,7 @@ Test scenarios:
 
 **Key**: No `.deleted` marker files! Deletions tracked in database.
 
-## Performance
 
-**Before (Flask):**
-- 10K files, no changes: 4-8 seconds
-- 100K files, no changes: 30-60 seconds
-
-**After (FastAPI):**
-- 10K files, no changes: 1-5 ms (O(1) query)
-- 100K files, no changes: 1-5 ms (O(1) query)
-
-**Speedup**: 1000x for "no changes" case
 
 ## Example: Deletion Propagation
 
@@ -321,22 +311,6 @@ Instance B syncs:
   2. Apply: doc_collections = ["corpus1", "gold_subset"]
   3. NO data file download
 ```
-
-## Timeline
-
-| Task | Hours |
-|------|-------|
-| Remote Metadata Manager | 6-8 |
-| FileRepository extensions | 4-6 |
-| SyncService | 16-20 |
-| SSEService | 3-4 |
-| Pydantic models | 1-2 |
-| Sync router | 6-8 |
-| SSE router | 2-3 |
-| Integration | 1 |
-| Integration tests | 16-20 |
-| Python unit tests | 8-10 |
-| **Total** | **64-82 hours** |
 
 **Estimate**: 8-10 working days
 
