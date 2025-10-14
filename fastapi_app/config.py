@@ -2,13 +2,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 from functools import lru_cache
 import tempfile
+import os
 
 class Settings(BaseSettings):
-    """Application settings loaded from .env.fastapi"""
+    """Application settings loaded from .env.fastapi (or custom env file)"""
 
     # Pydantic v2 configuration - Pylance may show false positive warning
+    # Allow overriding env_file via FASTAPI_ENV_FILE environment variable
     model_config = SettingsConfigDict(  # type: ignore[misc]
-        env_file='.env.fastapi',
+        env_file=os.environ.get('FASTAPI_ENV_FILE', '.env.fastapi'),
         env_file_encoding='utf-8',
         extra='ignore'
     )

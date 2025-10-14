@@ -63,8 +63,11 @@ SERVER_URL = "http://localhost:8000"
 STARTUP_TIMEOUT = 15
 HEALTH_CHECK_RETRIES = 10
 
-# Global variable to track server process
+# Global variables to track server processes
 server_process: Optional[subprocess.Popen] = None
+webdav_process: Optional[subprocess.Popen] = None
+WEBDAV_PORT = 8081
+WEBDAV_ROOT = Path("/tmp/webdav-test")
 
 
 def log_info(msg: str):
@@ -220,7 +223,7 @@ def wait_for_startup() -> bool:
         time.sleep(1)
 
         # Check if process is still running
-        if server_process.poll() is not None:
+        if server_process.poll() is not None: # type:ignore
             log_error("Server process died during startup!")
             log_error(f"Check log file: {LOG_FILE}")
             print()
@@ -327,6 +330,93 @@ def run_tests(test_files: List[str]) -> int:
         return 1
 
 
+def start_webdav_server() -> bool:
+    """Start WebDAV test server for sync tests."""
+    global webdav_process
+
+    log_step("Starting WebDAV test server for sync tests")
+
+    # Create WebDAV root directory and remote root subdirectory
+    try:
+        WEBDAV_ROOT.mkdir(parents=True, exist_ok=True)
+        log_info(f"Created WebDAV root: {WEBDAV_ROOT}")
+
+        # Create the remote root directory that sync will use
+        remote_dir = WEBDAV_ROOT / "pdf-tei-editor"
+        remote_dir.mkdir(parents=True, exist_ok=True)
+        log_info(f"Created remote root directory: {remote_dir}")
+    except Exception as e:
+        log_error(f"Failed to create WebDAV directories: {e}")
+        return False
+
+    # Start WsgiDAV server
+    try:
+        log_info(f"Starting WsgiDAV on port {WEBDAV_PORT}...")
+        env = os.environ.copy()
+
+        webdav_process = subprocess.Popen(
+            [
+                "uv", "run", "wsgidav",
+                "--host", "127.0.0.1",
+                "--port", str(WEBDAV_PORT),
+                "--root", str(WEBDAV_ROOT),
+                "--auth", "anonymous",  # No auth for testing
+                "--server", "cheroot",
+                "--no-config"
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            cwd=PROJECT_ROOT
+        )
+
+        # Wait briefly for startup
+        time.sleep(2)
+
+        # Check if process started successfully
+        if webdav_process.poll() is not None:
+            # Get output to see what went wrong
+            try:
+                output, _ = webdav_process.communicate(timeout=1)
+                log_error(f"WebDAV server failed to start: {output.decode()}")
+            except:
+                log_error("WebDAV server failed to start")
+            return False
+
+        log_success(f"WebDAV server started on port {WEBDAV_PORT}")
+        log_info("  Auth: anonymous (no credentials needed for testing)")
+        return True
+
+    except Exception as e:
+        log_error(f"Failed to start WebDAV server: {e}")
+        return False
+
+
+def stop_webdav_server():
+    """Stop the WebDAV test server."""
+    global webdav_process
+
+    if webdav_process:
+        log_info(f"Stopping WebDAV server (PID: {webdav_process.pid})")
+        try:
+            webdav_process.terminate()
+            try:
+                webdav_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                webdav_process.kill()
+        except:
+            pass
+        webdav_process = None
+
+    # Clean up WebDAV root
+    if WEBDAV_ROOT.exists():
+        try:
+            shutil.rmtree(WEBDAV_ROOT)
+            log_info(f"Cleaned up WebDAV root: {WEBDAV_ROOT}")
+        except Exception as e:
+            log_warning(f"Failed to clean up WebDAV root: {e}")
+
+
 def stop_server():
     """Stop the FastAPI server."""
     global server_process
@@ -362,10 +452,13 @@ def cleanup(do_cleanup: bool):
     if do_cleanup:
         log_step("Cleaning up...")
         stop_server()
+        stop_webdav_server()
         log_success("Cleanup complete")
     else:
         log_warning("Skipping cleanup (--no-cleanup flag set)")
-        log_info(f"Server still running at {SERVER_URL}")
+        log_info(f"FastAPI server still running at {SERVER_URL}")
+        if webdav_process:
+            log_info(f"WebDAV server still running on port {WEBDAV_PORT}")
         log_info(f"View logs: tail -f {LOG_FILE}")
         if platform.system() == "Windows":
             log_info(f"View logs: Get-Content {LOG_FILE} -Wait")
@@ -433,6 +526,43 @@ What this script does:
         else:
             wipe_database()
 
+        # Step 2.5: Start WebDAV server if running sync tests
+        needs_webdav = 'sync' in args.test_files if args.test_files else False
+        env_test_file = None
+        if needs_webdav:
+            if not start_webdav_server():
+                log_error("Failed to start WebDAV server for sync tests")
+                exit_code = 1
+                return
+
+            # Create temporary .env.test with WebDAV configuration for sync tests
+            import tempfile
+            fd, env_test_file = tempfile.mkstemp(suffix='.env', prefix='fastapi-test-')
+            log_info(f"Creating temporary env file: {env_test_file}")
+            with os.fdopen(fd, 'w') as f:
+                f.write(f"""# FastAPI Test Configuration with WebDAV
+HOST=127.0.0.1
+PORT=8000
+DATA_ROOT=fastapi_app/data
+DB_DIR=fastapi_app/db
+
+# WebDAV Configuration for Sync Tests
+WEBDAV_ENABLED=true
+WEBDAV_BASE_URL=http://localhost:{WEBDAV_PORT}
+WEBDAV_USERNAME=
+WEBDAV_PASSWORD=
+WEBDAV_REMOTE_ROOT=/pdf-tei-editor
+
+SESSION_TIMEOUT=3600
+LOG_LEVEL=INFO
+""")
+            log_success("WebDAV configuration written to temp env file")
+
+            # Set environment variable to use temp env file
+            os.environ['FASTAPI_ENV_FILE'] = env_test_file
+            log_info(f"Set FASTAPI_ENV_FILE={env_test_file}")
+            print()  # Add spacing
+
         # Step 3: Start server
         start_server(args.verbose)
 
@@ -474,6 +604,14 @@ What this script does:
 
     finally:
         cleanup(not args.no_cleanup)
+
+        # Clean up temporary env file
+        if env_test_file and Path(env_test_file).exists():
+            try:
+                Path(env_test_file).unlink()
+                log_info(f"Cleaned up temp env file: {env_test_file}")
+            except Exception as e:
+                log_warning(f"Failed to clean up temp env file: {e}")
 
     sys.exit(exit_code)
 
