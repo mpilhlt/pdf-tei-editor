@@ -54,9 +54,10 @@ def list_available_extractors(
     try:
         extractors_data = list_extractors(available_only=True)
 
-        # Convert to Pydantic models
+        # Convert to Pydantic models - add 'available' field since list_extractors
+        # filters by availability but doesn't include it in the dict
         extractors = [
-            ExtractorInfo(**extractor_data)
+            ExtractorInfo(**{**extractor_data, 'available': True})
             for extractor_data in extractors_data
         ]
 
@@ -153,8 +154,10 @@ def extract_metadata(
             )
 
         # Get physical file path from hash-sharded storage
+        # Note: files are stored in data_root/files subdirectory
+        storage_root = settings.data_root / "files"
         file_path = get_storage_path(
-            settings.data_root,
+            storage_root,
             file_metadata.id,
             file_metadata.file_type
         )
@@ -338,17 +341,17 @@ def _save_xml_extraction_result(
     file_create = FileCreate(
         id=file_hash,
         stable_id=None,  # Will be auto-generated
+        filename=f"{doc_id}.{file_type}.xml",
         doc_id=doc_id,
         file_type=file_type,
+        file_size=len(content_bytes),
         doc_collections=[collection],
-        doc_metadata=None,
+        doc_metadata={},  # Must be dict, not None
         variant=None,
         version=1,
         is_gold_standard=False,
         label=extractor_id,
-        file_metadata={'extractor': extractor_id},
-        sync_status='modified',
-        sync_version=0
+        file_metadata={'extractor': extractor_id}
     )
 
     # Insert into database

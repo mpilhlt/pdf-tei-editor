@@ -16,11 +16,9 @@ from ..lib.models_files import MoveFilesRequest, MoveFilesResponse
 from ..lib.models import FileUpdate
 from ..lib.dependencies import (
     get_file_repository,
-    require_authenticated_user,
-    get_hash_abbreviator
+    require_authenticated_user
 )
 from ..lib.access_control import check_file_access
-from ..lib.hash_abbreviation import HashAbbreviator
 from ..lib.logging_utils import get_logger
 
 
@@ -32,8 +30,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 def move_files(
     body: MoveFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
-    current_user: dict = Depends(require_authenticated_user),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    current_user: dict = Depends(require_authenticated_user)
 ):
     """
     Move files to a different collection.
@@ -48,7 +45,6 @@ def move_files(
         request: MoveFilesRequest with pdf_path, xml_path, and destination_collection
         repo: File repository (injected)
         current_user: Current user dict (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
         MoveFilesResponse with new paths (same as input in hash-based system)
@@ -58,14 +54,8 @@ def move_files(
     """
     logger.debug(f"Moving files to collection {body.destination_collection}, user={current_user}")
 
-    # Resolve PDF ID (hash or stable_id)
-    try:
-        pdf_full_hash = abbreviator.resolve(body.pdf_id)
-    except KeyError:
-        pdf_full_hash = body.pdf_id
-
-    # Look up PDF file
-    pdf_file = repo.get_file_by_id(pdf_full_hash)
+    # Look up PDF file by ID or stable_id
+    pdf_file = repo.get_file_by_id_or_stable_id(body.pdf_id)
     if not pdf_file:
         raise HTTPException(status_code=404, detail=f"PDF file not found: {body.pdf_id}")
 
@@ -102,9 +92,8 @@ def move_files(
             f"Document {pdf_file.doc_id} already in collection {body.destination_collection}"
         )
 
-    # Return IDs (abbreviated hashes, unchanged)
-    # In hash-based system, IDs are the abbreviated hashes
+    # Return IDs (stable_id, unchanged)
     return MoveFilesResponse(
-        new_pdf_id=abbreviator.abbreviate(pdf_file.id),
+        new_pdf_id=pdf_file.stable_id,
         new_xml_id=body.xml_id  # XML ID unchanged
     )

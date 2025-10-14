@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize file metadata database
     from .lib.database import DatabaseManager
-    db_path = settings.data_root / "metadata.db"
+    db_path = settings.db_dir / "metadata.db"
     try:
         db = DatabaseManager(db_path, logger)
         logger.info(f"File metadata database initialized: {db_path}")

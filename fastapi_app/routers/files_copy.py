@@ -17,11 +17,9 @@ from ..lib.models_files import CopyFilesRequest, CopyFilesResponse
 from ..lib.models import FileUpdate
 from ..lib.dependencies import (
     get_file_repository,
-    require_authenticated_user,
-    get_hash_abbreviator
+    require_authenticated_user
 )
 from ..lib.access_control import check_file_access
-from ..lib.hash_abbreviation import HashAbbreviator
 from ..lib.logging_utils import get_logger
 
 
@@ -33,8 +31,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 def copy_files(
     body: CopyFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
-    current_user: dict = Depends(require_authenticated_user),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    current_user: dict = Depends(require_authenticated_user)
 ):
     """
     Copy files to an additional collection.
@@ -49,7 +46,6 @@ def copy_files(
         body: CopyFilesRequest with pdf_path, xml_path, and destination_collection
         repo: File repository (injected)
         current_user: Current user dict (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
         CopyFilesResponse with paths (same as input in hash-based system)
@@ -59,14 +55,12 @@ def copy_files(
     """
     logger.debug(f"Copying files to collection {body.destination_collection}, user={current_user}")
 
-    # Resolve PDF ID (hash or stable_id)
+    # Resolve PDF ID using repository (handles both full hash and stable_id)
     try:
-        pdf_full_hash = abbreviator.resolve(body.pdf_id)
-    except KeyError:
-        pdf_full_hash = body.pdf_id
+        pdf_file = repo.get_file_by_id_or_stable_id(body.pdf_id)
+    except ValueError:
+        pdf_file = None
 
-    # Look up PDF file
-    pdf_file = repo.get_file_by_id(pdf_full_hash)
     if not pdf_file:
         raise HTTPException(status_code=404, detail=f"PDF file not found: {body.pdf_id}")
 
@@ -103,9 +97,8 @@ def copy_files(
             f"Document {pdf_file.doc_id} already in collection {body.destination_collection}"
         )
 
-    # Return IDs (abbreviated hashes, unchanged)
-    # In hash-based system, IDs are the abbreviated hashes
+    # Return stable_id (short, permanent ID) for client use
     return CopyFilesResponse(
-        new_pdf_id=abbreviator.abbreviate(pdf_file.id),
+        new_pdf_id=pdf_file.stable_id,
         new_xml_id=body.xml_id  # XML ID unchanged
     )

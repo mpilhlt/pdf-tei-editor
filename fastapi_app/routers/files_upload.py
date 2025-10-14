@@ -8,7 +8,7 @@ Key features:
 - Save to hash-sharded storage
 - Store metadata in database
 - MIME type validation
-- Return abbreviated hash
+- Return full hash
 """
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
@@ -31,10 +31,8 @@ from ..lib.models import FileCreate
 from ..lib.dependencies import (
     get_file_repository,
     get_file_storage,
-    get_hash_abbreviator,
     get_session_id
 )
-from ..lib.hash_abbreviation import HashAbbreviator
 from ..lib.logging_utils import get_logger
 
 
@@ -58,24 +56,22 @@ async def upload_file(
     file: UploadFile = File(...),
     storage: FileStorage = Depends(get_file_storage),
     repo: FileRepository = Depends(get_file_repository),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator),
     session_id: Optional[str] = Depends(get_session_id)
 ):
     """
     Upload a PDF or XML file.
 
     Files are stored in hash-sharded storage and metadata is saved to database.
-    Returns the abbreviated file hash for subsequent operations.
+    Returns the full file hash for subsequent operations.
 
     Args:
         file: Uploaded file (PDF or XML)
         storage: File storage (injected)
         repo: File repository (injected)
-        abbreviator: Hash abbreviator (injected)
         session_id: Current session ID (injected, optional)
 
     Returns:
-        UploadResponse with file type and abbreviated hash
+        UploadResponse with file type and full hash
 
     Raises:
         HTTPException: 400 if no file or invalid type
@@ -133,11 +129,10 @@ async def upload_file(
     existing_file = repo.get_file_by_id(file_hash)
     if existing_file:
         logger.info(f"File already exists in database: {file_hash[:16]}...")
-        # Return existing file info
-        abbreviated_hash = abbreviator.abbreviate(file_hash)
+        # Return existing file's stable_id (short, permanent ID)
         return UploadResponse(
             type=file_type,
-            filename=abbreviated_hash
+            filename=existing_file.stable_id
         )
 
     # Save metadata to database
@@ -155,22 +150,24 @@ async def upload_file(
     )
 
     try:
-        repo.insert_file(file_create)
+        created_file = repo.insert_file(file_create)
         logger.info(f"Inserted file metadata into database: {file_hash[:16]}...")
+
+        # Return auto-generated stable_id (short, permanent ID)
+        logger.info(f"Upload complete: {file.filename} -> {created_file.stable_id}")
+
+        return UploadResponse(
+            type=file_type,
+            filename=created_file.stable_id
+        )
     except Exception as e:
         logger.error(f"Error inserting file metadata: {e}")
         # File is already in storage, so don't fail completely
-        # Just log and continue with abbreviated hash
-
-    # Return response compatible with Flask endpoint
-    abbreviated_hash = abbreviator.abbreviate(file_hash)
-
-    logger.info(f"Upload complete: {file.filename} -> {abbreviated_hash}")
-
-    return UploadResponse(
-        type=file_type,
-        filename=abbreviated_hash
-    )
+        # Fall back to returning the content hash
+        return UploadResponse(
+            type=file_type,
+            filename=file_hash
+        )
 
 
 def _is_allowed_mime_type(filename: str, file_content: bytes) -> bool:

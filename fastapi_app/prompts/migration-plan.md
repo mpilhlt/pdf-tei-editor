@@ -124,14 +124,25 @@ See [schema-design.md](schema-design.md) for complete details.
 - Multi-collection support for documents
 - Stable nanoid-based IDs for permanent URLs
 
-### Phase 5: Validation and Extraction APIs
+### [Phase 5: Validation and Extraction APIs](phase-5-completion.md)
 
-- XML/TEI validation endpoints
-- AI-based metadata extraction
-- Extractor management
-- Schema validation integration
+- XML/TEI validation endpoints (XSD and RelaxNG)
+- CodeMirror autocomplete generation from schemas
+- Metadata extraction system (PDF and XML-based)
+- Extractor discovery and management
+- Framework-agnostic libraries with dependency injection
+- Storage reference counting tests and bug fixes
 
-**Status**: 🔄 In progress
+**Status**: ✅ Complete
+**Summary**: [phase-5-completion.md](phase-5-completion.md)
+**Details**:
+- 2 validation endpoints with 8/8 tests passing
+- 2 extraction endpoints with 9/10 tests passing (90%)
+- Storage reference counting with 5/5 tests passing (100%)
+- Framework-agnostic schema validation with timeout protection
+- Integrated with Phase 4 file storage and metadata system
+- Fixed reference counting cleanup bug in file deletion
+- Overall: 77/78 tests passing (99%)
 
 ### Phase 6: Sync and SSE APIs
 
@@ -186,16 +197,69 @@ npm run dev:fastapi
 # API docs at http://localhost:8000/docs
 ```
 
+**Troubleshooting**: If server fails to start, check `log/fastapi-server.log` for detailed error messages. Common issues:
+- Database schema errors: Remove `fastapi_app/db/` directory and restart to recreate with current schema
+- Port conflicts: Ensure port 8000 is available
+- Missing dependencies: Run `uv sync` to install dependencies
+
 ### Running Tests
+
+**✨ Recommended: Use the robust test runner script** (handles server lifecycle automatically, works on all platforms):
+
+```bash
+# Run all integration tests with clean database
+python bin/test-fastapi.py
+
+# Run specific test files
+python bin/test-fastapi.py validation extraction
+
+# Keep database between runs (faster, but not isolated)
+python bin/test-fastapi.py --keep-db files_save
+
+# Debug mode: keep server running after tests for manual testing
+python bin/test-fastapi.py --no-cleanup validation
+
+# Show server output during tests
+python bin/test-fastapi.py --verbose
+
+# See all options
+python bin/test-fastapi.py --help
+```
+
+You can also use the shortcut `npm run test:fastapi:e2e`
+
+**What the test script does:**
+1. ✅ Kills any running FastAPI servers (cross-platform)
+2. ✅ Wipes `fastapi_app/db/*` directory for clean slate (all databases)
+3. ✅ Starts FastAPI server and waits for successful startup
+4. ✅ Verifies startup by checking logs for errors and testing `/health` endpoint
+5. ✅ Runs specified integration tests with `E2E_BASE_URL` set
+6. ✅ Stops server (unless `--no-cleanup`)
+7. ✅ Shows test results and log file path: `log/fastapi-server.log`
+
+**Works on Windows, macOS, and Linux!**
+
+---
+
+**Manual testing** (for interactive development):
 
 ```bash
 # Terminal 1: Start server
 npm run dev:fastapi
 
-# Terminal 2: Run FastAPI backend tests
+# Terminal 2: Run specific tests
+E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/validation.test.js
+
+# Or run all tests
 E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/*.test.js
 
-# Or run Python unit tests
+# -- kill the server
+
+```
+
+**Python unit tests**:
+
+```bash
 npm run test:fastapi:py
 ```
 
@@ -223,23 +287,6 @@ During the Flask-to-FastAPI migration, backend E2E tests are used to verify the 
 - **FastAPI-specific backend tests**: `fastapi_app/tests/backend/*.test.js` - Tests specific to FastAPI implementation
 - **Python unit tests**: `fastapi_app/tests/py/*.py` - Unit tests for FastAPI components
 
-#### Running Backend Tests Against Local FastAPI Server
-
-FastAPI backend tests run against a locally running development server, avoiding Docker overhead during development:
-
-```bash
-# Terminal 1: Start FastAPI development server
-npm run dev:fastapi
-
-# Terminal 2: Run all FastAPI backend tests
-E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/*.test.js
-
-# Run specific test file
-E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/health.test.js
-
-# Run with grep pattern to filter tests (Node.js 20.9.0+)
-E2E_BASE_URL=http://localhost:8000 node --test --test-name-pattern="health" fastapi_app/tests/backend/*.test.js
-```
 
 #### Reusing Existing Flask Backend Tests
 
@@ -257,6 +304,8 @@ E2E_BASE_URL=http://localhost:8000 node --test tests/e2e/backend/*.test.js
 E2E_BASE_URL=http://localhost:8000 node --test tests/e2e/backend/file-locks-api.test.js
 
 # This verifies functional equivalence: same tests, same fixtures, same results
+
+# -- kill the server
 ```
 
 **Important**: When reusing Flask tests for FastAPI validation:
@@ -341,4 +390,4 @@ Track progress by updating phase status in this document:
 - ✅ Complete
 - ⚠️ Blocked
 
-Last updated: 2025-10-12
+Last updated: 2025-10-13

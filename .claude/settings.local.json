@@ -13,7 +13,15 @@
       "Bash(python:*)",
       "Bash(python3:*)",
       "Bash(npm run test:fastapi:py:*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(rm:*)",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/validation.test.js)",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node --test fastapi_app/tests/backend/extraction.test.js)",
+      "Bash(find:*)",
+      "Bash(sqlite3:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run test:fastapi:e2e:*)",
+      "Bash(E2E_BASE_URL=http://localhost:8000 node --test:*)"
     ],
     "deny": [],
     "ask": []

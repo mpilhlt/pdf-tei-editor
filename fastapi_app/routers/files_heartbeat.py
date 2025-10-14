@@ -11,9 +11,9 @@ Key changes from Flask:
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..lib.locking import acquire_lock
+from ..lib.file_repository import FileRepository
 from ..lib.models_files import HeartbeatRequest, HeartbeatResponse
-from ..lib.dependencies import get_session_id, get_hash_abbreviator
-from ..lib.hash_abbreviation import HashAbbreviator
+from ..lib.dependencies import get_session_id, get_file_repository
 from ..config import get_settings
 from ..lib.logging_utils import get_logger
 
@@ -25,8 +25,8 @@ router = APIRouter(prefix="/files", tags=["files"])
 @router.post("/heartbeat", response_model=HeartbeatResponse)
 def heartbeat(
     request: HeartbeatRequest,
-    session_id: str = Depends(get_session_id),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    repo: FileRepository = Depends(get_file_repository),
+    session_id: str = Depends(get_session_id)
 ):
     """
     Refresh file lock (keep-alive).
@@ -37,9 +37,9 @@ def heartbeat(
     Note: No cache_status in FastAPI (deprecated - database is always current).
 
     Args:
-        request: HeartbeatRequest with file_id (abbreviated or full hash)
+        request: HeartbeatRequest with file_id (stable_id or full hash)
+        repo: File repository (injected)
         session_id: Current session ID (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
         HeartbeatResponse with status='lock_refreshed'
@@ -47,17 +47,16 @@ def heartbeat(
     Raises:
         HTTPException: 409 if failed to refresh lock
     """
-    # Resolve file_id
-    try:
-        full_hash = abbreviator.resolve(request.file_id)
-    except KeyError:
-        full_hash = request.file_id
+    # Look up file by ID or stable_id
+    file_metadata = repo.get_file_by_id_or_stable_id(request.file_id)
+    if not file_metadata:
+        raise HTTPException(status_code=404, detail=f"File not found: {request.file_id}")
 
     logger.debug(f"Heartbeat for file {request.file_id} (session: {session_id[:8]}...)")
 
     # Refresh lock using acquire_lock (it handles refresh for same session)
     settings = get_settings()
-    if acquire_lock(full_hash, session_id, settings.db_dir, logger):
+    if acquire_lock(file_metadata.id, session_id, settings.db_dir, logger):
         return HeartbeatResponse(status="lock_refreshed")
 
     # Failed to refresh

@@ -6,7 +6,7 @@ Implements GET /api/files/list - Returns document-centric file listing.
 Key features:
 - Database queries instead of filesystem scan
 - Document-centric grouping (PDF + TEI files)
-- Abbreviated hashes in response
+- Stable IDs in response
 - Lock status integration
 - Access control filtering
 - Optional variant filtering
@@ -23,12 +23,10 @@ from ..lib.dependencies import (
     get_db,
     get_file_repository,
     get_current_user,
-    get_session_id,
-    get_hash_abbreviator
+    get_session_id
 )
 from ..lib.locking import get_all_active_locks
 from ..lib.access_control import DocumentAccessFilter
-from ..lib.hash_abbreviation import HashAbbreviator
 from ..config import get_settings
 from ..lib.logging_utils import get_logger
 
@@ -44,8 +42,7 @@ def list_files(
     refresh: bool = Query(False, description="Force refresh (deprecated in FastAPI)"),
     repo: FileRepository = Depends(get_file_repository),
     session_id: Optional[str] = Depends(get_session_id),
-    current_user: Optional[dict] = Depends(get_current_user),
-    abbreviator: HashAbbreviator = Depends(get_hash_abbreviator)
+    current_user: Optional[dict] = Depends(get_current_user)
 ):
     """
     List all files grouped by document.
@@ -92,8 +89,8 @@ def list_files(
                 logger.warning(f"No PDF found for document {doc_id}, skipping")
                 continue
 
-            # Convert PDF file to FileListItem with abbreviated hash
-            pdf_item = _file_metadata_to_list_item(pdf_file, abbreviator)
+            # Convert PDF file to FileListItem with stable_id
+            pdf_item = _file_metadata_to_list_item(pdf_file)
 
             documents_map[doc_id] = DocumentGroup(
                 doc_id=doc_id,
@@ -111,8 +108,8 @@ def list_files(
         if file_metadata.file_type == 'pdf':
             continue
 
-        # Convert TEI file to FileListItem with abbreviated hash
-        file_item = _file_metadata_to_list_item(file_metadata, abbreviator)
+        # Convert TEI file to FileListItem with stable_id
+        file_item = _file_metadata_to_list_item(file_metadata)
 
         # Inherit doc_collections and doc_metadata for TEI files
         file_item.doc_collections = doc_group.doc_collections
@@ -140,7 +137,7 @@ def list_files(
     settings = get_settings()
     try:
         active_locks = get_all_active_locks(settings.db_dir, logger)
-        _add_lock_info(documents_map, active_locks, session_id, abbreviator)
+        _add_lock_info(documents_map, active_locks, session_id)
     except Exception as e:
         logger.error(f"Error getting lock info: {e}")
         # Continue without lock info
@@ -154,16 +151,15 @@ def list_files(
     return FileListResponse(files=files_data)
 
 
-def _file_metadata_to_list_item(file_metadata, abbreviator: HashAbbreviator) -> FileListItem:
+def _file_metadata_to_list_item(file_metadata) -> FileListItem:
     """
     Convert FileMetadata to FileListItem with stable ID.
 
     Args:
         file_metadata: FileMetadata model
-        abbreviator: Hash abbreviator instance (unused, kept for compatibility)
 
     Returns:
-        FileListItem with stable_id as id field
+        FileListItem with stable_id as id field, content hash stored internally
     """
     # Use stable_id for the API response
     # The FileMetadata has both 'id' (content hash) and 'stable_id'
@@ -171,9 +167,14 @@ def _file_metadata_to_list_item(file_metadata, abbreviator: HashAbbreviator) -> 
 
     # Convert to FileListItem
     item_dict = file_metadata.model_dump()
+    content_hash = item_dict['id']  # Preserve content hash
     item_dict['id'] = file_metadata.stable_id  # Use stable_id as client-facing ID
 
-    return FileListItem(**item_dict)
+    list_item = FileListItem(**item_dict)
+    # Store content hash as private attribute for internal use (e.g., locking)
+    list_item._content_hash = content_hash
+
+    return list_item
 
 
 def _apply_variant_filtering(
@@ -200,17 +201,15 @@ def _apply_variant_filtering(
 def _add_lock_info(
     documents: Dict[str, DocumentGroup],
     active_locks: Dict[str, str],
-    session_id: Optional[str],
-    abbreviator: HashAbbreviator
+    session_id: Optional[str]
 ) -> None:
     """
     Add lock status to files in document groups (modifies in place).
 
     Args:
         documents: Dict of doc_id -> DocumentGroup
-        active_locks: Dict of full_hash -> session_id
+        active_locks: Dict of content_hash -> session_id
         session_id: Current session ID
-        abbreviator: Hash abbreviator instance
     """
     for doc_group in documents.values():
         # Check all file lists
@@ -220,11 +219,7 @@ def _add_lock_info(
             *doc_group.variants.values()
         ]:
             for file_item in file_list:
-                # Resolve abbreviated hash to full hash for lock lookup
-                try:
-                    full_hash = abbreviator.resolve(file_item.id)
-                    if full_hash in active_locks and active_locks[full_hash] != session_id:
-                        file_item.is_locked = True
-                except KeyError:
-                    # Can't resolve hash - skip lock check
-                    pass
+                # Use content hash stored as private attribute for lock lookup
+                content_hash = getattr(file_item, '_content_hash', None)
+                if content_hash and content_hash in active_locks and active_locks[content_hash] != session_id:
+                    file_item.is_locked = True
