@@ -47,11 +47,11 @@ class ConflictInfo(BaseModel):
 class SyncSummary(BaseModel):
     """Summary of sync operation results."""
     skipped: bool = False
-    uploads: int = 0
-    downloads: int = 0
-    deletions_local: int = 0
-    deletions_remote: int = 0
-    metadata_updates: int = 0
+    uploaded: int = 0
+    downloaded: int = 0
+    deleted_local: int = 0
+    deleted_remote: int = 0
+    metadata_synced: int = 0
     conflicts: int = 0
     errors: int = 0
     new_version: Optional[int] = None
