@@ -776,3 +776,108 @@ class FileRepository:
                 self.logger.debug(f"Updated sync status for file: {file_id}")
 
         return self.get_file_by_id(file_id)
+
+    def count_unsynced_files(self) -> int:
+        """
+        Count files that need to be synced (O(1) operation).
+
+        Returns:
+            Number of files with sync_status != 'synced'
+        """
+        query = "SELECT COUNT(*) as count FROM files WHERE sync_status != 'synced'"
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            row = cursor.fetchone()
+
+            return row['count'] if row else 0
+
+    def get_all_files(self, include_deleted: bool = False) -> List[FileMetadata]:
+        """
+        Get all files (for metadata comparison during sync).
+
+        Args:
+            include_deleted: If True, include soft-deleted files
+
+        Returns:
+            List of all FileMetadata models
+        """
+        deleted_filter = "" if include_deleted else "WHERE deleted = 0"
+        query = f"SELECT * FROM files {deleted_filter}"
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+            return [self._row_to_model(row) for row in rows]
+
+    def mark_file_synced(self, file_id: str, remote_version: int) -> None:
+        """
+        Mark file as synced with remote.
+
+        Args:
+            file_id: File ID (hash)
+            remote_version: Remote version number at sync time
+        """
+        query = """
+            UPDATE files
+            SET sync_status = 'synced',
+                remote_version = ?,
+                sync_hash = id,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (remote_version, file_id))
+
+            if self.logger:
+                self.logger.debug(f"Marked file as synced: {file_id}")
+
+    def apply_remote_metadata(self, file_id: str, remote_metadata: dict) -> None:
+        """
+        Apply metadata changes from remote without triggering sync.
+
+        This is used when remote metadata changes (collections, labels, etc.)
+        need to be applied locally without marking the file as modified.
+
+        Args:
+            file_id: File ID (hash)
+            remote_metadata: Dict with metadata fields to update
+        """
+        # Extract fields to update
+        update_data = {}
+        json_fields = ['doc_collections', 'doc_metadata', 'file_metadata']
+
+        for field in ['label', 'variant', 'version', 'is_gold_standard', 'remote_version']:
+            if field in remote_metadata:
+                update_data[field] = remote_metadata[field]
+
+        for field in json_fields:
+            if field in remote_metadata:
+                update_data[field] = json.dumps(remote_metadata[field])
+
+        if not update_data:
+            return
+
+        # Build SET clause
+        set_clauses = [f"{col} = ?" for col in update_data.keys()]
+        set_clause = ', '.join(set_clauses)
+
+        query = f"""
+            UPDATE files
+            SET {set_clause},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            params = tuple(update_data.values()) + (file_id,)
+            cursor.execute(query, params)
+
+            if self.logger:
+                self.logger.debug(f"Applied remote metadata to file: {file_id}")
