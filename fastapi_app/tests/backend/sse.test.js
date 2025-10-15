@@ -162,8 +162,8 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
     const session = await getSession();
     const connection = createSSEConnection(session, 'test');
 
-    // Wait for connection to establish
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for connection to establish and SSE stream to start consuming
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Prepare to collect all events
     const batch1 = ['Batch1-Msg1', 'Batch1-Msg2'];
@@ -233,11 +233,13 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
   });
 
   test('Test 8: Multiple concurrent SSE connections work independently', async () => {
-    const session = await getSession();
+    // Create two separate sessions for independent connections
+    const session1 = await login('reviewer', 'reviewer', BASE_URL);
+    const session2 = await login('reviewer', 'reviewer', BASE_URL);
 
-    // Create two connections
-    const connection1 = createSSEConnection(session, 'test');
-    const connection2 = createSSEConnection(session, 'test');
+    // Create two connections with different sessions
+    const connection1 = createSSEConnection(session1, 'test');
+    const connection2 = createSSEConnection(session2, 'test');
 
     // Wait for both connections to establish
     await new Promise(resolve => setTimeout(resolve, 200));
@@ -246,17 +248,17 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
     const messages1 = ['Connection1-Msg1', 'Connection1-Msg2'];
     const messages2 = ['Connection2-Msg1', 'Connection2-Msg2'];
 
-    // Send echo requests
+    // Send echo requests to respective sessions
     await Promise.all([
       authenticatedRequest(
-        session.sessionId,
+        session1.sessionId,
         '/sse/test/echo',
         'POST',
         messages1,
         BASE_URL
       ),
       authenticatedRequest(
-        session.sessionId,
+        session2.sessionId,
         '/sse/test/echo',
         'POST',
         messages2,
@@ -264,18 +266,23 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
       )
     ]);
 
-    // Wait for and collect events
-    const totalMessages = messages1.length + messages2.length;
+    // Each connection should receive only its own messages
     const [received1, received2] = await Promise.all([
-      connection1.waitForEvents(totalMessages, 3000),
-      connection2.waitForEvents(totalMessages, 3000)
+      connection1.waitForEvents(messages1.length, 3000),
+      connection2.waitForEvents(messages2.length, 3000)
     ]);
 
-    // Both connections should receive all messages
-    // Note: Since both use same client_id (username), they'll both receive all messages
-    // This tests that the SSE service correctly broadcasts to the same client_id
-    assert(received1.length >= messages1.length, 'Connection 1 should receive messages');
-    assert(received2.length >= messages2.length, 'Connection 2 should receive messages');
+    // Verify each connection received the correct messages
+    assert.strictEqual(received1.length, messages1.length, 'Connection 1 should receive its messages');
+    assert.strictEqual(received2.length, messages2.length, 'Connection 2 should receive its messages');
+
+    // Verify content of messages
+    for (let i = 0; i < messages1.length; i++) {
+      assert.strictEqual(received1[i], messages1[i], `Connection 1 message ${i+1} should match`);
+    }
+    for (let i = 0; i < messages2.length; i++) {
+      assert.strictEqual(received2[i], messages2[i], `Connection 2 message ${i+1} should match`);
+    }
 
     connection1.close();
     connection2.close();

@@ -21,7 +21,10 @@
       "Bash(sqlite3:*)",
       "Bash(npm run test:*)",
       "Bash(npm run test:fastapi:e2e:*)",
-      "Bash(E2E_BASE_URL=http://localhost:8000 node --test:*)"
+      "Bash(E2E_BASE_URL=http://localhost:8000 node --test:*)",
+      "Bash(timeout 30 npm run test:*)",
+      "Bash(echo:*)",
+      "Bash(gtimeout 30 npm run test:fastapi:e2e -- sse)"
     ],
     "deny": [],
     "ask": []

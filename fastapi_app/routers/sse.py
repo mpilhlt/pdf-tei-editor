@@ -6,13 +6,13 @@ Provides real-time progress updates for long-running operations like sync.
 For FastAPI migration - Phase 6.
 """
 
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, Request
 from fastapi.responses import StreamingResponse
 from typing import List
 import logging
 import asyncio
 
-from ..lib.dependencies import get_sse_service, get_session_user
+from ..lib.dependencies import get_sse_service, get_session_user, require_session_id
 from ..lib.sse_service import SSEService
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,10 @@ router = APIRouter(prefix="/sse", tags=["sse"])
 
 @router.get("/subscribe")
 async def subscribe(
+    request: Request,
     sse_service: SSEService = Depends(get_sse_service),
-    user: dict = Depends(get_session_user)
+    user: dict = Depends(get_session_user),
+    session_id: str = Depends(require_session_id)
 ):
     """
     Subscribe to Server-Sent Events stream.
@@ -49,10 +51,12 @@ async def subscribe(
     Returns:
         StreamingResponse with text/event-stream content type
     """
-    # Use username as client_id
-    client_id = user.get('username', '') # Since we enforce an authenticated user, the fallback value will never be used
+    # Use session_id as client_id to support multiple concurrent connections
+    # from the same user (each browser tab/window gets unique session)
+    client_id = session_id
+    username = user.get('username', 'unknown')
 
-    logger.info(f"SSE subscription request from user: {client_id}")
+    logger.info(f"SSE subscription request from user {username} (session: {client_id[:8]}...)")
 
     return StreamingResponse(
         sse_service.event_stream(client_id),
@@ -69,7 +73,8 @@ async def subscribe(
 async def echo_test(
     messages: List[str] = Body(...),
     sse_service: SSEService = Depends(get_sse_service),
-    user: dict = Depends(get_session_user)
+    user: dict = Depends(get_session_user),
+    session_id: str = Depends(require_session_id)
 ):
     """
     Test endpoint that echoes a list of messages as SSE events.
@@ -85,18 +90,21 @@ async def echo_test(
 
     Note:
         Client must be subscribed to /sse/subscribe before calling this endpoint.
+        Messages are sent to the session's SSE queue (based on session_id).
     """
-    client_id = user.get('username', '')
+    # Use session_id as client_id (same as /subscribe endpoint)
+    client_id = session_id
+    username = user.get('username', 'unknown')
 
-    logger.info(f"SSE echo test requested by {client_id} with {len(messages)} messages")
+    logger.info(f"SSE echo test requested by {username} (session: {client_id[:8]}...) with {len(messages)} messages")
 
     # Send each message as an SSE event
     for i, message in enumerate(messages):
         result = sse_service.send_message(client_id, "test", message)
         if not result:
-            logger.warning(f"Failed to send echo message {i+1}/{len(messages)}")
+            logger.warning(f"Failed to send echo message {i+1}/{len(messages)} to session {client_id[:8]}...")
         else:
-            logger.debug(f"Sent echo message {i+1}/{len(messages)}: {message}")
+            logger.debug(f"Sent echo message {i+1}/{len(messages)} to session {client_id[:8]}...: {message}")
         await asyncio.sleep(0.1)  # Small delay to ensure events are separate
 
     return {

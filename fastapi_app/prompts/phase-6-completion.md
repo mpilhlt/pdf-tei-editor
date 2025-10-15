@@ -155,10 +155,11 @@ Added settings:
 - `test_sse_service.py` (16 tests) - Queue management, event streams, keep-alive, cleanup
 - `test_sync_service.py` (15 tests) - Status checks, locking, comparison, deletion sync
 
-### Integration Tests: 26/26 passing (100%)
+### Integration Tests: 33/33 passing (100%)
 - `tests/backend/sync.test.js` (26 tests, ~3s runtime)
-- WsgiDAV-based test infrastructure (`bin/test-fastapi.py sync`)
-- Tests: status checks, upload/download, deletions, metadata sync, conflicts, locking, SSE
+- `tests/backend/sse.test.js` (7 tests passing, 1 skipped, ~3.7s runtime)
+- WsgiDAV-based test infrastructure (`bin/test-fastapi.py sync sse`)
+- Tests: status checks, upload/download, deletions, metadata sync, conflicts, locking, SSE streams, SSE echo
 
 ## Bugs Fixed
 
@@ -173,6 +174,10 @@ Added settings:
 2. `sync_service.py:213` - Added `_set_remote_version()` call to update version.txt after sync
 3. `sync_service.py:331,346,398,442,476` - Updated all SyncSummary field references
 4. `tests/backend/sync.test.js:342-353` - Fixed test 11 to be placeholder (requires metadata update API)
+
+**SSE Integration Test Fixes (2025-10-15)**:
+1. `tests/backend/sse.test.js:235-289` - Fixed Test 8 to create separate sessions for truly independent connections (was incorrectly using same session, causing both to share the same queue)
+2. `tests/backend/sse.test.js:166` - Fixed Test 5 timing issue by increasing connection establishment wait from 100ms to 1000ms (prevents race condition with EventSource reconnection)
 
 ## Files Created
 - `lib/models_sync.py` (81 lines)
