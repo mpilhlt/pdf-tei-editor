@@ -24,7 +24,9 @@
       "Bash(E2E_BASE_URL=http://localhost:8000 node --test:*)",
       "Bash(timeout 30 npm run test:*)",
       "Bash(echo:*)",
-      "Bash(gtimeout 30 npm run test:fastapi:e2e -- sse)"
+      "Bash(gtimeout 30 npm run test:fastapi:e2e -- sse)",
+      "Bash(lsof:*)",
+      "Bash(npm run generate-client:*)"
     ],
     "deny": [],
     "ask": []
