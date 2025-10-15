@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Check if FastAPI router files are being committed
+if git diff --cached --name-only | grep -q "fastapi_app/routers/"; then
+  echo "🔍 FastAPI router changes detected, checking if API client needs regeneration..."
+  npm run generate-client:check || {
+    echo ""
+    echo "💡 Tip: Run 'npm run generate-client' to update the API client"
+    exit 1
+  }
+fi

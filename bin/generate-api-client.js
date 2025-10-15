@@ -148,6 +148,8 @@ function convertType(schema, forProperty = false) {
  * /api/v1/config/get/{key} GET -> configGet
  * /api/v1/config/instructions GET -> configGetInstructions
  * /api/v1/config/instructions POST -> configSaveInstructions
+ * /api/v1/validate/autocomplete-data POST -> validateAutocompleteData
+ * /api/v1/files/check_lock POST -> filesCheckLock
  */
 function generateMethodName(path, httpMethod) {
   // Remove /api/v1/ prefix and split into parts
@@ -160,12 +162,17 @@ function generateMethodName(path, httpMethod) {
   const needsMethodPrefix = httpMethod === 'post' && pathParts[pathParts.length - 1] !== 'login' &&
     pathParts[pathParts.length - 1] !== 'logout' && pathParts[pathParts.length - 1] !== 'set';
 
-  // Build method name
+  // Build method name - convert hyphens and underscores to camelCase
   let parts = pathParts.map((part, index) => {
-    if (index === 0) {
-      return part.toLowerCase();
-    }
-    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    // Replace hyphens and underscores with spaces, then camelCase
+    const words = part.replace(/[-_]/g, ' ').split(' ');
+    const camelWords = words.map((word, wordIndex) => {
+      if (index === 0 && wordIndex === 0) {
+        return word.toLowerCase();
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    });
+    return camelWords.join('');
   });
 
   // Add prefix for POST methods on shared endpoints
@@ -232,6 +239,20 @@ function generateClientCode(schema) {
   for (const [path, pathItem] of v1Paths) {
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!['get', 'post', 'put', 'delete', 'patch'].includes(method)) continue;
+
+      // Skip file upload endpoints (multipart/form-data)
+      const requestBodyContent = operation.requestBody?.content;
+      if (requestBodyContent && requestBodyContent['multipart/form-data']) {
+        console.log(`  Skipping upload endpoint: ${method.toUpperCase()} ${path}`);
+        continue;
+      }
+
+      // Skip SSE endpoints (text/event-stream)
+      const responseContent = operation.responses?.['200']?.content;
+      if (responseContent && responseContent['text/event-stream']) {
+        console.log(`  Skipping SSE endpoint: ${method.toUpperCase()} ${path}`);
+        continue;
+      }
 
       const methodName = generateMethodName(path, method);
       const description = operation.description || operation.summary || '';

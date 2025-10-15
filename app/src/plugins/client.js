@@ -3,12 +3,12 @@
  */
 
 /**
- * @typedef {object} ErrorResponse 
+ * @typedef {object} ErrorResponse
  * @property {string} error
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { PluginConfig } from '../modules/plugin-manager.js'
  * @import { AuthenticationData } from './authentication.js'
  */
@@ -17,6 +17,7 @@
 
 import { logger, hasStateChanged } from '../app.js';
 import { notify } from '../modules/sl-utils.js';
+import { ApiClientV1 } from '../../fastapi_app/api-client-v1.js';
 
 /**
  * Parent class for all API errors
@@ -95,6 +96,9 @@ let lastHttpStatus = null;
 
 const api_base_url = '/api';
 const upload_route = api_base_url + '/files/upload'
+
+// Create singleton API client instance using the callApi function
+const apiClient = new ApiClientV1(callApi);
 
 /**
  * plugin API
@@ -179,11 +183,16 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
   const options = {
     method,
     headers: {
-      'Content-Type': 'application/json',
       'X-Session-ID': sessionId || '',
     }
   };
-  if (body) {
+
+  // Handle FormData (file uploads) - don't stringify or set Content-Type
+  if (body instanceof FormData) {
+    options.body = body;
+    // Don't set Content-Type header - browser will set it with boundary
+  } else if (body) {
+    options.headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(body);
   }
 
@@ -266,7 +275,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
  * @returns {Promise<AuthenticationData>}
  */
 async function login(username, passwd_hash) {
-  return await callApi('/auth/login', 'POST', { username, passwd_hash });
+  return await apiClient.authLogin({ username, passwd_hash });
 }
 
 /**
@@ -274,7 +283,7 @@ async function login(username, passwd_hash) {
  * @returns {Promise<any>}
  */
 async function logout() {
-  return await callApi('/auth/logout', 'POST', {});
+  return await apiClient.authLogout();
 }
 
 
@@ -283,7 +292,7 @@ async function logout() {
  * @returns {Promise<AuthenticationData>}
  */
 async function status() {
-  return await callApi('/auth/status', 'GET');
+  return await apiClient.authStatus();
 }
 
 
@@ -296,6 +305,8 @@ async function status() {
  * @returns {Promise<FileListItem[]>} - A promise that resolves to an array of file list items
  */
 async function getFileList(variant = null, refresh = false) {
+  // Note: FastAPI returns FileListResponse with DocumentGroup structure
+  // The generated client doesn't support query parameters yet, so we use callApi directly
   const params = {};
   if (variant !== null) params.variant = variant;
   if (refresh) params.refresh = 'true';
@@ -303,6 +314,7 @@ async function getFileList(variant = null, refresh = false) {
   const queryString = new URLSearchParams(params).toString();
   const url = '/files/list' + (queryString ? '?' + queryString : '');
   return await callApi(url, 'GET');
+  // TODO: Once generator supports query params, migrate to: apiClient.filesList(variant, refresh)
 }
 
 /**
@@ -313,13 +325,14 @@ async function getFileList(variant = null, refresh = false) {
  */
 
 /**
- * Lints a TEI XML string against the Flask API endpoint.
+ * Lints a TEI XML string against the FastAPI validation endpoint.
  *
  * @param {string} xmlString - The TEI XML string to validate.
  * @returns {Promise<ValidationError[]>} - A promise that resolves to an array of XML validation error messages,
  */
 async function validateXml(xmlString) {
-  return await callApi('/validate', 'POST', { xml_string: xmlString });
+  const response = await apiClient.validate({ xml_string: xmlString });
+  return response.errors || [];
 }
 
 /**
@@ -331,19 +344,23 @@ async function validateXml(xmlString) {
  *   which may be in a deduplicated format requiring resolution with resolveDeduplicated().
  */
 async function getAutocompleteData(xmlString, invalidateCache ) {
-  return await callApi('/validate/autocomplete-data', 'POST', { xml_string: xmlString, invalidate_cache: invalidateCache });
+  const response = await apiClient.validateAutocompleteData({ xml_string: xmlString, invalidate_cache: invalidateCache });
+  return response.data;
 }
 
 /**
  * Saves the XML string to a file on the server, optionally as a new version
- * @param {string} xmlString 
- * @param {string} fileId 
- * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
+ * @param {string} xmlString
+ * @param {string} fileId
+ * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version
  * @returns {Promise<Object>}
  */
 async function saveXml(xmlString, fileId, saveAsNewVersion) {
-  return await callApi('/files/save', 'POST',
-    { xml_string: xmlString, file_path: fileId, new_version: saveAsNewVersion });
+  return await apiClient.filesSave({
+    xml_string: xmlString,
+    file_path: fileId,
+    new_version: saveAsNewVersion
+  });
 }
 
 /**
@@ -351,7 +368,7 @@ async function saveXml(xmlString, fileId, saveAsNewVersion) {
  * @returns {Promise<any[]>} Array of extractor information objects
  */
 async function getExtractorList() {
-  return await callApi('/extract/list', 'GET');
+  return await apiClient.extractList();
 }
 
 /**
@@ -366,7 +383,7 @@ async function extract(file_id, options) {
   const extractionOptions = { ...options };
   delete extractionOptions.extractor; // Remove extractor from options
 
-  return await callApi('/extract', 'POST', {
+  return await apiClient.extract({
     file_id: file_id,
     extractor: extractor,
     options: extractionOptions
@@ -378,11 +395,11 @@ async function extract(file_id, options) {
  * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
  */
 async function loadInstructions() {
-  return await callApi('/config/instructions', 'GET');
+  return await apiClient.configGetInstructions();
 }
 
 /**
- * Returns the current prompt extraction instruction data
+ * Saves the prompt extraction instruction data
  * @param {Array<Object>} instructions An array of {active,label,text} objects
  * @returns {Promise<Object>} The result object
  */
@@ -391,30 +408,33 @@ async function saveInstructions(instructions) {
     throw new Error("Instructions must be an array");
   }
   // Send the instructions to the server
-  return await callApi('/config/instructions', 'POST', instructions);
+  return await apiClient.configSaveInstructions({ instructions });
 }
 
 
 /**
- * Deletes all extraction document versions with the given timestamps 
- * @returns {Promise<Object>} The result object
+ * Deletes all extraction document versions with the given file IDs
  * @param {string[]} fileIds
+ * @returns {Promise<Object>} The result object
  */
 async function deleteFiles(fileIds) {
   if (!Array.isArray(fileIds)) {
-    throw new Error("Timestamps must be an array");
+    throw new Error("File IDs must be an array");
   }
-  return await callApi('/files/delete', 'POST', fileIds);
+  return await apiClient.filesDelete({ files: fileIds });
 }
 
 /**
  * Creates a new version of a file from an uploaded file.
- * @param {string} tempFilename 
- * @param {string} fileId 
+ * @param {string} tempFilename
+ * @param {string} fileId
  * @returns {Promise<Object>}
  */
 async function createVersionFromUpload(tempFilename, fileId) {
-  return await callApi('/files/create_version_from_upload', 'POST', { temp_filename: tempFilename, file_path: fileId });
+  return await apiClient.filesCreateVersionFromUpload({
+    temp_filename: tempFilename,
+    file_path: fileId
+  });
 }
 
 /**
@@ -422,7 +442,7 @@ async function createVersionFromUpload(tempFilename, fileId) {
  * @returns {Promise<ApplicationState>}
  */
 async function state() {
-  return await callApi('/config/state')
+  return await apiClient.configState();
 }
 
 
@@ -431,7 +451,7 @@ async function state() {
  * @returns {Promise<import('./sync.js').SyncResult>}
  */
 async function syncFiles() {
-  return await callApi('/files/sync')
+  return await apiClient.sync();
 }
 
 /**
@@ -442,7 +462,7 @@ async function syncFiles() {
  * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
  */
 async function moveFiles(pdf, xml, destinationCollection) {
-  return await callApi('/files/move', 'POST', {
+  return await apiClient.filesMove({
     pdf_path: pdf,
     xml_path: xml,
     destination_collection: destinationCollection
@@ -451,10 +471,10 @@ async function moveFiles(pdf, xml, destinationCollection) {
 
 /**
  * Returns all server-side configuration values for this application
- * @returns {Promise<Object>} 
+ * @returns {Promise<Object>}
  */
 async function getConfigData() {
-  return await callApi('/config/list', 'GET')
+  return await apiClient.configList();
 }
 
 /**
@@ -467,76 +487,76 @@ async function setConfigValue(key, value) {
     throw new Error("Key must be a non-empty string");
   }
 
-  const data = {
-    key: key,
-    value: value,
-  };
-
   // The server is expected to return { result: "OK" } on success
-  const response = await callApi('/config/set', 'POST', data);
-  return response;
+  return await apiClient.configSet({ key, value });
 }
 
 /**
  * Sends a heartbeat to the server to keep the file lock alive.
- * @param {string} fileId The file path to send the heartbeat for
- * @returns {Promise<{status:string, cache_status:{dirty:boolean, last_modified:number|null, last_checked:number|null}}>} The response from the server 
- * @throws {Error} If the file path is not provided or if the heartbeat fails
+ * @param {string} fileId The file ID to send the heartbeat for
+ * @returns {Promise<{status:string, cache_status:{dirty:boolean, last_modified:number|null, last_checked:number|null}}>} The response from the server
+ * @throws {Error} If the file ID is not provided or if the heartbeat fails
  */
 async function sendHeartbeat(fileId) {
   if (!fileId) {
-    throw new Error("File path is required for heartbeat");
+    throw new Error("File ID is required for heartbeat");
   }
-  return await callApi('/files/heartbeat', 'POST', { file_path: fileId });
+  return await apiClient.filesHeartbeat({ file_id: fileId });
 }
 
 /**
  * Checks if a file is locked by another user.
- * @param {string} fileId The file id to check the lock for
+ * @param {string} fileId The file ID to check the lock for
  * @returns {Promise<{is_locked: boolean}>} The response from the server indicating if the file is locked
- * @throws {Error} If the file path is not provided or if the lock check fails
+ * @throws {Error} If the file ID is not provided or if the lock check fails
  */
 async function checkLock(fileId) {
   if (!fileId) {
-    throw new Error("File id is required to check lock");
+    throw new Error("File ID is required to check lock");
   }
-  return await callApi('/files/check_lock', 'POST', { file_id: fileId });
+  return await apiClient.filesCheckLock({ file_id: fileId });
 }
 
 /**
+ * Acquires a lock on a file
  * @param {string} fileId
+ * @returns {Promise<Object>}
  */
 async function acquireLock(fileId) {
   if (!fileId) {
-    throw new Error("File id is required to check lock");
+    throw new Error("File ID is required to acquire lock");
   }
-  return await callApi('/files/acquire_lock', 'POST', { file_id: fileId });
+  return await apiClient.filesAcquireLock({ file_id: fileId });
 }
 
 /**
+ * Releases a lock on a file
  * @param {string} fileId
+ * @returns {Promise<Object>}
  */
 async function releaseLock(fileId) {
   if (!fileId) {
-    throw new Error("File id is required to release lock");
+    throw new Error("File ID is required to release lock");
   }
-  return await callApi('/files/release_lock', 'POST', { file_id: fileId });
+  return await apiClient.filesReleaseLock({ file_id: fileId });
 }
 
 
 /**
- * Retrieves an object mapping all currently locked files to the session id that locked them.
- * @returns {Promise<{[key:string]:Number}>} An object mapping locked file paths to session ids 
+ * Retrieves an object mapping all currently locked files to the session ID that locked them.
+ * @returns {Promise<{[key:string]:Number}>} An object mapping locked file paths to session IDs
  */
 async function getAllLockedFileIds() {
-  return await callApi('/files/locks', 'GET');
+  return await apiClient.filesLocks();
 }
 
 /**
  * Gets the current file data cache status from the server.
+ * @deprecated This endpoint is deprecated in FastAPI - database is always current
  * @returns {Promise<{dirty: boolean, last_modified: number|null, last_checked: number|null}>} Cache status object
  */
 async function getCacheStatus() {
+  // TODO: Remove this method - no longer exists in FastAPI (database is always current)
   return await callApi('/files/cache_status', 'GET');
 }
 

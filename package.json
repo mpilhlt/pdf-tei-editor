@@ -10,6 +10,7 @@
         "start": "uv run python bin/start-dev",
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",
+        "prebuild": "npm run generate-client",
         "build": "node bin/build.js",
         "manage": "node bin/manage.js",
         "prepare": "husky",
@@ -32,7 +33,8 @@
         "dev:fastapi": "uv run python bin/start-dev-fastapi",
         "test:fastapi:py": "uv run python -m unittest fastapi_app/tests/py/*.py",
         "test:fastapi:e2e": "uv run python bin/test-fastapi.py",
-        "generate-client": "node bin/generate-api-client.js"
+        "generate-client": "node bin/generate-api-client.js",
+        "generate-client:check": "node bin/check-client-outdated.js"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",
