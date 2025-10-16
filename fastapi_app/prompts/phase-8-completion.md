@@ -213,11 +213,63 @@ With `--keep-db`, subsequent test runs take ~2-3 seconds total.
 4. **Migration-Friendly**: Works during transition (Phase 8), ready for consolidation (Phase 9)
 5. **Pluggable Architecture**: Easy to add new server managers (e.g., remote server manager)
 
+## Planned Enhancements
+
+The following enhancements are planned to complete Phase 8 implementation:
+
+### 1. WebDAV Server Manager
+
+**Goal**: Create standalone `WebdavServerManager` class inheriting from `ServerManager`.
+
+**Rationale**:
+- Decouple WebDAV lifecycle from LocalServerManager
+- Enable WebDAV in containerized environments
+- Allow orchestrator to independently start WebDAV for sync tests
+
+**Implementation**:
+- Extends `ServerManager` abstract class
+- Starts WsgiDAV server on configurable port (default: 8080)
+- Generates temporary .env file for WebDAV configuration
+- Cross-platform process management
+- Independent cleanup
+
+**Effort**: ~2-3 hours
+
+### 2. Environment File Support
+
+**Goal**: Add `--env-file <path>` option to backend-test-runner.
+
+**Benefits**:
+- Batch-load environment variables from .env files
+- Simplify CI configuration (.env.ci)
+- Support local testing (.env.testing)
+- Works in both local and container modes
+
+**Usage**:
+```bash
+node tests/backend-test-runner.js --env-file .env.testing
+node tests/backend-test-runner.js --env-file .env --env DEBUG=1
+```
+
+**Note**: In local mode, FastAPI server's .env can be overridden via `FASTAPI_ENV_FILE` environment variable.
+
+**Effort**: ~1-2 hours
+
+### 3. Remove Deprecated npm Scripts
+
+**Goal**: Remove `test:fastapi:e2e` npm script completely.
+
+**Current State**: Script shows deprecation message and redirects to `test:backend`.
+
+**Cleanup**: Remove from package.json once all users have migrated.
+
+**Effort**: ~5 minutes
+
 ## Deferred Work
 
-The following items are deferred to future work (not blocking for current phase):
+The following items are deferred to future work (optional improvements):
 
-### 1. E2E Runner Integration
+### 4. E2E Runner Integration
 
 **Goal**: Update `tests/e2e-runner.js` to use shared server managers for Playwright tests.
 
@@ -234,7 +286,7 @@ The following items are deferred to future work (not blocking for current phase)
 - Update Playwright configuration to support both modes
 - Test with existing Playwright test suite
 
-### 2. Smart Test Runner Integration
+### 5. Smart Test Runner Integration
 
 **Goal**: Update `tests/smart-test-runner.js` to delegate backend tests to `backend-test-runner.js`.
 
@@ -251,7 +303,7 @@ The following items are deferred to future work (not blocking for current phase)
 - Pass through grep patterns and env variables
 - Update CI detection logic
 
-### 3. Phase 9 Test Consolidation
+### 6. Phase 9 Test Consolidation
 
 **Goal**: Consolidate all tests into `tests/` directory after Flask decommissioning.
 
@@ -277,7 +329,8 @@ tests/
 ├── lib/
 │   ├── server-manager.js           # NEW: Abstract interface
 │   ├── local-server-manager.js     # NEW: Local server lifecycle
-│   └── container-server-manager.js # NEW: Container lifecycle
+│   ├── container-server-manager.js # NEW: Container lifecycle
+│   └── webdav-server-manager.js    # PLANNED: Standalone WebDAV server
 ├── smart-test-runner.js            # EXISTS: Not yet integrated
 ├── e2e-runner.js                   # EXISTS: Not yet refactored
 ├── js/                             # JavaScript unit tests
