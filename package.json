@@ -40,7 +40,6 @@
         "ai:gemini:flash": "gemini --model gemini-2.5-flash",
         "dev:fastapi": "uv run python bin/start-dev-fastapi",
         "test:fastapi:py": "uv run python -m unittest fastapi_app/tests/py/*.py",
-        "test:fastapi:e2e": "echo 'Deprecated: Use npm run test:backend' && node tests/backend-test-runner.js --local",
         "generate-client": "node bin/generate-api-client.js",
         "generate-client:check": "node bin/check-client-outdated.js"
     },

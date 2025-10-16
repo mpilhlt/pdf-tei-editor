@@ -29,6 +29,10 @@
  *   # Custom test directory
  *   node tests/backend-test-runner.js --test-dir fastapi_app/tests/backend
  *
+ *   # Load environment from file
+ *   node tests/backend-test-runner.js --env-file .env.testing
+ *   node tests/backend-test-runner.js --env-file .env --env DEBUG=1
+ *
  * Environment Variables:
  *   CI=true - Automatically use container mode
  */
@@ -36,7 +40,9 @@
 import { spawn } from 'child_process';
 import { glob } from 'glob';
 import { fileURLToPath } from 'url';
-import { dirname, join, relative } from 'path';
+import { dirname, join, relative, resolve } from 'path';
+import { existsSync } from 'fs';
+import dotenv from 'dotenv';
 import { LocalServerManager } from './lib/local-server-manager.js';
 import { ContainerServerManager } from './lib/container-server-manager.js';
 
@@ -61,6 +67,7 @@ function parseArgs() {
     noRebuild: false,
     testDir: null,
     env: {},
+    envFile: null,
   };
 
   // Auto-detect CI environment
@@ -100,6 +107,9 @@ function parseArgs() {
       case '--test-dir':
         options.testDir = args[++i];
         break;
+      case '--env-file':
+        options.envFile = args[++i];
+        break;
       case '--env':
         const envSpec = args[++i];
         if (envSpec.includes('=')) {
@@ -128,6 +138,31 @@ function parseArgs() {
 }
 
 /**
+ * Load environment variables from a .env file
+ *
+ * @param {string} envFilePath - Path to .env file (relative or absolute)
+ * @returns {Object} Environment variables as key-value pairs
+ * @throws {Error} If file doesn't exist
+ */
+function loadEnvFile(envFilePath) {
+  const resolvedPath = resolve(projectRoot, envFilePath);
+
+  if (!existsSync(resolvedPath)) {
+    throw new Error(`Environment file not found: ${resolvedPath}`);
+  }
+
+  console.log(`📄 Loading environment from: ${relative(projectRoot, resolvedPath)}`);
+
+  const result = dotenv.config({ path: resolvedPath });
+
+  if (result.error) {
+    throw new Error(`Failed to parse environment file: ${result.error.message}`);
+  }
+
+  return result.parsed || {};
+}
+
+/**
  * Print help message
  */
 function printHelp() {
@@ -153,8 +188,9 @@ Server Options:
   --verbose, -v        Show server output during tests
 
 Environment:
+  --env-file <path>    Load environment variables from .env file
   --env VAR_NAME       Pass environment variable from host
-  --env VAR=value      Set environment variable
+  --env VAR=value      Set environment variable (overrides --env-file)
 
 Examples:
   # Run all tests with local server
@@ -174,6 +210,10 @@ Examples:
 
   # Run specific test directory
   node tests/backend-test-runner.js --test-dir fastapi_app/tests/backend
+
+  # Load environment from file
+  node tests/backend-test-runner.js --env-file .env.testing
+  node tests/backend-test-runner.js --env-file .env --env DEBUG=1
 `);
 }
 
@@ -281,6 +321,20 @@ async function main() {
   console.log(`📦 Mode: ${options.mode}`);
   console.log(`📁 Project root: ${projectRoot}`);
   console.log();
+
+  // Load environment file if provided
+  if (options.envFile) {
+    try {
+      const envVars = loadEnvFile(options.envFile);
+      // Merge with explicitly provided --env options (--env takes precedence)
+      Object.assign(options.env, { ...envVars, ...options.env });
+      console.log(`✅ Loaded ${Object.keys(envVars).length} environment variables`);
+      console.log();
+    } catch (err) {
+      console.error(`❌ Failed to load environment file: ${err.message}`);
+      process.exit(1);
+    }
+  }
 
   let serverManager;
   let exitCode = 0;

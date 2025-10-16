@@ -1,4 +1,5 @@
 import { ServerManager } from './server-manager.js';
+import { WebdavServerManager } from './webdav-server-manager.js';
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -16,7 +17,7 @@ const __dirname = dirname(__filename);
  * - Kills existing servers on port 8000
  * - Optionally wipes database for clean slate
  * - Starts local server via npm run dev:fastapi
- * - Optionally starts WebDAV server for sync tests
+ * - Optionally starts WebDAV server for sync tests (via WebdavServerManager)
  * - Waits for /health endpoint
  * - Cleanup on exit
  *
@@ -33,9 +34,7 @@ export class LocalServerManager extends ServerManager {
     this.logFile = join(this.logDir, 'test-server.log');
     this.serverUrl = 'http://localhost:8000';
     this.serverProcess = null;
-    this.webdavProcess = null;
-    this.webdavPort = 8081;
-    this.webdavRoot = '/tmp/webdav-test';
+    this.webdavManager = null;
     this.tempEnvFile = null;
   }
 
@@ -147,80 +146,15 @@ export class LocalServerManager extends ServerManager {
     console.log('[SUCCESS] Database wiped - starting with clean slate');
   }
 
-  /**
-   * Start WebDAV test server for sync tests
-   *
-   * @private
-   * @returns {Promise<boolean>} True if started successfully
-   */
-  async startWebdavServer() {
-    console.log('\n==> Starting WebDAV test server for sync tests');
-
-    // Create WebDAV root directory and remote root subdirectory
-    try {
-      await fs.mkdir(this.webdavRoot, { recursive: true });
-      console.log(`[INFO] Created WebDAV root: ${this.webdavRoot}`);
-
-      const remoteDir = join(this.webdavRoot, 'pdf-tei-editor');
-      await fs.mkdir(remoteDir, { recursive: true });
-      console.log(`[INFO] Created remote root directory: ${remoteDir}`);
-    } catch (err) {
-      console.error(`[ERROR] Failed to create WebDAV directories: ${err.message}`);
-      return false;
-    }
-
-    // Start WsgiDAV server
-    try {
-      console.log(`[INFO] Starting WsgiDAV on port ${this.webdavPort}...`);
-
-      this.webdavProcess = spawn(
-        'uv',
-        [
-          'run',
-          'wsgidav',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          String(this.webdavPort),
-          '--root',
-          this.webdavRoot,
-          '--auth',
-          'anonymous',
-          '--server',
-          'cheroot',
-          '--no-config',
-        ],
-        {
-          cwd: this.projectRoot,
-          stdio: 'pipe',
-        }
-      );
-
-      // Wait briefly for startup
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Check if process started successfully
-      if (this.webdavProcess.exitCode !== null) {
-        console.error('[ERROR] WebDAV server failed to start');
-        return false;
-      }
-
-      console.log(`[SUCCESS] WebDAV server started on port ${this.webdavPort}`);
-      console.log('[INFO]   Auth: anonymous (no credentials needed for testing)');
-      return true;
-    } catch (err) {
-      console.error(`[ERROR] Failed to start WebDAV server: ${err.message}`);
-      return false;
-    }
-  }
 
   /**
    * Create temporary .env file with WebDAV configuration
    *
    * @private
+   * @param {Object} webdavConfig - WebDAV configuration object
    * @returns {Promise<string>} Path to temporary env file
    */
-  async createTempEnvFile() {
+  async createTempEnvFile(webdavConfig) {
     const { tmpdir } = await import('os');
     const { randomBytes } = await import('crypto');
 
@@ -236,11 +170,11 @@ DATA_ROOT=fastapi_app/data
 DB_DIR=fastapi_app/db
 
 # WebDAV Configuration for Sync Tests
-WEBDAV_ENABLED=true
-WEBDAV_BASE_URL=http://localhost:${this.webdavPort}
-WEBDAV_USERNAME=
-WEBDAV_PASSWORD=
-WEBDAV_REMOTE_ROOT=/pdf-tei-editor
+WEBDAV_ENABLED=${webdavConfig.WEBDAV_ENABLED}
+WEBDAV_BASE_URL=${webdavConfig.WEBDAV_BASE_URL}
+WEBDAV_USERNAME=${webdavConfig.WEBDAV_USERNAME}
+WEBDAV_PASSWORD=${webdavConfig.WEBDAV_PASSWORD}
+WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
 
 SESSION_TIMEOUT=3600
 LOG_LEVEL=INFO
@@ -251,42 +185,6 @@ LOG_LEVEL=INFO
     console.log('[SUCCESS] WebDAV configuration written to temp env file');
 
     return tempFileName;
-  }
-
-  /**
-   * Stop WebDAV server and cleanup
-   *
-   * @private
-   * @returns {Promise<void>}
-   */
-  async stopWebdavServer() {
-    if (this.webdavProcess) {
-      console.log(`[INFO] Stopping WebDAV server (PID: ${this.webdavProcess.pid})`);
-      try {
-        this.webdavProcess.kill('SIGTERM');
-        await new Promise((resolve) => {
-          const timeout = setTimeout(() => {
-            this.webdavProcess?.kill('SIGKILL');
-            resolve();
-          }, 3000);
-          this.webdavProcess?.once('exit', () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-        });
-      } catch (err) {
-        // Ignore errors
-      }
-      this.webdavProcess = null;
-    }
-
-    // Clean up WebDAV root
-    try {
-      await fs.rm(this.webdavRoot, { recursive: true, force: true });
-      console.log(`[INFO] Cleaned up WebDAV root: ${this.webdavRoot}`);
-    } catch (err) {
-      console.warn(`[WARNING] Failed to clean up WebDAV root: ${err.message}`);
-    }
   }
 
   /**
@@ -501,13 +399,13 @@ LOG_LEVEL=INFO
 
     // Step 2.5: Start WebDAV server if needed
     if (needsWebdav) {
-      const webdavStarted = await this.startWebdavServer();
-      if (!webdavStarted) {
-        throw new Error('Failed to start WebDAV server for sync tests');
-      }
+      // Create and start WebDAV server manager
+      this.webdavManager = new WebdavServerManager();
+      await this.webdavManager.start({ verbose });
 
       // Create temporary .env file with WebDAV configuration
-      this.tempEnvFile = await this.createTempEnvFile();
+      const webdavConfig = this.webdavManager.getConfig();
+      this.tempEnvFile = await this.createTempEnvFile(webdavConfig);
       process.env.FASTAPI_ENV_FILE = this.tempEnvFile;
       console.log(`[INFO] Set FASTAPI_ENV_FILE=${this.tempEnvFile}\n`);
     }
@@ -542,8 +440,8 @@ LOG_LEVEL=INFO
     if (keepRunning) {
       console.warn('\n[WARNING] Skipping cleanup (keepRunning=true)');
       console.log(`[INFO] FastAPI server still running at ${this.serverUrl}`);
-      if (this.webdavProcess) {
-        console.log(`[INFO] WebDAV server still running on port ${this.webdavPort}`);
+      if (this.webdavManager) {
+        console.log(`[INFO] WebDAV server still running at ${this.webdavManager.getBaseUrl()}`);
       }
       console.log(`[INFO] View logs: tail -f ${this.logFile}`);
       return;
@@ -582,7 +480,10 @@ LOG_LEVEL=INFO
     }
 
     // Stop WebDAV server
-    await this.stopWebdavServer();
+    if (this.webdavManager) {
+      await this.webdavManager.stop({ keepRunning: false });
+      this.webdavManager = null;
+    }
 
     // Clean up temporary env file
     if (this.tempEnvFile) {

@@ -213,63 +213,94 @@ With `--keep-db`, subsequent test runs take ~2-3 seconds total.
 4. **Migration-Friendly**: Works during transition (Phase 8), ready for consolidation (Phase 9)
 5. **Pluggable Architecture**: Easy to add new server managers (e.g., remote server manager)
 
-## Planned Enhancements
+## Completed Enhancements
 
-The following enhancements are planned to complete Phase 8 implementation:
+### 1. Remove Deprecated npm Scripts
 
-### 1. WebDAV Server Manager
+**Status**: ✅ Complete
 
-**Goal**: Create standalone `WebdavServerManager` class inheriting from `ServerManager`.
+Removed the deprecated `test:fastapi:e2e` npm script from [package.json](../../package.json:43). Users should now use `npm run test:backend` for backend integration tests.
 
-**Rationale**:
-- Decouple WebDAV lifecycle from LocalServerManager
-- Enable WebDAV in containerized environments
-- Allow orchestrator to independently start WebDAV for sync tests
-
-**Implementation**:
-- Extends `ServerManager` abstract class
-- Starts WsgiDAV server on configurable port (default: 8080)
-- Generates temporary .env file for WebDAV configuration
-- Cross-platform process management
-- Independent cleanup
-
-**Effort**: ~2-3 hours
+**Migration**:
+- Old: `npm run test:fastapi:e2e`
+- New: `npm run test:backend`
 
 ### 2. Environment File Support
 
-**Goal**: Add `--env-file <path>` option to backend-test-runner.
+**Status**: ✅ Complete
 
-**Benefits**:
-- Batch-load environment variables from .env files
-- Simplify CI configuration (.env.ci)
-- Support local testing (.env.testing)
+Added `--env-file <path>` option to [backend-test-runner.js](../../tests/backend-test-runner.js:104) for batch-loading environment variables from .env files.
+
+**Implementation**:
+- New `loadEnvFile()` utility function using dotenv package
+- Command-line option `--env-file` to specify .env file path
+- Supports both relative and absolute paths
+- Environment variables from `--env` flag override those from `--env-file`
 - Works in both local and container modes
 
-**Usage**:
+**Usage Examples**:
 ```bash
+# Load from .env.testing
 node tests/backend-test-runner.js --env-file .env.testing
+
+# Load from file and override specific variable
 node tests/backend-test-runner.js --env-file .env --env DEBUG=1
 ```
 
-**Note**: In local mode, FastAPI server's .env can be overridden via `FASTAPI_ENV_FILE` environment variable.
+**Benefits**:
+- Simplifies CI configuration with dedicated .env.ci files
+- Supports local testing with .env.testing
+- Eliminates need for long lists of --env flags
+- Maintains security by keeping secrets in .env files (not command line)
 
-**Effort**: ~1-2 hours
+## Completed Enhancements (Phase 8 - Part 2)
 
-### 3. Remove Deprecated npm Scripts
+### 1. WebDAV Server Manager
 
-**Goal**: Remove `test:fastapi:e2e` npm script completely.
+**Status**: ✅ Complete
 
-**Current State**: Script shows deprecation message and redirects to `test:backend`.
+**Implementation**: [tests/lib/webdav-server-manager.js](../../tests/lib/webdav-server-manager.js)
 
-**Cleanup**: Remove from package.json once all users have migrated.
+Created standalone `WebdavServerManager` class that decouples WebDAV lifecycle from backend server:
 
-**Effort**: ~5 minutes
+**Features**:
+- Extends `ServerManager` abstract class
+- Independent lifecycle management (start/stop/health check)
+- Cross-platform process management (Windows, macOS, Linux)
+- Configurable port (default: 8081) and root directory
+- Health check via directory listing endpoint
+- Returns configuration object via `getConfig()` for environment variable injection
+- Automatic cleanup of WebDAV root directory
+
+**LocalServerManager Integration**:
+- Updated [tests/lib/local-server-manager.js](../../tests/lib/local-server-manager.js) to use composition
+- Removed ~60 lines of embedded WebDAV code
+- WebdavServerManager instantiated only when `needsWebdav=true`
+- Temporary .env file generation now uses WebDAV config from manager
+- Cleanup delegates to WebdavServerManager.stop()
+
+**Benefits**:
+- **Decoupled lifecycle**: WebDAV server can be started/stopped independently
+- **Reusable**: Can be used by local and containerized modes
+- **Simpler code**: LocalServerManager focuses on backend server only
+- **Better testability**: WebDAV functionality isolated and testable
+
+**Testing**:
+- ✅ Sync tests pass with WebdavServerManager (26/26 tests)
+- ✅ Auth tests pass without WebDAV (10/10 tests)
+- ✅ Server cleanup works correctly
+- ✅ Temporary .env file generation works
+
+**Lines of Code**:
+- WebdavServerManager: ~265 lines (new)
+- LocalServerManager: -60 lines (removed WebDAV code)
+- Net change: ~205 lines
 
 ## Deferred Work
 
 The following items are deferred to future work (optional improvements):
 
-### 4. E2E Runner Integration
+### 2. E2E Runner Integration
 
 **Goal**: Update `tests/e2e-runner.js` to use shared server managers for Playwright tests.
 
@@ -325,14 +356,14 @@ The following items are deferred to future work (optional improvements):
 **Phase 8 Structure (Current)**:
 ```
 tests/
-├── backend-test-runner.js          # NEW: Unified backend orchestrator
+├── backend-test-runner.js          # ✅ Unified backend orchestrator
 ├── lib/
-│   ├── server-manager.js           # NEW: Abstract interface
-│   ├── local-server-manager.js     # NEW: Local server lifecycle
-│   ├── container-server-manager.js # NEW: Container lifecycle
-│   └── webdav-server-manager.js    # PLANNED: Standalone WebDAV server
-├── smart-test-runner.js            # EXISTS: Not yet integrated
-├── e2e-runner.js                   # EXISTS: Not yet refactored
+│   ├── server-manager.js           # ✅ Abstract interface
+│   ├── local-server-manager.js     # ✅ Local server lifecycle (refactored)
+│   ├── container-server-manager.js # ✅ Container lifecycle
+│   └── webdav-server-manager.js    # ✅ Standalone WebDAV server (NEW)
+├── smart-test-runner.js            # EXISTS: Not yet integrated (deferred)
+├── e2e-runner.js                   # EXISTS: Not yet refactored (deferred)
 ├── js/                             # JavaScript unit tests
 ├── py/                             # Python unit tests (Flask)
 └── e2e/
@@ -362,6 +393,8 @@ bin/
 - ✅ npm scripts added for all common workflows
 - ✅ WebDAV server starts automatically for sync tests
 - ✅ Graceful cleanup with signal handlers
+- ✅ Standalone WebdavServerManager decouples WebDAV lifecycle
+- ✅ LocalServerManager refactored to use WebdavServerManager via composition
 
 **Phase 9 Readiness (Achieved)**:
 - ✅ All tests are backend-agnostic (use `E2E_BASE_URL`)
