@@ -10,6 +10,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname); // Go up from tests to project root
 
 const DEBUG = process.argv.includes('--debug');
+/**
+ * @param {...any} args
+ */
 const debugLog = (...args) => {
   if (DEBUG) {
     console.log('[DEBUG]', ...args);
@@ -84,6 +87,9 @@ class SmartTestRunner {
     return { js: jsTests, py: pyTests, e2e: { playwright: playwrightTests, backend: backendTests } };
   }
 
+  /**
+   * @param {string} filePath
+   */
   parseTestAnnotations(filePath) {
     debugLog(`ENTERING parseTestAnnotations for ${filePath}`);
     try {
@@ -328,7 +334,7 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {{tap?: boolean, all?: boolean, changedFiles?: string[] | null}}
+   * @param {{tap?: boolean, all?: boolean, changedFiles?: string[] | null}} options
    */
   async analyzeDependencies(options = {}) {
     if (options.tap) {
@@ -384,9 +390,9 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {string}
-   * @param {string[]}
-   * @param {{dependencies: Record<string, {dependencies: string[], alwaysRun: boolean}>}}
+   * @param {string} testFile
+   * @param {string[]} changedFiles
+   * @param {{dependencies: Record<string, {dependencies: string[], alwaysRun: boolean}>}} analysisResult
    */
   shouldRunTest(testFile, changedFiles, analysisResult) {
     const testData = analysisResult.dependencies[testFile];
@@ -433,7 +439,7 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {{all?: boolean, tap?: boolean, changedFiles?: string[] | null}}
+   * @param {{all?: boolean, tap?: boolean, changedFiles?: string[] | null}} options
    */
   async getTestsToRun(options = {}) {
     const testFiles = await this.discoverTestFiles();
@@ -491,7 +497,7 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {{tap?: boolean, dryRun?: boolean, all?: boolean, changedFiles?: string[] | null, dotenvPath?: string | null}}
+   * @param {{tap?: boolean, dryRun?: boolean, all?: boolean, changedFiles?: string[] | null, dotenvPath?: string | null}} options
    */
   async run(options = {}) {
     const isTap = options.tap;
@@ -529,14 +535,16 @@ class SmartTestRunner {
     }
 
     // Build E2E commands with environment variables and dotenv path
+    // Route to specialized runners for clarity and consistency
     let playwrightCommand = null;
     if (testsToRun.e2e && testsToRun.e2e.playwright && testsToRun.e2e.playwright.length > 0) {
       const testFiles = testsToRun.e2e.playwright.map(f => f.replace('tests/e2e/', '').replace('.spec.js', '')).join('|');
       const grepArg = `--grep "${testFiles}"`;
       const envArgs = Array.from(playwrightEnvVars).map(envVar => `--env "${envVar}"`).join(' ');
-      const dotenvArg = options.dotenvPath ? `--dotenv-path "${options.dotenvPath}"` : '';
+      const dotenvArg = options.dotenvPath ? `--env-file "${options.dotenvPath}"` : '';
       const extraArgs = [grepArg, envArgs, dotenvArg].filter(Boolean).join(' ');
-      playwrightCommand = `node tests/e2e-runner.js --playwright ${extraArgs}`;
+      // Use e2e-runner.js (focused on Playwright) in local mode by default
+      playwrightCommand = `node tests/e2e-runner.js --local ${extraArgs}`;
     }
 
     let backendCommand = null;
@@ -544,9 +552,10 @@ class SmartTestRunner {
         const testFiles = testsToRun.e2e.backend.map(f => f.replace('tests/e2e/', '').replace('.test.js', '')).join('|');
         const grepArg = `--grep "${testFiles}"`;
         const envArgs = Array.from(backendEnvVars).map(envVar => `--env "${envVar}"`).join(' ');
-        const dotenvArg = options.dotenvPath ? `--dotenv-path "${options.dotenvPath}"` : '';
+        const dotenvArg = options.dotenvPath ? `--env-file "${options.dotenvPath}"` : '';
         const extraArgs = [grepArg, envArgs, dotenvArg].filter(Boolean).join(' ');
-        backendCommand = `node tests/e2e-runner.js --backend ${extraArgs}`;
+        // Route backend tests to specialized backend-test-runner
+        backendCommand = `node tests/backend-test-runner.js --local ${extraArgs}`;
     }
 
     const testSuites = [

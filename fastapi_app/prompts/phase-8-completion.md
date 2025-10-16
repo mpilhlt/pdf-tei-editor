@@ -296,45 +296,88 @@ Created standalone `WebdavServerManager` class that decouples WebDAV lifecycle f
 - LocalServerManager: -60 lines (removed WebDAV code)
 - Net change: ~205 lines
 
+### 2. Playwright E2E Runner Refactoring
+
+**Status**: ✅ Complete
+
+**Implementation**: [tests/e2e-runner.js](../../tests/e2e-runner.js)
+
+Completely refactored e2e-runner to focus exclusively on Playwright browser tests:
+
+**Major Changes**:
+- **Removed backend test functionality** (now handled by backend-test-runner.js)
+- **Code reduction: 1241 → 411 lines (-830 lines, 67% smaller)**
+- **Added dual-mode support**: `--local` and `--container` flags
+- **Uses LocalServerManager** for local mode (fast iteration)
+- **Uses ContainerServerManager** for container mode (CI-ready)
+- **Eliminated embedded container management** (~600 lines removed)
+- **Fixed all TypeScript errors** with proper JSDoc annotations
+
+**Architecture**:
+```javascript
+PlaywrightRunner
+├── --local mode  → LocalServerManager  → Local FastAPI server
+└── --container   → ContainerServerManager → Containerized FastAPI
+```
+
+**Benefits**:
+- **Single Responsibility**: E2E runner focuses only on Playwright tests
+- **Code Reuse**: Shares server managers with backend-test-runner
+- **Faster Iteration**: Local mode with `--keep-db` for rapid development
+- **Consistent Interface**: Same flags and patterns as backend-test-runner
+- **Simpler Debugging**: `--headed --debugger` works with both backends
+
+**Updated npm Scripts** (semantically correct naming):
+```json
+// Local mode (default)
+"test:e2e": "node tests/e2e-runner.js --local"
+"test:e2e:local": "node tests/e2e-runner.js --local"
+"test:e2e:local:keep-db": "node tests/e2e-runner.js --local --keep-db"
+"test:e2e:headed": "node tests/e2e-runner.js --local --headed --keep-db"
+"test:e2e:debug": "node tests/e2e-runner.js --local --headed --debugger --keep-db"
+
+// Container mode
+"test:e2e:container": "node tests/e2e-runner.js --container"
+"test:e2e:container:cached": "node tests/e2e-runner.js --container --no-rebuild"
+"test:e2e:ci": "node tests/e2e-runner.js --container"
+```
+
+Similar naming scheme applied to backend tests:
+```json
+"test:backend:local:keep-db": "... --local --keep-db"
+"test:backend:container:cached": "... --container --no-rebuild"
+```
+
+**Lines of Code**:
+- Old e2e-runner: 1241 lines
+- New e2e-runner: 411 lines
+- **Reduction: 830 lines (67% smaller)**
+
+### 3. Smart Test Runner Integration
+
+**Status**: ✅ Complete
+
+**Implementation**: [tests/smart-test-runner.js](../../tests/smart-test-runner.js)
+
+Updated smart-test-runner to route tests to specialized runners:
+
+**Changes**:
+- Playwright tests → `node tests/e2e-runner.js --local`
+- Backend tests → `node tests/backend-test-runner.js --local`
+- Fixed all TypeScript errors with proper JSDoc annotations
+- Ensures single responsibility principle across all runners
+
+**Benefits**:
+- **Consistent execution**: All test types use dedicated, optimized runners
+- **Clear separation**: Each runner focuses on one test type
+- **Automatic routing**: Smart runner delegates to appropriate specialized runner
+- **Shared patterns**: Grep filters and environment variables work uniformly
+
 ## Deferred Work
 
 The following items are deferred to future work (optional improvements):
 
-### 2. E2E Runner Integration
-
-**Goal**: Update `tests/e2e-runner.js` to use shared server managers for Playwright tests.
-
-**Current State**: E2E runner has embedded container logic that could be refactored to use `ContainerServerManager`.
-
-**Benefits of Refactoring**:
-- Remove code duplication between e2e-runner and backend-test-runner
-- Enable local mode for Playwright tests (faster iteration)
-- Consistent server management across all test types
-
-**Effort**: ~2-3 hours
-- Extract container logic to use `ContainerServerManager`
-- Add `--local` and `--container` flags to e2e-runner
-- Update Playwright configuration to support both modes
-- Test with existing Playwright test suite
-
-### 5. Smart Test Runner Integration
-
-**Goal**: Update `tests/smart-test-runner.js` to delegate backend tests to `backend-test-runner.js`.
-
-**Current State**: Smart test runner directly invokes test commands without delegating to specialized runners.
-
-**Benefits of Integration**:
-- Consistent backend test execution across all entry points
-- Automatic mode detection (local for development, container for CI)
-- Reuse grep patterns and environment variables
-
-**Effort**: ~1-2 hours
-- Add backend mode detection in smart test runner
-- Delegate backend tests to backend-test-runner
-- Pass through grep patterns and env variables
-- Update CI detection logic
-
-### 6. Phase 9 Test Consolidation
+### 4. Phase 9 Test Consolidation
 
 **Goal**: Consolidate all tests into `tests/` directory after Flask decommissioning.
 
@@ -390,11 +433,15 @@ bin/
 - ✅ Zero code duplication between server managers
 - ✅ Clear, self-documenting CLI interface
 - ✅ Comprehensive error messages and logging
-- ✅ npm scripts added for all common workflows
+- ✅ npm scripts added for all common workflows (semantically correct naming)
 - ✅ WebDAV server starts automatically for sync tests
 - ✅ Graceful cleanup with signal handlers
 - ✅ Standalone WebdavServerManager decouples WebDAV lifecycle
 - ✅ LocalServerManager refactored to use WebdavServerManager via composition
+- ✅ E2E runner refactored to focus only on Playwright tests (67% code reduction)
+- ✅ Smart test runner routes to specialized runners
+- ✅ TypeScript errors fixed in all test infrastructure files
+- ✅ Single responsibility principle: each runner handles one test type
 
 **Phase 9 Readiness (Achieved)**:
 - ✅ All tests are backend-agnostic (use `E2E_BASE_URL`)
