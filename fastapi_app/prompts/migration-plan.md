@@ -21,6 +21,13 @@ This directory contains the complete plan for migrating from Flask to FastAPI.
 
 ## Key Design Decisions
 
+### API Versioning
+
+- **All API endpoints use `/api/v1/` prefix** for versioned access
+- **No backward-compatible unversioned routes**: The frontend uses a client shim ([app/src/plugins/client.js](../../app/src/plugins/client.js)) that wraps all server interactions, making Flask-compatible unversioned routes unnecessary
+- OpenAPI schema generation targets only `/api/v1/*` endpoints
+- This simplifies the codebase and allows for future API version changes without cluttering the schema
+
 ### Document-Centric Schema
 
 - `doc_id` (DOI, custom ID, etc.) is the primary organizing principle

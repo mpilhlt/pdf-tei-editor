@@ -9,15 +9,20 @@
 
 Generate complete API client from OpenAPI schema and replace Flask API calls with generated v1 client shims.
 
-## Progress Summary (Last Updated: 2025-10-15)
+**Note**: All FastAPI endpoints use `/api/v1/` prefix. No backward-compatible unversioned routes are needed since the frontend uses [app/src/plugins/client.js](../../app/src/plugins/client.js) as a client shim for all server interactions.
+
+## Progress Summary (Last Updated: 2025-10-16)
 
 **Completed:**
 - ✅ Enhanced generator to skip upload/SSE endpoints
-- ✅ Generated client with 31 methods (888 lines, 20+ types)
+- ✅ Enhanced generator to support GET query parameters
+- ✅ Updated `callApi` to convert GET body to query string
+- ✅ Generated client with 31 methods (672 lines, 28 types)
 - ✅ Build integration (prebuild, check scripts, pre-commit hook)
-- ✅ Migrated 26 frontend API methods to use generated client
+- ✅ Migrated all 27 frontend API methods to use generated client
 - ✅ Kept 1 upload method with FormData handling
 - ✅ All methods have JSDoc type annotations
+- ✅ Query parameter support working (filesList method)
 
 **Pending:**
 - ⏳ Run integration tests against FastAPI backend
@@ -26,8 +31,7 @@ Generate complete API client from OpenAPI schema and replace Flask API calls wit
 - ⏳ Update migration plan
 
 **Known Issues:**
-- `getFileList` uses direct `callApi` - needs query parameter support in generator
-- `getCacheStatus` marked deprecated - endpoint no longer exists in FastAPI
+- `getCacheStatus` marked deprecated - endpoint no longer exists in FastAPI (TODO: remove method)
 
 **To Resume:**
 1. Start FastAPI server: `npm run dev:fastapi`

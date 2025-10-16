@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-10-15T16:24:14.796Z
+ * Generated from OpenAPI schema at 2025-10-16T06:11:31.708Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -535,11 +535,14 @@ export class ApiClientV1 {
    * Returns:
    * FileListResponse with list of DocumentGroup objects
    *
+   * @param {Object=} params - Query parameters
+   * @param {(string | null)=} params.variant
+   * @param {boolean=} params.refresh
    * @returns {Promise<FileListResponse>}
    */
-  async filesList() {
+  async filesList(params) {
     const endpoint = `/files/list`
-    return this.callApi(endpoint);
+    return this.callApi(endpoint, 'GET', params);
   }
 
   /**

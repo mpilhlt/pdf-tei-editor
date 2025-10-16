@@ -389,10 +389,10 @@ async def create_version_from_upload(
     import re
 
     temp_filename = request_data.get("temp_filename")
-    file_path_or_hash = request_data.get("file_path")
+    file_id_or_hash = request_data.get("file_id")
 
-    if not temp_filename or not file_path_or_hash:
-        raise HTTPException(status_code=400, detail="Missing temp_filename or file_path")
+    if not temp_filename or not file_id_or_hash:
+        raise HTTPException(status_code=400, detail="Missing temp_filename or file_id")
 
     # Read uploaded file from temp storage
     settings = get_settings()
@@ -413,7 +413,7 @@ async def create_version_from_upload(
     # Use save endpoint with new_version=True
     save_request = SaveFileRequest(
         xml_string=xml_content,
-        file_id=file_path_or_hash,
+        file_id=file_id_or_hash,
         new_version=True
     )
 
