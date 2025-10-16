@@ -107,6 +107,7 @@ from .routers import (
 )
 
 # Versioned API router (v1)
+# Note: No unversioned compatibility routes - frontend uses client shim (app/src/plugins/client.js)
 api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 api_v1.include_router(auth.router)
 api_v1.include_router(config.router)
@@ -124,24 +125,6 @@ api_v1.include_router(sync.router)  # Phase 6: Sync endpoints
 api_v1.include_router(sse.router)  # Phase 6: SSE stream
 api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
 
-# Unversioned API router (for backward compatibility with Flask)
-api_compat = APIRouter(prefix="/api", tags=["compatibility"])
-api_compat.include_router(auth.router)
-api_compat.include_router(config.router)
-api_compat.include_router(validation.router)
-api_compat.include_router(extraction.router)
-api_compat.include_router(files_list.router)
-api_compat.include_router(files_upload.router)
-api_compat.include_router(files_save.router)
-api_compat.include_router(files_delete.router)
-api_compat.include_router(files_move.router)
-api_compat.include_router(files_copy.router)
-api_compat.include_router(files_locks.router)  # Before files_serve (catch-all)
-api_compat.include_router(files_heartbeat.router)  # Before files_serve (catch-all)
-api_compat.include_router(sync.router)  # Phase 6: Sync endpoints
-api_compat.include_router(sse.router)  # Phase 6: SSE stream
-api_compat.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
-
 # Health check endpoint (unversioned)
 @app.get("/health")
 async def health_check():
@@ -150,6 +133,3 @@ async def health_check():
 
 # Mount versioned router
 app.include_router(api_v1)
-
-# Mount compatibility router (exclude from OpenAPI schema to keep it clean)
-app.include_router(api_compat, include_in_schema=False)

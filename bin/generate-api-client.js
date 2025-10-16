@@ -52,7 +52,7 @@ async function startServer() {
     const timeout = setTimeout(() => {
       serverProcess.kill();
       reject(new Error('Server startup timeout'));
-    }, 10000);
+    }, 30000);
 
     serverProcess.stdout.on('data', (data) => {
       output += data.toString();
@@ -264,6 +264,14 @@ function generateClientCode(schema) {
         .filter(p => p.in === 'path')
         .map(p => ({ name: p.name, type: convertType(p.schema), required: p.required }));
 
+      // Extract query parameters (only for GET requests)
+      const queryParams = (operation.parameters || [])
+        .filter(p => p.in === 'query')
+        .map(p => ({ name: p.name, type: convertType(p.schema), required: p.required }));
+
+      // For GET requests with query params, we pass a single object parameter
+      const hasQueryParams = method === 'get' && queryParams.length > 0;
+
       // Build JSDoc
       let jsdoc = '  /**\n';
       if (description) {
@@ -281,7 +289,14 @@ function generateClientCode(schema) {
           jsdoc += `   * @param {${param.type}} ${param.name}\n`;
         });
       }
-      if (requestBody) {
+      if (hasQueryParams) {
+        // For GET with query params, accept an optional params object
+        jsdoc += `   * @param {Object=} params - Query parameters\n`;
+        queryParams.forEach(qp => {
+          const optional = qp.required ? '' : '=';
+          jsdoc += `   * @param {${qp.type}${optional}} params.${qp.name}\n`;
+        });
+      } else if (requestBody) {
         jsdoc += `   * @param {${convertType(requestBody)}} requestBody\n`;
       }
 
@@ -296,7 +311,11 @@ function generateClientCode(schema) {
       // Build method signature
       const params = [];
       pathParams.forEach(p => params.push(p.name));
-      if (requestBody) params.push('requestBody');
+      if (hasQueryParams) {
+        params.push('params');
+      } else if (requestBody) {
+        params.push('requestBody');
+      }
 
       let methodCode = jsdoc;
       methodCode += `  async ${methodName}(${params.join(', ')}) {\n`;
@@ -311,8 +330,13 @@ function generateClientCode(schema) {
 
       // Build callApi call: callApi(endpoint, method, body)
       if (method === 'get') {
-        // GET request - callApi(endpoint)
-        methodCode += `    return this.callApi(endpoint);\n`;
+        // GET request with optional query params - callApi handles conversion to query string
+        if (hasQueryParams) {
+          methodCode += `    return this.callApi(endpoint, 'GET', params);\n`;
+        } else {
+          // GET request without params
+          methodCode += `    return this.callApi(endpoint);\n`;
+        }
       } else if (requestBody) {
         // POST/PUT/DELETE with body - callApi(endpoint, method, body)
         methodCode += `    return this.callApi(endpoint, '${method.toUpperCase()}', requestBody);\n`;

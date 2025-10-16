@@ -178,7 +178,7 @@ async function update(state) {
  *                           or rejects with an error message if the request fails.
  */
 async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
-  const url = `${api_base_url}${endpoint}`;
+  let url = `${api_base_url}${endpoint}`;
   /** @type {RequestInit} */
   const options = {
     method,
@@ -187,14 +187,31 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     }
   };
 
-  // Handle FormData (file uploads) - don't stringify or set Content-Type
-  if (body instanceof FormData) {
-    options.body = body;
-    // Don't set Content-Type header - browser will set it with boundary
-  } else if (body) {
-    options.headers['Content-Type'] = 'application/json';
-    options.body = JSON.stringify(body);
+  // Handle request body based on method and content type
+  if (body !== null && body !== undefined) {
+    if (method === 'GET') {
+      // GET requests: convert body to query string
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(body)) {
+        if (value !== null && value !== undefined) {
+          params.append(key, String(value));
+        }
+      }
+      const queryString = params.toString();
+      if (queryString) {
+        url += (url.includes('?') ? '&' : '?') + queryString;
+      }
+    } else if (body instanceof FormData) {
+      // FormData (file uploads) - don't stringify or set Content-Type
+      options.body = body;
+      // Don't set Content-Type header - browser will set it with boundary
+    } else {
+      // POST/PUT/PATCH/DELETE with JSON body
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(body);
+    }
   }
+  // else: no body (valid for GET without params, DELETE without body, etc.)
 
   // function to send the request which can be repeatedly called in case of a timeout
   const sendRequest = async () => {
@@ -305,16 +322,13 @@ async function status() {
  * @returns {Promise<FileListItem[]>} - A promise that resolves to an array of file list items
  */
 async function getFileList(variant = null, refresh = false) {
-  // Note: FastAPI returns FileListResponse with DocumentGroup structure
-  // The generated client doesn't support query parameters yet, so we use callApi directly
+  // Build query params object
   const params = {};
   if (variant !== null) params.variant = variant;
-  if (refresh) params.refresh = 'true';
-  // @ts-ignore
-  const queryString = new URLSearchParams(params).toString();
-  const url = '/files/list' + (queryString ? '?' + queryString : '');
-  return await callApi(url, 'GET');
-  // TODO: Once generator supports query params, migrate to: apiClient.filesList(variant, refresh)
+  if (refresh) params.refresh = refresh;
+
+  // Use generated client with query params (callApi handles GET query string conversion)
+  return await apiClient.filesList(params);
 }
 
 /**
@@ -358,7 +372,7 @@ async function getAutocompleteData(xmlString, invalidateCache ) {
 async function saveXml(xmlString, fileId, saveAsNewVersion) {
   return await apiClient.filesSave({
     xml_string: xmlString,
-    file_path: fileId,
+    file_id: fileId,
     new_version: saveAsNewVersion
   });
 }
@@ -433,7 +447,7 @@ async function deleteFiles(fileIds) {
 async function createVersionFromUpload(tempFilename, fileId) {
   return await apiClient.filesCreateVersionFromUpload({
     temp_filename: tempFilename,
-    file_path: fileId
+    file_id: fileId
   });
 }
 
