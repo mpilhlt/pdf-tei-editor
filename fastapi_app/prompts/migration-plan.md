@@ -194,13 +194,24 @@ See [schema-design.md](schema-design.md) for complete details.
 - ~5 second generation time
 - Total: ~1,100 lines added (client 888 + docs 200 + scripts 100)
 
-### Phase 8: Testing and Validation
+### [Phase 8: Unified Testing Infrastructure](phase-8-completion.md)
 
-- Full E2E test suite
-- Performance testing
-- Migration script testing
+- Server manager abstraction (local and container modes)
+- Unified backend test runner with pluggable server managers
+- Cross-platform local server manager with WebDAV support
+- Container server manager with Docker/Podman support
+- npm scripts for common workflows
+- Phase 9 test consolidation readiness
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete (Core infrastructure)
+**Summary**: [phase-8-completion.md](phase-8-completion.md)
+**Details**:
+- 3 server manager classes (~1,100 lines)
+- Unified backend-test-runner.js orchestrator
+- 8 new npm scripts (test:backend, test:backend:fast, etc.)
+- Cross-platform support (Windows, macOS, Linux)
+- Local mode: ~2-5s startup, Container mode: ~30-60s startup
+- Deferred: e2e-runner and smart-test-runner integration (optional improvements)
 
 ### Phase 9: Deployment and Switchover
 
