@@ -175,13 +175,24 @@ See [schema-design.md](schema-design.md) for complete details.
 - Session-based SSE queues (matches Flask implementation)
 - Total: ~1,635 lines of production + test code
 
-### Phase 7: Client Generation and Frontend Integration
+### [Phase 7: Client Generation and Frontend Integration](phase-7-client-integration.md)
 
-- Complete OpenAPI client generation
-- Build system integration
-- Frontend migration to generated client
+- Complete OpenAPI client generation (31 methods, 28 types)
+- Build system integration (prebuild, check scripts, pre-commit hook)
+- Frontend migration to generated client (27 methods migrated)
+- Enhanced generator with upload/SSE exclusion and query parameter support
+- API client usage documentation
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
+**Summary**: [phase-7-completion.md](phase-7-completion.md)
+**Details**:
+- 31 generated methods with full JSDoc type annotations
+- 27 frontend methods migrated to use generated client
+- 1 upload method kept with manual FormData handling
+- 5 endpoints appropriately excluded (3 uploads + 2 SSE)
+- Automated client regeneration (prebuild hook, pre-commit check)
+- ~5 second generation time
+- Total: ~1,100 lines added (client 888 + docs 200 + scripts 100)
 
 ### Phase 8: Testing and Validation
 
@@ -410,4 +421,4 @@ Track progress by updating phase status in this document:
 - ✅ Complete
 - ⚠️ Blocked
 
-Last updated: 2025-10-14
+Last updated: 2025-10-16

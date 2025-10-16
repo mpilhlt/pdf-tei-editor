@@ -26,7 +26,8 @@
       "Bash(echo:*)",
       "Bash(gtimeout 30 npm run test:fastapi:e2e -- sse)",
       "Bash(lsof:*)",
-      "Bash(npm run generate-client:*)"
+      "Bash(npm run generate-client:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
