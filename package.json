@@ -17,7 +17,6 @@
         "test": "npm run test:all",
         "test:all": "node tests/smart-test-runner.js --all",
         "test:changed": "node tests/smart-test-runner.js",
-        "test:fastapi:changed": "bin/test-fastapi-changed",
         "test:tap": "node tests/smart-test-runner.js --all --tap",
         "test:js": "node --test tests/js/*.test.js",
         "test:py": "uv run python -m unittest tests/py/*.py",

@@ -13,6 +13,7 @@ Implemented a unified testing infrastructure that supports both local and contai
 ### 1. Server Manager Abstraction (`tests/lib/server-manager.js`)
 
 Abstract base class defining the interface for server lifecycle management:
+
 - `start(options)` - Start server with configuration
 - `stop(options)` - Stop server and cleanup
 - `isHealthy(timeoutMs)` - Check /health endpoint
@@ -20,6 +21,7 @@ Abstract base class defining the interface for server lifecycle management:
 - `getType()` - Return server type identifier
 
 **Benefits**:
+
 - Consistent interface across execution modes
 - Pluggable architecture for future server managers
 - Clear separation of concerns
@@ -29,6 +31,7 @@ Abstract base class defining the interface for server lifecycle management:
 Fast iteration server manager for development:
 
 **Features**:
+
 - Cross-platform process management (Windows, macOS, Linux)
 - Automatic cleanup of existing servers on port 8000
 - Optional database wiping for clean slate testing
@@ -41,6 +44,7 @@ Fast iteration server manager for development:
 **Performance**: ~2-5s startup time
 
 **Usage**:
+
 ```javascript
 const manager = new LocalServerManager();
 await manager.start({ cleanDb: true, verbose: false, needsWebdav: false });
@@ -53,6 +57,7 @@ await manager.stop({ keepRunning: false });
 CI-ready containerized server manager:
 
 **Features**:
+
 - Docker and Podman support with automatic detection
 - Image building with layer caching
 - Automatic cleanup of stale images (>24 hours old)
@@ -65,6 +70,7 @@ CI-ready containerized server manager:
 **Performance**: ~30-60s startup time (includes image build)
 
 **Usage**:
+
 ```javascript
 const manager = new ContainerServerManager();
 await manager.start({ noRebuild: false, env: { VAR: 'value' } });
@@ -77,6 +83,7 @@ await manager.stop({ keepRunning: false });
 Unified test orchestrator with pluggable server managers:
 
 **Features**:
+
 - Test discovery from `fastapi_app/tests/backend/` and `tests/e2e/backend/`
 - Grep filtering (`--grep`, `--grep-invert`)
 - Custom test directory support (`--test-dir`)
@@ -86,6 +93,7 @@ Unified test orchestrator with pluggable server managers:
 - Graceful cleanup with signal handlers
 
 **CLI Options**:
+
 ```bash
 # Modes
 --local              # Use local server (default, fast)
@@ -109,6 +117,7 @@ Unified test orchestrator with pluggable server managers:
 ```
 
 **Examples**:
+
 ```bash
 # Fast iteration with local server
 node tests/backend-test-runner.js --grep validation
@@ -131,6 +140,7 @@ node tests/backend-test-runner.js --test-dir fastapi_app/tests/backend
 Added new npm scripts for backend testing:
 
 **Local Mode (Fast Iteration)**:
+
 ```json
 "test:backend":        "node tests/backend-test-runner.js --local"
 "test:backend:local":  "node tests/backend-test-runner.js --local"
@@ -138,12 +148,14 @@ Added new npm scripts for backend testing:
 ```
 
 **Container Mode (CI-Ready)**:
+
 ```json
 "test:backend:container": "node tests/backend-test-runner.js --container"
 "test:backend:ci":        "node tests/backend-test-runner.js --container"
 ```
 
 **Playwright E2E (Updated for Future Work)**:
+
 ```json
 "test:e2e:local":     "node tests/e2e-runner.js --playwright --local"
 "test:e2e:container": "node tests/e2e-runner.js --playwright --container"
@@ -151,6 +163,7 @@ Added new npm scripts for backend testing:
 ```
 
 **Deprecated**:
+
 ```json
 "test:fastapi:e2e": "echo 'Deprecated: Use npm run test:backend' && node tests/backend-test-runner.js --local"
 ```
@@ -158,11 +171,13 @@ Added new npm scripts for backend testing:
 ## Test Results
 
 **Local Mode Performance**:
+
 ```
 npm run test:backend:fast -- --grep auth.test
 ```
 
 **Results**:
+
 - ✅ FastAPI auth tests: 10/10 passing (65ms)
 - ❌ Flask auth tests: 7/7 failing (expected - Flask endpoints)
 - Total time: ~5 seconds (including server startup)
@@ -222,6 +237,7 @@ With `--keep-db`, subsequent test runs take ~2-3 seconds total.
 Removed the deprecated `test:fastapi:e2e` npm script from [package.json](../../package.json:43). Users should now use `npm run test:backend` for backend integration tests.
 
 **Migration**:
+
 - Old: `npm run test:fastapi:e2e`
 - New: `npm run test:backend`
 
@@ -232,6 +248,7 @@ Removed the deprecated `test:fastapi:e2e` npm script from [package.json](../../p
 Added `--env-file <path>` option to [backend-test-runner.js](../../tests/backend-test-runner.js:104) for batch-loading environment variables from .env files.
 
 **Implementation**:
+
 - New `loadEnvFile()` utility function using dotenv package
 - Command-line option `--env-file` to specify .env file path
 - Supports both relative and absolute paths
@@ -239,6 +256,7 @@ Added `--env-file <path>` option to [backend-test-runner.js](../../tests/backend
 - Works in both local and container modes
 
 **Usage Examples**:
+
 ```bash
 # Load from .env.testing
 node tests/backend-test-runner.js --env-file .env.testing
@@ -248,6 +266,7 @@ node tests/backend-test-runner.js --env-file .env --env DEBUG=1
 ```
 
 **Benefits**:
+
 - Simplifies CI configuration with dedicated .env.ci files
 - Supports local testing with .env.testing
 - Eliminates need for long lists of --env flags
@@ -264,6 +283,7 @@ node tests/backend-test-runner.js --env-file .env --env DEBUG=1
 Created standalone `WebdavServerManager` class that decouples WebDAV lifecycle from backend server:
 
 **Features**:
+
 - Extends `ServerManager` abstract class
 - Independent lifecycle management (start/stop/health check)
 - Cross-platform process management (Windows, macOS, Linux)
@@ -273,6 +293,7 @@ Created standalone `WebdavServerManager` class that decouples WebDAV lifecycle f
 - Automatic cleanup of WebDAV root directory
 
 **LocalServerManager Integration**:
+
 - Updated [tests/lib/local-server-manager.js](../../tests/lib/local-server-manager.js) to use composition
 - Removed ~60 lines of embedded WebDAV code
 - WebdavServerManager instantiated only when `needsWebdav=true`
@@ -280,18 +301,21 @@ Created standalone `WebdavServerManager` class that decouples WebDAV lifecycle f
 - Cleanup delegates to WebdavServerManager.stop()
 
 **Benefits**:
+
 - **Decoupled lifecycle**: WebDAV server can be started/stopped independently
 - **Reusable**: Can be used by local and containerized modes
 - **Simpler code**: LocalServerManager focuses on backend server only
 - **Better testability**: WebDAV functionality isolated and testable
 
 **Testing**:
+
 - ✅ Sync tests pass with WebdavServerManager (26/26 tests)
 - ✅ Auth tests pass without WebDAV (10/10 tests)
 - ✅ Server cleanup works correctly
 - ✅ Temporary .env file generation works
 
 **Lines of Code**:
+
 - WebdavServerManager: ~265 lines (new)
 - LocalServerManager: -60 lines (removed WebDAV code)
 - Net change: ~205 lines
@@ -305,6 +329,7 @@ Created standalone `WebdavServerManager` class that decouples WebDAV lifecycle f
 Completely refactored e2e-runner to focus exclusively on Playwright browser tests:
 
 **Major Changes**:
+
 - **Removed backend test functionality** (now handled by backend-test-runner.js)
 - **Code reduction: 1241 → 411 lines (-830 lines, 67% smaller)**
 - **Added dual-mode support**: `--local` and `--container` flags
@@ -314,6 +339,7 @@ Completely refactored e2e-runner to focus exclusively on Playwright browser test
 - **Fixed all TypeScript errors** with proper JSDoc annotations
 
 **Architecture**:
+
 ```javascript
 PlaywrightRunner
 ├── --local mode  → LocalServerManager  → Local FastAPI server
@@ -321,6 +347,7 @@ PlaywrightRunner
 ```
 
 **Benefits**:
+
 - **Single Responsibility**: E2E runner focuses only on Playwright tests
 - **Code Reuse**: Shares server managers with backend-test-runner
 - **Faster Iteration**: Local mode with `--keep-db` for rapid development
@@ -328,6 +355,7 @@ PlaywrightRunner
 - **Simpler Debugging**: `--headed --debugger` works with both backends
 
 **Updated npm Scripts** (semantically correct naming):
+
 ```json
 // Local mode (default)
 "test:e2e": "node tests/e2e-runner.js --local"
@@ -343,12 +371,14 @@ PlaywrightRunner
 ```
 
 Similar naming scheme applied to backend tests:
+
 ```json
 "test:backend:local:keep-db": "... --local --keep-db"
 "test:backend:container:cached": "... --container --no-rebuild"
 ```
 
 **Lines of Code**:
+
 - Old e2e-runner: 1241 lines
 - New e2e-runner: 411 lines
 - **Reduction: 830 lines (67% smaller)**
@@ -362,12 +392,14 @@ Similar naming scheme applied to backend tests:
 Updated smart-test-runner to route tests to specialized runners:
 
 **Changes**:
+
 - Playwright tests → `node tests/e2e-runner.js --local`
 - Backend tests → `node tests/backend-test-runner.js --local`
 - Fixed all TypeScript errors with proper JSDoc annotations
 - Ensures single responsibility principle across all runners
 
 **Benefits**:
+
 - **Consistent execution**: All test types use dedicated, optimized runners
 - **Clear separation**: Each runner focuses on one test type
 - **Automatic routing**: Smart runner delegates to appropriate specialized runner
@@ -384,6 +416,7 @@ The following items are deferred to future work (optional improvements):
 **Current State**: Tests are split between `fastapi_app/tests/` and `tests/e2e/`.
 
 **Migration Steps**:
+
 1. Move `fastapi_app/tests/backend/*.test.js` → `tests/e2e/backend/`
 2. Move `fastapi_app/tests/py/*.py` → `tests/py/`
 3. Remove Flask tests from `tests/e2e/backend/`
@@ -397,6 +430,7 @@ The following items are deferred to future work (optional improvements):
 ## File Structure
 
 **Phase 8 Structure (Current)**:
+
 ```
 tests/
 ├── backend-test-runner.js          # ✅ Unified backend orchestrator
@@ -425,6 +459,7 @@ bin/
 ## Success Criteria
 
 **Phase 8 Completion (Achieved)**:
+
 - ✅ Server manager abstraction implemented and documented
 - ✅ Local server manager works cross-platform (macOS, Linux, Windows)
 - ✅ Container server manager supports Docker and Podman
@@ -444,6 +479,7 @@ bin/
 - ✅ Single responsibility principle: each runner handles one test type
 
 **Phase 9 Readiness (Achieved)**:
+
 - ✅ All tests are backend-agnostic (use `E2E_BASE_URL`)
 - ✅ Test directory parameter (`--test-dir`) implemented and tested
 - ✅ Both test directory structures work during transition
@@ -454,21 +490,25 @@ bin/
 ### Development Workflow
 
 **Run all backend tests**:
+
 ```bash
 npm run test:backend
 ```
 
 **Fast iteration with database kept**:
+
 ```bash
 npm run test:backend:fast -- --grep validation
 ```
 
 **Debug mode (keep server running)**:
+
 ```bash
 node tests/backend-test-runner.js --no-cleanup --verbose --grep auth
 ```
 
 **Clean slate test**:
+
 ```bash
 node tests/backend-test-runner.js --grep extraction
 ```
@@ -476,16 +516,19 @@ node tests/backend-test-runner.js --grep extraction
 ### CI/CD Workflow
 
 **Run all tests in isolated container**:
+
 ```bash
 npm run test:backend:ci
 ```
 
 **Specific test suite**:
+
 ```bash
 npm run test:backend:container -- --grep "file operations"
 ```
 
 **With environment variables**:
+
 ```bash
 node tests/backend-test-runner.js --container --env GEMINI_API_KEY
 ```
@@ -506,6 +549,7 @@ CI=true npm run test:changed  # Uses container mode
 ## Impact on Development
 
 **Before Phase 8**:
+
 - Backend tests required Python script (`bin/test-fastapi.py`)
 - Manual server lifecycle management
 - Platform-specific commands
@@ -513,6 +557,7 @@ CI=true npm run test:changed  # Uses container mode
 - No container mode option
 
 **After Phase 8**:
+
 - Unified JavaScript CLI for all test types
 - Automatic server lifecycle management
 - Cross-platform compatibility
@@ -528,6 +573,7 @@ Phase 8 successfully implemented the core unified testing infrastructure with pl
 The deferred work items (e2e-runner integration, smart-test-runner integration) are not blocking for the current migration and can be completed as follow-up improvements. The infrastructure is ready for Phase 9 test consolidation with no breaking changes required.
 
 **Total Implementation**:
+
 - ~1,100 lines of production code
 - 3 new server manager classes
 - 1 unified test orchestrator
@@ -536,6 +582,7 @@ The deferred work items (e2e-runner integration, smart-test-runner integration) 
 - Zero breaking changes to existing tests
 
 **Next Steps**:
+
 - Continue with Phase 9 deployment preparation
 - E2E runner refactoring (optional improvement)
 - Smart test runner integration (optional improvement)

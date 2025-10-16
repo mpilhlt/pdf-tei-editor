@@ -3,6 +3,7 @@
 ## Overview
 
 Create a unified testing infrastructure that supports two execution modes:
+
 1. **Local server testing** (default) - Fast iteration during development using a local backend server
 2. **Containerized testing** (CI) - Isolated environment for CI/CD and pre-deployment validation
 
@@ -19,6 +20,7 @@ The design abstracts server lifecycle management from test execution, allowing s
 ## Test Organization
 
 **Current State (During Migration)**:
+
 ```
 tests/
 ├── js/                           # JavaScript unit tests (no server needed)
@@ -34,6 +36,7 @@ fastapi_app/
 ```
 
 **Target State (Phase 9 - Post-Migration)**:
+
 ```
 tests/
 ├── js/                           # JavaScript unit tests (no server needed)
@@ -83,9 +86,11 @@ All tests use `E2E_BASE_URL` environment variable, making them backend-agnostic.
 ## Implementation Tasks
 
 ### Task 1: Create Server Manager Abstraction
+
 **File**: `tests/lib/server-manager.js`
 
 Abstract interface for server lifecycle:
+
 ```javascript
 class ServerManager {
   async start(options) { /* Start server, return base URL */ }
@@ -96,9 +101,11 @@ class ServerManager {
 ```
 
 ### Task 2: Implement Local Server Manager
+
 **File**: `tests/lib/local-server-manager.js`
 
 Port functionality from `bin/test-fastapi.py`:
+
 - Kill existing servers on port 8000
 - Optionally wipe database (--clean-db flag)
 - Start local server via `npm run dev:fastapi`
@@ -106,6 +113,7 @@ Port functionality from `bin/test-fastapi.py`:
 - Cleanup on exit (unless --no-cleanup)
 
 **Key Features**:
+
 - Cross-platform process management (pkill, lsof, taskkill)
 - Log capture to `log/test-server.log`
 - Health check with timeout
@@ -113,9 +121,11 @@ Port functionality from `bin/test-fastapi.py`:
 **Note**: WebDAV server is now a separate ServerManager (see Task 3a)
 
 ### Task 3: Implement Container Server Manager
+
 **File**: `tests/lib/container-server-manager.js`
 
 Refactor from `tests/e2e-runner.js`:
+
 - Extract container lifecycle logic
 - Support both Docker and Podman
 - Build/rebuild control (--no-rebuild)
@@ -124,22 +134,26 @@ Refactor from `tests/e2e-runner.js`:
 - Log extraction and cleanup
 
 **Reuses**:
+
 - Existing container detection
 - Image building logic
 - Port management
 - Cleanup handlers
 
 ### Task 3a: Implement WebDAV Server Manager
+
 **File**: `tests/lib/webdav-server-manager.js`
 
 Create a standalone ServerManager for WebDAV server used in sync tests:
 
 **Purpose**:
+
 - Decouples WebDAV lifecycle from LocalServerManager
 - Enables WebDAV in containerized environments
 - Allows orchestrator to start WebDAV independently
 
 **Features**:
+
 - Extends ServerManager abstract class
 - Starts WsgiDAV server on configurable port (default: 8080)
 - Generates temporary .env file for WebDAV configuration
@@ -148,6 +162,7 @@ Create a standalone ServerManager for WebDAV server used in sync tests:
 - Independent cleanup
 
 **Usage**:
+
 ```javascript
 const webdavManager = new WebdavServerManager();
 await webdavManager.start({
@@ -160,14 +175,17 @@ await webdavManager.stop();
 ```
 
 **Integration**:
+
 - Backend-test-runner detects sync tests and auto-starts WebDAV
 - E2E runner can start WebDAV in container or local mode
 - No coupling to backend server lifecycle
 
 ### Task 4: Create Unified Backend Test Runner
+
 **File**: `tests/backend-test-runner.js`
 
 Orchestrates backend test execution:
+
 - Test discovery (glob `**/*.test.js` from specified directories)
 - Filtering (--grep, --grep-invert patterns)
 - Server manager selection (--local vs --container)
@@ -176,6 +194,7 @@ Orchestrates backend test execution:
 - Automatic server lifecycle management
 
 **CLI Options**:
+
 ```bash
 --local              # Use local server (default)
 --container          # Use containerized server
@@ -199,6 +218,7 @@ The runner supports multiple ways to inject environment variables:
 4. **FastAPI server .env override** (local mode only): Set `FASTAPI_ENV_FILE=/path/to/.env` to override the FastAPI server's default .env file
 
 **Example .env file**:
+
 ```bash
 # .env.testing
 GEMINI_API_KEY=your_key_here
@@ -207,6 +227,7 @@ WEBDAV_PORT=8080
 ```
 
 **Usage**:
+
 ```bash
 # Individual environment variables
 node tests/backend-test-runner.js --env GEMINI_API_KEY
@@ -224,6 +245,7 @@ FASTAPI_ENV_FILE=.env.testing node tests/backend-test-runner.js --local
 **Note**: In containerized mode, all environment variables must be explicitly passed via `--env` or `--env-file` since the container doesn't have access to the host's environment or .env files.
 
 ### Task 5: Update Smart Test Runner Integration
+
 **File**: `tests/smart-test-runner.js`
 
 - Add backend mode detection (local vs container)
@@ -232,6 +254,7 @@ FASTAPI_ENV_FILE=.env.testing node tests/backend-test-runner.js --local
 - Default to local mode for speed, container for CI
 
 ### Task 6: Update CLI Commands
+
 **File**: `package.json`
 
 ```json
@@ -263,13 +286,16 @@ FASTAPI_ENV_FILE=.env.testing node tests/backend-test-runner.js --local
 ```
 
 **Removed Scripts**:
+
 - `test:fastapi:e2e` - Fully replaced by `test:backend`
 - `test:e2e:backend` - Removed to avoid confusion (use `test:backend`)
 
 ### Task 7: Refactor E2E Runner (Playwright Focus)
+
 **File**: `tests/e2e-runner.js`
 
 Update to use shared server managers:
+
 - Extract container logic to `ContainerServerManager`
 - Support both `--local` and `--container` modes for Playwright tests
 - Reuse `LocalServerManager` for local Playwright testing
@@ -277,14 +303,17 @@ Update to use shared server managers:
 - Remove backend test execution (delegated to `backend-test-runner.js`)
 
 **Key Changes**:
+
 - Playwright can now run against local server (fast iteration)
 - Playwright can run against containerized server (CI mode)
 - No code duplication - both runners share the same server managers
 
 ### Task 8: Design Phase 9 Test Consolidation
+
 **File**: `fastapi_app/prompts/phase-9-consolidation.md`
 
 Plan for consolidating all tests into `tests/` directory:
+
 - Move `fastapi_app/tests/backend/*.test.js` → `tests/e2e/backend/`
 - Move `fastapi_app/tests/py/*.py` → `tests/py/`
 - Update test discovery paths in `backend-test-runner.js`
@@ -293,6 +322,7 @@ Plan for consolidating all tests into `tests/` directory:
 - Update all npm scripts to use consolidated paths
 
 **Migration Strategy**:
+
 1. Ensure all tests are backend-agnostic (use `E2E_BASE_URL`)
 2. Add `--test-dir` parameter to `backend-test-runner.js` for flexible discovery
 3. Test with both `fastapi_app/tests/backend` and `tests/e2e/backend` paths
@@ -360,6 +390,7 @@ tests/
 ## Migration Timeline
 
 **Week 1: Foundation**
+
 1. Create `ServerManager` abstract class
 2. Implement `LocalServerManager` (port from test-fastapi.py)
 3. Implement `ContainerServerManager` (refactor from e2e-runner.js)
@@ -387,6 +418,7 @@ tests/
 ## Usage Examples
 
 **Development (local server)**:
+
 ```bash
 # Run all backend tests with local server
 npm run test:backend
@@ -408,6 +440,7 @@ FASTAPI_ENV_FILE=.env.testing npm run test:backend
 ```
 
 **CI/CD (containerized)**:
+
 ```bash
 # Run all tests in isolated container
 npm run test:backend:ci
@@ -426,6 +459,7 @@ node tests/backend-test-runner.js --container --env-file .env --env DEBUG=1
 ```
 
 **Smart testing (detects mode)**:
+
 ```bash
 # Changed files only (defaults to local)
 npm run test:changed
