@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # Paths
-    DATA_ROOT: str = "fastapi_app/data"
-    DB_DIR: str = "fastapi_app/db"
+    DATA_ROOT: str = "data"
+    DB_DIR: str = "data/db"
     UPLOAD_DIR: str = ""
 
     # Features

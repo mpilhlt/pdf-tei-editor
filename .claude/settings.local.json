@@ -29,7 +29,8 @@
       "Bash(npm run generate-client:*)",
       "Bash(cat:*)",
       "Bash(node tests/backend-test-runner.js --help)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

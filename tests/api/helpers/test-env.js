@@ -25,8 +25,8 @@ HOST=127.0.0.1
 PORT=8000
 
 # Paths
-DATA_ROOT=fastapi_app/data
-DB_DIR=fastapi_app/db
+DATA_ROOT=tests/api/runtime
+DB_DIR=tests/api/runtime/db
 
 # WebDAV Configuration for Sync Tests
 WEBDAV_ENABLED=true
