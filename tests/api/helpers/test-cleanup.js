@@ -20,7 +20,7 @@ const PROJECT_ROOT = resolve(__dirname, '../../..');
  * Clear all locks from locks.db
  */
 export function clearAllLocks() {
-  const locksDbPath = resolve(PROJECT_ROOT, 'fastapi_app/db/locks.db');
+  const locksDbPath = resolve(PROJECT_ROOT, 'tests/api/runtime/db/locks.db');
   if (existsSync(locksDbPath)) {
     try {
       execSync(`sqlite3 "${locksDbPath}" "DELETE FROM locks WHERE 1=1;"`, {
@@ -39,7 +39,7 @@ export function clearAllLocks() {
  * @param {string[]} docIdPatterns - Array of SQL LIKE patterns to match doc_ids
  */
 export function clearTestFiles(docIdPatterns = ['delete-test%', '%/delete-test%']) {
-  const metadataDbPath = resolve(PROJECT_ROOT, 'fastapi_app/db/metadata.db');
+  const metadataDbPath = resolve(PROJECT_ROOT, 'tests/api/runtime/db/metadata.db');
   if (existsSync(metadataDbPath)) {
     try {
       const whereClause = docIdPatterns.map(pattern => `doc_id LIKE '${pattern}'`).join(' OR ');
@@ -61,7 +61,7 @@ export function clearTestFiles(docIdPatterns = ['delete-test%', '%/delete-test%'
 export function clearTestFilesByDocId(docIds) {
   if (!docIds || docIds.length === 0) return;
 
-  const metadataDbPath = resolve(PROJECT_ROOT, 'fastapi_app/db/metadata.db');
+  const metadataDbPath = resolve(PROJECT_ROOT, 'tests/api/runtime/db/metadata.db');
   if (existsSync(metadataDbPath)) {
     try {
       const placeholders = docIds.map(() => '?').join(',');

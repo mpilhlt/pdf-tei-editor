@@ -21,6 +21,7 @@ Consolidate and reorganize all tests into a unified structure that validates API
 ### Application Data Structure (Production)
 
 **Current**:
+
 ```
 /
 ├── data/              # Mixed usage
@@ -33,6 +34,7 @@ Consolidate and reorganize all tests into a unified structure that validates API
 ```
 
 **Target**:
+
 ```
 /
 └── data/              # Parent for all application data
@@ -44,6 +46,7 @@ Consolidate and reorganize all tests into a unified structure that validates API
 ### Test Directory Structure
 
 **Target**:
+
 ```
 tests/
 ├── api/                              # Backend API integration tests
@@ -58,12 +61,8 @@ tests/
 │   │   ├── files.test.js
 │   │   └── ...
 │   ├── fixtures/                    # API test fixtures
-│   │   ├── minimal/                 # Minimal test data
-│   │   │   └── config/              # Config preset only
-│   │   ├── standard/                # Standard test scenario
-│   │   │   └── config/
-│   │   └── complex/                 # Complex test scenario
-│   │       └── config/
+|   |   ├── import/                  # files to be imported into `files/` before test
+│   │   └── config/                  # Config preset only
 │   ├── runtime/                     # Runtime data (gitignored, ephemeral)
 │   │   ├── db/                      # Generated during tests
 │   │   ├── files/                   # Generated during tests
@@ -76,12 +75,8 @@ tests/
 │   │   ├── editor.spec.js
 │   │   └── ...
 │   ├── fixtures/                    # E2E test fixtures
-│   │   ├── minimal/
-│   │   │   └── config/
-│   │   ├── standard/
-│   │   │   └── config/
-│   │   └── complex/
-│   │       └── config/
+|   |   ├── import/                  # files to be imported into `files/` before test
+│   │   └── config/                  # Config preset only
 │   ├── helpers/                     # E2E test utilities
 │   │   ├── page-objects.js
 │   │   └── assertions.js
@@ -115,24 +110,29 @@ tests/
 ### Migration Mapping
 
 **API Tests**:
+
 - `tests/e2e/backend/*.test.js` → `tests/api/v0/` (Flask tests)
 - `fastapi_app/tests/backend/*.test.js` → `tests/api/v1/` (FastAPI tests)
 
 **E2E Tests**:
+
 - `tests/e2e/frontend/*.spec.js` → `tests/e2e/frontend/` (no change)
 
 **Unit Tests**:
+
 - `tests/js/*.test.js` → `tests/unit/js/`
 - `tests/py/*.py` → `tests/unit/flask/`
 - `fastapi_app/tests/py/*.py` → `tests/unit/fastapi/`
 
 **Application Data**:
+
 - `db/` → `data/db/`
 - `data/` → `data/files/`
 - `config/` → `data/config/` (or stays at root - TBD)
 - `fastapi_app/{data,db,config}/` → Remove after migration
 
 **Test Fixtures**:
+
 - Create `tests/api/fixtures/` with config presets
 - Create `tests/e2e/fixtures/` with config presets
 - Add `tests/e2e/runtime/` to `.gitignore`
@@ -146,11 +146,13 @@ tests/
 **Tasks**:
 
 1. **Create new data structure**:
+
    ```bash
    mkdir -p data/db data/files
    ```
 
 2. **Move existing data**:
+
    ```bash
    # Move database files
    mv db/*.json data/db/
@@ -166,12 +168,14 @@ tests/
    - Update environment variables and config files
 
 4. **Remove FastAPI-specific data directories**:
+
    ```bash
    # After verifying apps work with new structure
    rm -rf fastapi_app/data fastapi_app/db fastapi_app/config
    ```
 
 5. **Update .gitignore**:
+
    ```
    # Application runtime data
    data/db/
@@ -183,6 +187,7 @@ tests/
    ```
 
 **Validation**:
+
 - ✅ Both Flask and FastAPI work with new `data/` structure
 - ✅ No references to old data paths remain
 - ✅ Application starts and serves requests correctly
@@ -197,6 +202,7 @@ tests/
 **Tasks**:
 
 1. **Create new directory structure**:
+
    ```bash
    mkdir -p tests/api/v0 tests/api/v1 tests/api/fixtures tests/api/helpers tests/api/runtime
    mkdir -p tests/e2e/fixtures tests/e2e/helpers tests/e2e/runtime
@@ -204,6 +210,7 @@ tests/
    ```
 
 2. **Move API tests**:
+
    ```bash
    # Flask tests
    mv tests/e2e/backend/*.test.js tests/api/v0/
@@ -213,6 +220,7 @@ tests/
    ```
 
 3. **Move unit tests**:
+
    ```bash
    # JavaScript unit tests
    mv tests/js/*.test.js tests/unit/js/
@@ -250,6 +258,7 @@ tests/
      - Support `tests/unit/` for unit tests
 
 7. **Update npm scripts** in [package.json](../../package.json):
+
    ```json
    {
      "test:api:v0": "node tests/backend-test-runner.js --test-dir tests/api/v0",
@@ -264,6 +273,7 @@ tests/
    ```
 
 **Validation**:
+
 - ✅ All API tests pass in their new locations
 - ✅ Unit tests pass in new structure
 - ✅ Fixture loader correctly initializes runtime data
@@ -288,6 +298,7 @@ tests/
    - No hardcoded paths to `data/`, `db/`, or `config/`
 
 3. **Run FastAPI tests (v1) against Flask server**:
+
    ```bash
    # Terminal 1: Start Flask dev server with test fixture
    npm run dev -- --fixture minimal
@@ -301,6 +312,7 @@ tests/
    - Mark tests as "Flask-incompatible" if intentional differences exist
 
 4. **Run Flask tests (v0) against FastAPI server**:
+
    ```bash
    # Terminal 1: Start FastAPI dev server with test fixture
    npm run dev:fastapi -- --fixture minimal
@@ -319,6 +331,7 @@ tests/
    - Recommend fixes or clarify intended behavior
 
 6. **Add cross-backend npm scripts**:
+
    ```json
    {
      "test:api:v1-on-flask": "echo 'Start Flask server first' && E2E_BASE_URL=http://localhost:5000 node --test tests/api/v1/*.test.js",
@@ -327,6 +340,7 @@ tests/
    ```
 
 **Validation**:
+
 - ✅ Cross-backend compatibility documented
 - ✅ All critical API endpoints behave identically
 - ✅ Differences justified and documented
@@ -359,6 +373,7 @@ tests/
    - Ensure FastAPI test mode matches containerized setup
 
 4. **Test Playwright with local FastAPI**:
+
    ```bash
    # Run E2E tests against local FastAPI server with fixture
    npm run test:e2e:local -- --backend fastapi --fixture standard
@@ -374,6 +389,7 @@ tests/
      - Add `--fixture` flag (default: `standard`)
      - Pass backend selection to server managers
    - Update npm scripts:
+
      ```json
      {
        "test:e2e": "node tests/e2e-runner.js --local --backend fastapi",
@@ -382,6 +398,7 @@ tests/
      ```
 
 **Validation**:
+
 - ✅ Playwright tests pass with FastAPI backend (local mode)
 - ✅ Test fixtures properly initialized in `tests/e2e/runtime/`
 - ✅ All frontend features functional
@@ -409,6 +426,7 @@ tests/
      - Mount `tests/e2e/runtime/` as volume for E2E tests
 
 3. **Test API tests in containers**:
+
    ```bash
    # FastAPI API tests (containerized)
    npm run test:backend:container -- --test-dir tests/api/v1 --fixture minimal
@@ -418,6 +436,7 @@ tests/
    ```
 
 4. **Test Playwright in containers**:
+
    ```bash
    # FastAPI E2E tests (containerized)
    npm run test:e2e:container -- --fixture standard
@@ -427,6 +446,7 @@ tests/
    ```
 
 5. **Create comprehensive test matrix npm scripts**:
+
    ```json
    {
      "test:all:fastapi:local": "npm run test:api:v1 && npm run test:e2e:local",
@@ -438,6 +458,7 @@ tests/
    ```
 
 **Validation**:
+
 - ✅ All API tests pass in containers (both backends)
 - ✅ Playwright tests pass in containers (both backends)
 - ✅ Container setup/teardown reliable
@@ -478,6 +499,7 @@ tests/
      - Update "Running Tests" section
 
 4. **Remove deprecated scripts and directories**:
+
    ```bash
    # Remove old FastAPI test directory
    rm -rf fastapi_app/tests/
@@ -503,6 +525,7 @@ tests/
    - Provide migration timeline for final switchover
 
 **Validation**:
+
 - ✅ All documentation accurate and up-to-date
 - ✅ No broken links or outdated references
 - ✅ Deprecated code removed
@@ -584,22 +607,26 @@ tests/
 ### Application Data Structure
 
 **Unified data directory**:
+
 - `data/db/` - Database JSON files (users, collections, etc.)
 - `data/files/` - Document files and metadata
 - `data/webdav-data/` - Legacy data for migration reference
 
 **Configuration**:
+
 - Consider keeping `config/` at root or move to `data/config/` (decision TBD)
 - Both backends must use same config location
 
 ### Test Fixtures
 
 **Fixture structure**:
+
 - Fixtures contain **config presets only**, no db/files
 - Runtime data generated in `tests/e2e/runtime/` (gitignored)
 - Import script populates runtime data from fixtures on test startup
 
 **Fixture presets**:
+
 - `minimal/` - Basic setup for smoke tests
 - `standard/` - Typical test scenario with users, collections, documents
 - `complex/` - Advanced scenarios (permissions, workflows, etc.)
@@ -636,6 +663,7 @@ tests/
 ### API Test Compatibility
 
 All API tests must be backend-agnostic:
+
 - Use `E2E_BASE_URL` environment variable
 - Use fixture loader for initialization
 - No hardcoded URLs, ports, or paths
@@ -645,6 +673,7 @@ All API tests must be backend-agnostic:
 ### Backend Selection
 
 Test runners must support flags:
+
 - `--backend fastapi|flask` - Select backend (default: `fastapi`)
 - `--fixture minimal|standard|complex` - Select fixture preset (default: `standard`)
 - Affects server startup command, port, and data initialization
@@ -653,6 +682,7 @@ Test runners must support flags:
 ### Incremental Migration
 
 Data structure can be migrated incrementally:
+
 1. Create new `data/` structure
 2. Update Flask to use new structure
 3. Update FastAPI to use new structure
@@ -660,6 +690,7 @@ Data structure can be migrated incrementally:
 5. Remove old directories
 
 Tests can be migrated incrementally:
+
 1. Move tests to new structure
 2. Validate they pass in original backend
 3. Test cross-backend compatibility
@@ -669,6 +700,7 @@ Tests can be migrated incrementally:
 ### Flask Decommissioning Path
 
 After Phase 9:
+
 1. All tests pass for both backends
 2. API equivalence validated
 3. Flask tests (v0) can be kept as regression suite
@@ -690,21 +722,27 @@ After Phase 9:
 ## Risks and Mitigations
 
 **Risk**: Data structure migration breaks existing functionality
+
 - **Mitigation**: Incremental migration, thorough testing at each step
 
 **Risk**: API differences break cross-backend tests
+
 - **Mitigation**: Document differences, fix critical ones, accept minor differences
 
 **Risk**: Playwright tests fail with FastAPI backend
+
 - **Mitigation**: Careful fixture setup, gradual migration, thorough debugging
 
 **Risk**: Container setup issues on different platforms
+
 - **Mitigation**: Test on macOS, Linux, Windows; use Phase 8 infrastructure
 
 **Risk**: Test fixtures diverge or become stale
+
 - **Mitigation**: Single source of truth, fixture loader validation, documentation
 
 **Risk**: Runtime data not properly cleaned between tests
+
 - **Mitigation**: Explicit cleanup in fixture loader, test isolation
 
 ## Next Phase

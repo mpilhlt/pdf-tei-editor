@@ -11,8 +11,8 @@ LOCK_TIMEOUT_SECONDS = 90
 
 def get_db_path():
     """Returns the path to the locks database."""
-    db_dir = current_app.config.get("DB_ROOT", "db")
-    return os.path.join(db_dir, "locks.db")
+    db_dir = current_app.config.get("DB_DIR", "data/db")
+    return os.path.join(db_dir, "locks-flask.db")
 
 
 @contextmanager

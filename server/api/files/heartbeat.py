@@ -19,9 +19,10 @@ def heartbeat():
     Also returns the current cache status to enable efficient file data refresh.
     """
     data = request.get_json()
-    file_path_or_hash = data.get("file_path")
+    # Support both 'file_path' (legacy) and 'file_id' (FastAPI v1) for forward compatibility
+    file_path_or_hash = data.get("file_path") or data.get("file_id")
     if not file_path_or_hash:
-        raise ApiError("File path is required for heartbeat.")
+        raise ApiError("File path or file_id is required for heartbeat.")
     file_path = resolve_document_identifier(file_path_or_hash)
     session_id = get_session_id(request)
     # The existing acquire_lock function already handles refreshing

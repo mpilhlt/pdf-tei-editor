@@ -17,7 +17,7 @@
 
 import { logger, hasStateChanged } from '../app.js';
 import { notify } from '../modules/sl-utils.js';
-import { ApiClientV1 } from '../../fastapi_app/api-client-v1.js';
+import { ApiClientV1 } from '../modules/api-client-v1.js';
 
 /**
  * Parent class for all API errors

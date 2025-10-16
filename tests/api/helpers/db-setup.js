@@ -15,8 +15,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '../../..');
-const dbDir = path.join(projectRoot, 'fastapi_app/db');
-const configDir = path.join(projectRoot, 'fastapi_app/config');
+// Use test runtime directory for ephemeral data, fixtures for initial state
+const runtimeDbDir = path.join(projectRoot, 'tests/api/runtime/db');
+const fixtureDbDir = path.join(projectRoot, 'tests/api/fixtures/db');
 
 /**
  * Clean database directory for testing.
@@ -27,85 +28,85 @@ const configDir = path.join(projectRoot, 'fastapi_app/config');
  * @param {boolean} keepSqlite - If true, only remove JSON files
  */
 export function cleanDbDirectory(keepSqlite = false) {
-  if (!fs.existsSync(dbDir)) {
-    console.log('📁 Database directory does not exist, nothing to clean');
+  if (!fs.existsSync(runtimeDbDir)) {
+    console.log('📁 Runtime database directory does not exist, nothing to clean');
     return;
   }
 
   let removed = 0;
 
   // Remove JSON files
-  const jsonFiles = fs.readdirSync(dbDir).filter(f => f.endsWith('.json'));
+  const jsonFiles = fs.readdirSync(runtimeDbDir).filter(f => f.endsWith('.json'));
   for (const file of jsonFiles) {
-    fs.unlinkSync(path.join(dbDir, file));
+    fs.unlinkSync(path.join(runtimeDbDir, file));
     removed++;
   }
 
   // Remove SQLite files if requested
   if (!keepSqlite) {
-    const dbFiles = fs.readdirSync(dbDir).filter(f =>
+    const dbFiles = fs.readdirSync(runtimeDbDir).filter(f =>
       f.endsWith('.db') || f.endsWith('.db-shm') || f.endsWith('.db-wal')
     );
     for (const file of dbFiles) {
-      fs.unlinkSync(path.join(dbDir, file));
+      fs.unlinkSync(path.join(runtimeDbDir, file));
       removed++;
     }
   }
 
-  console.log(`🧹 Cleaned ${removed} files from database directory`);
+  console.log(`🧹 Cleaned ${removed} files from runtime database directory`);
 }
 
 /**
- * Initialize database from config defaults.
+ * Initialize database from fixture defaults.
  *
- * Copies all JSON files from config/ to db/.
- * Server will create SQLite databases on startup.
+ * Copies all files from fixtures/db/ to runtime/db/.
+ * This provides a clean starting state for each test run.
  */
-export function initDbFromConfig() {
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+export function initDbFromFixtures() {
+  if (!fs.existsSync(runtimeDbDir)) {
+    fs.mkdirSync(runtimeDbDir, { recursive: true });
   }
 
-  const configFiles = fs.readdirSync(configDir).filter(f => f.endsWith('.json'));
+  const fixtureFiles = fs.readdirSync(fixtureDbDir);
 
-  for (const file of configFiles) {
-    const src = path.join(configDir, file);
-    const dest = path.join(dbDir, file);
+  for (const file of fixtureFiles) {
+    const src = path.join(fixtureDbDir, file);
+    const dest = path.join(runtimeDbDir, file);
     fs.copyFileSync(src, dest);
   }
 
-  console.log(`📋 Copied ${configFiles.length} config files to database directory`);
+  console.log(`📋 Copied ${fixtureFiles.length} fixture files to runtime directory`);
 }
 
 /**
  * Ensure database is in clean state for tests.
  *
  * This is the recommended way to prepare for tests:
- * 1. Clean existing database files
- * 2. Copy fresh config defaults
- * 3. Let server create SQLite databases on demand
+ * 1. Clean existing runtime database files
+ * 2. Copy fresh fixture data
+ * 3. Server uses runtime directory during tests
  *
  * @param {boolean} keepSqlite - If true, keep existing SQLite databases
  */
 export function resetDbToDefaults(keepSqlite = false) {
   console.log('🔄 Resetting database to defaults...');
   cleanDbDirectory(keepSqlite);
-  initDbFromConfig();
+  initDbFromFixtures();
   console.log('✅ Database reset complete');
 }
 
 /**
- * Verify database files exist.
+ * Verify database files exist in runtime directory.
  *
  * @returns {Object} Status of each expected file
  */
 export function checkDbFiles() {
   const status = {
-    'config.json': fs.existsSync(path.join(dbDir, 'config.json')),
-    'users.json': fs.existsSync(path.join(dbDir, 'users.json')),
-    'prompt.json': fs.existsSync(path.join(dbDir, 'prompt.json')),
-    'sessions.db': fs.existsSync(path.join(dbDir, 'sessions.db')),
-    'locks.db': fs.existsSync(path.join(dbDir, 'locks.db'))
+    'config.json': fs.existsSync(path.join(runtimeDbDir, 'config.json')),
+    'users.json': fs.existsSync(path.join(runtimeDbDir, 'users.json')),
+    'prompt.json': fs.existsSync(path.join(runtimeDbDir, 'prompt.json')),
+    'sessions.db': fs.existsSync(path.join(runtimeDbDir, 'sessions.db')),
+    'locks.db': fs.existsSync(path.join(runtimeDbDir, 'locks.db'))
   };
 
   return status;

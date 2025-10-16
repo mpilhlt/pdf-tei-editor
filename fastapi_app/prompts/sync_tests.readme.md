@@ -1,6 +1,6 @@
 # Sync Integration Tests
 
-This directory contains comprehensive integration tests for Phase 6: Sync and SSE APIs.
+The information in this document might be outdated.
 
 ## Overview
 
