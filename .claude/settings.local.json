@@ -27,7 +27,9 @@
       "Bash(gtimeout 30 npm run test:fastapi:e2e -- sse)",
       "Bash(lsof:*)",
       "Bash(npm run generate-client:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(node tests/backend-test-runner.js --help)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []
