@@ -233,10 +233,7 @@ tests/
    ```
 
 4. **Create test fixtures**:
-   - Create `tests/api/fixtures/minimal/config/` with basic config
-   - Create `tests/api/fixtures/standard/config/` with typical test scenario
-   - Create `tests/e2e/fixtures/minimal/config/` with basic config
-   - Create `tests/e2e/fixtures/standard/config/` with typical test scenario
+   - Create `tests/api/fixtures/config/` with basic config
 
 5. **Create fixture loader utility**:
    - Create `tests/lib/fixture-loader.js`:
