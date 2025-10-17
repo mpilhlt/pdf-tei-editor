@@ -3,7 +3,7 @@
  *
  * @testCovers app/src/plugins/authentication.js
  * @testCovers server/api/auth.py
- * @env tests/e2e/.env.test
+ * 
  */
 
 /** @import { namedElementsTree } from '../../app/src/ui.js' */

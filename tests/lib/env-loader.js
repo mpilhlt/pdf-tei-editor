@@ -41,20 +41,36 @@ export function loadEnvFile(options) {
     }
   }
 
-  // Priority 2: .env in --test-dir
+  // Priority 2: .env or .env.test in --test-dir
   if (!envPath && testDir) {
-    const testDirEnv = resolve(projectRoot, testDir, '.env');
-    if (existsSync(testDirEnv)) {
-      envPath = testDirEnv;
+    // Try .env.test first (more specific for testing)
+    const testDirEnvTest = resolve(projectRoot, testDir, '.env.test');
+    if (existsSync(testDirEnvTest)) {
+      envPath = testDirEnvTest;
       source = '--test-dir';
-    } else if (verbose) {
-      console.log(`📄 No .env file found in test directory: ${testDir}`);
+    } else {
+      // Fallback to .env
+      const testDirEnv = resolve(projectRoot, testDir, '.env');
+      if (existsSync(testDirEnv)) {
+        envPath = testDirEnv;
+        source = '--test-dir';
+      } else if (verbose) {
+        console.log(`📄 No .env or .env.test file found in test directory: ${testDir}`);
+      }
     }
   }
 
-  // Priority 3: .env in default search directories
+  // Priority 3: .env or .env.test in default search directories
   if (!envPath) {
     for (const dir of searchDirs) {
+      // Try .env.test first
+      const searchPathTest = resolve(projectRoot, dir, '.env.test');
+      if (existsSync(searchPathTest)) {
+        envPath = searchPathTest;
+        source = 'default search';
+        break;
+      }
+      // Fallback to .env
       const searchPath = resolve(projectRoot, dir, '.env');
       if (existsSync(searchPath)) {
         envPath = searchPath;

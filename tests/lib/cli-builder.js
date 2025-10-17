@@ -18,10 +18,11 @@ import { join } from 'path';
  * @param {string} config.name - Command name
  * @param {string} config.description - Command description
  * @param {Option[]} [config.extraOptions] - Additional runner-specific options
+ * @param {string[]} [config.examples] - Array of example command lines
  * @returns {Command} Configured Commander program
  */
 export function createTestRunnerCommand(config) {
-  const { name, description, extraOptions = [] } = config;
+  const { name, description, extraOptions = [], examples = [] } = config;
 
   const program = new Command();
 
@@ -80,6 +81,11 @@ export function createTestRunnerCommand(config) {
   // Add runner-specific options
   for (const option of extraOptions) {
     program.addOption(option);
+  }
+
+  // Add examples to help text if provided
+  if (examples.length > 0) {
+    program.addHelpText('after', '\nExamples:\n' + examples.map(ex => `  ${ex}`).join('\n'));
   }
 
   return program;

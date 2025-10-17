@@ -8,30 +8,12 @@
  * - Local mode (--local): Fast iteration with local FastAPI server
  * - Container mode (--container): Isolated testing with containerized server
  *
- * Usage:
- *   # Run all backend tests with local server (default)
- *   node tests/backend-test-runner.js
- *   node tests/backend-test-runner.js --local
+ * Features:
+ * - Dynamic fixture selection (--fixture minimal|standard)
+ * - Automatic .env file detection from test directories
+ * - Commander.js for automatic help generation
  *
- *   # Run specific tests
- *   node tests/backend-test-runner.js --grep validation
- *   node tests/backend-test-runner.js --grep-invert "slow tests"
- *
- *   # Container mode for CI
- *   node tests/backend-test-runner.js --container
- *
- *   # Fast iteration (keep database)
- *   node tests/backend-test-runner.js --keep-db --grep auth
- *
- *   # Debug mode (keep server running)
- *   node tests/backend-test-runner.js --no-cleanup --verbose
- *
- *   # Custom test directory
- *   node tests/backend-test-runner.js --test-dir fastapi_app/tests/backend
- *
- *   # Load environment from file
- *   node tests/backend-test-runner.js --env-file .env.testing
- *   node tests/backend-test-runner.js --env-file .env --env DEBUG=1
+ * Run with --help to see all options and examples.
  *
  * Environment Variables:
  *   CI=true - Automatically use container mode
@@ -41,186 +23,52 @@ import { spawn } from 'child_process';
 import { glob } from 'glob';
 import { fileURLToPath } from 'url';
 import { dirname, join, relative, resolve } from 'path';
-import { existsSync } from 'fs';
-import dotenv from 'dotenv';
 import { LocalServerManager } from './lib/local-server-manager.js';
 import { ContainerServerManager } from './lib/container-server-manager.js';
+import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
+import { loadEnvFile } from './lib/env-loader.js';
+import { loadFixture } from './lib/fixture-loader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = dirname(__dirname);
 
-/**
- * Parse command line arguments
- *
- * @returns {Object} Parsed options
- */
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options = {
-    mode: 'local', // 'local' or 'container'
-    grep: null,
-    grepInvert: null,
-    cleanDb: true,
-    noCleanup: false,
-    verbose: false,
-    noRebuild: false,
-    testDir: null,
-    env: {},
-    envFile: null,
-    timeout: 30 * 1000, // 30 seconds default
-  };
+// Create Commander program with examples
+const program = createTestRunnerCommand({
+  name: 'backend-test-runner',
+  description: 'Run backend API integration tests with local or containerized server',
+  examples: [
+    '# Run all tests with local server',
+    'node tests/backend-test-runner.js',
+    '',
+    '# Run validation tests only',
+    'node tests/backend-test-runner.js --grep validation',
+    '',
+    '# Fast iteration with database kept',
+    'node tests/backend-test-runner.js --keep-db --grep auth',
+    '',
+    '# Debug mode (keep server running)',
+    'node tests/backend-test-runner.js --no-cleanup --verbose',
+    '',
+    '# Container mode for CI',
+    'node tests/backend-test-runner.js --container',
+    '',
+    '# Run specific test directory',
+    'node tests/backend-test-runner.js --test-dir tests/api/v1',
+    '',
+    '# Use minimal fixture for smoke tests',
+    'node tests/backend-test-runner.js --fixture minimal',
+    '',
+    '# Load environment from file',
+    'node tests/backend-test-runner.js --env-file .env.testing',
+    'node tests/backend-test-runner.js --env-file .env --env DEBUG=1',
+  ],
+});
 
-  // Auto-detect CI environment
-  if (process.env.CI === 'true') {
-    options.mode = 'container';
-  }
+// Parse arguments - Commander handles --help automatically
+program.parse(process.argv);
+const cliOptions = program.opts();
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-
-    switch (arg) {
-      case '--local':
-        options.mode = 'local';
-        break;
-      case '--container':
-        options.mode = 'container';
-        break;
-      case '--grep':
-        options.grep = args[++i];
-        break;
-      case '--grep-invert':
-        options.grepInvert = args[++i];
-        break;
-      case '--keep-db':
-        options.cleanDb = false;
-        break;
-      case '--no-cleanup':
-        options.noCleanup = true;
-        break;
-      case '--verbose':
-      case '-v':
-        options.verbose = true;
-        break;
-      case '--no-rebuild':
-        options.noRebuild = true;
-        break;
-      case '--test-dir':
-        options.testDir = args[++i];
-        break;
-      case '--env-file':
-        options.envFile = args[++i];
-        break;
-      case '--env':
-        const envSpec = args[++i];
-        if (envSpec.includes('=')) {
-          const [key, ...valueParts] = envSpec.split('=');
-          options.env[key] = valueParts.join('=');
-        } else {
-          // Pass through from environment
-          if (process.env[envSpec]) {
-            options.env[envSpec] = process.env[envSpec];
-          }
-        }
-        break;
-      case '--timeout':
-        options.timeout = parseInt(args[++i], 10) * 1000; // Convert seconds to ms
-        break;
-      case '--help':
-      case '-h':
-        printHelp();
-        process.exit(0);
-        break;
-      default:
-        console.error(`Unknown option: ${arg}`);
-        printHelp();
-        process.exit(1);
-    }
-  }
-
-  return options;
-}
-
-/**
- * Load environment variables from a .env file
- *
- * @param {string} envFilePath - Path to .env file (relative or absolute)
- * @returns {Object} Environment variables as key-value pairs
- * @throws {Error} If file doesn't exist
- */
-function loadEnvFile(envFilePath) {
-  const resolvedPath = resolve(projectRoot, envFilePath);
-
-  if (!existsSync(resolvedPath)) {
-    throw new Error(`Environment file not found: ${resolvedPath}`);
-  }
-
-  console.log(`📄 Loading environment from: ${relative(projectRoot, resolvedPath)}`);
-
-  const result = dotenv.config({ path: resolvedPath });
-
-  if (result.error) {
-    throw new Error(`Failed to parse environment file: ${result.error.message}`);
-  }
-
-  return result.parsed || {};
-}
-
-/**
- * Print help message
- */
-function printHelp() {
-  console.log(`
-Unified Backend Test Runner
-
-Usage: node tests/backend-test-runner.js [options]
-
-Modes:
-  --local              Use local server (default, fast iteration)
-  --container          Use containerized server (CI-ready)
-
-Test Selection:
-  --grep <pattern>     Only run tests matching pattern
-  --grep-invert <pat>  Exclude tests matching pattern
-  --test-dir <path>    Test directory (default: auto-detect)
-
-Server Options:
-  --clean-db           Wipe database before tests (default, local only)
-  --keep-db            Keep existing database (faster, local only)
-  --no-cleanup         Keep server running after tests (debug mode)
-  --no-rebuild         Skip image rebuild (container only)
-  --verbose, -v        Show server output during tests
-
-Environment:
-  --env-file <path>    Load environment variables from .env file
-  --env VAR_NAME       Pass environment variable from host
-  --env VAR=value      Set environment variable (overrides --env-file)
-  --timeout <seconds>  Test timeout in seconds (default: 60)
-
-Examples:
-  # Run all tests with local server
-  node tests/backend-test-runner.js
-
-  # Run validation tests only
-  node tests/backend-test-runner.js --grep validation
-
-  # Fast iteration with database kept
-  node tests/backend-test-runner.js --keep-db --grep auth
-
-  # Debug mode (keep server running)
-  node tests/backend-test-runner.js --no-cleanup --verbose
-
-  # Container mode for CI
-  node tests/backend-test-runner.js --container
-
-  # Run specific test directory
-  node tests/backend-test-runner.js --test-dir fastapi_app/tests/backend
-
-  # Load environment from file
-  node tests/backend-test-runner.js --env-file .env.testing
-  node tests/backend-test-runner.js --env-file .env --env DEBUG=1
-`);
-}
 
 /**
  * Discover test files from the test directory
@@ -341,31 +189,65 @@ async function runTests(testFiles, baseUrl, timeout = 60 * 1000) {
  * Main test orchestration
  */
 async function main() {
-  const options = parseArgs();
+  // Resolve mode from CLI options
+  const mode = resolveMode(cliOptions);
+
+  // Auto-detect test directory
+  const testDir = cliOptions.testDir || 'tests/api/v1';
+  const fixturesDir = 'tests/api/fixtures';
+  const runtimeDir = 'tests/api/runtime';
 
   console.log('🧪 Backend Test Runner');
-  console.log(`📦 Mode: ${options.mode}`);
+  console.log(`📦 Mode: ${mode}`);
   console.log(`📁 Project root: ${projectRoot}`);
   console.log();
 
-  // Load environment file if provided
-  if (options.envFile) {
-    try {
-      const envVars = loadEnvFile(options.envFile);
-      // Merge with explicitly provided --env options (--env takes precedence)
-      Object.assign(options.env, { ...envVars, ...options.env });
-      console.log(`✅ Loaded ${Object.keys(envVars).length} environment variables`);
-      console.log();
-    } catch (err) {
-      console.error(`❌ Failed to load environment file: ${err.message}`);
-      process.exit(1);
-    }
-  }
-
   let serverManager;
   let exitCode = 0;
+  let options; // Declare options at function scope so it's available in finally block
 
   try {
+    // Step 0a: Validate and load fixture (local mode only)
+    if (mode === 'local') {
+      validateFixture(cliOptions.fixture, resolve(projectRoot, fixturesDir));
+      await loadFixture({
+        fixtureName: cliOptions.fixture,
+        fixturesDir,
+        runtimeDir,
+        projectRoot,
+        verbose: cliOptions.verbose,
+      });
+    }
+
+    // Step 0b: Load environment
+    const envFromFile = loadEnvFile({
+      envFile: cliOptions.envFile,
+      testDir,
+      searchDirs: [testDir, 'tests/api/v1', 'tests/api/v0'],
+      projectRoot,
+      verbose: cliOptions.verbose,
+    });
+
+    // Process --env arguments
+    const envFromArgs = processEnvArgs(cliOptions.env || []);
+
+    // Merge (--env args take precedence)
+    const env = { ...envFromFile, ...envFromArgs };
+
+    // Convert Commander options to internal format
+    options = {
+      mode,
+      grep: cliOptions.grep,
+      grepInvert: cliOptions.grepInvert,
+      cleanDb: cliOptions.keepDb ? false : cliOptions.cleanDb,
+      noCleanup: cliOptions.cleanup === false,
+      verbose: cliOptions.verbose,
+      noRebuild: cliOptions.rebuild === false,
+      testDir,
+      env,
+      timeout: parseInt(cliOptions.timeout, 10) * 1000,
+    };
+
     // Step 1: Discover tests
     console.log('==> Discovering tests');
     const allTests = await discoverTests(options.testDir);

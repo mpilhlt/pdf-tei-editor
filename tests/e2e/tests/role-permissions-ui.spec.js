@@ -2,7 +2,7 @@
  * E2E Frontend Tests for Role-based UI Permissions
  * @testCovers app/src/plugins/access-control.js
  * @testCovers app/src/state.js
- * @env tests/e2e/.env.test
+ * 
  */
 
 import { test, expect } from '@playwright/test';

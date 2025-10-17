@@ -125,48 +125,59 @@ export class LocalServerManager extends ServerManager {
   /**
    * Wipe database for clean slate
    *
+   * Removes all SQLite database files but preserves JSON fixture files
+   * (users.json, config.json, prompt.json) that should already be in place
+   * from the fixture loader.
+   *
    * @private
    * @returns {Promise<void>}
    */
   async wipeDatabase() {
     console.log('\n==> Wiping database for clean slate');
 
-    // Remove database directory (contains metadata.db, sessions.db, locks.db)
-    try {
-      await fs.rm(this.dbDir, { recursive: true, force: true });
-      console.log(`[INFO] Removed ${this.dbDir}`);
-    } catch (err) {
-      // Ignore if doesn't exist
+    // Check if JSON fixture files exist (indicating fixture loader ran)
+    const usersJson = join(this.dbDir, 'users.json');
+    const fixturesLoaded = await fs.access(usersJson).then(() => true).catch(() => false);
+
+    if (fixturesLoaded) {
+      // Fixtures already loaded - just remove SQLite files
+      console.log('[INFO] Fixtures detected, removing only SQLite database files');
+      const dbFiles = ['metadata.db', 'sessions.db', 'locks.db'];
+
+      for (const dbFile of dbFiles) {
+        try {
+          const dbPath = join(this.dbDir, dbFile);
+          await fs.rm(dbPath, { force: true });
+          // Also remove WAL and SHM files
+          await fs.rm(`${dbPath}-wal`, { force: true });
+          await fs.rm(`${dbPath}-shm`, { force: true });
+        } catch (err) {
+          // Ignore if doesn't exist
+        }
+      }
+    } else {
+      // No fixtures - old behavior for backward compatibility
+      console.log('[INFO] No fixtures detected, wiping entire db directory');
+
+      // Remove database directory completely
+      try {
+        await fs.rm(this.dbDir, { recursive: true, force: true });
+        console.log(`[INFO] Removed ${this.dbDir}`);
+      } catch (err) {
+        // Ignore if doesn't exist
+      }
+
+      // Recreate db directory
+      await fs.mkdir(this.dbDir, { recursive: true });
     }
 
-    // Also remove old metadata.db in data directory
+    // Also remove old metadata.db in data directory if it exists
     const oldMetadataDb = join(this.dataDir, 'metadata.db');
     try {
       await fs.unlink(oldMetadataDb);
       console.log(`[INFO] Removed old ${oldMetadataDb}`);
     } catch (err) {
       // Ignore if doesn't exist
-    }
-
-    // Recreate db directory and copy fixtures if available
-    const fixturesConfigDir = join(this.projectRoot, 'tests/api/fixtures/config');
-    const fixturesDirExists = await fs.access(fixturesConfigDir).then(() => true).catch(() => false);
-
-    if (fixturesDirExists) {
-      // Create db directory
-      await fs.mkdir(this.dbDir, { recursive: true });
-
-      // Copy JSON config files from fixtures
-      const files = await fs.readdir(fixturesConfigDir);
-      const jsonFiles = files.filter(f => f.endsWith('.json'));
-
-      for (const file of jsonFiles) {
-        const src = join(fixturesConfigDir, file);
-        const dest = join(this.dbDir, file);
-        await fs.copyFile(src, dest);
-      }
-
-      console.log(`[INFO] Copied ${jsonFiles.length} fixture files to ${this.dbDir}`);
     }
 
     console.log('[SUCCESS] Database wiped - starting with clean slate');

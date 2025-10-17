@@ -6,35 +6,95 @@
  * Focused runner for Playwright browser tests with flexible backend options.
  * Backend integration tests are handled by backend-test-runner.js.
  *
- * Modes:
- *   --local      Run Playwright against local FastAPI server (default, fast iteration)
- *   --container  Run Playwright against containerized FastAPI server (CI-ready)
+ * Features:
+ * - Dynamic fixture selection (--fixture minimal|standard)
+ * - Automatic .env file detection from test directories
+ * - Commander.js for automatic help generation
+ * - Playwright-specific options (browser, headed, debugger)
+ *
+ * Run with --help to see all options and examples.
  *
  * Environment Variables:
  *   E2E_BASE_URL - Override base URL for tests
  *   E2E_PORT     - Port for containerized server (default: 8001)
- *
- * Usage:
- *   # Local mode (fast iteration)
- *   node tests/e2e-runner.js
- *   node tests/e2e-runner.js --local --browser firefox --headed
- *
- *   # Container mode (CI-ready)
- *   node tests/e2e-runner.js --container
- *   node tests/e2e-runner.js --container --grep "upload"
- *
- *   # Debug with local server
- *   node tests/e2e-runner.js --local --headed --debugger --verbose
+ *   CI=true      - Automatically use container mode
  */
 
 import { spawn, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { dirname, resolve } from 'path';
+import { Option } from 'commander';
 import { LocalServerManager } from './lib/local-server-manager.js';
 import { ContainerServerManager } from './lib/container-server-manager.js';
+import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
+import { loadEnvFile } from './lib/env-loader.js';
+import { loadFixture } from './lib/fixture-loader.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
+
+// Create Commander program with E2E-specific options
+const program = createTestRunnerCommand({
+  name: 'e2e-runner',
+  description: 'Run Playwright E2E tests against local or containerized backend',
+  extraOptions: [
+    new Option('--browser <name>', 'browser to use')
+      .choices(['chromium', 'firefox', 'webkit'])
+      .default('chromium'),
+    new Option('--headed', 'run tests in headed mode (show browser)'),
+    new Option('--debugger', 'enable Playwright debugger'),
+    new Option('--debug-messages', 'enable verbose E2E debug output'),
+    new Option('--workers <number>', 'number of parallel workers')
+      .default('1'),
+    new Option('--fail-fast', 'abort on first test failure'),
+  ],
+  examples: [
+    '# Fast local iteration',
+    'node tests/e2e-runner.js',
+    'node tests/e2e-runner.js --keep-db --grep "upload"',
+    '',
+    '# Debug with browser visible',
+    'node tests/e2e-runner.js --headed --debugger',
+    '',
+    '# Use minimal fixture for smoke tests',
+    'node tests/e2e-runner.js --fixture minimal',
+    '',
+    '# CI-ready container mode',
+    'node tests/e2e-runner.js --container',
+    'node tests/e2e-runner.js --container --no-rebuild',
+    '',
+    '# With environment variables',
+    'node tests/e2e-runner.js --env-file .env.testing',
+    'node tests/e2e-runner.js --env OPENAI_API_KEY',
+  ],
+});
+
+// Parse arguments - Commander handles --help automatically
+program.parse(process.argv);
+const cliOptions = program.opts();
+
+/**
+ * @typedef {Object} ServerOptions
+ * @property {string} mode - Execution mode ('local' or 'container')
+ * @property {string} fixture - Fixture preset name
+ * @property {boolean} cleanDb - Whether to wipe database before tests
+ * @property {boolean} verbose - Show server output
+ * @property {Record<string, string>} envVars - Environment variables from --env
+ * @property {string} [envFile] - Path to .env file
+ * @property {boolean} noRebuild - Skip image rebuild (container mode)
+ */
+
+/**
+ * @typedef {Object} PlaywrightOptions
+ * @property {string} browser - Browser to use
+ * @property {boolean} headed - Run in headed mode
+ * @property {boolean} debugger - Enable debugger
+ * @property {boolean} debugMessages - Enable debug output
+ * @property {number} workers - Number of parallel workers
+ * @property {string|null} grep - Test filter pattern
+ * @property {string|null} grepInvert - Test exclude pattern
+ * @property {boolean} failFast - Abort on first failure
+ */
 
 /**
  * Playwright E2E test runner with flexible backend
@@ -43,168 +103,6 @@ class PlaywrightRunner {
   constructor() {
     /** @type {LocalServerManager | ContainerServerManager | null} */
     this.serverManager = null;
-    this.mode = 'local'; // default to local mode
-  }
-
-  /**
-   * Parse command line arguments
-   * @param {string[]} args
-   */
-  parseArgs(args) {
-    const parsed = {
-      mode: 'local',
-      browser: 'chromium',
-      headed: false,
-      debugger: false,
-      debugMessages: false,
-      grep: /** @type {string | null} */ (null),
-      grepInvert: /** @type {string | null} */ (null),
-      help: false,
-      noRebuild: false,
-      cleanDb: true,
-      verbose: false,
-      noCleanup: false,
-      workers: 1,
-      failFast: false,
-      envFile: /** @type {string | null} */ (null),
-      envVars: /** @type {Record<string, string>} */ ({}),
-    };
-
-    for (let i = 0; i < args.length; i++) {
-      const arg = args[i];
-
-      switch (arg) {
-        case '--local':
-          parsed.mode = 'local';
-          break;
-        case '--container':
-          parsed.mode = 'container';
-          break;
-        case '--browser':
-          parsed.browser = args[++i];
-          break;
-        case '--headed':
-          parsed.headed = true;
-          break;
-        case '--debugger':
-          parsed.debugger = true;
-          break;
-        case '--debug-messages':
-          parsed.debugMessages = true;
-          break;
-        case '--grep':
-          parsed.grep = args[++i] || '';
-          break;
-        case '--grep-invert':
-          parsed.grepInvert = args[++i] || '';
-          break;
-        case '--no-rebuild':
-          parsed.noRebuild = true;
-          break;
-        case '--clean-db':
-          parsed.cleanDb = true;
-          break;
-        case '--keep-db':
-          parsed.cleanDb = false;
-          break;
-        case '--verbose':
-        case '-v':
-          parsed.verbose = true;
-          break;
-        case '--no-cleanup':
-          parsed.noCleanup = true;
-          break;
-        case '--workers':
-          parsed.workers = Number(args[++i]);
-          if (isNaN(parsed.workers)) {
-            throw new Error('--workers option must be a number');
-          }
-          break;
-        case '--fail-fast':
-          parsed.failFast = true;
-          break;
-        case '--env-file':
-          parsed.envFile = args[++i];
-          break;
-        case '--env':
-          const envArg = args[++i];
-          if (envArg) {
-            if (envArg.includes('=')) {
-              const [key, ...valueParts] = envArg.split('=');
-              parsed.envVars[key] = valueParts.join('=');
-            } else {
-              // Pass through from environment
-              if (process.env[envArg]) {
-                parsed.envVars[envArg] = process.env[envArg];
-              }
-            }
-          }
-          break;
-        case '--help':
-        case '-h':
-          parsed.help = true;
-          break;
-      }
-    }
-
-    return parsed;
-  }
-
-  /**
-   * Show help message
-   */
-  showHelp() {
-    console.log('Playwright E2E Test Runner');
-    console.log('===========================');
-    console.log('');
-    console.log('Run Playwright browser tests against local or containerized backend.');
-    console.log('Backend integration tests are handled by backend-test-runner.js.');
-    console.log('');
-    console.log('Usage:');
-    console.log('  node tests/e2e-runner.js [mode] [options]');
-    console.log('');
-    console.log('Modes:');
-    console.log('  --local              Use local FastAPI server (default, fast iteration)');
-    console.log('  --container          Use containerized FastAPI server (CI-ready)');
-    console.log('');
-    console.log('Playwright Options:');
-    console.log('  --browser <name>     Browser to use (chromium|firefox|webkit) [default: chromium]');
-    console.log('  --headed             Run tests in headed mode (show browser)');
-    console.log('  --debugger           Enable Playwright debugger (step-through debugging)');
-    console.log('  --debug-messages     Enable verbose E2E debug output');
-    console.log('  --grep <pattern>     Run tests matching pattern');
-    console.log('  --grep-invert <pat>  Exclude tests matching pattern');
-    console.log('  --workers <number>   Number of workers (default: 1, sequential)');
-    console.log('  --fail-fast          Abort on first test failure');
-    console.log('');
-    console.log('Server Options:');
-    console.log('  --clean-db           Wipe database before tests (default, local only)');
-    console.log('  --keep-db            Keep existing database (faster, local only)');
-    console.log('  --no-rebuild         Skip image rebuild (container only)');
-    console.log('  --no-cleanup         Keep server running after tests (debug mode)');
-    console.log('  --verbose, -v        Show server output during tests');
-    console.log('');
-    console.log('Environment:');
-    console.log('  --env-file <path>    Load environment from .env file');
-    console.log('  --env VAR_NAME       Pass environment variable from host');
-    console.log('  --env VAR=value      Set environment variable');
-    console.log('');
-    console.log('Examples:');
-    console.log('  # Fast local iteration');
-    console.log('  node tests/e2e-runner.js');
-    console.log('  node tests/e2e-runner.js --keep-db --grep "upload"');
-    console.log('');
-    console.log('  # Debug with browser visible');
-    console.log('  node tests/e2e-runner.js --headed --debugger');
-    console.log('');
-    console.log('  # CI-ready container mode');
-    console.log('  node tests/e2e-runner.js --container');
-    console.log('  node tests/e2e-runner.js --container --no-rebuild');
-    console.log('');
-    console.log('  # With environment variables');
-    console.log('  node tests/e2e-runner.js --env-file .env.testing');
-    console.log('  node tests/e2e-runner.js --env OPENAI_API_KEY');
-    console.log('');
   }
 
   /**
@@ -230,25 +128,52 @@ class PlaywrightRunner {
 
   /**
    * Start the server (local or containerized)
-   * @param {{mode: string, cleanDb: boolean, verbose: boolean, envVars: Record<string, string>, noRebuild: boolean}} options
+   * @param {ServerOptions} options
    */
   async startServer(options) {
+    const fixturesDir = 'tests/e2e/fixtures';
+    const runtimeDir = 'tests/e2e/runtime';
+
     console.log('\n🚀 Starting server...');
     console.log(`📦 Mode: ${options.mode}`);
+
+    // Load fixture (local mode only)
+    if (options.mode === 'local') {
+      validateFixture(options.fixture, resolve(projectRoot, fixturesDir));
+      await loadFixture({
+        fixtureName: options.fixture,
+        fixturesDir,
+        runtimeDir,
+        projectRoot,
+        verbose: options.verbose,
+      });
+    }
+
+    // Load environment
+    const envFromFile = loadEnvFile({
+      envFile: options.envFile,
+      testDir: 'tests/e2e',
+      searchDirs: ['tests/e2e'],
+      projectRoot,
+      verbose: options.verbose,
+    });
+
+    // Merge with explicit --env options (--env takes precedence)
+    const env = { ...envFromFile, ...options.envVars };
 
     if (options.mode === 'local') {
       this.serverManager = new LocalServerManager();
       await this.serverManager.start({
         cleanDb: options.cleanDb,
         verbose: options.verbose,
-        env: options.envVars,
+        env,
         needsWebdav: false, // Playwright tests don't need WebDAV
       });
     } else {
       this.serverManager = new ContainerServerManager();
       await this.serverManager.start({
         rebuild: !options.noRebuild,
-        env: options.envVars,
+        env,
       });
     }
 
@@ -259,7 +184,7 @@ class PlaywrightRunner {
 
   /**
    * Run Playwright tests
-   * @param {{browser: string, headed: boolean, debugger: boolean, debugMessages: boolean, workers: number, grep: string|null, grepInvert: string|null, failFast: boolean}} options
+   * @param {PlaywrightOptions} options
    */
   async runPlaywrightTests(options) {
     console.log('\n🧪 Running Playwright tests...');
@@ -340,15 +265,37 @@ class PlaywrightRunner {
 
   /**
    * Run the test suite
-   * @param {string[]} args
    */
-  async run(args) {
-    const options = this.parseArgs(args);
+  async run() {
+    // Resolve mode from CLI options
+    const mode = resolveMode(cliOptions);
 
-    if (options.help) {
-      this.showHelp();
-      return 0;
-    }
+    // Process --env arguments
+    const envVars = processEnvArgs(cliOptions.env || []);
+
+    // Convert Commander options to internal format
+    /** @type {ServerOptions} */
+    const serverOptions = {
+      mode,
+      fixture: cliOptions.fixture,
+      cleanDb: cliOptions.keepDb ? false : cliOptions.cleanDb,
+      verbose: cliOptions.verbose,
+      envVars,
+      envFile: cliOptions.envFile,
+      noRebuild: cliOptions.rebuild === false,
+    };
+
+    /** @type {PlaywrightOptions} */
+    const playwrightOptions = {
+      browser: cliOptions.browser,
+      headed: cliOptions.headed,
+      debugger: cliOptions.debugger,
+      debugMessages: cliOptions.debugMessages,
+      workers: parseInt(cliOptions.workers, 10),
+      grep: cliOptions.grep || null,
+      grepInvert: cliOptions.grepInvert || null,
+      failFast: cliOptions.failFast,
+    };
 
     try {
       console.log('🧪 Playwright E2E Test Runner');
@@ -361,13 +308,13 @@ class PlaywrightRunner {
       }
 
       // Start server
-      await this.startServer(options);
+      await this.startServer(serverOptions);
 
       // Run tests
-      await this.runPlaywrightTests(options);
+      await this.runPlaywrightTests(playwrightOptions);
 
       // Stop server
-      await this.stopServer(options);
+      await this.stopServer({ noCleanup: cliOptions.cleanup === false });
 
       return 0;
     } catch (error) {
@@ -394,7 +341,7 @@ async function main() {
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
 
-  const exitCode = await runner.run(process.argv.slice(2));
+  const exitCode = await runner.run();
   process.exit(exitCode);
 }
 

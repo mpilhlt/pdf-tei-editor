@@ -3,7 +3,7 @@
  * These tests ensure the application loads without critical errors.
  *
  * @testCovers app/src/*
- * @env tests/e2e/.env.test
+ * 
  */
 
 import { test, expect } from '@playwright/test';
