@@ -68,6 +68,7 @@ function parseArgs() {
     testDir: null,
     env: {},
     envFile: null,
+    timeout: 30 * 1000, // 30 seconds default
   };
 
   // Auto-detect CI environment
@@ -121,6 +122,9 @@ function parseArgs() {
             options.env[envSpec] = process.env[envSpec];
           }
         }
+        break;
+      case '--timeout':
+        options.timeout = parseInt(args[++i], 10) * 1000; // Convert seconds to ms
         break;
       case '--help':
       case '-h':
@@ -191,6 +195,7 @@ Environment:
   --env-file <path>    Load environment variables from .env file
   --env VAR_NAME       Pass environment variable from host
   --env VAR=value      Set environment variable (overrides --env-file)
+  --timeout <seconds>  Test timeout in seconds (default: 60)
 
 Examples:
   # Run all tests with local server
@@ -225,8 +230,9 @@ Examples:
  */
 async function discoverTests(testDir = null) {
   const defaultDirs = [
-    join(projectRoot, 'fastapi_app', 'tests', 'backend'), // FastAPI tests
-    join(projectRoot, 'tests', 'e2e', 'backend'), // Consolidated tests (Phase 9)
+    join(projectRoot, 'tests', 'api'), // Phase 9: API tests (v0, v1)
+    join(projectRoot, 'fastapi_app', 'tests', 'backend'), // Legacy FastAPI tests
+    join(projectRoot, 'tests', 'e2e', 'backend'), // Legacy E2E backend tests
   ];
 
   const searchDirs = testDir ? [join(projectRoot, testDir)] : defaultDirs;
@@ -277,12 +283,14 @@ function filterTests(tests, grep = null, grepInvert = null) {
  *
  * @param {string[]} testFiles - Test file paths
  * @param {string} baseUrl - Server base URL (E2E_BASE_URL)
+ * @param {number} timeout - Test timeout in milliseconds (default: 60 seconds)
  * @returns {Promise<number>} Exit code
  */
-async function runTests(testFiles, baseUrl) {
+async function runTests(testFiles, baseUrl, timeout = 60 * 1000) {
   console.log('\n==> Running backend integration tests');
   console.log(`📋 Base URL: ${baseUrl}`);
   console.log(`📋 Test files: ${testFiles.length}`);
+  console.log(`⏱️  Timeout: ${timeout / 1000}s`);
 
   for (const testFile of testFiles) {
     console.log(`  - ${relative(projectRoot, testFile)}`);
@@ -300,11 +308,29 @@ async function runTests(testFiles, baseUrl) {
       },
     });
 
+    // Set up timeout to kill stalled tests
+    const timeoutId = setTimeout(() => {
+      console.error(`\n❌ Tests timed out after ${timeout / 1000}s - killing process`);
+      testProcess.kill('SIGTERM');
+
+      // Force kill if it doesn't respond to SIGTERM
+      setTimeout(() => {
+        if (!testProcess.killed) {
+          console.error('⚠️  Process did not respond to SIGTERM, forcing SIGKILL');
+          testProcess.kill('SIGKILL');
+        }
+      }, 5000);
+
+      resolve(124); // Exit code for timeout
+    }, timeout);
+
     testProcess.on('exit', (code) => {
+      clearTimeout(timeoutId);
       resolve(code || 0);
     });
 
     testProcess.on('error', (err) => {
+      clearTimeout(timeoutId);
       console.error(`❌ Failed to run tests: ${err.message}`);
       resolve(1);
     });
@@ -367,7 +393,14 @@ async function main() {
 
     // Step 3: Initialize server manager
     if (options.mode === 'local') {
-      serverManager = new LocalServerManager();
+      // Pass DB_DIR, DATA_ROOT, and LOG_DIR from environment to LocalServerManager
+      // so it wipes the correct directories and logs to the right location
+      const managerOptions = {
+        dbDir: options.env.DB_DIR,
+        dataRoot: options.env.DATA_ROOT,
+        logDir: options.env.LOG_DIR,
+      };
+      serverManager = new LocalServerManager(managerOptions);
     } else {
       serverManager = new ContainerServerManager();
     }
@@ -386,7 +419,7 @@ async function main() {
     const baseUrl = await serverManager.start(startOptions);
 
     // Step 5: Run tests
-    exitCode = await runTests(filteredTests, baseUrl);
+    exitCode = await runTests(filteredTests, baseUrl, options.timeout);
 
     // Step 6: Report results
     console.log('\n==> Test Results');

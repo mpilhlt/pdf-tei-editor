@@ -22,7 +22,7 @@ Consolidate and reorganize all tests into a unified structure that validates API
 
 **Current**:
 
-```
+```text
 /
 ├── data/              # Mixed usage
 ├── db/                # Application database
@@ -35,7 +35,7 @@ Consolidate and reorganize all tests into a unified structure that validates API
 
 **Target**:
 
-```
+```text
 /
 └── data/              # Parent for all application data
     ├── db/            # Application database (users.json, collections.json, etc.)
@@ -47,7 +47,7 @@ Consolidate and reorganize all tests into a unified structure that validates API
 
 **Target**:
 
-```
+```text
 tests/
 ├── api/                              # Backend API integration tests
 │   ├── v0/                          # Flask API tests (legacy)
@@ -176,7 +176,7 @@ tests/
 
 5. **Update .gitignore**:
 
-   ```
+   ```text
    # Application runtime data
    data/db/
    data/files/

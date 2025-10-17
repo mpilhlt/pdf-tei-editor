@@ -80,6 +80,8 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test environment."""
+        import gc
+        gc.collect()  # Force garbage collection to close lingering connections
         shutil.rmtree(self.test_dir)
 
     @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
@@ -106,14 +108,13 @@ class TestRemoteMetadataManager(unittest.TestCase):
         """Test downloading existing metadata.db from WebDAV."""
         # Create a real test database to use as remote
         test_db_path = self.test_dir / 'remote.db'
-        conn = sqlite3.connect(test_db_path)
-        conn.executescript(REMOTE_SCHEMA)
-        conn.execute(
-            "INSERT INTO sync_metadata (key, value) VALUES (?, ?)",
-            ('version', '5')
-        )
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(test_db_path) as conn:
+            conn.executescript(REMOTE_SCHEMA)
+            conn.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES (?, ?)",
+                ('version', '5')
+            )
+            conn.commit()
 
         # Read the database content
         with open(test_db_path, 'rb') as f:
@@ -140,11 +141,10 @@ class TestRemoteMetadataManager(unittest.TestCase):
         self.logger.info.assert_called()
 
         # Verify database content
-        conn = sqlite3.connect(temp_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM sync_metadata WHERE key = 'version'")
-        version = cursor.fetchone()[0]
-        conn.close()
+        with sqlite3.connect(temp_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM sync_metadata WHERE key = 'version'")
+            version = cursor.fetchone()[0]
         self.assertEqual(version, '5')
 
     @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
@@ -159,26 +159,24 @@ class TestRemoteMetadataManager(unittest.TestCase):
         self.assertTrue(temp_path.exists())
 
         # Verify schema was created
-        conn = sqlite3.connect(temp_path)
-        cursor = conn.cursor()
+        with sqlite3.connect(temp_path) as conn:
+            cursor = conn.cursor()
 
-        # Check tables exist
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='file_metadata'"
-        )
-        self.assertIsNotNone(cursor.fetchone())
+            # Check tables exist
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='file_metadata'"
+            )
+            self.assertIsNotNone(cursor.fetchone())
 
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_metadata'"
-        )
-        self.assertIsNotNone(cursor.fetchone())
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_metadata'"
+            )
+            self.assertIsNotNone(cursor.fetchone())
 
-        # Check initial version
-        cursor.execute("SELECT value FROM sync_metadata WHERE key = 'version'")
-        version = cursor.fetchone()[0]
-        self.assertEqual(version, '1')
-
-        conn.close()
+            # Check initial version
+            cursor.execute("SELECT value FROM sync_metadata WHERE key = 'version'")
+            version = cursor.fetchone()[0]
+            self.assertEqual(version, '1')
 
     @patch('fastapi_app.lib.remote_metadata.WebdavFileSystem')
     def test_upload_database(self, mock_webdav_class):
@@ -187,14 +185,13 @@ class TestRemoteMetadataManager(unittest.TestCase):
 
         # Create a test database to upload
         test_db_path = self.test_dir / 'upload.db'
-        conn = sqlite3.connect(test_db_path)
-        conn.executescript(REMOTE_SCHEMA)
-        conn.execute(
-            "INSERT INTO sync_metadata (key, value) VALUES (?, ?)",
-            ('version', '10')
-        )
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(test_db_path) as conn:
+            conn.executescript(REMOTE_SCHEMA)
+            conn.execute(
+                "INSERT INTO sync_metadata (key, value) VALUES (?, ?)",
+                ('version', '10')
+            )
+            conn.commit()
 
         # Upload
         with patch('shutil.copyfileobj') as mock_copy:
