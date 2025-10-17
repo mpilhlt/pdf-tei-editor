@@ -213,7 +213,7 @@ describe('Extraction API E2E Tests', () => {
     // Verify the extracted file was saved
     const filesResponse = await authenticatedApiCall(
       session.sessionId,
-      '/files',
+      '/files/list',
       'GET',
       null,
       BASE_URL
