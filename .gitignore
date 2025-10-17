@@ -20,7 +20,17 @@ pdfjs
 # Debug logs
 log/
 
-# FastAPI database files (runtime-generated from config/)
+# Application runtime data (unified structure)
+data/db/
+data/files/
+
+# Test runtime data (ephemeral, gitignored)
+tests/api/runtime/db/
+tests/api/runtime/files/
+tests/api/runtime/logs/
+tests/e2e/runtime/
+
+# Legacy FastAPI database files (to be removed)
 fastapi_app/db/*.json
 fastapi_app/db/*.db
 fastapi_app/db/*.db-*

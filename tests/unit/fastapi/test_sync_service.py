@@ -110,6 +110,9 @@ class TestSyncService(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test environment."""
+        # Close any open database connections
+        import gc
+        gc.collect()  # Force garbage collection to close lingering connections
         shutil.rmtree(self.test_dir)
 
     @patch('fastapi_app.lib.sync_service.WebdavFileSystem')
@@ -452,7 +455,7 @@ class TestSyncService(unittest.TestCase):
         self.assertIsNone(file)  # Should not be found (soft deleted)
 
         # Verify summary
-        self.assertEqual(summary.deletions_local, 1)
+        self.assertEqual(summary.deleted_local, 1)
 
     @patch('fastapi_app.lib.sync_service.WebdavFileSystem')
     def test_get_remote_file_path(self, mock_webdav_class):
@@ -540,8 +543,8 @@ class TestSyncService(unittest.TestCase):
 
         # Verify sync was skipped
         self.assertTrue(summary.skipped)
-        self.assertEqual(summary.uploads, 0)
-        self.assertEqual(summary.downloads, 0)
+        self.assertEqual(summary.uploaded, 0)
+        self.assertEqual(summary.downloaded, 0)
 
     @patch('fastapi_app.lib.sync_service.WebdavFileSystem')
     def test_sse_progress_updates(self, mock_webdav_class):

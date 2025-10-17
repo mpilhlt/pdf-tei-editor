@@ -190,8 +190,11 @@ class TestConfigUtils(unittest.TestCase):
             self.assertTrue(success, f"Write failed for {key}")
 
         # Verify all values are present
+        import time
+        time.sleep(0.1)  # Small delay to ensure all writes are flushed
         config = load_full_config(self.db_dir)
         for i in range(10):
+            self.assertIn(f'key{i}', config, f"key{i} not found in config. Config keys: {list(config.keys())}")
             self.assertEqual(config[f'key{i}'], f'value{i}')
 
     def test_dot_notation_keys(self):
