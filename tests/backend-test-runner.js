@@ -393,7 +393,14 @@ async function main() {
 
     // Step 3: Initialize server manager
     if (options.mode === 'local') {
-      serverManager = new LocalServerManager();
+      // Pass DB_DIR, DATA_ROOT, and LOG_DIR from environment to LocalServerManager
+      // so it wipes the correct directories and logs to the right location
+      const managerOptions = {
+        dbDir: options.env.DB_DIR,
+        dataRoot: options.env.DATA_ROOT,
+        logDir: options.env.LOG_DIR,
+      };
+      serverManager = new LocalServerManager(managerOptions);
     } else {
       serverManager = new ContainerServerManager();
     }

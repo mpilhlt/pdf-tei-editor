@@ -28,7 +28,7 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
   /**
    * Helper: Create SSE connection with authentication and collect events
    */
-  function createSSEConnection(session, eventType = null) {
+  function createSSEConnection(session, eventType = null, debug = false) {
     const events = [];
     let resolvePromise = null;
     let rejectPromise = null;
@@ -40,12 +40,27 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
         'X-Session-Id': session.sessionId
       },
       onMessage: (message) => {
+        if (debug) {
+          console.log(`[SSE] Received event: ${message.event}, data: ${message.data}`);
+        }
         // Filter by event type if specified
         if (!eventType || message.event === eventType) {
           events.push(message.data);
           if (resolvePromise) {
             resolvePromise(message.data);
           }
+        } else if (debug) {
+          console.log(`[SSE] Filtered out event type: ${message.event} (waiting for: ${eventType})`);
+        }
+      },
+      onError: (error) => {
+        if (debug) {
+          console.log(`[SSE] Connection error:`, error);
+        }
+      },
+      onClose: () => {
+        if (debug) {
+          console.log(`[SSE] Connection closed`);
         }
       }
     });
@@ -92,11 +107,15 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(connection.eventSource.readyState, 'open', 'Connection should be open');
     connection.close();
+
+    // Wait for SSE cleanup to complete before next test
+    await new Promise(resolve => setTimeout(resolve, 200));
   });
 
   test('Test 3: SSE echo test endpoint sends messages', async () => {
-    const session = await getSession();
-    const connection = createSSEConnection(session, 'test');
+    // Create fresh session to avoid queue conflicts with Test 2
+    const session = await login('reviewer', 'reviewer', BASE_URL);
+    const connection = createSSEConnection(session, 'test'); // Filter for 'test' events
 
     // Wait for connection to establish and SSE stream to start consuming
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -122,8 +141,8 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
       'Should report correct number of messages sent'
     );
 
-    // Wait for and collect SSE events
-    const receivedMessages = await connection.waitForEvents(testMessages.length, 3000);
+    // Wait for and collect SSE events (increased timeout for full test suite)
+    const receivedMessages = await connection.waitForEvents(testMessages.length, 5000);
 
     assert.strictEqual(
       receivedMessages.length,

@@ -76,12 +76,21 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
     stableId2: null,
   };
 
+  // Get database path from environment or use default
+  const dbDir = process.env.DB_DIR || 'fastapi_app/db';
+  const metadataDb = `${dbDir}/metadata.db`;
+
   before(async () => {
     cleanupBeforeTests();
     // Cleanup our specific test files
-    execSync(`sqlite3 fastapi_app/db/metadata.db "DELETE FROM files WHERE doc_id LIKE 'refcount-test%';"`, {
-      stdio: 'pipe'
-    });
+    try {
+      execSync(`sqlite3 "${metadataDb}" "DELETE FROM files WHERE doc_id LIKE 'refcount-test%';"`, {
+        stdio: 'pipe'
+      });
+    } catch (error) {
+      // Ignore errors if table doesn't exist yet
+      console.log('⚠️  Could not cleanup test files (table may not exist yet)');
+    }
   });
 
   after(async () => {
@@ -91,9 +100,14 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
     }
     cleanupAfterTests();
     // Cleanup our specific test files
-    execSync(`sqlite3 fastapi_app/db/metadata.db "DELETE FROM files WHERE doc_id LIKE 'refcount-test%';"`, {
-      stdio: 'pipe'
-    });
+    try {
+      execSync(`sqlite3 "${metadataDb}" "DELETE FROM files WHERE doc_id LIKE 'refcount-test%';"`, {
+        stdio: 'pipe'
+      });
+    } catch (error) {
+      // Ignore errors if cleanup fails
+      console.log('⚠️  Could not cleanup test files after tests');
+    }
   });
 
   async function getSession() {

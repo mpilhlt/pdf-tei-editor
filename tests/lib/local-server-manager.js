@@ -24,14 +24,19 @@ const __dirname = dirname(__filename);
  * @extends ServerManager
  */
 export class LocalServerManager extends ServerManager {
-  constructor() {
+  constructor(options = {}) {
     super();
     this.projectRoot = join(__dirname, '..', '..');
     this.fastapiApp = join(this.projectRoot, 'fastapi_app');
-    this.dbDir = join(this.fastapiApp, 'db');
-    this.dataDir = join(this.fastapiApp, 'data');
-    this.logDir = join(this.projectRoot, 'log');
-    this.logFile = join(this.logDir, 'test-server.log');
+
+    // DB and data directories can be overridden via options (from env file)
+    // Default to fastapi_app locations for backward compatibility
+    this.dbDir = options.dbDir ? join(this.projectRoot, options.dbDir) : join(this.fastapiApp, 'db');
+    this.dataDir = options.dataRoot ? join(this.projectRoot, options.dataRoot) : join(this.fastapiApp, 'data');
+
+    // Log directory can be overridden via options (from env file)
+    this.logDir = options.logDir ? join(this.projectRoot, options.logDir) : join(this.projectRoot, 'log');
+    this.logFile = join(this.logDir, 'server.log');
     this.serverUrl = 'http://localhost:8000';
     this.serverProcess = null;
     this.webdavManager = null;
@@ -143,6 +148,27 @@ export class LocalServerManager extends ServerManager {
       // Ignore if doesn't exist
     }
 
+    // Recreate db directory and copy fixtures if available
+    const fixturesConfigDir = join(this.projectRoot, 'tests/api/fixtures/config');
+    const fixturesDirExists = await fs.access(fixturesConfigDir).then(() => true).catch(() => false);
+
+    if (fixturesDirExists) {
+      // Create db directory
+      await fs.mkdir(this.dbDir, { recursive: true });
+
+      // Copy JSON config files from fixtures
+      const files = await fs.readdir(fixturesConfigDir);
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
+
+      for (const file of jsonFiles) {
+        const src = join(fixturesConfigDir, file);
+        const dest = join(this.dbDir, file);
+        await fs.copyFile(src, dest);
+      }
+
+      console.log(`[INFO] Copied ${jsonFiles.length} fixture files to ${this.dbDir}`);
+    }
+
     console.log('[SUCCESS] Database wiped - starting with clean slate');
   }
 
@@ -227,10 +253,11 @@ LOG_LEVEL=INFO
       });
     } else {
       // Redirect to log file using shell redirection
+      // Use PYTHONUNBUFFERED=1 to ensure Python output isn't buffered
       const { spawn: spawnShell } = await import('child_process');
       this.serverProcess = spawnShell(
         'sh',
-        ['-c', `npm run dev:fastapi >> "${this.logFile}" 2>&1`],
+        ['-c', `PYTHONUNBUFFERED=1 npm run dev:fastapi >> "${this.logFile}" 2>&1`],
         {
           cwd: this.projectRoot,
           stdio: 'ignore',
