@@ -1,3 +1,5 @@
+runtime/*
+
 # Playwright test artifacts
 
 e2e/test-results/

@@ -1,7 +1,7 @@
 /**
  * E2E Backend Tests for File Move API
  * @testCovers fastapi_app/routers/files_move.py
- * @env tests/api/.env.test
+ * 
  */
 
 import { test, describe } from 'node:test';

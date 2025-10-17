@@ -1,6 +1,7 @@
 # Secrets and caches
 .env*
 !.env.dist
+!.env.test
 
 # Caches and temp files
 .venv

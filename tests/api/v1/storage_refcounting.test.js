@@ -2,7 +2,7 @@
  * E2E Tests for Storage Reference Counting
  * @testCovers fastapi_app/lib/storage_references.py
  * @testCovers fastapi_app/lib/file_storage.py
- * @env tests/api/.env.test
+ * 
  */
 
 import { test, describe, before, after } from 'node:test';

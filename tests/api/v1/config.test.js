@@ -2,7 +2,7 @@
  * Configuration API tests
  *
  * @testCovers fastapi_app/api/config.py
- * @env tests/api/.env.test
+ * 
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
