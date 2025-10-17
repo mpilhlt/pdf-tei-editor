@@ -1,0 +1,42 @@
+{
+    "model-configurations": [
+        {
+            "value": "llamore",
+            "label": "LLamore"
+        }
+    ],
+    "xml.encode-entities.server": true,
+    "xml.encode-entities.client": false,
+    "heartbeat.interval": 30,
+    "session.timeout": 86400,
+    "state.showInUrl": [
+        "pdf",
+        "xml",
+        "diff"
+    ],
+    "state.allowSetFromUrl": [
+        "pdf",
+        "xml",
+        "diff",
+        "variant",
+        "xpath",
+        "collection"
+    ],
+    "state.persistedVars": [
+        "*"
+    ],
+    "server.logging.level": {
+        "sse": "info",
+        "sync": "info"
+    },
+    "application.mode": "testing",
+    "application.mode.values": [
+        "development",
+        "production",
+        "testing"
+    ],
+    "application.login-message": "",
+    "application.login-message.type": "string",
+    "debug.enabled": true,
+    "debug.enabled.type": "boolean"
+}

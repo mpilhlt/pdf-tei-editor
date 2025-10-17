@@ -1,0 +1,34 @@
+[
+    {
+        "username": "testuser",
+        "fullname": "Test User",
+        "email": "testuser@example.com",
+        "roles": ["user"],
+        "passwd_hash": "13d249f2cb4127b40cfa757866850278793f814ded3c587fe5889e889a7a9f6c",
+        "session_id": null
+    },
+    {
+        "username": "testannotator",
+        "fullname": "Test Annotator",
+        "email": "testannotator@example.com",
+        "roles": ["annotator", "user"],
+        "passwd_hash": "38778e10be714f5d0b30c9c1598bc60bf54371e26198eb4d890010dc4e194abe",
+        "session_id": null
+    },
+    {
+        "username": "testreviewer",
+        "fullname": "Test Reviewer",
+        "email": "testreviewer@example.com",
+        "roles": ["reviewer", "user"],
+        "passwd_hash": "2464d37eb1d8957212a3e38c7f84def1cb7313355ef124f7f07011da06ecf333",
+        "session_id": null
+    },
+    {
+        "username": "testadmin",
+        "fullname": "Test Administrator",
+        "email": "testadmin@example.com",
+        "roles": ["admin", "reviewer", "annotator", "user"],
+        "passwd_hash": "713bfda78870bf9d1b261f565286f85e97ee614efe5f0faf7c34e7ca4f65baca",
+        "session_id": null
+    }
+]

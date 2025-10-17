@@ -4,7 +4,7 @@
 
 /**
  * @import {Page} from '@playwright/test'
- * @import {api as ClientApi} from '../../../../app/src/plugins/client'
+ * @import {api as ClientApi} from '../../../../app/src/plugins/client.js'
  * @import {namedElementsTree} from '../../../../app/src/ui.js'
  * @import {Application} from '../../../../app/src/modules/application.js'
  */
