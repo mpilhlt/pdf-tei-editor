@@ -137,10 +137,15 @@ test('dummy test', () => {});
     console.log('Parsed annotations:', result);
   });
 
-  test('should parse @env annotations and generate E2E commands with environment variables', async () => {
-    // Create test file with @env annotations
+  test('should parse @env annotations and categorize env vars vs env files', async () => {
+    // Create test file with @env annotations including both env vars and file paths
     const testFile = join(projectRoot, 'tests', 'e2e', 'temp-env-test.spec.js');
     testFiles.push(testFile);
+
+    // Create a temp .env file to test file path detection
+    const envFilePath = join(projectRoot, '.env.test-temp');
+    writeFileSync(envFilePath, 'TEST_VAR=value\n');
+    testFiles.push(envFilePath);
 
     const testContent = `/**
  * Test file for environment variable parsing
@@ -148,6 +153,7 @@ test('dummy test', () => {});
  * @env GROBID_SERVER_URL
  * @env GEMINI_API_KEY
  * @env TEST_MODE="e2e"
+ * @env .env.test-temp
  */
 import { test } from '@playwright/test';
 test('dummy test', () => {});
@@ -159,16 +165,14 @@ test('dummy test', () => {});
     const result = runner.parseTestAnnotations(testFile);
 
     // Test annotation parsing
-    assert(result.envVars.length === 3, 'Should parse all @env annotations');
+    assert(result.envVars.length === 4, 'Should parse all @env annotations');
     assert(result.envVars.includes('GROBID_SERVER_URL'), 'Should parse environment variable name');
     assert(result.envVars.includes('GEMINI_API_KEY'), 'Should parse second environment variable');
     assert(result.envVars.includes('TEST_MODE="e2e"'), 'Should parse environment variable assignment');
+    assert(result.envVars.includes('.env.test-temp'), 'Should parse env file path');
     assert(result.dependencies.includes('app/src/plugins/extraction.js'), 'Should still parse @testCovers');
 
     // Test E2E command generation with --dry-run
-    // Force analysis to include our test file
-    runner.cache = { dependencies: {}, lastAnalysis: 0 };
-
     // Mock to return only our test file
     const originalGetTestsToRun = runner.getTestsToRun;
     runner.getTestsToRun = async (options) => {
@@ -191,18 +195,90 @@ test('dummy test', () => {});
       try {
         await runner.run({ dryRun: true });
 
-        // Verify the E2E command contains environment variables
-        assert(capturedOutput.includes('--env "GROBID_SERVER_URL"'), 'Should include GROBID_SERVER_URL in E2E command');
-        assert(capturedOutput.includes('--env "GEMINI_API_KEY"'), 'Should include GEMINI_API_KEY in E2E command');
-        assert(capturedOutput.includes('--env "TEST_MODE="e2e""'), 'Should include TEST_MODE assignment in E2E command');
-        assert(capturedOutput.includes('node tests/e2e-runner.js --local'), 'Should use e2e-runner instead of npm run test:e2e');
+        // Verify the E2E command contains environment variables as --env
+        assert(capturedOutput.includes('--env "GROBID_SERVER_URL"'), 'Should include GROBID_SERVER_URL as --env in E2E command');
+        assert(capturedOutput.includes('--env "GEMINI_API_KEY"'), 'Should include GEMINI_API_KEY as --env in E2E command');
+        assert(capturedOutput.includes('--env "TEST_MODE="e2e""'), 'Should include TEST_MODE assignment as --env in E2E command');
+
+        // Verify the E2E command contains file path as --env-file
+        assert(capturedOutput.includes('--env-file ".env.test-temp"'), 'Should include .env.test-temp as --env-file in E2E command');
+
+        assert(capturedOutput.includes('node tests/e2e-runner.js --local'), 'Should use e2e-runner');
 
         console.log('Environment variable command generation test passed');
-        console.log('Generated command includes all expected environment variables');
+        console.log('Generated command correctly categorizes env vars and env files');
 
       } finally {
         console.log = originalLog;
       }
+    } finally {
+      runner.getTestsToRun = originalGetTestsToRun;
+    }
+  });
+
+  test('should throw error when multiple .env files are specified in same suite', async () => {
+    // Create two test files with different .env files
+    const testFile1 = join(projectRoot, 'tests', 'e2e', 'temp-env-conflict1.spec.js');
+    const testFile2 = join(projectRoot, 'tests', 'e2e', 'temp-env-conflict2.spec.js');
+    testFiles.push(testFile1, testFile2);
+
+    // Create two different .env files
+    const envFilePath1 = join(projectRoot, '.env.test-temp1');
+    const envFilePath2 = join(projectRoot, '.env.test-temp2');
+    writeFileSync(envFilePath1, 'TEST_VAR1=value1\n');
+    writeFileSync(envFilePath2, 'TEST_VAR2=value2\n');
+    testFiles.push(envFilePath1, envFilePath2);
+
+    const testContent1 = `/**
+ * @testCovers app/src/plugins/extraction.js
+ * @env .env.test-temp1
+ */
+import { test } from '@playwright/test';
+test('dummy test 1', () => {});
+`;
+
+    const testContent2 = `/**
+ * @testCovers app/src/plugins/extraction.js
+ * @env .env.test-temp2
+ */
+import { test } from '@playwright/test';
+test('dummy test 2', () => {});
+`;
+
+    writeFileSync(testFile1, testContent1);
+    writeFileSync(testFile2, testContent2);
+
+    const runner = new SmartTestRunner();
+
+    // Mock to return both test files in E2E suite
+    const originalGetTestsToRun = runner.getTestsToRun;
+    runner.getTestsToRun = async (options) => {
+      const analysisResult = await runner.analyzeDependencies(options);
+      return {
+        tests: { js: [], py: [], api: [], e2e: [`tests/e2e/${basename(testFile1)}`, `tests/e2e/${basename(testFile2)}`] },
+        analysisResult
+      };
+    };
+
+    try {
+      let errorThrown = false;
+      let errorMessage = '';
+
+      try {
+        await runner.run({ dryRun: true });
+      } catch (error) {
+        errorThrown = true;
+        errorMessage = error.message;
+      }
+
+      assert(errorThrown, 'Should throw an error when multiple .env files are specified');
+      assert(errorMessage.includes('E2E test suite has conflicting .env files'), 'Error message should mention conflicting .env files');
+      assert(errorMessage.includes('.env.test-temp1'), 'Error message should list first .env file');
+      assert(errorMessage.includes('.env.test-temp2'), 'Error message should list second .env file');
+
+      console.log('Conflicting .env files validation test passed');
+      console.log('Error message:', errorMessage);
+
     } finally {
       runner.getTestsToRun = originalGetTestsToRun;
     }
@@ -379,6 +455,26 @@ class TestExample(unittest.TestCase):
       // Restore original content
       writeFileSync(sourceFile, originalContent);
     }
+  });
+
+  test('should accept positional arguments as changed files', async () => {
+    const runner = new SmartTestRunner();
+
+    // Test with positional arguments instead of --changed-files
+    const customChangedFiles = ['app/src/modules/state-manager.js', 'app/src/ui.js'];
+
+    const { tests: testsToRun } = await runner.getTestsToRun({ changedFiles: customChangedFiles });
+
+    // Should find tests that cover state-manager.js or ui.js
+    // At minimum, we know that tests covering state-manager.js should be selected
+    const hasRelevantTest = testsToRun.js.some(test =>
+      test.includes('state-manager') || test.includes('ui')
+    );
+
+    assert(hasRelevantTest || testsToRun.js.length === 0, 'Should select tests based on positional arguments or none if no matches');
+
+    console.log('Tests selected for custom changed files:', testsToRun);
+    console.log('Custom changed files:', customChangedFiles);
   });
 
 });

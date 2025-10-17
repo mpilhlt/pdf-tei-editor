@@ -5,6 +5,7 @@
  * @testCovers app/src/plugins/xmleditor.js
  * @testCovers app/src/plugins/services.js
  * @testCovers server/api/files.py
+ * @env tests/e2e/.env.test
  */
 
 /** @import { namedElementsTree } from '../../../app/src/ui.js' */

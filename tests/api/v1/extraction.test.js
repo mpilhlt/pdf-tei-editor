@@ -2,6 +2,7 @@
  * E2E Backend Tests for Extraction API
  * @testCovers fastapi_app/routers/extraction.py
  * @testCovers fastapi_app/lib/extractor_manager.py
+ * @env tests/api/.env.test
  */
 
 import { test, describe } from 'node:test';

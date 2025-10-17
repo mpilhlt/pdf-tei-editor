@@ -71,7 +71,7 @@ tests/
 │       ├── api-client.js
 │       └── assertions.js
 ├── e2e/                             # Playwright browser tests
-│   ├── frontend/                    # Frontend E2E tests
+│   ├── tests/                        # Frontend E2E tests
 │   │   ├── editor.spec.js
 │   │   └── ...
 │   ├── fixtures/                    # E2E test fixtures
@@ -758,4 +758,61 @@ After Phase 9:
 
 ---
 
-Last updated: 2025-10-16
+## Recent Updates
+
+### 2025-10-17: Smart Test Runner Environment Variable Handling
+
+Updated the smart test runner to improve environment variable handling and file path argument processing:
+
+**Changes to [tests/smart-test-runner.js](../../tests/smart-test-runner.js)**:
+
+1. **Positional Arguments for File Paths**:
+   - Removed `--changed-files` named parameter
+   - File paths now accepted as positional arguments: `node tests/smart-test-runner.js app/src/ui.js server/api/auth.py`
+   - Simplifies command-line usage
+
+2. **Environment Variable File Detection**:
+   - Removed `--dotenv-path` parameter
+   - Automatically detects file paths in `@env` annotations by checking if they exist in the filesystem
+   - File paths (relative to project root) are passed as `--env-file` to test runners
+   - Regular environment variables/assignments are passed as `--env`
+
+3. **Conflict Validation**:
+   - **Validates that only one `.env` file is specified per test suite (API or E2E)**
+   - Throws descriptive error if multiple `.env` files are detected in the same suite
+   - Error message lists conflicting files and guides resolution
+   - Prevents configuration conflicts during test execution
+
+**Example Usage**:
+
+```javascript
+/**
+ * Test that uses environment variables and a .env file
+ * @testCovers app/src/plugins/extraction.js
+ * @env GROBID_SERVER_URL
+ * @env GEMINI_API_KEY
+ * @env .env.testing        # Detected as file, passed as --env-file
+ */
+```
+
+**Generated Commands**:
+
+```bash
+# Environment variables passed as --env
+# File paths passed as --env-file
+node tests/e2e-runner.js --local --env "GROBID_SERVER_URL" --env "GEMINI_API_KEY" --env-file ".env.testing"
+```
+
+**Error Handling**:
+
+```bash
+# If two tests in same suite specify different .env files:
+Error: E2E test suite has conflicting .env files: .env.testing, .env.production.
+Only one .env file can be specified per test suite. Please ensure all tests in this suite use the same .env file.
+```
+
+This ensures consistent environment configuration across all tests in a suite and prevents hard-to-debug configuration conflicts.
+
+---
+
+Last updated: 2025-10-17

@@ -1,6 +1,7 @@
 /**
  * E2E Backend Tests for File Delete API
  * @testCovers fastapi_app/routers/files_delete.py
+ * @env tests/api/.env.test
  */
 
 import { test, describe, before, after } from 'node:test';

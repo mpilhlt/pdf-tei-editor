@@ -2,10 +2,11 @@
  * Authentication API tests
  *
  * @testCovers fastapi_app/api/auth.py
+ * @env tests/api/.env.test
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { hashPassword, login, logout, checkStatus, API_BASE } from '../helpers/test-auth.js';
+import { login, logout, checkStatus, API_BASE } from '../helpers/test-auth.js';
 
 describe('Authentication API', () => {
     let sessionId = null;

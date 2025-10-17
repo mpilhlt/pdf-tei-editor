@@ -2,6 +2,7 @@
  * E2E Integration Tests for Server-Sent Events (SSE) API
  * @testCovers fastapi_app/routers/sse.py
  * @testCovers fastapi_app/lib/sse_service.py
+ * @env tests/api/.env.test
  */
 
 import { test, describe } from 'node:test';

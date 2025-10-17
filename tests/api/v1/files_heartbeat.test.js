@@ -1,6 +1,7 @@
 /**
  * E2E Backend Tests for File Heartbeat API
  * @testCovers fastapi_app/routers/files_heartbeat.py
+ * @env tests/api/.env.test
  */
 
 import { test, describe } from 'node:test';
