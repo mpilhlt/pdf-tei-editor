@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '../../..');
 // Use test runtime directory for ephemeral data, fixtures for initial state
 const runtimeDbDir = path.join(projectRoot, 'tests/api/runtime/db');
-const fixtureDbDir = path.join(projectRoot, 'tests/api/fixtures/db');
+const fixtureConfigDir = path.join(projectRoot, 'tests/api/fixtures/config');
 
 /**
  * Clean database directory for testing.
@@ -59,7 +59,8 @@ export function cleanDbDirectory(keepSqlite = false) {
 /**
  * Initialize database from fixture defaults.
  *
- * Copies all files from fixtures/db/ to runtime/db/.
+ * Copies JSON config files from fixtures/config/ to runtime/db/.
+ * SQLite databases will be created automatically by the server on first run.
  * This provides a clean starting state for each test run.
  */
 export function initDbFromFixtures() {
@@ -67,15 +68,17 @@ export function initDbFromFixtures() {
     fs.mkdirSync(runtimeDbDir, { recursive: true });
   }
 
-  const fixtureFiles = fs.readdirSync(fixtureDbDir);
+  // Copy JSON config files from fixtures/config/ to runtime/db/
+  const fixtureFiles = fs.readdirSync(fixtureConfigDir).filter(f => f.endsWith('.json'));
 
   for (const file of fixtureFiles) {
-    const src = path.join(fixtureDbDir, file);
+    const src = path.join(fixtureConfigDir, file);
     const dest = path.join(runtimeDbDir, file);
     fs.copyFileSync(src, dest);
   }
 
-  console.log(`📋 Copied ${fixtureFiles.length} fixture files to runtime directory`);
+  console.log(`📋 Copied ${fixtureFiles.length} config files to runtime/db directory`);
+  console.log('ℹ️  SQLite databases will be created automatically by server');
 }
 
 /**

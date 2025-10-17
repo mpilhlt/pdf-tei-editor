@@ -36,6 +36,8 @@ class TestDatabaseSchema(unittest.TestCase):
 
     def tearDown(self):
         """Clean up temporary directory."""
+        import gc
+        gc.collect()  # Force garbage collection to close lingering connections
         shutil.rmtree(self.test_dir)
 
     def test_schema_creation(self):
@@ -116,6 +118,8 @@ class TestDatabaseManager(unittest.TestCase):
 
     def tearDown(self):
         """Clean up temporary directory."""
+        import gc
+        gc.collect()  # Force garbage collection to close lingering connections
         shutil.rmtree(self.test_dir)
 
     def test_connection_context_manager(self):
@@ -176,6 +180,8 @@ class TestFileRepository(unittest.TestCase):
 
     def tearDown(self):
         """Clean up temporary directory."""
+        import gc
+        gc.collect()  # Force garbage collection to close lingering connections
         shutil.rmtree(self.test_dir)
 
     def test_insert_file(self):
@@ -492,6 +498,8 @@ class TestFileStorage(unittest.TestCase):
 
     def tearDown(self):
         """Clean up temporary directory."""
+        import gc
+        gc.collect()  # Force garbage collection to close lingering connections
         shutil.rmtree(self.test_dir)
 
     def test_save_and_read_file(self):
