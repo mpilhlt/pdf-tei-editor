@@ -5,6 +5,7 @@
  * @testCovers fastapi_app/lib/sync_service.py
  * @testCovers fastapi_app/lib/remote_metadata.py
  * @testCovers fastapi_app/lib/sse_service.py
+ * @env tests/api/.env.test
  */
 
 import { test, describe } from 'node:test';

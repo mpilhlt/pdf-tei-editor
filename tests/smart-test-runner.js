@@ -488,7 +488,15 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {{tap?: boolean, dryRun?: boolean, all?: boolean, changedFiles?: string[] | null, dotenvPath?: string | null}} options
+   * @typedef {Object} RunOptions
+   * @property {boolean} [tap] - Output in TAP format
+   * @property {boolean} [dryRun] - Show which tests would run without executing
+   * @property {boolean} [all] - Run all tests regardless of changes
+   * @property {string[] | null} [changedFiles] - Custom list of changed files to analyze
+   */
+
+  /**
+   * @param {RunOptions} options
    */
   async run(options = {}) {
     const isTap = options.tap;
@@ -504,6 +512,42 @@ class SmartTestRunner {
 
     const jsCommand = testsToRun.js.length > 0 ? `node tests/unit-test-runner.js ${isTap ? '--tap' : ''} ${testsToRun.js.join(' ')}` : null;
     const pyCommand = testsToRun.py.length > 0 ? `uv run python tests/unit-test-runner.py ${isTap ? '--tap' : ''} ${testsToRun.py.join(' ')}` : null;
+
+    /**
+     * Helper function to categorize environment variable specifications
+     * @param {Set<string>} envVars - Set of environment variable specifications from @env annotations
+     * @param {string} suiteType - Type of test suite ('API' or 'E2E') for error messages
+     * @returns {{envArgs: string[], envFile: string | null}} - Categorized env arguments and single env file
+     * @throws {Error} If multiple .env files are specified
+     */
+    const categorizeEnvVars = (envVars, suiteType) => {
+      const envArgs = [];
+      const envFiles = [];
+
+      for (const envVar of envVars) {
+        // First, try to check if it exists as a file (relative path from project root)
+        const filePath = join(projectRoot, envVar);
+        if (existsSync(filePath)) {
+          envFiles.push(envVar);
+        } else {
+          // If it doesn't exist as a file, treat as regular env var
+          envArgs.push(envVar);
+        }
+      }
+
+      // Validate: only one .env file is allowed per test suite
+      if (envFiles.length > 1) {
+        throw new Error(
+          `${suiteType} test suite has conflicting .env files: ${envFiles.join(', ')}. ` +
+          `Only one .env file can be specified per test suite. Please ensure all tests in this suite use the same .env file.`
+        );
+      }
+
+      return {
+        envArgs,
+        envFile: envFiles.length > 0 ? envFiles[0] : null
+      };
+    };
 
     // Collect environment variables from API tests
     const apiEnvVars = new Set();
@@ -531,11 +575,12 @@ class SmartTestRunner {
     let apiCommand = null;
     if (testsToRun.api && testsToRun.api.length > 0) {
       const testFiles = testsToRun.api.join(' ');
-      const envArgs = Array.from(apiEnvVars).map(envVar => `--env "${envVar}"`).join(' ');
-      const dotenvArg = options.dotenvPath ? `--env-file "${options.dotenvPath}"` : '';
-      const extraArgs = [envArgs, dotenvArg].filter(Boolean).join(' ');
+      const { envArgs, envFile } = categorizeEnvVars(apiEnvVars, 'API');
+      const envArgsStr = envArgs.map(envVar => `--env "${envVar}"`).join(' ');
+      const envFileArg = envFile ? `--env-file "${envFile}"` : '';
+      const extraArgs = [envArgsStr, envFileArg].filter(Boolean).join(' ');
       // Route API tests to backend-test-runner
-      apiCommand = `node tests/backend-test-runner.js ${extraArgs} ${testFiles}`;
+      apiCommand = `node tests/backend-test-runner.js ${extraArgs} ${testFiles}`.trim();
     }
 
     // Build E2E command (Playwright frontend tests)
@@ -543,9 +588,10 @@ class SmartTestRunner {
     if (testsToRun.e2e && testsToRun.e2e.length > 0) {
       const testFiles = testsToRun.e2e.map(f => f.replace('tests/e2e/', '').replace('.spec.js', '')).join('|');
       const grepArg = `--grep "${testFiles}"`;
-      const envArgs = Array.from(e2eEnvVars).map(envVar => `--env "${envVar}"`).join(' ');
-      const dotenvArg = options.dotenvPath ? `--env-file "${options.dotenvPath}"` : '';
-      const extraArgs = [grepArg, envArgs, dotenvArg].filter(Boolean).join(' ');
+      const { envArgs, envFile } = categorizeEnvVars(e2eEnvVars, 'E2E');
+      const envArgsStr = envArgs.map(envVar => `--env "${envVar}"`).join(' ');
+      const envFileArg = envFile ? `--env-file "${envFile}"` : '';
+      const extraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
       // Use e2e-runner.js for Playwright tests in local mode by default
       e2eCommand = `node tests/e2e-runner.js --local ${extraArgs}`;
     }
@@ -665,10 +711,11 @@ function parseArgs(args) {
         debug: false,
         forceAnalysis: false,
         /** @type {string[] | null} */
-        changedFiles: null,
-        /** @type {string | null} */
-        dotenvPath: null
+        changedFiles: null
     };
+
+    /** @type {string[]} */
+    const positionalArgs = [];
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -693,19 +740,18 @@ function parseArgs(args) {
             case '--force-analysis':
                 parsed.forceAnalysis = true;
                 break;
-            case '--changed-files':
-                if (i + 1 < args.length) {
-                    parsed.changedFiles = args[i + 1].split(',').map((/** @type {string} */ f) => f.trim());
-                    i++; // Skip the next argument as it's the file list
-                }
-                break;
-            case '--dotenv-path':
-                if (i + 1 < args.length) {
-                    parsed.dotenvPath = args[i + 1];
-                    i++; // Skip the next argument as it's the dotenv path
+            default:
+                // Treat as positional argument (file path)
+                if (!arg.startsWith('--')) {
+                    positionalArgs.push(arg);
                 }
                 break;
         }
+    }
+
+    // Use positional arguments as changed files if provided
+    if (positionalArgs.length > 0) {
+        parsed.changedFiles = positionalArgs;
     }
 
     return parsed;
@@ -715,30 +761,33 @@ function showHelp() {
     console.log('🧠 Smart Test Runner - Intelligent test execution based on file dependencies');
     console.log('');
     console.log('Usage:');
-    console.log('  node tests/smart-test-runner.js [options]');
+    console.log('  node tests/smart-test-runner.js [options] [files...]');
     console.log('');
     console.log('Options:');
-    console.log('  --all                    Run all tests regardless of changes');
-    console.log('  --changed-files <files>  Comma-separated list of changed files to analyze');
-    console.log('  --dry-run                Show which tests would run without executing them');
-    console.log('  --dotenv-path <path>     Path to .env file for E2E tests (passed to e2e-runner.js)');
-    console.log('  --tap                    Output results in TAP format');
-    console.log('  --debug                  Enable debug logging');
-    console.log('  --help, -h               Show this help message');
+    console.log('  --all         Run all tests regardless of changes');
+    console.log('  --dry-run     Show which tests would run without executing them');
+    console.log('  --tap         Output results in TAP format');
+    console.log('  --debug       Enable debug logging');
+    console.log('  --help, -h    Show this help message');
+    console.log('');
+    console.log('Positional Arguments:');
+    console.log('  [files...]    List of files for which tests should be run (space-separated)');
+    console.log('                If omitted, uses git to detect changed files');
     console.log('');
     console.log('Examples:');
     console.log('  node tests/smart-test-runner.js');
     console.log('  node tests/smart-test-runner.js --all');
-    console.log('  node tests/smart-test-runner.js --changed-files app/src/ui.js,server/api/auth.py');
-    console.log('  node tests/smart-test-runner.js --changed-files app/src/ui.js --dry-run --debug');
-    console.log('  node tests/smart-test-runner.js --dotenv-path .env.testing');
+    console.log('  node tests/smart-test-runner.js app/src/ui.js server/api/auth.py');
+    console.log('  node tests/smart-test-runner.js app/src/ui.js --dry-run --debug');
     console.log('  node tests/smart-test-runner.js --tap');
     console.log('');
     console.log('How it works:');
-    console.log('  • Analyzes test files for @testCovers annotations');
+    console.log('  • Analyzes test files for @testCovers and @env annotations');
     console.log('  • Detects JavaScript import dependencies automatically');
     console.log('  • Runs only tests affected by changed files');
     console.log('  • Always runs tests marked with @testCovers *');
+    console.log('  • @env annotations with file paths are passed as --env-file to runners');
+    console.log('  • @env annotations with variable names/assignments are passed as --env');
 }
 
 // Run if called directly
@@ -756,9 +805,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         all: args.all,
         tap: args.tap,
         dryRun: args.dryRun,
-        changedFiles: args.changedFiles,
-        dotenvPath: args.dotenvPath,
-        forceAnalysis: args.forceAnalysis
+        changedFiles: args.changedFiles
     };
 
     runner.run(options).catch(error => {

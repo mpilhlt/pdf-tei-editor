@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-10-17T14:10:44.465Z
+ * Generated from OpenAPI schema at 2025-10-17T16:02:48.629Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */

@@ -2,6 +2,7 @@
  * E2E Backend Tests for Validation API
  * @testCovers fastapi_app/routers/validation.py
  * @testCovers fastapi_app/lib/schema_validator.py
+ * @env tests/api/.env.test
  */
 
 import { test, describe } from 'node:test';

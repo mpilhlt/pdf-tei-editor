@@ -2,6 +2,7 @@
  * E2E Backend Tests for File Locks API
  * @testCovers fastapi_app/routers/files_locks.py
  * @testCovers fastapi_app/lib/locking.py
+ * @env tests/api/.env.test
  */
 
 import { test, describe } from 'node:test';
