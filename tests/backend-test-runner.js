@@ -147,7 +147,7 @@ async function runTests(testFiles, baseUrl, timeout = 60 * 1000) {
   console.log();
 
   return new Promise((resolve) => {
-    const testProcess = spawn('node', ['--test', ...testFiles], {
+    const testProcess = spawn('node', ['--test', '--test-concurrency=1', ...testFiles], {
       cwd: projectRoot,
       stdio: 'inherit',
       env: {
@@ -197,7 +197,7 @@ async function main() {
   const fixturesDir = 'tests/api/fixtures';
   const runtimeDir = 'tests/api/runtime';
 
-  console.log('🧪 Backend Test Runner');
+  console.log('🧪 Backend API Test Runner');
   console.log(`📦 Mode: ${mode}`);
   console.log(`📁 Project root: ${projectRoot}`);
   console.log();

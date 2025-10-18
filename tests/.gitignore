@@ -1,7 +1,8 @@
-runtime/*
+# Test runtime directories (ephemeral data, logs, temp files)
+runtime/
+**/runtime/
 
 # Playwright test artifacts
-
 e2e/test-results/
 e2e/playwright-report/
 .cache/

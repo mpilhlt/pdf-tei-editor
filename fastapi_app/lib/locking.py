@@ -365,7 +365,8 @@ def get_locked_file_ids(db_dir: Path, logger: logging.Logger, session_id: Option
         # Get stable_id if repository provided
         if repo:
             try:
-                file_metadata = repo.get_file_by_id(file_hash)
+                # Include deleted files since locks can exist on deleted files
+                file_metadata = repo.get_file_by_id(file_hash, include_deleted=True)
                 if file_metadata and file_metadata.stable_id:
                     file_id = file_metadata.stable_id
                 else:

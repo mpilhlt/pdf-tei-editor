@@ -348,6 +348,9 @@ class SyncService:
                 remote_mgr.mark_deleted(local_file.id, version)
                 summary.deleted_remote += 1
 
+                # Mark deletion as synced so it doesn't get synced again
+                self.file_repo.mark_deletion_synced(local_file.id, version)
+
                 if self.logger:
                     self.logger.info(f"Marked remote as deleted: {local_file.id[:8]}...")
 
