@@ -42,6 +42,33 @@ export function createTestLogger(applicationMode) {
  */
 
 /**
+ * Strips console formatting codes (%c) and CSS styles from console message text
+ * @param {string} text - Raw console message text with formatting codes
+ * @returns {string} Cleaned text without formatting codes
+ */
+function stripConsoleFormatting(text) {
+  // Browser console.log with %c formatting results in Playwright capturing text like:
+  // "%cMessage text %c[location] color: ...; color: ...;"
+  // We want to extract just "Message text"
+
+  // Remove all %c codes
+  let cleaned = text.replace(/%c/g, '');
+
+  // Remove CSS property patterns (color:, font-size:, etc.)
+  cleaned = cleaned.replace(/\b(color|font-size|font-weight|font-family|background|padding|margin):\s*[^;]+;?/gi, '');
+
+  // Remove multiple spaces first
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  // Remove square bracket content that looks like file locations [filename (line:col)]
+  // This handles nested brackets like: [install$g [as install] (app.js:17677)]
+  // Strategy: remove from " [" to the end if it contains both brackets and parens (looks like a stack trace)
+  cleaned = cleaned.replace(/\s+\[.*\(.*\).*\]$/g, '').trim();
+
+  return cleaned;
+}
+
+/**
  * Sets up enhanced console log capture for E2E tests with TEST message parsing
  * @param {import('@playwright/test').Page} page - Playwright page object
  * @returns {any[]} Array of captured console logs with parsed TEST messages
@@ -53,7 +80,15 @@ export function setupTestConsoleCapture(page) {
   page.on('console', msg => {
     // Capture log, info, warn, and error messages
     if (['log', 'info', 'warn', 'error'].includes(msg.type())) {
-      const text = msg.text();
+      const rawText = msg.text();
+      const text = stripConsoleFormatting(rawText);
+
+      // Skip messages that are only formatting codes (empty after stripping)
+      // or that only contain CSS styles
+      if (!text || text.trim().length === 0) {
+        return;
+      }
+
       /** @type {LogEntry} */
       const logEntry = {
         type: msg.type(),

@@ -1,15 +1,15 @@
 # Phase 9: Test Consolidation and API Equivalence Validation - Progress Report
 
-## Status: 🔄 In Progress - Unit Tests Complete, E2E Infrastructure Ready
+## Status: 🔄 In Progress - Unit Tests Complete, E2E Infrastructure Working
 
 Started: 2025-10-16
-Updated: 2025-10-18 (Session 3)
+Updated: 2025-10-18 (Session 4)
 
 ## User Priorities
 
 1. **Unit tests should just work** ✅ **COMPLETE**
 2. **All FastAPI API tests work** with dedicated fixtures and runtime data, using local server ⚠️
-3. **E2E tests** - reorganize, then make work with dedicated fixtures and runtime data, using local server ✅ **Infrastructure Ready** - 6/13 passing
+3. **E2E tests** - reorganize, then make work with dedicated fixtures and runtime data, using local server ✅ **Infrastructure Working** - 10/13 passing
 4. **Finally** - make API and E2E work with containerized backend 🚧
 
 ---
@@ -59,14 +59,16 @@ Updated: 2025-10-18 (Session 3)
      - `tests/api/runtime/logs/`
      - `tests/e2e/runtime/`
 
-7. **E2E test infrastructure configured** ✅ (Session 3 - 2025-10-18)
+7. **E2E test infrastructure working** ✅ (Session 3-4 - 2025-10-18)
    - Fixed fixture structure: moved JSON files from `db/` to `config/` to match FastAPI architecture
    - Updated [tests/lib/fixture-loader.js](../../tests/lib/fixture-loader.js) to create proper runtime structure
    - Added demo data (PDF and TEI files) to E2E fixtures from `demo/data/`
    - Added `CONFIG_DIR` support to [fastapi_app/config.py](../config.py) for test environment configuration
-   - Created [tests/e2e/.env.test](../../tests/e2e/.env.test) with test-specific paths to runtime directories
-   - Rebuilt frontend to include latest API client with correct `/api/v1` base URL
-   - E2E test runner now successfully starts local FastAPI server and runs Playwright tests
+   - Created [tests/e2e/.env.test](../../tests/e2e/.env.test) with test-specific paths and WebDAV disabled
+   - Fixed sync endpoints to gracefully handle missing WebDAV configuration
+   - Fixed auth responses to include `roles` array instead of singular `role`
+   - Fixed console formatting codes in test output (stripped `%c` codes and CSS styles)
+   - **10/13 E2E tests now passing**
 
 ### ⚠️ Partial / Issues
 
@@ -107,28 +109,23 @@ These tests either have infinite loops, hang waiting for responses, or have othe
 
 When run via E2E test runner (`node tests/e2e-runner.js --fixture standard`), results:
 
-✅ **Passing Tests (6/13):**
+✅ **Passing Tests (10/13):**
 
-- Application Loading (1/1 test) - Basic app loads without critical errors
-- Auth Workflow (2/2 tests) - Login and logout functionality
-- Document Actions (3/3 tests) - Basic document operations that don't trigger 422 errors
+- Application Loading (1/1 test)
+- Authentication Workflow (4/4 tests) - Login, logout, invalid credentials, Enter key navigation
+- Debug Simple Load (1/1 test)
+- Role-based UI Permissions (4/4 tests) - User, Annotator, Reviewer, Admin roles
 
-⚠️ **Failing Tests (7/13) - All 422 Validation Errors:**
+⚠️ **Failing Tests (3/13) - Missing Test Data:**
 
-1. **Document Actions:**
-   - "should create new version from existing document" - 422 Unprocessable Content
-   - "should save revision for existing document" - 422 Unprocessable Content
+1. **Document Actions (2 tests):**
+   - "should create new version from existing document" - Timeout waiting for new version dialog (no documents available)
+   - "should save revision for existing document" - Timeout waiting for save revision dialog (no documents available)
 
-2. **Extraction Workflow:**
-   - "should complete PDF extraction workflow" - 422 Unprocessable Content
+2. **Extraction Workflow (1 test):**
+   - "should complete PDF extraction workflow" - Test needs to be investigated
 
-3. **Role Permissions UI (all role tests):**
-   - "User role: Can login and access application" - 422 Unprocessable Content
-   - "Annotator role: Can login and access application" - 422 Unprocessable Content
-   - "Reviewer role: Can login and access application" - 422 Unprocessable Content
-   - "Admin role: Can login and access application" - 422 Unprocessable Content
-
-**Root Cause**: All failing tests encounter 422 validation errors from FastAPI endpoints. The infrastructure is working correctly - these are API-level validation issues that need individual investigation.
+**Root Cause**: Tests expect documents to already exist in the database but fixtures don't include database metadata (only files exist in filesystem). Tests need either database initialization or refactoring to create their own test data.
 
 ---
 
@@ -183,39 +180,32 @@ Test runner must properly clean up all spawned processes:
 
 Both normal completion AND timeout/abort scenarios must clean up properly.
 
-### Priority 3: Fix E2E Test 422 Validation Errors
+### Priority 3: Fix Remaining E2E Test Failures
 
-Infrastructure is complete, but 7/13 tests fail with 422 validation errors. Each needs individual investigation:
+3/13 tests fail due to missing test data. Options:
 
 **Document Actions (2 tests):**
 
 - Test: "should create new version from existing document"
   - File: [tests/e2e/tests/document-actions.spec.js](../../tests/e2e/tests/document-actions.spec.js) around line 49
-  - Action: Check server logs for validation error details, verify request payload matches FastAPI endpoint schema
+  - Issue: Expects documents to already exist in database
+  - Solution: Either add database fixture with file metadata OR refactor test to upload documents first
 
 - Test: "should save revision for existing document"
   - File: [tests/e2e/tests/document-actions.spec.js](../../tests/e2e/tests/document-actions.spec.js) around line 137
-  - Action: Same as above
+  - Issue: Same as above
 
 **Extraction Workflow (1 test):**
 
 - Test: "should complete PDF extraction workflow"
   - File: [tests/e2e/tests/extraction-workflow.spec.js](../../tests/e2e/tests/extraction-workflow.spec.js) around line 200
-  - Action: Check which extraction endpoint is being called and what validation is failing
-
-**Role Permissions UI (4 tests):**
-
-- Tests: All role-based UI tests (User, Annotator, Reviewer, Admin)
-  - File: [tests/e2e/tests/role-permissions-ui.spec.js](../../tests/e2e/tests/role-permissions-ui.spec.js) lines 38, 81, 130, 173
-  - Action: These all follow the same login → check UI pattern, likely hitting same endpoint with 422 error
-  - Priority: Fix one, likely fixes all four
+  - Issue: To be investigated
 
 **Recommended Approach:**
 
-1. Start with role-permissions tests (fixes 4 at once)
-2. Run individual test with `--grep` flag to isolate issue
-3. Check server logs for validation error details
-4. Fix endpoint schema or test payload as needed
+1. Create database fixture with file metadata for test documents
+2. OR refactor tests to be self-contained (upload their own test data)
+3. Extraction test may need similar fix or may have different issue
 
 ### Priority 4: Containerized Backend Testing
 
@@ -254,12 +244,13 @@ tests/
 │   │   ├── storage_refcounting.test.js ⏸️ Stalls
 │   │   ├── sync.test.js         ⏸️ Stalls
 │   │   └── validation.test.js   ⏸️ Stalls
-│   ├── fixtures/
-│   │   ├── config/              # Configuration JSON files
-│   │   │   ├── config.json
-│   │   │   ├── prompt.json
-│   │   │   └── users.json
-│   │   └── files/               # Test document files
+│   ├── fixtures/                # Fixture presets (version controlled)
+│   │   ├── minimal/             # Bare minimum for smoke tests
+│   │   │   ├── config/          # JSON configs (users, config, prompt)
+│   │   │   └── files/           # Minimal test files
+│   │   └── standard/            # Comprehensive test scenario (default)
+│   │       ├── config/          # JSON configs (users, config, prompt)
+│   │       └── files/           # Test document files
 │   ├── runtime/                 # Ephemeral (gitignored)
 │   │   ├── db/                  # JSON + SQLite generated during tests
 │   │   ├── files/               # Copied/generated during tests
@@ -272,15 +263,32 @@ tests/
 │   │   └── webdav-server.js
 │   └── .env.test                # Test environment config
 ├── unit/
-│   ├── js/                      # JS unit tests (115/122 pass)
+│   ├── js/                      # JS unit tests (122/122 pass)
 │   ├── flask/                   # Flask unit tests (not counted separately)
-│   └── fastapi/                 # FastAPI unit tests (133/135 pass)
-├── e2e/                         # Frontend E2E tests (unchanged)
+│   └── fastapi/                 # FastAPI unit tests (135/135 pass)
+├── e2e/
+│   ├── tests/                   # E2E test specs
+│   ├── fixtures/                # Fixture presets (version controlled)
+│   │   ├── minimal/             # Bare minimum for smoke tests
+│   │   │   ├── config/          # JSON configs (users, roles, config)
+│   │   │   └── files/           # Minimal test files
+│   │   └── standard/            # Comprehensive test scenario (default)
+│   │       ├── config/          # JSON configs (users, roles, config)
+│   │       └── files/           # Test document files (PDF, TEI)
+│   ├── runtime/                 # Ephemeral (gitignored)
+│   │   ├── db/                  # JSON + SQLite generated during tests
+│   │   ├── config/              # JSON copied from fixtures
+│   │   ├── files/               # Files copied from fixtures
+│   │   └── logs/                # Test logs
+│   └── .env.test                # E2E test environment config
 ├── lib/                         # Test infrastructure
-│   ├── local-server-manager.js
-│   └── container-server-manager.js
-├── backend-test-runner.js       ✅ Enhanced with timeout
-└── e2e-runner.js                # Frontend E2E runner
+│   ├── local-server-manager.js  # Local server lifecycle
+│   ├── container-server-manager.js  # Container server lifecycle
+│   ├── fixture-loader.js        # Fixture loading utilities
+│   ├── env-loader.js            # Environment file loading
+│   └── cli-builder.js           # Commander.js CLI utilities
+├── backend-test-runner.js       # API test runner
+└── e2e-runner.js                # E2E test runner
 ```
 
 ---
@@ -298,16 +306,61 @@ npm run test:unit           # All unit tests
 ### API Tests (Local Server)
 
 ```bash
-npm run test:backend        # All v1 API tests (auto-starts server)
+npm run test:backend        # All v1 API tests (auto-starts server, uses 'standard' fixture)
 npm run test:api:v1         # Same as test:backend
 npm run test:api:v0         # v0 tests (currently broken imports)
 
-# Custom options
-npm run test:backend -- --grep health       # Run specific test
-npm run test:backend -- --timeout 120       # Custom timeout
-npm run test:backend -- --keep-db           # Don't wipe DB
-npm run test:backend -- --no-cleanup        # Keep server running
+# Fixture selection
+npm run test:backend -- --fixture minimal    # Use minimal fixture for smoke tests
+npm run test:backend -- --fixture standard   # Use standard fixture (default)
+
+# Filtering tests
+npm run test:backend -- --grep health        # Run tests with 'health' in FILE PATH
+npm run test:backend -- --grep auth          # Run tests with 'auth' in FILE PATH
+npm run test:backend -- --grep-invert sync   # Exclude tests with 'sync' in FILE PATH
+
+# Other options
+npm run test:backend -- --timeout 120        # Custom timeout (seconds)
+npm run test:backend -- --keep-db            # Don't wipe DB between runs
+npm run test:backend -- --no-cleanup         # Keep server running after tests
+npm run test:backend -- --verbose            # Show server output
+
+# Combined
+npm run test:backend -- --fixture minimal --grep health --keep-db
 ```
+
+**Note on --grep**: For backend tests, `--grep` filters by test FILE PATH (e.g., `auth.test.js`), not test names within files. For more granular filtering, use Node.js test runner directly.
+
+### E2E Tests (Local Server)
+
+```bash
+# Run all E2E tests (uses 'standard' fixture)
+node tests/e2e-runner.js
+
+# Fixture selection
+node tests/e2e-runner.js --fixture minimal    # Use minimal fixture for smoke tests
+node tests/e2e-runner.js --fixture standard   # Use standard fixture (default)
+
+# Filtering tests
+node tests/e2e-runner.js --grep "User role"   # Run tests with 'User role' in TEST NAME
+node tests/e2e-runner.js --grep "login"       # Run tests with 'login' in TEST NAME
+node tests/e2e-runner.js --grep-invert "Document"  # Exclude tests with 'Document' in name
+
+# Browser options
+node tests/e2e-runner.js --headed             # Show browser (default: headless)
+node tests/e2e-runner.js --browser firefox    # Use firefox (default: chromium)
+node tests/e2e-runner.js --debugger           # Open Playwright inspector
+
+# Other options
+node tests/e2e-runner.js --workers 4          # Run tests in parallel (4 workers)
+node tests/e2e-runner.js --keep-db            # Don't wipe DB between runs
+node tests/e2e-runner.js --verbose            # Show server output
+
+# Combined
+node tests/e2e-runner.js --fixture minimal --grep "login" --headed
+```
+
+**Note on --grep**: For E2E tests, `--grep` filters by TEST NAME (the string passed to `test()` in Playwright), not file paths. This is passed directly to Playwright's `--grep` option.
 
 ### Manual Server (for debugging)
 

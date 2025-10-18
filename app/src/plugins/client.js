@@ -465,7 +465,7 @@ async function state() {
  * @returns {Promise<import('./sync.js').SyncResult>}
  */
 async function syncFiles() {
-  return await apiClient.sync();
+  return await apiClient.sync({});
 }
 
 /**
