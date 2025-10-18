@@ -1,9 +1,9 @@
 # Phase 9: Test Consolidation and API Equivalence Validation - Progress Report
 
-## Status: 🔄 In Progress - Unit Tests Complete, E2E Infrastructure Working
+## Status: 🔄 In Progress - Unit Tests Complete, Fixture Infrastructure Fixed
 
 Started: 2025-10-16
-Updated: 2025-10-18 (Session 4)
+Updated: 2025-10-18 (Session 5)
 
 ## User Priorities
 
@@ -70,11 +70,32 @@ Updated: 2025-10-18 (Session 4)
    - Fixed console formatting codes in test output (stripped `%c` codes and CSS styles)
    - **10/13 E2E tests now passing**
 
+8. **Fixture file import infrastructure fixed** ✅ (Session 5 - 2025-10-18)
+   - **Critical Bug Fixed**: Fixture loader was only copying files to disk, not importing them into database
+   - Split fixture loading into two phases:
+     - Phase 1: Load JSON configs before server starts
+     - Phase 2: Import files into database AFTER server starts
+   - Updated [tests/lib/fixture-loader.js](../../tests/lib/fixture-loader.js):
+     - `loadFixture()` copies JSON configs and returns fixture files path
+     - `importFixtureFiles()` calls [bin/import_files.py](../../bin/import_files.py) using `uv run`
+   - Updated [tests/lib/local-server-manager.js](../../tests/lib/local-server-manager.js):
+     - `wipeDatabase()` now properly cleans both SQLite databases AND files directory
+     - No longer tries to preserve fixture files (they're imported fresh after wipe)
+   - Updated both test runners to import files after server starts:
+     - [tests/e2e-runner.js](../../tests/e2e-runner.js)
+     - [tests/backend-test-runner.js](../../tests/backend-test-runner.js)
+   - Fixed [bin/import_files.py](../../bin/import_files.py):
+     - Added missing `db_path` parameter to `FileStorage` initialization
+   - Files are now properly:
+     - Stored in content-addressable hash-sharded structure
+     - Registered in metadata.db with correct doc_id, file_type, etc.
+     - Available via API endpoints
+
 ### ⚠️ Partial / Issues
 
 **FastAPI v1 API Tests (using local server):**
 
-When run via backend test runner (`npm run test:backend`), results:
+When run via backend test runner (`npm run test:api`), results:
 
 ✅ **Passing Tests:**
 
@@ -116,60 +137,62 @@ When run via E2E test runner (`node tests/e2e-runner.js --fixture standard`), re
 - Debug Simple Load (1/1 test)
 - Role-based UI Permissions (4/4 tests) - User, Annotator, Reviewer, Admin roles
 
-⚠️ **Failing Tests (3/13) - Missing Test Data:**
+⚠️ **Failing Tests (3/13) - Remaining Issues:**
 
 1. **Document Actions (2 tests):**
-   - "should create new version from existing document" - Timeout waiting for new version dialog (no documents available)
-   - "should save revision for existing document" - Timeout waiting for save revision dialog (no documents available)
+   - "should create new version from existing document" - Timeout waiting for new version dialog
+   - "should save revision for existing document" - Timeout waiting for save revision dialog
+   - **Root Cause**: Fixture users have Flask-style password hashes (plain SHA256) but FastAPI expects bcrypt hashes
+   - Files ARE being imported correctly, but login fails with "Invalid credentials"
+   - Need to update [tests/e2e/fixtures/standard/config/users.json](../../tests/e2e/fixtures/standard/config/users.json) with bcrypt hashes
+   - Also affects [tests/api/fixtures/standard/config/users.json](../../tests/api/fixtures/standard/config/users.json)
 
 2. **Extraction Workflow (1 test):**
-   - "should complete PDF extraction workflow" - Test needs to be investigated
-
-**Root Cause**: Tests expect documents to already exist in the database but fixtures don't include database metadata (only files exist in filesystem). Tests need either database initialization or refactoring to create their own test data.
-
----
-
-## Critical Bug: Background Process Cleanup
-
-**Issue**: When tests complete or are interrupted, background processes (FastAPI server, node test processes) remain running.
-
-**Evidence**: Multiple background bash processes (d1e81f, 18c0a4) still running after test completion.
-
-**Impact**:
-
-- Subsequent test runs fail due to port conflicts
-- Manual `pkill` required to clean up
-- Indicates test runner cleanup logic is not working properly
-
-**Expected**: All spawned processes (FastAPI server, WebDAV server, test runners) should be cleanly terminated when tests complete or timeout.
-
-**Affected Components**:
-
-- [tests/backend-test-runner.js](../../tests/backend-test-runner.js) cleanup logic
-- [tests/lib/local-server-manager.js](../../tests/lib/local-server-manager.js) server lifecycle
-- Test timeout handler may not be killing child processes
+   - "should complete PDF extraction workflow" - Skipped (needs API keys)
+   - Requires `GEMINI_API_KEY` and `GROBID_SERVER_URL` environment variables
+   - Not a test infrastructure issue
 
 ---
 
 ## Outstanding Items
 
-### Priority 1: Fix Stalling Tests
+### Priority 1: Fix Fixture Password Hashes ⚠️ **BLOCKING E2E TESTS**
 
-Investigate and fix tests that stall:
+**Issue**: Fixture users have Flask-style password hashes but FastAPI expects bcrypt hashes
 
-1. SSE echo test - doesn't receive events
-2. Sync tests - cause complete stall
-3. Validation tests - cause complete stall
-4. Storage refcounting tests - cause complete stall
+**Files to Update:**
 
-These may have issues with:
+- [tests/e2e/fixtures/standard/config/users.json](../../tests/e2e/fixtures/standard/config/users.json)
+- [tests/api/fixtures/standard/config/users.json](../../tests/api/fixtures/standard/config/users.json)
 
-- Async operations not completing
-- Infinite loops
-- Missing responses from server
-- Resource cleanup issues
+**Current Format** (SHA256):
 
-### Priority 2: Fix Background Process Cleanup
+```json
+{
+  "username": "testuser",
+  "passwd_hash": "13d249f2cb4127b40cfa757866850278793f814ded3c587fe5889e889a7a9f6c"
+}
+```
+
+**Required Format** (bcrypt):
+
+```json
+{
+  "username": "testuser",
+  "passwd_hash": "$2b$12$..."
+}
+```
+
+**Test Credentials Needed:**
+
+- testuser / testpass
+- testannotator / annotatorpass
+- testreviewer / reviewerpass
+- testadmin / adminpass
+
+**Impact**: Blocks document-actions E2E tests and API tests requiring authentication
+
+### Priority 3: Fix Background Process Cleanup
 
 Test runner must properly clean up all spawned processes:
 
@@ -179,33 +202,6 @@ Test runner must properly clean up all spawned processes:
 - Any child processes
 
 Both normal completion AND timeout/abort scenarios must clean up properly.
-
-### Priority 3: Fix Remaining E2E Test Failures
-
-3/13 tests fail due to missing test data. Options:
-
-**Document Actions (2 tests):**
-
-- Test: "should create new version from existing document"
-  - File: [tests/e2e/tests/document-actions.spec.js](../../tests/e2e/tests/document-actions.spec.js) around line 49
-  - Issue: Expects documents to already exist in database
-  - Solution: Either add database fixture with file metadata OR refactor test to upload documents first
-
-- Test: "should save revision for existing document"
-  - File: [tests/e2e/tests/document-actions.spec.js](../../tests/e2e/tests/document-actions.spec.js) around line 137
-  - Issue: Same as above
-
-**Extraction Workflow (1 test):**
-
-- Test: "should complete PDF extraction workflow"
-  - File: [tests/e2e/tests/extraction-workflow.spec.js](../../tests/e2e/tests/extraction-workflow.spec.js) around line 200
-  - Issue: To be investigated
-
-**Recommended Approach:**
-
-1. Create database fixture with file metadata for test documents
-2. OR refactor tests to be self-contained (upload their own test data)
-3. Extraction test may need similar fix or may have different issue
 
 ### Priority 4: Containerized Backend Testing
 
@@ -306,27 +302,25 @@ npm run test:unit           # All unit tests
 ### API Tests (Local Server)
 
 ```bash
-npm run test:backend        # All v1 API tests (auto-starts server, uses 'standard' fixture)
-npm run test:api:v1         # Same as test:backend
-npm run test:api:v0         # v0 tests (currently broken imports)
+npm run test:api        # All v1 API tests (auto-starts server, uses 'standard' fixture)
 
 # Fixture selection
-npm run test:backend -- --fixture minimal    # Use minimal fixture for smoke tests
-npm run test:backend -- --fixture standard   # Use standard fixture (default)
+npm run test:api -- --fixture minimal    # Use minimal fixture for smoke tests
+npm run test:api -- --fixture standard   # Use standard fixture (default)
 
 # Filtering tests
-npm run test:backend -- --grep health        # Run tests with 'health' in FILE PATH
-npm run test:backend -- --grep auth          # Run tests with 'auth' in FILE PATH
-npm run test:backend -- --grep-invert sync   # Exclude tests with 'sync' in FILE PATH
+npm run test:api -- --grep health        # Run tests with 'health' in FILE PATH
+npm run test:api -- --grep auth          # Run tests with 'auth' in FILE PATH
+npm run test:api -- --grep-invert sync   # Exclude tests with 'sync' in FILE PATH
 
 # Other options
-npm run test:backend -- --timeout 120        # Custom timeout (seconds)
-npm run test:backend -- --keep-db            # Don't wipe DB between runs
-npm run test:backend -- --no-cleanup         # Keep server running after tests
-npm run test:backend -- --verbose            # Show server output
+npm run test:api -- --timeout 120        # Custom timeout (seconds)
+npm run test:api -- --keep-db            # Don't wipe DB between runs
+npm run test:api -- --no-cleanup         # Keep server running after tests
+npm run test:api -- --verbose            # Show server output
 
 # Combined
-npm run test:backend -- --fixture minimal --grep health --keep-db
+npm run test:api -- --fixture minimal --grep health --keep-db
 ```
 
 **Note on --grep**: For backend tests, `--grep` filters by test FILE PATH (e.g., `auth.test.js`), not test names within files. For more granular filtering, use Node.js test runner directly.
@@ -373,46 +367,78 @@ npm run dev:fastapi:test    # Start server with test config
 
 ## Fixtures vs Runtime Pattern
 
-### Fixtures (`tests/api/fixtures/`)
+### Fixtures (`tests/api/fixtures/` and `tests/e2e/fixtures/`)
 
 - **Immutable** test data
 - **Version controlled** in git
 - **Contains**:
-  - `config/` - JSON configuration files (users.json, config.json, prompt.json)
-  - `files/` - Test document files
+  - `config/` - JSON configuration files (users.json, config.json, prompt.json, roles.json)
+  - `files/` - Test document files (PDF, TEI/XML)
 - **Never** contains:
   - Database files (*.db) - these are generated at runtime
   - The `db/` directory itself - only `config/` exists in fixtures
 
-### Runtime (`tests/api/runtime/`)
+### Runtime (`tests/api/runtime/` and `tests/e2e/runtime/`)
 
 - **Ephemeral** test data
 - **Gitignored** - can be deleted anytime
 - **Generated** from fixtures before each test run
 - **Contains**:
   - `db/` - JSON files copied from fixtures/config/ + SQLite DBs created by server
-  - `files/` - Test files (copied from fixtures/files/ if needed)
+  - `files/` - Hash-sharded content-addressable storage populated by file import
   - `logs/` - Server logs
 - **Modified** during tests
 - **Kept** on failure for debugging
 
-### Initialization
+### Fixture Loading and File Import Flow
 
-Before running tests, runtime data is initialized from fixtures:
+**Phase 1: Before Server Starts** (via `loadFixture()`)
 
-```javascript
-// Automatic (via backend test runner)
-npm run test:backend
+1. Clean runtime directory completely
+2. Create directory structure: `runtime/{db,config,files,logs}`
+3. Copy JSON configs from `fixtures/config/` to `runtime/config/`
+4. Return path to `fixtures/files/` for later import
 
-// Manual (for debugging)
-node -e "import('./tests/api/helpers/db-setup.js').then(m => m.resetDbToDefaults())"
+**Phase 2: Server Startup**
+
+1. Start FastAPI server
+2. Server reads configs from `runtime/config/` (via CONFIG_DIR env var)
+3. `db_init.py` copies JSON files from `runtime/config/` to `runtime/db/`
+4. Server creates SQLite databases in `runtime/db/`
+5. Wait for server health check
+
+**Phase 3: After Server Ready** (via `importFixtureFiles()`)
+
+1. Call `bin/import_files.py` with `fixtures/files/` directory
+2. FileImporter scans for PDF and XML files
+3. Files are:
+   - Hashed (SHA256)
+   - Stored in `runtime/files/` using content-addressable structure
+   - Registered in `runtime/db/metadata.db` with full metadata
+   - Associated with doc_id, file_type, version, etc.
+4. Files are now available via API endpoints
+
+**Why This Order?**
+
+- JSON configs must exist BEFORE server starts (server reads them on startup)
+- Files must be imported AFTER server starts (requires database to be initialized)
+- Old approach copied files but didn't register them in database
+
+**Usage:**
+
+```bash
+# E2E tests
+node tests/e2e-runner.js --fixture standard
+
+# API tests
+node tests/backend-test-runner.js --fixture standard
+
+# Both automatically:
+# 1. Load fixture config
+# 2. Start server
+# 3. Import fixture files
+# 4. Run tests
 ```
-
-This:
-
-1. Cleans `tests/api/runtime/db/`
-2. Copies JSON files from `fixtures/config/` to `runtime/db/`
-3. Server automatically creates SQLite databases on startup
 
 ---
 

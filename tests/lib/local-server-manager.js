@@ -125,9 +125,13 @@ export class LocalServerManager extends ServerManager {
   /**
    * Wipe database for clean slate
    *
-   * Removes all SQLite database files but preserves JSON fixture files
-   * (users.json, config.json, prompt.json) that should already be in place
-   * from the fixture loader.
+   * Clears all data for a fresh test run:
+   * 1. Removes SQLite databases (metadata.db, sessions.db, locks.db)
+   * 2. Removes all files from runtime/files storage
+   * 3. Preserves JSON config files (users.json, config.json, roles.json)
+   *    which will be used by db_init on server startup
+   *
+   * After this, the fixture loader will import fresh files.
    *
    * @private
    * @returns {Promise<void>}
@@ -135,70 +139,48 @@ export class LocalServerManager extends ServerManager {
   async wipeDatabase() {
     console.log('\n==> Wiping database for clean slate');
 
-    // Check if JSON fixture files exist (indicating fixture loader ran)
-    const usersJson = join(this.dbDir, 'users.json');
-    const fixturesLoaded = await fs.access(usersJson).then(() => true).catch(() => false);
+    // Remove SQLite database files
+    console.log('[INFO] Removing SQLite database files');
+    const dbFiles = ['metadata.db', 'sessions.db', 'locks.db'];
 
-    if (fixturesLoaded) {
-      // Fixtures already loaded - just remove SQLite files
-      console.log('[INFO] Fixtures detected, removing only SQLite database files');
-      const dbFiles = ['metadata.db', 'sessions.db', 'locks.db'];
-
-      for (const dbFile of dbFiles) {
-        try {
-          const dbPath = join(this.dbDir, dbFile);
-          await fs.rm(dbPath, { force: true });
-          // Also remove WAL and SHM files
-          await fs.rm(`${dbPath}-wal`, { force: true });
-          await fs.rm(`${dbPath}-shm`, { force: true });
-        } catch (err) {
-          // Ignore if doesn't exist
-        }
-      }
-    } else {
-      // No fixtures - old behavior for backward compatibility
-      console.log('[INFO] No fixtures detected, wiping entire db directory');
-
-      // Remove database directory completely
+    for (const dbFile of dbFiles) {
       try {
-        await fs.rm(this.dbDir, { recursive: true, force: true });
-        console.log(`[INFO] Removed ${this.dbDir}`);
+        const dbPath = join(this.dbDir, dbFile);
+        await fs.rm(dbPath, { force: true });
+        // Also remove WAL and SHM files
+        await fs.rm(`${dbPath}-wal`, { force: true });
+        await fs.rm(`${dbPath}-shm`, { force: true });
+        console.log(`[INFO] Removed ${dbFile}`);
       } catch (err) {
         // Ignore if doesn't exist
       }
-
-      // Recreate db directory
-      await fs.mkdir(this.dbDir, { recursive: true });
     }
 
-    // Also remove old metadata.db in data directory if it exists
-    const oldMetadataDb = join(this.dataDir, 'metadata.db');
-    try {
-      await fs.unlink(oldMetadataDb);
-      console.log(`[INFO] Removed old ${oldMetadataDb}`);
-    } catch (err) {
-      // Ignore if doesn't exist
-    }
-
-    // Clean only the files subdirectory (uploaded files)
-    // Keep JSON config files in data directory intact
-    console.log('[INFO] Cleaning uploaded files from data/files');
+    // Remove all files from storage (runtime/files)
+    // This removes the hash-sharded storage but preserves the directory structure
+    console.log('[INFO] Cleaning file storage');
     try {
       const filesDir = join(this.dataDir, 'files');
       const filesDirExists = await fs.access(filesDir).then(() => true).catch(() => false);
 
       if (filesDirExists) {
+        // Remove the entire files directory
         await fs.rm(filesDir, { recursive: true, force: true });
-        console.log('[INFO] Removed data/files directory');
+        console.log('[INFO] Removed files directory');
+
         // Recreate empty files directory
         await fs.mkdir(filesDir, { recursive: true });
-        console.log('[INFO] Recreated empty data/files directory');
+        console.log('[INFO] Recreated empty files directory');
+      } else {
+        // Files directory doesn't exist - create it
+        await fs.mkdir(filesDir, { recursive: true });
+        console.log('[INFO] Created files directory');
       }
     } catch (err) {
       console.log('[WARN] Could not clean files directory:', err.message);
     }
 
-    console.log('[SUCCESS] Database wiped - starting with clean slate');
+    console.log('[SUCCESS] Database wiped - ready for fixture import');
   }
 
 
