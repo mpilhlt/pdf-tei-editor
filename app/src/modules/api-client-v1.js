@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-10-18T13:04:27.695Z
+ * Generated from OpenAPI schema at 2025-10-18T15:53:11.547Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -200,7 +200,7 @@
  * @typedef {Object} LoginResponse
  * @property {string} username
  * @property {string=} fullname
- * @property {string=} role
+ * @property {Array<string>=} roles
  * @property {string} sessionId
  */
 
@@ -262,7 +262,7 @@
  * @typedef {Object} StatusResponse
  * @property {string} username
  * @property {string=} fullname
- * @property {string=} role
+ * @property {Array<string>=} roles
  */
 
 /**

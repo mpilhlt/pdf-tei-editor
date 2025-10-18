@@ -3,17 +3,22 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { setupTestConsoleCapture } from './helpers/test-logging.js';
 
 test.describe('Debug - Simple Load', () => {
   test('should load and show detailed errors', async ({ page }) => {
-    // Track all console messages
-    const consoleMessages = [];
-    page.on('console', msg => {
-      const type = msg.type();
-      const text = msg.text();
-      consoleMessages.push({ type, text });
-      console.log(`[Browser ${type}]:`, text);
-    });
+    // Use our test logging helper which strips formatting codes
+    const consoleMessages = setupTestConsoleCapture(page);
+
+    // Print console messages in real-time for debugging
+    let lastIndex = 0;
+    const printInterval = setInterval(() => {
+      while (lastIndex < consoleMessages.length) {
+        const { type, text } = consoleMessages[lastIndex];
+        console.log(`[Browser ${type}]:`, text);
+        lastIndex++;
+      }
+    }, 100);
 
     // Track page errors with full details
     const pageErrors = [];
@@ -34,7 +39,17 @@ test.describe('Debug - Simple Load', () => {
     // Wait for app to load
     await page.waitForTimeout(3000);
 
-    // Log what we found
+    // Stop the print interval
+    clearInterval(printInterval);
+
+    // Print any remaining messages
+    while (lastIndex < consoleMessages.length) {
+      const { type, text } = consoleMessages[lastIndex];
+      console.log(`[Browser ${type}]:`, text);
+      lastIndex++;
+    }
+
+    // Log summary
     console.log('\n=== Console Messages ===');
     consoleMessages.forEach(({ type, text }) => {
       console.log(`  [${type}] ${text}`);

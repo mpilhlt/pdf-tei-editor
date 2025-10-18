@@ -4,7 +4,7 @@ Authentication API endpoints for FastAPI.
 Provides login, logout, and session status checking.
 """
 
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Request, HTTPException, Response
 from fastapi.responses import JSONResponse
@@ -32,7 +32,7 @@ class LoginResponse(BaseModel):
     """Response model for successful login"""
     username: str
     fullname: Optional[str] = None
-    role: Optional[str] = None
+    roles: Optional[List[str]] = None
     sessionId: str
 
 
@@ -40,7 +40,7 @@ class StatusResponse(BaseModel):
     """Response model for session status"""
     username: str
     fullname: Optional[str] = None
-    role: Optional[str] = None
+    roles: Optional[List[str]] = None
 
 
 class LogoutResponse(BaseModel):
@@ -93,7 +93,7 @@ async def login(request_data: LoginRequest, request: Request):
     response_data = {
         "username": user.get("username"),
         "fullname": user.get("fullname"),
-        "role": user.get("role"),
+        "roles": user.get("roles"),
         "sessionId": session_id
     }
 
@@ -150,5 +150,5 @@ async def status(request: Request):
     return StatusResponse(
         username=user.get("username"),
         fullname=user.get("fullname"),
-        role=user.get("role")
+        roles=user.get("roles")
     )

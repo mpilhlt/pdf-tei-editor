@@ -10,6 +10,7 @@ For FastAPI migration - Phase 6.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
 import logging
 
 from ..lib.models_sync import (
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/sync", tags=["sync"])
 
 @router.get("/status", response_model=SyncStatusResponse)
 def get_sync_status(
-    sync_service: SyncService = Depends(get_sync_service),
+    sync_service: Optional[SyncService] = Depends(get_sync_service),
     user: dict = Depends(get_session_user)
 ) -> SyncStatusResponse:
     """
@@ -44,6 +45,17 @@ def get_sync_status(
     Returns:
         Sync status with version info and unsynced count
     """
+    # If WebDAV not configured, return no sync needed
+    if sync_service is None:
+        return SyncStatusResponse(
+            needs_sync=False,
+            local_version=0,
+            remote_version=0,
+            unsynced_count=0,
+            last_sync_time=None,
+            sync_in_progress=False
+        )
+
     try:
         status = sync_service.check_if_sync_needed()
 
@@ -73,7 +85,7 @@ def get_sync_status(
 @router.post("", response_model=SyncSummary)
 def perform_sync(
     request: SyncRequest,
-    sync_service: SyncService = Depends(get_sync_service),
+    sync_service: Optional[SyncService] = Depends(get_sync_service),
     user: dict = Depends(get_session_user)
 ) -> SyncSummary:
     """
@@ -98,6 +110,13 @@ def perform_sync(
     Returns:
         Summary of sync operations performed
     """
+    # If WebDAV not configured, return skipped sync
+    if sync_service is None:
+        return SyncSummary(
+            skipped=True,
+            message="WebDAV not configured"
+        )
+
     try:
         # Mark sync as in progress
         sync_service.file_repo.set_sync_metadata('sync_in_progress', '1')
@@ -144,6 +163,10 @@ def list_conflicts(
     Returns:
         List of conflicts with details
     """
+    # If WebDAV not configured, return empty conflicts list
+    if sync_service is None:
+        return ConflictListResponse(conflicts=[], total=0)
+
     try:
         # Get files with conflict status
         from ..lib.models import FileMetadata
@@ -199,6 +222,13 @@ def resolve_conflict(
     Returns:
         Success message
     """
+    # If WebDAV not configured, cannot resolve conflicts
+    if sync_service is None:
+        raise HTTPException(
+            status_code=400,
+            detail="WebDAV not configured - no sync conflicts to resolve"
+        )
+
     try:
         file_id = resolution.file_id
 

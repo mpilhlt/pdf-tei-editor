@@ -170,9 +170,13 @@ def get_sync_service(
     file_repo: FileRepository = Depends(get_file_repository),
     file_storage: FileStorage = Depends(get_file_storage),
     sse_service: SSEService = Depends(get_sse_service)
-) -> SyncService:
-    """Get SyncService instance with dependencies"""
+) -> Optional[SyncService]:
+    """Get SyncService instance with dependencies. Returns None if WebDAV is not configured."""
     settings = get_settings()
+
+    # Check if WebDAV is configured
+    if not settings.webdav_base_url:
+        return None
 
     # Build WebDAV config
     webdav_config = {

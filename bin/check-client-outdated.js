@@ -24,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT_DIR = join(__dirname, '..');
 
-const CLIENT_FILE = join(ROOT_DIR, 'fastapi_app/api-client-v1.js');
+const CLIENT_FILE = join(ROOT_DIR, 'app/src/modules/api-client-v1.js');
 const ROUTERS_DIR = join(ROOT_DIR, 'fastapi_app/routers');
 
 /**
