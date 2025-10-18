@@ -27,7 +27,7 @@ import { LocalServerManager } from './lib/local-server-manager.js';
 import { ContainerServerManager } from './lib/container-server-manager.js';
 import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
 import { loadEnvFile } from './lib/env-loader.js';
-import { loadFixture } from './lib/fixture-loader.js';
+import { loadFixture, importFixtureFiles } from './lib/fixture-loader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -206,11 +206,13 @@ async function main() {
   let exitCode = 0;
   let options; // Declare options at function scope so it's available in finally block
 
+  let fixtureFilesPath = null;
+
   try {
-    // Step 0a: Validate and load fixture (local mode only)
+    // Step 0a: Validate and load fixture config (local mode only)
     if (mode === 'local') {
       validateFixture(cliOptions.fixture, resolve(projectRoot, fixturesDir));
-      await loadFixture({
+      fixtureFilesPath = await loadFixture({
         fixtureName: cliOptions.fixture,
         fixturesDir,
         runtimeDir,
@@ -299,6 +301,16 @@ async function main() {
     };
 
     const baseUrl = await serverManager.start(startOptions);
+
+    // Step 4.5: Import fixture files after server is ready (local mode only)
+    if (mode === 'local' && fixtureFilesPath) {
+      await importFixtureFiles(
+        fixtureFilesPath,
+        resolve(projectRoot, runtimeDir),
+        projectRoot,
+        cliOptions.verbose
+      );
+    }
 
     // Step 5: Run tests
     exitCode = await runTests(filteredTests, baseUrl, options.timeout);

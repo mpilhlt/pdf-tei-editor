@@ -84,7 +84,7 @@ Examples:
     logger.info(f"Storage: {storage_root}")
 
     db = DatabaseManager(db_path, logger)
-    storage = FileStorage(storage_root)
+    storage = FileStorage(storage_root, db_path, logger)
     repo = FileRepository(db)
     importer = FileImporter(db, storage, repo, args.dry_run)
 

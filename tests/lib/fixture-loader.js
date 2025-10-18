@@ -5,14 +5,23 @@
  *
  * Manages fixture loading into runtime directories for test execution.
  * Supports multiple fixture presets (minimal, standard, complex).
+ *
+ * IMPORTANT: Files are imported using FileImporter to ensure they are:
+ * - Stored in content-addressable hash-sharded structure
+ * - Registered in the metadata database
+ * - Available via the API
  */
 
 import { existsSync, readdirSync, statSync } from 'fs';
 import { resolve, join, relative } from 'path';
 import { cp, rm, mkdir } from 'fs/promises';
+import { spawn } from 'child_process';
 
 /**
- * Load fixture preset into runtime directory
+ * Load fixture preset into runtime directory (Phase 1: Config only)
+ *
+ * This prepares the runtime directory with JSON config files.
+ * File import happens later via importFixtureFiles() after server starts.
  *
  * @param {Object} options
  * @param {string} options.fixtureName - Fixture preset name (minimal, standard, complex)
@@ -20,7 +29,7 @@ import { cp, rm, mkdir } from 'fs/promises';
  * @param {string} options.runtimeDir - Runtime directory (relative to projectRoot)
  * @param {string} options.projectRoot - Project root directory
  * @param {boolean} [options.verbose] - Show detailed output
- * @returns {Promise<void>}
+ * @returns {Promise<string>} Path to fixture files directory (for later import)
  */
 export async function loadFixture(options) {
   const { fixtureName, fixturesDir, runtimeDir, projectRoot, verbose = false } = options;
@@ -63,16 +72,75 @@ export async function loadFixture(options) {
     }
   }
 
-  // Copy fixture files to runtime/files
-  const fixtureFiles = join(fixturePath, 'files');
-  if (existsSync(fixtureFiles)) {
-    await cp(fixtureFiles, join(runtimePath, 'files'), { recursive: true });
-    if (verbose) {
-      console.log(`   ✓ Copied files/`);
-    }
+  console.log(`✅ Fixture config loaded`);
+
+  // Return path to fixture files for later import
+  return join(fixturePath, 'files');
+}
+
+/**
+ * Import fixture files using the FileImporter Python script (Phase 2: After server starts)
+ *
+ * @param {string} fixtureFilesPath - Path to fixture files directory
+ * @param {string} runtimePath - Path to runtime directory
+ * @param {string} projectRoot - Project root directory
+ * @param {boolean} verbose - Show detailed output
+ * @returns {Promise<void>}
+ */
+export async function importFixtureFiles(fixtureFilesPath, runtimePath, projectRoot, verbose = false) {
+  console.log(`   📥 Importing files into database...`);
+
+  // Build paths for the import script
+  const importScript = join(projectRoot, 'bin', 'import_files.py');
+  const dbPath = join(runtimePath, 'db', 'metadata.db');
+  const storageRoot = join(runtimePath, 'files');
+
+  // Run the import script using uv (for proper Python environment)
+  const args = [
+    'run',
+    'python3',
+    importScript,
+    '--directory', fixtureFilesPath,
+    '--db-path', dbPath,
+    '--storage-root', storageRoot,
+    '--collection', 'example' // Default collection for fixture files
+  ];
+
+  if (verbose) {
+    args.push('--verbose');
   }
 
-  console.log(`✅ Fixture loaded successfully`);
+  return new Promise((resolve, reject) => {
+    const importProcess = spawn('uv', args, {
+      cwd: projectRoot,
+      stdio: verbose ? 'inherit' : 'pipe'
+    });
+
+    let stderr = '';
+
+    if (!verbose) {
+      importProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+    }
+
+    importProcess.on('exit', (code) => {
+      if (code === 0) {
+        console.log(`   ✓ Files imported successfully`);
+        resolve();
+      } else {
+        const error = new Error(`File import failed with exit code ${code}`);
+        if (stderr) {
+          error.message += `\n${stderr}`;
+        }
+        reject(error);
+      }
+    });
+
+    importProcess.on('error', (err) => {
+      reject(new Error(`Failed to run import script: ${err.message}`));
+    });
+  });
 }
 
 /**

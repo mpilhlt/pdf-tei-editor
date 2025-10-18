@@ -28,7 +28,7 @@ import { LocalServerManager } from './lib/local-server-manager.js';
 import { ContainerServerManager } from './lib/container-server-manager.js';
 import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
 import { loadEnvFile } from './lib/env-loader.js';
-import { loadFixture } from './lib/fixture-loader.js';
+import { loadFixture, importFixtureFiles } from './lib/fixture-loader.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
@@ -137,10 +137,11 @@ class PlaywrightRunner {
     console.log('\n🚀 Starting server...');
     console.log(`📦 Mode: ${options.mode}`);
 
-    // Load fixture (local mode only)
+    // Phase 1: Load fixture config (local mode only)
+    let fixtureFilesPath = null;
     if (options.mode === 'local') {
       validateFixture(options.fixture, resolve(projectRoot, fixturesDir));
-      await loadFixture({
+      fixtureFilesPath = await loadFixture({
         fixtureName: options.fixture,
         fixturesDir,
         runtimeDir,
@@ -169,6 +170,16 @@ class PlaywrightRunner {
         env,
         needsWebdav: false, // Playwright tests don't need WebDAV
       });
+
+      // Phase 2: Import fixture files after server is ready
+      if (fixtureFilesPath) {
+        await importFixtureFiles(
+          fixtureFilesPath,
+          resolve(projectRoot, runtimeDir),
+          projectRoot,
+          options.verbose
+        );
+      }
     } else {
       this.serverManager = new ContainerServerManager();
       await this.serverManager.start({
