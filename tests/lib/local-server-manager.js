@@ -16,7 +16,7 @@ const __dirname = dirname(__filename);
  * Manages FastAPI server lifecycle on the local machine:
  * - Kills existing servers on port 8000
  * - Optionally wipes database for clean slate
- * - Starts local server via npm run dev:fastapi
+ * - Starts local server
  * - Optionally starts WebDAV server for sync tests (via WebdavServerManager)
  * - Waits for /health endpoint
  * - Cleanup on exit
@@ -180,6 +180,24 @@ export class LocalServerManager extends ServerManager {
       // Ignore if doesn't exist
     }
 
+    // Clean only the files subdirectory (uploaded files)
+    // Keep JSON config files in data directory intact
+    console.log('[INFO] Cleaning uploaded files from data/files');
+    try {
+      const filesDir = join(this.dataDir, 'files');
+      const filesDirExists = await fs.access(filesDir).then(() => true).catch(() => false);
+
+      if (filesDirExists) {
+        await fs.rm(filesDir, { recursive: true, force: true });
+        console.log('[INFO] Removed data/files directory');
+        // Recreate empty files directory
+        await fs.mkdir(filesDir, { recursive: true });
+        console.log('[INFO] Recreated empty data/files directory');
+      }
+    } catch (err) {
+      console.log('[WARN] Could not clean files directory:', err.message);
+    }
+
     console.log('[SUCCESS] Database wiped - starting with clean slate');
   }
 
@@ -248,7 +266,7 @@ LOG_LEVEL=INFO
 
     // Start server
     if (verbose) {
-      this.serverProcess = spawn('npm', ['run', 'dev:fastapi'], {
+      this.serverProcess = spawn('uv', ['run', 'python', 'bin/start-dev-fastapi'], {
         cwd: this.projectRoot,
         stdio: 'pipe',
       });
@@ -268,7 +286,7 @@ LOG_LEVEL=INFO
       const { spawn: spawnShell } = await import('child_process');
       this.serverProcess = spawnShell(
         'sh',
-        ['-c', `PYTHONUNBUFFERED=1 npm run dev:fastapi >> "${this.logFile}" 2>&1`],
+        ['-c', `PYTHONUNBUFFERED=1 uv run python bin/start-dev-fastapi >> "${this.logFile}" 2>&1`],
         {
           cwd: this.projectRoot,
           stdio: 'ignore',

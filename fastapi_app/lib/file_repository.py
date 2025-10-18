@@ -704,12 +704,17 @@ class FileRepository:
 
     def get_deleted_files(self) -> List[FileMetadata]:
         """
-        Get all soft-deleted files (for sync).
+        Get all soft-deleted files that need to be synced to remote.
+        Excludes files whose deletion has already been synced.
 
         Returns:
-            List of FileMetadata models for deleted files
+            List of FileMetadata models for deleted files pending sync
         """
-        query = "SELECT * FROM files WHERE deleted = 1"
+        query = """
+            SELECT * FROM files
+            WHERE deleted = 1
+            AND sync_status != 'deletion_synced'
+        """
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -732,9 +737,12 @@ class FileRepository:
         Get all files that need to be synced.
 
         Returns:
-            List of FileMetadata models with sync_status != 'synced'
+            List of FileMetadata models with sync_status not in ('synced', 'deletion_synced')
         """
-        query = "SELECT * FROM files WHERE sync_status != 'synced'"
+        query = """
+            SELECT * FROM files
+            WHERE sync_status NOT IN ('synced', 'deletion_synced')
+        """
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -782,9 +790,12 @@ class FileRepository:
         Count files that need to be synced (O(1) operation).
 
         Returns:
-            Number of files with sync_status != 'synced'
+            Number of files with sync_status not in ('synced', 'deletion_synced')
         """
-        query = "SELECT COUNT(*) as count FROM files WHERE sync_status != 'synced'"
+        query = """
+            SELECT COUNT(*) as count FROM files
+            WHERE sync_status NOT IN ('synced', 'deletion_synced')
+        """
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -836,6 +847,30 @@ class FileRepository:
 
             if self.logger:
                 self.logger.debug(f"Marked file as synced: {file_id}")
+
+    def mark_deletion_synced(self, file_id: str, remote_version: int) -> None:
+        """
+        Mark a deleted file's deletion as synced to remote.
+        This prevents the deletion from being synced again on subsequent syncs.
+
+        Args:
+            file_id: File ID (hash)
+            remote_version: Remote version number at sync time
+        """
+        query = """
+            UPDATE files
+            SET sync_status = 'deletion_synced',
+                remote_version = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND deleted = 1
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (remote_version, file_id))
+
+            if self.logger:
+                self.logger.debug(f"Marked deletion as synced: {file_id}")
 
     def apply_remote_metadata(self, file_id: str, remote_metadata: dict) -> None:
         """

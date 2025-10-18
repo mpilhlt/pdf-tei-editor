@@ -259,34 +259,84 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
   });
 
   test('Multiple locks workflow should work correctly', async () => {
+    // Clean up any locks from previous tests first
+    await cleanupSessionLocks();
     const session = await getSession();
 
+    // Ensure test files exist (they may have been deleted if this is a re-run)
+    if (!testState.testFileHash || !testState.testFileHash2) {
+      const testContent = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for file locks - Run ID: ${testRunId}</text></TEI>`;
+      const result1 = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
+        file_id: testState.testFilePath,
+        xml_string: testContent
+      }, BASE_URL);
+      testState.testFileHash = result1.hash;
+
+      const testContent2 = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for file locks - FILE 2 - Run ID: ${testRunId}</text></TEI>`;
+      const result2 = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
+        file_id: testState.testFilePath2,
+        xml_string: testContent2
+      }, BASE_URL);
+      testState.testFileHash2 = result2.hash;
+
+      // Release locks created during save
+      await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
+        file_id: testState.testFileHash
+      }, BASE_URL).catch(() => {});
+      await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
+        file_id: testState.testFileHash2
+      }, BASE_URL).catch(() => {});
+    }
+
+    // Verify initial lock state
+    const initialResponse = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
+    const initialFileIds = initialResponse.locked_files || initialResponse;
+    console.log(`📊 Initial locks before acquiring: ${initialFileIds.length} (${JSON.stringify(initialFileIds.map(id => id.substring(0, 6)))})`);
+
     // Acquire locks for multiple files
+    console.log(`🔒 Acquiring lock for file 1: ${testState.testFileHash.substring(0, 6)}`);
     const result1 = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
       file_id: testState.testFileHash
     }, BASE_URL);
+    console.log(`📊 Acquire 1 result: ${JSON.stringify(result1)}`);
+
+    console.log(`🔒 Acquiring lock for file 2: ${testState.testFileHash2.substring(0, 6)}`);
     const result2 = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
       file_id: testState.testFileHash2
     }, BASE_URL);
+    console.log(`📊 Acquire 2 result: ${JSON.stringify(result2)}`);
 
-    assert.strictEqual(result1, 'OK', 'Should acquire first lock');
-    assert.strictEqual(result2, 'OK', 'Should acquire second lock');
+    assert.strictEqual(result1, 'OK', `Should acquire first lock (got: ${result1})`);
+    assert.strictEqual(result2, 'OK', `Should acquire second lock (got: ${result2})`);
 
     // Check that both locks are active
     const response = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
     const fileIds = response.locked_files || response;
     console.log(`✓ Multiple locks acquired successfully (${fileIds.length} total locks)`);
+    console.log(`📊 Locked files: ${JSON.stringify(fileIds.map(id => id.substring(0, 6)))}`);
+    console.log(`📊 Test hashes: ${testState.testFileHash.substring(0, 6)}, ${testState.testFileHash2.substring(0, 6)}`);
+
+    // Verify our test files are actually in the locked list
+    assert(fileIds.includes(testState.testFileHash) || fileIds.includes(testState.testFileHash.substring(0, 6)),
+           `Test file 1 should be locked (hash: ${testState.testFileHash})`);
+    assert(fileIds.includes(testState.testFileHash2) || fileIds.includes(testState.testFileHash2.substring(0, 6)),
+           `Test file 2 should be locked (hash: ${testState.testFileHash2})`);
 
     // Release both locks
+    console.log(`🔓 Releasing lock for file 1: ${testState.testFileHash.substring(0, 6)}`);
     const release1 = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
       file_id: testState.testFileHash
     }, BASE_URL);
+    console.log(`📊 Release 1 response: ${JSON.stringify(release1)}`);
+
+    console.log(`🔓 Releasing lock for file 2: ${testState.testFileHash2.substring(0, 6)}`);
     const release2 = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
       file_id: testState.testFileHash2
     }, BASE_URL);
+    console.log(`📊 Release 2 response: ${JSON.stringify(release2)}`);
 
-    assert.strictEqual(release1.action, 'released', 'Should release first lock');
-    assert.strictEqual(release2.action, 'released', 'Should release second lock');
+    assert.strictEqual(release1.action, 'released', `Should release first lock (got: ${release1.action})`);
+    assert.strictEqual(release2.action, 'released', `Should release second lock (got: ${release2.action})`);
 
     // Verify both locks are gone
     const finalResponse = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);

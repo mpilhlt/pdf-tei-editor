@@ -59,7 +59,7 @@ class FileMetadata(BaseModel):
     @classmethod
     def validate_sync_status(cls, v: str) -> str:
         """Validate that sync_status is one of the allowed values."""
-        allowed = {'synced', 'modified', 'pending', 'pending_delete', 'error'}
+        allowed = {'synced', 'modified', 'pending', 'pending_delete', 'deletion_synced', 'error'}
         if v not in allowed:
             raise ValueError(f"sync_status must be one of {allowed}")
         return v
@@ -141,7 +141,7 @@ class SyncUpdate(BaseModel):
     @classmethod
     def validate_sync_status(cls, v: str) -> str:
         """Validate that sync_status is one of the allowed values."""
-        allowed = {'synced', 'modified', 'pending', 'pending_delete', 'error'}
+        allowed = {'synced', 'modified', 'pending', 'pending_delete', 'deletion_synced', 'error'}
         if v not in allowed:
             raise ValueError(f"sync_status must be one of {allowed}")
         return v
