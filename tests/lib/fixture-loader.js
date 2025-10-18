@@ -48,15 +48,16 @@ export async function loadFixture(options) {
     await rm(runtimePath, { recursive: true, force: true });
   }
 
-  // Create runtime structure
+  // Create runtime structure matching FastAPI expectations
   await mkdir(join(runtimePath, 'db'), { recursive: true });
+  await mkdir(join(runtimePath, 'config'), { recursive: true });
   await mkdir(join(runtimePath, 'files'), { recursive: true });
   await mkdir(join(runtimePath, 'logs'), { recursive: true });
 
-  // Copy fixture config to runtime/db
+  // Copy fixture config to runtime/config (for db_init to read from)
   const fixtureConfig = join(fixturePath, 'config');
   if (existsSync(fixtureConfig)) {
-    await cp(fixtureConfig, join(runtimePath, 'db'), { recursive: true });
+    await cp(fixtureConfig, join(runtimePath, 'config'), { recursive: true });
     if (verbose) {
       console.log(`   ✓ Copied config/`);
     }

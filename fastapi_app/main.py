@@ -5,6 +5,7 @@ FastAPI main application with versioned API endpoints.
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -30,7 +31,14 @@ async def lifespan(app: FastAPI):
     # This copies JSON files from config/ to db/ if they don't exist
     from .lib.db_init import ensure_db_initialized
     try:
-        ensure_db_initialized()
+        # Use custom config_dir if specified (for tests), otherwise use default
+        config_dir = settings.config_dir
+        db_dir = settings.db_dir
+        if config_dir:
+            logger.info(f"Using custom config directory: {config_dir}")
+            ensure_db_initialized(config_dir=config_dir, db_dir=db_dir)
+        else:
+            ensure_db_initialized(db_dir=db_dir)
         logger.info("Database configuration initialized from defaults")
     except Exception as e:
         logger.error(f"Error initializing database from config: {e}")
@@ -133,3 +141,40 @@ async def health_check():
 
 # Mount versioned router
 app.include_router(api_v1)
+
+# Static file serving
+# These must be mounted AFTER API routes to avoid conflicts
+project_root = Path(__file__).parent.parent
+web_root = project_root / 'app' / 'web'
+
+# Development mode routes (conditionally mounted)
+# In development, serve source files, node_modules, and tests
+settings = get_settings()
+from .lib.config_utils import load_full_config
+config = load_full_config(settings.db_dir)
+is_dev_mode = config.get("application", {}).get("mode", "development") == "development"
+
+if is_dev_mode:
+    # Mount node_modules for importmap
+    node_modules_root = project_root / 'node_modules'
+    if node_modules_root.exists():
+        app.mount("/node_modules", StaticFiles(directory=str(node_modules_root)), name="node_modules")
+
+    # Mount source files
+    src_root = project_root / 'app' / 'src'
+    if src_root.exists():
+        app.mount("/src", StaticFiles(directory=str(src_root)), name="src")
+
+    # Mount tests (for test utilities)
+    tests_root = project_root / 'tests'
+    if tests_root.exists():
+        app.mount("/tests", StaticFiles(directory=str(tests_root)), name="tests")
+
+# Mount docs
+docs_root = project_root / 'docs'
+if docs_root.exists():
+    app.mount("/docs", StaticFiles(directory=str(docs_root)), name="docs")
+
+# Mount web root for all other static files (must be last - catch-all)
+# html=True enables serving index.html for directory requests
+app.mount("/", StaticFiles(directory=str(web_root), html=True), name="static")

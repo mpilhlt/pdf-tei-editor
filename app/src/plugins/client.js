@@ -94,7 +94,7 @@ let sessionId = null;
 /** @type {number|null} */
 let lastHttpStatus = null;
 
-const api_base_url = '/api';
+const api_base_url = '/api/v1';
 const upload_route = api_base_url + '/files/upload'
 
 // Create singleton API client instance using the callApi function
