@@ -1,15 +1,15 @@
 # Phase 9: Test Consolidation and API Equivalence Validation - Progress Report
 
-## Status: 🔄 In Progress - Unit Tests Complete
+## Status: 🔄 In Progress - Unit Tests Complete, E2E Infrastructure Ready
 
 Started: 2025-10-16
-Updated: 2025-10-17 (Session 2)
+Updated: 2025-10-18 (Session 3)
 
 ## User Priorities
 
 1. **Unit tests should just work** ✅ **COMPLETE**
 2. **All FastAPI API tests work** with dedicated fixtures and runtime data, using local server ⚠️
-3. **E2E tests** - reorganize, then make work with dedicated fixtures and runtime data, using local server 🚧
+3. **E2E tests** - reorganize, then make work with dedicated fixtures and runtime data, using local server ✅ **Infrastructure Ready** - 6/13 passing
 4. **Finally** - make API and E2E work with containerized backend 🚧
 
 ---
@@ -59,6 +59,15 @@ Updated: 2025-10-17 (Session 2)
      - `tests/api/runtime/logs/`
      - `tests/e2e/runtime/`
 
+7. **E2E test infrastructure configured** ✅ (Session 3 - 2025-10-18)
+   - Fixed fixture structure: moved JSON files from `db/` to `config/` to match FastAPI architecture
+   - Updated [tests/lib/fixture-loader.js](../../tests/lib/fixture-loader.js) to create proper runtime structure
+   - Added demo data (PDF and TEI files) to E2E fixtures from `demo/data/`
+   - Added `CONFIG_DIR` support to [fastapi_app/config.py](../config.py) for test environment configuration
+   - Created [tests/e2e/.env.test](../../tests/e2e/.env.test) with test-specific paths to runtime directories
+   - Rebuilt frontend to include latest API client with correct `/api/v1` base URL
+   - E2E test runner now successfully starts local FastAPI server and runs Playwright tests
+
 ### ⚠️ Partial / Issues
 
 **FastAPI v1 API Tests (using local server):**
@@ -93,6 +102,33 @@ These tests either have infinite loops, hang waiting for responses, or have othe
 - v0 tests (Flask API) have broken import paths: use `./helpers/test-auth.js` but helpers are in `../helpers/`
 - Currently excluded from default `npm run test:backend` run
 - Low priority - v0 tests are legacy
+
+**E2E Tests (using local server):**
+
+When run via E2E test runner (`node tests/e2e-runner.js --fixture standard`), results:
+
+✅ **Passing Tests (6/13):**
+
+- Application Loading (1/1 test) - Basic app loads without critical errors
+- Auth Workflow (2/2 tests) - Login and logout functionality
+- Document Actions (3/3 tests) - Basic document operations that don't trigger 422 errors
+
+⚠️ **Failing Tests (7/13) - All 422 Validation Errors:**
+
+1. **Document Actions:**
+   - "should create new version from existing document" - 422 Unprocessable Content
+   - "should save revision for existing document" - 422 Unprocessable Content
+
+2. **Extraction Workflow:**
+   - "should complete PDF extraction workflow" - 422 Unprocessable Content
+
+3. **Role Permissions UI (all role tests):**
+   - "User role: Can login and access application" - 422 Unprocessable Content
+   - "Annotator role: Can login and access application" - 422 Unprocessable Content
+   - "Reviewer role: Can login and access application" - 422 Unprocessable Content
+   - "Admin role: Can login and access application" - 422 Unprocessable Content
+
+**Root Cause**: All failing tests encounter 422 validation errors from FastAPI endpoints. The infrastructure is working correctly - these are API-level validation issues that need individual investigation.
 
 ---
 
@@ -147,18 +183,53 @@ Test runner must properly clean up all spawned processes:
 
 Both normal completion AND timeout/abort scenarios must clean up properly.
 
-### Priority 3: E2E Test Reorganization
+### Priority 3: Fix E2E Test 422 Validation Errors
 
-Following the same pattern as API tests:
+Infrastructure is complete, but 7/13 tests fail with 422 validation errors. Each needs individual investigation:
 
-- Move E2E tests to proper structure
-- Use fixtures → runtime pattern
-- Update test runners
-- Validate containerized backend works
+**Document Actions (2 tests):**
 
-### Priority 4: Documentation & Cleanup
+- Test: "should create new version from existing document"
+  - File: [tests/e2e/tests/document-actions.spec.js](../../tests/e2e/tests/document-actions.spec.js) around line 49
+  - Action: Check server logs for validation error details, verify request payload matches FastAPI endpoint schema
+
+- Test: "should save revision for existing document"
+  - File: [tests/e2e/tests/document-actions.spec.js](../../tests/e2e/tests/document-actions.spec.js) around line 137
+  - Action: Same as above
+
+**Extraction Workflow (1 test):**
+
+- Test: "should complete PDF extraction workflow"
+  - File: [tests/e2e/tests/extraction-workflow.spec.js](../../tests/e2e/tests/extraction-workflow.spec.js) around line 200
+  - Action: Check which extraction endpoint is being called and what validation is failing
+
+**Role Permissions UI (4 tests):**
+
+- Tests: All role-based UI tests (User, Annotator, Reviewer, Admin)
+  - File: [tests/e2e/tests/role-permissions-ui.spec.js](../../tests/e2e/tests/role-permissions-ui.spec.js) lines 38, 81, 130, 173
+  - Action: These all follow the same login → check UI pattern, likely hitting same endpoint with 422 error
+  - Priority: Fix one, likely fixes all four
+
+**Recommended Approach:**
+
+1. Start with role-permissions tests (fixes 4 at once)
+2. Run individual test with `--grep` flag to isolate issue
+3. Check server logs for validation error details
+4. Fix endpoint schema or test payload as needed
+
+### Priority 4: Containerized Backend Testing
+
+Once local E2E tests are fully passing:
+
+- Test E2E runner with `--container` flag
+- Verify containerized backend works with current E2E test structure
+- Document any differences between local and containerized execution
+
+### Priority 5: Documentation & Cleanup
 
 - Update test documentation for new structure
+- Remove debug test file [tests/e2e/tests/debug-simple.spec.js](../../tests/e2e/tests/debug-simple.spec.js) (temporary debugging aid)
+- Document E2E test fixture requirements
 - Remove old test directories after full validation
 - Update Phase 9 plan document
 

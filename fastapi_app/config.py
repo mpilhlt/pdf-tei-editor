@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # Paths
     DATA_ROOT: str = "data"
     DB_DIR: str = "data/db"
+    CONFIG_DIR: str = ""  # Optional: override default config location (for tests)
     UPLOAD_DIR: str = ""
 
     # Features
@@ -47,6 +48,13 @@ class Settings(BaseSettings):
     @property
     def db_dir(self) -> Path:
         return Path(self.DB_DIR)
+
+    @property
+    def config_dir(self) -> Path | None:
+        """Return config directory if specified, otherwise None (use default)"""
+        if not self.CONFIG_DIR:
+            return None
+        return Path(self.CONFIG_DIR)
 
     @property
     def webdav_enabled(self) -> bool:

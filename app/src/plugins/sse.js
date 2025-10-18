@@ -142,8 +142,8 @@ async function ready() {
  */
 function establishConnection(sessionId) {
   logger.debug(`Establishing SSE connection with session ID ${sessionId} (attempt ${reconnectAttempts + 1})`);
-  
-  const url = `/sse/subscribe?session_id=${sessionId}`;
+
+  const url = `/api/v1/sse/subscribe?sessionId=${sessionId}`;
   eventSource = new EventSource(url);
   cachedSessionId = sessionId;
 
