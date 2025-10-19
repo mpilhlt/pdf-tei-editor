@@ -19,6 +19,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle"""
+    import os
     settings = get_settings()
 
     # Setup logging
@@ -26,6 +27,23 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting PDF-TEI Editor API")
     logger.info(f"Data root: {settings.data_root}")
     logger.info(f"DB directory: {settings.db_dir}")
+
+    # Sync application mode between environment and config
+    # Priority: FASTAPI_APPLICATION_MODE env var > config.json
+    from .lib.config_utils import load_full_config
+    config = load_full_config(settings.db_dir)
+
+    if "FASTAPI_APPLICATION_MODE" in os.environ:
+        # Environment variable takes precedence
+        app_mode = os.environ["FASTAPI_APPLICATION_MODE"]
+        config["application"] = config.get("application", {})
+        config["application"]["mode"] = app_mode
+        logger.info(f"Application mode from environment: {app_mode}")
+    else:
+        # Get from config and set environment variable
+        app_mode = config.get("application", {}).get("mode", settings.application_mode)
+        os.environ["FASTAPI_APPLICATION_MODE"] = app_mode
+        logger.info(f"Application mode from config: {app_mode}")
 
     # Initialize database directory from config defaults
     # This copies JSON files from config/ to db/ if they don't exist
@@ -141,6 +159,13 @@ async def health_check():
 
 # Mount versioned router
 app.include_router(api_v1)
+
+# Backwards compatibility: Mount files_serve at /api/files for legacy frontend code
+# This allows /api/files/{hash} to work alongside /api/v1/files/{hash}
+# TODO: Remove this once all frontend code is updated to use /api/v1/files
+api_compat = APIRouter(prefix="/api")
+api_compat.include_router(files_serve.router)
+app.include_router(api_compat)
 
 # Static file serving
 # These must be mounted AFTER API routes to avoid conflicts

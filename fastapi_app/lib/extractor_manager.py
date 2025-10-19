@@ -8,12 +8,12 @@ For FastAPI migration - Phase 5.
 """
 
 from typing import List, Dict, Any
-from server.extractors.discovery import (
+from fastapi_app.extractors.discovery import (
     list_extractors as _list_extractors,
     create_extractor as _create_extractor,
     get_extractor as _get_extractor
 )
-from server.extractors import BaseExtractor
+from fastapi_app.extractors import BaseExtractor
 
 # Re-export types
 __all__ = ['list_extractors', 'create_extractor', 'get_extractor', 'BaseExtractor']

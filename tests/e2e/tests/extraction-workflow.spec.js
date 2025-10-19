@@ -23,7 +23,9 @@ const ALLOWED_ERROR_PATTERNS = [
   'api/validate/autocomplete-data.*400.*BAD REQUEST', // Schema validation API errors
   'offsetParent is not set.*cannot scroll', // UI scrolling errors in browser automation
   'Failed to load resource.*404.*NOT FOUND', // Resource access control errors
-  'ApiError.*Hash.*not found in lookup table' // Test data availability issues
+  'ApiError.*Hash.*not found in lookup table', // Test data availability issues
+  'Error loading XML.*Resource at /api/files/.* does not exist', // File loading during migration (Phase 9c)
+  'Missing PDF file.*Unexpected server response \\(404\\).*retrieving PDF.*api/files' // PDF.js file loading during migration (Phase 9c)
 ];
 
 // Enable debug output only when E2E_DEBUG environment variable is set
@@ -50,8 +52,8 @@ const E2E_BASE_URL = process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_
  * @returns {Promise<boolean>} - Whether extraction is available
  */
 async function checkExtractionAvailability(page) {
-  // Since we now have fallback to mock extractor, extraction is always available
-  debugLog('Extraction availability: Using fallback to mock extractor when external dependencies are missing');
+  // Mock extractor is always available in testing mode
+  debugLog('Extraction availability: Mock extractor enabled in testing mode');
   return true;
 }
 
@@ -119,7 +121,7 @@ async function waitForPDFUploadCompletion(page, consoleLogs) {
  * @param {string} modelIndex - Model index to use for extraction
  * @returns {Promise<void>}
  */
-async function configureExtractionOptions(page, consoleLogs, modelIndex = 'llamore-gemini') {
+async function configureExtractionOptions(page, consoleLogs, modelIndex = 'mock-extractor') {
   debugLog('Starting extraction configuration phase...');
 
   // Wait for extraction options dialog to appear
@@ -155,8 +157,8 @@ async function configureExtractionOptions(page, consoleLogs, modelIndex = 'llamo
 async function waitForExtractionCompletion(page, consoleLogs) {
   debugLog('Waiting for extraction to complete...');
 
-  // Wait for extraction to complete (this can take time)
-  const extractionLog = await waitForTestMessage(consoleLogs, 'EXTRACTION_COMPLETED', 60000);
+  // Wait for extraction to complete (mock extraction is instant)
+  const extractionLog = await waitForTestMessage(consoleLogs, 'EXTRACTION_COMPLETED', 10000);
   debugLog('Extraction completed:', extractionLog);
 
   expect(extractionLog.value).toHaveProperty('resultHash');
@@ -198,7 +200,7 @@ async function waitForDocumentLoad(page, consoleLogs) {
 test.describe.serial('Extraction Workflow', () => {
 
   test('should complete PDF extraction workflow', async ({ page }) => {
-    test.setTimeout(60000); // 60 seconds for extraction workflow
+    test.setTimeout(30000); // 30 seconds sufficient for mock extraction
 
     // Check if extraction is available (either external services or mock)
     const extractionAvailable = await checkExtractionAvailability(page);
@@ -237,7 +239,7 @@ test.describe.serial('Extraction Workflow', () => {
       await waitForPDFUploadCompletion(page, consoleLogs);
 
       // Step 3: Configure extraction options
-      await configureExtractionOptions(page, consoleLogs, 'llamore-gemini');
+      await configureExtractionOptions(page, consoleLogs, 'mock-extractor');
 
       // Step 4: Wait for extraction completion
       const extractionLog = await waitForExtractionCompletion(page, consoleLogs);

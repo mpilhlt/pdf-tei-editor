@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
 
 
-@router.get("/list", response_model=FileListResponse)
+@router.get("/list", response_model=List[DocumentGroup])
 def list_files(
     request: Request,
     variant: Optional[str] = Query(None, description="Filter by variant"),
@@ -65,7 +65,7 @@ def list_files(
         abbreviator: Hash abbreviator (injected)
 
     Returns:
-        FileListResponse with list of DocumentGroup objects
+        List of DocumentGroup objects
     """
     logger.debug(f"Listing files - variant={variant}, user={current_user}")
 
@@ -148,7 +148,7 @@ def list_files(
 
     logger.debug(f"After access control: {len(files_data)} documents")
 
-    return FileListResponse(files=files_data)
+    return files_data
 
 
 def _file_metadata_to_list_item(file_metadata) -> FileListItem:
