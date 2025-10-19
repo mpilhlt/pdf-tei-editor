@@ -223,9 +223,18 @@ See [schema-design.md](schema-design.md) for complete details.
 
 ### Phase 10: Documentation and Cleanup
 
-- API documentation
-- Development guides
-- Migration cleanup
+In this phase, the developer docs, and the prompts that instruct you must be updated to match the new architecture.
+
+For this,
+
+- first create a summary of each completion document in `fastapi_app/prompts`. this summary must only contain information about the final state of the migrated code. Do not talk about what has changed and specifically do not discuss the advantages of the implementation over alternatives. We are interested in the facts only that help us rewrite the documentation. Specifically, since the Flask server has been removed, no need to mention it at all. 
+- when done, update any developer-facing information that is inconsistent with the migrated code. 
+- finally, replace the `prompts` directory with a new `skills` directory that makes use of the new "skills" feature of Claude. Reorganize information on understanding the app architecture, the coding standard, the mail commands used during development, plugin development, and testing, as separate skills that you can use when assisting, and update it so it conforms with the new state of the code. 
+
+Other tasks in this phase:
+
+- Add information on the generated OpenAPI documentation and the generated client
+- Propose other files to cleanup
 
 **Status**: ⬜ Not started
 
