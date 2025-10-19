@@ -34,7 +34,8 @@
       "Bash(for i in {1..3})",
       "Bash(do echo \"=== Run $i ===\")",
       "Bash(done)",
-      "Bash(for i in 1 2 3)"
+      "Bash(for i in 1 2 3)",
+      "Bash(cp:*)"
     ],
     "deny": [],
     "ask": []

@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_CATEGORIES: str = ""
 
+    # Application Mode - can be overridden by config/config.json
+    # Valid values: "development", "production", "testing"
+    APPLICATION_MODE: str = "development"
+
     @property
     def data_root(self) -> Path:
         return Path(self.DATA_ROOT)
@@ -95,6 +99,11 @@ class Settings(BaseSettings):
     @property
     def webdav_remote_root(self) -> str:
         return self.WEBDAV_REMOTE_ROOT
+
+    @property
+    def application_mode(self) -> str:
+        """Return application mode (development, production, testing)"""
+        return self.APPLICATION_MODE.lower()
 
 @lru_cache
 def get_settings() -> Settings:

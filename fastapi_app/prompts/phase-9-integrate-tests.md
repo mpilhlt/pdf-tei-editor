@@ -812,4 +812,305 @@ This ensures consistent environment configuration across all tests in a suite an
 
 ---
 
-Last updated: 2025-10-17
+## Phase 9c: Extractor Infrastructure Migration
+
+### Overview
+
+The extractor infrastructure currently resides in `server/extractors/` which will be deleted after the Flask-to-FastAPI migration. This section addresses migrating extractors to FastAPI-specific locations and simplifying test infrastructure by standardizing on mock extractors for deterministic testing.
+
+### Goals
+
+1. **Migrate extractors to FastAPI directory structure** - Move from `server/extractors/` to `fastapi_app/extractors/`
+2. **Environment-based extractor availability** - Mock extractor available only in development and testing modes
+3. **Simplified test infrastructure** - All tests use mock extractor for fast, deterministic results
+4. **Clean separation** - Real extractors (Grobid, LLamore) get dedicated integration tests (out of scope)
+
+### Current State
+
+**Extractor Location:**
+- `server/extractors/` - Framework-agnostic extractor implementations
+  - `__init__.py` - BaseExtractor abstract class
+  - `discovery.py` - ExtractorRegistry for auto-discovery
+  - `mock_extractor.py` - Test/development extractor
+  - `grobid_training_extractor.py` - Grobid-based extraction
+  - `llamore_extractor.py` - LLM-based extraction
+  - `kisski_extractor.py` - Legacy extractor
+  - `rng_extractor.py` - Schema validation extractor
+  - `llm_base_extractor.py` - Base class for LLM extractors
+
+**Current Issues:**
+
+1. `fastapi_app/lib/extractor_manager.py` imports from `server.extractors.discovery` - will break when `server/` is removed
+2. Mock extractor always available via `is_available() -> True` - no environment-based control
+3. Tests use mix of real and mock extractors - slow, non-deterministic, require external dependencies
+4. No clear way to enable/disable extractors based on application mode
+
+### Implementation Plan
+
+#### Step 1: Add Application Mode to Environment
+
+**Objective**: Make `application.mode` config value available as environment variable for extractors to check.
+
+**Tasks:**
+
+1. **Update [fastapi_app/config.py](../config.py)**:
+   - Add `APPLICATION_MODE` setting (default: "development")
+   - Add property `application_mode` to access the value
+   - Document valid values: "development", "production", "testing"
+
+2. **Set environment variable in [fastapi_app/main.py](../main.py) startup**:
+   - Load full config during startup
+   - Set `FASTAPI_APPLICATION_MODE` environment variable from `application.mode` config value
+   - Log the application mode for visibility
+
+**Validation:**
+- ✅ Environment variable `FASTAPI_APPLICATION_MODE` set on startup
+- ✅ Value matches config `application.mode`
+- ✅ Logged in startup messages
+
+---
+
+#### Step 2: Copy Extractor Infrastructure to FastAPI
+
+**Objective**: Create FastAPI-local copy of extractor infrastructure before modifying.
+
+**Tasks:**
+
+1. **Create [fastapi_app/extractors/](../extractors/) directory**:
+   ```bash
+   mkdir -p fastapi_app/extractors
+   ```
+
+2. **Copy extractor files**:
+   ```bash
+   cp server/extractors/__init__.py fastapi_app/extractors/
+   cp server/extractors/discovery.py fastapi_app/extractors/
+   cp server/extractors/mock_extractor.py fastapi_app/extractors/
+   cp server/extractors/grobid_training_extractor.py fastapi_app/extractors/
+   cp server/extractors/llamore_extractor.py fastapi_app/extractors/
+   cp server/extractors/kisski_extractor.py fastapi_app/extractors/
+   cp server/extractors/rng_extractor.py fastapi_app/extractors/
+   cp server/extractors/llm_base_extractor.py fastapi_app/extractors/
+   ```
+
+3. **Update import paths in [fastapi_app/extractors/discovery.py](../extractors/discovery.py)**:
+   - Change `from . import BaseExtractor` - stays the same (relative import)
+   - Change module import from `server.extractors.{module_name}` to `fastapi_app.extractors.{module_name}`
+
+4. **Update [fastapi_app/lib/extractor_manager.py](../lib/extractor_manager.py)**:
+   - Change imports from `server.extractors.discovery` to `fastapi_app.extractors.discovery`
+   - Change imports from `server.extractors` to `fastapi_app.extractors`
+
+**Validation:**
+- ✅ All files copied successfully
+- ✅ No import errors when loading FastAPI
+- ✅ Extractor discovery works with new location
+- ✅ `/api/v1/extract/list` returns expected extractors
+
+---
+
+#### Step 3: Make Mock Extractor Environment-Aware
+
+**Objective**: Mock extractor available only in development and testing modes.
+
+**Tasks:**
+
+1. **Update [fastapi_app/extractors/mock_extractor.py](../extractors/mock_extractor.py)**:
+   ```python
+   @classmethod
+   def is_available(cls) -> bool:
+       """Mock extractor available only in development and testing modes."""
+       app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
+       return app_mode in ["development", "testing"]
+   ```
+
+2. **Document behavior in extractor info**:
+   - Update `description` field to mention "Available in development and testing modes only"
+
+**Validation:**
+- ✅ Mock extractor appears in list when `FASTAPI_APPLICATION_MODE=development`
+- ✅ Mock extractor appears in list when `FASTAPI_APPLICATION_MODE=testing`
+- ✅ Mock extractor NOT in list when `FASTAPI_APPLICATION_MODE=production`
+- ✅ Other extractors unaffected by this change
+
+---
+
+#### Step 4: Update API Tests to Use Mock Extractor
+
+**Objective**: Simplify extraction tests to use only mock extractor for fast, deterministic results.
+
+**Tasks:**
+
+1. **Update [tests/api/v1/extraction.test.js](../../tests/api/v1/extraction.test.js)**:
+   - Remove test: "POST /api/extract with RNG extractor should perform extraction" (line 191-233)
+   - Remove test: "POST /api/extract should fall back to mock for unavailable extractors" (line 235-264)
+   - Update test: "POST /api/extract should validate input type matches extractor" (line 266-302):
+     - Change to use mock extractor with XML file (should succeed)
+     - Verify result contains expected mock data structure
+   - Add new test: "POST /api/extract with mock extractor should perform extraction":
+     - Use mock extractor with test file
+     - Verify response structure (xml hash)
+     - Verify extracted content contains mock references
+     - Check file was saved to database
+
+2. **Ensure test environment sets application mode**:
+   - Verify [tests/api/.env.test](../../tests/api/.env.test) does NOT set `APPLICATION_MODE` (defaults to development)
+   - Or explicitly set `FASTAPI_APPLICATION_MODE=testing` for clarity
+
+**Validation:**
+- ✅ All extraction API tests pass
+- ✅ Tests complete in <5 seconds (mock extraction is instant)
+- ✅ No external dependencies required (no GROBID, no Gemini API)
+- ✅ Deterministic results
+
+---
+
+#### Step 5: Update E2E Tests to Use Mock Extractor
+
+**Objective**: Make extraction E2E test fast and deterministic using mock extractor.
+
+**Tasks:**
+
+1. **Update [tests/e2e/tests/extraction-workflow.spec.js](../../tests/e2e/tests/extraction-workflow.spec.js)**:
+
+   **Line 51-56** - Update `checkExtractionAvailability()`:
+   ```javascript
+   async function checkExtractionAvailability(page) {
+     // Mock extractor is always available in testing mode
+     debugLog('Extraction availability: Mock extractor enabled in testing mode');
+     return true;
+   }
+   ```
+
+   **Line 122** - Update `configureExtractionOptions()`:
+   ```javascript
+   async function configureExtractionOptions(page, consoleLogs, modelIndex = 'mock-extractor') {
+   ```
+
+   **Line 240** - Update test call:
+   ```javascript
+   await configureExtractionOptions(page, consoleLogs, 'mock-extractor');
+   ```
+
+   **Line 158-173** - Update `waitForExtractionCompletion()`:
+   - Reduce timeout from 60 seconds to 10 seconds (mock extraction is instant)
+   ```javascript
+   const extractionLog = await waitForTestMessage(consoleLogs, 'EXTRACTION_COMPLETED', 10000);
+   ```
+
+   **Line 200** - Update test timeout:
+   ```javascript
+   test.setTimeout(30000); // 30 seconds sufficient for mock extraction
+   ```
+
+2. **Verify mock extractor content structure**:
+   - Mock extractor creates TEI with `<standOff><listBibl>` containing 3 mock references
+   - Add assertion to verify structure after extraction completes
+
+3. **Update test environment**:
+   - Ensure [tests/e2e/.env.test](../../tests/e2e/.env.test) sets `FASTAPI_APPLICATION_MODE=testing`
+   - This ensures mock extractor is available
+
+**Validation:**
+- ✅ E2E extraction test completes in <30 seconds
+- ✅ No external dependencies required
+- ✅ Deterministic extraction results
+- ✅ Test verifies expected mock content structure
+
+---
+
+#### Step 6: Create Placeholder for Real Extractor Tests
+
+**Objective**: Document that real extractors need dedicated integration tests (out of scope).
+
+**Tasks:**
+
+1. **Create [tests/api/v1/extractors/README.md](../../tests/api/v1/extractors/README.md)**:
+   ```markdown
+   # Extractor Integration Tests
+
+   This directory is reserved for dedicated integration tests of real extractors:
+
+   - `grobid.test.js` - Grobid extractor integration tests (requires GROBID_SERVER_URL)
+   - `llamore.test.js` - LLamore/Gemini extractor tests (requires GEMINI_API_KEY)
+   - `rng.test.js` - RNG schema validation extractor tests
+
+   These tests are separate from the main test suite because they:
+   - Require external services or API keys
+   - Are slow (LLM calls, network requests)
+   - Are non-deterministic (LLM responses vary)
+   - Should run in CI only when credentials are available
+
+   **Status**: Not yet implemented (Phase 9c placeholder)
+   ```
+
+2. **Add to .gitignore** if needed:
+   - `tests/api/v1/extractors/*.test.js` (until implemented)
+
+**Validation:**
+- ✅ README documents future work
+- ✅ Directory structure prepared for future tests
+
+---
+
+#### Step 7: Update Documentation
+
+**Objective**: Document extractor migration and testing approach.
+
+**Tasks:**
+
+1. **Update [fastapi_app/prompts/phase-9-completion.md](phase-9-completion.md)**:
+   - Add section for Phase 9c completion
+   - Document extractor migration
+   - Document mock extractor usage in tests
+   - Note that real extractor integration tests are deferred
+
+2. **Update [prompts/testing-guide.md](../../prompts/testing-guide.md)**:
+   - Document mock extractor usage
+   - Explain `FASTAPI_APPLICATION_MODE` environment variable
+   - Document that extraction tests use mock extractor by default
+   - Note where to add real extractor integration tests
+
+3. **Update [prompts/architecture.md](../../prompts/architecture.md)**:
+   - Document extractor location: `fastapi_app/extractors/`
+   - Document environment-based availability
+   - Note mock extractor for testing
+
+**Validation:**
+- ✅ Documentation accurate and up-to-date
+- ✅ Testing approach clearly explained
+- ✅ Future work documented
+
+---
+
+### Success Criteria
+
+**Phase 9c Completion:**
+
+- ✅ Extractors migrated from `server/extractors/` to `fastapi_app/extractors/`
+- ✅ `FASTAPI_APPLICATION_MODE` environment variable set on startup
+- ✅ Mock extractor available only in development and testing modes
+- ✅ All API extraction tests use mock extractor and pass
+- ✅ E2E extraction test uses mock extractor and completes in <30s
+- ✅ No external dependencies required for extraction tests
+- ✅ Deterministic test results
+- ✅ Real extractor integration tests documented as future work
+- ✅ Documentation updated
+
+### Migration Path
+
+This phase can be done incrementally:
+
+1. Add application mode environment variable
+2. Copy extractors to FastAPI directory
+3. Update imports in extractor manager
+4. Make mock extractor environment-aware
+5. Update tests one by one
+6. Verify all tests pass
+7. Update documentation
+
+After Phase 9c completion, `server/extractors/` can remain until full Flask decommissioning (Phase 10).
+
+---
+
+Last updated: 2025-10-19

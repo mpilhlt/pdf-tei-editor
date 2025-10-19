@@ -11,7 +11,7 @@ For FastAPI migration - Phase 5.
 from fastapi import APIRouter, HTTPException, Depends
 from pathlib import Path
 import logging
-from typing import Optional
+from typing import Optional, List
 
 from ..config import get_settings
 from ..lib.models_extraction import (
@@ -39,10 +39,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/extract", tags=["extraction"])
 
 
-@router.get("/list", response_model=ListExtractorsResponse)
+@router.get("/list", response_model=List[ExtractorInfo])
 def list_available_extractors(
     current_user: dict = Depends(require_authenticated_user)
-) -> ListExtractorsResponse:
+) -> List[ExtractorInfo]:
     """
     List all available extractors with their capabilities.
 
@@ -61,7 +61,7 @@ def list_available_extractors(
             for extractor_data in extractors_data
         ]
 
-        return ListExtractorsResponse(extractors=extractors)
+        return extractors
 
     except Exception as e:
         logger.error(f"Error listing extractors: {e}")
@@ -116,15 +116,15 @@ def extract_metadata(
             else:
                 raise HTTPException(status_code=400, detail=str(e))
 
-        # Get extractor metadata to determine expected input type
+        # Get extractor metadata to determine expected input types
         extractor_info = extractor.__class__.get_info()
-        if not extractor_info.get('input') or len(extractor_info['input']) != 1:
+        if not extractor_info.get('input'):
             raise HTTPException(
                 status_code=400,
-                detail=f"Extractor {request.extractor} must specify exactly one input type"
+                detail=f"Extractor {request.extractor} must specify at least one input type"
             )
 
-        expected_input = extractor_info['input'][0]
+        expected_inputs = extractor_info['input']
 
         # Resolve file_id to get file metadata
         try:
@@ -141,16 +141,18 @@ def extract_metadata(
                 detail=f"File not found: {request.file_id}"
             )
 
-        # Verify file extension matches expected input type
-        if expected_input == "xml" and file_metadata.file_type not in ['tei', 'rng']:
+        # Verify file type matches one of the expected input types
+        file_matches_input = False
+        if "xml" in expected_inputs and file_metadata.file_type in ['tei', 'rng']:
+            file_matches_input = True
+        if "pdf" in expected_inputs and file_metadata.file_type == 'pdf':
+            file_matches_input = True
+
+        if not file_matches_input:
+            expected_types_str = ", ".join(expected_inputs)
             raise HTTPException(
                 status_code=400,
-                detail=f"Extractor {request.extractor} expects XML input, but file has type: {file_metadata.file_type}"
-            )
-        elif expected_input == "pdf" and file_metadata.file_type != 'pdf':
-            raise HTTPException(
-                status_code=400,
-                detail=f"Extractor {request.extractor} expects PDF input, but file has type: {file_metadata.file_type}"
+                detail=f"Extractor {request.extractor} expects {expected_types_str} input, but file has type: {file_metadata.file_type}"
             )
 
         # Get physical file path from hash-sharded storage
@@ -172,11 +174,11 @@ def extract_metadata(
         pdf_path = None
         xml_content = None
 
-        if expected_input == "xml":
+        if file_metadata.file_type in ['tei', 'rng']:
             # For XML-based extractors, load XML content
             with open(file_path, 'r', encoding='utf-8') as f:
                 xml_content = f.read()
-        else:
+        elif file_metadata.file_type == 'pdf':
             # For PDF-based extractors, pass file path
             pdf_path = str(file_path)
 
@@ -198,7 +200,7 @@ def extract_metadata(
             )
 
         # Save the extraction result
-        if pdf_path and expected_input == "pdf":
+        if pdf_path and file_metadata.file_type == 'pdf':
             # For PDF-based extraction, save as associated TEI file
             result = _save_pdf_extraction_result(
                 file_metadata,
@@ -270,10 +272,12 @@ def _save_pdf_extraction_result(
     file_create = FileCreate(
         id=tei_hash,
         stable_id=None,  # Will be auto-generated
+        filename=f"{pdf_metadata.doc_id}-extracted.xml",
         doc_id=pdf_metadata.doc_id,
         file_type='tei',
+        file_size=len(tei_bytes),
         doc_collections=doc_collections,
-        doc_metadata=None,  # TEI files don't store doc metadata
+        doc_metadata={},  # TEI files don't store doc metadata
         variant=variant,
         version=1,  # First version
         is_gold_standard=False,

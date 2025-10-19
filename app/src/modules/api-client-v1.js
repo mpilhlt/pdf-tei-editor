@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-10-18T19:50:48.735Z
+ * Generated from OpenAPI schema at 2025-10-19T16:19:25.487Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -154,11 +154,6 @@
  */
 
 /**
- * @typedef {Object} FileListResponse
- * @property {Array<DocumentGroup>} files
- */
-
-/**
  * @typedef {Object} GetLocksResponse
  * @property {Array<string>} locked_files
  */
@@ -183,11 +178,6 @@
  * @property {string} label
  * @property {Array<string>} extractor
  * @property {Array<string>} text
- */
-
-/**
- * @typedef {Object} ListExtractorsResponse
- * @property {Array<ExtractorInfo>=} extractors - List of available extractors
  */
 
 /**
@@ -485,7 +475,7 @@ export class ApiClientV1 {
    * Returns:
    * List of extractor information including input/output types and availability
    *
-   * @returns {Promise<ListExtractorsResponse>}
+   * @returns {Promise<Array<ExtractorInfo>>}
    */
   async extractList() {
     const endpoint = `/extract/list`
@@ -533,12 +523,12 @@ export class ApiClientV1 {
    * current_user: Current user dict (injected)
    * abbreviator: Hash abbreviator (injected)
    * Returns:
-   * FileListResponse with list of DocumentGroup objects
+   * List of DocumentGroup objects
    *
    * @param {Object=} params - Query parameters
    * @param {(string | null)=} params.variant
    * @param {boolean=} params.refresh
-   * @returns {Promise<FileListResponse>}
+   * @returns {Promise<Array<DocumentGroup>>}
    */
   async filesList(params) {
     const endpoint = `/files/list`

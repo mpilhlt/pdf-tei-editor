@@ -188,17 +188,17 @@ describe('Extraction API E2E Tests', () => {
     }
   });
 
-  test('POST /api/extract with RNG extractor should perform extraction', async () => {
-    // Use RNG extractor which accepts XML input
+  test('POST /api/extract with mock extractor should perform extraction', async () => {
+    // Use mock extractor which accepts PDF or XML input
     const response = await authenticatedApiCall(
       session.sessionId,
       '/extract',
       'POST',
       {
-        extractor: 'rng',
+        extractor: 'mock-extractor',
         file_id: testFileHash,
         options: {
-          collection: 'test_collection'
+          doi: '10.1234/test.doi'
         }
       },
       BASE_URL
@@ -207,9 +207,7 @@ describe('Extraction API E2E Tests', () => {
     assert.ok(response, 'Should receive a response');
     assert.ok(response.xml, 'Should have xml hash in response');
 
-    // For PDF-based extraction, we'd also have pdf hash and id
-    // For XML-based extraction (like RNG), we just get xml hash
-    console.log(`✓ RNG extraction succeeded, result: ${response.xml}`);
+    console.log(`✓ Mock extraction succeeded, result: ${response.xml}`);
 
     // Verify the extracted file was saved
     const filesResponse = await authenticatedApiCall(
@@ -232,72 +230,4 @@ describe('Extraction API E2E Tests', () => {
     }
   });
 
-  test('POST /api/extract should fall back to mock for unavailable extractors', async () => {
-    // Try to use an extractor that requires external dependencies (like grobid)
-    // It should fall back to mock if dependencies are missing
-    try {
-      const response = await authenticatedApiCall(
-        session.sessionId,
-        '/extract',
-        'POST',
-        {
-          extractor: 'grobid',  // Requires GROBID_SERVER_URL
-          file_id: testFileHash,
-          options: {}
-        },
-        BASE_URL
-      );
-
-      // If we get here, either grobid is available or it fell back to mock
-      assert.ok(response, 'Should receive a response');
-      assert.ok(response.xml, 'Should have xml hash in response');
-      console.log('✓ Extraction succeeded (grobid available or mock fallback)');
-
-    } catch (error) {
-      // May fail with 400 if extractor expects PDF but we gave XML
-      if (error.message.includes('expects PDF input')) {
-        console.log('✓ Correctly validated input type mismatch');
-      } else {
-        console.log(`⚠️  Extraction failed: ${error.message}`);
-      }
-    }
-  });
-
-  test('POST /api/extract should validate input type matches extractor', async () => {
-    // Get list of extractors to find one with specific input requirements
-    const listResponse = await authenticatedApiCall(
-      session.sessionId,
-      '/extract/list',
-      'GET',
-      null,
-      BASE_URL
-    );
-
-    const extractors = listResponse.extractors || listResponse;
-    const pdfExtractor = extractors.find(e => e.input.includes('pdf'));
-
-    if (pdfExtractor) {
-      try {
-        // Try to use PDF extractor on XML file
-        await authenticatedApiCall(
-          session.sessionId,
-          '/extract',
-          'POST',
-          {
-            extractor: pdfExtractor.id,
-            file_id: testFileHash,  // This is an XML file
-            options: {}
-          },
-          BASE_URL
-        );
-        assert.fail('Should have thrown an error for type mismatch');
-      } catch (error) {
-        assert.ok(error.message.includes('400'), 'Should return 400 for type mismatch');
-        assert.ok(error.message.includes('expects PDF'), 'Error should mention type mismatch');
-        console.log('✓ Validated input type mismatch');
-      }
-    } else {
-      console.log('⚠️  No PDF extractor found, skipping type validation test');
-    }
-  });
 });
