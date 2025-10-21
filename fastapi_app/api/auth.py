@@ -89,11 +89,18 @@ async def login(request_data: LoginRequest, request: Request):
     # Create new session
     session_id = session_manager.create_session(request_data.username)
 
+    # Normalize roles field (legacy data may have "role" as string)
+    roles = user.get("roles")
+    if roles is None:
+        # Handle legacy "role" field (singular string)
+        role = user.get("role")
+        roles = [role] if role else []
+
     # Build response
     response_data = {
         "username": user.get("username"),
         "fullname": user.get("fullname"),
-        "roles": user.get("roles"),
+        "roles": roles,
         "sessionId": session_id
     }
 
@@ -147,8 +154,15 @@ async def status(request: Request):
     # Refresh session
     session_manager.update_session_access_time(session_id)
 
+    # Normalize roles field (legacy data may have "role" as string)
+    roles = user.get("roles")
+    if roles is None:
+        # Handle legacy "role" field (singular string)
+        role = user.get("role")
+        roles = [role] if role else []
+
     return StatusResponse(
         username=user.get("username"),
         fullname=user.get("fullname"),
-        roles=user.get("roles")
+        roles=roles
     )

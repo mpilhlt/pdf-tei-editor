@@ -41,7 +41,7 @@ describe('Authentication API', () => {
 
         assert.strictEqual(user.username, 'admin');
         assert.strictEqual(user.fullname, 'Administrator');
-        assert.strictEqual(user.role, 'admin');
+        assert.ok(Array.isArray(user.roles) && user.roles.includes('admin'), 'User should have admin role');
         assert.ok(sid, 'Should return session ID');
 
         // Save session ID for subsequent tests
@@ -54,7 +54,7 @@ describe('Authentication API', () => {
         const user = await checkStatus(sessionId);
         assert.strictEqual(user.username, 'admin');
         assert.strictEqual(user.fullname, 'Administrator');
-        assert.strictEqual(user.role, 'admin');
+        assert.ok(Array.isArray(user.roles) && user.roles.includes('admin'), 'User should have admin role');
     });
 
     test('should reject status check without session', async () => {
