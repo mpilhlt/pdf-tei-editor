@@ -25,7 +25,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          image: lfoppiano/pdf-tei-editor
+          image: ${{ secrets.DOCKERHUB_USERNAME }}/pdf-tei-editor
           registry: docker.io
           pushImage: ${{ github.event_name != 'pull_request' }}
           tags: latest
