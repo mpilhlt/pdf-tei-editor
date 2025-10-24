@@ -10,8 +10,7 @@ from typing import Optional
 
 def create_debug_log_dir() -> Path:
     """Create and return the debug log directory."""
-    project_root = Path(__file__).resolve().parent.parent.parent
-    log_dir = project_root / 'log'
+    log_dir = Path(os.environ.get('LOG_DIR', Path(__file__).resolve().parent.parent.parent / 'log'))
     log_dir.mkdir(exist_ok=True)
     return log_dir
 
