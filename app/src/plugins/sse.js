@@ -5,7 +5,7 @@
 /** 
  * @import { ApplicationState } from '../state.js' 
  */
-import { logger } from '../app.js'
+import { logger, config } from '../app.js'
 
 /**
  * plugin API
@@ -128,9 +128,15 @@ async function update(state) {
  * Called when app startup is complete
  */
 async function ready() {
+  const sseEnabled = await config.get("sse.enabled")
   appStarted = true;
+  if (sseEnabled === false) {
+    // disable only if explicitly set to false for BC
+    logger.debug('SSE is disabled.');
+    return
+  }
   // If user is already authenticated, establish connection now
-  if (!eventSource && currentState.sessionId) {
+  if (sseEnabled && !eventSource && currentState.sessionId) {
     logger.debug('App ready, SSE is connecting...');
     establishConnection(currentState.sessionId);
   }

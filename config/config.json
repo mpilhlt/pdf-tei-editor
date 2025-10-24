@@ -36,5 +36,6 @@
     "testing"
   ],
   "application.login-message": "",
-  "application.login-message.type": "string"
+  "application.login-message.type": "string",
+  "sse.enabled": true
 }

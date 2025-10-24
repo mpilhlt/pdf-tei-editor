@@ -27,7 +27,24 @@ def read_config() -> dict:
     with config_lock:
         try:
             with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                config = json.load(f) # type: dict
+
+            for key in config.keys():
+                # Check for environment variable override
+                env_key = f"PDF_TEI_EDITOR_CONFIG_{key.replace('.', '_')}"
+                env_value = os.environ.get(env_key)
+
+                if env_value is not None:
+                    try:
+                        # Parse the environment variable value as JSON
+                        config[key] = json.loads(env_value)
+                        
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Invalid JSON in environment variable {env_key}: {e}")
+                        # Fall through to config file if env var is invalid
+
+            return config
+
         except IOError as e:
             print(f"Error reading config file {CONFIG_FILE_PATH}: {e}")
             # Re-raise the exception or return an error indicator
@@ -57,7 +74,13 @@ def api_config_route():
 @handle_api_errors
 #@session_required # disabled because of /app/src/app.js#L160
 def get_config_value(key):
-    """Retrieves a configuration value by key."""
+    """Retrieves a configuration value by key.
+
+    Environment variable override: If PDF_TEI_EDITOR_CONFIG_<KEY> exists,
+    it overrides the value from config.json. The key is transformed by
+    replacing dots with underscores (e.g., 'sse.enabled' -> 'sse_enabled').
+    The environment variable value is parsed as JSON.
+    """
     if not isinstance(key, str) or not key:
         raise ValueError("Invalid or empty key")
 
