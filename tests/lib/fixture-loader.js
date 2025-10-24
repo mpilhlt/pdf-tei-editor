@@ -88,6 +88,19 @@ export async function loadFixture(options) {
  * @returns {Promise<void>}
  */
 export async function importFixtureFiles(fixtureFilesPath, runtimePath, projectRoot, verbose = false) {
+  // Check if fixture files directory exists
+  if (!existsSync(fixtureFilesPath)) {
+    console.log(`   ℹ️  No files to import (fixture has no files directory)`);
+    return;
+  }
+
+  // Check if directory is empty
+  const files = readdirSync(fixtureFilesPath);
+  if (files.length === 0) {
+    console.log(`   ℹ️  No files to import (files directory is empty)`);
+    return;
+  }
+
   console.log(`   📥 Importing files into database...`);
 
   // Build paths for the import script
@@ -96,9 +109,11 @@ export async function importFixtureFiles(fixtureFilesPath, runtimePath, projectR
   const storageRoot = join(runtimePath, 'files');
 
   // Run the import script using uv (for proper Python environment)
+  // Use 'python' on Windows, 'python3' on Unix
+  const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
   const args = [
     'run',
-    'python3',
+    pythonCommand,
     importScript,
     '--directory', fixtureFilesPath,
     '--db-path', dbPath,

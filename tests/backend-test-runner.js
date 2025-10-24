@@ -89,7 +89,8 @@ async function discoverTests(testDir = null) {
 
   for (const dir of searchDirs) {
     try {
-      const pattern = join(dir, '**', '*.test.js');
+      // Normalize to forward slashes for glob (required on Windows)
+      const pattern = join(dir, '**', '*.test.js').replace(/\\/g, '/');
       const files = await glob(pattern);
       allTests.push(...files);
     } catch (err) {

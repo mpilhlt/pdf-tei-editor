@@ -247,24 +247,44 @@ LOG_LEVEL=INFO
     );
 
     // Start server
-    if (verbose) {
-      this.serverProcess = spawn('uv', ['run', 'python', 'bin/start-dev-fastapi'], {
+    // On Windows, always use pipe mode since shell redirection is unreliable
+    // On Unix, use shell redirection for better performance
+    if (verbose || platform() === 'win32') {
+      // Set environment variables:
+      // - PYTHONUNBUFFERED=1 for immediate Python output
+      // - DISABLE_RELOAD=1 on Windows (uvicorn --reload has issues on Windows)
+      const env = {
+        ...process.env,
+        PYTHONUNBUFFERED: '1',
+      };
+
+      // On Windows, bypass the Python wrapper script and call uvicorn directly
+      // The wrapper script has issues with piped stdio on Windows
+      const uvicornArgs = platform() === 'win32'
+        ? ['run', 'uvicorn', 'run_fastapi:app', '--host', 'localhost', '--port', '8000', '--log-level', 'info']
+        : ['run', 'python', 'bin/start-dev-fastapi'];
+
+      this.serverProcess = spawn('uv', uvicornArgs, {
         cwd: this.projectRoot,
         stdio: 'pipe',
+        env,
       });
 
-      // If verbose, tee output to both console and log file
+      // Redirect output to log file
       this.serverProcess.stdout?.on('data', (data) => {
-        process.stdout.write(data);
+        if (verbose) {
+          process.stdout.write(data);
+        }
         fs.appendFile(this.logFile, data);
       });
       this.serverProcess.stderr?.on('data', (data) => {
-        process.stderr.write(data);
+        if (verbose) {
+          process.stderr.write(data);
+        }
         fs.appendFile(this.logFile, data);
       });
     } else {
-      // Redirect to log file using shell redirection
-      // Use PYTHONUNBUFFERED=1 to ensure Python output isn't buffered
+      // Unix only: use sh with shell redirection for better performance
       const { spawn: spawnShell } = await import('child_process');
       this.serverProcess = spawnShell(
         'sh',
@@ -455,7 +475,9 @@ LOG_LEVEL=INFO
     await this.startServerProcess(verbose);
 
     // Step 4: Wait for startup
-    const started = await this.waitForStartup();
+    // Use longer timeout on Windows (server startup is slower)
+    const timeoutSec = platform() === 'win32' ? 30 : 15;
+    const started = await this.waitForStartup(timeoutSec);
     if (!started) {
       throw new Error('Server failed to start');
     }

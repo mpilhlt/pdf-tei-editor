@@ -66,14 +66,19 @@ if __name__ == '__main__':
 
     # Start uvicorn with auto-reload
     # Use subprocess to run uvicorn so we can handle signals properly
+    # Disable auto-reload on Windows in test environments (DISABLE_RELOAD env var)
+    disable_reload = os.environ.get('DISABLE_RELOAD', '').lower() in ('1', 'true', 'yes')
+
     cmd = [
         'uv', 'run', 'uvicorn',
         'run_fastapi:app',
-        '--reload',
         '--host', host,
         '--port', str(port),
         '--log-level', 'info'
     ]
+
+    if not disable_reload:
+        cmd.insert(3, '--reload')
 
     try:
         # Run uvicorn and tee output to log file

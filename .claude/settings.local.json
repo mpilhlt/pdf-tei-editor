@@ -35,7 +35,10 @@
       "Bash(do echo \"=== Run $i ===\")",
       "Bash(done)",
       "Bash(for i in 1 2 3)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(npm run test:api:*)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(tasklist:*)"
     ],
     "deny": [],
     "ask": []

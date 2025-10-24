@@ -2,7 +2,7 @@ import { ServerManager } from './server-manager.js';
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { platform } from 'os';
+import { platform, tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -26,14 +26,17 @@ export class WebdavServerManager extends ServerManager {
   /**
    * @param {Object} [config] - Configuration options
    * @param {number} [config.port=8081] - Port to run WebDAV server on
-   * @param {string} [config.webdavRoot] - Root directory for WebDAV (default: /tmp/webdav-test)
+   * @param {string} [config.webdavRoot] - Root directory for WebDAV (default: OS temp dir + webdav-test)
    * @param {string} [config.remoteRoot='/pdf-tei-editor'] - Remote root path within WebDAV
    */
   constructor(config = {}) {
     super();
     this.projectRoot = join(__dirname, '..', '..');
     this.port = config.port || 8081;
-    this.webdavRoot = config.webdavRoot || '/tmp/webdav-test';
+    // Use OS-specific temp directory on Windows, /tmp on Unix
+    this.webdavRoot = config.webdavRoot || (platform() === 'win32'
+      ? join(tmpdir(), 'webdav-test')
+      : '/tmp/webdav-test');
     this.remoteRoot = config.remoteRoot || '/pdf-tei-editor';
     this.serverUrl = `http://localhost:${this.port}`;
     this.webdavProcess = null;
@@ -190,8 +193,9 @@ export class WebdavServerManager extends ServerManager {
       }
     });
 
-    // Wait briefly for startup
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Wait briefly for startup (longer on Windows)
+    const startupWait = platform() === 'win32' ? 4000 : 2000;
+    await new Promise((resolve) => setTimeout(resolve, startupWait));
 
     // Check if process started successfully
     if (this.webdavProcess.exitCode !== null) {
@@ -206,21 +210,33 @@ export class WebdavServerManager extends ServerManager {
    * @inheritdoc
    */
   async isHealthy(timeoutMs = 5000) {
-    try {
-      // Check if we can list the root directory
-      const response = await fetch(`${this.serverUrl}/`, {
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (response.ok) {
-        console.log(`[SUCCESS] WebDAV health check passed`);
-        return true;
+    // Retry health check with exponential backoff (especially important on Windows)
+    const maxRetries = 5;
+    const retryDelay = 1000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Check if we can list the root directory
+        const response = await fetch(`${this.serverUrl}/`, {
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (response.ok) {
+          console.log(`[SUCCESS] WebDAV health check passed`);
+          return true;
+        }
+        console.error(`[ERROR] WebDAV health check failed: status ${response.status}`);
+        return false;
+      } catch (err) {
+        if (attempt < maxRetries) {
+          console.log(`[INFO] Health check attempt ${attempt}/${maxRetries} failed, retrying in ${retryDelay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        } else {
+          console.error(`[ERROR] WebDAV health check failed after ${maxRetries} attempts: ${err.message}`);
+          return false;
+        }
       }
-      console.error(`[ERROR] WebDAV health check failed: status ${response.status}`);
-      return false;
-    } catch (err) {
-      console.error(`[ERROR] WebDAV health check failed: ${err.message}`);
-      return false;
     }
+    return false;
   }
 
   /**
