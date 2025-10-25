@@ -42,7 +42,7 @@ server_root = project_root / 'server'
 web_root = project_root / 'app' / 'web'
 node_modules_root = project_root / 'node_modules'
 src_root = project_root / 'app' / 'src'
-data_root = project_root / 'data' if local_webdav_root is None else local_webdav_root
+data_root = Path(os.environ.get('DATA_DIR', project_root / 'data')) if local_webdav_root is None else local_webdav_root
 config_dir = project_root / 'config'
 
 # Flask app
@@ -80,7 +80,7 @@ def configure_logger_with_colors(target_logger, level=logging.DEBUG):
         target_logger.addHandler(console_handler)
     
     # File handler for log/server.log
-    log_dir = project_root / 'log'
+    log_dir = Path(os.environ.get('LOG_DIR', project_root / 'log'))
     log_dir.mkdir(exist_ok=True)
     log_file = log_dir / 'server.log'
     
@@ -100,7 +100,7 @@ app.logger.handlers = logger.handlers
 app.logger.setLevel(logger.level)
 
 # Configure separate access logging for HTTP requests
-log_dir = project_root / 'log'
+log_dir = Path(os.environ.get('LOG_DIR', project_root / 'log'))
 log_dir.mkdir(exist_ok=True)
 
 # Purge non-.log files from log directory on startup
@@ -128,7 +128,7 @@ access_logger.setLevel(logging.INFO)
 access_logger.propagate = False
 
 # Dir to place app data in
-app_db_dir = project_root / 'db'
+app_db_dir = Path(os.environ.get('DB_DIR', project_root / 'db'))
 os.makedirs(app_db_dir, exist_ok=True)
 app.config['DB_DIR'] = app_db_dir
 

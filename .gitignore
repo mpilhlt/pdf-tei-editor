@@ -19,4 +19,4 @@ pdfjs
 
 # Debug logs
 log/
-
+.idea
