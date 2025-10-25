@@ -147,11 +147,9 @@ class SSEService:
                         message['data']
                     )
 
-                    # Send keep-alive comments periodically (every ~30s)
-                    # This is handled by timeout - when no messages, send ping
                 except queue.Empty:
-                    # Send keep-alive ping
-                    yield ': ping\n\n'
+                    # Send keep-alive ping event (every ~0.5s when no messages)
+                    yield self._format_sse_message('ping', 'keepalive')
                     continue
 
         except GeneratorExit:

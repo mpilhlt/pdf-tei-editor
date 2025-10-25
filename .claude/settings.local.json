@@ -38,7 +38,8 @@
       "Bash(cp:*)",
       "Bash(npm run test:api:*)",
       "Bash(taskkill //F //IM python.exe)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

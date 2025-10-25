@@ -1,12 +1,14 @@
+// @ts-check
+/// <reference types="node" />
 /**
  * E2E Integration Tests for Server-Sent Events (SSE) API
  * @testCovers fastapi_app/routers/sse.py
  * @testCovers fastapi_app/lib/sse_service.py
- * 
+ *
  */
 
 import { test, describe } from 'node:test';
-import assert from 'node:assert';
+import * as assert from 'node:assert';
 import { createEventSource } from 'eventsource-client';
 import { login, authenticatedRequest } from '../helpers/test-auth.js';
 
@@ -14,7 +16,8 @@ const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
 describe('SSE API Integration Tests', { concurrency: 1 }, () => {
 
-  let globalSession = null;
+  /** @type {{sessionId: string, user: object}} */
+  let globalSession;
 
   /**
    * Helper: Get test session
@@ -28,12 +31,14 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
 
   /**
    * Helper: Create SSE connection with authentication and collect events
+   * @param {{sessionId: string}} session - Session with authentication
+   * @param {string|null} eventType - Optional event type filter
+   * @param {boolean} debug - Enable debug logging
+   * @returns {{eventSource: any, events: string[], waitForEvents: (count: number, timeout?: number) => Promise<string[]>, close: () => void}}
    */
   function createSSEConnection(session, eventType = null, debug = false) {
+    /** @type {string[]} */
     const events = [];
-    let resolvePromise = null;
-    let rejectPromise = null;
-    let eventPromise = null;
 
     const eventSource = createEventSource({
       url: `${BASE_URL}/api/v1/sse/subscribe`,
@@ -47,21 +52,13 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
         // Filter by event type if specified
         if (!eventType || message.event === eventType) {
           events.push(message.data);
-          if (resolvePromise) {
-            resolvePromise(message.data);
-          }
         } else if (debug) {
           console.log(`[SSE] Filtered out event type: ${message.event} (waiting for: ${eventType})`);
         }
       },
-      onError: (error) => {
+      onDisconnect: () => {
         if (debug) {
-          console.log(`[SSE] Connection error:`, error);
-        }
-      },
-      onClose: () => {
-        if (debug) {
-          console.log(`[SSE] Connection closed`);
+          console.log(`[SSE] Connection disconnected`);
         }
       }
     });
@@ -163,23 +160,22 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
     connection.close();
   });
 
-  test.skip('Test 4: SSE connection receives keep-alive pings', async () => {
-    // This test is skipped because it takes 30+ seconds waiting for keep-alive ping
-    // The keep-alive functionality is tested indirectly by other tests
+  test('Test 4: SSE connection receives keep-alive pings', async () => {
     const session = await getSession();
-    const eventSource = createSSEConnection(session);
+    const connection = createSSEConnection(session, 'ping');
 
     // Collect one ping event
-    const pingPromise = collectSSEEvents(eventSource, 'ping', 1, 35000); // Keep-alive is every 30s
-
-    const pingData = await pingPromise;
+    const pingData = await connection.waitForEvents(1, 35000); // Keep-alive is every 30s
 
     assert.strictEqual(pingData.length, 1, 'Should receive one ping event');
     assert.strictEqual(pingData[0], 'keepalive', 'Ping should contain keepalive message');
+
+    connection.close();
   });
 
   test('Test 5: Multiple echo requests are received in order', async () => {
-    const session = await getSession();
+    // Create fresh session to avoid queue conflicts with previous tests
+    const session = await login('reviewer', 'reviewer', BASE_URL);
     const connection = createSSEConnection(session, 'test');
 
     // Wait for connection to establish and SSE stream to start consuming
