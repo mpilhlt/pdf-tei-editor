@@ -91,11 +91,13 @@ export class LocalServerManager extends ServerManager {
         // Ignore errors
       }
     } else {
-      // Unix: kill by pattern
+      // Unix: kill by pattern - run commands separately for reliability
       try {
         const { exec } = await import('child_process');
         await new Promise((resolve) => {
-          exec('pkill -9 -f "uvicorn.*fastapi_app"', () => resolve());
+          exec('pkill -9 -f "uvicorn.*run_fastapi"', () => {
+            exec('pkill -9 -f "bin/start-dev-fastapi"', () => resolve());
+          });
         });
       } catch (err) {
         // Ignore errors
@@ -560,18 +562,39 @@ LOG_LEVEL=INFO
             exec(`taskkill /F /T /PID ${this.serverProcess.pid}`, () => resolve());
           });
         } else {
-          // Unix: send SIGTERM
-          this.serverProcess.kill('SIGTERM');
+          // Unix: kill entire process tree (parent + all children)
+          const { exec } = await import('child_process');
+          const pid = this.serverProcess.pid;
+
+          // Use process group kill to terminate all related processes
+          // Run pkill commands separately for more reliable execution
           await new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-              this.serverProcess?.kill('SIGKILL');
-              resolve();
-            }, 5000);
-            this.serverProcess?.once('exit', () => {
-              clearTimeout(timeout);
-              resolve();
+            exec('pkill -9 -f "uvicorn.*run_fastapi"', () => {
+              exec('pkill -9 -f "bin/start-dev-fastapi"', () => {
+                // Also try to kill the parent process directly
+                try {
+                  process.kill(pid, 'SIGKILL');
+                } catch (err) {
+                  // Process may already be dead
+                }
+                resolve();
+              });
             });
           });
+
+          // Wait for processes to die (SIGKILL should be immediate but give it time)
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+
+          // Wait for parent process to exit
+          if (this.serverProcess && this.serverProcess.exitCode === null) {
+            await new Promise((resolve) => {
+              const timeout = setTimeout(() => resolve(), 2000);
+              this.serverProcess?.once('exit', () => {
+                clearTimeout(timeout);
+                resolve();
+              });
+            });
+          }
         }
       } catch (err) {
         // Ignore errors

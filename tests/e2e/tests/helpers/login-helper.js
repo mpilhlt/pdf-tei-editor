@@ -161,13 +161,20 @@ export async function releaseAllLocks(page) {
 /**
  * Navigates to application and performs login
  * @param {import('Page} page - Playwright page object
- * @param {string} baseUrl - Base URL of the application
+ * @param {string} [baseUrl] - Base URL of the application (deprecated, uses Playwright baseURL by default)
  * @param {string} username - Username to login with
  * @param {string} password - Password to login with
  */
 export async function navigateAndLogin(page, baseUrl, username = 'testuser', password = 'testpass') {
-  // Navigate to application first
-  await page.goto(baseUrl);
+  // If baseUrl is actually a username (for backwards compatibility when baseUrl is omitted)
+  if (baseUrl && !baseUrl.startsWith('http')) {
+    password = username;
+    username = baseUrl;
+    baseUrl = '/';
+  }
+
+  // Navigate to application first (use relative URL to leverage Playwright's baseURL config)
+  await page.goto(baseUrl || '/');
 
   // Perform login (app will handle if already logged in)
   await performLogin(page, username, password);

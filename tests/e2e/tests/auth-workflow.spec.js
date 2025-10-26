@@ -10,11 +10,6 @@
 
 import { test, expect } from '@playwright/test';
 
-// Configuration from environment variables
-const E2E_HOST = process.env.E2E_HOST || 'localhost';
-const E2E_PORT = process.env.E2E_PORT || '8000';
-const E2E_BASE_URL = process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_PORT}`;
-
 test.describe('Authentication Workflow', () => {
 
   test('should complete full login and logout cycle', async ({ page }) => {
@@ -33,7 +28,7 @@ test.describe('Authentication Workflow', () => {
     });
 
     // Navigate to application
-    await page.goto(E2E_BASE_URL);
+    await page.goto('/');
 
     // Wait for application to load and show login dialog
     await page.waitForSelector('sl-dialog[name="loginDialog"][open]', { timeout: 10000 });
@@ -153,7 +148,7 @@ test.describe('Authentication Workflow', () => {
     });
 
     // Navigate to application
-    await page.goto(E2E_BASE_URL);
+    await page.goto('/');
 
     // Wait for login dialog
     await page.waitForSelector('sl-dialog[open]', { timeout: 10000 });
@@ -201,7 +196,7 @@ test.describe('Authentication Workflow', () => {
 
   test('should handle Enter key navigation in login form', async ({ page }) => {
     // Navigate to application
-    await page.goto(E2E_BASE_URL);
+    await page.goto('/');
 
     // Wait for login dialog
     await page.waitForSelector('sl-dialog[open]', { timeout: 10000 });
@@ -260,7 +255,7 @@ test.describe('Authentication Workflow', () => {
 
   test('should preserve login dialog state during failed attempts', async ({ page }) => {
     // Navigate to application
-    await page.goto(E2E_BASE_URL);
+    await page.goto('/');
 
     // Wait for login dialog
     await page.waitForSelector('sl-dialog[open]', { timeout: 10000 });

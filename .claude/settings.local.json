@@ -39,7 +39,9 @@
       "Bash(npm run test:api:*)",
       "Bash(taskkill //F //IM python.exe)",
       "Bash(tasklist:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm run test:e2e:*)",
+      "Bash(E2E_DEBUG=true npm run test:e2e:*)"
     ],
     "deny": [],
     "ask": []

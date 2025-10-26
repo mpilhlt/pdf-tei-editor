@@ -114,20 +114,50 @@ export async function selectFirstDocuments(page) {
   // Wait for PDF selection to process
   await page.waitForTimeout(2000);
 
-  // Check state after PDF selection
-  const afterPdfSelection = await page.evaluate(() => {
+  // Check state after PDF selection and select XML
+  const xmlSelected = await page.evaluate(() => {
     /** @type {namedElementsTree} */
     const ui = /** @type {any} */(window).ui;
     const xmlOptions = ui.toolbar.xml.querySelectorAll('sl-option');
 
-    return {
+    const beforeXml = {
       pdfValue: ui.toolbar.pdf.value,
       xmlValue: ui.toolbar.xml.value,
       xmlOptionsCount: xmlOptions.length,
       xmlOptionValues: Array.from(xmlOptions).map(opt => opt.value)
     };
+
+    // Try to select the first XML if available
+    if (xmlOptions.length > 0) {
+      const firstXmlValue = xmlOptions[0].value;
+      console.log('Attempting to select XML:', firstXmlValue);
+
+      // Try direct value assignment
+      ui.toolbar.xml.value = firstXmlValue;
+
+      // Try to force the change event
+      const changeEvent = new CustomEvent('sl-change', {
+        detail: { value: firstXmlValue },
+        bubbles: true
+      });
+      ui.toolbar.xml.dispatchEvent(changeEvent);
+
+      return {
+        success: true,
+        selectedValue: firstXmlValue,
+        before: beforeXml
+      };
+    }
+    return {
+      success: false,
+      reason: 'No XML options available',
+      before: beforeXml
+    };
   });
-  debugLog('After PDF selection:', afterPdfSelection);
+  debugLog('XML selection result:', xmlSelected);
+
+  // Wait for XML selection to process
+  await page.waitForTimeout(1000);
 
   // Actually load the selected documents to trigger proper state updates
   const loadResult = await page.evaluate(async () => {

@@ -25,11 +25,6 @@ const debugLog = (...args) => {
   }
 };
 
-// Configuration from environment variables
-const E2E_HOST = process.env.E2E_HOST || 'localhost';
-const E2E_PORT = process.env.E2E_PORT || '8000';
-const E2E_BASE_URL = process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_PORT}`;
-
 // Define allowed error patterns for document actions
 const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*401.*UNAUTHORIZED', // will always be thrown when first loading without a saved state
@@ -55,7 +50,7 @@ test.describe('Document Actions', () => {
 
     try {
       // Navigate and login as reviewer (required for document actions)
-      await navigateAndLogin(page, E2E_BASE_URL, 'testreviewer', 'reviewerpass');
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
 
       // Select the first available PDF and XML documents (should exist from previous tests)
       await selectFirstDocuments(page);
@@ -147,7 +142,7 @@ test.describe('Document Actions', () => {
 
       try {
       // Navigate and login as reviewer (required for document actions)
-      await navigateAndLogin(page, E2E_BASE_URL, 'testreviewer', 'reviewerpass');
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
 
       // Select the first available PDF and XML documents (should exist from previous tests)
       await selectFirstDocuments(page);

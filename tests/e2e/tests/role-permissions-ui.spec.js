@@ -9,11 +9,6 @@ import { test, expect } from '@playwright/test';
 import { navigateAndLogin, performLogout } from './helpers/login-helper.js';
 import { setupTestConsoleCapture, setupErrorFailure, waitForTestMessage } from './helpers/test-logging.js';
 
-// Configuration from environment variables
-const E2E_HOST = process.env.E2E_HOST || 'localhost';
-const E2E_PORT = process.env.E2E_PORT || '8000';
-const E2E_BASE_URL = process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_PORT}`;
-
 // Define allowed error patterns for role permission tests
 const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*401.*UNAUTHORIZED', // will always be thrown when first loading without a saved state
@@ -42,7 +37,7 @@ test.describe('Role-based UI Permissions', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
     try {
-      await navigateAndLogin(page, E2E_BASE_URL, TEST_USERS.user.username, TEST_USERS.user.password);
+      await navigateAndLogin(page, TEST_USERS.user.username, TEST_USERS.user.password);
 
       // Wait for user authentication to complete
       await waitForTestMessage(consoleLogs, 'USER_AUTHENTICATED', 10000);
@@ -87,7 +82,7 @@ test.describe('Role-based UI Permissions', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
     try {
-      await navigateAndLogin(page, E2E_BASE_URL, TEST_USERS.annotator.username, TEST_USERS.annotator.password);
+      await navigateAndLogin(page, TEST_USERS.annotator.username, TEST_USERS.annotator.password);
 
       // Wait for user authentication to complete with longer timeout
       await waitForTestMessage(consoleLogs, 'USER_AUTHENTICATED', 15000);
@@ -134,7 +129,7 @@ test.describe('Role-based UI Permissions', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
     try {
-      await navigateAndLogin(page, E2E_BASE_URL, TEST_USERS.reviewer.username, TEST_USERS.reviewer.password);
+      await navigateAndLogin(page, TEST_USERS.reviewer.username, TEST_USERS.reviewer.password);
 
       // Wait for user authentication to complete
       await waitForTestMessage(consoleLogs, 'USER_AUTHENTICATED', 10000);
@@ -177,7 +172,7 @@ test.describe('Role-based UI Permissions', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
     try {
-      await navigateAndLogin(page, E2E_BASE_URL, TEST_USERS.admin.username, TEST_USERS.admin.password);
+      await navigateAndLogin(page, TEST_USERS.admin.username, TEST_USERS.admin.password);
 
       // Wait for user authentication to complete
       await waitForTestMessage(consoleLogs, 'USER_AUTHENTICATED', 10000);

@@ -38,5 +38,6 @@
     "application.login-message": "",
     "application.login-message.type": "string",
     "debug.enabled": true,
-    "debug.enabled.type": "boolean"
+    "debug.enabled.type": "boolean",
+    "sse.enabled": true
 }

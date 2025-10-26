@@ -39,11 +39,6 @@ const debugLog = (...args) => {
   }
 };
 
-// Configuration from environment variables
-const E2E_HOST = process.env.E2E_HOST || 'localhost';
-const E2E_PORT = process.env.E2E_PORT || '8000';
-const E2E_BASE_URL = process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_PORT}`;
-
 // Helper functions are now imported from test-logging.js
 
 // Helper functions for extraction workflow steps
@@ -220,7 +215,7 @@ test.describe.serial('Extraction Workflow', () => {
       debugLog('Starting extraction workflow test');
 
       // Navigate and login as annotator (required for extraction operations)
-      await navigateAndLogin(page, E2E_BASE_URL, 'testannotator', 'annotatorpass');
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
       debugLog('Login completed');
 
       // Debug: Check if test logging is enabled
