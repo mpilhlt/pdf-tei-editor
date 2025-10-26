@@ -1,5 +1,6 @@
 import { ServerManager } from './server-manager.js';
 import { WebdavServerManager } from './webdav-server-manager.js';
+import { getPortWithFallback, allocateports } from './port-allocator.js';
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -39,9 +40,11 @@ export class LocalServerManager extends ServerManager {
     this.logFile = join(this.logDir, 'server.log');
 
     // Host and port can be overridden via options (from env vars or CLI)
+    // Port will be resolved to available port during start() if not explicitly specified
     this.host = options.host || 'localhost';
-    this.port = options.port || 8000;
-    this.serverUrl = `http://${this.host}:${this.port}`;
+    this.explicitPort = options.port; // Explicit port from env/CLI (undefined if not set)
+    this.port = null; // Actual port, set during start()
+    this.serverUrl = null; // Set during start()
 
     this.serverProcess = null;
     this.webdavManager = null;
@@ -59,7 +62,7 @@ export class LocalServerManager extends ServerManager {
    * @inheritdoc
    */
   getBaseUrl() {
-    if (!this.serverProcess) {
+    if (!this.serverProcess || !this.serverUrl) {
       throw new Error('Server is not running');
     }
     return this.serverUrl;
@@ -451,8 +454,38 @@ LOG_LEVEL=INFO
       needsWebdav = false,
     } = options;
 
-    // Step 1: Kill existing servers
-    await this.killExistingServers();
+    // Step 0: Resolve ports - allocate main server and WebDAV ports together to avoid conflicts
+    let webdavPort = null;
+
+    if (this.explicitPort) {
+      // Explicit port specified - use it directly and kill any existing servers on it
+      this.port = this.explicitPort;
+      console.log(`[INFO] Using explicitly specified port ${this.port} for local server`);
+      this.serverUrl = `http://${this.host}:${this.port}`;
+
+      // Kill existing servers on the explicit port
+      await this.killExistingServers();
+
+      // If WebDAV needed, allocate its port separately (excluding the explicit main port)
+      if (needsWebdav) {
+        webdavPort = await getPortWithFallback(8012, 8012, 8999, [this.port]);
+      }
+    } else {
+      // No explicit port - auto-select available port(s) in 8010+ range
+      if (needsWebdav) {
+        // Allocate both main and WebDAV ports together to avoid conflicts
+        const [mainPort, wdavPort] = await allocateports(2, 8010, 8999);
+        this.port = mainPort;
+        webdavPort = wdavPort;
+        console.log(`[INFO] Auto-selected available ports: ${this.port} (main), ${webdavPort} (WebDAV)`);
+      } else {
+        // Just allocate main server port
+        this.port = await getPortWithFallback(8010, 8010, 8999);
+        console.log(`[INFO] Auto-selected available port ${this.port} for local server`);
+      }
+      this.serverUrl = `http://${this.host}:${this.port}`;
+      // No need to kill servers - ports are already available
+    }
 
     // Step 2: Wipe database (unless cleanDb is false)
     if (cleanDb) {
@@ -464,8 +497,8 @@ LOG_LEVEL=INFO
 
     // Step 2.5: Start WebDAV server if needed
     if (needsWebdav) {
-      // Create and start WebDAV server manager
-      this.webdavManager = new WebdavServerManager();
+      // Create and start WebDAV server manager with pre-allocated port
+      this.webdavManager = new WebdavServerManager({ port: webdavPort });
       await this.webdavManager.start({ verbose });
 
       // Create temporary .env file with WebDAV configuration

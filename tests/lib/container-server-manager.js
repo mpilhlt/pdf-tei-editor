@@ -1,4 +1,5 @@
 import { ServerManager } from './server-manager.js';
+import { getPortWithFallback } from './port-allocator.js';
 import { execSync } from 'child_process';
 import { promises as fs } from 'fs';
 import { join, relative } from 'path';
@@ -33,10 +34,12 @@ export class ContainerServerManager extends ServerManager {
     this.isContainerStarted = false;
 
     // Configuration: options take precedence over environment variables
+    // Port will be auto-selected during start() if not explicitly specified
     this.config = {
       host: options.host || process.env.E2E_HOST || 'localhost',
-      port: options.port || parseInt(process.env.E2E_PORT || '8001'),
-      containerPort: options.containerPort || parseInt(process.env.E2E_CONTAINER_PORT || '8001'),
+      explicitPort: options.port, // Explicit port from options (undefined if not set)
+      port: null, // Actual port, set during start()
+      containerPort: options.containerPort || parseInt(process.env.E2E_CONTAINER_PORT || '8011'),
     };
 
     // Detect container tool
@@ -458,6 +461,17 @@ export class ContainerServerManager extends ServerManager {
    */
   async start(options = {}) {
     const { noRebuild = false, env = {}, verbose = false } = options;
+
+    // Resolve port - use explicit port if specified, otherwise find available port
+    if (this.config.explicitPort) {
+      // Explicit port specified - use it directly
+      this.config.port = this.config.explicitPort;
+      console.log(`[INFO] Using explicitly specified port ${this.config.port} for container`);
+    } else {
+      // No explicit port - auto-select available port in 8010+ range
+      this.config.port = await getPortWithFallback(8011, 8011, 8999);
+      console.log(`[INFO] Auto-selected available port ${this.config.port} for container`);
+    }
 
     console.log('🚀 Starting containerized test environment...');
     console.log(`🆔 Test Run ID: ${this.testRunId}`);

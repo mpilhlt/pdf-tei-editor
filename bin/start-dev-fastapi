@@ -32,9 +32,9 @@ def get_pid_on_port(port=8000):
     return None
 
 if __name__ == '__main__':
-    # host and port default to localhost:8000 unless overridden by CLI arguments
-    host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
+    # host and port: env vars take precedence, then CLI arguments, then defaults
+    host = os.environ.get('HOST') or (sys.argv[1] if len(sys.argv) > 1 else "localhost")
+    port = int(os.environ.get('PORT') or (sys.argv[2] if len(sys.argv) > 2 else 8000))
 
     # Check if server is already running
     if check_port_in_use(port):

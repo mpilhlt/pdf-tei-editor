@@ -1238,4 +1238,95 @@ node tests/backend-test-runner.js --container --port 8080
 
 ---
 
+## Phase 9e: Dynamic Port Allocation ✅ **COMPLETE**
+
+**Completed: 2025-10-26**
+
+### Overview
+
+Implemented automatic port allocation in 8010-8999 range to avoid conflicts with running services and enable parallel test execution.
+
+### Changes
+
+1. **Port Allocator Module** - [tests/lib/port-allocator.js](../../tests/lib/port-allocator.js)
+   - `findAvailablePort()` - Finds first available port in range
+   - `allocatePorts()` - Allocates multiple ports ensuring no conflicts
+   - `getPortWithFallback()` - Uses preferred port or finds alternative
+   - Checks port availability using Node.js `net.createServer()`
+
+2. **LocalServerManager** - [tests/lib/local-server-manager.js](../../tests/lib/local-server-manager.js)
+   - Auto-selects available port when not explicitly specified
+   - Allocates main server and WebDAV ports together to prevent conflicts
+   - Only kills existing servers when using explicit ports
+   - Skips unnecessary cleanup when using auto-selected ports
+
+3. **ContainerServerManager** - [tests/lib/container-server-manager.js](../../tests/lib/container-server-manager.js)
+   - Supports auto port selection with same logic as LocalServerManager
+   - Default port changed from 8001 to 8011 to avoid conflicts
+
+4. **WebdavServerManager** - [tests/lib/webdav-server-manager.js](../../tests/lib/webdav-server-manager.js)
+   - Accepts pre-allocated port from LocalServerManager
+   - Uses explicit port when provided, auto-selects otherwise
+   - Default port changed from 8081 to 8012
+
+5. **Server Startup Script** - [bin/start-dev-fastapi](../../bin/start-dev-fastapi:35-37)
+   - Reads HOST and PORT from environment variables
+   - Falls back to CLI arguments, then defaults
+   - Priority: env vars > CLI args > defaults
+
+6. **Playwright Configuration** - [playwright.config.js](../../playwright.config.js:4-7)
+   - Prioritizes E2E_BASE_URL over E2E_CONTAINER_URL
+   - Allows test runner to pass actual server URL
+
+7. **Test Environment Files**
+   - [tests/api/v1/.env.test](../../tests/api/v1/.env.test:6) - Removed hardcoded PORT=8000
+   - [tests/e2e/.env.test](../../tests/e2e/.env.test:6) - Removed hardcoded PORT=8000
+
+### Port Selection Behavior
+
+**Auto-selection (default):**
+- LocalServerManager: Allocates ports 8010+ for main and 8010+ for WebDAV together
+- ContainerServerManager: Allocates port 8011+
+- WebdavServerManager: Uses pre-allocated port or allocates 8012+
+
+**Explicit port (env var or CLI):**
+- Uses specified port exactly
+- Kills any existing servers on that port
+- Fails if port cannot be acquired
+
+**Configuration Precedence:**
+1. Environment variables (`HOST`, `PORT`, `E2E_HOST`, `E2E_PORT`)
+2. CLI options (`--host`, `--port`)
+3. Auto-select from available ports in 8010-8999 range
+
+### Usage Examples
+
+```bash
+# Auto-select available ports (default)
+npm run test:api
+# Output: [INFO] Auto-selected available ports: 8010 (main), 8011 (WebDAV)
+
+# Use specific port via CLI
+node tests/backend-test-runner.js --port 9000
+# Output: [INFO] Using explicitly specified port 9000 for local server
+
+# Use specific port via environment variable
+PORT=9000 npm run test:api
+# Output: [INFO] Using explicitly specified port 9000 for local server
+
+# Container mode with auto port selection
+node tests/backend-test-runner.js --container
+# Output: [INFO] Auto-selected available port 8011 for container
+```
+
+### Benefits
+
+- Avoids port conflicts with development servers running on 8000
+- Enables parallel test execution without manual port configuration
+- Allocates multiple ports together to prevent server conflicts
+- Only performs cleanup when necessary (explicit ports only)
+- Clear logging distinguishes explicit vs auto-selected ports
+
+---
+
 Last updated: 2025-10-26

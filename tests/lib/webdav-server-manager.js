@@ -1,4 +1,5 @@
 import { ServerManager } from './server-manager.js';
+import { getPortWithFallback } from './port-allocator.js';
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -32,13 +33,14 @@ export class WebdavServerManager extends ServerManager {
   constructor(config = {}) {
     super();
     this.projectRoot = join(__dirname, '..', '..');
-    this.port = config.port || 8081;
+    this.explicitPort = config.port; // Explicit port from config (undefined if not set)
+    this.port = null; // Actual port, set during start()
     // Use OS-specific temp directory on Windows, /tmp on Unix
     this.webdavRoot = config.webdavRoot || (platform() === 'win32'
       ? join(tmpdir(), 'webdav-test')
       : '/tmp/webdav-test');
     this.remoteRoot = config.remoteRoot || '/pdf-tei-editor';
-    this.serverUrl = `http://localhost:${this.port}`;
+    this.serverUrl = null; // Set during start()
     this.webdavProcess = null;
   }
 
@@ -53,7 +55,7 @@ export class WebdavServerManager extends ServerManager {
    * @inheritdoc
    */
   getBaseUrl() {
-    if (!this.webdavProcess) {
+    if (!this.webdavProcess || !this.serverUrl) {
       throw new Error('WebDAV server is not running');
     }
     return this.serverUrl;
@@ -245,8 +247,22 @@ export class WebdavServerManager extends ServerManager {
   async start(options = {}) {
     const { verbose = false } = options;
 
-    // Step 1: Kill existing WebDAV servers
-    await this.killExistingServers();
+    // Step 0: Resolve port - use explicit port if specified, otherwise find available port
+    if (this.explicitPort) {
+      // Explicit port specified - use it directly and kill any existing servers on it
+      this.port = this.explicitPort;
+      console.log(`[INFO] Using explicitly specified port ${this.port} for WebDAV server`);
+      this.serverUrl = `http://localhost:${this.port}`;
+
+      // Kill existing WebDAV servers on the explicit port
+      await this.killExistingServers();
+    } else {
+      // No explicit port - auto-select available port in 8010+ range
+      this.port = await getPortWithFallback(8012, 8012, 8999);
+      console.log(`[INFO] Auto-selected available port ${this.port} for WebDAV server`);
+      this.serverUrl = `http://localhost:${this.port}`;
+      // No need to kill servers - port is already available
+    }
 
     // Step 2: Create directories
     await this.createDirectories();

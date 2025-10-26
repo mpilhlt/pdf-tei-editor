@@ -279,7 +279,10 @@ async function main() {
     // Step 3: Initialize server manager
     // Resolve host and port: env vars take precedence over CLI options
     const host = options.env.HOST || options.env.E2E_HOST || cliOptions.host;
-    const port = options.env.PORT || options.env.E2E_PORT || cliOptions.port;
+    // Only pass port if explicitly set via env var or CLI (not default)
+    const portFromEnv = options.env.PORT || options.env.E2E_PORT;
+    const portFromCli = cliOptions.port !== '8010' ? cliOptions.port : undefined;
+    const port = portFromEnv || portFromCli;
 
     if (options.mode === 'local') {
       // Pass DB_DIR, DATA_ROOT, LOG_DIR, host, and port to LocalServerManager
@@ -289,14 +292,14 @@ async function main() {
         dataRoot: options.env.DATA_ROOT,
         logDir: options.env.LOG_DIR,
         host,
-        port: parseInt(port, 10),
+        port: port ? parseInt(port, 10) : undefined,
       };
       serverManager = new LocalServerManager(managerOptions);
     } else {
       // Pass host and port to ContainerServerManager
       const managerOptions = {
         host,
-        port: parseInt(port, 10),
+        port: port ? parseInt(port, 10) : undefined,
         containerPort: options.env.E2E_CONTAINER_PORT ? parseInt(options.env.E2E_CONTAINER_PORT, 10) : undefined,
       };
       serverManager = new ContainerServerManager(managerOptions);

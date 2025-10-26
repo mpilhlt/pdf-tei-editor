@@ -1,9 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // Configuration from environment variables
+// Priority: E2E_BASE_URL > E2E_CONTAINER_URL > constructed from E2E_HOST:E2E_PORT
 const E2E_HOST = process.env.E2E_HOST || 'localhost';
 const E2E_PORT = process.env.E2E_PORT || '8000';
-const E2E_BASE_URL = process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_PORT}`;
+const E2E_BASE_URL = process.env.E2E_BASE_URL || process.env.E2E_CONTAINER_URL || `http://${E2E_HOST}:${E2E_PORT}`;
 
 /**
  * @see https://playwright.dev/docs/test-configuration
