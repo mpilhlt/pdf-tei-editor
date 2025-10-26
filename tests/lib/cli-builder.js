@@ -68,6 +68,8 @@ export function createTestRunnerCommand(config) {
 
   // Server options
   program
+    .option('--host <host>', 'server host (env vars take precedence)', 'localhost')
+    .option('--port <port>', 'server port (env vars take precedence)', '8000')
     .option('--clean-db', 'wipe database before tests (default, local only)', true)
     .option('--keep-db', 'keep existing database (faster, local only)')
     .option('--no-cleanup', 'keep server running after tests (debug mode)')

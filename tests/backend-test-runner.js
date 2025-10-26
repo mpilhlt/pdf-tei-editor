@@ -277,17 +277,29 @@ async function main() {
     const needsWebdav = filteredTests.some((test) => test.includes('sync'));
 
     // Step 3: Initialize server manager
+    // Resolve host and port: env vars take precedence over CLI options
+    const host = options.env.HOST || options.env.E2E_HOST || cliOptions.host;
+    const port = options.env.PORT || options.env.E2E_PORT || cliOptions.port;
+
     if (options.mode === 'local') {
-      // Pass DB_DIR, DATA_ROOT, and LOG_DIR from environment to LocalServerManager
+      // Pass DB_DIR, DATA_ROOT, LOG_DIR, host, and port to LocalServerManager
       // so it wipes the correct directories and logs to the right location
       const managerOptions = {
         dbDir: options.env.DB_DIR,
         dataRoot: options.env.DATA_ROOT,
         logDir: options.env.LOG_DIR,
+        host,
+        port: parseInt(port, 10),
       };
       serverManager = new LocalServerManager(managerOptions);
     } else {
-      serverManager = new ContainerServerManager();
+      // Pass host and port to ContainerServerManager
+      const managerOptions = {
+        host,
+        port: parseInt(port, 10),
+        containerPort: options.env.E2E_CONTAINER_PORT ? parseInt(options.env.E2E_CONTAINER_PORT, 10) : undefined,
+      };
+      serverManager = new ContainerServerManager(managerOptions);
     }
 
     console.log(`==> Starting ${serverManager.getType()} server`);

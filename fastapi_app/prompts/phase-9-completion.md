@@ -1189,4 +1189,53 @@ Real extractor integration tests (Grobid, LLamore, RNG) should be implemented as
 
 ---
 
-Last updated: 2025-10-19
+## Phase 9d: Configurable Server Host/Port ✅ **COMPLETE**
+
+**Completed: 2025-10-26**
+
+### Overview
+
+Made server host and port fully configurable across all test infrastructure with proper precedence handling (environment variables > CLI options > defaults).
+
+### Changes
+
+1. **CLI Options** - [tests/lib/cli-builder.js](../../tests/lib/cli-builder.js:71-72)
+   - Added `--host <host>` and `--port <port>` options
+   - Apply to both local and containerized server modes
+
+2. **LocalServerManager** - [tests/lib/local-server-manager.js](../../tests/lib/local-server-manager.js)
+   - Constructor accepts `host` and `port` options (lines 42-44)
+   - All hardcoded references updated to use configurable values
+   - Server URL dynamically constructed: `http://${this.host}:${this.port}`
+
+3. **ContainerServerManager** - [tests/lib/container-server-manager.js](../../tests/lib/container-server-manager.js:25-40)
+   - Constructor accepts `options` parameter
+   - Options take precedence over environment variables
+   - Maintains backwards compatibility with `E2E_HOST`, `E2E_PORT`, `E2E_CONTAINER_PORT`
+
+4. **Test Runner Integration** - [tests/backend-test-runner.js](../../tests/backend-test-runner.js:280-303)
+   - Resolves host/port from environment variables, CLI options, or defaults
+   - Passes configuration to both server managers
+
+### Configuration Precedence
+
+1. Environment variables (`HOST`, `PORT`, `E2E_HOST`, `E2E_PORT`)
+2. CLI options (`--host`, `--port`)
+3. Default values (`localhost:8000` for local / `localhost:8001` for container)
+
+### Usage Examples
+
+```bash
+# Custom port via CLI
+node tests/backend-test-runner.js --port 9000
+
+# Custom host and port via environment variables
+HOST=127.0.0.1 PORT=9000 node tests/backend-test-runner.js
+
+# Container mode with custom port
+node tests/backend-test-runner.js --container --port 8080
+```
+
+---
+
+Last updated: 2025-10-26

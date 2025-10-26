@@ -22,7 +22,7 @@ const __dirname = dirname(__filename);
  * @extends ServerManager
  */
 export class ContainerServerManager extends ServerManager {
-  constructor() {
+  constructor(options = {}) {
     super();
     this.projectRoot = join(__dirname, '..', '..');
     this.containerCmd = null;
@@ -32,11 +32,11 @@ export class ContainerServerManager extends ServerManager {
     this.containerName = `pdf-tei-editor-test-${this.testRunId}`;
     this.isContainerStarted = false;
 
-    // Configuration
+    // Configuration: options take precedence over environment variables
     this.config = {
-      host: process.env.E2E_HOST || 'localhost',
-      port: parseInt(process.env.E2E_PORT || '8001'),
-      containerPort: parseInt(process.env.E2E_CONTAINER_PORT || '8001'),
+      host: options.host || process.env.E2E_HOST || 'localhost',
+      port: options.port || parseInt(process.env.E2E_PORT || '8001'),
+      containerPort: options.containerPort || parseInt(process.env.E2E_CONTAINER_PORT || '8001'),
     };
 
     // Detect container tool

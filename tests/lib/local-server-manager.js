@@ -37,7 +37,12 @@ export class LocalServerManager extends ServerManager {
     // Log directory can be overridden via options (from env file)
     this.logDir = options.logDir ? join(this.projectRoot, options.logDir) : join(this.projectRoot, 'log');
     this.logFile = join(this.logDir, 'server.log');
-    this.serverUrl = 'http://localhost:8000';
+
+    // Host and port can be overridden via options (from env vars or CLI)
+    this.host = options.host || 'localhost';
+    this.port = options.port || 8000;
+    this.serverUrl = `http://${this.host}:${this.port}`;
+
     this.serverProcess = null;
     this.webdavManager = null;
     this.tempEnvFile = null;
@@ -61,13 +66,13 @@ export class LocalServerManager extends ServerManager {
   }
 
   /**
-   * Kill any existing FastAPI/uvicorn servers on port 8000
+   * Kill any existing FastAPI/uvicorn servers on the configured port
    *
    * @private
    * @returns {Promise<void>}
    */
   async killExistingServers() {
-    console.log('\n==> Killing any running FastAPI servers');
+    console.log(`\n==> Killing any running FastAPI servers on port ${this.port}`);
 
     if (platform() === 'win32') {
       // Windows: use taskkill
@@ -97,7 +102,7 @@ export class LocalServerManager extends ServerManager {
       try {
         const { exec } = await import('child_process');
         await new Promise((resolve, reject) => {
-          exec('lsof -ti:8000', (err, stdout) => {
+          exec(`lsof -ti:${this.port}`, (err, stdout) => {
             if (err || !stdout.trim()) {
               resolve();
               return;
@@ -201,8 +206,8 @@ export class LocalServerManager extends ServerManager {
     );
 
     const envContent = `# FastAPI Test Configuration with WebDAV
-HOST=127.0.0.1
-PORT=8000
+HOST=${this.host}
+PORT=${this.port}
 DATA_ROOT=fastapi_app/data
 DB_DIR=fastapi_app/db
 
@@ -252,16 +257,18 @@ LOG_LEVEL=INFO
     if (verbose || platform() === 'win32') {
       // Set environment variables:
       // - PYTHONUNBUFFERED=1 for immediate Python output
-      // - DISABLE_RELOAD=1 on Windows (uvicorn --reload has issues on Windows)
+      // - HOST and PORT for server configuration
       const env = {
         ...process.env,
         PYTHONUNBUFFERED: '1',
+        HOST: this.host,
+        PORT: String(this.port),
       };
 
       // On Windows, bypass the Python wrapper script and call uvicorn directly
       // The wrapper script has issues with piped stdio on Windows
       const uvicornArgs = platform() === 'win32'
-        ? ['run', 'uvicorn', 'run_fastapi:app', '--host', 'localhost', '--port', '8000', '--log-level', 'info']
+        ? ['run', 'uvicorn', 'run_fastapi:app', '--host', this.host, '--port', String(this.port), '--log-level', 'info']
         : ['run', 'python', 'bin/start-dev-fastapi'];
 
       this.serverProcess = spawn('uv', uvicornArgs, {
@@ -288,7 +295,7 @@ LOG_LEVEL=INFO
       const { spawn: spawnShell } = await import('child_process');
       this.serverProcess = spawnShell(
         'sh',
-        ['-c', `PYTHONUNBUFFERED=1 uv run python bin/start-dev-fastapi >> "${this.logFile}" 2>&1`],
+        ['-c', `PYTHONUNBUFFERED=1 HOST=${this.host} PORT=${this.port} uv run python bin/start-dev-fastapi >> "${this.logFile}" 2>&1`],
         {
           cwd: this.projectRoot,
           stdio: 'ignore',
