@@ -43,7 +43,7 @@ def list_files(
     repo: FileRepository = Depends(get_file_repository),
     session_id: Optional[str] = Depends(get_session_id),
     current_user: Optional[dict] = Depends(get_current_user)
-):
+) -> FileListResponse:
     """
     List all files grouped by document.
 
@@ -172,7 +172,7 @@ def _file_metadata_to_list_item(file_metadata) -> FileListItem:
 
     list_item = FileListItem(**item_dict)
     # Store content hash as private attribute for internal use (e.g., locking)
-    list_item._content_hash = content_hash
+    list_item._content_hash = content_hash # type:ignore
 
     return list_item
 

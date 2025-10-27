@@ -46,6 +46,8 @@ if __name__ == '__main__':
         print(f"To restart, kill the process and run this command again.")
         if pid:
             print(f"  kill {pid}")
+        print(f"Open http://{host}:{port}?dev to access app in development mode.")
+        print(f"API docs available at: http://{host}:{port}/docs")            
         print("=" * 86)
         print()
         sys.exit(0)
@@ -57,9 +59,10 @@ if __name__ == '__main__':
 
     print()
     print("=" * 86)
-    print(f"Starting FastAPI development server on http://{host}:{port}")
+    print(f"Starting FastAPI development server.")
     print(f"Server output being logged to: {log_file}")
     print(f"The server will automatically reload when files change.")
+    print(f"Open http://{host}:{port}?dev to access app in development mode.")
     print(f"API docs available at: http://{host}:{port}/docs")
     print("=" * 86)
     print()
