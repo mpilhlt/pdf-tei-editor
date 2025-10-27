@@ -678,7 +678,17 @@ async function downloadXml(state) {
 
   const fileData = getFileDataByHash(state.xml);
   console.warn(fileData)
-  const filename = fileData?.file?.fileref || state.xml;
+  let filename = fileData?.file?.fileref || state.xml;
+
+  // Add variant name to filename if variant_id exists
+  // The item could be a version or gold file which has variant_id
+  const variantId = fileData?.item?.variant_id;
+  if (variantId) {
+    // Extract the variant name from variant_id (e.g., "grobid.training.segmentation" -> "training.segmentation")
+    const variantName = variantId.replace(/^grobid\./, '');
+    filename = `${filename}.${variantName}`;
+  }
+
   a.download = `${filename}.tei.xml`;
 
   a.click()
