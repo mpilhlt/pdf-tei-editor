@@ -234,7 +234,9 @@ For this,
 Other tasks in this phase:
 
 - Add information on the generated OpenAPI documentation and the generated client
-- Propose other files to cleanup
+- Create a separate page that describes the scripts in the `bin` directory and provides one or two examples for each script. Also check `package.json` and document if there is an npm run alias for the script
+- Create a separate documentation page for the `npm run` scripts in `package.json`, with a short explanation what they do. Refer to the previous document on the `bin` scripts for details. 
+
 
 **Status**: ⬜ Not started
 

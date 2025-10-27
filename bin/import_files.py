@@ -46,11 +46,26 @@ Examples:
 
   # Import without assigning collection
   python bin/import_files.py --directory /path/to/files
+
+  # Import with automatic collection naming from subdirectories
+  python bin/import_files.py --directory /path/to/data --recursive-collections
+  # Files in /path/to/data/corpus1/file.pdf -> collection "corpus1"
+  # Files in /path/to/data/corpus1/pdf/file.pdf -> collection "corpus1" (skips "pdf" dir)
+  # Files in /path/to/data/corpus2/tei/file.xml -> collection "corpus2" (skips "tei" dir)
+  # Files in /path/to/data/file.pdf -> no collection
         """
     )
     parser.add_argument('--directory', required=True,
                        help='Directory containing PDF and XML files')
     parser.add_argument('--collection', help='Collection name for imported files')
+    parser.add_argument('--recursive-collections', action='store_true',
+                       help='Use subdirectory names as collection names. '
+                            'Files in <root>/<subdir>/ get collection "subdir". '
+                            'Files in <root>/ have no collection. '
+                            'Overrides --collection if both are specified.')
+    parser.add_argument('--skip-dirs', nargs='+', default=['pdf', 'tei', 'versions', 'version'],
+                       help='Directory names to skip when determining collections '
+                            '(default: pdf tei versions version). Only used with --recursive-collections.')
     parser.add_argument('--db-path', help='Database path (default: fastapi_app/data/metadata.db)')
     parser.add_argument('--storage-root', help='Storage root (default: fastapi_app/data/files)')
     parser.add_argument('--dry-run', action='store_true',
@@ -86,17 +101,29 @@ Examples:
     db = DatabaseManager(db_path, logger)
     storage = FileStorage(storage_root, db_path, logger)
     repo = FileRepository(db)
-    importer = FileImporter(db, storage, repo, args.dry_run)
+
+    # Pass skip_dirs only if recursive_collections is enabled
+    skip_dirs = args.skip_dirs if args.recursive_collections else None
+    importer = FileImporter(db, storage, repo, args.dry_run, skip_dirs)
 
     # Import
     logger.info(f"Importing from {directory}")
-    if args.collection:
+    if args.recursive_collections:
+        logger.info("Using subdirectory names as collection names")
+        logger.info(f"Skipping directories: {', '.join(args.skip_dirs)}")
+        logger.info("Files in root directory will have no collection")
+    elif args.collection:
         logger.info(f"Collection: {args.collection}")
     if args.dry_run:
         logger.info("[DRY RUN MODE - No changes will be made]")
 
     recursive = not args.no_recursive
-    stats = importer.import_directory(directory, args.collection, recursive)
+    stats = importer.import_directory(
+        directory,
+        args.collection,
+        recursive,
+        args.recursive_collections
+    )
 
     # Report
     print("\n" + "="*60)

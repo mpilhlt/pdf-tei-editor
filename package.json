@@ -14,6 +14,7 @@
         "generate-client": "node bin/generate-api-client.js app/src/modules/api-client-v1.js",
         "generate-client:check": "node bin/check-client-outdated.js",
         "manage": "node bin/manage.js",
+        "import": "uv run python bin/import_files.py",
         "start": "uv run python bin/start-dev",
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",

@@ -180,20 +180,20 @@ def ensure_db_initialized(
     """
     Ensure database is initialized with defaults.
 
-    Uses fastapi_app/config and fastapi_app/db as defaults.
+    Uses PROJECT_ROOT/config and db_dir as defaults.
     Safe to call multiple times - only copies files that don't exist.
 
     Args:
-        config_dir: Override default config directory
-        db_dir: Override default db directory
+        config_dir: Override default config directory (defaults to PROJECT_ROOT/config)
+        db_dir: Override default db directory (required - no default)
     """
-    # Default paths relative to this module
+    # Default config path is at project root (same level as fastapi_app/)
     if config_dir is None:
-        module_dir = Path(__file__).parent.parent
-        config_dir = module_dir / "config"
+        module_dir = Path(__file__).parent.parent  # fastapi_app/
+        project_root = module_dir.parent  # project root
+        config_dir = project_root / "config"
 
     if db_dir is None:
-        module_dir = Path(__file__).parent.parent
-        db_dir = module_dir / "db"
+        raise ValueError("db_dir must be provided (no default available)")
 
     initialize_db_from_config(config_dir, db_dir)

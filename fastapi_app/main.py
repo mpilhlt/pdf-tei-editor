@@ -28,7 +28,25 @@ async def lifespan(app: FastAPI):
     logger.info(f"Data root: {settings.data_root}")
     logger.info(f"DB directory: {settings.db_dir}")
 
-    # Sync application mode between environment and config
+    # Initialize database directory from config defaults FIRST
+    # This copies JSON files from config/ to db/ if they don't exist
+    # and merges missing config values into db/config.json
+    from .lib.db_init import ensure_db_initialized
+    try:
+        # Use custom config_dir if specified (for tests), otherwise use default
+        config_dir = settings.config_dir
+        db_dir = settings.db_dir
+        if config_dir:
+            logger.info(f"Using custom config directory: {config_dir}")
+            ensure_db_initialized(config_dir=config_dir, db_dir=db_dir)
+        else:
+            ensure_db_initialized(db_dir=db_dir)
+        logger.info("Database configuration initialized from defaults")
+    except Exception as e:
+        logger.error(f"Error initializing database from config: {e}")
+        raise
+
+    # Now load config and sync application mode between environment and config
     # Priority: FASTAPI_APPLICATION_MODE env var > config.json
     from .lib.config_utils import load_full_config
     config = load_full_config(settings.db_dir)
@@ -44,23 +62,6 @@ async def lifespan(app: FastAPI):
         app_mode = config.get("application", {}).get("mode", settings.application_mode)
         os.environ["FASTAPI_APPLICATION_MODE"] = app_mode
         logger.info(f"Application mode from config: {app_mode}")
-
-    # Initialize database directory from config defaults
-    # This copies JSON files from config/ to db/ if they don't exist
-    from .lib.db_init import ensure_db_initialized
-    try:
-        # Use custom config_dir if specified (for tests), otherwise use default
-        config_dir = settings.config_dir
-        db_dir = settings.db_dir
-        if config_dir:
-            logger.info(f"Using custom config directory: {config_dir}")
-            ensure_db_initialized(config_dir=config_dir, db_dir=db_dir)
-        else:
-            ensure_db_initialized(db_dir=db_dir)
-        logger.info("Database configuration initialized from defaults")
-    except Exception as e:
-        logger.error(f"Error initializing database from config: {e}")
-        raise
 
     # Ensure directories exist
     settings.data_root.mkdir(parents=True, exist_ok=True)

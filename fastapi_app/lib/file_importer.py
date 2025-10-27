@@ -6,7 +6,7 @@ storage system with SQLite metadata tracking.
 """
 
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, TypedDict
 from datetime import datetime
 import logging
 from lxml import etree
@@ -20,6 +20,22 @@ from .hash_utils import generate_file_hash
 from .doc_id_resolver import DocIdResolver
 
 logger = logging.getLogger(__name__)
+
+
+class ImportStats(TypedDict):
+    """Statistics for file import operations."""
+    files_scanned: int
+    files_imported: int
+    files_skipped: int
+    files_updated: int
+    errors: List[Dict[str, str]]
+
+
+class DocumentFiles(TypedDict):
+    """Files grouped by document."""
+    pdf: List[Path]
+    tei: List[Path]
+    metadata: Dict[str, str]
 
 
 class FileImporter:
@@ -37,7 +53,8 @@ class FileImporter:
         db: DatabaseManager,
         storage: FileStorage,
         repo: FileRepository,
-        dry_run: bool = False
+        dry_run: bool = False,
+        skip_collection_dirs: Optional[List[str]] = None
     ):
         """
         Args:
@@ -45,14 +62,21 @@ class FileImporter:
             storage: File storage manager
             repo: File repository
             dry_run: If True, scan but don't import
+            skip_collection_dirs: Directory names to skip when determining collection
+                from path (e.g., ['pdf', 'tei', 'versions']). These are organizational
+                directories that should not be used as collection names.
         """
         self.db = db
         self.storage = storage
         self.repo = repo
         self.dry_run = dry_run
         self.resolver = DocIdResolver()
+        self.skip_collection_dirs = set(
+            (name.lower() for name in skip_collection_dirs)
+            if skip_collection_dirs else []
+        )
 
-        self.stats = {
+        self.stats: ImportStats = {
             'files_scanned': 0,
             'files_imported': 0,
             'files_skipped': 0,
@@ -64,8 +88,9 @@ class FileImporter:
         self,
         directory: Path,
         collection: Optional[str] = None,
-        recursive: bool = True
-    ) -> Dict:
+        recursive: bool = True,
+        recursive_collections: bool = False
+    ) -> ImportStats:
         """
         Import all PDF and XML files from a directory.
 
@@ -73,11 +98,20 @@ class FileImporter:
             directory: Directory to import from
             collection: Default collection name (can be None for multi-collection docs)
             recursive: Scan subdirectories
+            recursive_collections: If True, use subdirectory names as collection names.
+                Files in root directory will have no collection assigned.
 
         Returns:
             Statistics dict with import results
         """
         logger.info(f"Starting import from {directory}")
+
+        if recursive_collections and collection:
+            logger.warning(
+                f"Both --collection and --recursive-collections specified. "
+                f"Ignoring --collection, using subdirectory names instead."
+            )
+            collection = None
 
         # Scan directory for files
         files = self._scan_directory(directory, recursive)
@@ -88,7 +122,17 @@ class FileImporter:
         # Import each document
         for doc_id, doc_files in documents.items():
             try:
-                self._import_document(doc_id, doc_files, collection)
+                # Determine collection based on file location
+                if recursive_collections:
+                    # Use subdirectory name as collection
+                    file_collection = self._get_collection_from_path(
+                        doc_files, directory
+                    )
+                else:
+                    # Use provided collection
+                    file_collection = collection
+
+                self._import_document(doc_id, doc_files, file_collection)
             except Exception as e:
                 logger.error(f"Error importing document {doc_id}: {e}")
                 self.stats['errors'].append({
@@ -103,6 +147,58 @@ class FileImporter:
         )
 
         return self.stats
+
+    def _get_collection_from_path(
+        self,
+        doc_files: DocumentFiles,
+        base_directory: Path
+    ) -> Optional[str]:
+        """
+        Determine collection name from file paths.
+
+        Skips organizational directories (configured via skip_collection_dirs)
+        and uses the first meaningful subdirectory name as the collection.
+
+        Examples (with skip_collection_dirs=['pdf', 'tei', 'versions']):
+            <root>/collection1/file.pdf -> "collection1"
+            <root>/collection1/pdf/file.pdf -> "collection1"
+            <root>/collection1/tei/file.xml -> "collection1"
+            <root>/pdf/collection1/file.pdf -> "collection1"
+            <root>/file.pdf -> None
+
+        Args:
+            doc_files: Document files dict with 'pdf' and 'tei' keys
+            base_directory: Root directory being imported
+
+        Returns:
+            Collection name or None for files in root directory
+        """
+        # Get first available file path to determine location
+        file_path = None
+        if doc_files.get('pdf'):
+            file_path = doc_files['pdf'][0]
+        elif doc_files.get('tei'):
+            file_path = doc_files['tei'][0]
+
+        if not file_path:
+            return None
+
+        # Get relative path from base directory
+        try:
+            rel_path = file_path.relative_to(base_directory)
+        except ValueError:
+            # File is not under base_directory
+            logger.warning(f"File {file_path} is not under {base_directory}")
+            return None
+
+        # Find first non-organizational directory
+        parts = rel_path.parts[:-1]  # Exclude filename
+        for part in parts:
+            if part.lower() not in self.skip_collection_dirs:
+                return part
+
+        # No meaningful subdirectory found
+        return None
 
     def _scan_directory(
         self,
@@ -130,7 +226,7 @@ class FileImporter:
         self,
         files: List[Path],
         base_path: Path
-    ) -> Dict[str, Dict[str, List[Path]]]:
+    ) -> Dict[str, DocumentFiles]:
         """
         Group files by document ID using intelligent matching.
 
@@ -155,7 +251,7 @@ class FileImporter:
                 tei_metadata[tei_path] = {}
 
         # Second pass: Match PDFs to TEIs and resolve doc_ids
-        documents: Dict[str, Dict[str, List[Path]]] = {}
+        documents: Dict[str, DocumentFiles] = {}
 
         for pdf_path in pdf_files:
             # Find matching TEI files for this PDF
@@ -230,7 +326,7 @@ class FileImporter:
     def _import_document(
         self,
         doc_id: str,
-        doc_files: Dict[str, List[Path]],
+        doc_files: DocumentFiles,
         default_collection: Optional[str]
     ) -> None:
         """Import a single document (PDF + TEI files)"""
@@ -277,7 +373,7 @@ class FileImporter:
         # Create metadata
         file_create = FileCreate(
             id=file_hash,
-            filename=f"{file_hash}.pdf",
+            filename=pdf_path.name,  # Preserve original filename
             doc_id=doc_id,
             doc_id_type='custom',  # Can be refined by TEI metadata
             file_type='pdf',
@@ -370,7 +466,7 @@ class FileImporter:
         # Create metadata
         file_create = FileCreate(
             id=file_hash,
-            filename=f"{file_hash}.tei.xml",
+            filename=tei_path.name,  # Preserve original filename
             doc_id=doc_id,
             doc_id_type=doc_id_type,
             file_type='tei',
@@ -413,10 +509,9 @@ class FileImporter:
         current_metadata = pdf_file.doc_metadata or {}
         updated_metadata = {**doc_metadata, **current_metadata}
 
-        # Update both metadata and doc_id (normalize to match TEI)
+        # Update metadata (doc_id is immutable in FileUpdate)
         self.repo.update_file(pdf_file.id, FileUpdate(
-            doc_id=doc_id,  # Use the doc_id from TEI (with proper format)
             doc_metadata=updated_metadata
         ))
 
-        logger.debug(f"Updated PDF metadata and doc_id for {doc_id}")
+        logger.debug(f"Updated PDF metadata for {doc_id}")
