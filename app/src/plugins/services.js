@@ -686,7 +686,7 @@ async function downloadXml(state) {
   if (variantId) {
     // Extract the variant name from variant_id (e.g., "grobid.training.segmentation" -> "training.segmentation")
     const variantName = variantId.replace(/^grobid\./, '');
-    filename = `${filename}.training.${variantName}`;
+    filename = `${filename}.${variantName}`;
   }
 
   a.download = `${filename}.tei.xml`;
