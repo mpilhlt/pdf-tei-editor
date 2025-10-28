@@ -314,56 +314,55 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 
 ## Detailed File Change Checklist
 
-### Backend Files
+### Backend Files ✅ COMPLETED (Phase 1)
 
-- [ ] `fastapi_app/lib/models_files.py`
-  - [ ] Add `FileItemModel` (base model with label field)
-    - [ ] Fields: id, filename, file_type, label, file_size, created_at, updated_at
-  - [ ] Add `ArtifactModel` (extends FileItemModel)
-    - [ ] Inherit all FileItemModel fields
-    - [ ] Additional fields: variant, version, is_gold_standard, is_locked, access_control
-    - [ ] All fields required (use `Optional[...]` for nullable, but always present in response)
-  - [ ] Add `DocumentGroupModel` (document with source + artifacts)
-    - [ ] Fields: doc_id, collections, doc_metadata, source (FileItemModel), artifacts (List[ArtifactModel])
-  - [ ] Add `FileListResponseModel` (top-level response)
-    - [ ] Field: files (List[DocumentGroupModel])
-  - [ ] Update or deprecate old models (DocumentGroup, FileListItem, FileListResponse)
+- [x] `fastapi_app/lib/models_files.py` ✅ DONE (commit a37eed8)
+  - [x] Add `FileItemModel` (base model with label field)
+    - [x] Fields: id, filename, file_type, label, file_size, created_at, updated_at
+  - [x] Add `ArtifactModel` (extends FileItemModel)
+    - [x] Inherit all FileItemModel fields
+    - [x] Additional fields: variant, version, is_gold_standard, is_locked, access_control
+    - [x] All fields required (use `Optional[...]` for nullable, but always present in response)
+  - [x] Add `DocumentGroupModel` (document with source + artifacts)
+    - [x] Fields: doc_id, collections, doc_metadata, source (FileItemModel), artifacts (List[ArtifactModel])
+  - [x] Add `FileListResponseModel` (top-level response)
+    - [x] Field: files (List[DocumentGroupModel])
+  - [x] Update or deprecate old models (DocumentGroup, FileListItem, FileListResponse)
 
-- [ ] `fastapi_app/routers/files_list.py`
-  - [ ] Create `_build_file_item()` helper (creates FileItemModel from FileMetadata)
-  - [ ] Create `_build_artifact()` helper (creates ArtifactModel from FileMetadata)
-  - [ ] Create `_build_document_group()` helper (creates DocumentGroupModel)
-  - [ ] Update `list_files()` to use new models
-  - [ ] Flatten variants into `artifacts` array
-  - [ ] Keep `doc_metadata` nested (no extraction)
-  - [ ] Use single `collections` array field
-  - [ ] Rename `pdf` → `source`
-  - [ ] Rename `versions`/`gold`/`variants` → `artifacts`
-  - [ ] Add `label` to source files (from doc_metadata.title)
-  - [ ] Ensure all artifact fields present (variant, version, is_gold_standard, is_locked, access_control)
+- [x] `fastapi_app/routers/files_list.py` ✅ DONE (commit a37eed8)
+  - [x] Create `_build_file_item()` helper (creates FileItemModel from FileMetadata)
+  - [x] Create `_build_artifact()` helper (creates ArtifactModel from FileMetadata)
+  - [x] Update `list_files()` to use new models
+  - [x] Flatten variants into `artifacts` array
+  - [x] Keep `doc_metadata` nested (no extraction)
+  - [x] Use single `collections` array field
+  - [x] Rename `pdf` → `source`
+  - [x] Rename `versions`/`gold`/`variants` → `artifacts`
+  - [x] Add `label` to source files (from doc_metadata.title)
+  - [x] Ensure all artifact fields present (variant, version, is_gold_standard, is_locked, access_control)
+  - [x] Regenerate API client (commit a37eed8)
 
-- [ ] `fastapi_app/lib/file_repository.py`
-  - [ ] Add helper methods if needed for new structure
-  - [ ] Ensure stable_id is always populated
+- [N/A] `fastapi_app/lib/file_repository.py`
+  - No changes needed - stable_id already populated
 
-### Frontend Files
+### Frontend Files (Phase 2 - In Progress)
 
-- [ ] `app/src/modules/file-data-utils.js`
-  - [ ] Update all `@typedef` comments
-  - [ ] Rename `hash` → `id` in all typedefs
-  - [ ] Add `DocumentMetadata` typedef
-  - [ ] Update `DocumentItem` typedef to use `collections` array, `doc_metadata`, `source`, `artifacts`
-  - [ ] Update `createHashLookupIndex()` → `createIdLookupIndex()`
-  - [ ] Update `getFileDataByHash()` → `getFileDataById()`
-  - [ ] Update `getDocumentTitle()` to use id and doc_metadata
-  - [ ] Simplify `extractVariants()` (flat artifacts array)
-  - [ ] Simplify `filterFileDataByVariant()` (filter artifacts array)
-  - [ ] Remove `filterFileContentByVariant()` (no longer needed - just filter artifacts)
-  - [ ] Update `findMatchingGold()` (filter artifacts by is_gold_standard flag)
-  - [ ] Update `findCollectionByHash()` → `findCollectionById()` (use collections[0])
-  - [ ] Update `findFileByPdfHash()` → `findFileBySourceId()`
-  - [ ] Update `findCorrespondingPdf()` → `findCorrespondingSource()`
-  - [ ] Update `groupFilesByCollection()` to handle collections array
+- [x] `app/src/modules/file-data-utils.js` ✅ DONE (commit 9253e15)
+  - [x] Update all `@typedef` comments
+  - [x] Rename `hash` → `id` in all typedefs
+  - [x] Add `DocumentMetadata` typedef
+  - [x] Update `DocumentItem` typedef to use `collections` array, `doc_metadata`, `source`, `artifacts`
+  - [x] Add `createIdLookupIndex()` (new), keep `createHashLookupIndex()` as legacy wrapper
+  - [x] Add `getFileDataById()` (new), keep `getFileDataByHash()` as legacy wrapper
+  - [x] Update `getDocumentTitle()` to use id
+  - [x] Simplify `extractVariants()` (flat artifacts array)
+  - [x] Simplify `filterFileDataByVariant()` (filter artifacts array)
+  - [x] Update `filterFileContentByVariant()` to work with flat artifacts (backward compatible return structure)
+  - [x] Update `findMatchingGold()` (filter artifacts by is_gold_standard flag)
+  - [x] Add `findCollectionById()` (new), keep `findCollectionByHash()` as legacy wrapper
+  - [x] Add `findFileBySourceId()` (new), keep `findFileByPdfHash()` as legacy wrapper
+  - [x] Add `findCorrespondingSource()` (new), keep `findCorrespondingPdf()` as legacy wrapper
+  - [x] Update `groupFilesByCollection()` to handle collections array
 
 - [ ] `app/src/plugins/file-selection.js` (674 lines)
   - [ ] Update `DocumentItem` typedef import
