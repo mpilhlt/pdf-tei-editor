@@ -14,6 +14,7 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 ### 1. Multiple Conflicting Structures
 
 **FastAPI Server Returns:**
+
 ```javascript
 {
   files: [{
@@ -39,6 +40,7 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 ```
 
 **Frontend Expects:**
+
 ```javascript
 {
   files: [{
@@ -70,6 +72,7 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 ### 3. Variant Complexity
 
 **Current Approach:**
+
 - Server nests variants in a dictionary: `variants: { "variant_name": [...files] }`
 - Frontend expects flat `versions` and `gold` arrays with `variant_id` property
 - Filtering logic duplicated in multiple places (file-data-utils.js, file-selection.js, file-selection-drawer.js)
@@ -79,7 +82,6 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 
 - Server returns `doc_collections` as an array
 - Frontend expects `collection` as a singular string
-- No clear guidance on multi-collection scenarios
 
 ## Proposed Simplified Structure
 
@@ -91,7 +93,7 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
     // Document-level properties
     "doc_id": "10.32361/2025170222092",
     "collections": ["grobid3", "test"],    // All collections
-    "doc_metadata": {                      // Metadata from TEI header (not flattened)
+    "doc_metadata": {                      // Metadata from TEI header
       "title": "Document Title",
       "authors": [...],
       "date": "2025",
@@ -99,29 +101,34 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
     },
 
     // Source file (PDF or primary XML for XML-only docs)
+    // Type: FileItem (base type with label)
     "source": {
       "id": "tnc2u3",                      // Stable ID (for URLs)
       "filename": "document.pdf",
       "file_type": "pdf",
+      "label": "Document Title",           // Display label (from doc_metadata.title)
       "file_size": 312341,
       "created_at": "2025-10-27T16:53:50",
       "updated_at": "2025-10-27T16:53:50"
     },
 
     // All artifact files (flattened, no gold/version/variant distinction)
+    // Type: Artifact[] (extends FileItem with artifact-specific fields)
     "artifacts": [{
+      // Base FileItem fields (all required)
       "id": "htzgub",                      // Stable ID (for URLs)
       "filename": "document.grobid.xml",
       "file_type": "tei",                  // or other artifact types in future
       "label": "Annotator",                // Display label
-      "variant": "grobid.training.segmentation",  // null if no variant
-      "version": 1,
-      "is_gold_standard": false,
       "file_size": 94764,
       "created_at": "2025-10-27T16:53:50",
       "updated_at": "2025-10-27T16:53:50",
+      // Artifact-specific fields (all required, use null for empty)
+      "variant": "grobid.training.segmentation",  // null if no variant
+      "version": 1,                        // null for gold standard
+      "is_gold_standard": false,
       "is_locked": false,
-      "access_control": {...}              // Added at runtime
+      "access_control": null               // null if no restrictions
     }]
   }]
 }
@@ -135,20 +142,26 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 4. **Nested Metadata**: Keep `doc_metadata` as nested object (no flattening)
 5. **Unified Source**: Call it `source` instead of `pdf` to support XML-only workflows
 6. **Generic Artifacts**: Use `artifacts` instead of `tei_files` to support future non-TEI artifacts
+7. **Type Hierarchy**: `FileItem` (base type with label) and `Artifact` (extends FileItem) - eliminates optional properties and provides type safety
 
 ## Migration Strategy
 
 ### Phase 1: Server-Side Changes
 
 **Files to Update:**
+
 - `fastapi_app/routers/files_list.py` - Update response construction
 - `fastapi_app/lib/models_files.py` - Update Pydantic models
 
 **Changes:**
-1. Create new response models:
-   - `SimplifiedFileListItem` - Represents a single file (source or artifact)
-   - `SimplifiedDocumentGroup` - Represents a document with source + artifacts
-   - `SimplifiedFileListResponse` - Top-level response
+
+1. Create new response models with type hierarchy:
+   - `FileItemModel` - Base model for files (has label field)
+     - Fields: id, filename, file_type, label, file_size, created_at, updated_at
+   - `ArtifactModel` - Extends FileItemModel with artifact-specific fields
+     - Additional fields: variant, version, is_gold_standard, is_locked, access_control
+   - `DocumentGroupModel` - Document with source (FileItemModel) + artifacts (ArtifactModel[])
+   - `FileListResponseModel` - Top-level response
 
 2. Update `list_files()` endpoint:
    - Flatten variants into single `artifacts` array
@@ -156,6 +169,8 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
    - Use `collections` array (no primary collection)
    - Rename `pdf` to `source`
    - Rename `versions`/`gold`/`variants` to `artifacts`
+   - Add `label` to source files (use doc_metadata.title)
+   - Ensure all artifact-specific fields are present (use null where appropriate)
 
 3. No backward compatibility needed:
    - No published URLs exist
@@ -167,19 +182,26 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 
 ```javascript
 /**
+ * Base file item - used for source files (PDF, primary XML)
  * @typedef {object} FileItem
  * @property {string} id - Stable ID for URLs and references
  * @property {string} filename
- * @property {string} file_type - 'pdf', 'tei', or other artifact types
+ * @property {string} file_type - 'pdf' or 'tei'
+ * @property {string} label - Display label
  * @property {number} file_size
  * @property {string} created_at - ISO timestamp
  * @property {string} updated_at - ISO timestamp
- * @property {string} [label] - Display label (artifacts only)
- * @property {string|null} [variant] - Variant name (artifacts only)
- * @property {number|null} [version] - Version number (artifacts only)
- * @property {boolean} [is_gold_standard] - Gold standard flag (artifacts only)
- * @property {boolean} [is_locked] - Lock status (artifacts only)
- * @property {object} [access_control] - Access control (artifacts only)
+ */
+
+/**
+ * Artifact file item - extends FileItem with artifact-specific properties
+ * @typedef {FileItem & {
+ *   variant: string|null,
+ *   version: number|null,
+ *   is_gold_standard: boolean,
+ *   is_locked: boolean,
+ *   access_control: object|null
+ * }} Artifact
  */
 
 /**
@@ -196,7 +218,7 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
  * @property {string[]} collections - All collections for this document
  * @property {DocumentMetadata} doc_metadata - Document metadata from TEI header
  * @property {FileItem} source - Source file (PDF or primary XML)
- * @property {FileItem[]} artifacts - All artifact files (TEI, etc.)
+ * @property {Artifact[]} artifacts - All artifact files (TEI, etc.)
  */
 
 /**
@@ -222,7 +244,7 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
    - Update `populateSelectboxes()` to use new structure
    - Replace `.hash` with `.id` throughout
    - Simplify variant filtering (just filter `artifacts` array)
-   - Update gold/version separation logic (filter by `is_gold_standard` flag)
+   - Update gold/version separation logic (filter by `is_gold_standard` flag) - note that there can be several gold standards if no variant filter is set (one gold per variant)
    - Update `onChangePdfSelection()` to use `source` instead of `pdf`
    - Update collection handling (use `collections[0]` or first available)
 
@@ -255,6 +277,7 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 ### Phase 3: State Management Updates
 
 **Current State:**
+
 ```javascript
 {
   pdf: "abc123",    // Content hash
@@ -264,6 +287,7 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 ```
 
 **New State:**
+
 ```javascript
 {
   pdf: "tnc2u3",        // Stable ID (keep name as-is for now)
@@ -277,11 +301,13 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 ### Phase 4: Testing Updates
 
 **Test Files to Update:**
+
 - E2E tests that expect specific response structures
 - Backend tests that validate response schemas
 - Any mock data in test fixtures
 
 **Test Strategy:**
+
 1. Update backend tests first (validate new response structure)
 2. Update E2E tests incrementally
 3. Add tests for backward compatibility (if maintaining old endpoint)
@@ -291,20 +317,30 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 ### Backend Files
 
 - [ ] `fastapi_app/lib/models_files.py`
-  - [ ] Add `ArtifactFileItem` model (replaces FileListItem for artifacts)
-  - [ ] Add `SourceFileItem` model (for source files)
-  - [ ] Add `SimplifiedDocumentGroup` model with `source` and `artifacts` fields
-  - [ ] Add `SimplifiedFileListResponse` model
-  - [ ] Update or deprecate old models
+  - [ ] Add `FileItemModel` (base model with label field)
+    - [ ] Fields: id, filename, file_type, label, file_size, created_at, updated_at
+  - [ ] Add `ArtifactModel` (extends FileItemModel)
+    - [ ] Inherit all FileItemModel fields
+    - [ ] Additional fields: variant, version, is_gold_standard, is_locked, access_control
+    - [ ] All fields required (use `Optional[...]` for nullable, but always present in response)
+  - [ ] Add `DocumentGroupModel` (document with source + artifacts)
+    - [ ] Fields: doc_id, collections, doc_metadata, source (FileItemModel), artifacts (List[ArtifactModel])
+  - [ ] Add `FileListResponseModel` (top-level response)
+    - [ ] Field: files (List[DocumentGroupModel])
+  - [ ] Update or deprecate old models (DocumentGroup, FileListItem, FileListResponse)
 
 - [ ] `fastapi_app/routers/files_list.py`
-  - [ ] Create `_build_simplified_response()` helper
+  - [ ] Create `_build_file_item()` helper (creates FileItemModel from FileMetadata)
+  - [ ] Create `_build_artifact()` helper (creates ArtifactModel from FileMetadata)
+  - [ ] Create `_build_document_group()` helper (creates DocumentGroupModel)
   - [ ] Update `list_files()` to use new models
   - [ ] Flatten variants into `artifacts` array
   - [ ] Keep `doc_metadata` nested (no extraction)
   - [ ] Use single `collections` array field
   - [ ] Rename `pdf` → `source`
   - [ ] Rename `versions`/`gold`/`variants` → `artifacts`
+  - [ ] Add `label` to source files (from doc_metadata.title)
+  - [ ] Ensure all artifact fields present (variant, version, is_gold_standard, is_locked, access_control)
 
 - [ ] `fastapi_app/lib/file_repository.py`
   - [ ] Add helper methods if needed for new structure
@@ -408,6 +444,11 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 3. **Collection Field**: `doc_collections` (array) → `collections` (array, no singular form)
 4. **Metadata**: `doc_metadata` remains nested (no change)
 5. **Artifacts**: Generic term for all derived files (TEI, future formats)
+6. **Type Hierarchy**:
+   - Server: `FileItemModel` (base) and `ArtifactModel` (extends base)
+   - Client: `FileItem` (base) and `Artifact` (extends base)
+   - Both source and artifacts have `label` field (non-optional)
+   - All artifact-specific fields are non-optional (use null for empty values)
 
 ## Backward Compatibility
 
@@ -435,5 +476,5 @@ The FastAPI server's `/api/v1/files/list` endpoint returns a different structure
 2. How to handle multi-collection documents (use primary, all, or first)? - just one data point (`collections`), no primary collection needed
 3. Should we version the API endpoint or use content negotiation? - Leave versioned as before?
 4. What to do about existing URLs with old hash parameters? - no need for BC, no URLs have been published
-5. Should we maintain a hash→id mapping table for URL migration? - No. 
-6. Should we change the state management variable names (Phase 5) - no, leave that for a later refactoring 
+5. Should we maintain a hash→id mapping table for URL migration? - No.
+6. Should we change the state management variable names (Phase 5) - no, leave that for a later refactoring
