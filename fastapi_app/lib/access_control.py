@@ -210,37 +210,27 @@ class DocumentAccessFilter:
             # Get doc metadata for permissions
             doc_metadata = doc.doc_metadata or {}
 
-            # Filter versions, gold, and variants
-            accessible_versions = []
-            accessible_gold = []
-            accessible_variants = {}
+            # Filter artifacts
+            accessible_artifacts = []
 
-            # Filter versions
-            for version in doc.versions:
-                if DocumentAccessFilter._can_access_file(version, doc_metadata, user):
-                    accessible_versions.append(version)
+            # Check source file access
+            source_accessible = True
+            if doc.source:
+                source_accessible = DocumentAccessFilter._can_access_file(doc.source, doc_metadata, user)
 
-            # Filter gold
-            for gold_entry in doc.gold:
-                if DocumentAccessFilter._can_access_file(gold_entry, doc_metadata, user):
-                    accessible_gold.append(gold_entry)
+            # Filter artifacts
+            for artifact in doc.artifacts:
+                if DocumentAccessFilter._can_access_file(artifact, doc_metadata, user):
+                    accessible_artifacts.append(artifact)
 
-            # Filter variants
-            for variant_name, variant_files in doc.variants.items():
-                accessible_variant_files = [
-                    f for f in variant_files
-                    if DocumentAccessFilter._can_access_file(f, doc_metadata, user)
-                ]
-                if accessible_variant_files:
-                    accessible_variants[variant_name] = accessible_variant_files
-
-            # Only include document if user has access to at least one file
-            if accessible_versions or accessible_gold or accessible_variants:
+            # Only include document if user has access to source or at least one artifact
+            if source_accessible or accessible_artifacts:
                 # Create a copy with filtered files
                 doc_copy = doc.model_copy(deep=True)
-                doc_copy.versions = accessible_versions
-                doc_copy.gold = accessible_gold
-                doc_copy.variants = accessible_variants
+                doc_copy.artifacts = accessible_artifacts
+                # If source is not accessible, set it to None
+                if not source_accessible:
+                    doc_copy.source = None
                 filtered_documents.append(doc_copy)
 
         return filtered_documents

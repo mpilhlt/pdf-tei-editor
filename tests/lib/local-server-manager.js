@@ -204,28 +204,41 @@ export class LocalServerManager extends ServerManager {
   async createTempEnvFile(webdavConfig) {
     const { tmpdir } = await import('os');
     const { randomBytes } = await import('crypto');
+    const { resolve } = await import('path');
 
     const tempFileName = join(
       tmpdir(),
       `fastapi-test-${randomBytes(8).toString('hex')}.env`
     );
 
-    const envContent = `# FastAPI Test Configuration with WebDAV
+    // Config dir is one level up from db dir (tests/api/runtime/config)
+    // Use absolute paths since FastAPI may have different CWD
+    const configDir = resolve(join(this.dbDir, '..', 'config'));
+    const dbDirAbs = resolve(this.dbDir);
+    const dataDirAbs = resolve(this.dataDir);
+
+    let envContent = `# FastAPI Test Configuration
 HOST=${this.host}
 PORT=${this.port}
-DATA_ROOT=fastapi_app/data
-DB_DIR=fastapi_app/db
+DATA_ROOT=${dataDirAbs}
+DB_DIR=${dbDirAbs}
+CONFIG_DIR=${configDir}
 
+SESSION_TIMEOUT=3600
+LOG_LEVEL=INFO
+`;
+
+    // Add WebDAV configuration if provided
+    if (webdavConfig) {
+      envContent += `
 # WebDAV Configuration for Sync Tests
 WEBDAV_ENABLED=${webdavConfig.WEBDAV_ENABLED}
 WEBDAV_BASE_URL=${webdavConfig.WEBDAV_BASE_URL}
 WEBDAV_USERNAME=${webdavConfig.WEBDAV_USERNAME}
 WEBDAV_PASSWORD=${webdavConfig.WEBDAV_PASSWORD}
 WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
-
-SESSION_TIMEOUT=3600
-LOG_LEVEL=INFO
 `;
+    }
 
     await fs.writeFile(tempFileName, envContent, 'utf-8');
     console.log(`[INFO] Created temporary env file: ${tempFileName}`);
@@ -263,11 +276,14 @@ LOG_LEVEL=INFO
       // Set environment variables:
       // - PYTHONUNBUFFERED=1 for immediate Python output
       // - HOST and PORT for server configuration
+      // - FASTAPI_CONFIG_DIR for fixture config directory
+      const configDir = join(this.dbDir, '..', 'config');
       const env = {
         ...process.env,
         PYTHONUNBUFFERED: '1',
         HOST: this.host,
         PORT: String(this.port),
+        FASTAPI_CONFIG_DIR: configDir,
       };
 
       // On Windows, bypass the Python wrapper script and call uvicorn directly
@@ -298,9 +314,10 @@ LOG_LEVEL=INFO
     } else {
       // Unix only: use sh with shell redirection for better performance
       const { spawn: spawnShell } = await import('child_process');
+      const configDir = join(this.dbDir, '..', 'config');
       this.serverProcess = spawnShell(
         'sh',
-        ['-c', `PYTHONUNBUFFERED=1 HOST=${this.host} PORT=${this.port} uv run python bin/start-dev-fastapi >> "${this.logFile}" 2>&1`],
+        ['-c', `PYTHONUNBUFFERED=1 HOST=${this.host} PORT=${this.port} FASTAPI_CONFIG_DIR="${configDir}" uv run python bin/start-dev-fastapi >> "${this.logFile}" 2>&1`],
         {
           cwd: this.projectRoot,
           stdio: 'ignore',
@@ -497,18 +514,19 @@ LOG_LEVEL=INFO
       console.warn('[WARNING] Tests may fail if database schema is outdated');
     }
 
-    // Step 2.5: Start WebDAV server if needed
+    // Step 2.5: Start WebDAV server if needed and create temp env file
+    let webdavConfig = null;
     if (needsWebdav) {
       // Create and start WebDAV server manager with pre-allocated port
       this.webdavManager = new WebdavServerManager({ port: webdavPort });
       await this.webdavManager.start({ verbose });
-
-      // Create temporary .env file with WebDAV configuration
-      const webdavConfig = this.webdavManager.getConfig();
-      this.tempEnvFile = await this.createTempEnvFile(webdavConfig);
-      process.env.FASTAPI_ENV_FILE = this.tempEnvFile;
-      console.log(`[INFO] Set FASTAPI_ENV_FILE=${this.tempEnvFile}\n`);
+      webdavConfig = this.webdavManager.getConfig();
     }
+
+    // Always create temporary .env file (even without WebDAV) to set CONFIG_DIR
+    this.tempEnvFile = await this.createTempEnvFile(webdavConfig);
+    process.env.FASTAPI_ENV_FILE = this.tempEnvFile;
+    console.log(`[INFO] Set FASTAPI_ENV_FILE=${this.tempEnvFile}\n`);
 
     // Apply any additional environment variables
     Object.assign(process.env, env);

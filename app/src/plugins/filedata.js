@@ -5,17 +5,17 @@
  * and managing file-related state updates.
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
- * @import { FileListItem } from '../modules/file-data-utils.js'
+ * @import { DocumentItem } from '../modules/file-data-utils.js'
  */
 
 import { endpoints as ep } from '../app.js'
 import { Plugin } from '../modules/plugin-base.js'
 import { logger, client, dialog, xmlEditor } from '../app.js'
-import { createHashLookupIndex } from '../modules/file-data-utils.js'
+import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import ui from '../ui.js'
 
@@ -43,9 +43,9 @@ class FiledataPlugin extends Plugin {
     await super.install(state);
     logger.debug(`Installing plugin "${this.name}"`);
 
-    // Initialize empty hash lookup index to prevent errors during plugin initialization
-    logger.debug('Initializing empty hash lookup index during installation');
-    createHashLookupIndex([]);
+    // Initialize empty ID lookup index to prevent errors during plugin initialization
+    logger.debug('Initializing empty ID lookup index during installation');
+    createIdLookupIndex([]);
 
     // Create status widget for save operations
     this.savingStatusWidget = PanelUtils.createText({
@@ -65,21 +65,21 @@ class FiledataPlugin extends Plugin {
   async reload(options = {}) {
     logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
     
-    /** @type {FileListItem[]} */
+    /** @type {DocumentItem[]} */
     let data = await client.getFileList(null, options.refresh);
     if (!data || data.length === 0) {
       dialog.error("No files found");
       data = []; // Ensure data is an empty array instead of null/undefined
     }
-    
-    // Create hash lookup index when fileData is loaded
+
+    // Create ID lookup index when fileData is loaded
     if (data && data.length > 0) {
-      logger.debug('Creating hash lookup index for file data');
-      createHashLookupIndex(data);
+      logger.debug('Creating ID lookup index for file data');
+      createIdLookupIndex(data);
     } else {
-      // Initialize empty hash lookup index to prevent errors
-      logger.debug('Initializing empty hash lookup index');
-      createHashLookupIndex([]);
+      // Initialize empty ID lookup index to prevent errors
+      logger.debug('Initializing empty ID lookup index');
+      createIdLookupIndex([]);
     }
     
     // Store fileData in state and propagate it

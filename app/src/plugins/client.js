@@ -316,10 +316,10 @@ async function status() {
 /**
  * Gets a list of pdf/tei files from the server, including their relative paths
  *
- * @import { FileListItem } from '../modules/file-data-utils.js'
+ * @import { DocumentItem } from '../modules/file-data-utils.js'
  * @param {string|null} variant - Optional variant filter to apply
  * @param {boolean} refresh - Whether to force refresh of server cache
- * @returns {Promise<FileListItem[]>} - A promise that resolves to an array of file list items
+ * @returns {Promise<DocumentItem[]>} - A promise that resolves to an array of document items
  */
 async function getFileList(variant = null, refresh = false) {
   // Build query params object

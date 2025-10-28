@@ -3,10 +3,10 @@
  */
 
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { SlSelect } from '../ui.js'
- * @import { FileListItem, TeiFileData } from '../modules/file-data-utils.js'
+ * @import { DocumentItem, Artifact } from '../modules/file-data-utils.js'
  */
 import ui from '../ui.js'
 import { SlOption, SlDivider, updateUi } from '../ui.js'
@@ -17,7 +17,7 @@ import { groupFilesByCollection } from '../modules/file-data-utils.js'
 
 /**
  * The data about the pdf and xml files on the server
- * @type {FileListItem[]}
+ * @type {DocumentItem[]}
  */
 let fileData = [];
 
@@ -180,12 +180,11 @@ async function update(state) {
       if (!state.pdf && state.xml && state.fileData) {
         // Find the file that contains this XML and get its identifier
         const xmlFile = state.fileData.find(file =>
-          (file.gold && file.gold.some(g => g.hash === state.xml)) ||
-          (file.versions && file.versions.some(v => v.hash === state.xml))
+          file.artifacts && file.artifacts.some(a => a.id === state.xml)
         );
         if (xmlFile) {
-          // For XML-only files, the source identifier is the XML hash itself
-          if (!xmlFile.pdf) {
+          // For XML-only files, the source identifier is the XML id itself
+          if (!xmlFile.source) {
             sourceValue = state.xml;
           }
         }
@@ -216,16 +215,15 @@ function isCurrentSelectionValid(state) {
   // Check if current PDF selection exists in fileData
   if (state.pdf) {
     const pdfExists = state.fileData.some(file =>
-      file.pdf && file.pdf.hash === state.pdf
+      file.source && file.source.id === state.pdf
     );
     if (!pdfExists) return false;
   }
 
-  // Check if current XML selection exists in fileData  
+  // Check if current XML selection exists in fileData
   if (state.xml) {
     const xmlExists = state.fileData.some(file =>
-      (file.gold && file.gold.some(g => g.hash === state.xml)) ||
-      (file.versions && file.versions.some(v => v.hash === state.xml))
+      file.artifacts && file.artifacts.some(a => a.id === state.xml)
     );
     if (!xmlExists) return false;
   }
@@ -233,8 +231,7 @@ function isCurrentSelectionValid(state) {
   // Check if current diff selection exists in fileData
   if (state.diff) {
     const diffExists = state.fileData.some(file =>
-      (file.gold && file.gold.some(g => g.hash === state.diff)) ||
-      (file.versions && file.versions.some(v => v.hash === state.diff))
+      file.artifacts && file.artifacts.some(a => a.id === state.diff)
     );
     if (!diffExists) return false;
   }
@@ -274,19 +271,11 @@ async function populateVariantSelectbox(state) {
   // Get unique variants from fileData and store in closure variable
   variants = new Set();
   state.fileData.forEach(file => {
-    // Add variant_id from gold entries
-    if (file.gold) {
-      file.gold.forEach(gold => {
-        if (gold.variant_id) {
-          variants.add(gold.variant_id);
-        }
-      });
-    }
-    // Add variant_id from versions
-    if (file.versions) {
-      file.versions.forEach(version => {
-        if (version.variant_id) {
-          variants.add(version.variant_id);
+    // Add variant from artifacts
+    if (file.artifacts) {
+      file.artifacts.forEach(artifact => {
+        if (artifact.variant) {
+          variants.add(artifact.variant);
         }
       });
     }
@@ -360,18 +349,16 @@ async function populateSelectboxes(state) {
   const variant = state.variant;
 
   if (variant === "none") {
-    // Show only files without variant_id in gold or versions
+    // Show only files without variant in artifacts
     filteredFileData = fileData.filter(file => {
-      const hasGoldVariant = file.gold && file.gold.some(g => !!g.variant_id);
-      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
-      return !hasGoldVariant && !hasVersionVariant;
+      const hasArtifactVariant = file.artifacts && file.artifacts.some(a => !!a.variant);
+      return !hasArtifactVariant;
     });
   } else if (variant && variant !== "") {
-    // Show only files with the selected variant_id (in gold or versions)
+    // Show only files with the selected variant in artifacts
     filteredFileData = fileData.filter(file => {
-      const matchesGold = file.gold && file.gold.some(g => g.variant_id === variant);
-      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
-      return matchesGold || matchesVersion;
+      const matchesArtifact = file.artifacts && file.artifacts.some(a => a.variant === variant);
+      return matchesArtifact;
     });
   }
   // If variant is "" (All), show all files
@@ -390,24 +377,24 @@ async function populateSelectboxes(state) {
 
     // get a list of file data sorted by label
     const files = grouped_files[collection_name]
-      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0)
+      .sort((a, b) => {
+        const aLabel = a.source?.label || a.doc_metadata?.title || a.doc_id;
+        const bLabel = b.source?.label || b.doc_metadata?.title || b.doc_id;
+        return (aLabel < bLabel) ? -1 : (aLabel > bLabel) ? 1 : 0;
+      })
 
     for (const file of files) {
       // Determine file identifier and label based on file type
       let fileIdentifier, displayLabel;
 
-      if (file.pdf) {
-        // Traditional PDF-XML workflow
-        fileIdentifier = file.pdf.hash;
-        displayLabel = file.label;
-      } else if (file.gold && file.gold.length > 0) {
-        // XML-only file - use first gold file as identifier
-        fileIdentifier = file.gold[0].hash;
-        displayLabel = `📄 ${file.label}`;
-      } else if (file.versions && file.versions.length > 0) {
-        // XML-only file with only versions - use first version as identifier
-        fileIdentifier = file.versions[0].hash;
-        displayLabel = `📄 ${file.label}`;
+      if (file.source) {
+        // Traditional PDF-XML workflow or XML-only with source
+        fileIdentifier = file.source.id;
+        displayLabel = file.source.label;
+      } else if (file.artifacts && file.artifacts.length > 0) {
+        // XML-only file without source - use first artifact as identifier
+        fileIdentifier = file.artifacts[0].id;
+        displayLabel = `📄 ${file.doc_metadata?.title || file.doc_id}`;
       } else {
         continue; // Skip files without identifiable content
       }
@@ -420,38 +407,29 @@ async function populateSelectboxes(state) {
       })
 
       // save scalar file properties in option
-      const data = Object.fromEntries(Object.entries(file).filter(([key, value]) => typeof value !== 'object'))
-      Object.assign(option.dataset, data)
+      option.dataset.doc_id = file.doc_id;
+      option.dataset.collections = JSON.stringify(file.collections);
 
       ui.toolbar.pdf.hoist = true
       ui.toolbar.pdf.appendChild(option);
 
       if (fileIdentifier === state.pdf) {
         // populate the version and diff selectboxes depending on the selected file
-        if (file.versions) {
-          // Filter versions based on variant selection
-          let versionsToShow = file.versions;
+        if (file.artifacts) {
+          // Filter artifacts based on variant selection
+          let artifactsToShow = file.artifacts;
           if (variant === "none") {
-            // Show only versions without variant_id
-            versionsToShow = file.versions.filter(version => !version.variant_id);
+            // Show only artifacts without variant
+            artifactsToShow = file.artifacts.filter(artifact => !artifact.variant);
           } else if (variant && variant !== "") {
-            // Show only versions with the selected variant_id
-            versionsToShow = file.versions.filter(version => version.variant_id === variant);
+            // Show only artifacts with the selected variant
+            artifactsToShow = file.artifacts.filter(artifact => artifact.variant === variant);
           }
-          // If variant is "" (All), show all versions
+          // If variant is "" (All), show all artifacts
 
-          // Also add gold entries if they match the variant filter
-          /** @type {TeiFileData[]} */
-          let goldToShow = [];
-          if (file.gold) {
-            if (variant === "none") {
-              goldToShow = file.gold.filter(gold => !gold.variant_id);
-            } else if (variant && variant !== "") {
-              goldToShow = file.gold.filter(gold => gold.variant_id === variant);
-            } else {
-              goldToShow = file.gold;
-            }
-          }
+          // Separate gold and versions
+          const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
+          const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
 
           // Add gold entries with visual grouping
           if (goldToShow.length > 0) {
@@ -464,14 +442,14 @@ async function populateSelectboxes(state) {
               let option = new SlOption()
               // @ts-ignore
               option.size = "small"
-              option.value = gold.hash;  // Use document identifier
+              option.value = gold.id;  // Use stable ID
               option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
               ui.toolbar.xml.appendChild(option);
               // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
-              option.value = gold.hash;  // Use document identifier
+              option.value = gold.id;  // Use stable ID
               option.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
               ui.toolbar.diff.appendChild(option)
             });
@@ -494,14 +472,14 @@ async function populateSelectboxes(state) {
               let option = new SlOption()
               // @ts-ignore
               option.size = "small"
-              option.value = version.hash;  // Use document identifier
+              option.value = version.id;  // Use stable ID
               option.innerHTML = createDocumentLabel(version.label, version.is_locked);
               ui.toolbar.xml.appendChild(option);
               // diff
               option = new SlOption()
               // @ts-ignore
               option.size = "small"
-              option.value = version.hash;  // Use document identifier
+              option.value = version.id;  // Use stable ID
               option.innerHTML = createDocumentLabel(version.label, version.is_locked);
               ui.toolbar.diff.appendChild(option)
             });
@@ -527,19 +505,14 @@ async function onChangePdfSelection() {
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
-  /** @type {FileListItem | undefined} */
   const selectedIdentifier = ui.toolbar.pdf.value;
   const selectedFile = state.fileData.find(file => {
-    // Check if it matches PDF hash (traditional workflow)
-    if (file.pdf && file.pdf.hash === selectedIdentifier) {
+    // Check if it matches source id (traditional workflow)
+    if (file.source && file.source.id === selectedIdentifier) {
       return true;
     }
-    // Check if it matches any gold file hash (XML-only workflow)
-    if (file.gold && file.gold.some(g => g.hash === selectedIdentifier)) {
-      return true;
-    }
-    // Check if it matches any version file hash (XML-only workflow)
-    if (file.versions && file.versions.some(v => v.hash === selectedIdentifier)) {
+    // Check if it matches any artifact id (XML-only workflow)
+    if (file.artifacts && file.artifacts.some(a => a.id === selectedIdentifier)) {
       return true;
     }
     return false;
@@ -549,12 +522,12 @@ async function onChangePdfSelection() {
     return;
   }
 
-  const collection = selectedFile.collection;
+  const collection = selectedFile.collections[0];
   let pdf = null;
   let xml = null;
 
   // Determine if this is a PDF-XML file or XML-only file
-  if (selectedFile.pdf && selectedFile.pdf.hash === selectedIdentifier) {
+  if (selectedFile.source && selectedFile.source.id === selectedIdentifier) {
     // Traditional PDF-XML workflow
     pdf = selectedIdentifier;
   } else {
@@ -563,22 +536,22 @@ async function onChangePdfSelection() {
   }
 
   // For PDF-XML files, find the appropriate XML file
-  if (pdf && selectedFile.gold) {
+  if (pdf && selectedFile.artifacts) {
     const { variant } = state;
     let matchingGold;
 
     if (variant === "none") {
-      // Find gold without variant_id
-      matchingGold = selectedFile.gold.find(gold => !gold.variant_id);
+      // Find gold without variant
+      matchingGold = selectedFile.artifacts.find(a => a.is_gold_standard && !a.variant);
     } else if (variant && variant !== "") {
-      // Find gold with matching variant_id
-      matchingGold = selectedFile.gold.find(gold => gold.variant_id === variant);
+      // Find gold with matching variant
+      matchingGold = selectedFile.artifacts.find(a => a.is_gold_standard && a.variant === variant);
     } else {
       // No variant filter - use first gold file
-      matchingGold = selectedFile.gold[0];
+      matchingGold = selectedFile.artifacts.find(a => a.is_gold_standard);
     }
 
-    xml = matchingGold?.hash;
+    xml = matchingGold?.id;
   }
 
   const filesToLoad = {}
@@ -625,11 +598,10 @@ async function onChangeXmlSelection() {
     try {
       // Find the collection for this XML file by searching fileData
       for (const file of state.fileData) {
-        const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xml);
-        const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xml);
+        const hasArtifactMatch = file.artifacts && file.artifacts.some(artifact => artifact.id === xml);
 
-        if (hasGoldMatch || hasVersionMatch) {
-          await app.updateState({ collection: file.collection });
+        if (hasArtifactMatch) {
+          await app.updateState({ collection: file.collections[0] });
           break;
         }
       }

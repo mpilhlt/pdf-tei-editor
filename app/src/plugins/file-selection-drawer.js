@@ -3,10 +3,10 @@
  * Uses a SlDrawer with SlTree for hierarchical file selection
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem } from '../ui.js'
- * @import { FileListItem } from '../modules/file-data-utils.js'
+ * @import { DocumentItem } from '../modules/file-data-utils.js'
  */
 
 /**
@@ -30,9 +30,8 @@ import {
   filterFileDataByVariant,
   filterFileDataByLabel,
   groupFilesByCollection,
-  filterFileContentByVariant,
   findMatchingGold,
-  findFileByPdfHash
+  findFileBySourceId
 } from '../modules/file-data-utils.js'
 
 /**
@@ -297,26 +296,24 @@ async function populateFileTree(state) {
     if (!state.pdf && !state.xml) return false;
     const files = groupedFiles[collectionName];
     return files.some(file => {
-      // Expand if this collection contains the current PDF
-      if (state.pdf && file.pdf.hash === state.pdf) return true;
+      // Expand if this collection contains the current source
+      if (state.pdf && file.source?.id === state.pdf) return true;
       // Expand if this collection contains the current XML
       if (state.xml) {
-        const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
-        return [...versionsToShow, ...goldToShow].some(item => item.hash === state.xml);
+        return file.artifacts?.some(artifact => artifact.id === state.xml);
       }
       return false;
     });
   };
 
-  /** @type { (file:FileListItem) => boolean} */
+  /** @type { (file:DocumentItem) => boolean} */
   const shouldExpandPdf = (file) => {
     if (!state.pdf && !state.xml) return false;
-    // Expand if this is the current PDF
-    if (state.pdf && file.pdf.hash === state.pdf) return true;
-    // Expand if this PDF contains the current XML
+    // Expand if this is the current source
+    if (state.pdf && file.source?.id === state.pdf) return true;
+    // Expand if this source contains the current XML
     if (state.xml) {
-      const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
-      return [...versionsToShow, ...goldToShow].some(item => item.hash === state.xml);
+      return file.artifacts?.some(artifact => artifact.id === state.xml);
     }
     return false;
   };
@@ -332,20 +329,34 @@ async function populateFileTree(state) {
     collectionItem.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
     
     const files = groupedFiles[collectionName]
-      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0);
-    
+      .sort((a, b) => {
+        const aLabel = a.source?.label || a.doc_metadata?.title || a.doc_id;
+        const bLabel = b.source?.label || b.doc_metadata?.title || b.doc_id;
+        return (aLabel < bLabel) ? -1 : (aLabel > bLabel) ? 1 : 0;
+      });
+
     for (const file of files) {
-      // Get filtered content for this file
-      const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
-      
-      // Create PDF document item
+      // Filter artifacts based on variant
+      let artifactsToShow = file.artifacts || [];
+      if (state.variant === "none") {
+        artifactsToShow = artifactsToShow.filter(a => !a.variant);
+      } else if (state.variant && state.variant !== "") {
+        artifactsToShow = artifactsToShow.filter(a => a.variant === state.variant);
+      }
+
+      // Separate gold and versions
+      const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
+      const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
+
+      // Create source/PDF document item
       const pdfItem = document.createElement('sl-tree-item');
       pdfItem.expanded = shouldExpandPdf(file);
       pdfItem.className = 'pdf-item';
       pdfItem.dataset.type = 'pdf';
-      pdfItem.dataset.hash = file.pdf.hash;
-      pdfItem.dataset.collection = file.collection;
-      pdfItem.innerHTML = `<sl-icon name="file-pdf"></sl-icon><span>${file.label}</span>`;
+      pdfItem.dataset.hash = file.source?.id || '';
+      pdfItem.dataset.collection = file.collections[0];
+      const displayLabel = file.source?.label || file.doc_metadata?.title || file.doc_id;
+      pdfItem.innerHTML = `<sl-icon name="file-pdf"></sl-icon><span>${displayLabel}</span>`;
       
       // Add Gold section if there are gold entries
       if (goldToShow.length > 0) {
@@ -359,9 +370,9 @@ async function populateFileTree(state) {
           const goldItem = document.createElement('sl-tree-item');
           goldItem.className = 'gold-item';
           goldItem.dataset.type = 'gold';
-          goldItem.dataset.hash = gold.hash;
-          goldItem.dataset.pdfHash = file.pdf.hash;
-          goldItem.dataset.collection = file.collection;
+          goldItem.dataset.hash = gold.id;
+          goldItem.dataset.pdfHash = file.source?.id || '';
+          goldItem.dataset.collection = file.collections[0];
           goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
           goldSection.appendChild(goldItem);
         });
@@ -380,9 +391,9 @@ async function populateFileTree(state) {
           const versionItem = document.createElement('sl-tree-item');
           versionItem.className = 'version-item';
           versionItem.dataset.type = 'version';
-          versionItem.dataset.hash = version.hash;
-          versionItem.dataset.pdfHash = file.pdf.hash;
-          versionItem.dataset.collection = file.collection;
+          versionItem.dataset.hash = version.id;
+          versionItem.dataset.pdfHash = file.source?.id || '';
+          versionItem.dataset.collection = file.collections[0];
           versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked);
           versionsSection.appendChild(versionItem);
         });
@@ -490,12 +501,12 @@ async function onFileTreeSelection(event, state) {
     stateUpdates.pdf = hash;
     stateUpdates.collection = collection;
     
-    // Find matching gold file for this PDF and variant
-    const selectedFile = findFileByPdfHash(state.fileData, hash);
+    // Find matching gold file for this source and variant
+    const selectedFile = findFileBySourceId(state.fileData, hash);
     if (selectedFile) {
       const matchingGold = findMatchingGold(selectedFile, state.variant);
       if (matchingGold) {
-        stateUpdates.xml = matchingGold.hash;
+        stateUpdates.xml = matchingGold.id;
       } else {
         stateUpdates.xml = null;
       }

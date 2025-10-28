@@ -464,6 +464,9 @@ class FileImporter:
         assert saved_hash == file_hash
 
         # Create metadata
+        # Prefer edition_title over label for display
+        label = metadata.get('edition_title') or metadata.get('label') or tei_path.name
+
         file_create = FileCreate(
             id=file_hash,
             filename=tei_path.name,  # Preserve original filename
@@ -471,7 +474,7 @@ class FileImporter:
             doc_id_type=doc_id_type,
             file_type='tei',
             file_size=len(content),
-            label=metadata.get('label'),
+            label=label,
             variant=variant,
             version=version,
             is_gold_standard=is_gold,

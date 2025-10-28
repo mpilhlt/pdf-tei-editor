@@ -436,7 +436,12 @@ def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
 
     metadata['is_gold_standard'] = is_gold
 
-    # Extract labels/roles from respStmt
+    # Extract edition title (preferred for labels)
+    edition_title_elem = tei_root.find('.//tei:editionStmt/tei:edition/tei:title', ns)
+    if edition_title_elem is not None and edition_title_elem.text:
+        metadata['edition_title'] = edition_title_elem.text.strip()
+
+    # Extract labels/roles from respStmt (fallback)
     labels = []
     for resp_stmt in tei_root.findall('.//tei:titleStmt/tei:respStmt', ns):
         resp_elem = resp_stmt.find('tei:resp', ns)

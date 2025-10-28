@@ -70,11 +70,13 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
     for (const docGroup of fileList.files) {
       if (docGroup.doc_id === testState.testDocId) {
-        if (docGroup.pdf) {
-          pdfHash = docGroup.pdf.id;
+        // New structure uses 'source' instead of 'pdf'
+        if (docGroup.source) {
+          pdfHash = docGroup.source.id;
         }
-        if (docGroup.versions.length > 0) {
-          teiHash = docGroup.versions[0].id;
+        // New structure uses artifacts array instead of versions
+        if (docGroup.artifacts && docGroup.artifacts.length > 0) {
+          teiHash = docGroup.artifacts[0].id;
         }
         break;
       }

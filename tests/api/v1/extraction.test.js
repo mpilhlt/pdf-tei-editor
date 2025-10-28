@@ -219,11 +219,22 @@ describe('Extraction API E2E Tests', () => {
     );
 
     const files = filesResponse.files || filesResponse;
-    const extractedFile = files.find(f => f.id === response.xml || f.hash === response.xml);
+
+    // Search for extracted file in artifacts array (new structure)
+    let extractedFile = null;
+    for (const docGroup of files) {
+      // Check in artifacts (new structure)
+      if (docGroup.artifacts) {
+        extractedFile = docGroup.artifacts.find(artifact =>
+          artifact.id === response.xml || artifact.filename?.includes(response.xml)
+        );
+      }
+      if (extractedFile) break;
+    }
 
     if (extractedFile) {
       console.log(`✓ Extracted file found in file list`);
-      assert.ok(extractedFile.file_type === 'tei' || extractedFile.type === 'tei',
+      assert.ok(extractedFile.file_type === 'tei',
         'Extracted file should be TEI type');
     } else {
       console.log(`⚠️  Extracted file not found in list (hash mismatch or async issue)`);

@@ -186,9 +186,10 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
 
     let abbreviatedHash = null;
     for (const docGroup of fileList.files) {
-      for (const teiFile of [...docGroup.versions, ...docGroup.gold]) {
-        if (teiFile.id) {
-          abbreviatedHash = teiFile.id;
+      // New structure uses artifacts array instead of versions/gold
+      for (const artifact of docGroup.artifacts || []) {
+        if (artifact.id) {
+          abbreviatedHash = artifact.id;
           break;
         }
       }

@@ -176,8 +176,13 @@ def _build_artifact(file_metadata) -> ArtifactModel:
     Returns:
         ArtifactModel with all required fields, content hash stored as private attribute
     """
-    # Extract label - use a descriptive name for artifacts
-    label = "Annotator" if file_metadata.is_gold_standard else f"Version {file_metadata.version or 'N/A'}"
+    # Extract label - prefer metadata label (edition title), with smart fallbacks
+    if file_metadata.label:
+        label = file_metadata.label
+    elif file_metadata.is_gold_standard:
+        label = f"Gold ({file_metadata.variant})" if file_metadata.variant else "Gold"
+    else:
+        label = file_metadata.filename
 
     artifact = ArtifactModel(
         id=file_metadata.stable_id,

@@ -73,9 +73,10 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
 
     let abbreviatedHash = null;
     for (const docGroup of fileList.files) {
-      for (const teiFile of [...docGroup.versions, ...docGroup.gold]) {
-        if (teiFile.filename && teiFile.filename.includes('heartbeat-test')) {
-          abbreviatedHash = teiFile.id;
+      // New structure uses artifacts array instead of versions/gold
+      for (const artifact of docGroup.artifacts || []) {
+        if (artifact.filename && artifact.filename.includes('heartbeat-test')) {
+          abbreviatedHash = artifact.id;
           break;
         }
       }

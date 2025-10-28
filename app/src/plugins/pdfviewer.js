@@ -9,7 +9,7 @@ import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { PanelUtils, StatusText } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor, hasStateChanged } from '../app.js'
-import { getDocumentTitle, getFileDataByHash } from '../modules/file-data-utils.js'
+import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
 
 //
 // UI Parts
@@ -128,9 +128,9 @@ async function update(state) {
     }
   }
   
-  // Update title and fileame widgets
+  // Update title and filename widgets
   if (state.pdf) {
-    filenameWidget.text = getFileDataByHash(state.pdf)?.file?.fileref || ''
+    filenameWidget.text = getFileDataById(state.pdf)?.file?.fileref || ''
     try {
       const title = getDocumentTitle(state.pdf);
       titleWidget.text = title || 'PDF Document';
