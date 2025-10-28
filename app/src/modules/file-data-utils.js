@@ -13,206 +13,187 @@
  */
 
 /**
- * Metadata retrieved from the <teiHeader>
- * @typedef {object} TeiHeaderMetaData
- * @property {string} author - Document author
- * @property {string} date - Publication date
- * @property {string} doi - DOI identifier
- * @property {string} fileref - File reference identifier
- * @property {string} last_status - Last known status
- * @property {string} last_update - ISO timestamp of last update
- * @property {string|null} last_updated_by - User who last updated
+ * Document metadata from TEI header
+ * @typedef {object} DocumentMetadata
  * @property {string} title - Document title
- * @property {string} [variant_id] - Optional variant identifier
+ * @property {object[]} authors - Array of author objects {given, family}
+ * @property {string} [date] - Publication date
+ * @property {string} [publisher] - Publisher name
  */
 
 /**
- * @typedef {TeiHeaderMetaData & {access_control: AccessControl}} FileMetadata
+ * Base file item - used for source files (PDF, primary XML)
+ * @typedef {object} FileItem
+ * @property {string} id - Stable ID for URLs and references
+ * @property {string} filename - Filename
+ * @property {string} file_type - 'pdf' or 'tei'
+ * @property {string} label - Display label
+ * @property {number} file_size - File size in bytes
+ * @property {string} created_at - ISO timestamp
+ * @property {string} updated_at - ISO timestamp
  */
 
 /**
- * @typedef {object} BaseFileData
- * @property {string} [collection] - Collection name
- * @property {string} hash - Unique hash identifier
- * @property {string} [path] - File system path (only for debugging)
- */
-
-
-/**
- * TEI file with full metadata
- * @typedef {Object} TeiFileData
- * @property {boolean} [is_locked] - Whether the file is locked for editing
- * @property {string} label - Display label for the file
- * @property {string} last_status - Most recent status of the file
- * @property {string} last_update - Timestamp of last update
- * @property {string} [last_updated_by] - User who last updated the file
- * @property {FileMetadata} metadata - File metadata object
- * @property {string} [variant_id] - Optional variant identifier
- * @property {string} [version_name] - Optional version name
+ * Artifact file item - extends FileItem with artifact-specific properties
+ * @typedef {FileItem & {
+ *   variant: string|null,
+ *   version: number|null,
+ *   is_gold_standard: boolean,
+ *   is_locked: boolean,
+ *   access_control: object|null
+ * }} Artifact
  */
 
 /**
- * @typedef {BaseFileData} PdfFileData - PDF file reference (minimal structure)
+ * Document item with source and artifacts
+ * @typedef {object} DocumentItem
+ * @property {string} doc_id - Document identifier
+ * @property {string[]} collections - All collections for this document
+ * @property {object} doc_metadata - Document metadata from TEI header
+ * @property {FileItem} source - Source file (PDF or primary XML)
+ * @property {Artifact[]} artifacts - All artifact files (TEI, etc.)
  */
 
 /**
- * @typedef {TeiFileData} VersionFileData - Version file extends TEI file with lock status
+ * File list response
+ * @typedef {object} FileListResponse
+ * @property {DocumentItem[]} files - Array of documents
  */
 
 /**
- * @typedef {object} FileListItem
- * @property {string} author - Document author
- * @property {string} collection - Collection name
- * @property {string} date - Publication date
- * @property {string} doi - DOI identifier
- * @property {string} fileref - File reference identifier
- * @property {TeiFileData[]} gold - Array of gold standard TEI files
- * @property {string} id - Unique file identifier
- * @property {string} label - Human-readable label for the file
- * @property {PdfFileData} pdf - PDF file data
- * @property {string} title - Document title
- * @property {VersionFileData[]} versions - Array of version files
- */
-
-/**
+ * Lookup item for index
  * @typedef {object} LookupItem
- * @property {"version" | "gold" | "pdf"} type
- * @property {TeiFileData | PdfFileData} item
- * @property {FileListItem} file
- * @property {string} label
+ * @property {"source" | "artifact"} type - Type of item
+ * @property {FileItem | Artifact} item - The file or artifact item
+ * @property {DocumentItem} file - Parent document
+ * @property {string} label - Display label
  */
 
-// Global lookup index for efficient hash-based queries
-let hashLookupIndex = new Map();
+// Global lookup index for efficient ID-based queries
+let idLookupIndex = new Map();
 
 /**
- * Creates a lookup index that maps hash values directly to items
- * @param {FileListItem[]} fileData - The file data array
- * @returns {Map<string, LookupItem>} Map of hash to item with metadata
+ * Creates a lookup index that maps stable IDs to items
+ * @param {DocumentItem[]} fileData - The file data array
+ * @returns {Map<string, LookupItem>} Map of id to item with metadata
  */
-export function createHashLookupIndex(fileData) {
+export function createIdLookupIndex(fileData) {
   const index = new Map();
-  
+
   fileData.forEach((file) => {
-    // Index PDF hash
-    if (file.pdf && file.pdf.hash) {
-      index.set(file.pdf.hash, {
-        type: 'pdf',
-        item: file.pdf,
+    // Index source file ID
+    if (file.source && file.source.id) {
+      index.set(file.source.id, {
+        type: 'source',
+        item: file.source,
         file: file,
-        label: file.label
+        label: file.source.label
       });
     }
-    
-    // Index gold entries
-    if (file.gold) {
-      file.gold.forEach((gold) => {
-        if (gold.hash) {
-          index.set(gold.hash, {
-            type: 'gold',
-            item: gold,
+
+    // Index all artifacts
+    if (file.artifacts) {
+      file.artifacts.forEach((artifact) => {
+        if (artifact.id) {
+          index.set(artifact.id, {
+            type: 'artifact',
+            item: artifact,
             file: file,
-            label: gold.label || file.label
-          });
-        }
-      });
-    }
-    
-    // Index version entries
-    if (file.versions) {
-      file.versions.forEach((version) => {
-        if (version.hash) {
-          index.set(version.hash, {
-            type: 'version',
-            item: version,
-            file: file,
-            label: version.label || file.label
+            label: artifact.label
           });
         }
       });
     }
   });
-  
+
   // Store globally for use by other functions
-  hashLookupIndex = index;
+  idLookupIndex = index;
   return index;
 }
 
 /**
- * Gets file data entry from hashLookupIndex based on any hash (PDF or XML)
- * @param {string} hash - Hash of any file (PDF, gold, or version)
- * @returns {LookupItem|null} Entry object with {type, item, file, label} or null if not found
+ * Legacy function for backward compatibility - calls createIdLookupIndex
+ * @deprecated Use createIdLookupIndex instead
+ * @param {DocumentItem[]} fileData - The file data array
+ * @returns {Map<string, LookupItem>} Map of id to item with metadata
  */
-export function getFileDataByHash(hash) {
-  if (!hash) return null;
-
-  if (!hashLookupIndex || hashLookupIndex.size === 0) {
-    throw new Error('Hash lookup index not initialized. Call createHashLookupIndex() first.');
-  }
-
-  return hashLookupIndex.get(hash) || null;
+export function createHashLookupIndex(fileData) {
+  return createIdLookupIndex(fileData);
 }
 
 /**
- * Gets document title/label from fileData based on any hash (PDF or XML)
- * @param {string} hash - Hash of any file (PDF, gold, or version)
+ * Gets file data entry from idLookupIndex based on stable ID
+ * @param {string} id - Stable ID of any file (source or artifact)
+ * @returns {LookupItem|null} Entry object with {type, item, file, label} or null if not found
+ */
+export function getFileDataById(id) {
+  if (!id) return null;
+
+  if (!idLookupIndex || idLookupIndex.size === 0) {
+    throw new Error('ID lookup index not initialized. Call createIdLookupIndex() first.');
+  }
+
+  return idLookupIndex.get(id) || null;
+}
+
+/**
+ * Legacy function for backward compatibility - calls getFileDataById
+ * @deprecated Use getFileDataById instead
+ * @param {string} hash - Hash/ID of any file
+ * @returns {LookupItem|null} Entry object or null if not found
+ */
+export function getFileDataByHash(hash) {
+  return getFileDataById(hash);
+}
+
+/**
+ * Gets document title/label from fileData based on stable ID
+ * @param {string} id - Stable ID of any file (source or artifact)
  * @returns {string} Document title/label or empty string if not found
  */
-export function getDocumentTitle(hash) {
-  const entry = getFileDataByHash(hash);
+export function getDocumentTitle(id) {
+  const entry = getFileDataById(id);
   return entry?.label || '';
 }
 
 /**
  * Extracts all unique variants from file data
- * @param {FileListItem[]} fileData - The file data array
+ * @param {DocumentItem[]} fileData - The file data array
  * @returns {Set<string>} Set of unique variant IDs
  */
 export function extractVariants(fileData) {
   const variants = new Set();
-  
+
   fileData.forEach(file => {
-    // Add variant_id from gold entries
-    if (file.gold) {
-      file.gold.forEach(gold => {
-        if (gold.variant_id) {
-          variants.add(gold.variant_id);
-        }
-      });
-    }
-    // Add variant_id from versions
-    if (file.versions) {
-      file.versions.forEach(version => {
-        if (version.variant_id) {
-          variants.add(version.variant_id);
+    // Add variant from all artifacts
+    if (file.artifacts) {
+      file.artifacts.forEach(artifact => {
+        if (artifact.variant) {
+          variants.add(artifact.variant);
         }
       });
     }
   });
-  
+
   return variants;
 }
 
 /**
  * Filters file data by variant selection
- * @param {FileListItem[]} fileData - The file data array
+ * @param {DocumentItem[]} fileData - The file data array
  * @param {string|null} variant - Selected variant ("", "none", or variant ID)
- * @returns {FileListItem[]} Filtered file data
+ * @returns {DocumentItem[]} Filtered file data
  */
 export function filterFileDataByVariant(fileData, variant) {
   if (variant === "none") {
-    // Show only files without variant_id in gold or versions
+    // Show only files with artifacts that have no variant
     return fileData.filter(file => {
-      const hasGoldVariant = file.gold && file.gold.some(g => !!g.variant_id);
-      const hasVersionVariant = file.versions && file.versions.some(v => !!v.variant_id);
-      return !hasGoldVariant && !hasVersionVariant;
+      return file.artifacts && file.artifacts.some(a => !a.variant);
     });
   } else if (variant && variant !== "") {
-    // Show only files with the selected variant_id (in gold or versions)
+    // Show only files with artifacts matching the selected variant
     return fileData.filter(file => {
-      const matchesGold = file.gold && file.gold.some(g => g.variant_id === variant);
-      const matchesVersion = file.versions && file.versions.some(v => v.variant_id === variant);
-      return matchesGold || matchesVersion;
+      return file.artifacts && file.artifacts.some(a => a.variant === variant);
     });
   }
   // If variant is "" (All), show all files
@@ -221,31 +202,32 @@ export function filterFileDataByVariant(fileData, variant) {
 
 /**
  * Filters file data by label text search
- * @param {FileListItem[]} fileData - The file data array
+ * @param {DocumentItem[]} fileData - The file data array
  * @param {string} searchText - Text to search for in labels
- * @returns {FileListItem[]} Filtered file data
+ * @returns {DocumentItem[]} Filtered file data
  */
 export function filterFileDataByLabel(fileData, searchText) {
   if (!searchText || searchText.trim() === '') {
     return fileData;
   }
-  
+
   const search = searchText.toLowerCase();
-  return fileData.filter(file => 
-    file.label && file.label.toLowerCase().includes(search)
+  return fileData.filter(file =>
+    file.source.label && file.source.label.toLowerCase().includes(search)
   );
 }
 
 /**
  * Groups file data by collection
- * @param {FileListItem[]} fileData - The file data array
- * @returns {Record<string, FileListItem[]>} Grouped files by collection name
+ * @param {DocumentItem[]} fileData - The file data array
+ * @returns {Record<string, DocumentItem[]>} Grouped files by collection name
  */
 export function groupFilesByCollection(fileData) {
-  /** @type Record<string, FileListItem[]> */
+  /** @type Record<string, DocumentItem[]> */
   const groups = {}
   return fileData.reduce((groups, file) => {
-    const collection_name = file.collection;
+    // Use first collection from collections array
+    const collection_name = file.collections && file.collections[0];
     if (collection_name) {
       groups[collection_name] ||= []
       groups[collection_name].push(file);
@@ -255,97 +237,131 @@ export function groupFilesByCollection(fileData) {
 }
 
 /**
- * Filters versions and gold entries by variant
- * @param {FileListItem} file - File object containing versions and gold
+ * Filters artifacts by variant - simplified version for flat artifacts array
+ * @param {DocumentItem} file - File object containing artifacts
  * @param {string|null} variant - Selected variant
- * @returns {{ versionsToShow: TeiFileData[], goldToShow:TeiFileData[] }} Object with filtered versions and gold arrays
+ * @returns {{versions: Artifact[], gold: Artifact[]}} Object with filtered versions and gold arrays
  */
 export function filterFileContentByVariant(file, variant) {
-  let versionsToShow = file.versions || [];
-  let goldToShow = file.gold || [];
-  
+  let artifacts = file.artifacts || [];
+
   if (variant === "none") {
-    // Show only entries without variant_id
-    versionsToShow = file.versions ? file.versions.filter(version => !version.variant_id) : [];
-    goldToShow = file.gold ? file.gold.filter(gold => !gold.variant_id) : [];
+    // Show only artifacts without variant
+    artifacts = file.artifacts ? file.artifacts.filter(a => !a.variant) : [];
   } else if (variant && variant !== "") {
-    // Show only entries with the selected variant_id
-    versionsToShow = file.versions ? file.versions.filter(version => version.variant_id === variant) : [];
-    goldToShow = file.gold ? file.gold.filter(gold => gold.variant_id === variant) : [];
+    // Show only artifacts with the selected variant
+    artifacts = file.artifacts ? file.artifacts.filter(a => a.variant === variant) : [];
   }
-  // If variant is "" (All), show all entries (already assigned above)
-  
-  return { versionsToShow, goldToShow };
+  // If variant is "" (All), show all artifacts (already assigned above)
+
+  // Separate into versions and gold for backward compatibility
+  const versions = artifacts.filter(a => !a.is_gold_standard);
+  const gold = artifacts.filter(a => a.is_gold_standard);
+
+  return { versions, gold };
 }
 
 /**
  * Finds a matching gold file based on variant selection
- * @param {FileListItem} file - File object containing gold entries
+ * @param {DocumentItem} file - File object containing artifacts
  * @param {string|null} variant - Selected variant
- * @returns {TeiFileData|null} Matching gold entry or null
+ * @returns {Artifact|null} Matching gold artifact or null
  */
 export function findMatchingGold(file, variant) {
-  if (!file.gold) return null;
-  
+  if (!file.artifacts) return null;
+
+  // Filter to only gold standards
+  const goldArtifacts = file.artifacts.filter(a => a.is_gold_standard);
+
   if (variant === "none") {
-    // Find gold without variant_id
-    return file.gold.find(gold => !gold.variant_id) || null;
+    // Find gold without variant
+    return goldArtifacts.find(gold => !gold.variant) || null;
   } else if (variant && variant !== "") {
-    // Find gold with matching variant_id
-    return file.gold.find(gold => gold.variant_id === variant) || null;
+    // Find gold with matching variant
+    return goldArtifacts.find(gold => gold.variant === variant) || null;
   } else {
     // No variant filter - use first gold file
-    return file.gold[0] || null;
+    return goldArtifacts[0] || null;
   }
 }
 
 /**
- * Finds the collection for a given file hash by searching through file data
- * @param {FileListItem[]} fileData - The file data array
- * @param {string} hash - Hash of the file to find
+ * Finds the collection for a given file ID by searching through file data
+ * @param {DocumentItem[]} fileData - The file data array
+ * @param {string} id - Stable ID of the file to find
  * @returns {string|null} Collection name or null if not found
  */
-export function findCollectionByHash(fileData, hash) {
-  for (const file of fileData) {
-    const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === hash);
-    const hasVersionMatch = file.versions && file.versions.some(version => version.hash === hash);
-    
-    if (hasGoldMatch || hasVersionMatch || file.pdf.hash === hash) {
-      return file.collection;
-    }
+export function findCollectionById(id) {
+  const entry = getFileDataById(id);
+  if (entry && entry.file.collections && entry.file.collections[0]) {
+    return entry.file.collections[0];
   }
   return null;
 }
 
 /**
- * Finds a file object by PDF hash
- * @param {FileListItem[]} fileData - The file data array  
- * @param {string} pdfHash - Hash of the PDF file
- * @returns {FileListItem|null} File object or null if not found
+ * Legacy function for backward compatibility - calls findCollectionById
+ * @deprecated Use findCollectionById instead
+ * @param {DocumentItem[]} fileData - The file data array
+ * @param {string} hash - ID of the file to find
+ * @returns {string|null} Collection name or null if not found
  */
-export function findFileByPdfHash(fileData, pdfHash) {
-  return fileData.find(file => file.pdf.hash === pdfHash) || null;
+export function findCollectionByHash(fileData, hash) {
+  return findCollectionById(hash);
 }
 
 /**
- * Finds the corresponding PDF hash and collection for a given XML hash
- * @param {FileListItem[]} fileData - The file data array
- * @param {string} xmlHash - Hash of the XML file (gold or version)
+ * Finds a file object by source ID
+ * @param {DocumentItem[]} fileData - The file data array
+ * @param {string} sourceId - Stable ID of the source file
+ * @returns {DocumentItem|null} File object or null if not found
+ */
+export function findFileBySourceId(fileData, sourceId) {
+  return fileData.find(file => file.source.id === sourceId) || null;
+}
+
+/**
+ * Legacy function for backward compatibility - calls findFileBySourceId
+ * @deprecated Use findFileBySourceId instead
+ * @param {DocumentItem[]} fileData - The file data array
+ * @param {string} pdfHash - ID of the source file
+ * @returns {DocumentItem|null} File object or null if not found
+ */
+export function findFileByPdfHash(fileData, pdfHash) {
+  return findFileBySourceId(fileData, pdfHash);
+}
+
+/**
+ * Finds the corresponding source ID and collection for a given artifact ID
+ * @param {DocumentItem[]} fileData - The file data array
+ * @param {string} artifactId - Stable ID of the artifact file
+ * @returns {{sourceId: string, collection: string}|null} Object with {sourceId, collection} or null if not found
+ */
+export function findCorrespondingSource(fileData, artifactId) {
+  const entry = getFileDataById(artifactId);
+  if (entry && entry.type === 'artifact' && entry.file) {
+    return {
+      sourceId: entry.file.source.id,
+      collection: entry.file.collections && entry.file.collections[0]
+    };
+  }
+  return null;
+}
+
+/**
+ * Legacy function for backward compatibility - calls findCorrespondingSource
+ * @deprecated Use findCorrespondingSource instead
+ * @param {DocumentItem[]} fileData - The file data array
+ * @param {string} xmlHash - ID of the artifact file
  * @returns {{pdfHash: string, collection: string}|null} Object with {pdfHash, collection} or null if not found
  */
 export function findCorrespondingPdf(fileData, xmlHash) {
-  for (const file of fileData) {
-    // Check if this XML is in the gold entries
-    const hasGoldMatch = file.gold && file.gold.some(gold => gold.hash === xmlHash);
-    // Check if this XML is in the versions
-    const hasVersionMatch = file.versions && file.versions.some(version => version.hash === xmlHash);
-    
-    if (hasGoldMatch || hasVersionMatch) {
-      return {
-        pdfHash: file.pdf.hash,
-        collection: file.collection
-      };
-    }
+  const result = findCorrespondingSource(fileData, xmlHash);
+  if (result) {
+    return {
+      pdfHash: result.sourceId,
+      collection: result.collection
+    };
   }
   return null;
 }
