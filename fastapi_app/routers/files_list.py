@@ -18,7 +18,12 @@ from collections import defaultdict
 
 from ..lib.database import DatabaseManager
 from ..lib.file_repository import FileRepository
-from ..lib.models_files import FileListResponse, DocumentGroup, FileListItem
+from ..lib.models_files import (
+    FileListResponseModel,
+    DocumentGroupModel,
+    FileItemModel,
+    ArtifactModel
+)
 from ..lib.dependencies import (
     get_db,
     get_file_repository,
@@ -35,7 +40,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
 
 
-@router.get("/list", response_model=FileListResponse)
+@router.get("/list", response_model=FileListResponseModel)
 def list_files(
     request: Request,
     variant: Optional[str] = Query(None, description="Filter by variant"),
@@ -43,16 +48,16 @@ def list_files(
     repo: FileRepository = Depends(get_file_repository),
     session_id: Optional[str] = Depends(get_session_id),
     current_user: Optional[dict] = Depends(get_current_user)
-) -> FileListResponse:
+) -> FileListResponseModel:
     """
     List all files grouped by document.
 
-    Returns files in document-centric structure:
+    Returns files in simplified document-centric structure:
     - One entry per document (doc_id)
-    - PDF file + TEI versions + gold standards + variants
+    - Source file (PDF or primary XML) + flattened artifacts array
     - Lock information for each file
     - Access control filtering applied
-    - Abbreviated hashes (5+ chars) in all IDs
+    - Stable IDs throughout
 
     Note: 'refresh' parameter ignored - database is always current.
 
@@ -62,10 +67,9 @@ def list_files(
         repo: File repository (injected)
         session_id: Current session ID (injected)
         current_user: Current user dict (injected)
-        abbreviator: Hash abbreviator (injected)
 
     Returns:
-        FileListResponse with files property containing List of DocumentGroup objects
+        FileListResponseModel with files property containing List of DocumentGroupModel objects
     """
     logger.debug(f"Listing files - variant={variant}, user={current_user}")
 
@@ -75,7 +79,7 @@ def list_files(
     logger.debug(f"Found {len(all_files)} total files")
 
     # Group files by doc_id
-    documents_map: Dict[str, DocumentGroup] = {}
+    documents_map: Dict[str, DocumentGroupModel] = {}
 
     for file_metadata in all_files:
         doc_id = file_metadata.doc_id
@@ -89,42 +93,27 @@ def list_files(
                 logger.warning(f"No PDF found for document {doc_id}, skipping")
                 continue
 
-            # Convert PDF file to FileListItem with stable_id
-            pdf_item = _file_metadata_to_list_item(pdf_file)
+            # Build source file item
+            source_item = _build_file_item(pdf_file)
 
-            documents_map[doc_id] = DocumentGroup(
+            documents_map[doc_id] = DocumentGroupModel(
                 doc_id=doc_id,
-                doc_collections=pdf_file.doc_collections or [],
+                collections=pdf_file.doc_collections or [],
                 doc_metadata=pdf_file.doc_metadata or {},
-                pdf=pdf_item,
-                versions=[],
-                gold=[],
-                variants={}
+                source=source_item,
+                artifacts=[]
             )
 
         doc_group = documents_map[doc_id]
 
-        # Skip PDF files (already added above)
+        # Skip PDF files (already added as source above)
         if file_metadata.file_type == 'pdf':
             continue
 
-        # Convert TEI file to FileListItem with stable_id
-        file_item = _file_metadata_to_list_item(file_metadata)
-
-        # Inherit doc_collections and doc_metadata for TEI files
-        file_item.doc_collections = doc_group.doc_collections
-        file_item.doc_metadata = doc_group.doc_metadata
-
-        # Categorize TEI files
+        # Build artifact for TEI files
         if file_metadata.file_type == 'tei':
-            if file_metadata.is_gold_standard:
-                doc_group.gold.append(file_item)
-            elif file_metadata.variant:
-                if file_metadata.variant not in doc_group.variants:
-                    doc_group.variants[file_metadata.variant] = []
-                doc_group.variants[file_metadata.variant].append(file_item)
-            else:
-                doc_group.versions.append(file_item)
+            artifact = _build_artifact(file_metadata)
+            doc_group.artifacts.append(artifact)
 
     logger.debug(f"Grouped into {len(documents_map)} documents")
 
@@ -148,44 +137,78 @@ def list_files(
 
     logger.debug(f"After access control: {len(files_data)} documents")
 
-    return FileListResponse(files=files_data)
+    return FileListResponseModel(files=files_data)
 
 
-def _file_metadata_to_list_item(file_metadata) -> FileListItem:
+def _build_file_item(file_metadata) -> FileItemModel:
     """
-    Convert FileMetadata to FileListItem with stable ID.
+    Build FileItemModel from FileMetadata (for source files).
 
     Args:
         file_metadata: FileMetadata model
 
     Returns:
-        FileListItem with stable_id as id field, content hash stored internally
+        FileItemModel with stable_id as id, label from doc_metadata.title
     """
-    # Use stable_id for the API response
-    # The FileMetadata has both 'id' (content hash) and 'stable_id'
-    # We expose stable_id as 'id' to the client for URL stability
+    # Extract label from doc_metadata if available
+    label = "Untitled"
+    if file_metadata.doc_metadata and isinstance(file_metadata.doc_metadata, dict):
+        label = file_metadata.doc_metadata.get('title', 'Untitled')
 
-    # Convert to FileListItem
-    item_dict = file_metadata.model_dump()
-    content_hash = item_dict['id']  # Preserve content hash
-    item_dict['id'] = file_metadata.stable_id  # Use stable_id as client-facing ID
+    return FileItemModel(
+        id=file_metadata.stable_id,
+        filename=file_metadata.filename,
+        file_type=file_metadata.file_type,
+        label=label,
+        file_size=file_metadata.file_size or 0,
+        created_at=file_metadata.created_at,
+        updated_at=file_metadata.updated_at
+    )
 
-    list_item = FileListItem(**item_dict)
+
+def _build_artifact(file_metadata) -> ArtifactModel:
+    """
+    Build ArtifactModel from FileMetadata (for TEI artifacts).
+
+    Args:
+        file_metadata: FileMetadata model
+
+    Returns:
+        ArtifactModel with all required fields, content hash stored as private attribute
+    """
+    # Extract label - use a descriptive name for artifacts
+    label = "Annotator" if file_metadata.is_gold_standard else f"Version {file_metadata.version or 'N/A'}"
+
+    artifact = ArtifactModel(
+        id=file_metadata.stable_id,
+        filename=file_metadata.filename,
+        file_type=file_metadata.file_type,
+        label=label,
+        file_size=file_metadata.file_size or 0,
+        created_at=file_metadata.created_at,
+        updated_at=file_metadata.updated_at,
+        variant=file_metadata.variant,
+        version=file_metadata.version,
+        is_gold_standard=file_metadata.is_gold_standard,
+        is_locked=False,  # Will be updated later
+        access_control=None  # Will be updated later if needed
+    )
+
     # Store content hash as private attribute for internal use (e.g., locking)
-    list_item._content_hash = content_hash # type:ignore
+    artifact._content_hash = file_metadata.id  # type: ignore
 
-    return list_item
+    return artifact
 
 
 def _apply_variant_filtering(
-    documents: Dict[str, DocumentGroup],
+    documents: Dict[str, DocumentGroupModel],
     variant: str
-) -> Dict[str, DocumentGroup]:
+) -> Dict[str, DocumentGroupModel]:
     """
-    Filter documents to only those with the specified variant.
+    Filter documents to only those with artifacts matching the specified variant.
 
     Args:
-        documents: Dict of doc_id -> DocumentGroup
+        documents: Dict of doc_id -> DocumentGroupModel
         variant: Variant name to filter by
 
     Returns:
@@ -193,33 +216,33 @@ def _apply_variant_filtering(
     """
     filtered = {}
     for doc_id, doc_group in documents.items():
-        if variant in doc_group.variants:
+        # Check if any artifact has the matching variant
+        has_variant = any(
+            artifact.variant == variant
+            for artifact in doc_group.artifacts
+        )
+        if has_variant:
             filtered[doc_id] = doc_group
     return filtered
 
 
 def _add_lock_info(
-    documents: Dict[str, DocumentGroup],
+    documents: Dict[str, DocumentGroupModel],
     active_locks: Dict[str, str],
     session_id: Optional[str]
 ) -> None:
     """
-    Add lock status to files in document groups (modifies in place).
+    Add lock status to artifacts in document groups (modifies in place).
 
     Args:
-        documents: Dict of doc_id -> DocumentGroup
+        documents: Dict of doc_id -> DocumentGroupModel
         active_locks: Dict of content_hash -> session_id
         session_id: Current session ID
     """
     for doc_group in documents.values():
-        # Check all file lists
-        for file_list in [
-            doc_group.versions,
-            doc_group.gold,
-            *doc_group.variants.values()
-        ]:
-            for file_item in file_list:
-                # Use content hash stored as private attribute for lock lookup
-                content_hash = getattr(file_item, '_content_hash', None)
-                if content_hash and content_hash in active_locks and active_locks[content_hash] != session_id:
-                    file_item.is_locked = True
+        # Check all artifacts
+        for artifact in doc_group.artifacts:
+            # Use content hash stored as private attribute for lock lookup
+            content_hash = getattr(artifact, '_content_hash', None)
+            if content_hash and content_hash in active_locks and active_locks[content_hash] != session_id:
+                artifact.is_locked = True

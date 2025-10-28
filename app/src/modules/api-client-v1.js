@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-10-27T22:46:04.896Z
+ * Generated from OpenAPI schema at 2025-10-28T10:22:51.081Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -10,6 +10,22 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
+ */
+
+/**
+ * @typedef {Object} ArtifactModel
+ * @property {string} id
+ * @property {string} filename
+ * @property {string} file_type
+ * @property {string} label
+ * @property {number} file_size
+ * @property {string} created_at
+ * @property {string} updated_at
+ * @property {string=} variant
+ * @property {number=} version
+ * @property {boolean} is_gold_standard
+ * @property {boolean} is_locked
+ * @property {Object<string, any>=} access_control
  */
 
 /**
@@ -100,14 +116,12 @@
  */
 
 /**
- * @typedef {Object} DocumentGroup
+ * @typedef {Object} DocumentGroupModel
  * @property {string} doc_id
- * @property {Array<string>} doc_collections
+ * @property {Array<string>} collections
  * @property {Object<string, any>} doc_metadata
- * @property {FileListItem=} pdf
- * @property {Array<FileListItem>=} versions
- * @property {Array<FileListItem>=} gold
- * @property {Object<string, any>=} variants
+ * @property {FileItemModel} source
+ * @property {Array<ArtifactModel>} artifacts
  */
 
 /**
@@ -135,27 +149,19 @@
  */
 
 /**
- * @typedef {Object} FileListItem
+ * @typedef {Object} FileItemModel
  * @property {string} id
  * @property {string} filename
- * @property {string} doc_id
  * @property {string} file_type
- * @property {string=} label
- * @property {string=} variant
- * @property {number=} version
- * @property {boolean=} is_gold_standard
- * @property {number=} file_size
+ * @property {string} label
+ * @property {number} file_size
  * @property {string} created_at
  * @property {string} updated_at
- * @property {Array<string>=} doc_collections
- * @property {Object<string, any>=} doc_metadata
- * @property {boolean=} is_locked
- * @property {Object<string, any>=} access_control
  */
 
 /**
- * @typedef {Object} FileListResponse
- * @property {Array<DocumentGroup>} files
+ * @typedef {Object} FileListResponseModel
+ * @property {Array<DocumentGroupModel>} files
  */
 
 /**
@@ -513,12 +519,12 @@ export class ApiClientV1 {
 
   /**
    * List all files grouped by document.
-   * Returns files in document-centric structure:
+   * Returns files in simplified document-centric structure:
    * - One entry per document (doc_id)
-   * - PDF file + TEI versions + gold standards + variants
+   * - Source file (PDF or primary XML) + flattened artifacts array
    * - Lock information for each file
    * - Access control filtering applied
-   * - Abbreviated hashes (5+ chars) in all IDs
+   * - Stable IDs throughout
    * Note: 'refresh' parameter ignored - database is always current.
    * Args:
    * variant: Optional variant filter (e.g., "grobid")
@@ -526,14 +532,13 @@ export class ApiClientV1 {
    * repo: File repository (injected)
    * session_id: Current session ID (injected)
    * current_user: Current user dict (injected)
-   * abbreviator: Hash abbreviator (injected)
    * Returns:
-   * FileListResponse with files property containing List of DocumentGroup objects
+   * FileListResponseModel with files property containing List of DocumentGroupModel objects
    *
    * @param {Object=} params - Query parameters
    * @param {(string | null)=} params.variant
    * @param {boolean=} params.refresh
-   * @returns {Promise<FileListResponse>}
+   * @returns {Promise<FileListResponseModel>}
    */
   async filesList(params) {
     const endpoint = `/files/list`

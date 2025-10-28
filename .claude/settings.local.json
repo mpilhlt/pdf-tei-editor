@@ -41,7 +41,9 @@
       "Bash(tasklist:*)",
       "Bash(npx tsc:*)",
       "Bash(npm run test:e2e:*)",
-      "Bash(E2E_DEBUG=true npm run test:e2e:*)"
+      "Bash(E2E_DEBUG=true npm run test:e2e:*)",
+      "Bash(git add fastapi_app/lib/models_files.py fastapi_app/routers/files_list.py)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nImplement Phase 1: Simplified file data structure in backend\n\n- Add new Pydantic models: FileItemModel, ArtifactModel, DocumentGroupModel, FileListResponseModel\n- Update /api/files/list endpoint to return flattened structure:\n  - Replace nested versions/gold/variants with single artifacts array\n  - Rename pdf → source, doc_collections → collections\n  - Add label field to all files (source and artifacts)\n  - Use stable IDs consistently throughout\n- Update helper functions to build new model types\n- Simplify variant filtering to work with flat artifacts array\n- Keep legacy models for backward compatibility with other endpoints\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []

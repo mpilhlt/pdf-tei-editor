@@ -7,9 +7,62 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
-# Response models
+# Response models - New simplified structure
+
+class DocumentMetadata(BaseModel):
+    """Document metadata extracted from TEI header"""
+    title: str
+    authors: List[Dict[str, Any]] = []
+    date: Optional[str] = None
+    publisher: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FileItemModel(BaseModel):
+    """Base model for files with label field"""
+    id: str                                    # Stable ID for URLs and references
+    filename: str
+    file_type: str                             # 'pdf' or 'tei'
+    label: str                                 # Display label
+    file_size: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ArtifactModel(FileItemModel):
+    """Artifact file - extends FileItemModel with artifact-specific properties"""
+    variant: Optional[str] = None              # Variant name or null
+    version: Optional[int] = None              # Version number or null for gold
+    is_gold_standard: bool                     # True for gold standards
+    is_locked: bool                            # Lock status
+    access_control: Optional[Dict[str, Any]] = None  # Access control rules or null
+
+
+class DocumentGroupModel(BaseModel):
+    """Document with source file and artifacts"""
+    doc_id: str
+    collections: List[str]                     # All collections
+    doc_metadata: Dict[str, Any]               # Metadata from TEI header
+    source: FileItemModel                      # Source file (PDF or primary XML)
+    artifacts: List[ArtifactModel]             # All artifact files (flattened)
+
+    class Config:
+        from_attributes = True
+
+
+class FileListResponseModel(BaseModel):
+    """Response for GET /api/files/list"""
+    files: List[DocumentGroupModel]
+
+
+# Legacy models (kept for backward compatibility with other endpoints)
 class FileListItem(BaseModel):
-    """Single file entry in list response"""
+    """Single file entry in list response (LEGACY - use FileItemModel/ArtifactModel)"""
     id: str                                    # Stable ID (6+ chars, permanent) for client
     filename: str
     doc_id: str
@@ -37,7 +90,7 @@ class FileListItem(BaseModel):
 
 
 class DocumentGroup(BaseModel):
-    """Document with grouped files (PDF + TEI versions + gold)"""
+    """Document with grouped files (LEGACY - use DocumentGroupModel)"""
     doc_id: str
     doc_collections: List[str]
     doc_metadata: Dict[str, Any]
@@ -52,7 +105,7 @@ class DocumentGroup(BaseModel):
 
 
 class FileListResponse(BaseModel):
-    """Response for GET /api/files/list"""
+    """Response for GET /api/files/list (LEGACY - use FileListResponseModel)"""
     files: List[DocumentGroup]
 
 
