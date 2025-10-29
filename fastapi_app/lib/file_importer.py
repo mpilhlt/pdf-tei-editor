@@ -54,7 +54,8 @@ class FileImporter:
         storage: FileStorage,
         repo: FileRepository,
         dry_run: bool = False,
-        skip_collection_dirs: Optional[List[str]] = None
+        skip_collection_dirs: Optional[List[str]] = None,
+        gold_dir_name: str = 'tei'
     ):
         """
         Args:
@@ -65,12 +66,14 @@ class FileImporter:
             skip_collection_dirs: Directory names to skip when determining collection
                 from path (e.g., ['pdf', 'tei', 'versions']). These are organizational
                 directories that should not be used as collection names.
+            gold_dir_name: Name of directory containing gold standard files (default: 'tei')
         """
         self.db = db
         self.storage = storage
         self.repo = repo
         self.dry_run = dry_run
         self.resolver = DocIdResolver()
+        self.gold_dir_name = gold_dir_name.lower()
         self.skip_collection_dirs = set(
             (name.lower() for name in skip_collection_dirs)
             if skip_collection_dirs else []
@@ -431,9 +434,18 @@ class FileImporter:
         else:
             doc_id_type = 'custom'
 
-        # Determine if this is a version file (check if in 'versions' directory)
-        is_version = 'versions' in tei_path.parts or 'version' in str(tei_path).lower()
-        is_gold = metadata.get('is_gold_standard', False) and not is_version
+        # Determine if this is a gold standard file (check if in gold directory)
+        # Convert path parts to lowercase for case-insensitive comparison
+        path_parts_lower = [p.lower() for p in tei_path.parts]
+        is_in_gold_dir = self.gold_dir_name in path_parts_lower
+        is_in_versions_dir = 'versions' in path_parts_lower or 'version' in str(tei_path).lower()
+
+        # Gold standard files are in the gold directory but not in versions directory
+        is_gold = is_in_gold_dir and not is_in_versions_dir
+
+        # Override with metadata if explicitly set
+        if metadata.get('is_gold_standard', False):
+            is_gold = True
 
         # Extract variant
         variant = metadata.get('variant')
@@ -442,12 +454,12 @@ class FileImporter:
         # - Gold files: version = None
         # - Variant files: version = None
         # - Version files (in versions/ directory): version = N
-        # - Regular TEI files: version = 1 (default)
+        # - Files in gold dir that are also versions: version = N (not gold)
         version = None
         if is_gold or variant:
             # Gold and variant files have no version number
             version = None
-        elif is_version:
+        elif is_in_versions_dir:
             # Files in versions/ directory get incremental version numbers
             existing_versions = self.repo.get_files_by_doc_id(doc_id)
             version_files = [f for f in existing_versions
@@ -456,7 +468,7 @@ class FileImporter:
                            and not f.variant]
             version = len(version_files) + 1
         else:
-            # Regular TEI files get version 1 by default
+            # Regular TEI files (not in gold dir, not in versions dir) get version 1
             version = 1
 
         # Save to storage
@@ -464,8 +476,12 @@ class FileImporter:
         assert saved_hash == file_hash
 
         # Create metadata
-        # Prefer edition_title over label for display
-        label = metadata.get('edition_title') or metadata.get('label') or tei_path.name
+        # Prefer edition_title over label for display, with fallbacks
+        label = metadata.get('edition_title') or metadata.get('label')
+
+        # If no label or label is generic, fall back to doc_id or filename
+        if not label or label.lower() in ['unknown title', 'untitled']:
+            label = doc_id or tei_path.name
 
         file_create = FileCreate(
             id=file_hash,
@@ -495,13 +511,83 @@ class FileImporter:
 
         logger.info(f"Imported TEI: {tei_path.name} -> {file_hash[:8]}")
 
+    def _format_pdf_label(self, doc_metadata: Dict, doc_id: str = None, filename: str = None) -> str:
+        """
+        Format PDF label as "Author (Year) Title..." with fallbacks.
+
+        Priority:
+        1. "Author (Year) Title..." if metadata available
+        2. doc_id if no metadata
+        3. filename if no doc_id
+
+        Args:
+            doc_metadata: Document metadata dict with title, authors, date
+            doc_id: Document ID (DOI, etc.)
+            filename: Filename as last resort
+
+        Returns:
+            Formatted label string
+        """
+        # Extract first author's family name
+        authors = doc_metadata.get('authors', [])
+        author_str = ""
+        if authors and len(authors) > 0:
+            first_author = authors[0]
+            family = first_author.get('family', '')
+            if family:
+                author_str = family
+
+        # Extract year from date
+        date_str = doc_metadata.get('date', '')
+        year_str = ""
+        if date_str:
+            # Try to extract 4-digit year
+            import re
+            year_match = re.search(r'\d{4}', str(date_str))
+            if year_match:
+                year_str = year_match.group(0)
+
+        # Extract and truncate title
+        title = doc_metadata.get('title', '')
+        # Skip generic/placeholder titles
+        if title and title.lower() not in ['unknown title', 'untitled', '']:
+            max_title_len = 40
+            if len(title) > max_title_len:
+                title_str = title[:max_title_len] + "..."
+            else:
+                title_str = title
+        else:
+            title_str = None
+
+        # Build label from metadata
+        parts = []
+        if author_str:
+            parts.append(author_str)
+        if year_str:
+            parts.append(f"({year_str})")
+        if title_str:
+            parts.append(title_str)
+
+        if parts:
+            return " ".join(parts)
+
+        # Fallback to doc_id or filename
+        if doc_id:
+            return doc_id
+        if filename:
+            # Remove extension for cleaner display
+            import os
+            return os.path.splitext(filename)[0]
+
+        return "Untitled"
+
     def _update_pdf_metadata(
         self,
         pdf_file_id: str,
         doc_id: str,
         doc_metadata: Dict
     ) -> None:
-        """Update PDF file's doc_metadata and doc_id from TEI file"""
+        """Update PDF file's doc_metadata, doc_id, and label from TEI file"""
 
         # Get PDF file
         pdf_file = self.repo.get_file_by_id(pdf_file_id)
@@ -512,9 +598,13 @@ class FileImporter:
         current_metadata = pdf_file.doc_metadata or {}
         updated_metadata = {**doc_metadata, **current_metadata}
 
-        # Update metadata (doc_id is immutable in FileUpdate)
+        # Generate formatted label for PDF (with fallbacks to doc_id or filename)
+        pdf_label = self._format_pdf_label(updated_metadata, doc_id, pdf_file.filename)
+
+        # Update metadata and label
         self.repo.update_file(pdf_file.id, FileUpdate(
-            doc_metadata=updated_metadata
+            doc_metadata=updated_metadata,
+            label=pdf_label
         ))
 
-        logger.debug(f"Updated PDF metadata for {doc_id}")
+        logger.debug(f"Updated PDF metadata and label for {doc_id}: {pdf_label}")

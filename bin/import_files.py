@@ -10,6 +10,7 @@ Usage:
 import argparse
 from pathlib import Path
 import sys
+import os
 import logging
 
 # Add fastapi_app to Python path
@@ -66,12 +67,16 @@ Examples:
     parser.add_argument('--skip-dirs', nargs='+', default=['pdf', 'tei', 'versions', 'version'],
                        help='Directory names to skip when determining collections '
                             '(default: pdf tei versions version). Only used with --recursive-collections.')
-    parser.add_argument('--db-path', help='Database path (default: fastapi_app/data/metadata.db)')
-    parser.add_argument('--storage-root', help='Storage root (default: fastapi_app/data/files)')
+    parser.add_argument('--db-path', help='Database path', default='data/db/metadata.db')
+    parser.add_argument('--storage-root', help='Storage root', default='data/files')
     parser.add_argument('--dry-run', action='store_true',
                        help='Preview without importing')
     parser.add_argument('--no-recursive', action='store_true',
                        help='Do not scan subdirectories')
+    parser.add_argument('--clean', action='store_true',
+                       help='Clear all existing data from database before importing')
+    parser.add_argument('--gold-dir-name', default='tei',
+                       help='Name of directory containing gold standard files (default: tei)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
     args = parser.parse_args()
@@ -102,12 +107,21 @@ Examples:
     storage = FileStorage(storage_root, db_path, logger)
     repo = FileRepository(db)
 
+    # Clean database if requested
+    if args.clean:
+        if args.dry_run:
+            logger.info("[DRY RUN] Would clear all data from database")
+        else:
+            logger.warning("Clearing all data from database...")
+            db.clear_all_data()
+
     # Pass skip_dirs only if recursive_collections is enabled
     skip_dirs = args.skip_dirs if args.recursive_collections else None
-    importer = FileImporter(db, storage, repo, args.dry_run, skip_dirs)
+    importer = FileImporter(db, storage, repo, args.dry_run, skip_dirs, args.gold_dir_name)
 
     # Import
     logger.info(f"Importing from {directory}")
+    logger.info(f"Gold standard directory: {args.gold_dir_name}")
     if args.recursive_collections:
         logger.info("Using subdirectory names as collection names")
         logger.info(f"Skipping directories: {', '.join(args.skip_dirs)}")

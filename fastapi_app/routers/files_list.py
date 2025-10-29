@@ -148,12 +148,26 @@ def _build_file_item(file_metadata) -> FileItemModel:
         file_metadata: FileMetadata model
 
     Returns:
-        FileItemModel with stable_id as id, label from doc_metadata.title
+        FileItemModel with stable_id as id, label from file.label, doc_metadata.title, doc_id, or filename
     """
-    # Extract label from doc_metadata if available
-    label = "Untitled"
-    if file_metadata.doc_metadata and isinstance(file_metadata.doc_metadata, dict):
-        label = file_metadata.doc_metadata.get('title', 'Untitled')
+    # Priority: file.label > doc_metadata.title > doc_id > filename
+    label = None
+
+    if file_metadata.label and file_metadata.label.lower() not in ['untitled', 'unknown title']:
+        label = file_metadata.label
+    elif file_metadata.doc_metadata and isinstance(file_metadata.doc_metadata, dict):
+        title = file_metadata.doc_metadata.get('title', '')
+        if title and title.lower() not in ['untitled', 'unknown title']:
+            label = title
+
+    # Fallback to doc_id or filename
+    if not label:
+        if file_metadata.doc_id:
+            label = file_metadata.doc_id
+        else:
+            # Remove extension from filename
+            import os
+            label = os.path.splitext(file_metadata.filename)[0]
 
     return FileItemModel(
         id=file_metadata.stable_id,
@@ -177,12 +191,17 @@ def _build_artifact(file_metadata) -> ArtifactModel:
         ArtifactModel with all required fields, content hash stored as private attribute
     """
     # Extract label - prefer metadata label (edition title), with smart fallbacks
-    if file_metadata.label:
+    if file_metadata.label and file_metadata.label.lower() not in ['untitled', 'unknown title']:
         label = file_metadata.label
     elif file_metadata.is_gold_standard:
         label = f"Gold ({file_metadata.variant})" if file_metadata.variant else "Gold"
     else:
-        label = file_metadata.filename
+        # Fallback to doc_id or filename
+        if file_metadata.doc_id:
+            label = file_metadata.doc_id
+        else:
+            import os
+            label = os.path.splitext(file_metadata.filename)[0]
 
     artifact = ArtifactModel(
         id=file_metadata.stable_id,

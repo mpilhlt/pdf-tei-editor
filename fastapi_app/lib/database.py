@@ -187,3 +187,20 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute(query, params)
             return cursor.rowcount
+
+    def clear_all_data(self) -> None:
+        """
+        Clear all data from the files table.
+
+        This removes all file metadata records from the database.
+        The table schema remains intact.
+
+        Warning: This operation cannot be undone.
+        """
+        with self.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM files")
+            deleted_count = cursor.rowcount
+
+            if self.logger:
+                self.logger.info(f"Cleared {deleted_count} records from database")

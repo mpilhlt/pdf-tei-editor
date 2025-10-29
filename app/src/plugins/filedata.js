@@ -64,9 +64,12 @@ class FiledataPlugin extends Plugin {
    */
   async reload(options = {}) {
     logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
-    
+
+    // Get file list response - API returns {files: [...]} structure
+    const response = await client.getFileList(null, options.refresh);
+
     /** @type {DocumentItem[]} */
-    let data = await client.getFileList(null, options.refresh);
+    let data = response?.files || [];
     if (!data || data.length === 0) {
       dialog.error("No files found");
       data = []; // Ensure data is an empty array instead of null/undefined
