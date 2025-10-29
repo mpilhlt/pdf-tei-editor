@@ -4,7 +4,8 @@
       "Bash(git fetch origin main)",
       "Bash(E2E_BASE_URL=http://127.0.0.1:8014 node --test tests/api/v1/files_delete.test.js)",
       "Bash(cat tests/api/runtime/db/users.json)",
-      "Bash(cat tests/api/runtime/config/users.json)"
+      "Bash(cat tests/api/runtime/config/users.json)",
+      "Bash(python -m pytest tests/unit/fastapi/test_doi_utils.py -v)"
     ],
     "deny": [],
     "ask": []

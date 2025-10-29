@@ -2,9 +2,15 @@
 DOI metadata utilities for fetching and parsing bibliographic information.
 
 Ported from Flask implementation with enhancements.
+
+Provides:
+- DOI validation and normalization
+- Filesystem-safe encoding/decoding for doc_ids
+- Metadata fetching from CrossRef and DataCite APIs
 """
 
 import re
+import warnings
 import requests
 from typing import Dict, Any, Optional
 import logging
@@ -233,3 +239,176 @@ def normalize_doi(doi: str) -> str:
     # DOIs are case-insensitive, but conventionally lowercase
     # However, keep original case for compatibility
     return doi
+
+
+# Filesystem encoding utilities
+# ==============================
+
+def encode_filename(doc_id: str) -> str:
+    """
+    Encode a document ID (e.g., DOI) to a filesystem-safe filename.
+
+    Encoding rules:
+    - Forward slashes (/) → double underscore (__)
+    - Other filesystem-incompatible characters → dollar-sign encoding ($XX$)
+      where XX is the hexadecimal representation of the character code
+    - Dollar sign is used instead of percent for better cross-platform compatibility
+
+    Args:
+        doc_id: Document identifier to encode (e.g., DOI, file reference)
+
+    Returns:
+        Filesystem-safe encoded string
+
+    Raises:
+        ValueError: If doc_id is empty
+
+    Examples:
+        >>> encode_filename("10.1111/1467-6478.00040")
+        "10.1111__1467-6478.00040"
+        >>> encode_filename("10.1234/test:file")
+        "10.1234__test$3A$file"
+        >>> encode_filename("doc<name>")
+        "doc$3C$name$3E$"
+    """
+    if not doc_id:
+        raise ValueError("doc_id cannot be empty")
+
+    # First handle forward slashes specially (common in DOIs)
+    result = doc_id.replace("/", "__")
+
+    # Characters that are unsafe on various filesystems
+    # Windows: < > : " | ? * and control chars
+    # Unix/Mac: / (already handled) and control chars
+    # We'll encode anything that might be problematic
+    unsafe_chars = set('<>:"|?*\\')
+
+    # Also encode dollar sign itself to avoid ambiguity
+    unsafe_chars.add('$')
+
+    # Build encoded string
+    encoded = []
+    for char in result:
+        if char in unsafe_chars or ord(char) < 32:
+            # Encode as $XX$ where XX is hex
+            encoded.append(f"${ord(char):02X}$")
+        else:
+            encoded.append(char)
+
+    return ''.join(encoded)
+
+
+def decode_filename(filename: str) -> str:
+    """
+    Decode a filesystem-safe filename back to the original document ID.
+
+    Reverses the encoding applied by encode_filename().
+    Handles both new dollar-sign encoding and legacy formats.
+
+    Args:
+        filename: Encoded filename to decode
+
+    Returns:
+        Original document ID string
+
+    Raises:
+        ValueError: If filename is empty or contains invalid encoding
+
+    Examples:
+        >>> decode_filename("10.1111__1467-6478.00040")
+        "10.1111/1467-6478.00040"
+        >>> decode_filename("10.1234__test$3A$file")
+        "10.1234/test:file"
+        >>> decode_filename("doc$3C$name$3E$")
+        "doc<name>"
+    """
+    if not filename:
+        raise ValueError("filename cannot be empty")
+
+    # First, restore forward slashes from double underscores
+    result = filename.replace("__", "/")
+
+    # Decode $XX$ patterns
+    decoded = []
+    i = 0
+    while i < len(result):
+        if result[i] == '$':
+            # Look for pattern $XX$
+            if i + 3 < len(result) and result[i+3] == '$':
+                hex_code = result[i+1:i+3]
+                try:
+                    char_code = int(hex_code, 16)
+                    decoded.append(chr(char_code))
+                    i += 4
+                    continue
+                except ValueError:
+                    raise ValueError(f"Invalid hex encoding: ${hex_code}$")
+            else:
+                raise ValueError(f"Invalid encoding at position {i}: incomplete $XX$ pattern")
+        else:
+            decoded.append(result[i])
+            i += 1
+
+    return ''.join(decoded)
+
+
+def decode_filename_legacy(filename: str) -> str:
+    """
+    Decode filename using legacy encoding from server/lib/doi_utils.py.
+
+    **DEPRECATED**: This function is provided for backward compatibility only.
+    New code should use decode_filename() which handles both formats.
+    The legacy format will be removed in a future version.
+
+    Legacy encoding map:
+    - $1$ → /
+    - $2$ → :
+    - $3$ → ?
+    - $4$ → *
+    - $5$ → |
+    - $6$ → <
+    - $7$ → >
+    - $8$ → "
+    - $9$ → \\
+
+    Args:
+        filename: Legacy encoded filename
+
+    Returns:
+        Decoded document ID
+
+    Raises:
+        ValueError: If filename is empty
+
+    Examples:
+        >>> decode_filename_legacy("10.1111$1$1467-6478.00040")
+        "10.1111/1467-6478.00040"
+    """
+    warnings.warn(
+        "decode_filename_legacy() is deprecated and will be removed in a future version. "
+        "Use decode_filename() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
+    if not filename:
+        raise ValueError("filename cannot be empty")
+
+    # Legacy encoding map from server/lib/doi_utils.py
+    legacy_map = {
+        "$1$": "/",
+        "$2$": ":",
+        "$3$": "?",
+        "$4$": "*",
+        "$5$": "|",
+        "$6$": "<",
+        "$7$": ">",
+        "$8$": '"',
+        "$9$": "\\"
+    }
+
+    result = filename
+    for encoded, char in legacy_map.items():
+        result = result.replace(encoded, char)
+
+    return result
