@@ -9,6 +9,8 @@ Tests:
 - Skip directories configuration
 - File grouping by document ID
 - Metadata extraction and inheritance
+
+@testCovers fastapi_app/lib/file_importer.py
 """
 
 import unittest

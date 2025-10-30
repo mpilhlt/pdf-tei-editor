@@ -11,6 +11,8 @@ Tests:
 - Multi-collection duplication
 - Filename transformations
 - Dry run mode
+
+@testCovers fastapi_app/lib/file_exporter.py
 """
 
 import unittest

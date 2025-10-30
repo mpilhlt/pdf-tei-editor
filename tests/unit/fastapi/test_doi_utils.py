@@ -6,6 +6,8 @@ Tests:
 - Legacy format compatibility
 - Round-trip encoding
 - Edge cases and error handling
+
+@testCovers fastapi_app/lib/doi_utils.py
 """
 
 import unittest

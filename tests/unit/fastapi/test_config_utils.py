@@ -2,6 +2,8 @@
 Unit tests for config_utils.py
 
 Self-contained tests that can be run independently.
+
+@testCovers fastapi_app/lib/config_utils.py
 """
 
 import tempfile

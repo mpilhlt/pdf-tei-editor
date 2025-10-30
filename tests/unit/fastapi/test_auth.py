@@ -2,6 +2,8 @@
 Unit tests for auth.py
 
 Self-contained tests that can be run independently.
+
+@testCovers fastapi_app/lib/auth.py
 """
 
 import tempfile

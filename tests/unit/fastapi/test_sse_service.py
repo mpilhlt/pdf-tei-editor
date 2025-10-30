@@ -9,6 +9,8 @@ Tests:
 - Queue cleanup
 - Thread safety
 - Keep-alive pings
+
+@testCovers fastapi_app/lib/sse_service.py
 """
 
 import unittest

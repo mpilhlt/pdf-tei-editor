@@ -12,6 +12,8 @@ Tests:
 - Conflict detection
 - SSE progress updates
 - Transaction handling
+
+@testCovers fastapi_app/lib/sync_service.py
 """
 
 import unittest

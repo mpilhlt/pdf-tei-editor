@@ -9,6 +9,8 @@ Tests:
 - Sync metadata management
 - Version tracking
 - Transaction handling
+
+@testCovers fastapi_app/lib/remote_metadata.py
 """
 
 import unittest

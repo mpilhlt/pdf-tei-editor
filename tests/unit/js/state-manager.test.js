@@ -1,6 +1,8 @@
 /**
  * Unit tests for StateManager
  * Tests pure state operations, history tracking, and persistence
+ *
+ * @testCovers app/src/modules/state-manager.js
  */
 
 import { describe, it, beforeEach } from 'node:test';

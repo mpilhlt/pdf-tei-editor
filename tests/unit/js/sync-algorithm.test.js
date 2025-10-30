@@ -3,6 +3,8 @@
 /**
  * Test suite for XML Editor syntax tree <-> DOM synchronization algorithm
  * Uses Node.js built-in test runner (available in Node 18+)
+ *
+ * @testCovers app/src/modules/xml-editor-dom-sync.js
  */
 
 import { test, describe } from 'node:test';

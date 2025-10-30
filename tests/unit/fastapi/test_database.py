@@ -10,6 +10,11 @@ Tests:
 - Multi-collection support
 - Soft delete
 - File storage
+
+@testCovers fastapi_app/lib/db_schema.py
+@testCovers fastapi_app/lib/database.py
+@testCovers fastapi_app/lib/file_repository.py
+@testCovers fastapi_app/lib/file_storage.py
 """
 
 import unittest

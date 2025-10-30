@@ -1,3 +1,10 @@
+/**
+ * File List Access Control Tests
+ *
+ * @testCovers fastapi_app/routers/files_list.py
+ * @testCovers fastapi_app/lib/access_control.py
+ * @testCovers fastapi_app/lib/file_repository.py
+ */
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { login, authenticatedApiCall } from '../helpers/test-auth.js';

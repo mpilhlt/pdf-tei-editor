@@ -2,6 +2,8 @@
 Unit tests for sessions.py (SQLite-based)
 
 Self-contained tests that can be run independently.
+
+@testCovers fastapi_app/lib/sessions.py
 """
 
 import tempfile

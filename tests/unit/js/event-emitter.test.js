@@ -3,6 +3,8 @@
 /**
  * Test suite for EventEmitter class
  * Uses Node.js built-in test runner (available in Node 18+)
+ *
+ * @testCovers app/src/modules/event-emitter.js
  */
 
 import { test, describe } from 'node:test';

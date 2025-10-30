@@ -2,6 +2,8 @@
  * Unit tests for PluginManager
  * Tests dependency resolution, topological sorting, circular dependency detection,
  * endpoint invocation, timeout handling, and all other plugin manager behaviors.
+ *
+ * @testCovers app/src/modules/plugin-manager.js
  */
 
 import { describe, it, beforeEach } from 'node:test';

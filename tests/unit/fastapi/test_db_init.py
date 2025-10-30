@@ -2,6 +2,8 @@
 Unit tests for database initialization module.
 
 Tests the config/ → db/ initialization pattern.
+
+@testCovers fastapi_app/lib/db_init.py
 """
 
 import json
