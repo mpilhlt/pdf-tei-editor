@@ -92,6 +92,12 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing locks database: {e}")
         raise
 
+    # Log startup complete
+    logger.info("=" * 80)
+    logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
+    logger.info(f"API docs available at: http://{settings.HOST}:{settings.PORT}/docs")
+    logger.info("=" * 80)
+
     yield
 
     # Shutdown

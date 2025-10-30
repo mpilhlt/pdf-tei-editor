@@ -415,12 +415,11 @@ def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
     if publisher_elem is not None and publisher_elem.text:
         metadata['publisher'] = publisher_elem.text.strip()
 
-    # Extract variant from GROBID application metadata
-    grobid_app = tei_root.find('.//tei:application[@ident="GROBID"]', ns)
-    if grobid_app is not None:
-        variant_label = grobid_app.find('tei:label[@type="variant-id"]', ns)
-        if variant_label is not None and variant_label.text:
-            metadata['variant'] = variant_label.text.strip()
+    # Extract variant from any extractor application metadata (GROBID, llamore, etc.)
+    # Search for any application with a variant-id label
+    variant_label = tei_root.find('.//tei:application[@type="extractor"]/tei:label[@type="variant-id"]', ns)
+    if variant_label is not None and variant_label.text:
+        metadata['variant'] = variant_label.text.strip()
 
     # Check for gold standard status
     # Gold standard files typically don't have version markers

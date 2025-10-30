@@ -59,7 +59,10 @@ Examples:
   python bin/export_files.py --regex="^10\\.1111" export/
 
   # Transform filenames (remove DOI prefix)
-  python bin/export_files.py --translate-filename="/^10\\.\\d+__//" export/
+  python bin/export_files.py --transform-filename="/^10\\.\\d+__//" export/
+
+  # Multiple transforms applied sequentially
+  python bin/export_files.py --transform-filename="/^10\\.\\d+__//" --transform-filename="/__/-/" export/
 
   # Dry-run to preview without exporting
   python bin/export_files.py --dry-run export/
@@ -87,8 +90,8 @@ Filename Format:
                        help='Include versioned TEI files (default: only gold files)')
     parser.add_argument('--group-by', choices=['type', 'collection', 'variant'], default='type',
                        help='Directory grouping strategy (default: type)')
-    parser.add_argument('--translate-filename', metavar='EXPR',
-                       help='sed-style filename transformation (/search/replace/)')
+    parser.add_argument('--transform-filename', metavar='EXPR', action='append',
+                       help='sed-style filename transformation (/search/replace/), can be specified multiple times')
     parser.add_argument('--db-path', help='Database path (default: data/db/metadata.db)')
     parser.add_argument('--storage-root', help='Storage root (default: data/files)')
     parser.add_argument('--dry-run', action='store_true',
@@ -148,8 +151,8 @@ Filename Format:
         logger.info(f"Variants: {', '.join(variants)}")
     if args.regex:
         logger.info(f"Regex filter: {args.regex}")
-    if args.translate_filename:
-        logger.info(f"Filename transform: {args.translate_filename}")
+    if args.transform_filename:
+        logger.info(f"Filename transforms: {', '.join(args.transform_filename)}")
     logger.info(f"Include versions: {args.versions}")
     if args.dry_run:
         logger.info("[DRY RUN MODE - No files will be exported]")
@@ -163,7 +166,7 @@ Filename Format:
             regex=args.regex,
             include_versions=args.versions,
             group_by=args.group_by,
-            filename_transform=args.translate_filename
+            filename_transforms=args.transform_filename
         )
     except ValueError as e:
         logger.error(f"Invalid parameters: {e}")

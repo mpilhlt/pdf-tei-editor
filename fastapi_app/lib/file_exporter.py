@@ -80,7 +80,7 @@ class FileExporter:
         regex: Optional[str] = None,
         include_versions: bool = False,
         group_by: str = "type",
-        filename_transform: Optional[str] = None
+        filename_transforms: Optional[List[str]] = None
     ) -> ExportStats:
         """
         Export files to target directory with optional filters and grouping.
@@ -92,7 +92,7 @@ class FileExporter:
             regex: Regular expression to filter filenames
             include_versions: If True, export versioned TEI files
             group_by: Grouping strategy: "type" (default), "collection", or "variant"
-            filename_transform: sed-style transform pattern (/search/replace/)
+            filename_transforms: List of sed-style transform patterns (/search/replace/), applied sequentially
 
         Returns:
             Export statistics
@@ -104,9 +104,10 @@ class FileExporter:
         if group_by not in ("type", "collection", "variant"):
             raise ValueError(f"Invalid group_by: {group_by}. Must be 'type', 'collection', or 'variant'")
 
-        # Validate transform pattern if provided
-        if filename_transform:
-            self._validate_transform(filename_transform)
+        # Validate transform patterns if provided
+        if filename_transforms:
+            for transform in filename_transforms:
+                self._validate_transform(transform)
 
         # Create target directory
         if not self.dry_run:
@@ -142,13 +143,17 @@ class FileExporter:
                     self.stats['files_skipped'] += 1
                     continue
 
-                # Apply filename transform if provided
-                if filename_transform:
-                    filename = self._apply_transform(filename, filename_transform)
+                # Apply filename transforms if provided (sequentially)
+                if filename_transforms:
+                    for transform in filename_transforms:
+                        filename = self._apply_transform(filename, transform)
+
+                # Resolve collections for TEI files (inherit from PDF)
+                file_collections = self._resolve_file_collections(file_meta)
 
                 # Determine output paths based on grouping
                 output_paths = self._get_output_paths(
-                    target_path, file_meta, filename, group_by
+                    target_path, file_meta, file_collections, filename, group_by
                 )
 
                 # Export to all paths (handles multi-collection duplication)
@@ -192,62 +197,169 @@ class FileExporter:
 
         # If collections specified, query each collection
         if collections:
+            # Get all PDFs in the specified collections
+            collection_pdfs = []
             for collection in collections:
-                # Get PDFs for this collection
                 pdfs = self.repo.list_files(
                     collection=collection,
                     file_type='pdf',
                     include_deleted=False
                 )
-                all_files.extend(pdfs)
+                collection_pdfs.extend(pdfs)
 
-                # Get gold TEI files for this collection
-                tei_files = self.repo.list_files(
-                    collection=collection,
-                    file_type='tei',
-                    include_deleted=False
-                )
-                # Filter for gold standard (version IS NULL or version = 1 with is_gold_standard)
-                gold_files = [
-                    f for f in tei_files
-                    if f.version is None or (f.version == 1 and f.is_gold_standard)
+            all_files.extend(collection_pdfs)
+
+            # Get doc_ids from the PDFs to find related TEI files
+            # TEI files don't store collections, they inherit from their PDF
+            doc_ids = {pdf.doc_id for pdf in collection_pdfs}
+
+            # Get all TEI files and filter by doc_id
+            all_tei_files = self.repo.list_files(file_type='tei', include_deleted=False)
+
+            # Filter for gold files belonging to documents in target collections
+            gold_files = [
+                f for f in all_tei_files
+                if f.is_gold_standard and f.doc_id in doc_ids
+            ]
+            all_files.extend(gold_files)
+
+            # If include_versions, get non-gold files
+            if include_versions:
+                non_gold_files = [
+                    f for f in all_tei_files
+                    if not f.is_gold_standard and f.doc_id in doc_ids
                 ]
-                all_files.extend(gold_files)
-
-                # If include_versions, get versioned files
-                if include_versions:
-                    version_files = [
-                        f for f in tei_files
-                        if f.version is not None and f.version > 1
-                    ]
-                    all_files.extend(version_files)
+                all_files.extend(non_gold_files)
         else:
             # No collection filter - get all files
             # Get all PDFs
             pdfs = self.repo.list_files(file_type='pdf', include_deleted=False)
             all_files.extend(pdfs)
 
-            # Get all gold TEI files
+            # Get all TEI files
             tei_files = self.repo.list_files(file_type='tei', include_deleted=False)
+
+            # Get gold standard files (is_gold_standard=1)
             gold_files = [
                 f for f in tei_files
-                if f.version is None or (f.version == 1 and f.is_gold_standard)
+                if f.is_gold_standard
             ]
             all_files.extend(gold_files)
 
-            # If include_versions, get versioned files
+            # If include_versions, get non-gold files (is_gold_standard=0)
             if include_versions:
-                version_files = [
+                non_gold_files = [
                     f for f in tei_files
-                    if f.version is not None and f.version > 1
+                    if not f.is_gold_standard
                 ]
-                all_files.extend(version_files)
+                all_files.extend(non_gold_files)
 
         # Apply variant filter if specified
         if variants:
             all_files = self._filter_by_variants(all_files, variants)
 
+        # Handle inconsistent state: ensure each (doc_id, variant) has a "gold" file
+        # If no gold exists, promote the most recent non-gold file to act as gold for export
+        all_files = self._ensure_gold_files(all_files)
+
         return all_files
+
+    def _ensure_gold_files(self, files: List[FileMetadata]) -> List[FileMetadata]:
+        """
+        Ensure each (doc_id, variant) combination has a gold file for export.
+
+        When the database is in an inconsistent state (no gold file for a variant),
+        this method promotes the most recent non-gold file to act as gold for export
+        purposes only. This does NOT modify the database.
+
+        Args:
+            files: List of files to process
+
+        Returns:
+            Modified list with pseudo-gold files added/marked
+        """
+        from collections import defaultdict
+
+        # Group TEI files by (doc_id, variant)
+        variant_groups: Dict[tuple, List[FileMetadata]] = defaultdict(list)
+        pdf_files = []
+
+        for file_meta in files:
+            if file_meta.file_type == 'pdf':
+                pdf_files.append(file_meta)
+            elif file_meta.file_type == 'tei':
+                key = (file_meta.doc_id, file_meta.variant)
+                variant_groups[key].append(file_meta)
+
+        # Check each variant group for gold file
+        result_files = pdf_files.copy()
+
+        for key, group in variant_groups.items():
+            has_gold = any(f.is_gold_standard for f in group)
+
+            if has_gold:
+                # Normal case: add all files as-is
+                result_files.extend(group)
+            else:
+                # Inconsistent state: no gold file for this variant
+                # Find most recent file (highest version number, or latest created_at if tied)
+                sorted_files = sorted(
+                    group,
+                    key=lambda f: (f.version if f.version is not None else 0, f.created_at),
+                    reverse=True
+                )
+
+                if sorted_files:
+                    # Promote most recent to pseudo-gold for export
+                    # Create a shallow copy and mark as gold (doesn't affect database)
+                    pseudo_gold = sorted_files[0]
+                    # Create new instance with is_gold_standard=True for export purposes
+                    from copy import copy
+                    promoted = copy(pseudo_gold)
+                    promoted.is_gold_standard = True
+
+                    logger.warning(
+                        f"No gold file for doc_id={key[0]}, variant={key[1]}. "
+                        f"Promoting version {promoted.version} (created {promoted.created_at}) "
+                        f"to act as gold for export."
+                    )
+
+                    # Add promoted file plus remaining files
+                    result_files.append(promoted)
+                    result_files.extend(sorted_files[1:])  # Add remaining non-gold files
+
+        return result_files
+
+    def _resolve_file_collections(self, file_meta: FileMetadata) -> List[str]:
+        """
+        Resolve collections for a file.
+
+        For PDF files, uses the file's doc_collections directly.
+        For TEI files, inherits collections from the associated PDF (same doc_id).
+
+        Args:
+            file_meta: File metadata
+
+        Returns:
+            List of collection names
+        """
+        # PDFs have collections stored directly
+        if file_meta.file_type == 'pdf':
+            return file_meta.doc_collections if file_meta.doc_collections else []
+
+        # TEI files inherit collections from their PDF
+        if file_meta.file_type == 'tei':
+            # Check if TEI already has collections (legacy data)
+            if file_meta.doc_collections:
+                return file_meta.doc_collections
+
+            # Look up the PDF for this document
+            pdf = self.repo.get_pdf_for_document(file_meta.doc_id)
+            if pdf and pdf.doc_collections:
+                return pdf.doc_collections
+
+        # No collections found
+        return []
 
     def _filter_by_variants(
         self,
@@ -308,11 +420,12 @@ class FileExporter:
             return f"{encoded_doc_id}{extension}"
 
         elif file_meta.file_type == 'tei':
-            # Check if this is a versioned file
-            if file_meta.version is not None and file_meta.version > 1:
-                # Versioned file: doc_id.variant-vN.tei.xml
+            # Check if this is a non-gold file (archived version)
+            if not file_meta.is_gold_standard:
+                # Non-gold file: doc_id.variant-vN.tei.xml
                 variant_part = file_meta.variant or "default"
-                return f"{encoded_doc_id}.{variant_part}-v{file_meta.version}{extension}"
+                version_num = file_meta.version if file_meta.version is not None else 0
+                return f"{encoded_doc_id}.{variant_part}-v{version_num}{extension}"
             else:
                 # Gold file
                 if file_meta.variant:
@@ -378,6 +491,7 @@ class FileExporter:
         self,
         target_path: Path,
         file_meta: FileMetadata,
+        file_collections: List[str],
         filename: str,
         group_by: str
     ) -> List[Path]:
@@ -389,6 +503,7 @@ class FileExporter:
         Args:
             target_path: Base target directory
             file_meta: File metadata
+            file_collections: Resolved collections for this file
             filename: Constructed filename
             group_by: Grouping strategy
 
@@ -399,9 +514,11 @@ class FileExporter:
             # Group by file type: pdf/, tei/, versions/
             if file_meta.file_type == 'pdf':
                 subdir = "pdf"
-            elif file_meta.version is not None and file_meta.version > 1:
+            elif not file_meta.is_gold_standard:
+                # Non-gold files go to versions/
                 subdir = "versions"
             else:
+                # Gold files go to tei/
                 subdir = "tei"
 
             return [target_path / subdir / filename]
@@ -410,16 +527,18 @@ class FileExporter:
             # Group by collection: collection/pdf/, collection/tei/, collection/versions/
             paths = []
 
-            # Get collections (may be multiple)
-            collections = file_meta.doc_collections if file_meta.doc_collections else ["uncategorized"]
+            # Use resolved collections (inherited from PDF for TEI files)
+            collections = file_collections if file_collections else ["uncategorized"]
 
             for collection in collections:
-                # Determine subdirectory based on file type
+                # Determine subdirectory based on file type and gold status
                 if file_meta.file_type == 'pdf':
                     subdir = "pdf"
-                elif file_meta.version is not None and file_meta.version > 1:
+                elif not file_meta.is_gold_standard:
+                    # Non-gold files go to versions/
                     subdir = "versions"
                 else:
+                    # Gold files go to tei/
                     subdir = "tei"
 
                 paths.append(target_path / collection / subdir / filename)

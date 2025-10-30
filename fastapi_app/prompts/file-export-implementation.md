@@ -64,19 +64,64 @@ $9$ → \
 
 The `decode_filename_legacy()` function supports decoding these files for migration purposes but is marked as deprecated.
 
+## Collection Inheritance
+
+**Important**: In the database schema, only PDF files store collection information in their `doc_collections` field. TEI files have an empty `doc_collections` array and inherit their collections from the associated PDF file (same `doc_id`).
+
+When exporting:
+- PDF files use their stored `doc_collections` directly
+- TEI files look up their associated PDF and inherit its `doc_collections`
+- This ensures TEI files are exported to the same collections as their PDFs
+
+Example:
+```
+PDF:  doc_id="10.1515/test", doc_collections=["corpus1", "corpus2"]
+TEI:  doc_id="10.1515/test", doc_collections=[]  ← inherits from PDF
+```
+
+Both files will be exported to `corpus1/` and `corpus2/` when using `--group-by=collection`.
+
+## Terminology: Variants vs. Versions
+
+**Critical Distinction:**
+
+The system has two orthogonal concepts:
+
+1. **Variant** = The extraction method/model used to create a TEI file
+   - Examples: `grobid.training.segmentation`, `llamore-default`
+   - Stored in the `variant` field
+   - Multiple variants can exist for the same document (different extraction methods)
+
+2. **Version** = Edition number within a specific variant
+   - Stored in the `version` field (0, 1, 2, 3...)
+   - Gold status determined by `is_gold_standard` flag (only ONE gold per variant)
+   - Multiple versions can exist for the same variant (editing/extraction history)
+   - `version=NULL` treated as `version=0` for compatibility
+
+**Example:**
+```
+Document 10.1234/test:
+  Variant "grobid.training.segmentation":
+    - version=0, is_gold_standard=1  → Current gold (→ tei/10.1234__test.grobid.training.segmentation.tei.xml)
+    - version=0, is_gold_standard=0  → Older v0     (→ versions/10.1234__test.grobid.training.segmentation-v0.tei.xml)
+    - version=1, is_gold_standard=0  → Even older   (→ versions/10.1234__test.grobid.training.segmentation-v1.tei.xml)
+```
+
 ## Export Modes and Filtering
 
 ### File Selection
 
 **By Default:**
 - Exports all PDF files
-- Exports all gold standard TEI files (version IS NULL or is_gold_standard=true with version=1)
+- Exports only gold standard TEI files (`is_gold_standard=1`)
 
 **With `--versions` flag:**
-- Additionally exports all versioned TEI files (version > 1)
+- Additionally exports all non-gold TEI files (`is_gold_standard=0`)
+- Version number in filename comes from the `version` field (treating NULL as 0)
 
 **Collection Filtering (`--collections=corpus1,corpus2`):**
 - Exports only files belonging to specified collections
+- TEI files inherit collections from their associated PDF (same `doc_id`)
 - Multi-collection files are exported if they belong to any specified collection
 
 **Variant Filtering (`--variants=pattern1,pattern2`):**
@@ -172,24 +217,36 @@ export/
 
 ## Filename Transformations
 
-The `--translate-filename` option allows sed-style transformations using `/search/replace/` syntax.
+The `--transform-filename` option allows sed-style transformations using `/search/replace/` syntax. This option can be specified multiple times to apply sequential transformations.
 
-**Examples:**
+**Single Transformation:**
 
 Remove DOI prefix:
 ```bash
---translate-filename="/^10\\.\\d+__//"
+--transform-filename="/^10\\.\\d+__//"
 ```
 
 Replace underscores with hyphens:
 ```bash
---translate-filename="/__/-/g"  # Note: 'g' flag not supported, only first match
+--transform-filename="/__/-/"  # Note: replaces first match only
+```
+
+**Multiple Transformations:**
+
+Transformations are applied sequentially in the order specified:
+
+```bash
+# First remove DOI prefix, then replace underscores with hyphens
+--transform-filename="/^10\\.\\d+__//" --transform-filename="/__/-/"
+
+# Example: 10.1111__test_file.pdf → test_file.pdf → test-file.pdf
 ```
 
 **Validation:**
-- Transform pattern is validated before export begins
+- All transform patterns are validated before export begins
 - Invalid patterns raise ValueError with helpful error message
 - Regex syntax errors are caught early
+- Each transformation is applied to the result of the previous transformation
 
 ## CLI Usage
 
@@ -226,7 +283,15 @@ Filter by regex and transform filenames:
 ```bash
 uv run python bin/export_files.py \
   --regex="^10\\.1111" \
-  --translate-filename="/^10\\.1111__//" \
+  --transform-filename="/^10\\.1111__//" \
+  export/
+```
+
+Multiple sequential transformations:
+```bash
+uv run python bin/export_files.py \
+  --transform-filename="/^10\\.\\d+__//" \
+  --transform-filename="/__/-/" \
   export/
 ```
 
@@ -331,6 +396,70 @@ Potential improvements for future versions:
 5. **Compression:**
    - Optional ZIP/tar.gz archive creation
    - Per-collection or per-variant archives
+
+## Recent Fixes
+
+### Variant Extraction for Non-GROBID Extractors (2025-10-30)
+
+**Issue**: The variant extraction in [fastapi_app/lib/tei_utils.py](../../fastapi_app/lib/tei_utils.py) was hardcoded to only extract variants from GROBID application metadata. This caused TEI files from other extractors (like llamore) to have `variant=NULL` in the database, even though their TEI headers contained variant information.
+
+**Fix**: Updated `extract_tei_metadata()` to search for variant-id labels in any extractor application (not just GROBID):
+
+```python
+# Before (GROBID-specific)
+grobid_app = tei_root.find('.//tei:application[@ident="GROBID"]', ns)
+if grobid_app is not None:
+    variant_label = grobid_app.find('tei:label[@type="variant-id"]', ns)
+
+# After (any extractor)
+variant_label = tei_root.find('.//tei:application[@type="extractor"]/tei:label[@type="variant-id"]', ns)
+```
+
+This now correctly extracts variants from:
+- GROBID: `grobid.training.segmentation`
+- llamore: `llamore-default`
+- Any future extractors following the TEI application metadata structure
+
+**Impact**: Existing files in the database may still have NULL variants. To populate missing variants, re-import files using [bin/import_files.py](../../bin/import_files.py).
+
+### Import CLI Syntax Update (2025-10-30)
+
+The import script now accepts the directory as a positional argument instead of requiring `--directory`:
+
+```bash
+# New syntax (positional argument)
+python bin/import_files.py /path/to/files --collection corpus1
+
+# Old syntax (deprecated)
+python bin/import_files.py --directory /path/to/files --collection corpus1
+```
+
+### Version Numbering and Gold Status Fix (2025-10-30)
+
+**Critical Behavior Change**: Fixed importer and exporter to correctly handle version numbering and gold status.
+
+**Importer Changes**:
+- Version numbers now increment sequentially (0, 1, 2...) for each file with the same `(doc_id, variant)` pair
+- Version numbering is independent of gold status
+- Gold status is determined solely by directory structure (files in the "tei" or configured gold directory)
+- **WARNING (Phase 10)**: Directory-based gold detection can lead to inconsistent state if no file in a variant is marked as gold. This needs replacement with explicit metadata-based marking before Phase 10.
+
+**Exporter Changes**:
+- Export based on `is_gold_standard` flag, not `version` number
+- Gold files (is_gold_standard=1) export to `tei/` directory
+- Non-gold files (is_gold_standard=0) export to `versions/` directory when `--versions` flag is used
+- **Inconsistent State Handling**: If a (doc_id, variant) has no gold file, the exporter automatically promotes the most recent non-gold file (highest version number) to act as gold for export purposes, with a warning logged
+
+**Example Database State**:
+```
+doc_id="10.1234/test", variant="grobid.training.segmentation":
+  - version=0, is_gold_standard=1  → Exported to: tei/10.1234__test.grobid.training.segmentation.tei.xml
+  - version=1, is_gold_standard=0  → Exported to: versions/10.1234__test.grobid.training.segmentation-v1.tei.xml
+  - version=2, is_gold_standard=0  → Exported to: versions/10.1234__test.grobid.training.segmentation-v2.tei.xml
+
+doc_id="10.1234/test", variant="llamore-default":
+  - version=0, is_gold_standard=1  → Exported to: tei/10.1234__test.llamore-default.tei.xml
+```
 
 ## See Also
 

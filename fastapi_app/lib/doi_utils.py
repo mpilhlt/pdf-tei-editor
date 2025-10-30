@@ -1,8 +1,6 @@
 """
 DOI metadata utilities for fetching and parsing bibliographic information.
 
-Ported from Flask implementation with enhancements.
-
 Provides:
 - DOI validation and normalization
 - Filesystem-safe encoding/decoding for doc_ids

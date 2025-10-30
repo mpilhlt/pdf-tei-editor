@@ -94,9 +94,17 @@ class TestFileExporter(unittest.TestCase):
         version: int = None,
         is_gold: bool = False
     ) -> str:
-        """Add a file to storage and database."""
+        """
+        Add a file to storage and database.
+
+        Note: Collections should only be set for PDF files.
+        TEI files inherit collections from their associated PDF.
+        """
         # Save to storage
         file_hash, _ = self.storage.save_file(content, file_type)
+
+        # Only PDFs store collections - TEI files inherit from PDF
+        file_collections = collections if file_type == 'pdf' and collections else []
 
         # Create metadata
         file_create = FileCreate(
@@ -108,7 +116,7 @@ class TestFileExporter(unittest.TestCase):
             variant=variant,
             version=version,
             is_gold_standard=is_gold,
-            doc_collections=collections or []
+            doc_collections=file_collections
         )
 
         # Insert into database
@@ -150,7 +158,8 @@ class TestFileExporter(unittest.TestCase):
             file_type="tei",
             content=tei_content,
             collections=["corpus1"],
-            variant="grobid-0.8.1"
+            variant="grobid-0.8.1",
+            is_gold=True
         )
 
         # Export
@@ -171,7 +180,8 @@ class TestFileExporter(unittest.TestCase):
             file_type="tei",
             content=tei_content,
             collections=["corpus1"],
-            variant=None
+            variant=None,
+            is_gold=True
         )
 
         # Export
@@ -185,7 +195,7 @@ class TestFileExporter(unittest.TestCase):
 
     def test_export_with_versions(self):
         """Test exporting versioned TEI files."""
-        # Add gold file
+        # Add gold file (version=0, is_gold=True)
         gold_content = self.create_test_tei("10.1111/test", title="Gold")
         self.add_file(
             doc_id="10.1111/test",
@@ -193,10 +203,23 @@ class TestFileExporter(unittest.TestCase):
             content=gold_content,
             collections=["corpus1"],
             variant="grobid-0.8.1",
-            version=None
+            version=0,
+            is_gold=True
         )
 
-        # Add version 2
+        # Add version 1 (non-gold version, is_gold=False)
+        v1_content = self.create_test_tei("10.1111/test", title="Version 1")
+        self.add_file(
+            doc_id="10.1111/test",
+            file_type="tei",
+            content=v1_content,
+            collections=["corpus1"],
+            variant="grobid-0.8.1",
+            version=1,
+            is_gold=False
+        )
+
+        # Add version 2 (non-gold version, is_gold=False)
         v2_content = self.create_test_tei("10.1111/test", title="Version 2")
         self.add_file(
             doc_id="10.1111/test",
@@ -204,47 +227,37 @@ class TestFileExporter(unittest.TestCase):
             content=v2_content,
             collections=["corpus1"],
             variant="grobid-0.8.1",
-            version=2
-        )
-
-        # Add version 3
-        v3_content = self.create_test_tei("10.1111/test", title="Version 3")
-        self.add_file(
-            doc_id="10.1111/test",
-            file_type="tei",
-            content=v3_content,
-            collections=["corpus1"],
-            variant="grobid-0.8.1",
-            version=3
+            version=2,
+            is_gold=False
         )
 
         # Export without versions
         exporter = FileExporter(self.db, self.storage, self.repo)
         stats = exporter.export_files(self.export_dir, include_versions=False)
 
-        # Should only export gold file
+        # Should only export gold file (is_gold_standard=True)
         self.assertEqual(stats['files_exported'], 1)
         gold_file = self.export_dir / "tei" / "10.1111__test.grobid-0.8.1.tei.xml"
         self.assertTrue(gold_file.exists())
 
-        # Versions should not exist
+        # Versions should not exist when include_versions=False
+        v1_file = self.export_dir / "versions" / "10.1111__test.grobid-0.8.1-v1.tei.xml"
         v2_file = self.export_dir / "versions" / "10.1111__test.grobid-0.8.1-v2.tei.xml"
-        v3_file = self.export_dir / "versions" / "10.1111__test.grobid-0.8.1-v3.tei.xml"
+        self.assertFalse(v1_file.exists())
         self.assertFalse(v2_file.exists())
-        self.assertFalse(v3_file.exists())
 
         # Export with versions
         export_dir2 = self.test_dir / "export2"
         stats2 = exporter.export_files(export_dir2, include_versions=True)
 
-        # Should export all files
+        # Should export all files (1 gold + 2 non-gold versions)
         self.assertEqual(stats2['files_exported'], 3)
         gold_file2 = export_dir2 / "tei" / "10.1111__test.grobid-0.8.1.tei.xml"
+        v1_file2 = export_dir2 / "versions" / "10.1111__test.grobid-0.8.1-v1.tei.xml"
         v2_file2 = export_dir2 / "versions" / "10.1111__test.grobid-0.8.1-v2.tei.xml"
-        v3_file2 = export_dir2 / "versions" / "10.1111__test.grobid-0.8.1-v3.tei.xml"
         self.assertTrue(gold_file2.exists())
+        self.assertTrue(v1_file2.exists())
         self.assertTrue(v2_file2.exists())
-        self.assertTrue(v3_file2.exists())
 
     def test_filter_by_collection(self):
         """Test filtering by collection."""
@@ -265,9 +278,9 @@ class TestFileExporter(unittest.TestCase):
     def test_filter_by_variants_glob(self):
         """Test filtering variants with glob patterns."""
         # Add files with different variants
-        self.add_file("10.1111/test", "tei", self.create_test_tei(), variant="grobid-0.7.0")
-        self.add_file("10.1111/test", "tei", self.create_test_tei(), variant="grobid-0.8.1")
-        self.add_file("10.1111/test", "tei", self.create_test_tei(), variant="metatei-1.0")
+        self.add_file("10.1111/test", "tei", self.create_test_tei(), variant="grobid-0.7.0", is_gold=True)
+        self.add_file("10.1111/test", "tei", self.create_test_tei(), variant="grobid-0.8.1", is_gold=True)
+        self.add_file("10.1111/test", "tei", self.create_test_tei(), variant="metatei-1.0", is_gold=True)
 
         # Export only grobid variants
         exporter = FileExporter(self.db, self.storage, self.repo)
@@ -302,7 +315,7 @@ class TestFileExporter(unittest.TestCase):
         pdf_content = self.create_test_pdf()
         tei_content = self.create_test_tei()
         self.add_file("10.1111/test", "pdf", pdf_content)
-        self.add_file("10.1111/test", "tei", tei_content, variant="grobid")
+        self.add_file("10.1111/test", "tei", tei_content, variant="grobid", is_gold=True)
 
         # Export with group_by=type
         exporter = FileExporter(self.db, self.storage, self.repo)
@@ -318,7 +331,7 @@ class TestFileExporter(unittest.TestCase):
         pdf_content = self.create_test_pdf()
         tei_content = self.create_test_tei()
         self.add_file("10.1111/test", "pdf", pdf_content, collections=["corpus1"])
-        self.add_file("10.1111/test", "tei", tei_content, collections=["corpus1"], variant="grobid")
+        self.add_file("10.1111/test", "tei", tei_content, collections=["corpus1"], variant="grobid", is_gold=True)
 
         # Export with group_by=collection
         exporter = FileExporter(self.db, self.storage, self.repo)
@@ -335,8 +348,8 @@ class TestFileExporter(unittest.TestCase):
         tei1_content = self.create_test_tei(title="Grobid")
         tei2_content = self.create_test_tei(title="MetaTEI")
         self.add_file("10.1111/test", "pdf", pdf_content)
-        self.add_file("10.1111/test", "tei", tei1_content, variant="grobid-0.8.1")
-        self.add_file("10.1111/test", "tei", tei2_content, variant="metatei-1.0")
+        self.add_file("10.1111/test", "tei", tei1_content, variant="grobid-0.8.1", is_gold=True)
+        self.add_file("10.1111/test", "tei", tei2_content, variant="metatei-1.0", is_gold=True)
 
         # Export with group_by=variant
         exporter = FileExporter(self.db, self.storage, self.repo)
@@ -388,11 +401,32 @@ class TestFileExporter(unittest.TestCase):
         exporter = FileExporter(self.db, self.storage, self.repo)
         stats = exporter.export_files(
             self.export_dir,
-            filename_transform="/^10\\.1111__//"
+            filename_transforms=["/^10\\.1111__//"]
         )
 
         # Verify transformed filename
         exported_file = self.export_dir / "pdf" / "test.pdf"
+        self.assertTrue(exported_file.exists())
+
+    def test_multiple_filename_transforms(self):
+        """Test multiple sequential filename transformations."""
+        # Add file
+        pdf_content = self.create_test_pdf()
+        self.add_file("10.1111/test-file", "pdf", pdf_content)
+
+        # Export with multiple transforms applied sequentially
+        # First: remove DOI prefix, Second: replace hyphens with underscores
+        exporter = FileExporter(self.db, self.storage, self.repo)
+        stats = exporter.export_files(
+            self.export_dir,
+            filename_transforms=["/^10\\.1111__//", "/-/_/"]
+        )
+
+        # Verify filename with both transforms applied
+        # Original: 10.1111__test-file.pdf
+        # After transform 1: test-file.pdf
+        # After transform 2: test_file.pdf
+        exported_file = self.export_dir / "pdf" / "test_file.pdf"
         self.assertTrue(exported_file.exists())
 
     def test_dry_run(self):
@@ -410,6 +444,30 @@ class TestFileExporter(unittest.TestCase):
         # But file should not exist
         exported_file = self.export_dir / "pdf" / "10.1111__test.pdf"
         self.assertFalse(exported_file.exists())
+
+    def test_collection_inheritance(self):
+        """Test that TEI files inherit collections from their PDF."""
+        # Add PDF with collections
+        pdf_content = self.create_test_pdf()
+        self.add_file("10.1111/test", "pdf", pdf_content, collections=["corpus1", "corpus2"])
+
+        # Add TEI without collections (they should inherit from PDF)
+        tei_content = self.create_test_tei("10.1111/test")
+        self.add_file("10.1111/test", "tei", tei_content, variant="grobid", is_gold=True)
+
+        # Export with group_by=collection
+        exporter = FileExporter(self.db, self.storage, self.repo)
+        stats = exporter.export_files(self.export_dir, group_by="collection")
+
+        # TEI should be exported to both collections (inherited from PDF)
+        # 2 PDF copies (one per collection) + 2 TEI copies (one per collection) = 4
+        self.assertEqual(stats['files_exported'], 4)
+
+        # Verify files exist in both collections
+        self.assertTrue((self.export_dir / "corpus1" / "pdf" / "10.1111__test.pdf").exists())
+        self.assertTrue((self.export_dir / "corpus1" / "tei" / "10.1111__test.grobid.tei.xml").exists())
+        self.assertTrue((self.export_dir / "corpus2" / "pdf" / "10.1111__test.pdf").exists())
+        self.assertTrue((self.export_dir / "corpus2" / "tei" / "10.1111__test.grobid.tei.xml").exists())
 
     def test_invalid_group_by_raises_error(self):
         """Test that invalid group_by raises ValueError."""
@@ -429,12 +487,12 @@ class TestFileExporter(unittest.TestCase):
 
         # Invalid pattern (no leading /)
         with self.assertRaises(ValueError) as cm:
-            exporter.export_files(self.export_dir, filename_transform="test/replace/")
+            exporter.export_files(self.export_dir, filename_transforms=["test/replace/"])
         self.assertIn("must start with", str(cm.exception))
 
         # Invalid pattern (too few parts)
         with self.assertRaises(ValueError) as cm:
-            exporter.export_files(self.export_dir, filename_transform="/test")
+            exporter.export_files(self.export_dir, filename_transforms=["/test"])
         self.assertIn("must be in format", str(cm.exception))
 
 

@@ -3,8 +3,8 @@
 Import PDF and XML files from any directory into FastAPI database.
 
 Usage:
-    python bin/import_files.py --directory demo/data --collection example
-    python bin/import_files.py --directory /path/to/files --collection my_collection --dry-run
+    python bin/import_files.py demo/data --collection example
+    python bin/import_files.py /path/to/files --collection my_collection --dry-run
 """
 
 import argparse
@@ -37,26 +37,26 @@ def main():
         epilog="""
 Examples:
   # Import demo data
-  python bin/import_files.py --directory demo/data --collection example
+  python bin/import_files.py demo/data --collection example
 
   # Import from arbitrary directory
-  python bin/import_files.py --directory /path/to/files --collection corpus1
+  python bin/import_files.py /path/to/files --collection corpus1
 
   # Dry-run (preview without importing)
-  python bin/import_files.py --directory demo/data --collection example --dry-run
+  python bin/import_files.py demo/data --collection example --dry-run
 
   # Import without assigning collection
-  python bin/import_files.py --directory /path/to/files
+  python bin/import_files.py /path/to/files
 
   # Import with automatic collection naming from subdirectories
-  python bin/import_files.py --directory /path/to/data --recursive-collections
+  python bin/import_files.py /path/to/data --recursive-collections
   # Files in /path/to/data/corpus1/file.pdf -> collection "corpus1"
   # Files in /path/to/data/corpus1/pdf/file.pdf -> collection "corpus1" (skips "pdf" dir)
   # Files in /path/to/data/corpus2/tei/file.xml -> collection "corpus2" (skips "tei" dir)
   # Files in /path/to/data/file.pdf -> no collection
         """
     )
-    parser.add_argument('--directory', required=True,
+    parser.add_argument('directory',
                        help='Directory containing PDF and XML files')
     parser.add_argument('--collection', help='Collection name for imported files')
     parser.add_argument('--recursive-collections', action='store_true',

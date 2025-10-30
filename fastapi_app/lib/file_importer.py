@@ -434,42 +434,33 @@ class FileImporter:
         else:
             doc_id_type = 'custom'
 
-        # Determine if this is a gold standard file (check if in gold directory)
-        # Convert path parts to lowercase for case-insensitive comparison
-        path_parts_lower = [p.lower() for p in tei_path.parts]
-        is_in_gold_dir = self.gold_dir_name in path_parts_lower
-        is_in_versions_dir = 'versions' in path_parts_lower or 'version' in str(tei_path).lower()
-
-        # Gold standard files are in the gold directory but not in versions directory
-        is_gold = is_in_gold_dir and not is_in_versions_dir
-
-        # Override with metadata if explicitly set
-        if metadata.get('is_gold_standard', False):
-            is_gold = True
-
-        # Extract variant
+        # Extract variant from TEI metadata
         variant = metadata.get('variant')
 
-        # Determine version number
-        # - Gold files: version = None
-        # - Variant files: version = None
-        # - Version files (in versions/ directory): version = N
-        # - Files in gold dir that are also versions: version = N (not gold)
-        version = None
-        if is_gold or variant:
-            # Gold and variant files have no version number
-            version = None
-        elif is_in_versions_dir:
-            # Files in versions/ directory get incremental version numbers
-            existing_versions = self.repo.get_files_by_doc_id(doc_id)
-            version_files = [f for f in existing_versions
-                           if f.file_type == 'tei'
-                           and f.version is not None
-                           and not f.variant]
-            version = len(version_files) + 1
-        else:
-            # Regular TEI files (not in gold dir, not in versions dir) get version 1
-            version = 1
+        # Determine if this is a gold standard file based on directory structure
+        # IMPORTANT: This directory-based approach needs replacement before Phase 10
+        # because it can lead to inconsistent state (no gold file for a variant).
+        # If files are moved/imported from non-standard directories, we may end up
+        # with variants that have no gold standard version.
+        # TODO (Phase 10): Implement explicit gold marking in TEI metadata or use
+        # a database migration to ensure exactly one gold per (doc_id, variant) pair.
+        path_parts_lower = [p.lower() for p in tei_path.parts]
+        is_in_gold_dir = self.gold_dir_name in path_parts_lower
+        is_gold = is_in_gold_dir
+
+        # Determine version number by counting existing files with same doc_id + variant
+        # Version numbering is sequential: 0, 1, 2, 3...
+        # The version number increments for each new file with the same (doc_id, variant),
+        # regardless of gold status. Gold status is independent of version number.
+        existing_files = self.repo.get_files_by_doc_id(doc_id)
+        same_variant_files = [
+            f for f in existing_files
+            if f.file_type == 'tei'
+            and f.variant == variant  # Match exact variant (including None)
+        ]
+
+        # Assign next version number (0 for first, 1 for second, etc.)
+        version = len(same_variant_files)
 
         # Save to storage
         saved_hash, storage_path = self.storage.save_file(content, 'tei')
