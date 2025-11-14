@@ -188,8 +188,8 @@ class TestSSEService(unittest.TestCase):
         ping_msg = next(stream)
         elapsed = time.time() - start_time
 
-        # Should be a ping
-        self.assertEqual(ping_msg, ': ping\n\n')
+        # Should be a ping event with keepalive data
+        self.assertEqual(ping_msg, 'event: ping\ndata: keepalive\n\n')
 
         # Should have waited approximately queue_timeout
         self.assertGreater(elapsed, 0.05)

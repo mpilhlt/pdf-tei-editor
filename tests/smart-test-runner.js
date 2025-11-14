@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { Command } from 'commander';
 import madge from 'madge';
@@ -37,39 +37,45 @@ class SmartTestRunner {
 
     const { glob } = await import('glob');
 
+    // Helper to normalize paths for glob (use forward slashes even on Windows)
+    const normalizeGlobPattern = (path) => path.replace(/\\/g, '/');
+
+    // Helper to convert absolute paths to relative and normalize to forward slashes
+    const makeRelative = (file) => relative(projectRoot, file).replace(/\\/g, '/');
+
     // Discover JS unit tests in tests/unit/ (recursively)
     const unitDir = join(testsDir, 'unit');
     const jsTests = [];
     if (existsSync(unitDir)) {
-      const jsPattern = join(unitDir, '**/*.test.js');
+      const jsPattern = normalizeGlobPattern(join(unitDir, '**/*.test.js'));
       const jsFiles = await glob(jsPattern);
-      jsTests.push(...jsFiles.map(file => file.replace(projectRoot + '/', '')));
+      jsTests.push(...jsFiles.map(makeRelative));
     }
 
     // Discover Python unit tests in tests/unit/ (recursively)
     const pyTests = [];
     if (existsSync(unitDir)) {
-      const pyPattern = join(unitDir, '**/test_*.py');
+      const pyPattern = normalizeGlobPattern(join(unitDir, '**/test_*.py'));
       const pyFiles = await glob(pyPattern);
-      pyTests.push(...pyFiles.map(file => file.replace(projectRoot + '/', '')));
+      pyTests.push(...pyFiles.map(makeRelative));
     }
 
     // Discover API tests in tests/api/ (backend API integration tests)
     const apiTests = [];
     const apiDir = join(testsDir, 'api');
     if (existsSync(apiDir)) {
-      const apiPattern = join(apiDir, '**/*.test.js');
+      const apiPattern = normalizeGlobPattern(join(apiDir, '**/*.test.js'));
       const apiFiles = await glob(apiPattern);
-      apiTests.push(...apiFiles.map(file => file.replace(projectRoot + '/', '')));
+      apiTests.push(...apiFiles.map(makeRelative));
     }
 
     // Discover E2E tests in tests/e2e/ (Playwright frontend E2E tests)
     const e2eTests = [];
     const e2eDir = join(testsDir, 'e2e');
     if (existsSync(e2eDir)) {
-      const e2ePattern = join(e2eDir, '**/*.spec.js');
+      const e2ePattern = normalizeGlobPattern(join(e2eDir, '**/*.spec.js'));
       const e2eFiles = await glob(e2ePattern);
-      e2eTests.push(...e2eFiles.map(file => file.replace(projectRoot + '/', '')));
+      e2eTests.push(...e2eFiles.map(makeRelative));
     }
 
     if (!process.argv.includes('--tap')) {
@@ -107,12 +113,11 @@ class SmartTestRunner {
                 }
             }
 
-            // Parse @env annotations (only VAR_NAME or VAR=VALUE, not file paths)
+            // Parse @env annotations (VAR_NAME, VAR=VALUE, or .env file paths)
             const envRegex = /@env\s+([^\n]+)/g;
             while ((match = envRegex.exec(commentBlock)) !== null) {
                 const envSpec = match[1].trim();
-                // Only support VAR_NAME or VAR=VALUE format
-                if (envSpec && !envSpec.includes('/') && !envSpec.startsWith('.')) {
+                if (envSpec) {
                     envVars.push(envSpec);
                 }
             }
@@ -145,12 +150,11 @@ class SmartTestRunner {
             }
           }
 
-          // Parse @env annotations (only VAR_NAME or VAR=VALUE, not file paths)
+          // Parse @env annotations (VAR_NAME, VAR=VALUE, or .env file paths)
           const envRegex = /@env\s+([^\n]+)/g;
           while ((match = envRegex.exec(docstring)) !== null) {
             const envSpec = match[1].trim();
-            // Only support VAR_NAME or VAR=VALUE format
-            if (envSpec && !envSpec.includes('/') && !envSpec.startsWith('.')) {
+            if (envSpec) {
               envVars.push(envSpec);
             }
           }
@@ -356,6 +360,27 @@ class SmartTestRunner {
   }
 
   /**
+   * Categorize @env annotations into environment variables and .env files
+   * @param {Set<string>} envVars - Set of env annotations
+   * @returns {{vars: string[], files: string[]}} Categorized env vars and files
+   */
+  categorizeEnvVars(envVars) {
+    const vars = [];
+    const files = [];
+
+    for (const envSpec of envVars) {
+      // Check if it's a .env file path
+      if (envSpec.startsWith('.env')) {
+        files.push(envSpec);
+      } else {
+        vars.push(envSpec);
+      }
+    }
+
+    return { vars, files };
+  }
+
+  /**
    * @param {string[] | null} customFiles
    * @returns {string[]}
    */
@@ -543,10 +568,21 @@ class SmartTestRunner {
     let apiCommand = null;
     if (testsToRun.api && testsToRun.api.length > 0) {
       const testFiles = testsToRun.api.join(' ');
-      const envArgsStr = Array.from(apiEnvVars).map(v => `--env "${v}"`).join(' ');
-      const extraArgs = envArgsStr ? `${envArgsStr} ` : '';
+      const { vars: apiVars, files: apiFiles } = this.categorizeEnvVars(apiEnvVars);
+
+      // Check for conflicting .env files
+      if (apiFiles.length > 1) {
+        throw new Error(
+          `API test suite has conflicting .env files specified:\n${apiFiles.map(f => `  - ${f}`).join('\n')}\n` +
+          `Please ensure all API tests use the same .env file or use --env variables instead.`
+        );
+      }
+
+      const envArgsStr = apiVars.map(v => `--env "${v}"`).join(' ');
+      const envFileArg = apiFiles.length > 0 ? `--env-file "${apiFiles[0]}"` : '';
+      const extraArgs = [envArgsStr, envFileArg].filter(Boolean).join(' ');
       // Route API tests to backend-test-runner (.env auto-detected from test directory)
-      apiCommand = `node tests/backend-test-runner.js ${extraArgs}${testFiles}`.trim();
+      apiCommand = `node tests/backend-test-runner.js ${extraArgs} ${testFiles}`.trim();
     }
 
     // Build E2E command (Playwright frontend tests)
@@ -554,8 +590,19 @@ class SmartTestRunner {
     if (testsToRun.e2e && testsToRun.e2e.length > 0) {
       const testFiles = testsToRun.e2e.map(f => f.replace('tests/e2e/', '').replace('.spec.js', '')).join('|');
       const grepArg = `--grep "${testFiles}"`;
-      const envArgsStr = Array.from(e2eEnvVars).map(v => `--env "${v}"`).join(' ');
-      const extraArgs = [grepArg, envArgsStr].filter(Boolean).join(' ');
+      const { vars: e2eVars, files: e2eFiles } = this.categorizeEnvVars(e2eEnvVars);
+
+      // Check for conflicting .env files
+      if (e2eFiles.length > 1) {
+        throw new Error(
+          `E2E test suite has conflicting .env files specified:\n${e2eFiles.map(f => `  - ${f}`).join('\n')}\n` +
+          `Please ensure all E2E tests use the same .env file or use --env variables instead.`
+        );
+      }
+
+      const envArgsStr = e2eVars.map(v => `--env "${v}"`).join(' ');
+      const envFileArg = e2eFiles.length > 0 ? `--env-file "${e2eFiles[0]}"` : '';
+      const extraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
       // Use e2e-runner.js for Playwright tests in local mode (.env auto-detected)
       e2eCommand = `node tests/e2e-runner.js --local ${extraArgs}`;
     }

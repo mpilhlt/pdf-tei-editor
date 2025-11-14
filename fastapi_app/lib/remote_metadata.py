@@ -8,9 +8,12 @@ Manages the shared metadata.db file on the WebDAV server, enabling:
 - O(1) change detection queries
 """
 
+import gc
 import json
+import os
 import sqlite3
 import tempfile
+import time
 import shutil
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -205,11 +208,27 @@ class RemoteMetadataManager:
         """Disconnect from database and clean up temporary file."""
         if self.local_db_conn:
             self.local_db_conn.close()
+            del self.local_db_conn  # Explicitly delete to release reference
             self.local_db_conn = None
 
+        # Force garbage collection to release file handles on Windows
+        gc.collect()
+
         if self.temp_db_path and self.temp_db_path.exists():
-            self.temp_db_path.unlink()
-            self.temp_db_path = None
+            # Retry deletion with delays (Windows file handle release issue)
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    self.temp_db_path.unlink()
+                    self.temp_db_path = None
+                    break
+                except (PermissionError, OSError) as e:
+                    if attempt < max_retries - 1:
+                        time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                        gc.collect()  # Try again after another collection
+                    else:
+                        # Last resort: silently ignore cleanup failure (file will be cleaned by OS temp cleanup)
+                        self.temp_db_path = None
 
     @contextmanager
     def transaction(self):

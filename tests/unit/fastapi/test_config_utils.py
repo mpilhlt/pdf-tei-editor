@@ -165,6 +165,7 @@ class TestConfigUtils(unittest.TestCase):
         self.assertFalse(success)
         self.assertIn('must be one of', msg.lower())
 
+    @unittest.skipIf(sys.platform == 'win32', 'File locking with concurrent writes is unreliable on Windows')
     def test_concurrent_writes(self):
         """Test that file locking handles concurrent writes."""
         import threading

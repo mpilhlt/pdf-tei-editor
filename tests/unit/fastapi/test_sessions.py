@@ -6,6 +6,7 @@ Self-contained tests that can be run independently.
 @testCovers fastapi_app/lib/sessions.py
 """
 
+import gc
 import tempfile
 import time
 import unittest
@@ -15,6 +16,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from fastapi_app.lib.sessions import SessionManager
+from fastapi_app.lib.db_utils import close_all_connections
 
 
 class TestSessionManager(unittest.TestCase):
@@ -28,6 +30,10 @@ class TestSessionManager(unittest.TestCase):
 
     def tearDown(self):
         """Clean up temporary directory."""
+        # Close all database connections before cleanup (required on Windows)
+        close_all_connections()
+        # Force garbage collection to release file handles on Windows
+        gc.collect()
         self.temp_dir.cleanup()
 
     def test_database_initialization(self):
