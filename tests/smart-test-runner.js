@@ -5,8 +5,7 @@ import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { Command } from 'commander';
 import madge from 'madge';
-import { logger } from 'api/helpers/test-logger.js';
-import { logger } from 'api/helpers/test-logger.js';
+import { logger } from 'api/helpers/test-logger.js';b
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname); // Go up from tests to project root
