@@ -5,6 +5,7 @@
  */
 
 import { writeFileSync } from 'fs';
+import { logger } from './test-logger.js';
 
 /**
  * Create a test .env file with WebDAV configuration
@@ -43,7 +44,7 @@ LOG_LEVEL=INFO
 `;
 
   writeFileSync(envPath, envContent);
-  console.log(`✅ Created test environment file: ${envPath}`);
+  logger.success(`Created test environment file: ${envPath}`);
   console.log(`   To use: FASTAPI_ENV_FILE=${envPath} npm run dev:fastapi`);
 
   return envPath;

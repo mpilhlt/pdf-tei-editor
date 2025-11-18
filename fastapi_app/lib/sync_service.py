@@ -13,7 +13,7 @@ import time
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Callable, Tuple, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from webdav4.fsspec import WebdavFileSystem
 
 from .file_repository import FileRepository
@@ -216,7 +216,7 @@ class SyncService:
                     self.file_repo.set_sync_metadata('remote_version', str(new_version))
                     self.file_repo.set_sync_metadata(
                         'last_sync_time',
-                        datetime.now().isoformat()
+                        datetime.now(timezone.utc).isoformat()
                     )
 
                 finally:
@@ -545,7 +545,7 @@ class SyncService:
                     # Check if lock is stale (> 60 seconds)
                     lock_info = self.fs.info(self.lock_path)
                     if lock_info.get('modified'):
-                        lock_age = datetime.now() - lock_info['modified']
+                        lock_age = datetime.now(timezone.utc) - lock_info['modified']
                         if lock_age.total_seconds() > 60:
                             self.fs.rm(self.lock_path)
                         else:
@@ -555,7 +555,7 @@ class SyncService:
                 # Create lock file
                 with self.fs.open(self.lock_path, 'w') as f:
                     f.write(json.dumps({
-                        'timestamp': datetime.now().isoformat(),
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
                         'host': 'fastapi-instance'
                     }))
 

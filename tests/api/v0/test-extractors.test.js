@@ -15,6 +15,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { createTestSession, authenticatedApiCall } from './helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
+import { logger } from '../helpers/test-logger.js';
+import { logger } from '../helpers/test-logger.js';
 
 // Enable debug output only when E2E_DEBUG environment variable is set
 const DEBUG = process.env.E2E_DEBUG === 'true';
@@ -41,7 +44,7 @@ describe('Extractor API E2E Tests', () => {
     assert(Array.isArray(extractors), 'Should return an array of extractors');
     assert(extractors.length > 0, 'Should return at least one extractor');
 
-    console.log(`✓ Found ${extractors.length} available extractors`);
+    logger.success(`Found ${extractors.length} available extractors`);
 
     // Log each extractor for debugging
     extractors.forEach(extractor => {
@@ -73,22 +76,22 @@ describe('Extractor API E2E Tests', () => {
     // Check for specific extractors that should be available
     const llamoreExtractor = extractors.find(e => e.id === 'llamore-gemini');
     if (llamoreExtractor) {
-      console.log('✓ Found llamore-gemini extractor');
+      logger.success('Found llamore-gemini extractor');
 
       // Verify expected properties for llamore extractor
       if (llamoreExtractor.input?.includes('pdf') && llamoreExtractor.output?.includes('tei-document')) {
         debugLog('✓ LLamore extractor has correct input/output types');
       } else {
-        console.log('⚠ LLamore extractor has unexpected input/output types');
+        logger.warn('LLamore extractor has unexpected input/output types');
       }
     } else {
       debugLog('LLamore+Gemini extractor not found (this may be expected depending on configuration)');
     }
 
-    console.log('✓ Extractor discovery system working');
+    logger.success('Extractor discovery system working');
 
     const extractorNames = extractors.map(e => e.id).join(', ');
-    console.log(`✓ Discovered extractors: ${extractorNames}`);
+    logger.success(`Discovered extractors: ${extractorNames}`);
 
     // Verify we have at least some basic extractors
     assert(extractors.length > 0, 'Should have at least one extractor available');
@@ -106,7 +109,7 @@ describe('Extractor API E2E Tests', () => {
       assert.fail('Should have thrown an error for invalid endpoint');
     } catch (error) {
       assert(error.message.includes('404'), 'Should return 404 for invalid endpoint');
-      console.log('✓ Invalid endpoint returned status 404');
+      logger.success('Invalid endpoint returned status 404');
     }
   });
 
@@ -123,7 +126,7 @@ describe('Extractor API E2E Tests', () => {
       assert.fail('Should have thrown an error for malformed request');
     } catch (error) {
       assert(error.message.includes('405'), 'Should return 405 for wrong HTTP method');
-      console.log('✓ Malformed request returned status 405');
+      logger.success('Malformed request returned status 405');
     }
   });
 });

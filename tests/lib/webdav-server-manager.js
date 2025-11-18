@@ -6,6 +6,7 @@ import { join } from 'path';
 import { platform, tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { logger } from '../api/helpers/test-logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -68,7 +69,7 @@ export class WebdavServerManager extends ServerManager {
    * @returns {Promise<void>}
    */
   async killExistingServers() {
-    console.log(`\n==> Killing any running WebDAV servers on port ${this.port}`);
+    logger.info(`Killing any running WebDAV servers on port ${this.port}`);
 
     if (platform() === 'win32') {
       // Windows: kill by port (requires netstat + taskkill)
@@ -130,7 +131,7 @@ export class WebdavServerManager extends ServerManager {
    * @returns {Promise<void>}
    */
   async createDirectories() {
-    console.log('\n==> Creating WebDAV directories');
+    logger.info('Creating WebDAV directories');
 
     try {
       await fs.mkdir(this.webdavRoot, { recursive: true });
@@ -152,7 +153,7 @@ export class WebdavServerManager extends ServerManager {
    * @returns {Promise<void>}
    */
   async startServerProcess(verbose = false) {
-    console.log(`\n==> Starting WsgiDAV server on port ${this.port}`);
+    logger.info(`Starting WsgiDAV server on port ${this.port}`);
 
     this.webdavProcess = spawn(
       'uv',
@@ -291,7 +292,7 @@ export class WebdavServerManager extends ServerManager {
       return;
     }
 
-    console.log('\n==> Cleaning up WebDAV server...');
+    logger.info('Cleaning up WebDAV server...');
 
     // Stop WebDAV process
     if (this.webdavProcess) {

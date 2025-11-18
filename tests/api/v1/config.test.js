@@ -9,7 +9,6 @@ import assert from 'node:assert';
 import {
     login,
     logout,
-    authenticatedRequest,
     authenticatedApiCall,
     API_BASE
 } from '../helpers/test-auth.js';

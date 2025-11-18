@@ -6,7 +6,9 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { createTestSession, authenticatedApiCall, logout, login } from '../helpers/test-auth.js';
+import { authenticatedApiCall, logout, login } from '../helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
+
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
@@ -27,9 +29,9 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     if (!globalSession) {
       // Use reviewer which can create all file types
       globalSession = await login('reviewer', 'reviewer', BASE_URL);
-      console.log(`🔐 Created session: ${globalSession.sessionId}`);
+      logger.info(`  Created session: ${globalSession.sessionId}`);
     }
-    console.log(`🔍 Using session: ${globalSession.sessionId}`);
+    logger.info(`Using session: ${globalSession.sessionId}`);
     return globalSession;
   }
 
@@ -48,7 +50,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     testState.testFileHash = result.hash;
 
     // The save operation acquires a lock, keep it for heartbeat tests
-    console.log(`✓ Test file created with lock for heartbeat tests (hash: ${testState.testFileHash}, run: ${testRunId})`);
+    logger.success(`Test file created with lock for heartbeat tests (hash: ${testState.testFileHash}, run: ${testRunId})`);
   });
 
   test('POST /api/files/heartbeat should refresh lock', async () => {
@@ -62,7 +64,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     assert.strictEqual(result.status, 'lock_refreshed', 'Should return lock_refreshed status');
     // Note: FastAPI does not return cache_status (deprecated)
 
-    console.log('✓ Lock refreshed successfully via heartbeat');
+    logger.success('Lock refreshed successfully via heartbeat');
   });
 
   test('POST /api/files/heartbeat should support abbreviated hashes', async () => {
@@ -89,9 +91,9 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
       }, BASE_URL);
 
       assert.strictEqual(result.status, 'lock_refreshed', 'Should refresh using abbreviated hash');
-      console.log(`✓ Heartbeat successful with abbreviated hash: ${abbreviatedHash}`);
+      logger.success(`Heartbeat successful with abbreviated hash: ${abbreviatedHash}`);
     } else {
-      console.log('⚠️ Could not find abbreviated hash for testing');
+      logger.warn('Could not find abbreviated hash for testing');
     }
   });
 
@@ -107,7 +109,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
       assert.strictEqual(result.status, 'lock_refreshed', `Heartbeat ${i + 1} should succeed`);
     }
 
-    console.log('✓ Multiple sequential heartbeats successful');
+    logger.success('Multiple sequential heartbeats successful');
   });
 
   test('POST /api/files/heartbeat should fail if lock is lost', async () => {
@@ -127,7 +129,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
       assert.fail('Should have thrown 409 error for lost lock');
     } catch (error) {
       assert(error.message.includes('409'), 'Should return 409 when lock is lost');
-      console.log('✓ Heartbeat correctly failed after lock release');
+      logger.success('Heartbeat correctly failed after lock release');
     }
   });
 
@@ -143,7 +145,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     } catch (error) {
       assert(error.message.includes('409') || error.message.includes('404'),
              'Should return error for non-existent file');
-      console.log('✓ Heartbeat correctly failed for non-existent file');
+      logger.success('Heartbeat correctly failed for non-existent file');
     }
   });
 
@@ -159,7 +161,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     } catch (error) {
       assert(error.message.includes('400') || error.message.includes('422'),
              'Should return validation error for missing file_id');
-      console.log('✓ Missing file_id parameter handled with validation error');
+      logger.success('Missing file_id parameter handled with validation error');
     }
   });
 
@@ -178,7 +180,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     assert.strictEqual(result.status, 'lock_refreshed', 'Should return lock_refreshed status');
     assert.strictEqual(result.cache_status, undefined, 'Should not return cache_status (deprecated in FastAPI)');
 
-    console.log('✓ Response does not include deprecated cache_status field');
+    logger.success('Response does not include deprecated cache_status field');
   });
 
   test('Cleanup: Delete test file and logout', async () => {
@@ -190,7 +192,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
         file_id: testState.testFileHash
       }, BASE_URL);
     } catch (error) {
-      console.log('⚠️ Lock already released or error:', error.message);
+      logger.warn(`Lock already released or error:: ${error.message}`);
     }
 
     // Delete test file using hash
@@ -199,9 +201,9 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
         await authenticatedApiCall(session.sessionId, '/files/delete', 'POST', {
           files: [testState.testFileHash]
         }, BASE_URL);
-        console.log('✓ Test file deleted');
+        logger.success('Test file deleted');
       } catch (error) {
-        console.log('⚠️ Failed to delete test file:', error.message);
+        logger.warn(`Failed to delete test file:: ${error.message}`);
       }
     }
 
@@ -209,7 +211,7 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
     if (globalSession) {
       await logout(globalSession.sessionId, BASE_URL);
       globalSession = null;
-      console.log('✓ Global session cleaned up');
+      logger.success('Global session cleaned up');
     }
   });
 

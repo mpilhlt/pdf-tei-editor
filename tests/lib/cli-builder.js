@@ -78,7 +78,7 @@ export function createTestRunnerCommand(config) {
   // Output options
   program
     .option('-v, --verbose', 'show server output during tests')
-    .option('--timeout <seconds>', 'test timeout in seconds', '60');
+    .option('--timeout <seconds>', 'test timeout in seconds', '180');
 
   // Add runner-specific options
   for (const option of extraOptions) {

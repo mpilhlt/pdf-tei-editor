@@ -114,7 +114,7 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
       });
     } catch (error) {
       // Ignore errors if table doesn't exist yet
-      console.log('⚠️  Could not cleanup test files (table may not exist yet)');
+      logger.info('⚠️  Could not cleanup test files (table may not exist yet)');
     }
   });
 
@@ -131,14 +131,14 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
       });
     } catch (error) {
       // Ignore errors if cleanup fails
-      console.log('⚠️  Could not cleanup test files after tests');
+      logger.info('⚠️  Could not cleanup test files after tests');
     }
   });
 
   async function getSession() {
     if (!globalSession) {
       globalSession = await login('reviewer', 'reviewer', BASE_URL);
-      console.log(`🔐 Created session: ${globalSession.sessionId}`);
+      logger.info(`  Created session: ${globalSession.sessionId}`);
     }
     return globalSession;
   }
@@ -180,7 +180,7 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
     const exists = physicalFileExists(testState.stableId1);
     assert.strictEqual(exists, true, 'Physical file should exist');
 
-    console.log(`✓ File saved with ref_count = 1`);
+    logger.info(`✓ File saved with ref_count = 1`);
   });
 
   test.skip('Second file has independent reference count', async () => {
@@ -222,7 +222,7 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
     assert.strictEqual(refCount1, 1, 'First file should have ref_count = 1');
     assert.strictEqual(refCount2, 1, 'Second file should have ref_count = 1');
 
-    console.log(`✓ Each file has independent ref_count = 1`);
+    logger.info(`✓ Each file has independent ref_count = 1`);
   });
 
   test.skip('Deleting file removes its physical file', async () => {
@@ -250,7 +250,7 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
     const exists2 = physicalFileExists(testState.stableId2);
     assert.strictEqual(exists2, true, 'Second file should still exist');
 
-    console.log(`✓ File deleted independently`);
+    logger.info(`✓ File deleted independently`);
   });
 
   test.skip('Deleting last reference removes physical file', async () => {
@@ -271,7 +271,7 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
     const exists = physicalFileExists(testState.stableId2);
     assert.strictEqual(exists, false, 'Physical file should be deleted when ref_count reaches 0');
 
-    console.log(`✓ Physical file deleted when ref_count reaches 0`);
+    logger.info(`✓ Physical file deleted when ref_count reaches 0`);
   });
 
   test.skip('Content change triggers cleanup of old file', async () => {
@@ -333,7 +333,7 @@ describe('Storage Reference Counting Tests', { concurrency: 1 }, () => {
     const newRefCount = getRefCount(newStableId);
     assert.strictEqual(newRefCount, 1, 'Updated file should have ref_count = 1');
 
-    console.log(`✓ Old file cleaned up when content changes`);
+    logger.info(`✓ Old file cleaned up when content changes`);
 
     // Cleanup
     await authenticatedApiCall(session.sessionId, '/files/delete', 'POST', {

@@ -47,18 +47,18 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
       },
       onMessage: (message) => {
         if (debug) {
-          console.log(`[SSE] Received event: ${message.event}, data: ${message.data}`);
+          logger.info(`[SSE] Received event: ${message.event}, data: ${message.data}`);
         }
         // Filter by event type if specified
         if (!eventType || message.event === eventType) {
           events.push(message.data);
         } else if (debug) {
-          console.log(`[SSE] Filtered out event type: ${message.event} (waiting for: ${eventType})`);
+          logger.info(`[SSE] Filtered out event type: ${message.event} (waiting for: ${eventType})`);
         }
       },
       onDisconnect: () => {
         if (debug) {
-          console.log(`[SSE] Connection disconnected`);
+          logger.info(`[SSE] Connection disconnected`);
         }
       }
     });

@@ -7,6 +7,7 @@ import { join } from 'path';
 import { platform } from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { logger } from '../api/helpers/test-logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -75,7 +76,7 @@ export class LocalServerManager extends ServerManager {
    * @returns {Promise<void>}
    */
   async killExistingServers() {
-    console.log(`\n==> Killing any running FastAPI servers on port ${this.port}`);
+    logger.info(`Killing any running FastAPI servers on port ${this.port}`);
 
     if (platform() === 'win32') {
       // Windows: use taskkill
@@ -147,7 +148,7 @@ export class LocalServerManager extends ServerManager {
    * @returns {Promise<void>}
    */
   async wipeDatabase() {
-    console.log('\n==> Wiping database for clean slate');
+    logger.info('Wiping database for clean slate');
 
     // Remove SQLite database files
     console.log('[INFO] Removing SQLite database files');
@@ -255,7 +256,7 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
    * @returns {Promise<void>}
    */
   async startServerProcess(verbose = false) {
-    console.log('\n==> Starting FastAPI development server');
+    logger.info('Starting FastAPI development server');
 
     // Ensure log directory exists
     await fs.mkdir(this.logDir, { recursive: true });
@@ -375,7 +376,7 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
    * @returns {Promise<boolean>} True if server started successfully
    */
   async waitForStartup(timeoutSec = 15) {
-    console.log(`\n==> Waiting for server startup (timeout: ${timeoutSec}s)`);
+    logger.info(`Waiting for server startup (timeout: ${timeoutSec}s)`);
 
     for (let i = 0; i < timeoutSec; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -510,7 +511,7 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
     if (cleanDb) {
       await this.wipeDatabase();
     } else {
-      console.log('\n==> Keeping existing database (cleanDb=false)');
+      logger.info('Keeping existing database (cleanDb=false)');
       console.warn('[WARNING] Tests may fail if database schema is outdated');
     }
 
@@ -567,7 +568,7 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
       return;
     }
 
-    console.log('\n==> Cleaning up...');
+    logger.info('Cleaning up...');
 
     // Stop FastAPI server
     if (this.serverProcess) {

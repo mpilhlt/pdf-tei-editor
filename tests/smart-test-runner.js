@@ -5,6 +5,8 @@ import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { Command } from 'commander';
 import madge from 'madge';
+import { logger } from 'api/helpers/test-logger.js';
+import { logger } from 'api/helpers/test-logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname); // Go up from tests to project root
@@ -79,7 +81,7 @@ class SmartTestRunner {
     }
 
     if (!process.argv.includes('--tap')) {
-      console.log(`📋 Discovered ${jsTests.length} JS unit tests, ${pyTests.length} Python unit tests, ${apiTests.length} API tests, ${e2eTests.length} E2E tests`);
+      logger.info(`Discovered ${jsTests.length} JS unit tests, ${pyTests.length} Python unit tests, ${apiTests.length} API tests, ${e2eTests.length} E2E tests`);
     }
     return { js: jsTests, py: pyTests, api: apiTests, e2e: e2eTests };
   }
@@ -173,7 +175,7 @@ class SmartTestRunner {
    * @param {string[]} testFiles
    */
   async analyzeJSDependencies(testFiles) {
-    if (!process.argv.includes('--tap')) console.log('🔍 Analyzing JavaScript dependencies...');
+    if (!process.argv.includes('--tap')) logger.info('Analyzing JavaScript dependencies...');
     /** @type {Record<string, {dependencies: string[], alwaysRun: boolean, envVars: string[]}>} */
     const jsDeps = {};
     /** @type {string[]} */
@@ -236,7 +238,7 @@ class SmartTestRunner {
    * @param {string[]} testFiles
    */
   async analyzePyDependencies(testFiles) {
-    if (!process.argv.includes('--tap')) console.log('🔍 Analyzing Python dependencies...');
+    if (!process.argv.includes('--tap')) logger.info('Analyzing Python dependencies...');
     /** @type {Record<string, {dependencies: string[], alwaysRun: boolean, envVars: string[]}>} */
     const pyDeps = {};
     /** @type {string[]} */
@@ -471,7 +473,7 @@ class SmartTestRunner {
     }
 
     const changedFiles = this.getChangedFiles(options.changedFiles);
-    if (!options.tap) console.log('📁 Changed files:', changedFiles.length > 0 ? changedFiles.join(', ') : 'none');
+    if (!options.tap) logger.info('Changed files:', changedFiles.length > 0 ? changedFiles.join(', ') : 'none');
 
     const analysisResult = await this.analyzeDependencies(options);
     debugLog('Analysis result:', JSON.stringify(analysisResult, null, 2));
@@ -615,7 +617,7 @@ class SmartTestRunner {
     ].filter(s => s.command);
 
     if (dryRun) {
-        console.log('🔍 Dry run - showing tests that would run:');
+        logger.info('Dry run - showing tests that would run:');
         if (testsToRun.js.length > 0) {
           console.log('\n  📄 JavaScript unit tests:');
           testsToRun.js.forEach(test => console.log(`    - ${test}`));
@@ -654,7 +656,7 @@ class SmartTestRunner {
     }
 
     if (testSuites.length === 0) {
-      if (!isTap) console.log('✅ No relevant tests to run');
+      if (!isTap) logger.success('No relevant tests to run');
       return;
     }
 

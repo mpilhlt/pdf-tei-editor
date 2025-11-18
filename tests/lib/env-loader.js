@@ -13,6 +13,7 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { relative } from 'path';
 import dotenv from 'dotenv';
+import { logger } from '../api/helpers/test-logger.js';
 
 /**
  * Load environment variables from .env file
@@ -55,7 +56,7 @@ export function loadEnvFile(options) {
         envPath = testDirEnv;
         source = '--test-dir';
       } else if (verbose) {
-        console.log(`📄 No .env or .env.test file found in test directory: ${testDir}`);
+        logger.info(`No .env or .env.test file found in test directory: ${testDir}`);
       }
     }
   }
@@ -82,13 +83,13 @@ export function loadEnvFile(options) {
 
   if (!envPath) {
     if (verbose) {
-      console.log('📄 No .env file found (not an error)');
+      logger.info('No .env file found (not an error)');
     }
     return {}; // No .env file found, not an error
   }
 
   const relativePath = relative(projectRoot, envPath);
-  console.log(`📄 Loading environment from: ${relativePath} (${source})`);
+  logger.info(`Loading environment from: ${relativePath} (${source})`);
 
   const result = dotenv.config({ path: envPath });
 
@@ -98,7 +99,7 @@ export function loadEnvFile(options) {
 
   if (verbose) {
     const varCount = Object.keys(result.parsed || {}).length;
-    console.log(`✅ Loaded ${varCount} environment variable${varCount !== 1 ? 's' : ''}`);
+    logger.success(`Loaded ${varCount} environment variable${varCount !== 1 ? 's' : ''}`);
   }
 
   return result.parsed || {};

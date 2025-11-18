@@ -11,6 +11,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { login, logout } from '../helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
+import { logger } from '../helpers/test-logger.js';
 
 // Get configuration from environment variables
 const HOST = process.env.E2E_HOST || 'localhost';
@@ -52,9 +54,9 @@ describe('Fixture Import Tests', () => {
       assert(exampleDoc.pdf, 'Document should have a PDF file');
       assert(exampleDoc.pdf.id, 'PDF should have an ID (hash)');
 
-      console.log(`✓ Found ${data.documents.length} document(s) from fixture`);
-      console.log(`✓ Example document: ${exampleDoc.doc_id}`);
-      console.log(`✓ PDF hash: ${exampleDoc.pdf.id}`);
+      logger.success(`Found ${data.documents.length} document(s) from fixture`);
+      logger.success(`Example document: ${exampleDoc.doc_id}`);
+      logger.success(`PDF hash: ${exampleDoc.pdf.id}`);
 
     } finally {
       // Clean up session
@@ -102,8 +104,8 @@ describe('Fixture Import Tests', () => {
       const pdfData = await fileResponse.arrayBuffer();
       assert(pdfData.byteLength > 0, 'PDF data should not be empty');
 
-      console.log(`✓ Successfully downloaded PDF: ${pdfId}`);
-      console.log(`✓ PDF size: ${pdfData.byteLength} bytes`);
+      logger.success(`Successfully downloaded PDF: ${pdfId}`);
+      logger.success(`PDF size: ${pdfData.byteLength} bytes`);
 
     } finally {
       // Clean up session
@@ -154,8 +156,8 @@ describe('Fixture Import Tests', () => {
       assert(teiData.length > 0, 'TEI data should not be empty');
       assert(teiData.includes('<TEI'), 'TEI data should contain TEI XML tags');
 
-      console.log(`✓ Successfully downloaded TEI: ${teiId}`);
-      console.log(`✓ TEI size: ${teiData.length} bytes`);
+      logger.success(`Successfully downloaded TEI: ${teiId}`);
+      logger.success(`TEI size: ${teiData.length} bytes`);
 
     } finally {
       // Clean up session

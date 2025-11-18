@@ -29,6 +29,10 @@ import { ContainerServerManager } from './lib/container-server-manager.js';
 import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
 import { loadEnvFile } from './lib/env-loader.js';
 import { loadFixture, importFixtureFiles } from './lib/fixture-loader.js';
+import { logger } from 'api/helpers/test-logger.js';
+import { logger } from 'api/helpers/test-logger.js';
+import { logger } from 'api/helpers/test-logger.js';
+import { logger } from 'api/helpers/test-logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
@@ -109,13 +113,13 @@ class PlaywrightRunner {
    * Check if Playwright is installed
    */
   async checkPlaywrightInstalled() {
-    console.log('🔍 Checking Playwright installation...');
+    logger.info('Checking Playwright installation...');
     try {
       execSync('npx playwright --version', { stdio: 'pipe' });
-      console.log('✅ Playwright is available');
+      logger.success('Playwright is available');
       return true;
     } catch (error) {
-      console.error('❌ Playwright is not installed');
+      logger.error('Playwright is not installed');
       console.error('');
       console.error('Please install Playwright:');
       console.error('  npm install @playwright/test');
@@ -135,7 +139,7 @@ class PlaywrightRunner {
     const runtimeDir = 'tests/e2e/runtime';
 
     console.log('\n🚀 Starting server...');
-    console.log(`📦 Mode: ${options.mode}`);
+    logger.info(`Mode: ${options.mode}`);
 
     // Phase 1: Load fixture config (local mode only)
     let fixtureFilesPath = null;
@@ -189,7 +193,7 @@ class PlaywrightRunner {
     }
 
     const baseUrl = this.serverManager.getBaseUrl();
-    console.log(`✅ Server ready at ${baseUrl}`);
+    logger.success(`Server ready at ${baseUrl}`);
     return baseUrl;
   }
 
@@ -200,7 +204,7 @@ class PlaywrightRunner {
   async runPlaywrightTests(options) {
     console.log('\n🧪 Running Playwright tests...');
     console.log(`🌐 Browser: ${options.browser}`);
-    console.log(`👁️  Mode: ${options.headed ? 'headed' : 'headless'}`);
+    logger.info('Mode: ${options.headed ? 'headed' : 'headless'}');
 
     // Build Playwright command
     const cmd = ['playwright', 'test'];
@@ -227,7 +231,7 @@ class PlaywrightRunner {
       cmd.push('--max-failures=1');
     }
 
-    console.log(`🚀 Executing: npx ${cmd.join(' ')}`);
+    logger.info('Executing: npx ${cmd.join(' ')}');
 
     // Get base URL from server manager
     const baseUrl = this.serverManager?.getBaseUrl();

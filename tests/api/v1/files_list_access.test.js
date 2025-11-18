@@ -8,6 +8,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { login, authenticatedApiCall } from '../helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://127.0.0.1:8014';
 
@@ -36,7 +37,7 @@ describe('File List Access Control', () => {
 
     assert.ok(response.files, 'Response should have files array');
     assert.ok(Array.isArray(response.files), 'Files should be an array');
-    console.log(`✓ Admin sees ${response.files.length} files`);
+    logger.success(`Admin sees ${response.files.length} files`);
   });
 
   test('Regular user can access file list (with filtering)', async () => {
@@ -50,7 +51,7 @@ describe('File List Access Control', () => {
 
     assert.ok(response.files, 'Response should have files array');
     assert.ok(Array.isArray(response.files), 'Files should be an array');
-    console.log(`✓ Regular user sees ${response.files.length} files`);
+    logger.success(`Regular user sees ${response.files.length} files`);
   });
 
   test('File list uses new data structure', async () => {
@@ -76,7 +77,7 @@ describe('File List Access Control', () => {
       assert.ok(!('variants' in firstDoc), 'Document should not have variants field');
       assert.ok(!('pdf' in firstDoc), 'Document should not have pdf field');
 
-      console.log(`✓ File list uses new data structure (source + artifacts)`);
+      logger.success('File list uses new data structure (source + artifacts)');
     }
   });
 
@@ -107,10 +108,10 @@ describe('File List Access Control', () => {
       'Admin should see at least as many files as regular user'
     );
 
-    console.log(`✓ Admin sees ${adminResponse.files.length} files, user sees ${userResponse.files.length} files`);
+    logger.success(`Admin sees ${adminResponse.files.length} files, user sees ${userResponse.files.length} files`);
 
     if (adminResponse.files.length === 0) {
-      console.log('  ℹ Note: Standard fixture has no files, but access control structure is correct');
+      logger.info('Note: Standard fixture has no files, but access control structure is correct');
     }
   });
 });

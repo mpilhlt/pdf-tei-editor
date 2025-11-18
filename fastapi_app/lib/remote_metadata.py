@@ -17,7 +17,7 @@ import time
 import shutil
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from webdav4.fsspec import WebdavFileSystem
 
@@ -342,7 +342,7 @@ class RemoteMetadataManager:
 
         # Prepare data for upsert
         file_data = file_data.copy()
-        file_data['updated_at'] = datetime.now().isoformat()
+        file_data['updated_at'] = datetime.now(timezone.utc).isoformat()
 
         # Build column names and placeholders
         columns = list(file_data.keys())

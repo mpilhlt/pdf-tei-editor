@@ -16,6 +16,7 @@ import { existsSync, readdirSync, statSync } from 'fs';
 import { resolve, join, relative } from 'path';
 import { cp, rm, mkdir } from 'fs/promises';
 import { spawn } from 'child_process';
+import { logger } from '../api/helpers/test-logger.js';
 
 /**
  * Load fixture preset into runtime directory (Phase 1: Config only)
@@ -46,7 +47,7 @@ export async function loadFixture(options) {
 
   const runtimePath = resolve(projectRoot, runtimeDir);
 
-  console.log(`📦 Loading fixture: ${fixtureName}`);
+  logger.info(`Loading fixture: ${fixtureName}`);
   if (verbose) {
     console.log(`   From: ${relative(projectRoot, fixturePath)}`);
     console.log(`   To: ${relative(projectRoot, runtimePath)}`);
@@ -68,11 +69,11 @@ export async function loadFixture(options) {
   if (existsSync(fixtureConfig)) {
     await cp(fixtureConfig, join(runtimePath, 'config'), { recursive: true });
     if (verbose) {
-      console.log(`   ✓ Copied config/`);
+      logger.success('Copied config/');
     }
   }
 
-  console.log(`✅ Fixture config loaded`);
+  logger.success('Fixture config loaded');
 
   // Return path to fixture files for later import
   return join(fixturePath, 'files');
@@ -90,18 +91,18 @@ export async function loadFixture(options) {
 export async function importFixtureFiles(fixtureFilesPath, runtimePath, projectRoot, verbose = false) {
   // Check if fixture files directory exists
   if (!existsSync(fixtureFilesPath)) {
-    console.log(`   ℹ️  No files to import (fixture has no files directory)`);
+    logger.info('No files to import (fixture has no files directory)');
     return;
   }
 
   // Check if directory is empty
   const files = readdirSync(fixtureFilesPath);
   if (files.length === 0) {
-    console.log(`   ℹ️  No files to import (files directory is empty)`);
+    logger.info('No files to import (files directory is empty)');
     return;
   }
 
-  console.log(`   📥 Importing files into database...`);
+  logger.info('Importing files into database...');
 
   // Build paths for the import script
   const importScript = join(projectRoot, 'bin', 'import_files.py');
@@ -115,10 +116,10 @@ export async function importFixtureFiles(fixtureFilesPath, runtimePath, projectR
     'run',
     pythonCommand,
     importScript,
-    '--directory', fixtureFilesPath,
     '--db-path', dbPath,
     '--storage-root', storageRoot,
-    '--collection', 'example' // Default collection for fixture files
+    '--collection', 'example', // Default collection for fixture files
+    fixtureFilesPath
   ];
 
   if (verbose) {
@@ -141,7 +142,7 @@ export async function importFixtureFiles(fixtureFilesPath, runtimePath, projectR
 
     importProcess.on('exit', (code) => {
       if (code === 0) {
-        console.log(`   ✓ Files imported successfully`);
+        logger.success('Files imported successfully');
         resolve();
       } else {
         const error = new Error(`File import failed with exit code ${code}`);

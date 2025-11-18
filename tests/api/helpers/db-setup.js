@@ -7,10 +7,10 @@
  * - Verifying database initialization
  */
 
-import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { logger } from './test-logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +29,7 @@ const fixtureConfigDir = path.join(projectRoot, 'tests/api/fixtures/config');
  */
 export function cleanDbDirectory(keepSqlite = false) {
   if (!fs.existsSync(runtimeDbDir)) {
-    console.log('📁 Runtime database directory does not exist, nothing to clean');
+    logger.info('Runtime database directory does not exist, nothing to clean');
     return;
   }
 
@@ -53,7 +53,7 @@ export function cleanDbDirectory(keepSqlite = false) {
     }
   }
 
-  console.log(`🧹 Cleaned ${removed} files from runtime database directory`);
+  logger.info(`Cleaned ${removed} files from runtime database directory`);
 }
 
 /**
@@ -77,8 +77,8 @@ export function initDbFromFixtures() {
     fs.copyFileSync(src, dest);
   }
 
-  console.log(`📋 Copied ${fixtureFiles.length} config files to runtime/db directory`);
-  console.log('ℹ️  SQLite databases will be created automatically by server');
+  logger.info(`Copied ${fixtureFiles.length} config files to runtime/db directory`);
+  logger.info('SQLite databases will be created automatically by server');
 }
 
 /**
@@ -95,7 +95,7 @@ export function resetDbToDefaults(keepSqlite = false) {
   console.log('🔄 Resetting database to defaults...');
   cleanDbDirectory(keepSqlite);
   initDbFromFixtures();
-  console.log('✅ Database reset complete');
+  logger.success('Database reset complete');
 }
 
 /**
@@ -131,7 +131,7 @@ export async function waitForServerReady(baseUrl = 'http://localhost:8000', time
     try {
       const response = await fetch(`${baseUrl}/docs`, { method: 'GET' });
       if (response.ok) {
-        console.log('✅ Server is ready');
+        logger.success('Server is ready');
         return true;
       }
     } catch (error) {

@@ -6,8 +6,10 @@
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert';
-import { createTestSession, authenticatedApiCall, logout, login } from '../helpers/test-auth.js';
+import { authenticatedApiCall, logout, login } from '../helpers/test-auth.js';
 import { cleanupBeforeTests, cleanupAfterTests, clearAllLocks } from '../helpers/test-cleanup.js';
+import { logger } from '../helpers/test-logger.js';
+
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
@@ -41,9 +43,9 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
     if (!globalSession) {
       // Use reviewer which can create gold files
       globalSession = await login('reviewer', 'reviewer', BASE_URL);
-      console.log(`🔐 Created session: ${globalSession.sessionId}`);
+      logger.info(`  Created session: ${globalSession.sessionId}`);
     }
-    console.log(`🔍 Using session: ${globalSession.sessionId}`);
+    logger.info(`Using session: ${globalSession.sessionId}`);
     return globalSession;
   }
 
@@ -77,7 +79,7 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
       file_id: testState.testFilePath2
     }, BASE_URL);
 
-    console.log('✓ Test files created successfully');
+    logger.success('Test files created successfully');
   });
 
   test('POST /api/files/delete should delete single file', async () => {
@@ -89,7 +91,7 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(result.result, 'ok', 'Should return ok result');
 
-    console.log('✓ Single file deleted successfully');
+    logger.success('Single file deleted successfully');
   });
 
   test('POST /api/files/delete should delete multiple files', async () => {
@@ -125,7 +127,7 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(deleteResult.result, 'ok', 'Should return ok result');
 
-    console.log('✓ Multiple files deleted successfully');
+    logger.success('Multiple files deleted successfully');
   });
 
   test('POST /api/files/delete should handle empty file list gracefully', async () => {
@@ -137,7 +139,7 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(result.result, 'ok', 'Should return ok for empty list');
 
-    console.log('✓ Empty file list handled gracefully');
+    logger.success('Empty file list handled gracefully');
   });
 
   test('POST /api/files/delete should skip empty identifiers', async () => {
@@ -150,7 +152,7 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(result.result, 'ok', 'Should return ok after skipping invalid entries');
 
-    console.log('✓ Empty identifiers skipped gracefully');
+    logger.success('Empty identifiers skipped gracefully');
   });
 
   test('POST /api/files/delete should skip non-existent files', async () => {
@@ -162,7 +164,7 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(result.result, 'ok', 'Should return ok after skipping non-existent file');
 
-    console.log('✓ Non-existent file skipped gracefully');
+    logger.success('Non-existent file skipped gracefully');
   });
 
   test('POST /api/files/delete should support abbreviated hashes', async () => {
@@ -203,9 +205,9 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
       }, BASE_URL);
 
       assert.strictEqual(deleteResult.result, 'ok', 'Should delete using abbreviated hash');
-      console.log(`✓ File deleted using abbreviated hash: ${abbreviatedHash}`);
+      logger.success(`File deleted using abbreviated hash: ${abbreviatedHash}`);
     } else {
-      console.log('⚠️ Could not find abbreviated hash for testing');
+      logger.warn('Could not find abbreviated hash for testing');
     }
   });
 

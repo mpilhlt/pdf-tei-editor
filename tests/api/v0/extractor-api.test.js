@@ -10,6 +10,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { createTestSession, authenticatedRequest } from './helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
+import { logger } from '../helpers/test-logger.js';
+import { logger } from '../helpers/test-logger.js';
 
 // Get configuration from environment variables (set by e2e-runner.js)
 const HOST = process.env.E2E_HOST || 'localhost';
@@ -41,7 +44,7 @@ describe('Extractor API E2E Tests', () => {
       assert(Array.isArray(extractor.output), 'Extractor should have output array');
     }
 
-    console.log(`✓ Found ${extractors.length} available extractors`);
+    logger.success(`Found ${extractors.length} available extractors`);
     extractors.forEach(e => console.log(`  - ${e.id}: ${e.name}`));
 
     const extractorIds = extractors.map(e => e.id);
@@ -88,47 +91,47 @@ describe('Extractor API E2E Tests', () => {
       // so we're more lenient - we just log what we find
       if (hasGeminiKey) {
         if (hasLlamore) {
-          console.log('✓ Found llamore-gemini extractor (GEMINI_API_KEY present)');
+          logger.success('Found llamore-gemini extractor (GEMINI_API_KEY present)');
         } else {
-          console.log('⚠ GEMINI_API_KEY present but llamore-gemini extractor not available (may be network restricted in test environment)');
+          logger.warn('GEMINI_API_KEY present but llamore-gemini extractor not available (may be network restricted in test environment)');
         }
       } else if (hasLlamore) {
-        console.log('✓ Found llamore-gemini extractor (no GEMINI_API_KEY - may use fallback)');
+        logger.success('Found llamore-gemini extractor (no GEMINI_API_KEY - may use fallback)');
       }
 
       if (hasGrobidUrl) {
         if (hasGrobidTraining) {
-          console.log('✓ Found grobid-training extractor (GROBID_SERVER_URL present)');
+          logger.success('Found grobid-training extractor (GROBID_SERVER_URL present)');
         } else {
-          console.log('⚠ GROBID_SERVER_URL present but grobid-training extractor not available (may be network restricted in test environment)');
+          logger.warn('GROBID_SERVER_URL present but grobid-training extractor not available (may be network restricted in test environment)');
         }
       } else if (hasGrobidTraining) {
-        console.log('✓ Found grobid-training extractor (no GROBID_SERVER_URL - may use fallback)');
+        logger.success('Found grobid-training extractor (no GROBID_SERVER_URL - may use fallback)');
       }
 
       if (hasKisskiKey) {
         if (hasKisski) {
-          console.log('✓ Found kisski-neural-chat extractor (KISSKI_API_KEY present)');
+          logger.success('Found kisski-neural-chat extractor (KISSKI_API_KEY present)');
         } else {
-          console.log('⚠ KISSKI_API_KEY present but kisski-neural-chat extractor not available (may be network restricted in test environment)');
+          logger.warn('KISSKI_API_KEY present but kisski-neural-chat extractor not available (may be network restricted in test environment)');
         }
       } else if (hasKisski) {
-        console.log('✓ Found kisski-neural-chat extractor (no KISSKI_API_KEY - may use fallback)');
+        logger.success('Found kisski-neural-chat extractor (no KISSKI_API_KEY - may use fallback)');
       }
 
       if (isTestEnv) {
         assert(hasMock, 'Mock extractor should be available in test environment');
-        console.log('✓ Found mock-extractor (TEST_IN_PROGRESS=1)');
+        logger.success('Found mock-extractor (TEST_IN_PROGRESS=1)');
       } else if (hasMock) {
-        console.log('⚠ Found mock-extractor outside test environment');
+        logger.warn('Found mock-extractor outside test environment');
       }
 
       // Verify at least one extractor is discovered
       const hasAnyExtractor = hasKisski || hasLlamore || hasGrobidTraining || hasMock || extractorIds.length > 0;
       assert(hasAnyExtractor, 'Should discover at least one extractor');
 
-      console.log('✓ Extractor discovery system working');
-      console.log(`✓ Discovered extractors: ${extractorIds.join(', ')}`);
+      logger.success('Extractor discovery system working');
+      logger.success(`Discovered extractors: ${extractorIds.join(`, ')}');
 
     } finally {
       await logout(sessionId);
@@ -146,7 +149,7 @@ describe('Extractor API E2E Tests', () => {
     // Should return 404 or similar error status
     assert(response.status >= 400, 'Should return error status for invalid endpoint');
 
-    console.log(`✓ Invalid endpoint returned status ${response.status}`);
+    logger.success(`Invalid endpoint returned status ${response.status}`);
   });
 
   test('API should handle malformed requests', async () => {
@@ -161,7 +164,7 @@ describe('Extractor API E2E Tests', () => {
     // Should return method not allowed or similar error
     assert(response.status >= 400, 'Should return error status for wrong HTTP method');
 
-    console.log(`✓ Malformed request returned status ${response.status}`);
+    logger.success(`Malformed request returned status ${response.status}`);
   });
 
 });

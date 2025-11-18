@@ -11,7 +11,11 @@
       "Bash(node --test:*)",
       "Bash(node tests/unit-test-runner.js:*)",
       "Bash(uv run python:*)",
-      "Bash(npm run test:unit:fastapi:*)"
+      "Bash(npm run test:unit:fastapi:*)",
+      "Bash(nul)",
+      "Bash(node tests/scripts/replace-emoji-logging.js:*)",
+      "Bash(npm run test:api:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

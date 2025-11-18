@@ -9,6 +9,7 @@ import { spawn } from 'child_process';
 import { mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { logger } from './test-logger.js';
 
 /**
  * WebDAV server configuration and management
@@ -38,7 +39,7 @@ class WebDAVTestServer {
   async start() {
     // Create root directory
     await mkdir(this.rootDir, { recursive: true });
-    console.log(`📁 Created WebDAV root directory: ${this.rootDir}`);
+    logger.info(`Created WebDAV root directory: ${this.rootDir}`);
 
     // Start WsgiDAV server using Python
     // Using basic auth with specified credentials
@@ -52,7 +53,7 @@ class WebDAVTestServer {
       '--no-config' // Don't look for config files
     ];
 
-    console.log(`🚀 Starting WsgiDAV server on port ${this.port}...`);
+    logger.info(`Starting WsgiDAV server on port ${this.port}...`);
     console.log(`   Command: python ${args.join(' ')}`);
 
     return new Promise((resolve, reject) => {
@@ -80,7 +81,7 @@ class WebDAVTestServer {
         // Look for successful startup message
         if (output.includes('Serving on') || output.includes('listening on')) {
           clearTimeout(timeoutId);
-          console.log(`✅ WebDAV server started successfully on ${this.baseUrl}`);
+          logger.success(`WebDAV server started successfully on ${this.baseUrl}`);
           console.log(`   Root: ${this.rootDir}`);
           console.log(`   Auth: ${this.username}:${this.password}`);
           resolve();
@@ -93,7 +94,7 @@ class WebDAVTestServer {
         // Some servers log to stderr, check for startup there too
         if (output.includes('Serving on') || output.includes('listening on')) {
           clearTimeout(timeoutId);
-          console.log(`✅ WebDAV server started successfully on ${this.baseUrl}`);
+          logger.success(`WebDAV server started successfully on ${this.baseUrl}`);
           resolve();
         }
       });
@@ -114,7 +115,7 @@ class WebDAVTestServer {
       setTimeout(() => {
         if (this.process && !this.process.killed) {
           clearTimeout(timeoutId);
-          console.log(`⚠️  WebDAV server process started (no startup message detected)`);
+          logger.warn('WebDAV server process started (no startup message detected)');
           resolve();
         }
       }, 2000);
@@ -127,11 +128,11 @@ class WebDAVTestServer {
    */
   async stop() {
     if (this.process && !this.process.killed) {
-      console.log(`🛑 Stopping WebDAV server...`);
+      logger.info('Stopping WebDAV server...');
 
       return new Promise((resolve) => {
         this.process.once('exit', () => {
-          console.log(`✅ WebDAV server stopped`);
+          logger.success('WebDAV server stopped');
           resolve();
         });
 
@@ -140,7 +141,7 @@ class WebDAVTestServer {
         // Force kill after 3 seconds if still running
         setTimeout(() => {
           if (this.process && !this.process.killed) {
-            console.log(`⚠️  Force killing WebDAV server...`);
+            logger.warn('Force killing WebDAV server...');
             this.process.kill('SIGKILL');
             resolve();
           }
@@ -156,7 +157,7 @@ class WebDAVTestServer {
   async cleanup() {
     try {
       await rm(this.rootDir, { recursive: true, force: true });
-      console.log(`🧹 Cleaned up WebDAV directory: ${this.rootDir}`);
+      logger.info(`Cleaned up WebDAV directory: ${this.rootDir}`);
     } catch (error) {
       console.warn(`⚠️  Failed to cleanup WebDAV directory: ${error.message}`);
     }

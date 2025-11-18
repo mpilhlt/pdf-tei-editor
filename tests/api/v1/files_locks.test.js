@@ -7,7 +7,9 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { createTestSession, authenticatedApiCall, authenticatedRequest, logout, login } from '../helpers/test-auth.js';
+import { authenticatedApiCall, authenticatedRequest, logout, login } from '../helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
+
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
@@ -33,25 +35,25 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     if (!globalSession) {
       // Use reviewer which can create gold files and edit
       globalSession = await login('reviewer', 'reviewer', BASE_URL);
-      console.log(`🔐 Created session: ${globalSession.sessionId}`);
+      logger.info(`  Created session: ${globalSession.sessionId}`);
     }
-    console.log(`🔍 Using session: ${globalSession.sessionId}`);
+    logger.info(`Using session: ${globalSession.sessionId}`);
     return globalSession;
   }
 
   // Helper function to clean up all locks for the current session
   async function cleanupSessionLocks() {
     const session = await getSession();
-    console.log(`🧹 Cleaning up locks for session ${session.sessionId}...`);
+    logger.info(`Cleaning up locks for session ${session.sessionId}...`);
 
     try {
       // Get all locked file IDs for this session
       const response = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
       const lockedFileIds = response.locked_files || response;
-      console.log(`🧹 Found ${lockedFileIds.length} locked files for this session`);
+      logger.info(`Found ${lockedFileIds.length} locked files for this session`);
 
       if (lockedFileIds.length === 0) {
-        console.log(`✓ No locks to clean up`);
+        logger.success('No locks to clean up');
         return;
       }
 
@@ -61,10 +63,10 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
           await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
             file_id: fileId
           }, BASE_URL);
-          console.log(`  ✓ Released lock for ${fileId}`);
+          logger.success(`Released lock for ${fileId}`);
           return { fileId, success: true };
         } catch (error) {
-          console.log(`  ❌ Failed to release lock for ${fileId}: ${error.message}`);
+          logger.error(`Failed to release lock for ${fileId}: ${error.message}`);
           return { fileId, success: false, error: error.message };
         }
       });
@@ -73,16 +75,16 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
       const successful = results.filter(r => r.success).length;
       const failed = results.filter(r => !r.success).length;
 
-      console.log(`🧹 Released ${successful} locks, ${failed} failed`);
+      logger.info(`Released ${successful} locks, ${failed} failed`);
 
       // Get final count
       const finalResponse = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
       const finalFileIds = finalResponse.locked_files || finalResponse;
 
-      console.log(`✅ Session lock cleanup completed (${finalFileIds.length} locks remain)`);
+      logger.success(`Session lock cleanup completed (${finalFileIds.length} locks remain)`);
 
     } catch (error) {
-      console.log(`💥 Lock cleanup failed: ${error.message}`);
+      logger.error(`Lock cleanup failed: ${error.message}`);
       throw error;
     }
   }
@@ -101,7 +103,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
       xml_string: testContent
     }, BASE_URL);
     testState.testFileHash = result1.hash;
-    console.log(`✓ Created test file 1 with hash: ${testState.testFileHash} (run: ${testRunId})`);
+    logger.success(`Created test file 1 with hash: ${testState.testFileHash} (run: ${testRunId})`);
 
     const testContent2 = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for file locks - FILE 2 - Run ID: ${testRunId}</text></TEI>`;
     const result2 = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
@@ -109,7 +111,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
       xml_string: testContent2 // Different content to get different hash
     }, BASE_URL);
     testState.testFileHash2 = result2.hash;
-    console.log(`✓ Created test file 2 with hash: ${testState.testFileHash2} (run: ${testRunId})`);
+    logger.success(`Created test file 2 with hash: ${testState.testFileHash2} (run: ${testRunId})`);
 
     // Release the locks that were acquired during file saving (use hashes)
     await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
@@ -127,7 +129,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     // Store initial count for subsequent tests
     testState.initialLockCount = fileIds.length;
-    console.log(`✓ Found ${fileIds.length} active file locks for this session`);
+    logger.success(`Found ${fileIds.length} active file locks for this session`);
   });
 
   test('POST /api/files/check_lock should return not locked for non-existent file', async () => {
@@ -139,7 +141,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     assert(typeof result === 'object', 'Should return an object');
     assert.strictEqual(result.is_locked, false, 'Non-existent file should not be locked');
 
-    console.log('✓ Non-existent file reported as not locked');
+    logger.success('Non-existent file reported as not locked');
   });
 
   test('POST /api/files/acquire_lock should successfully acquire lock', async () => {
@@ -151,13 +153,13 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(result, 'OK', 'Should return OK for successful lock acquisition');
 
-    console.log('✓ Successfully acquired lock for test file');
+    logger.success('Successfully acquired lock for test file');
 
     // Verify lock count increased by 1
     const response = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
     const fileIds = response.locked_files || response;
     assert.strictEqual(fileIds.length, testState.initialLockCount + 1, 'There should be one more active lock');
-    console.log('✓ Lock verified in active locks list');
+    logger.success('Lock verified in active locks list');
   });
 
   test('POST /api/files/check_lock should detect existing lock from same session', async () => {
@@ -170,7 +172,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(result.is_locked, false, 'File should not be locked for the owner session');
 
-    console.log('✓ Lock not reported as locked for owner session');
+    logger.success('Lock not reported as locked for owner session');
   });
 
   test('POST /api/files/acquire_lock should refresh existing lock', async () => {
@@ -183,7 +185,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
 
     assert.strictEqual(result, 'OK', 'Should return OK when refreshing own lock');
 
-    console.log('✓ Lock refresh handled correctly');
+    logger.success('Lock refresh handled correctly');
   });
 
   test('POST /api/files/release_lock should successfully release lock', async () => {
@@ -199,13 +201,13 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     assert(result.message.includes('successfully released') || result.message.includes('released'),
            'Message should indicate successful release');
 
-    console.log('✓ Successfully released lock');
-    console.log(`✓ Action: ${result.action}, Message: ${result.message}`);
+    logger.success('Successfully released lock');
+    logger.success(`Action: ${result.action}, Message: ${result.message}`);
 
     // Verify lock count decreased by 1
     const response = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
     const fileIds = response.locked_files || response;
-    console.log(`✓ Lock verified as removed from active locks list (${fileIds.length} total locks remaining)`);
+    logger.success(`Lock verified as removed from active locks list (${fileIds.length} total locks remaining)`);
   });
 
   test('POST /api/files/release_lock should handle second file locks', async () => {
@@ -224,7 +226,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     assert.strictEqual(result.action, 'released', 'Should release second file lock');
     assert(result.message, 'Should provide descriptive message');
 
-    console.log('✓ Second file lock handled correctly');
+    logger.success('Second file lock handled correctly');
   });
 
   test('POST /api/files/release_lock should succeed for already released lock', async () => {
@@ -242,8 +244,8 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     assert(result.message.includes('already released') || result.message.includes('not locked'),
            'Message should indicate already released state');
 
-    console.log('✓ Releasing non-existent lock handled gracefully');
-    console.log(`✓ Action: ${result.action}, Message: ${result.message}`);
+    logger.success('Releasing non-existent lock handled gracefully');
+    logger.success(`Action: ${result.action}, Message: ${result.message}`);
   });
 
   test('API should handle malformed requests gracefully', async () => {
@@ -255,7 +257,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     assert(response1.status === 400 || response1.status === 422,
            'Should return 400 or 422 for missing file_id');
 
-    console.log('✓ Malformed requests handled gracefully');
+    logger.success('Malformed requests handled gracefully');
   });
 
   test('Multiple locks workflow should work correctly', async () => {
@@ -291,20 +293,20 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     // Verify initial lock state
     const initialResponse = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
     const initialFileIds = initialResponse.locked_files || initialResponse;
-    console.log(`📊 Initial locks before acquiring: ${initialFileIds.length} (${JSON.stringify(initialFileIds.map(id => id.substring(0, 6)))})`);
+    logger.data(`Initial locks before acquiring: ${initialFileIds.length} (${JSON.stringify(initialFileIds.map(id => id.substring(0, 6)))})`);
 
     // Acquire locks for multiple files
-    console.log(`🔒 Acquiring lock for file 1: ${testState.testFileHash.substring(0, 6)}`);
+    logger.info(`  Acquiring lock for file 1: ${testState.testFileHash.substring(0, 6)}`);
     const result1 = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
       file_id: testState.testFileHash
     }, BASE_URL);
-    console.log(`📊 Acquire 1 result: ${JSON.stringify(result1)}`);
+    logger.data(`Acquire 1 result: ${JSON.stringify(result1)}`);
 
-    console.log(`🔒 Acquiring lock for file 2: ${testState.testFileHash2.substring(0, 6)}`);
+    logger.info(`  Acquiring lock for file 2: ${testState.testFileHash2.substring(0, 6)}`);
     const result2 = await authenticatedApiCall(session.sessionId, '/files/acquire_lock', 'POST', {
       file_id: testState.testFileHash2
     }, BASE_URL);
-    console.log(`📊 Acquire 2 result: ${JSON.stringify(result2)}`);
+    logger.data(`Acquire 2 result: ${JSON.stringify(result2)}`);
 
     assert.strictEqual(result1, 'OK', `Should acquire first lock (got: ${result1})`);
     assert.strictEqual(result2, 'OK', `Should acquire second lock (got: ${result2})`);
@@ -312,9 +314,9 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     // Check that both locks are active
     const response = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
     const fileIds = response.locked_files || response;
-    console.log(`✓ Multiple locks acquired successfully (${fileIds.length} total locks)`);
-    console.log(`📊 Locked files: ${JSON.stringify(fileIds.map(id => id.substring(0, 6)))}`);
-    console.log(`📊 Test hashes: ${testState.testFileHash.substring(0, 6)}, ${testState.testFileHash2.substring(0, 6)}`);
+    logger.success(`Multiple locks acquired successfully (${fileIds.length} total locks)`);
+    logger.data(`Locked files: ${JSON.stringify(fileIds.map(id => id.substring(0, 6)))}`);
+    logger.data(`Test hashes: ${testState.testFileHash.substring(0, 6)}, ${testState.testFileHash2.substring(0, 6)}`);
 
     // Verify our test files are actually in the locked list
     assert(fileIds.includes(testState.testFileHash) || fileIds.includes(testState.testFileHash.substring(0, 6)),
@@ -323,17 +325,17 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
            `Test file 2 should be locked (hash: ${testState.testFileHash2})`);
 
     // Release both locks
-    console.log(`🔓 Releasing lock for file 1: ${testState.testFileHash.substring(0, 6)}`);
+    logger.info(`  Releasing lock for file 1: ${testState.testFileHash.substring(0, 6)}`);
     const release1 = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
       file_id: testState.testFileHash
     }, BASE_URL);
-    console.log(`📊 Release 1 response: ${JSON.stringify(release1)}`);
+    logger.data(`Release 1 response: ${JSON.stringify(release1)}`);
 
-    console.log(`🔓 Releasing lock for file 2: ${testState.testFileHash2.substring(0, 6)}`);
+    logger.info(`  Releasing lock for file 2: ${testState.testFileHash2.substring(0, 6)}`);
     const release2 = await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
       file_id: testState.testFileHash2
     }, BASE_URL);
-    console.log(`📊 Release 2 response: ${JSON.stringify(release2)}`);
+    logger.data(`Release 2 response: ${JSON.stringify(release2)}`);
 
     assert.strictEqual(release1.action, 'released', `Should release first lock (got: ${release1.action})`);
     assert.strictEqual(release2.action, 'released', `Should release second lock (got: ${release2.action})`);
@@ -341,7 +343,7 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     // Verify both locks are gone
     const finalResponse = await authenticatedApiCall(session.sessionId, '/files/locks', 'GET', null, BASE_URL);
     const finalFileIds = finalResponse.locked_files || finalResponse;
-    console.log(`✓ Multiple locks released successfully (${finalFileIds.length} total locks remaining)`);
+    logger.success(`Multiple locks released successfully (${finalFileIds.length} total locks remaining)`);
 
     // Final cleanup to ensure no locks remain from this test suite
     await cleanupSessionLocks();
@@ -353,16 +355,16 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
       await authenticatedApiCall(cleanupSession.sessionId, '/files/delete', 'POST', {
         files: [testState.testFileHash, testState.testFileHash2]
       }, BASE_URL);
-      console.log('✓ Test files cleaned up');
+      logger.success('Test files cleaned up');
     } catch (error) {
-      console.log('⚠️ Failed to clean up test files:', error.message);
+      logger.warn(`Failed to clean up test files:: ${error.message}`);
     }
 
     // Clean up session
     if (globalSession) {
       await logout(globalSession.sessionId, BASE_URL);
       globalSession = null;
-      console.log('✓ Global session cleaned up');
+      logger.success('Global session cleaned up');
     }
   });
 

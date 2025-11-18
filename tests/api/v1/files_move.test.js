@@ -7,6 +7,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { createTestSession, authenticatedApiCall, logout, login } from '../helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
@@ -27,9 +28,9 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
     if (!globalSession) {
       // Use reviewer which can create gold files
       globalSession = await login('reviewer', 'reviewer', BASE_URL);
-      console.log(`🔐 Created session: ${globalSession.sessionId}`);
+      logger.info(`  Created session: ${globalSession.sessionId}`);
     }
-    console.log(`🔍 Using session: ${globalSession.sessionId}`);
+    logger.info(`Using session: ${globalSession.sessionId}`);
     return globalSession;
   }
 
@@ -56,7 +57,7 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
       file_id: teiPath
     }, BASE_URL);
 
-    console.log('✓ Test files created for move tests');
+    logger.success('Test files created for move tests');
   });
 
   test('POST /api/files/move should move files to new collection', async () => {
@@ -83,7 +84,7 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
     }
 
     if (!pdfHash) {
-      console.log('⚠️ Could not find PDF for move test, skipping');
+      logger.warn('Could not find PDF for move test, skipping');
       return;
     }
 
@@ -100,14 +101,14 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
     assert(result.new_pdf_id, 'Should return new PDF ID');
     assert(result.new_xml_id, 'Should return new XML ID');
 
-    console.log(`✓ Files moved successfully: PDF=${result.new_pdf_id}, XML=${result.new_xml_id}`);
+    logger.success(`Files moved successfully: PDF=${result.new_pdf_id}, XML=${result.new_xml_id}`);
   });
 
   test('POST /api/files/move should support abbreviated hashes', async () => {
     const session = await getSession();
 
     if (!testState.pdfHash || !testState.teiHash) {
-      console.log('⚠️ Test hashes not available, skipping');
+      logger.warn('Test hashes not available, skipping');
       return;
     }
 
@@ -121,14 +122,14 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
     assert(result.new_pdf_id, 'Should return new PDF ID');
     assert(result.new_xml_id, 'Should return new XML ID');
 
-    console.log('✓ Move with abbreviated hashes successful');
+    logger.success('Move with abbreviated hashes successful');
   });
 
   test('POST /api/files/move should handle duplicate collection gracefully', async () => {
     const session = await getSession();
 
     if (!testState.pdfHash || !testState.teiHash) {
-      console.log('⚠️ Test hashes not available, skipping');
+      logger.warn('Test hashes not available, skipping');
       return;
     }
 
@@ -142,7 +143,7 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
     assert(result.new_pdf_id, 'Should return new PDF ID even if already in collection');
     assert(result.new_xml_id, 'Should return new XML ID even if already in collection');
 
-    console.log('✓ Duplicate collection move handled gracefully');
+    logger.success('Duplicate collection move handled gracefully');
   });
 
   test('POST /api/files/move should return 404 for non-existent PDF', async () => {
@@ -158,7 +159,7 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
       assert.fail('Should have thrown 404 error');
     } catch (error) {
       assert(error.message.includes('404'), 'Should return 404 for non-existent PDF');
-      console.log('✓ Non-existent PDF handled with 404');
+      logger.success('Non-existent PDF handled with 404');
     }
   });
 
@@ -175,7 +176,7 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
     } catch (error) {
       assert(error.message.includes('400') || error.message.includes('422'),
              'Should return validation error for missing parameters');
-      console.log('✓ Missing parameters handled with validation error');
+      logger.success('Missing parameters handled with validation error');
     }
   });
 
@@ -188,9 +189,9 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
         await authenticatedApiCall(session.sessionId, '/files/delete', 'POST', {
           files: [testState.teiHash]
         }, BASE_URL);
-        console.log('✓ Test files deleted');
+        logger.success('Test files deleted');
       } catch (error) {
-        console.log('⚠️ Failed to delete test files:', error.message);
+        logger.warn(`Failed to delete test files:: ${error.message}`);
       }
     }
 
@@ -198,7 +199,7 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
     if (globalSession) {
       await logout(globalSession.sessionId, BASE_URL);
       globalSession = null;
-      console.log('✓ Global session cleaned up');
+      logger.success('Global session cleaned up');
     }
   });
 

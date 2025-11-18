@@ -11,10 +11,31 @@ import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { logger } from './test-logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = resolve(__dirname, '../../..');
+
+/**
+ * Execute a SQL statement on a SQLite database using Python's sqlite3 module
+ * @param {string} dbPath - Path to the SQLite database file
+ * @param {string} sql - SQL statement to execute
+ */
+function executeSql(dbPath, sql) {
+  // Normalize path for cross-platform compatibility
+  const normalizedPath = dbPath.replace(/\\/g, '/');
+  // Escape single quotes in SQL for Python string
+  const escapedSql = sql.replace(/'/g, "\\'");
+
+  execSync(
+    `uv run python -c "import sqlite3; conn = sqlite3.connect('${normalizedPath}'); conn.execute('${escapedSql}'); conn.commit(); conn.close()"`,
+    {
+      stdio: 'pipe',
+      encoding: 'utf-8'
+    }
+  );
+}
 
 /**
  * Clear all locks from locks.db
@@ -23,13 +44,10 @@ export function clearAllLocks() {
   const locksDbPath = resolve(PROJECT_ROOT, 'tests/api/runtime/db/locks.db');
   if (existsSync(locksDbPath)) {
     try {
-      execSync(`sqlite3 "${locksDbPath}" "DELETE FROM locks WHERE 1=1;"`, {
-        stdio: 'pipe',
-        encoding: 'utf-8'
-      });
-      console.log('🧹 Cleared all locks');
+      executeSql(locksDbPath, 'DELETE FROM locks WHERE 1=1');
+      logger.info('Cleared all locks');
     } catch (error) {
-      console.error('⚠️ Failed to clear locks:', error.message);
+      logger.error('Failed to clear locks:', error.message);
     }
   }
 }
@@ -43,13 +61,10 @@ export function clearTestFiles(docIdPatterns = ['delete-test%', '%/delete-test%'
   if (existsSync(metadataDbPath)) {
     try {
       const whereClause = docIdPatterns.map(pattern => `doc_id LIKE '${pattern}'`).join(' OR ');
-      execSync(`sqlite3 "${metadataDbPath}" "DELETE FROM files WHERE ${whereClause};"`, {
-        stdio: 'pipe',
-        encoding: 'utf-8'
-      });
-      console.log('🧹 Cleared test files from database');
+      executeSql(metadataDbPath, `DELETE FROM files WHERE ${whereClause}`);
+      logger.info('Cleared test files from database');
     } catch (error) {
-      console.error('⚠️ Failed to clear test files:', error.message);
+      logger.error('Failed to clear test files:', error.message);
     }
   }
 }
@@ -64,15 +79,11 @@ export function clearTestFilesByDocId(docIds) {
   const metadataDbPath = resolve(PROJECT_ROOT, 'tests/api/runtime/db/metadata.db');
   if (existsSync(metadataDbPath)) {
     try {
-      const placeholders = docIds.map(() => '?').join(',');
       const quotedIds = docIds.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
-      execSync(`sqlite3 "${metadataDbPath}" "DELETE FROM files WHERE doc_id IN (${quotedIds});"`, {
-        stdio: 'pipe',
-        encoding: 'utf-8'
-      });
-      console.log(`🧹 Cleared ${docIds.length} test file(s) from database`);
+      executeSql(metadataDbPath, `DELETE FROM files WHERE doc_id IN (${quotedIds})`);
+      logger.info(`Cleared ${docIds.length} test file(s) from database`);
     } catch (error) {
-      console.error('⚠️ Failed to clear test files by doc_id:', error.message);
+      logger.error('Failed to clear test files by doc_id:', error.message);
     }
   }
 }
@@ -82,7 +93,7 @@ export function clearTestFilesByDocId(docIds) {
  * Call this before starting tests to ensure clean slate
  */
 export function cleanupBeforeTests() {
-  console.log('🧹 Cleaning up before tests...');
+  logger.info('Cleaning up before tests...');
   clearAllLocks();
   clearTestFiles();
 }
@@ -92,7 +103,7 @@ export function cleanupBeforeTests() {
  * Call this after tests complete
  */
 export function cleanupAfterTests() {
-  console.log('🧹 Cleaning up after tests...');
+  logger.info('Cleaning up after tests...');
   clearAllLocks();
   clearTestFiles();
 }

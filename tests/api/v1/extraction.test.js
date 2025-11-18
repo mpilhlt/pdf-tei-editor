@@ -8,6 +8,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { login, authenticatedApiCall } from '../helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
 
 // Enable mock extractor for testing
 process.env.TEST_IN_PROGRESS = '1';
@@ -69,7 +70,7 @@ describe('Extraction API E2E Tests', () => {
     assert.ok(response.hash, 'Should have hash');
 
     testFileHash = response.hash;
-    console.log(`✓ Test file uploaded: ${testFileHash}`);
+    logger.success(`Test file uploaded: ${testFileHash}`);
   });
 
   test('GET /api/extract/list should return available extractors', async () => {
@@ -97,9 +98,9 @@ describe('Extraction API E2E Tests', () => {
     assert.ok(Array.isArray(firstExtractor.output), 'Extractor should have output array');
     assert.ok(typeof firstExtractor.available === 'boolean', 'Extractor should have available flag');
 
-    console.log(`✓ Found ${extractors.length} available extractors:`);
+    logger.success(`Found ${extractors.length} available extractors:`);
     extractors.forEach(ext => {
-      console.log(`  - ${ext.id}: ${ext.name} (${ext.input.join(', ')} → ${ext.output.join(', ')})`);
+      logger.info(`  - ${ext.id}: ${ext.name} (${ext.input.join(', ')} → ${ext.output.join(', ')})`);
     });
   });
 
@@ -121,7 +122,7 @@ describe('Extraction API E2E Tests', () => {
         error.message.includes('400') || error.message.includes('422'),
         'Should return 400 or 422 for missing extractor'
       );
-      console.log('✓ Rejected request with missing extractor');
+      logger.success('Rejected request with missing extractor');
     }
   });
 
@@ -142,7 +143,7 @@ describe('Extraction API E2E Tests', () => {
     } catch (error) {
       assert.ok(error.message.includes('400'), 'Should return 400 for unknown extractor');
       assert.ok(error.message.includes('Unknown extractor'), 'Error should mention unknown extractor');
-      console.log('✓ Rejected request with unknown extractor');
+      logger.success('Rejected request with unknown extractor');
     }
   });
 
@@ -164,7 +165,7 @@ describe('Extraction API E2E Tests', () => {
         error.message.includes('400') || error.message.includes('422'),
         'Should return 400 or 422 for missing file_id'
       );
-      console.log('✓ Rejected request with missing file_id');
+      logger.success('Rejected request with missing file_id');
     }
   });
 
@@ -184,7 +185,7 @@ describe('Extraction API E2E Tests', () => {
       assert.fail('Should have thrown an error for non-existent file');
     } catch (error) {
       assert.ok(error.message.includes('404'), 'Should return 404 for non-existent file');
-      console.log('✓ Rejected request with non-existent file_id');
+      logger.success('Rejected request with non-existent file_id');
     }
   });
 
@@ -207,7 +208,7 @@ describe('Extraction API E2E Tests', () => {
     assert.ok(response, 'Should receive a response');
     assert.ok(response.xml, 'Should have xml hash in response');
 
-    console.log(`✓ Mock extraction succeeded, result: ${response.xml}`);
+    logger.success(`Mock extraction succeeded, result: ${response.xml}`);
 
     // Verify the extracted file was saved
     const filesResponse = await authenticatedApiCall(
@@ -233,11 +234,11 @@ describe('Extraction API E2E Tests', () => {
     }
 
     if (extractedFile) {
-      console.log(`✓ Extracted file found in file list`);
+      logger.success('Extracted file found in file list');
       assert.ok(extractedFile.file_type === 'tei',
         'Extracted file should be TEI type');
     } else {
-      console.log(`⚠️  Extracted file not found in list (hash mismatch or async issue)`);
+      logger.warn('Extracted file not found in list (hash mismatch or async issue)');
     }
   });
 

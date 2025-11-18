@@ -8,6 +8,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { login, authenticatedApiCall } from '../helpers/test-auth.js';
+import { logger } from '../helpers/test-logger.js';
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 
@@ -79,15 +80,15 @@ describe('Validation API E2E Tests', () => {
     assert.ok(Array.isArray(response.errors), 'Should have errors array');
 
     // Valid XML may have warnings (e.g., timeout) but should not have syntax errors
-    console.log(`Validation result: ${response.errors.length} errors/warnings`);
+    logger.info(`Validation result: ${response.errors.length} errors/warnings`);
     if (response.errors.length > 0) {
-      console.log('Errors/warnings:', response.errors);
+      logger.info('Errors/warnings:', response.errors);
       // Check if it's just a timeout warning
       const hasOnlyTimeoutWarning = response.errors.every(
         e => e.severity === 'warning' && e.message.includes('timed out')
       );
       if (hasOnlyTimeoutWarning) {
-        console.log('✓ Validation timed out (expected for complex Grobid schema)');
+        logger.success('Validation timed out (expected for complex Grobid schema)');
       }
     }
   });
@@ -111,7 +112,7 @@ describe('Validation API E2E Tests', () => {
     assert.ok(typeof firstError.line === 'number', 'Error should have line number');
     assert.ok(typeof firstError.column === 'number', 'Error should have column number');
 
-    console.log(`✓ Detected syntax error: ${firstError.message} at line ${firstError.line}`);
+    logger.success(`Detected syntax error: ${firstError.message} at line ${firstError.line}`);
   });
 
   test('POST /api/validate should handle XML without schema gracefully', async () => {
@@ -127,7 +128,7 @@ describe('Validation API E2E Tests', () => {
     assert.ok(Array.isArray(response.errors), 'Should have errors array');
     assert.strictEqual(response.errors.length, 0, 'Should have no errors for XML without schema');
 
-    console.log('✓ No errors for XML without schema reference');
+    logger.success('No errors for XML without schema reference');
   });
 
   test('POST /api/validate should reject empty XML', async () => {
@@ -143,7 +144,7 @@ describe('Validation API E2E Tests', () => {
     } catch (error) {
       assert.ok(error.message.includes('400') || error.message.includes('422'),
         'Should return 400 or 422 for empty XML');
-      console.log('✓ Rejected empty XML');
+      logger.success('Rejected empty XML');
     }
   });
 
@@ -168,11 +169,11 @@ describe('Validation API E2E Tests', () => {
       const elementCount = Object.keys(response.data).filter(k => !k.startsWith('#')).length;
       assert.ok(elementCount > 0, 'Should have at least one element definition');
 
-      console.log(`✓ Generated autocomplete data with ${elementCount} elements`);
+      logger.success(`Generated autocomplete data with ${elementCount} elements`);
     } catch (error) {
       // Autocomplete generation may fail for various reasons (timeout, network, schema complexity)
       // Log but don't fail the test
-      console.log(`⚠️  Autocomplete generation failed (this may be expected): ${error.message}`);
+      logger.warn(`Autocomplete generation failed (this may be expected): ${error.message}`);
     }
   });
 
@@ -194,7 +195,7 @@ describe('Validation API E2E Tests', () => {
         error.message.includes('400') || error.message.includes('No schema'),
         'Should return 400 for XML without schema'
       );
-      console.log('✓ Rejected XML without schema reference');
+      logger.success('Rejected XML without schema reference');
     }
   });
 
@@ -211,14 +212,14 @@ describe('Validation API E2E Tests', () => {
         BASE_URL
       );
       // If we have internet, this should succeed or timeout
-      console.log('✓ Cache invalidation succeeded (internet available)');
+      logger.success('Cache invalidation succeeded (internet available)');
     } catch (error) {
       // May fail with 503 if no internet connection
       if (error.message.includes('503')) {
-        console.log('✓ Correctly returned 503 when offline');
+        logger.success('Correctly returned 503 when offline');
       } else {
         // Other errors are also acceptable (schema issues, timeouts, etc.)
-        console.log(`⚠️  Cache invalidation failed: ${error.message}`);
+        logger.warn(`Cache invalidation failed: ${error.message}`);
       }
     }
   });

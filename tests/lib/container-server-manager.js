@@ -5,6 +5,7 @@ import { promises as fs } from 'fs';
 import { join, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { logger } from '../api/helpers/test-logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -73,21 +74,21 @@ export class ContainerServerManager extends ServerManager {
       execSync('command -v podman', { stdio: 'ignore' });
       this.containerCmd = 'podman';
       this.usePodman = true;
-      console.log('🐙 Using podman as container tool');
-      console.log('📦 Preferring native podman commands over compose tools');
+      logger.info('Using podman as container tool');
+      logger.info('Preferring native podman commands over compose tools');
 
       // Check for compose tools (for compatibility)
       try {
         execSync('command -v podman-compose', { stdio: 'ignore' });
         this.composeCmd = 'podman-compose';
-        console.log('📦 Found podman-compose (available but using native podman)');
+        logger.info('Found podman-compose (available but using native podman)');
       } catch {
         try {
           execSync('command -v docker-compose', { stdio: 'ignore' });
           this.composeCmd = 'docker-compose';
-          console.log('📦 Found docker-compose (available but using native podman)');
+          logger.info('Found docker-compose (available but using native podman)');
         } catch {
-          console.log('📦 No compose tool found, using direct podman commands');
+          logger.info('No compose tool found, using direct podman commands');
         }
       }
     } catch {
@@ -95,18 +96,18 @@ export class ContainerServerManager extends ServerManager {
         execSync('command -v docker', { stdio: 'ignore' });
         this.containerCmd = 'docker';
         this.usePodman = false;
-        console.log('🐳 Using docker as container tool');
+        logger.info('Using docker as container tool');
 
         // Check for docker compose
         try {
           execSync('docker compose version', { stdio: 'ignore' });
           this.composeCmd = 'docker compose';
-          console.log('📦 Found docker compose');
+          logger.info('Found docker compose');
         } catch {
           try {
             execSync('command -v docker-compose', { stdio: 'ignore' });
             this.composeCmd = 'docker-compose';
-            console.log('📦 Found docker-compose');
+            logger.info('Found docker-compose');
           } catch {
             throw new Error('Docker Compose is required but not installed');
           }
@@ -125,20 +126,20 @@ export class ContainerServerManager extends ServerManager {
    */
   async buildImage(noRebuild = false) {
     if (noRebuild) {
-      console.log('⏭️ Skipping image build (using existing image)...');
+      logger.info('Skipping image build (using existing image)...');
       // Check if the image exists
       try {
         execSync(`${this.containerCmd} image exists pdf-tei-editor-test:latest`, {
           stdio: 'ignore',
         });
-        console.log('✅ Found existing pdf-tei-editor-test:latest image');
+        logger.success('Found existing pdf-tei-editor-test:latest image');
       } catch {
         throw new Error(
           'No existing pdf-tei-editor-test:latest image found. Run without noRebuild first.'
         );
       }
     } else {
-      console.log('🏗️ Building test image...');
+      logger.info('Building test image...');
       execSync(
         `${this.containerCmd} build -t pdf-tei-editor-test:latest --target test .`,
         {
@@ -159,7 +160,7 @@ export class ContainerServerManager extends ServerManager {
    */
   async cleanupStaleImages() {
     try {
-      console.log('🧹 Cleaning up stale images...');
+      logger.info('Cleaning up stale images...');
 
       // Remove dangling images (untagged <none> images)
       const cleanupCmd = `${this.containerCmd} image prune -f --filter "dangling=true"`;
@@ -201,7 +202,7 @@ export class ContainerServerManager extends ServerManager {
           }
 
           if (removedCount > 0) {
-            console.log(`🗑️ Removed ${removedCount} stale image(s) older than 24 hours`);
+            logger.info(`Removed ${removedCount} stale image(s) older than 24 hours`);
           }
         }
       } catch (err) {
@@ -209,7 +210,7 @@ export class ContainerServerManager extends ServerManager {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      console.log('⚠️ Image cleanup failed (continuing anyway):', errorMessage);
+      logger.warn(`Image cleanup failed (continuing anyway):: ${errorMessage}`);
     }
   }
 
@@ -222,7 +223,7 @@ export class ContainerServerManager extends ServerManager {
    */
   async startDirectContainer(noRebuild = false, env = {}) {
     // Clean up any existing containers using the configured port
-    console.log('🧹 Cleaning up existing containers...');
+    logger.info('Cleaning up existing containers...');
     try {
       const existingContainers = execSync(
         `${this.containerCmd} ps -a --format "table {{.ID}}\\t{{.Ports}}" | grep ":${this.config.port}->" | awk '{print $1}'`,
@@ -230,7 +231,7 @@ export class ContainerServerManager extends ServerManager {
       ).trim();
 
       if (existingContainers) {
-        console.log(`🛑 Stopping existing containers using port ${this.config.port}...`);
+        logger.info(`Stopping existing containers using port ${this.config.port}...`);
         execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} stop`, {
           stdio: 'ignore',
         });
@@ -253,7 +254,7 @@ export class ContainerServerManager extends ServerManager {
     await this.buildImage(noRebuild);
 
     // Start container with test environment
-    console.log('🚀 Starting test container...');
+    logger.info('Starting test container...');
     const portMapping = `${this.config.port}:${this.config.containerPort}`;
 
     // Build environment arguments
@@ -270,7 +271,7 @@ export class ContainerServerManager extends ServerManager {
       encoding: 'utf8',
       cwd: this.projectRoot,
     }).trim();
-    console.log(`🆔 Container ID: ${containerId}`);
+    logger.info(`Container ID: ${containerId}`);
   }
 
   /**
@@ -281,7 +282,7 @@ export class ContainerServerManager extends ServerManager {
    * @param {Object.<string, string>} env - Environment variables
    */
   async startComposeContainer(noRebuild = false, env = {}) {
-    console.log('🏗️ Using compose commands...');
+    logger.info('Using compose commands...');
 
     // Clean up any existing containers
     try {
@@ -298,14 +299,14 @@ export class ContainerServerManager extends ServerManager {
 
     // Start the test environment
     if (noRebuild) {
-      console.log('🚀 Starting test environment with compose (no rebuild)...');
+      logger.info('Starting test environment with compose (no rebuild)...');
       execSync(`${this.composeCmd} -f docker-compose.test.yml up --no-build -d`, {
         stdio: 'pipe',
         cwd: this.projectRoot,
         env: testEnv,
       });
     } else {
-      console.log('🚀 Starting test environment with compose...');
+      logger.info('Starting test environment with compose...');
       execSync(`${this.composeCmd} -f docker-compose.test.yml up --build -d`, {
         stdio: 'pipe',
         cwd: this.projectRoot,
@@ -344,7 +345,7 @@ export class ContainerServerManager extends ServerManager {
           });
         }
 
-        console.log('✅ Application is ready');
+        logger.success('Application is ready');
         return;
       } catch (err) {
         // Not ready yet, continue waiting
@@ -359,7 +360,7 @@ export class ContainerServerManager extends ServerManager {
     }
 
     // If we get here, the application didn't start in time
-    console.error(`❌ Application failed to start within ${timeoutSec} seconds`);
+    logger.error(`Application failed to start within ${timeoutSec} seconds`);
     await this.showContainerLogs();
     throw new Error('Application startup timeout');
   }
@@ -377,7 +378,7 @@ export class ContainerServerManager extends ServerManager {
     console.log(
       `📋 Container logs saved to: ${relative(this.projectRoot, containerLogFile)}`
     );
-    console.log(`📋 Server logs saved to: ${relative(this.projectRoot, serverLogFile)}`);
+    logger.info(`Server logs saved to: ${relative(this.projectRoot, serverLogFile)}`);
 
     try {
       // Ensure test results directory exists
@@ -473,8 +474,8 @@ export class ContainerServerManager extends ServerManager {
       console.log(`[INFO] Auto-selected available port ${this.config.port} for container`);
     }
 
-    console.log('🚀 Starting containerized test environment...');
-    console.log(`🆔 Test Run ID: ${this.testRunId}`);
+    logger.info('Starting containerized test environment...');
+    logger.info(`Test Run ID: ${this.testRunId}`);
 
     try {
       if (this.usePodman) {
@@ -484,7 +485,7 @@ export class ContainerServerManager extends ServerManager {
       }
 
       this.isContainerStarted = true;
-      console.log('✅ Container started successfully');
+      logger.success('Container started successfully');
 
       // Wait for application to be ready
       await this.waitForApplicationReady();
@@ -512,7 +513,7 @@ export class ContainerServerManager extends ServerManager {
 
     if (!this.isContainerStarted) return;
 
-    console.log('🛑 Cleaning up test environment...');
+    logger.info('Cleaning up test environment...');
 
     try {
       if (this.usePodman) {
@@ -526,7 +527,7 @@ export class ContainerServerManager extends ServerManager {
             ).trim();
 
             if (existingContainers) {
-              console.log(`🛑 Stopping all containers using port ${this.config.port}...`);
+              logger.info(`Stopping all containers using port ${this.config.port}...`);
               execSync(`echo "${existingContainers}" | xargs -r ${this.containerCmd} stop`, {
                 stdio: 'ignore',
               });
@@ -541,7 +542,7 @@ export class ContainerServerManager extends ServerManager {
           // Clean up specific test container
           execSync(`${this.containerCmd} stop ${this.containerName}`, { stdio: 'ignore' });
           execSync(`${this.containerCmd} rm -f ${this.containerName}`, { stdio: 'ignore' });
-          console.log('🛑 Container stopped and removed');
+          logger.info('Container stopped and removed');
         }
       } else {
         // Compose cleanup
@@ -553,12 +554,12 @@ export class ContainerServerManager extends ServerManager {
               cwd: this.projectRoot,
             }
           );
-          console.log('🛑 Compose environment stopped');
+          logger.info('Compose environment stopped');
         }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      console.log('⚠️ Error during cleanup (may be expected):', errorMessage);
+      logger.warn(`Error during cleanup (may be expected):: ${errorMessage}`);
     }
 
     this.isContainerStarted = false;
