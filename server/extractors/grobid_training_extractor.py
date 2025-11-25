@@ -48,6 +48,8 @@ class GrobidTrainingExtractor(BaseExtractor):
                     "required": False,
                     "options": [
                         "grobid.training.segmentation", 
+                        "grobid.training.header",
+                        "grobid.training.fulltext",
                         "grobid.training.references.referenceSegmenter",
                         "grobid.training.references"
                     ]
@@ -64,24 +66,6 @@ class GrobidTrainingExtractor(BaseExtractor):
                 }
             },
             "navigation_xpath": {
-                "grobid.training.segmentation": [
-                    {
-                        "value": "//tei:listBibl",
-                        "label": "<listBibl>"
-                    }
-                ],
-                "grobid.training.references.referenceSegmenter": [
-                    {
-                        "value": "//tei:bibl",
-                        "label": "<bibl>"
-                    }
-                ],                
-                "grobid.training.references": [
-                    {
-                        "value": "//tei:bibl",
-                        "label": "<bibl>"
-                    }
-                ]
             }
         }
     
@@ -329,7 +313,7 @@ class GrobidTrainingExtractor(BaseExtractor):
     def _create_training_data(self, pdf_path: str, grobid_server_url: str, variant_id: str, flavor: str) -> str:
         """Create training data using GROBID createTraining API."""
         print(f"Creating training data from {pdf_path} via GROBID")
-        
+
         # Create temporary directory for processing
         with tempfile.TemporaryDirectory() as temp_dir:
             # Call GROBID createTraining API
@@ -339,30 +323,30 @@ class GrobidTrainingExtractor(BaseExtractor):
                     'input': pdf_file,
                     'flavor': ('', flavor)
                 }
-                
+
                 response = requests.post(url, files=files, timeout=300)  # 5 minute timeout
                 response.raise_for_status()
-            
+
             # Save ZIP file
             zip_path = os.path.join(temp_dir, 'training.zip')
             with open(zip_path, 'wb') as f:
                 f.write(response.content)
-            
+
             # Extract ZIP file
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(temp_dir)
-            
+
             # Find the file that corresponds to the variant
             training_file = None
-            suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml' 
+            suffix = f'.{variant_id.removeprefix("grobid.")}.tei.xml'
             for filename in os.listdir(temp_dir):
                 if filename.endswith(suffix):
                     training_file = os.path.join(temp_dir, filename)
                     break
-            
+
             if not training_file:
                 raise RuntimeError(f"Could not find '*{suffix}' file in GROBID output")
-            
+
             # Read the training file content
             with open(training_file, 'r', encoding='utf-8') as f:
                 return f.read()

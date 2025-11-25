@@ -37,4 +37,7 @@ fastapi_app/db/*.db
 fastapi_app/db/*.db-*
 
 # unknown
-nul 
+nul
+
+# IDE
+.idea

@@ -14,8 +14,7 @@ const args = process.argv.slice(2);
 // Spawn the Python manage.py script with uv
 const child = spawn('uv', ['run', 'python', join(projectRoot, 'bin', 'manage.py'), ...args], {
     stdio: 'inherit',
-    cwd: projectRoot,
-    shell: true
+    cwd: projectRoot
 });
 
 child.on('error', (error) => {
