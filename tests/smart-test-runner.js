@@ -724,8 +724,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         .option('--dry-run', 'show which tests would run without executing them')
         .option('--tap', 'output results in TAP format')
         .option('--debug', 'enable debug logging')
-        .argument('[files...]', 'list of files for which tests should be run')
+        .arguments('[files...]')
+        .usage('[options] [files...]')
         .addHelpText('after', `
+Arguments:
+  files...    List of files for which tests should be run
+
 Examples:
   node tests/smart-test-runner.js
   node tests/smart-test-runner.js --all
