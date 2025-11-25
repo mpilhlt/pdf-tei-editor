@@ -79,8 +79,9 @@ async function start() {
 
     // Authenticate user, otherwise we don't proceed further
     const userData = await authentication.ensureAuthenticated()
-    logger.info(`${userData.fullname} has logged in.`)
-    notify(`Welcome back, ${userData.fullname}!`)
+    const name = userData.fullname || userData.username
+    logger.info(`${name} has logged in.`)
+    notify(`Welcome back, ${name}!`)
 
     testLog('USER_AUTHENTICATED', {
       username: userData.username,

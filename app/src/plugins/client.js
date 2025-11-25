@@ -240,7 +240,8 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     }
 
     // handle error responses
-    const message = result.error
+    // FastAPI uses 'detail', Flask uses 'error'
+    const message = result.detail || result.error
 
     // handle app-specific error types
     switch (response.status) {

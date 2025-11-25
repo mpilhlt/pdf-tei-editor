@@ -224,6 +224,7 @@ def extract_metadata(
                 storage
             )
             return ExtractResponse(
+                id=None,
                 pdf=None,
                 xml=result['xml']
             )
@@ -258,6 +259,9 @@ def _save_pdf_extraction_result(
     Returns:
         Dict with 'pdf' and 'xml' hashes
     """
+    from lxml import etree
+    from ..lib.tei_utils import extract_tei_metadata
+
     # Determine variant from options
     variant = options.get('variant_id')
 
@@ -265,8 +269,19 @@ def _save_pdf_extraction_result(
     tei_bytes = tei_xml.encode('utf-8')
     tei_hash, tei_path = storage.save_file(tei_bytes, 'tei')
 
-    # Get collections from PDF metadata
+    # Get collections from PDF metadata (TEI files inherit PDF collections)
     doc_collections = pdf_metadata.doc_collections or []
+
+    # Parse TEI to extract metadata
+    label = None
+    tei_metadata = None
+    try:
+        tei_root = etree.fromstring(tei_bytes)
+        tei_metadata = extract_tei_metadata(tei_root)
+        # Use edition_title as label if available
+        label = tei_metadata.get('edition_title')
+    except Exception as e:
+        logger.warning(f"Failed to parse TEI metadata for label: {e}")
 
     # Create file metadata record
     file_create = FileCreate(
@@ -281,20 +296,64 @@ def _save_pdf_extraction_result(
         variant=variant,
         version=1,  # First version
         is_gold_standard=False,
-        label=None,
-        file_metadata={'extractor': options.get('extractor', 'unknown')},
-        sync_status='modified',
-        sync_version=0
+        label=label,
+        file_metadata={'extractor': options.get('extractor', 'unknown')}
     )
 
     # Insert into database
     inserted_file = repo.insert_file(file_create)
 
-    logger.info(f"Saved extraction result: {tei_hash[:8]}... (doc_id={pdf_metadata.doc_id}, variant={variant})")
+    # Update PDF metadata from extracted TEI
+    if tei_metadata:
+        from ..lib.models import FileUpdate
+
+        # Get doc_metadata that was extracted
+        doc_metadata = tei_metadata.get('doc_metadata', {})
+
+        # Build a label for the PDF from metadata
+        # Priority: title, DOI, or keep existing
+        pdf_label = None
+        if 'title' in doc_metadata:
+            title = doc_metadata['title']
+            # Optionally include first author and date for more context
+            author_part = ""
+            if 'authors' in doc_metadata and doc_metadata['authors']:
+                first_author = doc_metadata['authors'][0]
+                if 'family' in first_author:
+                    author_part = first_author['family'] + ", "
+
+            date_part = ""
+            if 'date' in doc_metadata:
+                date_part = f" ({doc_metadata['date']})"
+
+            # Truncate long titles
+            if len(title) > 60:
+                title = title[:57] + "..."
+
+            pdf_label = f"{author_part}{title}{date_part}"
+        elif tei_metadata.get('doc_id'):
+            # Use DOI/doc_id if available
+            pdf_label = tei_metadata['doc_id']
+
+        # Update PDF file with extracted metadata
+        if doc_metadata or pdf_label:
+            updates = FileUpdate()
+            if doc_metadata:
+                updates.doc_metadata = doc_metadata
+            if pdf_label:
+                updates.label = pdf_label
+
+            try:
+                repo.update_file(pdf_metadata.id, updates)
+                logger.info(f"Updated PDF metadata: {pdf_metadata.id[:8]}... label='{pdf_label}'")
+            except Exception as e:
+                logger.warning(f"Failed to update PDF metadata: {e}")
+
+    logger.info(f"Saved extraction result: {tei_hash[:8]}... (doc_id={pdf_metadata.doc_id}, variant={variant}, label={label})")
 
     return {
-        'pdf': pdf_metadata.id,
-        'xml': tei_hash
+        'pdf': pdf_metadata.stable_id,
+        'xml': inserted_file.stable_id
     }
 
 
@@ -364,5 +423,5 @@ def _save_xml_extraction_result(
     logger.info(f"Saved {extractor_id} extraction result: {file_hash[:8]}... (doc_id={doc_id})")
 
     return {
-        'xml': file_hash
+        'xml': inserted_file.stable_id
     }

@@ -159,6 +159,10 @@ function start(state, timeoutSeconds = 60) {
           // We're in read-only mode, so lock conflicts are expected - just log it
           logger.debug(`Heartbeat received lock conflict for read-only file ${filePath} (expected, not showing error)`);
         }
+      } else if (error.statusCode === 404) {
+        // File not found - silently skip (file was likely deleted)
+        logger.debug(`Heartbeat file not found (${filePath}), skipping. File may have been deleted.`);
+        return;
       } else if (error.statusCode === 504) {
         logger.warn("Temporary connection failure, will try again...")
       } else if (error.statusCode === 403) {

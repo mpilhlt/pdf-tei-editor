@@ -38,6 +38,9 @@ npm run test:e2e -- --grep "extraction" --env SOME_ENVIRONMENT_VAR
 # Use custom .env file for E2E tests
 npm run test:e2e -- --dotenv-path .env.testing
 
+# Bypass authentication for development/testing (allows anonymous access to all endpoints)
+FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run dev:fastapi
+
 ```
 
 ### Key Files

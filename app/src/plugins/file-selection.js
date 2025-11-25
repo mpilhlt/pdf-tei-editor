@@ -326,15 +326,6 @@ async function populateSelectboxes(state) {
   }
   logger.debug("Populating selectboxes")
 
-  // Note: This function should only be called when fileData exists
-  // If fileData is missing, it should be loaded via reloadFileData() which will trigger
-  // this function again via the update() method
-  if (!state.fileData || state.fileData.length === 0) {
-    throw new Error("populateSelectboxes called but fileData is not available")
-  }
-
-  const fileData = state.fileData;
-
   // Populate variant selectbox first
   await populateVariantSelectbox(state);
 
@@ -343,6 +334,14 @@ async function populateSelectboxes(state) {
     // @ts-ignore
     ui.toolbar[name].innerHTML = ""
   }
+
+  // If no files, keep selectboxes empty
+  if (state.fileData.length === 0) {
+    logger.debug("No files to display, selectboxes cleared")
+    return
+  }
+
+  const fileData = state.fileData;
 
   // Filter files by variant selection
   let filteredFileData = fileData;
@@ -366,14 +365,19 @@ async function populateSelectboxes(state) {
   // sort into groups by collection (now directly from server data)
   const grouped_files = groupFilesByCollection(filteredFileData)
 
-  // save the collections in closure variable
-  collections = Object.keys(grouped_files).sort()
+  // save the collections in closure variable, with __unfiled always first
+  collections = Object.keys(grouped_files).sort((a, b) => {
+    if (a === "__unfiled") return -1;
+    if (b === "__unfiled") return 1;
+    return a.localeCompare(b);
+  });
   ui.toolbar.pdf.dataset.collections = JSON.stringify(collections)
 
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
-
-    await createHtmlElements(`<small>${collection_name.replaceAll("_", " ").trim()}</small>`, ui.toolbar.pdf)
+    // Display "Unfiled" for the special __unfiled collection
+    const displayName = collection_name === "__unfiled" ? "Unfiled" : collection_name.replaceAll("_", " ").trim();
+    await createHtmlElements(`<small>${displayName}</small>`, ui.toolbar.pdf)
 
     // get a list of file data sorted by label
     const files = grouped_files[collection_name]

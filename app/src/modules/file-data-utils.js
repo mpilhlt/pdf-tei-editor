@@ -226,12 +226,10 @@ export function groupFilesByCollection(fileData) {
   /** @type Record<string, DocumentItem[]> */
   const groups = {}
   return fileData.reduce((groups, file) => {
-    // Use first collection from collections array
-    const collection_name = file.collections && file.collections[0];
-    if (collection_name) {
-      groups[collection_name] ||= []
-      groups[collection_name].push(file);
-    }
+    // Use first collection from collections array, or "__unfiled" if none
+    const collection_name = (file.collections && file.collections[0]) || "__unfiled";
+    groups[collection_name] ||= []
+    groups[collection_name].push(file);
     return groups;
   }, groups);
 }

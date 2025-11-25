@@ -15,7 +15,10 @@
       "Bash(nul)",
       "Bash(node tests/scripts/replace-emoji-logging.js:*)",
       "Bash(npm run test:api:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(python3:*)",
+      "Bash(curl:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

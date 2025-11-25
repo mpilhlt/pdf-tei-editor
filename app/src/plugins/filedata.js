@@ -71,7 +71,6 @@ class FiledataPlugin extends Plugin {
     /** @type {DocumentItem[]} */
     let data = response?.files || [];
     if (!data || data.length === 0) {
-      dialog.error("No files found");
       data = []; // Ensure data is an empty array instead of null/undefined
     }
 

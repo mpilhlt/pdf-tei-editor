@@ -299,7 +299,7 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter)
 
     # Global arguments
-    parser.add_argument('--db-path', help='Path to the db directory (default: ./db)')
+    parser.add_argument('--db-path', help='Path to the db directory (default: ./data/db)')
     parser.add_argument('--config-path', help='Path to the config directory (default: ./config)')
 
     subparsers = parser.add_subparsers(dest='command', title='Available commands')

@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-11-18T11:16:18.115Z
+ * Generated from OpenAPI schema at 2025-11-25T22:00:30.487Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -146,6 +146,7 @@
  * @property {Array<string>} input - Supported input types (e.g., ['pdf'], ['xml'])
  * @property {Array<string>} output - Supported output types (e.g., ['xml'])
  * @property {boolean} available - Whether the extractor is currently available
+ * @property {Object<string, any>=} options - Configuration options supported by the extractor
  */
 
 /**

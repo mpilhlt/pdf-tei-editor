@@ -1,8 +1,8 @@
 import os
 from typing import Dict, Any, List
-import requests
 import json
 from server.extractors.llm_base_extractor import LLMBaseExtractor
+from .http_utils import get_retry_session
 
 class KisskiExtractor(LLMBaseExtractor):
     """
@@ -23,31 +23,32 @@ class KisskiExtractor(LLMBaseExtractor):
         }
     
     def get_models(self) -> List[str]:
-        """Return list of available KISSKI models from API"""
+        """Return list of available KISSKI models from API with retry logic"""
         # Ensure we have access to the API
         env_var = self._get_api_key_env_var()
         api_key = os.getenv(env_var)
         if not api_key:
             raise RuntimeError(f"API key not available. Please set {env_var} environment variable.")
-        
+
         url = "https://chat-ai.academiccloud.de/v1/models"
         headers = {
             'Accept': 'application/json',
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
         }
-        
-        response = requests.post(url, headers=headers)
+
+        session = get_retry_session(retries=3, backoff_factor=1.0)
+        response = session.post(url, headers=headers, timeout=30)
         response.raise_for_status()
-        
+
         result = response.json()
-        
+
         # Extract model IDs from the response
         if 'data' in result:
             models = [model.get('id', '') for model in result['data'] if model.get('id')]
             if models:
                 return models
-        
+
         raise RuntimeError("Could not retrieve model list from KISSKI API")
     
     def _get_api_key_env_var(self) -> str:
@@ -59,19 +60,19 @@ class KisskiExtractor(LLMBaseExtractor):
         return api_key
     
     def _call_llm(self, system_prompt: str, user_prompt: str, model: str = None, temperature: float = 0.1) -> str:
-        """Call the KISSKI API and return the response text"""
+        """Call the KISSKI API and return the response text with retry logic"""
         url = "https://chat-ai.academiccloud.de/v1/chat/completions"
-        
+
         # Use specified model or default
         if not model or model == "":
             raise RuntimeError("No model given")
-        
+
         headers = {
             'Accept': 'application/json',
             'Authorization': f'Bearer {self.client}',
             'Content-Type': 'application/json'
         }
-        
+
         data = {
             "model": model,
             "messages": [
@@ -80,12 +81,13 @@ class KisskiExtractor(LLMBaseExtractor):
             ],
             "temperature": temperature
         }
-        
-        response = requests.post(url, headers=headers, json=data)
+
+        session = get_retry_session(retries=3, backoff_factor=2.0)
+        response = session.post(url, headers=headers, json=data, timeout=120)
         response.raise_for_status()
-        
+
         result = response.json()
         if 'choices' in result and len(result['choices']) > 0:
             return result['choices'][0]['message']['content']
-        
+
         return ""

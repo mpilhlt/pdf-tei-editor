@@ -433,6 +433,70 @@ class FileRepository:
             if self.logger:
                 self.logger.info(f"Deleted physical file {file_id[:8]}... (ref_count reached 0)")
 
+    def undelete_file(self, file_id: str, label: Optional[str] = None) -> FileMetadata:
+        """
+        Restore a soft-deleted file (sets deleted = 0).
+
+        Also updates:
+        - local_modified_at = CURRENT_TIMESTAMP
+        - sync_status = 'modified'
+        - Increments storage reference count
+        - Optionally updates label
+
+        Args:
+            file_id: File ID (hash)
+            label: Optional new label to set
+
+        Returns:
+            Updated FileMetadata
+
+        Raises:
+            ValueError: If file_id not found or not deleted
+        """
+        # Get file metadata first (need file_type for reference counting)
+        file_metadata = self.get_file_by_id(file_id, include_deleted=True)
+        if not file_metadata:
+            raise ValueError(f"File not found: {file_id}")
+        if not file_metadata.deleted:
+            raise ValueError(f"File is not deleted: {file_id}")
+
+        # Build SET clause with optional label
+        set_parts = [
+            "deleted = 0",
+            "local_modified_at = CURRENT_TIMESTAMP",
+            "sync_status = 'modified'",
+            "updated_at = CURRENT_TIMESTAMP"
+        ]
+        params = []
+
+        if label is not None:
+            set_parts.append("label = ?")
+            params.append(label)
+
+        params.append(file_id)
+
+        query = f"""
+            UPDATE files
+            SET {', '.join(set_parts)}
+            WHERE id = ? AND deleted = 1
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+
+            if cursor.rowcount == 0:
+                raise ValueError(f"File not found or not deleted: {file_id}")
+
+            if self.logger:
+                self.logger.debug(f"Undeleted file: {file_id}")
+
+        # Increment storage reference count (undoes the decrement from delete)
+        self.ref_manager.increment_reference(file_id, file_metadata.file_type)
+
+        # Return updated file metadata
+        return self.get_file_by_id(file_id)
+
     # List and Filter Operations
 
     def list_files(

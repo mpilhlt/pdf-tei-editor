@@ -52,9 +52,9 @@ class MockExtractor(BaseExtractor):
 
     @classmethod
     def is_available(cls) -> bool:
-        """Mock extractor available only in development and testing modes."""
+        """Mock extractor available only in testing mode."""
         app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
-        return app_mode in ["development", "testing"]
+        return app_mode == "testing"
 
     def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                 options: Dict[str, Any] = None) -> str:

@@ -108,7 +108,20 @@ def require_authenticated_user(
     """
     Get current authenticated user (raises 401 if not authenticated).
     Use for endpoints that require authentication.
+
+    Set FASTAPI_ALLOW_ANONYMOUS_ACCESS=true to bypass authentication for development/testing.
     """
+    import os
+
+    # Check if anonymous access is allowed via environment variable
+    allow_anonymous = os.environ.get("FASTAPI_ALLOW_ANONYMOUS_ACCESS", "").lower() in ["true", "1", "yes"]
+    if allow_anonymous:
+        return {
+            "username": "anonymous",
+            "email": "anonymous@localhost",
+            "role": "admin"
+        }
+
     session_id = get_session_id_from_request(request)
     if not session_id:
         raise HTTPException(status_code=401, detail="Authentication required")

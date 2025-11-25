@@ -91,7 +91,7 @@ def get_project_paths(db_path: Optional[str] = None,
     else:
         # Get project root (parent of bin directory where manage.py is located)
         project_root = Path(__file__).resolve().parent.parent.parent
-        db_dir = project_root / 'db'
+        db_dir = project_root / 'data' / 'db'
 
     if config_path:
         config_dir = Path(config_path)

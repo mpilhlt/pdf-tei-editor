@@ -34,6 +34,10 @@ class ExtractorInfo(BaseModel):
         ...,
         description="Whether the extractor is currently available"
     )
+    options: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Configuration options supported by the extractor"
+    )
 
 
 class ListExtractorsResponse(BaseModel):

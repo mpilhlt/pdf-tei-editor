@@ -19,7 +19,7 @@
         "start": "uv run python bin/start-prod",
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",
-        "start:dev:flask": "uv run python bin/start-dev-flase",
+        "start:dev:flask": "uv run python bin/start-dev-flask",
         "test:all": "node tests/smart-test-runner.js --all",
         "test:changed": "node tests/smart-test-runner.js",
         "test:tap": "node tests/smart-test-runner.js --all --tap",

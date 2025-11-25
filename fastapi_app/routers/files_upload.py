@@ -125,15 +125,41 @@ async def upload_file(
 
     logger.info(f"Saved file to storage: {file_hash[:16]}... at {storage_path}")
 
-    # Check if file already exists in database
-    existing_file = repo.get_file_by_id(file_hash)
+    # Check if file already exists in database (including soft-deleted files)
+    existing_file = repo.get_file_by_id(file_hash, include_deleted=True)
     if existing_file:
-        logger.info(f"File already exists in database: {file_hash[:16]}...")
-        # Return existing file's stable_id (short, permanent ID)
-        return UploadResponse(
-            type=file_type,
-            filename=existing_file.stable_id
-        )
+        if existing_file.deleted:
+            # File was soft-deleted - undelete it and update label
+            logger.info(f"Undeleting previously deleted file: {file_hash[:16]}...")
+
+            # Extract label from filename
+            import os
+            original_name = os.path.splitext(file.filename)[0]
+            label = original_name.replace("__", "/")
+
+            # Undelete the file and update label
+            updated_file = repo.undelete_file(file_hash, label=label)
+            logger.info(f"Undeleted file: {file_hash[:16]}... -> {updated_file.stable_id}")
+
+            return UploadResponse(
+                type=file_type,
+                filename=updated_file.stable_id
+            )
+        else:
+            # File exists and is not deleted
+            logger.info(f"File already exists in database: {file_hash[:16]}...")
+            return UploadResponse(
+                type=file_type,
+                filename=existing_file.stable_id
+            )
+
+    # Extract a label from the original filename
+    # Remove extension and use as initial label
+    import os
+    original_name = os.path.splitext(file.filename)[0]
+    # Convert underscores used for DOIs back to slashes/dots
+    # e.g., "10.1111__eulj.12049" -> "10.1111/eulj.12049"
+    label = original_name.replace("__", "/")
 
     # Save metadata to database
     file_create = FileCreate(
@@ -142,6 +168,7 @@ async def upload_file(
         doc_id=file_hash,  # Temporary doc_id - will be updated on save/processing
         file_type=file_type,
         file_size=len(content),
+        label=label,
         file_metadata={
             "original_filename": file.filename,
             "upload_source": "upload_endpoint",
@@ -162,11 +189,19 @@ async def upload_file(
         )
     except Exception as e:
         logger.error(f"Error inserting file metadata: {e}")
-        # File is already in storage, so don't fail completely
-        # Fall back to returning the content hash
-        return UploadResponse(
-            type=file_type,
-            filename=file_hash
+        # This shouldn't happen since we check for existing files above
+        # If it does, it's likely a race condition - try to get the file again
+        existing_file = repo.get_file_by_id(file_hash)
+        if existing_file:
+            logger.info(f"File exists after race condition: {file_hash[:16]}...")
+            return UploadResponse(
+                type=file_type,
+                filename=existing_file.stable_id
+            )
+        # If we still can't find it, this is an actual error
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save file metadata: {str(e)}"
         )
 
 

@@ -285,8 +285,12 @@ async function populateFileTree(state) {
   
   // Group by collection
   const groupedFiles = groupFilesByCollection(filteredData);
-  const collections = Object.keys(groupedFiles).sort();
-  
+  const collections = Object.keys(groupedFiles).sort((a, b) => {
+    if (a === "__unfiled") return -1;
+    if (b === "__unfiled") return 1;
+    return a.localeCompare(b);
+  });
+
   // Clear existing tree
   fileTree.innerHTML = '';
 
@@ -317,10 +321,11 @@ async function populateFileTree(state) {
     }
     return false;
   };
-  
+
   // Build tree structure programmatically
   for (const collectionName of collections) {
-    const collectionDisplayName = collectionName.replaceAll("_", " ").trim();
+    // Display "Unfiled" for the special __unfiled collection
+    const collectionDisplayName = collectionName === "__unfiled" ? "Unfiled" : collectionName.replaceAll("_", " ").trim();
     
     // Create collection item
     const collectionItem = document.createElement('sl-tree-item');
