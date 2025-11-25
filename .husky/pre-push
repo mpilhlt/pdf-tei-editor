@@ -1,1 +1,1 @@
-node .husky/pre-push.js
+python3 .husky/pre-push.py
