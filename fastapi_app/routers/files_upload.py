@@ -156,16 +156,21 @@ async def upload_file(
     # Extract a label from the original filename
     # Remove extension and use as initial label
     import os
+    import re
     original_name = os.path.splitext(file.filename)[0]
     # Convert underscores used for DOIs back to slashes/dots
     # e.g., "10.1111__eulj.12049" -> "10.1111/eulj.12049"
     label = original_name.replace("__", "/")
 
+    # Use filename (without extension) as doc_id, replacing whitespace with underscores
+    # This ensures the fileref in extracted/saved TEI matches the file's doc_id
+    doc_id = re.sub(r'\s+', '_', original_name)
+
     # Save metadata to database
     file_create = FileCreate(
         id=file_hash,
         filename=f"{file_hash}.{file_type}",
-        doc_id=file_hash,  # Temporary doc_id - will be updated on save/processing
+        doc_id=doc_id,
         file_type=file_type,
         file_size=len(content),
         label=label,

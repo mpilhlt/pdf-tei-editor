@@ -7,9 +7,20 @@ No Flask or FastAPI dependencies.
 
 import xml.sax.saxutils as saxutils
 from html import unescape
+from typing import TypedDict, Optional
 
 
-def encode_xml_entities(xml_string: str) -> str:
+class EncodeOptions(TypedDict, total=False):
+    """Options for XML entity encoding.
+
+    Attributes:
+        encode_quotes: If True, encode apostrophes (') and quotes (") as &apos; and &quot;
+                      Default: False (not required by XML spec for text content)
+    """
+    encode_quotes: bool
+
+
+def encode_xml_entities(xml_string: str, options: Optional[EncodeOptions] = None) -> str:
     """
     Escapes special characters in XML content using a manual string-parsing
     approach, but delegates the actual escaping logic to xml.sax.saxutils.escape.
@@ -17,19 +28,30 @@ def encode_xml_entities(xml_string: str) -> str:
     This function iterates through the string, keeping track of whether the
     current position is inside a tag or in the content between tags.
 
+    By default, only escapes the characters that are strictly required in XML text content:
+    - & (ampersand)
+    - < (less-than)
+    - > (greater-than)
+
     Args:
       xml_string: The raw XML string to be processed.
+      options: Optional encoding options (see EncodeOptions)
 
     Returns:
       A new XML string with its node content properly escaped.
     """
 
-    # Define the entities that need escaping in addition to the defaults (&, <, >).
-    # saxutils.escape will handle these correctly.
-    custom_entities: dict[str, str] = {
-        "'": "&apos;",
-        "\"": "&quot;",
-    }
+    # Use default options if none provided
+    if options is None:
+        options = {}
+
+    # Define optional entities for quotes (not strictly required in XML text content)
+    custom_entities: dict[str, str] = {}
+    if options.get('encode_quotes', False):
+        custom_entities = {
+            "'": "&apos;",
+            "\"": "&quot;",
+        }
 
     in_tag = False
     result_parts = []
@@ -43,7 +65,11 @@ def encode_xml_entities(xml_string: str) -> str:
                 content_to_escape = "".join(content_buffer)
                 # unescape first so that it isn't double-escaped
                 unescaped_content = unescape(content_to_escape)
-                escaped_content = saxutils.escape(unescaped_content, custom_entities)
+                # Only pass custom_entities if not empty (empty dict overrides defaults)
+                if custom_entities:
+                    escaped_content = saxutils.escape(unescaped_content, custom_entities)
+                else:
+                    escaped_content = saxutils.escape(unescaped_content)
                 result_parts.append(escaped_content)
                 content_buffer = []  # Reset the buffer.
 
@@ -68,7 +94,11 @@ def encode_xml_entities(xml_string: str) -> str:
         content_to_escape = "".join(content_buffer)
         # unescape first so that it isn't double-escaped
         unescaped_content = unescape(content_to_escape)
-        escaped_content = saxutils.escape(unescaped_content, custom_entities)
+        # Only pass custom_entities if not empty (empty dict overrides defaults)
+        if custom_entities:
+            escaped_content = saxutils.escape(unescaped_content, custom_entities)
+        else:
+            escaped_content = saxutils.escape(unescaped_content)
         result_parts.append(escaped_content)
 
     return "".join(result_parts)

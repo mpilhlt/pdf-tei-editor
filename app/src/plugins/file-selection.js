@@ -471,6 +471,9 @@ async function populateSelectboxes(state) {
             await createHtmlElements(`<small>Versions</small>`, ui.toolbar.xml);
             await createHtmlElements(`<small>Versions</small>`, ui.toolbar.diff);
 
+            // Sort versions by version number in ascending order (earliest first)
+            versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
+
             versionsToShow.forEach((version) => {
               // xml
               let option = new SlOption()

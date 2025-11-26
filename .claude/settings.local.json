@@ -21,7 +21,8 @@
       "Bash(sqlite3:*)",
       "Bash(node:*)",
       "Bash(source ~/.nvm/nvm.sh)",
-      "Bash(nvm use:*)"
+      "Bash(nvm use:*)",
+      "Bash(npm run test:unit:js:*)"
     ],
     "deny": [],
     "ask": []

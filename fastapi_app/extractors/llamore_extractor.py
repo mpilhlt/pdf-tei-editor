@@ -131,8 +131,11 @@ class LLamoreExtractor(BaseExtractor):
         
         # Add editionStmt with fileref
         timestamp = datetime.datetime.now().isoformat() + "Z"
-        pdf_name = os.path.basename(pdf_path)
-        file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
+        # Use doc_id from options if provided, otherwise extract from PDF path
+        file_id = options.get('doc_id')
+        if not file_id:
+            pdf_name = os.path.basename(pdf_path)
+            file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
         
         fileDesc = tei_header.find("fileDesc")
         titleStmt = fileDesc.find("titleStmt")

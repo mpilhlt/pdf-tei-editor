@@ -203,16 +203,6 @@ async def save_file(
         tei_metadata = extract_tei_metadata(xml_root)
         label = tei_metadata.get('edition_title')  # Extract edition title for label
 
-        # Update fileref in XML to ensure consistency
-        xml_string = _update_fileref_in_xml(xml_string, file_id, logger_inst)
-
-        # Encode XML entities if configured
-        from ..lib.config_utils import load_full_config
-        config = load_full_config(settings.db_dir)
-        if config.get("xml.encode-entities.server", False):
-            logger_inst.debug("Encoding XML entities")
-            xml_string = encode_xml_entities(xml_string)
-
         # For new saves, file_id becomes the doc_id (PDF and TEI share same doc_id)
         doc_id = file_id
 
@@ -254,6 +244,21 @@ async def save_file(
             except ValueError:
                 # Source file_id not found - use file_id as doc_id for new document
                 pass
+
+        # Update fileref in XML to ensure consistency with resolved doc_id
+        # This must happen AFTER resolving the correct doc_id from source file
+        xml_string = _update_fileref_in_xml(xml_string, file_id, logger_inst)
+
+        # Encode XML entities if configured
+        from ..lib.config_utils import load_full_config
+        from ..lib.xml_utils import EncodeOptions
+        config = load_full_config(settings.db_dir)
+        if config.get("xml.encode-entities.server", False):
+            logger_inst.debug("Encoding XML entities")
+            encode_options: EncodeOptions = {
+                'encode_quotes': config.get("xml.encode-quotes", False)
+            }
+            xml_string = encode_xml_entities(xml_string, encode_options)
 
         # Refresh existing_gold after resolving doc_id
         if existing_file:

@@ -95,6 +95,7 @@ For comprehensive guides, see the modular documentation in the `prompts/` direct
 
 ### Critical Rules
 
+- **Command Execution**: ALWAYS use `uv run python` for Python commands and `source ~/.nvm/nvm.sh && nvm use && node` for Node.js commands
 - **Suggest Prompt Updates**: if something in the prompts referenced here does not align with the consistent code patterns, suggest to update the prompts, if only to acknowledge legacy patterns.
 - **NEVER start, restart, or suggest restarting the Flask server** - It auto-restarts on changes, tests should be done using the containerized server
 - **ALWAYS add comprehensive JSDoc headers** - Use specific types instead of generic "object"

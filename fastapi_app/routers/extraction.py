@@ -183,11 +183,15 @@ def extract_metadata(
             pdf_path = str(file_path)
 
         # Perform extraction
+        # Pass doc_id through options so extractors can set the correct fileref
+        extraction_options = {**(request.options or {})}
+        extraction_options['doc_id'] = file_metadata.doc_id
+
         try:
             tei_xml = extractor.extract(
                 pdf_path=pdf_path,
                 xml_content=xml_content,
-                options=request.options
+                options=extraction_options
             )
 
             logger.debug(f"Extraction completed with {request.extractor}, result length: {len(tei_xml)}")
@@ -205,7 +209,7 @@ def extract_metadata(
             result = _save_pdf_extraction_result(
                 file_metadata,
                 tei_xml,
-                request.options,
+                extraction_options,
                 repo,
                 storage
             )

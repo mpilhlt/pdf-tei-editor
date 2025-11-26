@@ -189,10 +189,12 @@ class GrobidTrainingExtractor(BaseExtractor):
         fileDesc = tei_header.find("fileDesc")
         titleStmt = fileDesc.find("titleStmt")
         edition_stmt = create_edition_stmt(timestamp, f"{variant_id} [{flavor}]")
-        
-        # Add fileref to edition - extract from PDF path
-        pdf_name = os.path.basename(pdf_path)
-        file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
+
+        # Add fileref to edition - use doc_id from options if provided, otherwise extract from PDF path
+        file_id = options.get('doc_id')
+        if not file_id:
+            pdf_name = os.path.basename(pdf_path)
+            file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
         
         edition = edition_stmt.find("edition")
         if edition is not None:

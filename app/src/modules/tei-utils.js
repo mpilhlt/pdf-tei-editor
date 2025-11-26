@@ -176,9 +176,18 @@ export function addEdition(xmlDoc, edition) {
   const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
   const titleStmt = titleStmts[0]
 
+  // Preserve fileref from existing editionStmt if present
+  let existingFileref = null;
   if (editionStmts.length > 0) {
-    const lastEditionStmt = editionStmts[editionStmts.length - 1]
-    fileDesc.replaceChild(editionStmt, lastEditionStmt)
+    const lastEditionStmt = editionStmts[editionStmts.length - 1];
+    const editions = lastEditionStmt.getElementsByTagName('edition');
+    if (editions.length > 0) {
+      const idnos = editions[0].querySelectorAll('idno[type="fileref"]');
+      if (idnos.length > 0) {
+        existingFileref = idnos[0].cloneNode(true);
+      }
+    }
+    fileDesc.replaceChild(editionStmt, lastEditionStmt);
   } else {
     if (titleStmt.nextSibling) {
       fileDesc.insertBefore(editionStmt, titleStmt.nextSibling);
@@ -187,21 +196,26 @@ export function addEdition(xmlDoc, edition) {
     }
   }
 
-  // <edition> 
+  // <edition>
   const editionElem = xmlDoc.createElementNS(teiNamespaceURI, 'edition'); // Fixed: creating <edition> element
 
-  // <date> 
+  // <date>
   const dateElem = xmlDoc.createElementNS(teiNamespaceURI, 'date'); // Fixed: creating <date> element
   dateElem.setAttribute('when', currentDateString); // Keeping ISO string as per original code.
   dateElem.textContent = date.toLocaleDateString() + " " + date.toLocaleTimeString();
   editionElem.appendChild(dateElem); // Appending <date> to <edition>
 
-  // <title>  
+  // <title>
   const titleElem = xmlDoc.createElementNS(teiNamespaceURI, 'title');
   titleElem.textContent = title;
   editionElem.appendChild(titleElem);
 
-  // <note> 
+  // Preserve fileref if it existed
+  if (existingFileref) {
+    editionElem.appendChild(existingFileref);
+  }
+
+  // <note>
   if (note && note.trim() !== '') {
     const noteElem = xmlDoc.createElementNS(teiNamespaceURI, 'note');
     noteElem.textContent = note;
@@ -216,19 +230,33 @@ export function addEdition(xmlDoc, edition) {
  * The order of replacements is important to avoid double-escaping.
  * Ampersand (&) must be replaced first.
  *
+ * By default, only escapes characters strictly required in XML text content:
+ * - & (ampersand)
+ * - < (less-than)
+ * - > (greater-than)
+ *
  * @param {string} unsafeString The raw string that may contain special characters.
+ * @param {Object} [options] Options for escaping
+ * @param {boolean} [options.encodeQuotes=false] If true, also encode quotes and apostrophes (not required by XML spec for text content)
  * @returns {string} The string with special characters converted to XML entities.
  */
-export function escapeXml(unsafeString) {
+export function escapeXml(unsafeString, options = {}) {
   if (typeof unsafeString !== 'string') {
     return '';
   }
-  return unsafeString
+  let result = unsafeString
     .replaceAll(/&/g, '&amp;')
     .replaceAll(/</g, '&lt;')
-    .replaceAll(/>/g, '&gt;')
-    .replaceAll(/"/g, '&quot;')
-    .replaceAll(/'/g, '&apos;');
+    .replaceAll(/>/g, '&gt;');
+
+  // Only encode quotes if explicitly requested
+  if (options.encodeQuotes) {
+    result = result
+      .replaceAll(/"/g, '&quot;')
+      .replaceAll(/'/g, '&apos;');
+  }
+
+  return result;
 }
 
 /**
@@ -257,10 +285,17 @@ export function unescapeXml(escapedString) {
  * current position is inside a tag or in the content between tags, and
  * only applies escaping to the content portion.
  *
+ * By default, only escapes characters strictly required in XML text content:
+ * - & (ampersand)
+ * - < (less-than)
+ * - > (greater-than)
+ *
  * @param {string} xmlString The raw XML string to be processed.
+ * @param {Object} [options] Options for escaping
+ * @param {boolean} [options.encodeQuotes=false] If true, also encode quotes and apostrophes (not required by XML spec for text content)
  * @returns {string} A new XML string with its node content properly escaped.
  */
-export function encodeXmlEntities(xmlString) {
+export function encodeXmlEntities(xmlString, options = {}) {
   if (typeof xmlString !== 'string') {
     return "";
   }
@@ -276,7 +311,7 @@ export function encodeXmlEntities(xmlString) {
       if (contentBuffer.length > 0) {
         const contentToProcess = contentBuffer.join('');
         const unescapedContent = unescapeXml(contentToProcess);
-        const escapedContent = escapeXml(unescapedContent);
+        const escapedContent = escapeXml(unescapedContent, options);
         resultParts.push(escapedContent);
         contentBuffer = []; // Reset the buffer.
       }
@@ -304,7 +339,7 @@ export function encodeXmlEntities(xmlString) {
   if (contentBuffer.length > 0) {
     const contentToProcess = contentBuffer.join('');
     const unescapedContent = unescapeXml(contentToProcess);
-    const escapedContent = escapeXml(unescapedContent);
+    const escapedContent = escapeXml(unescapedContent, options);
     resultParts.push(escapedContent);
   }
 

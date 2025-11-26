@@ -669,7 +669,8 @@ async function downloadXml(state) {
   }
   let xml = xmlEditor.getXML()
   if (await config.get('xml.encode-entities.server')) {
-    xml = tei_utils.encodeXmlEntities(xml)
+    const encodeQuotes = await config.get('xml.encode-quotes', false)
+    xml = tei_utils.encodeXmlEntities(xml, { encodeQuotes })
   }
   const blob = new Blob([xml], { type: 'application/xml' })
   const url = URL.createObjectURL(blob)
@@ -913,11 +914,12 @@ async function createNewVersion(state) {
     // Mark as clean since we just saved
     xmlEditor.markAsClean()
 
+    // Update state to reflect the new file_id without reloading from backend
+    // (editor already has the correct content from addTeiHeaderInfo)
+    await app.updateState({ xml: newFileId })
+
     // reload the file data to display the new name and inform the user
     await fileselection.reload({refresh:true})
-
-    // Load the new version
-    await load({ xml: newFileId })
 
     notify("Document was duplicated. You are now editing the copy.")
     

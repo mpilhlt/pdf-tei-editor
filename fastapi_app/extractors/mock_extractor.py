@@ -84,11 +84,14 @@ class MockExtractor(BaseExtractor):
 
         # Add editionStmt with fileref
         timestamp = datetime.datetime.now().isoformat() + "Z"
-        if pdf_path:
-            file_name = os.path.basename(pdf_path)
-            file_id = os.path.splitext(file_name)[0]  # Remove extension
-        else:
-            file_id = f"mock-extracted-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        # Use doc_id from options if provided (preferred), otherwise derive from PDF path
+        file_id = options.get('doc_id')
+        if not file_id:
+            if pdf_path:
+                file_name = os.path.basename(pdf_path)
+                file_id = os.path.splitext(file_name)[0]  # Remove extension
+            else:
+                file_id = f"mock-extracted-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         fileDesc = tei_header.find("fileDesc")
         titleStmt = fileDesc.find("titleStmt")
