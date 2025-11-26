@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Keep in mind this is the FastAPI migration branch, so things could be different than what is written here - see the migration step completion documents in `fastapi_app/prompts`.
+
 ## General tone
 
 - Don't be too congratulatory. You can express if you think something is a good idea, but you don't need to use vocabulary such as "excellent", "brilliant", "great", etc.
@@ -9,38 +11,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Quick Reference
 
-### Essential Commands
+### Testing Commands
+
+See [prompts/testing-guide.md](prompts/testing-guide.md) for complete testing documentation.
 
 ```bash
-# Run only tests for changed files
+# Run tests for changed files (most common)
 npm run test:changed
 
-# Run all JavaScript unit tests
-npm run test:js
+# Unit tests
+npm run test:unit:js          # JavaScript units
+npm run test:unit:fastapi     # Python units
 
-# Run all Python unit tests
-npm run test:py             # Flask unit tests
-npm run test:fastapi:py     # FastAPI unit tests
+# API integration tests (local server, fast)
+npm run test:api
+npm run test:api -- --grep "save"
 
-# Run end-to-end tests in containerized environment, requires environment variables to work
-npm run test:e2e            # all E2E test, don't use this- always run more specific tests
-npm run test:e2e:backend    # Backend integration tests only
+# E2E tests (Playwright)
+npm run test:e2e
+npm run test:e2e:headed       # Show browser
+npm run test:e2e:debug        # Step-through debugging
+```
 
-# Run FastAPI backend tests against local server (no Docker)
-npm run dev:fastapi                                                 # Terminal 1: Start server
-E2E_BASE_URL=http://localhost:8000 node --test \
-  fastapi_app/tests/backend/*.test.js                              # Terminal 2: Run tests
+### Development Commands
 
-# Pass environment variables to E2E test containers
-npm run test:e2e -- --env SOME_ENVIRONMENT_VAR
-npm run test:e2e -- --grep "extraction" --env SOME_ENVIRONMENT_VAR
+```bash
+# Start dev server
+npm run start:dev
 
-# Use custom .env file for E2E tests
-npm run test:e2e -- --dotenv-path .env.testing
+# Build for production
+npm run build
 
-# Bypass authentication for development/testing (allows anonymous access to all endpoints)
-FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run dev:fastapi
-
+# Bypass authentication for development/testing
+FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 ```
 
 ### Key Files
@@ -54,7 +57,8 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run dev:fastapi
 
 ### Key Directories:
 
-Read `prompts/architecture.md` when you need to understand the system design
+Read `prompts/architecture.md` when you need to understand the system design.
+
 
 - `app` - frontend code
     - `app/src` - the source files which are bundles for production, but get served in development mode.
@@ -62,10 +66,11 @@ Read `prompts/architecture.md` when you need to understand the system design
     - `app/src/plugins` - Plugin objects and classes (Read `prompts/plugin-development.md` when creating new plugins)
     - `app/src/templates` - html templates used by the plugins to create UI parts
 - `bin` - executable files used on the command line
-- `config` - the default content of files in `db`
+- `config` - the default content of files in `data/db`
 - `data` - file data 
-- `db` - application data stored in subject-specific json files 
-- `server` - the python backend based on a Flask server
+- `data/db` - application data stored in subject-specific json files 
+- `server` - the python backend based on a Flask server (deprecated)
+- `fastapi_app` - the new python backend based on a FastAPI server
 - `tests` - JavaScript and Python unit tests and E2E tests using a containerized version of the application (Read `prompts/testing-guide.md` when creating or debuggingtests)
 
 
@@ -96,6 +101,7 @@ For comprehensive guides, see the modular documentation in the `prompts/` direct
 - **Plugin endpoints are observers, not mutators** - Never update the state in functions that receive it, otherwise there will be unwanted state mutation or infinite loops.
 - **Use UI navigation via the `ui` object instead of DOM node navigation** for fast lookup and alignment of runtime UI structure and documentation
 - **Use testLog() for E2E test validation** - Don't rely on DOM queries
+- ** when inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message so that these commands can be found and removed later.
 
 ### Planning documents and completion reports
 

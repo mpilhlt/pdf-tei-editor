@@ -119,15 +119,15 @@ class UploadResponse(BaseModel):
 class SaveFileRequest(BaseModel):
     """Request for POST /api/files/save"""
     xml_string: str
-    file_id: str                           # Hash or path (hash preferred)
-    new_version: bool = False
+    file_id: str                           # Stable file ID or content hash to update; for new_version=True, this is the source file
+    new_version: bool = False              # If True, create new version (file_id identifies source); if False, update file_id
     encoding: Optional[str] = None         # 'base64' if encoded
 
 
 class SaveFileResponse(BaseModel):
     """Response for POST /api/files/save"""
     status: str         # 'saved', 'new', 'new_gold', 'promoted_to_gold'
-    hash: str           # File hash of saved file
+    file_id: str        # Stable file ID of the saved file
 
 
 class CreateVersionFromUploadRequest(BaseModel):

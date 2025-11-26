@@ -54,8 +54,8 @@ describe('Sync and SSE API Integration Tests', { concurrency: 1 }, () => {
       xml_string: content,
       ...metadata
     }, BASE_URL);
-    logger.success(`Created test file: ${filePath} -> ${result.hash}`);
-    return result.hash;
+    logger.success(`Created test file: ${filePath} -> ${result.file_id}`);
+    return result.file_id;
   }
 
   /**

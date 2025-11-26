@@ -601,10 +601,10 @@ async function deleteAllVersions() {
       await load({ xml: goldToLoad.id });
     }
     
-    const variantText = variant === "none" ? "without variant" : 
+    const variantText = variant === "none" ? "without variant" :
                       variant && variant !== "" ? `with variant "${variant}"` : "";
     notify(`All versions ${variantText} have been deleted`)
-    sync.syncFiles(state)
+    sync.syncFiles(currentState)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
   } catch (error) {
@@ -892,26 +892,32 @@ async function createNewVersion(state) {
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     if (!state.xml) throw new Error('No XML file loaded');
-    
-    // save new version first
-    const filedata = FiledataPlugin.getInstance()
-    let { hash } = await filedata.saveXml(state.xml, /* save as new version */ true)
 
-    testLog('NEW_VERSION_CREATED', { oldHash: state.xml, newHash: hash });
+    // Keep reference to current file (used to determine doc_id for the new version)
+    const currentFileId = state.xml
 
-    // update the state to load the new document
-    await load({ xml: hash })
-
-    // now modify the header
+    // Modify the header FIRST, before saving as new version
+    // This ensures the new version has unique content (won't conflict with existing content hash)
     await addTeiHeaderInfo(respStmt, editionStmt)
 
-    // save the modified content back to the same timestamped version file
-    await filedata.saveXml(hash)
-    xmlEditor.markAsClean() 
+    // Save as new version with the modified content
+    // The backend will:
+    // 1. Resolve doc_id from currentFileId (the source file)
+    // 2. Create a new version file with incremented version number
+    // 3. Return the new file's stable_id
+    const filedata = FiledataPlugin.getInstance()
+    let { file_id: newFileId } = await filedata.saveXml(currentFileId, /* save as new version */ true)
+
+    testLog('NEW_VERSION_CREATED', { oldFileId: currentFileId, newFileId });
+
+    // Mark as clean since we just saved
+    xmlEditor.markAsClean()
 
     // reload the file data to display the new name and inform the user
     await fileselection.reload({refresh:true})
-    await app.updateState({ xml: hash }) // should have been done 
+
+    // Load the new version
+    await load({ xml: newFileId })
 
     notify("Document was duplicated. You are now editing the copy.")
     

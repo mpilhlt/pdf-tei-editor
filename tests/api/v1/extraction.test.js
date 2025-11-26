@@ -67,9 +67,9 @@ describe('Extraction API E2E Tests', () => {
     );
 
     assert.ok(response, 'Should receive a response');
-    assert.ok(response.hash, 'Should have hash');
+    assert.ok(response.file_id, 'Should have file_id');
 
-    testFileHash = response.hash;
+    testFileHash = response.file_id;
     logger.success(`Test file uploaded: ${testFileHash}`);
   });
 

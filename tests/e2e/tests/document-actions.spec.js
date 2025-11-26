@@ -102,9 +102,9 @@ test.describe('Document Actions', () => {
 
       // Wait for new version creation to complete
       const newVersionLog = await waitForTestMessage(consoleLogs, 'NEW_VERSION_CREATED', 10000);
-      expect(newVersionLog.value).toHaveProperty('oldHash');
-      expect(newVersionLog.value).toHaveProperty('newHash');
-      expect(newVersionLog.value.newHash).not.toBe(newVersionLog.value.oldHash);
+      expect(newVersionLog.value).toHaveProperty('oldFileId');
+      expect(newVersionLog.value).toHaveProperty('newFileId');
+      expect(newVersionLog.value.newFileId).not.toBe(newVersionLog.value.oldFileId);
 
       debugLog('New version creation test completed successfully');
 

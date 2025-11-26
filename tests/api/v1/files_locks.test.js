@@ -102,16 +102,16 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
       file_id: testState.testFilePath,
       xml_string: testContent
     }, BASE_URL);
-    testState.testFileHash = result1.hash;
-    logger.success(`Created test file 1 with hash: ${testState.testFileHash} (run: ${testRunId})`);
+    testState.testFileHash = result1.file_id;
+    logger.success(`Created test file 1 with file_id: ${testState.testFileHash} (run: ${testRunId})`);
 
     const testContent2 = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for file locks - FILE 2 - Run ID: ${testRunId}</text></TEI>`;
     const result2 = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
       file_id: testState.testFilePath2,
-      xml_string: testContent2 // Different content to get different hash
+      xml_string: testContent2 // Different content to get different file_id
     }, BASE_URL);
-    testState.testFileHash2 = result2.hash;
-    logger.success(`Created test file 2 with hash: ${testState.testFileHash2} (run: ${testRunId})`);
+    testState.testFileHash2 = result2.file_id;
+    logger.success(`Created test file 2 with file_id: ${testState.testFileHash2} (run: ${testRunId})`);
 
     // Release the locks that were acquired during file saving (use hashes)
     await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
@@ -272,14 +272,14 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
         file_id: testState.testFilePath,
         xml_string: testContent
       }, BASE_URL);
-      testState.testFileHash = result1.hash;
+      testState.testFileHash = result1.file_id;
 
       const testContent2 = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Test document for file locks - FILE 2 - Run ID: ${testRunId}</text></TEI>`;
       const result2 = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
         file_id: testState.testFilePath2,
         xml_string: testContent2
       }, BASE_URL);
-      testState.testFileHash2 = result2.hash;
+      testState.testFileHash2 = result2.file_id;
 
       // Release locks created during save
       await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {

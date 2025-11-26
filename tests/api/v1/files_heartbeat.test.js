@@ -47,10 +47,10 @@ describe('File Heartbeat API E2E Tests', { concurrency: 1 }, () => {
       xml_string: testContent
     }, BASE_URL);
 
-    testState.testFileHash = result.hash;
+    testState.testFileHash = result.file_id;
 
     // The save operation acquires a lock, keep it for heartbeat tests
-    logger.success(`Test file created with lock for heartbeat tests (hash: ${testState.testFileHash}, run: ${testRunId})`);
+    logger.success(`Test file created with lock for heartbeat tests (file_id: ${testState.testFileHash}, run: ${testRunId})`);
   });
 
   test('POST /api/files/heartbeat should refresh lock', async () => {

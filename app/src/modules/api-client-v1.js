@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-11-25T22:00:30.487Z
+ * Generated from OpenAPI schema at 2025-11-26T15:04:13.497Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -246,7 +246,7 @@
 /**
  * @typedef {Object} SaveFileResponse
  * @property {string} status
- * @property {string} hash
+ * @property {string} file_id
  */
 
 /**

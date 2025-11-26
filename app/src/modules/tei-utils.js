@@ -54,7 +54,7 @@ export function getRespStmtById(xmlDoc, id) {
  */
 export function addRespStmt(xmlDoc, respStmt) {
   const { persName, persId, resp } = respStmt
-  if (!persName || !resp || !persId) {
+  if (!(persName || persId) || !resp ) {
     throw new Error("Missing required parameters: persName, resp, or persId.");
   }
   if (getRespStmtById(xmlDoc, persId)) {
@@ -73,7 +73,7 @@ export function addRespStmt(xmlDoc, respStmt) {
   const respStmtElem = xmlDoc.createElementNS(teiNamespaceURI, 'respStmt');
   const persNameElem = xmlDoc.createElementNS(teiNamespaceURI, 'persName');
   persNameElem.setAttributeNS(xmlNamespace, 'xml:id', persId);
-  persNameElem.textContent = persName;
+  persNameElem.textContent = persName || persId;
   respStmtElem.appendChild(persNameElem);
 
   const respElem = xmlDoc.createElementNS(teiNamespaceURI, 'resp');

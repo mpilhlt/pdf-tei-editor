@@ -97,7 +97,7 @@ export class LocalServerManager extends ServerManager {
         const { exec } = await import('child_process');
         await new Promise((resolve) => {
           exec('pkill -9 -f "uvicorn.*run_fastapi"', () => {
-            exec('pkill -9 -f "bin/start-dev-fastapi"', () => resolve());
+            exec('pkill -9 -f "bin/start-dev"', () => resolve());
           });
         });
       } catch (err) {
@@ -291,7 +291,7 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
       // The wrapper script has issues with piped stdio on Windows
       const uvicornArgs = platform() === 'win32'
         ? ['run', 'uvicorn', 'run_fastapi:app', '--host', this.host, '--port', String(this.port), '--log-level', 'info']
-        : ['run', 'python', 'bin/start-dev-fastapi'];
+        : ['run', 'python', 'bin/'];
 
       this.serverProcess = spawn('uv', uvicornArgs, {
         cwd: this.projectRoot,
@@ -318,7 +318,7 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
       const configDir = join(this.dbDir, '..', 'config');
       this.serverProcess = spawnShell(
         'sh',
-        ['-c', `PYTHONUNBUFFERED=1 HOST=${this.host} PORT=${this.port} FASTAPI_CONFIG_DIR="${configDir}" uv run python bin/start-dev-fastapi >> "${this.logFile}" 2>&1`],
+        ['-c', `PYTHONUNBUFFERED=1 HOST=${this.host} PORT=${this.port} FASTAPI_CONFIG_DIR="${configDir}" uv run python bin/start-dev >> "${this.logFile}" 2>&1`],
         {
           cwd: this.projectRoot,
           stdio: 'ignore',
@@ -589,7 +589,7 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
           // Run pkill commands separately for more reliable execution
           await new Promise((resolve) => {
             exec('pkill -9 -f "uvicorn.*run_fastapi"', () => {
-              exec('pkill -9 -f "bin/start-dev-fastapi"', () => {
+              exec('pkill -9 -f "bin/start-dev"', () => {
                 // Also try to kill the parent process directly
                 try {
                   process.kill(pid, 'SIGKILL');

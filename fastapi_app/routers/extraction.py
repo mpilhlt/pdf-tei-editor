@@ -294,8 +294,8 @@ def _save_pdf_extraction_result(
         doc_collections=doc_collections,
         doc_metadata={},  # TEI files don't store doc metadata
         variant=variant,
-        version=1,  # First version
-        is_gold_standard=False,
+        version=None,  # Gold files have no version number
+        is_gold_standard=True,  # First extraction is gold standard
         label=label,
         file_metadata={'extractor': options.get('extractor', 'unknown')}
     )
@@ -411,8 +411,8 @@ def _save_xml_extraction_result(
         doc_collections=[collection],
         doc_metadata={},  # Must be dict, not None
         variant=None,
-        version=1,
-        is_gold_standard=False,
+        version=None,  # Gold files have no version number
+        is_gold_standard=True,  # First extraction is gold standard
         label=extractor_id,
         file_metadata={'extractor': extractor_id}
     )

@@ -437,10 +437,10 @@ async function saveIfDirty() {
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
     } else {
-      logger.debug(`Saved file with hash ${result.hash}`)
-      if (result.hash && result.hash !== fileHash) {
-        // Update state to use new hash
-        await app.updateState({ xml: result.hash })
+      logger.debug(`Saved file with file_id ${result.file_id}`)
+      if (result.file_id && result.file_id !== fileHash) {
+        // Update state to use new file_id
+        await app.updateState({ xml: result.file_id })
       }
     }
     xmlEditor.markAsClean()

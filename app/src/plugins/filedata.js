@@ -92,8 +92,8 @@ class FiledataPlugin extends Plugin {
   /**
    * Saves the current XML content to a file
    * @param {string} fileHash The hash identifying the XML file on the server
-   * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
-   * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
+   * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version
+   * @returns {Promise<{file_id:string, status:string}>} An object with file_id (stable file identifier) and status
    * @throws {Error}
    */
   async saveXml(fileHash, saveAsNewVersion = false) {
@@ -109,7 +109,7 @@ class FiledataPlugin extends Plugin {
       const xmlContent = xmlEditor.getXML()
 
       const result = await client.saveXml(xmlContent, fileHash, saveAsNewVersion);
-      return /** @type {{hash: string, status: string}} */ (result);
+      return /** @type {{file_id: string, status: string}} */ (result);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       console.error("Error while saving XML:", errorMessage);

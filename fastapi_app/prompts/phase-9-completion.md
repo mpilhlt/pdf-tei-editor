@@ -1269,7 +1269,7 @@ Implemented automatic port allocation in 8010-8999 range to avoid conflicts with
    - Uses explicit port when provided, auto-selects otherwise
    - Default port changed from 8081 to 8012
 
-5. **Server Startup Script** - [bin/start-dev-fastapi](../../bin/start-dev-fastapi:35-37)
+5. **Server Startup Script** - [bin/start-dev](../../bin/start-dev:35-37)
    - Reads HOST and PORT from environment variables
    - Falls back to CLI arguments, then defaults
    - Priority: env vars > CLI args > defaults

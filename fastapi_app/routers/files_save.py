@@ -45,8 +45,11 @@ router = APIRouter(prefix="/files", tags=["files"])
 def _user_has_role(user: dict, role: str) -> bool:
     """Check if user has a specific role."""
     if not user or 'roles' not in user:
+        logger.debug(f"_user_has_role: user={user}, role={role} -> False (no user or roles)")
         return False
-    return role in user.get('roles', [])
+    result = role in user.get('roles', [])
+    logger.debug(f"_user_has_role: user={user.get('username')}, roles={user.get('roles')}, checking role={role} -> {result}")
+    return result
 
 
 def _extract_metadata_from_xml(xml_string: str, file_id_hint: Optional[str], logger) -> tuple[str, Optional[str]]:
@@ -194,6 +197,12 @@ async def save_file(
         # Extract metadata from XML
         file_id, variant = _extract_metadata_from_xml(xml_string, request.file_id, logger_inst)
 
+        # Extract full TEI metadata including label
+        from ..lib.tei_utils import extract_tei_metadata
+        xml_root = etree.fromstring(xml_string.encode('utf-8'))
+        tei_metadata = extract_tei_metadata(xml_root)
+        label = tei_metadata.get('edition_title')  # Extract edition title for label
+
         # Update fileref in XML to ensure consistency
         xml_string = _update_fileref_in_xml(xml_string, file_id, logger_inst)
 
@@ -210,23 +219,47 @@ async def save_file(
         # Determine save strategy based on existing files in database
         existing_gold = file_repo.get_gold_standard(doc_id)
 
-        # Check if we're updating an existing file (provided file_id is a hash)
+        # Resolve file context based on save operation:
+        # - For updates (new_version=False): Find the existing file to update
+        # - For new versions (new_version=True): Find the source file to extract doc_id
+        #   (the source file_id is needed to determine which document this version belongs to)
         existing_file = None
-        if len(request.file_id) >= 5:  # Could be abbreviated hash or stable_id
-            try:
-                full_hash = file_repo.resolve_file_id(request.file_id)
-                existing_file = file_repo.get_file_by_id(full_hash)
 
-                # If found, override doc_id with the existing file's doc_id
+        if not request.new_version and len(request.file_id) >= 5:
+            # UPDATE operation: Resolve file_id to find the file to update
+            try:
+                resolved_file_id = file_repo.resolve_file_id(request.file_id)
+                existing_file = file_repo.get_file_by_id(resolved_file_id)
+
                 if existing_file:
+                    # Use the file's doc_id for this operation
                     doc_id = existing_file.doc_id
-                    file_id = existing_file.doc_id  # Use doc_id as file_id
-                    logger_inst.info(f"Updating existing file: {full_hash[:8]}")
+                    file_id = existing_file.doc_id
+                    logger_inst.info(f"Updating existing file: {resolved_file_id[:8]}")
             except ValueError:
-                pass  # Not a hash, treat as new file
+                pass  # Not a valid file_id, treat as new file
+
+        elif request.new_version and len(request.file_id) >= 5:
+            # NEW VERSION operation: Resolve source file_id to extract doc_id
+            # The source file_id tells us which document this new version belongs to
+            try:
+                source_file_id = file_repo.resolve_file_id(request.file_id)
+                source_file = file_repo.get_file_by_id(source_file_id)
+
+                if source_file:
+                    # Extract doc_id from source - new version will share this doc_id
+                    doc_id = source_file.doc_id
+                    file_id = source_file.doc_id
+                    logger_inst.info(f"Creating new version from source: {source_file_id[:8]}, doc_id: {doc_id[:16]}")
+            except ValueError:
+                # Source file_id not found - use file_id as doc_id for new document
+                pass
 
         # Refresh existing_gold after resolving doc_id
         if existing_file:
+            existing_gold = file_repo.get_gold_standard(doc_id)
+        elif request.new_version:
+            # For new versions, refresh gold based on resolved doc_id
             existing_gold = file_repo.get_gold_standard(doc_id)
 
         # Determine save operation
@@ -239,13 +272,19 @@ async def save_file(
             logger_inst.info(f"Updating existing file: {existing_file.id[:8]}")
 
         # Check permissions based on file type
+            logger_inst.debug(f"Permission check: user={user.get('username')}, roles={user.get('roles')}, file.is_gold={existing_file.is_gold_standard}, file.version={existing_file.version}")
+
             if existing_file.is_gold_standard and not _user_has_role(user, 'reviewer'):
                 raise HTTPException(
                     status_code=403,
                     detail="Only reviewers can edit gold standard files"
                 )
 
-            if existing_file.version is not None and not _user_has_role(user, 'annotator') and not _user_has_role(user, 'reviewer'):
+            has_annotator = _user_has_role(user, 'annotator')
+            has_reviewer = _user_has_role(user, 'reviewer')
+            logger_inst.debug(f"Version file permission check: has_annotator={has_annotator}, has_reviewer={has_reviewer}")
+
+            if existing_file.version is not None and not has_annotator and not has_reviewer:
                 raise HTTPException(
                     status_code=403,
                     detail="Only annotators or reviewers can edit version files"
@@ -260,19 +299,34 @@ async def save_file(
             saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
             file_size = len(xml_bytes)
 
-            # Update database (FileRepository handles reference counting automatically)
-            file_repo.update_file(
-                existing_file.id,
-                FileUpdate(
-                    id=saved_hash,  # Update hash if content changed
-                    file_size=file_size,
-                    file_metadata={}  # Could extract more metadata from XML
+            # Only update if hash actually changed
+            if saved_hash != existing_file.id:
+                logger_inst.debug(f"Content changed: {existing_file.id[:8]} -> {saved_hash[:8]}")
+                # Update database (FileRepository handles reference counting automatically)
+                file_repo.update_file(
+                    existing_file.id,
+                    FileUpdate(
+                        id=saved_hash,  # Update hash if content changed
+                        label=label,  # Update label from edition title
+                        file_size=file_size,
+                        file_metadata={}  # Could extract more metadata from XML
+                    )
                 )
-            )
+            else:
+                logger_inst.debug(f"Content unchanged: {existing_file.id[:8]}")
+                # Just update metadata without changing ID
+                file_repo.update_file(
+                    existing_file.id,
+                    FileUpdate(
+                        label=label,  # Still update label even if content unchanged
+                        file_size=file_size,
+                        file_metadata={}
+                    )
+                )
 
-            return SaveFileResponse(status="saved", hash=existing_file.stable_id)
+            return SaveFileResponse(status="saved", file_id=existing_file.stable_id)
 
-        elif request.new_version or (existing_gold and existing_gold.variant == variant):
+        elif request.new_version or (not existing_file and existing_gold and existing_gold.variant == variant):
         # Create new version
             if not _user_has_role(user, 'annotator') and not _user_has_role(user, 'reviewer'):
                 raise HTTPException(
@@ -291,6 +345,19 @@ async def save_file(
             saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
             file_size = len(xml_bytes)
 
+        # Check if this hash already exists (content-addressed storage means same content = same hash)
+            try:
+                existing_hash_file = file_repo.get_file_by_id(saved_hash)
+                if existing_hash_file:
+                    # File with this content already exists - return it instead of creating duplicate
+                    logger_inst.info(f"File with hash {saved_hash[:8]} already exists, returning existing file")
+                    # Acquire lock if we don't have it
+                    if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
+                        raise HTTPException(status_code=423, detail="Failed to acquire lock")
+                    return SaveFileResponse(status="saved", file_id=existing_hash_file.stable_id)
+            except ValueError:
+                pass  # Hash doesn't exist, continue with creation
+
         # Acquire lock
             if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
@@ -305,7 +372,7 @@ async def save_file(
                 filename=f"{file_id}.{variant}.v{next_version}.tei.xml" if variant else f"{file_id}.v{next_version}.tei.xml",
                 doc_id=doc_id,
                 file_type='tei',
-                label=None,
+                label=label,  # Use extracted edition title
                 variant=variant,
                 version=next_version,
                 is_gold_standard=False,
@@ -316,7 +383,7 @@ async def save_file(
             ))
 
             status = "new"
-            return SaveFileResponse(status=status, hash=created_file.stable_id)
+            return SaveFileResponse(status=status, file_id=created_file.stable_id)
 
         else:
         # Create new gold standard file
@@ -349,7 +416,7 @@ async def save_file(
                 filename=filename,
                 doc_id=doc_id,
                 file_type='tei',
-                label=None,
+                label=label,  # Use extracted edition title
                 variant=variant,
                 version=None,  # Gold files have no version
                 is_gold_standard=True,
@@ -360,7 +427,7 @@ async def save_file(
             ))
 
             status = "new_gold"
-            return SaveFileResponse(status=status, hash=created_file.stable_id)
+            return SaveFileResponse(status=status, file_id=created_file.stable_id)
 
     except HTTPException:
         # Re-raise HTTP exceptions

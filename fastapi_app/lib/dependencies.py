@@ -119,7 +119,7 @@ def require_authenticated_user(
         return {
             "username": "anonymous",
             "email": "anonymous@localhost",
-            "role": "admin"
+            "roles": ["admin", "reviewer", "annotator"]  # Use roles array like real users
         }
 
     session_id = get_session_id_from_request(request)

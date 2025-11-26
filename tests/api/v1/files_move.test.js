@@ -50,7 +50,7 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
       xml_string: testContent
     }, BASE_URL);
 
-    testState.teiHash = teiResult.hash;
+    testState.teiHash = teiResult.file_id;
 
     // Release lock
     await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {

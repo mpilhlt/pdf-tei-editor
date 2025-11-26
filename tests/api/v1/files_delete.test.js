@@ -67,8 +67,8 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
       xml_string: testContent2
     }, BASE_URL);
 
-    testState.testFileHash = result1.hash;
-    testState.testFileHash2 = result2.hash;
+    testState.testFileHash = result1.file_id;
+    testState.testFileHash2 = result2.file_id;
 
     // Release locks
     await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
@@ -122,7 +122,7 @@ describe('File Delete API E2E Tests', { concurrency: 1 }, () => {
 
     // Delete both files
     const deleteResult = await authenticatedApiCall(session.sessionId, '/files/delete', 'POST', {
-      files: [result1.hash, result2.hash]
+      files: [result1.file_id, result2.file_id]
     }, BASE_URL);
 
     assert.strictEqual(deleteResult.result, 'ok', 'Should return ok result');
