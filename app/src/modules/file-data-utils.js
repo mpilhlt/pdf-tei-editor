@@ -330,6 +330,26 @@ export function findFileByPdfHash(fileData, pdfHash) {
 }
 
 /**
+ * Gets the display name for a collection
+ * @param {string} collectionId - Collection ID
+ * @param {Array<{id: string, name: string, description: string}>} collections - Collections array from state
+ * @returns {string} Display name for the collection
+ */
+export function getCollectionName(collectionId, collections) {
+  if (collectionId === "__unfiled") {
+    return "Unfiled";
+  }
+
+  if (!collections || collections.length === 0) {
+    // Fallback to converting underscores to spaces if collections not loaded
+    return collectionId.replaceAll("_", " ").trim();
+  }
+
+  const collection = collections.find(c => c.id === collectionId);
+  return collection ? collection.name : collectionId.replaceAll("_", " ").trim();
+}
+
+/**
  * Finds the corresponding source ID and collection for a given artifact ID
  * @param {DocumentItem[]} fileData - The file data array
  * @param {string} artifactId - Stable ID of the artifact file

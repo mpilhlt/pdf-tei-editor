@@ -138,7 +138,8 @@ from .routers import (
     extraction,
     sync,
     sse,
-    schema
+    schema,
+    collections
 )
 
 # Versioned API router (v1)
@@ -146,6 +147,7 @@ from .routers import (
 api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 api_v1.include_router(auth.router)
 api_v1.include_router(config.router)
+api_v1.include_router(collections.router)
 api_v1.include_router(validation.router)
 api_v1.include_router(extraction.router)
 api_v1.include_router(files_list.router)

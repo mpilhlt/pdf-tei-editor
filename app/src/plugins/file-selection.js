@@ -13,7 +13,7 @@ import { SlOption, SlDivider, updateUi } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import { app, logger, services, dialog, updateState, hasStateChanged } from '../app.js'
 import { FiledataPlugin } from '../plugins.js'
-import { groupFilesByCollection } from '../modules/file-data-utils.js'
+import { groupFilesByCollection, getCollectionName } from '../modules/file-data-utils.js'
 
 /**
  * The data about the pdf and xml files on the server
@@ -376,7 +376,7 @@ async function populateSelectboxes(state) {
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
     // Display "Unfiled" for the special __unfiled collection
-    const displayName = collection_name === "__unfiled" ? "Unfiled" : collection_name.replaceAll("_", " ").trim();
+    const displayName = getCollectionName(collection_name, state.collections);
     await createHtmlElements(`<small>${displayName}</small>`, ui.toolbar.pdf)
 
     // get a list of file data sorted by label

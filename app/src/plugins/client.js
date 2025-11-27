@@ -127,6 +127,9 @@ const api = {
   setConfigValue,
   syncFiles,
   moveFiles,
+  copyFiles,
+  getCollections,
+  createCollection,
   state,
   sendHeartbeat,
   checkLock,
@@ -471,16 +474,54 @@ async function syncFiles() {
 
 /**
  * Moves the given files to a new collection
- * @param {string} pdf
- * @param {string} xml
- * @param {string} destinationCollection
- * @returns {Promise<{new_pdf_path: string, new_xml_path: string}>}
+ * @param {string} pdf - PDF file ID
+ * @param {string} xml - XML file ID
+ * @param {string} destinationCollection - Destination collection ID
+ * @returns {Promise<{new_pdf_id: string, new_xml_id: string}>}
  */
 async function moveFiles(pdf, xml, destinationCollection) {
   return await apiClient.filesMove({
-    pdf_path: pdf,
-    xml_path: xml,
+    pdf_id: pdf,
+    xml_id: xml,
     destination_collection: destinationCollection
+  });
+}
+
+/**
+ * Copies the given files to an additional collection
+ * @param {string} pdf - PDF file ID
+ * @param {string} xml - XML file ID
+ * @param {string} destinationCollection - Destination collection ID
+ * @returns {Promise<{new_pdf_id: string, new_xml_id: string}>}
+ */
+async function copyFiles(pdf, xml, destinationCollection) {
+  return await apiClient.filesCopy({
+    pdf_id: pdf,
+    xml_id: xml,
+    destination_collection: destinationCollection
+  });
+}
+
+/**
+ * Gets the list of collections accessible to the current user
+ * @returns {Promise<{collections: Array<{id: string, name: string, description: string}>}>}
+ */
+async function getCollections() {
+  return await apiClient.collectionsList();
+}
+
+/**
+ * Creates a new collection
+ * @param {string} id - Collection ID (only letters, numbers, hyphens, underscores)
+ * @param {string} [name] - Display name (defaults to id if not provided)
+ * @param {string} [description] - Collection description
+ * @returns {Promise<{success: boolean, message: string, collection: {id: string, name: string, description: string}}>}
+ */
+async function createCollection(id, name, description = "") {
+  return await apiClient.collectionsCreate({
+    id,
+    name: name || id,
+    description
   });
 }
 

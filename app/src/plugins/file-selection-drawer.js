@@ -31,7 +31,8 @@ import {
   filterFileDataByLabel,
   groupFilesByCollection,
   findMatchingGold,
-  findFileBySourceId
+  findFileBySourceId,
+  getCollectionName
 } from '../modules/file-data-utils.js'
 
 /**
@@ -325,7 +326,7 @@ async function populateFileTree(state) {
   // Build tree structure programmatically
   for (const collectionName of collections) {
     // Display "Unfiled" for the special __unfiled collection
-    const collectionDisplayName = collectionName === "__unfiled" ? "Unfiled" : collectionName.replaceAll("_", " ").trim();
+    const collectionDisplayName = getCollectionName(collectionName, state.collections);
     
     // Create collection item
     const collectionItem = document.createElement('sl-tree-item');

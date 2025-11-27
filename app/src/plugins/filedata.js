@@ -83,9 +83,36 @@ class FiledataPlugin extends Plugin {
       logger.debug('Initializing empty ID lookup index');
       createIdLookupIndex([]);
     }
-    
-    // Store fileData in state and propagate it
-    const newState = await this.dispatchStateChange({fileData: data});
+
+    // Load collections from server
+    let collections = [];
+    try {
+      const collectionsResponse = await client.getCollections();
+      collections = collectionsResponse?.collections || [];
+      logger.debug(`Loaded ${collections.length} collections from server`);
+
+      // Validate that all document collections exist in the collections list
+      const collectionIds = new Set(collections.map(c => c.id));
+      data.forEach((doc, index) => {
+        if (doc.collections && doc.collections.length > 0) {
+          const invalidCollections = doc.collections.filter(colId => !collectionIds.has(colId));
+          if (invalidCollections.length > 0) {
+            logger.warn(
+              `Document ${doc.doc_id} references non-existent collection(s): ${invalidCollections.join(', ')}`
+            );
+          }
+        }
+      });
+    } catch (error) {
+      logger.error(`Failed to load collections: ${error}`);
+      // Continue with empty collections list - file operations will still work
+    }
+
+    // Store fileData and collections in state and propagate them
+    const newState = await this.dispatchStateChange({
+      fileData: data,
+      collections
+    });
     return newState
   }
 

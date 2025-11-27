@@ -345,22 +345,32 @@ async function promptForExtractionOptions(options={}) {
   const doiValue = options.doi || documentMetadata.doi || "";
   ui.extractionOptions.doi.value = doiValue;
 
-  // configure collections selectbox 
+  // configure collections selectbox
   /** @type {SlSelect|null} */
   const collectionSelectBox = ui.extractionOptions.collectionName
   collectionSelectBox.innerHTML=""
-  const collectionData = ui.toolbar.pdf.dataset.collections || '[]'
-  const collections = JSON.parse(collectionData)
-  collections.unshift('_inbox')
-  for (const collection_name of collections){
+
+  // Get collections from state (includes RBAC-filtered collections)
+  const collections = currentState?.collections || [];
+
+  // Add _inbox as first option
+  const inboxOption = Object.assign(new SlOption, {
+    value: '_inbox',
+    textContent: 'Inbox'
+  })
+  collectionSelectBox.append(inboxOption)
+
+  // Add accessible collections from state
+  for (const collection of collections){
     const option = Object.assign(new SlOption, {
-      value: collection_name,
-      textContent: collection_name.replaceAll("_", " ").trim()
+      value: collection.id,
+      textContent: collection.name
     })
     collectionSelectBox.append(option)
   }
+
   // Set collection value - prioritize options parameter, then first available collection
-  const collectionValue = options.collection || (collections.length > 0 ? collections[0] : "");
+  const collectionValue = options.collection || (collections.length > 0 ? collections[0].id : "_inbox");
   collectionSelectBox.value = collectionValue
   // if we have a collection, it cannot be changed
   collectionSelectBox.disabled = Boolean(options.collection)

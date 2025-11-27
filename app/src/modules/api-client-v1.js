@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-11-27T21:47:24.673Z
+ * Generated from OpenAPI schema at 2025-11-27T22:16:51.554Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -56,6 +56,18 @@
  */
 
 /**
+ * @typedef {Object} Collection
+ * @property {string} id - Unique collection identifier
+ * @property {string} name - Display name for the collection
+ * @property {string=} description - Collection description
+ */
+
+/**
+ * @typedef {Object} CollectionsListResponse
+ * @property {Array<Collection>} collections - List of collections accessible to the user
+ */
+
+/**
  * @typedef {Object} ConfigSetRequest
  * @property {string} key
  * @property {any} value
@@ -103,6 +115,20 @@
  * @typedef {Object} CopyFilesResponse
  * @property {string} new_pdf_id
  * @property {string} new_xml_id
+ */
+
+/**
+ * @typedef {Object} CreateCollectionRequest
+ * @property {string} id - Unique collection identifier (only letters, numbers, hyphens, underscores)
+ * @property {string=} name - Display name (defaults to id if not provided)
+ * @property {string=} description - Collection description
+ */
+
+/**
+ * @typedef {Object} CreateCollectionResponse
+ * @property {boolean} success - Whether the operation succeeded
+ * @property {string} message - Result message
+ * @property {Collection=} collection - Created collection details
  */
 
 /**
@@ -460,6 +486,44 @@ export class ApiClientV1 {
   async configState() {
     const endpoint = `/config/state`
     return this.callApi(endpoint);
+  }
+
+  /**
+   * List all collections accessible to the current user.
+   * For users with wildcard access (admin role, * in roles/groups), returns all collections.
+   * For regular users, returns only collections their groups have access to.
+   * Anonymous users get an empty list.
+   * Args:
+   * current_user: Current user dict or None (injected)
+   * Returns:
+   * CollectionsListResponse with accessible collections
+   *
+   * @returns {Promise<CollectionsListResponse>}
+   */
+  async collectionsList() {
+    const endpoint = `/collections/list`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create a new collection.
+   * Requires admin or reviewer role.
+   * Collection ID must be unique and contain only letters, numbers, hyphens, and underscores.
+   * If name is not provided, uses id as the display name.
+   * Args:
+   * body: CreateCollectionRequest with collection details
+   * current_user: Current user dict (injected)
+   * Returns:
+   * CreateCollectionResponse with success status and created collection
+   * Raises:
+   * HTTPException: 401 if not authenticated, 403 if insufficient permissions, 400 if validation fails
+   *
+   * @param {CreateCollectionRequest} requestBody
+   * @returns {Promise<CreateCollectionResponse>}
+   */
+  async collectionsCreate(requestBody) {
+    const endpoint = `/collections/create`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**
