@@ -282,8 +282,8 @@ export function unescapeXml(escapedString) {
  * Escapes special characters in XML content using a manual string-parsing approach.
  *
  * This function iterates through the string, keeping track of whether the
- * current position is inside a tag or in the content between tags, and
- * only applies escaping to the content portion.
+ * current position is inside a tag, comment, CDATA, or processing instruction.
+ * Only applies escaping to regular text content, not to special XML constructs.
  *
  * By default, only escapes characters strictly required in XML text content:
  * - & (ampersand)
@@ -301,10 +301,112 @@ export function encodeXmlEntities(xmlString, options = {}) {
   }
 
   let inTag = false;
+  let inComment = false;
+  let inCdata = false;
+  let inPi = false; // processing instruction
   const resultParts = [];
   let contentBuffer = [];
+  let i = 0;
+  const length = xmlString.length;
 
-  for (const char of xmlString) {
+  while (i < length) {
+    const char = xmlString[i];
+
+    // Check for comment start: <!--
+    if (!inComment && !inCdata && !inPi && i + 3 < length) {
+      if (xmlString.substring(i, i + 4) === '<!--') {
+        // Flush content buffer
+        if (contentBuffer.length > 0) {
+          const contentToProcess = contentBuffer.join('');
+          const unescapedContent = unescapeXml(contentToProcess);
+          const escapedContent = escapeXml(unescapedContent, options);
+          resultParts.push(escapedContent);
+          contentBuffer = [];
+        }
+
+        inComment = true;
+        resultParts.push('<!--');
+        i += 4;
+        continue;
+      }
+    }
+
+    // Check for comment end: -->
+    if (inComment && i + 2 < length) {
+      if (xmlString.substring(i, i + 3) === '-->') {
+        inComment = false;
+        resultParts.push('-->');
+        i += 3;
+        continue;
+      }
+    }
+
+    // Check for CDATA start: <![CDATA[
+    if (!inComment && !inCdata && !inPi && i + 8 < length) {
+      if (xmlString.substring(i, i + 9) === '<![CDATA[') {
+        // Flush content buffer
+        if (contentBuffer.length > 0) {
+          const contentToProcess = contentBuffer.join('');
+          const unescapedContent = unescapeXml(contentToProcess);
+          const escapedContent = escapeXml(unescapedContent, options);
+          resultParts.push(escapedContent);
+          contentBuffer = [];
+        }
+
+        inCdata = true;
+        resultParts.push('<![CDATA[');
+        i += 9;
+        continue;
+      }
+    }
+
+    // Check for CDATA end: ]]>
+    if (inCdata && i + 2 < length) {
+      if (xmlString.substring(i, i + 3) === ']]>') {
+        inCdata = false;
+        resultParts.push(']]>');
+        i += 3;
+        continue;
+      }
+    }
+
+    // Check for processing instruction start: <?
+    if (!inComment && !inCdata && !inPi && i + 1 < length) {
+      if (xmlString.substring(i, i + 2) === '<?') {
+        // Flush content buffer
+        if (contentBuffer.length > 0) {
+          const contentToProcess = contentBuffer.join('');
+          const unescapedContent = unescapeXml(contentToProcess);
+          const escapedContent = escapeXml(unescapedContent, options);
+          resultParts.push(escapedContent);
+          contentBuffer = [];
+        }
+
+        inPi = true;
+        resultParts.push('<?');
+        i += 2;
+        continue;
+      }
+    }
+
+    // Check for processing instruction end: ?>
+    if (inPi && i + 1 < length) {
+      if (xmlString.substring(i, i + 2) === '?>') {
+        inPi = false;
+        resultParts.push('?>');
+        i += 2;
+        continue;
+      }
+    }
+
+    // Handle special sections (comment, CDATA, PI) - pass through unchanged
+    if (inComment || inCdata || inPi) {
+      resultParts.push(char);
+      i++;
+      continue;
+    }
+
+    // Normal tag/content handling
     if (char === '<') {
       // When a '<' is found, the preceding text in the buffer is content.
       // Un-escape it first to prevent double-escaping, then re-escape it.
@@ -333,6 +435,8 @@ export function encodeXmlEntities(xmlString, options = {}) {
         contentBuffer.push(char);
       }
     }
+
+    i++;
   }
 
   // After the loop, process any final remaining content from the buffer.

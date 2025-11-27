@@ -357,11 +357,14 @@ async function populateFileTree(state) {
       const pdfItem = document.createElement('sl-tree-item');
       pdfItem.expanded = shouldExpandPdf(file);
       pdfItem.className = 'pdf-item';
-      pdfItem.dataset.type = 'pdf';
+      // Use actual file type - distinguish between PDF sources and XML-only sources (like RNG)
+      pdfItem.dataset.type = file.source?.file_type === 'pdf' ? 'pdf' : 'xml-only';
       pdfItem.dataset.hash = file.source?.id || '';
       pdfItem.dataset.collection = file.collections[0];
       const displayLabel = file.source?.label || file.doc_metadata?.title || file.doc_id;
-      pdfItem.innerHTML = `<sl-icon name="file-pdf"></sl-icon><span>${displayLabel}</span>`;
+      // Use appropriate icon based on file type
+      const icon = file.source?.file_type === 'pdf' ? 'file-pdf' : 'file-earmark-code';
+      pdfItem.innerHTML = `<sl-icon name="${icon}"></sl-icon><span>${displayLabel}</span>`;
       
       // Add Gold section if there are gold entries
       if (goldToShow.length > 0) {
@@ -431,10 +434,10 @@ async function selectCurrentStateItem(state, fileTree) {
   
   let itemToSelect = null;
   
-  // Priority: XML item (gold/version) over PDF item
+  // Priority: XML item (gold/version/xml-only) over PDF item
   if (state.xml) {
-    // Find XML item (gold or version) with matching hash
-    itemToSelect = fileTree.querySelector(`[data-type="gold"][data-hash="${state.xml}"], [data-type="version"][data-hash="${state.xml}"]`);
+    // Find XML item (gold, version, or xml-only source) with matching hash
+    itemToSelect = fileTree.querySelector(`[data-type="gold"][data-hash="${state.xml}"], [data-type="version"][data-hash="${state.xml}"], [data-type="xml-only"][data-hash="${state.xml}"]`);
   } else if (state.pdf) {
     // Find PDF item with matching hash
     itemToSelect = fileTree.querySelector(`[data-type="pdf"][data-hash="${state.pdf}"]`);
@@ -497,15 +500,15 @@ async function onFileTreeSelection(event, state) {
   
   // Don't handle section clicks
   if (type === 'section') return;
-  
+
   // Prepare state updates
   const stateUpdates = {};
-  
+
   if (type === 'pdf') {
     // User selected a PDF document
     stateUpdates.pdf = hash;
     stateUpdates.collection = collection;
-    
+
     // Find matching gold file for this source and variant
     const selectedFile = findFileBySourceId(state.fileData, hash);
     if (selectedFile) {
@@ -516,11 +519,17 @@ async function onFileTreeSelection(event, state) {
         stateUpdates.xml = null;
       }
     }
+  } else if (type === 'xml-only') {
+    // User selected an XML-only source file (RNG schema, standalone TEI, etc.)
+    // The source IS the XML file
+    stateUpdates.xml = hash;
+    stateUpdates.pdf = null; // Clear PDF for XML-only files
+    stateUpdates.collection = collection;
   } else if (type === 'gold' || type === 'version') {
     // User selected an XML file (gold or version)
     stateUpdates.xml = hash;
     stateUpdates.collection = collection;
-    
+
     // Ensure the corresponding PDF is loaded
     if (pdfHash && pdfHash !== state.pdf) {
       stateUpdates.pdf = pdfHash;

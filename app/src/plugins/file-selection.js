@@ -417,7 +417,11 @@ async function populateSelectboxes(state) {
       ui.toolbar.pdf.hoist = true
       ui.toolbar.pdf.appendChild(option);
 
-      if (fileIdentifier === state.pdf) {
+      // Check if this is the currently selected file (either by PDF hash or XML hash for XML-only files)
+      const isSelectedFile = (fileIdentifier === state.pdf) ||
+                             (file.source && file.source.file_type !== 'pdf' && fileIdentifier === state.xml);
+
+      if (isSelectedFile) {
         // populate the version and diff selectboxes depending on the selected file
         if (file.artifacts) {
           // Filter artifacts based on variant selection
@@ -533,16 +537,22 @@ async function onChangePdfSelection() {
   let pdf = null;
   let xml = null;
 
-  // Determine if this is a PDF-XML file or XML-only file
+  // Determine file type from source
   if (selectedFile.source && selectedFile.source.id === selectedIdentifier) {
-    // Traditional PDF-XML workflow
-    pdf = selectedIdentifier;
+    // Check if source is a PDF or an XML-only file (like RNG schema)
+    if (selectedFile.source.file_type === 'pdf') {
+      // Traditional PDF-XML workflow
+      pdf = selectedIdentifier;
+    } else {
+      // XML-only file (RNG, standalone TEI, etc.) - source IS the XML
+      xml = selectedIdentifier;
+    }
   } else {
-    // XML-only file - the selected identifier is actually an XML file
+    // Selected identifier matches an artifact, not the source
     xml = selectedIdentifier;
   }
 
-  // For PDF-XML files, find the appropriate XML file
+  // For PDF files, find the appropriate XML file
   if (pdf && selectedFile.artifacts) {
     const { variant } = state;
     let matchingGold;

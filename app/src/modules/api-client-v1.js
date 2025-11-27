@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-11-27T07:27:38.210Z
+ * Generated from OpenAPI schema at 2025-11-27T16:37:50.133Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -911,6 +911,31 @@ export class ApiClientV1 {
   async sseTestEcho(requestBody) {
     const endpoint = `/sse/test/echo`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Serve schema by type and variant name.
+   * Provides clean, stable URLs for schema validation:
+   * - /api/v1/schema/rng/grobid
+   * - /api/v1/schema/xsd/myschema
+   * Args:
+   * schema_type: Schema type (e.g., 'rng', 'xsd')
+   * variant: Variant name (e.g., 'grobid', 'gemini')
+   * repo: File repository (injected)
+   * storage: File storage (injected)
+   * current_user: Current user dict (injected)
+   * Returns:
+   * FileResponse with schema XML content
+   * Raises:
+   * HTTPException: 404 if schema not found, 403 if access denied
+   *
+   * @param {string} schema_type
+   * @param {string} variant
+   * @returns {Promise<any>}
+   */
+  async schema(schema_type, variant) {
+    const endpoint = `/schema/${schema_type}/${variant}`
+    return this.callApi(endpoint);
   }
 
   /**

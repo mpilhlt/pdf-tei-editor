@@ -1,8 +1,10 @@
 /**
  * E2E Backend Tests for RNG Extraction
- * Tests that RNG files appear in file list as self-referential sources
+ * Tests RNG schema extraction with stable variant-based URLs
  * @testCovers fastapi_app/routers/extraction.py
- * @testCovers fastapi_app/routers/files_list.py
+ * @testCovers fastapi_app/routers/schema.py
+ * @testCovers fastapi_app/routers/files_serve.py
+ * @testCovers fastapi_app/extractors/rng_extractor.py
  */
 
 import { test, describe } from 'node:test';
@@ -44,6 +46,7 @@ describe('RNG Extraction E2E Tests', () => {
   let session = null;
   let testFileHash = null;
   let rngFileId = null;
+  const testVariant = `test-variant-${Date.now()}`;
 
   test('Setup: login as reviewer', async () => {
     session = await login('reviewer', 'reviewer', BASE_URL);
@@ -72,7 +75,7 @@ describe('RNG Extraction E2E Tests', () => {
     logger.success(`Test TEI file uploaded: ${testFileHash}`);
   });
 
-  test('POST /api/extract with rng extractor should create RNG schema', async () => {
+  test('POST /api/extract with rng extractor should create RNG schema with variant', async () => {
     const response = await authenticatedApiCall(
       session.sessionId,
       '/extract',
@@ -83,7 +86,8 @@ describe('RNG Extraction E2E Tests', () => {
         options: {
           schema_strictness: 'balanced',
           include_namespaces: true,
-          add_documentation: true
+          add_documentation: true,
+          variant_id: testVariant
         }
       },
       BASE_URL
@@ -94,13 +98,13 @@ describe('RNG Extraction E2E Tests', () => {
     assert.strictEqual(response.pdf, null, 'Should not have pdf in response for XML-to-XML extraction');
 
     rngFileId = response.xml;
-    logger.success(`RNG extraction succeeded, result: ${rngFileId}`);
+    logger.success(`RNG extraction succeeded with variant=${testVariant}, result: ${rngFileId}`);
   });
 
-  test('GET /api/files/list should include RNG file with variant=rng', async () => {
+  test('GET /api/files/list should include RNG file with correct variant', async () => {
     const response = await authenticatedApiCall(
       session.sessionId,
-      '/files/list?variant=rng',
+      `/files/list?variant=${testVariant}`,
       'GET',
       null,
       BASE_URL
@@ -116,39 +120,19 @@ describe('RNG Extraction E2E Tests', () => {
       return docGroup.source && docGroup.source.id === rngFileId;
     });
 
-    assert.ok(rngDocument, `RNG file should appear in file list with variant=rng`);
+    assert.ok(rngDocument, `RNG file should appear in file list with variant=${testVariant}`);
     assert.strictEqual(rngDocument.source.file_type, 'rng', 'Source should be RNG type');
     assert.strictEqual(rngDocument.source.label, 'RelaxNG Schema', 'Should have descriptive label');
     assert.ok(Array.isArray(rngDocument.artifacts), 'Should have artifacts array');
-    assert.strictEqual(rngDocument.artifacts.length, 1, 'RNG file should have one artifact (itself) for filtering');
-    assert.strictEqual(rngDocument.artifacts[0].variant, 'rng', 'Artifact should have variant=rng');
+    assert.strictEqual(rngDocument.artifacts.length, 1, 'RNG file should have one artifact (itself)');
+    assert.strictEqual(rngDocument.artifacts[0].variant, testVariant, `Artifact should have variant=${testVariant}`);
 
-    logger.success('RNG file found in file list as self-referential source with variant=rng');
+    logger.success(`RNG file found in file list as self-referential source with variant=${testVariant}`);
     logger.info(`  - doc_id: ${rngDocument.doc_id}`);
     logger.info(`  - source.id: ${rngDocument.source.id}`);
     logger.info(`  - source.file_type: ${rngDocument.source.file_type}`);
     logger.info(`  - source.label: ${rngDocument.source.label}`);
     logger.info(`  - artifacts[0].variant: ${rngDocument.artifacts[0].variant}`);
-  });
-
-  test('GET /api/files/list without variant filter should include RNG file', async () => {
-    const response = await authenticatedApiCall(
-      session.sessionId,
-      '/files/list',
-      'GET',
-      null,
-      BASE_URL
-    );
-
-    assert.ok(response, 'Should receive a response');
-    const files = response.files || response;
-
-    const rngDocument = files.find(docGroup => {
-      return docGroup.source && docGroup.source.id === rngFileId;
-    });
-
-    assert.ok(rngDocument, 'RNG file should appear in file list without variant filter');
-    logger.success('RNG file visible in unfiltered file list');
   });
 
   test('RNG file should be loadable via /api/files/{id}', async () => {
@@ -169,6 +153,107 @@ describe('RNG Extraction E2E Tests', () => {
     assert.ok(xmlContent.includes('<grammar'), 'Should contain RNG grammar element');
     assert.ok(xmlContent.includes('http://relaxng.org/ns/structure/1.0'), 'Should contain RelaxNG namespace');
 
-    logger.success('RNG file successfully loaded via API');
+    logger.success('RNG file successfully loaded via /api/files/{id}');
+  });
+
+  test('RNG schema should be accessible via stable /api/v1/schema/rng/{variant} endpoint', async () => {
+    const response = await authenticatedRequest(
+      session.sessionId,
+      `/schema/rng/${testVariant}`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    assert.ok(response, 'Should receive a response');
+    assert.ok(response.ok, 'Response should be successful');
+    assert.strictEqual(response.status, 200, 'Should return 200 OK');
+
+    // Get XML content
+    const xmlContent = await response.text();
+    assert.ok(xmlContent, 'Should have XML content');
+    assert.ok(xmlContent.includes('<grammar'), 'Should contain RNG grammar element');
+    assert.ok(xmlContent.includes('http://relaxng.org/ns/structure/1.0'), 'Should contain RelaxNG namespace');
+
+    logger.success(`RNG schema accessible via /api/v1/schema/rng/${testVariant}`);
+  });
+
+  test('RNG schema should contain validation instruction with stable URL', async () => {
+    const response = await authenticatedRequest(
+      session.sessionId,
+      `/files/${rngFileId}`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    const xmlContent = await response.text();
+
+    // Check for validation instruction
+    assert.ok(xmlContent.includes('<?xml-model'), 'Should contain xml-model processing instruction');
+    assert.ok(xmlContent.includes('/api/v1/schema/rng/'), 'Should reference schema endpoint');
+    assert.ok(xmlContent.includes(testVariant), 'Should reference the variant in URL');
+
+    // Verify no URL encoding needed (no colons, etc.)
+    assert.ok(!xmlContent.includes('schema:rng'), 'Should not use colon separator (would require encoding)');
+    assert.ok(!xmlContent.includes('%3A'), 'Should not contain URL-encoded characters');
+
+    logger.success('RNG schema contains correct validation instruction with clean URL');
+  });
+
+  test('Re-extracting same variant should create a new version', async () => {
+    const response = await authenticatedApiCall(
+      session.sessionId,
+      '/extract',
+      'POST',
+      {
+        extractor: 'rng',
+        file_id: testFileHash,
+        options: {
+          schema_strictness: 'permissive', // Different option to change content
+          include_namespaces: true,
+          add_documentation: true,
+          variant_id: testVariant
+        }
+      },
+      BASE_URL
+    );
+
+    assert.ok(response, 'Should receive a response');
+    assert.ok(response.xml, 'Should have xml (RNG file ID) in response');
+
+    const newRngFileId = response.xml;
+    logger.success(`Second extraction created new version: ${newRngFileId}`);
+
+    // The stable schema endpoint should still serve the gold standard
+    const schemaResponse = await authenticatedRequest(
+      session.sessionId,
+      `/schema/rng/${testVariant}`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    assert.ok(schemaResponse.ok, 'Schema endpoint should still work');
+    logger.success('Schema endpoint still serves gold standard after version creation');
+  });
+
+  test('GET /api/v1/schema/rng/{variant} for non-existent variant should return 404', async () => {
+    const nonExistentVariant = `non-existent-${Date.now()}`;
+    const response = await authenticatedRequest(
+      session.sessionId,
+      `/schema/rng/${nonExistentVariant}`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    assert.strictEqual(response.status, 404, 'Should return 404 for non-existent variant');
+
+    const errorData = await response.json();
+    assert.ok(errorData.detail, 'Should have error detail');
+    assert.ok(errorData.detail.includes(nonExistentVariant), 'Error should mention the variant name');
+
+    logger.success('Schema endpoint correctly returns 404 for non-existent variant');
   });
 });

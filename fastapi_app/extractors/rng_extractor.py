@@ -93,8 +93,13 @@ class RelaxNGExtractor(BaseExtractor):
             schema_generator = RelaxNGGenerator(options)
             rng_schema = schema_generator.generate(schema_structure)
 
-            # Add validation instructions with dynamic base URL
-            validation_comment = self._generate_validation_comment()
+            # Extract variant_id for stable URL generation
+            variant_id = options.get('variant_id')
+            if not variant_id:
+                raise ValueError("variant_id is required in options for RNG extraction")
+
+            # Add validation instructions with variant-based stable URL
+            validation_comment = self._generate_validation_comment(variant_id, options)
 
             # Combine schema with validation instructions
             return self._format_final_schema(rng_schema, validation_comment, options)
@@ -104,30 +109,37 @@ class RelaxNGExtractor(BaseExtractor):
         except Exception as e:
             raise RuntimeError(f"Schema generation failed: {e}")
 
-    def _get_base_url(self) -> str:
-        """Get the dynamic base URL from the current request."""
-        try:
-            # Try to get from Flask request context
-            if request:
-                scheme = request.scheme
-                host = request.host
-                return f"{scheme}://{host}"
-        except:
-            pass
+    def _get_base_url(self, options: Dict[str, Any]) -> str:
+        """Get the base URL from options or fall back to localhost."""
+        # Check if base_url was provided in options (from FastAPI request)
+        if 'base_url' in options:
+            return options['base_url']
 
-        # Fallback to localhost if no request context
+        # Fallback to localhost if no base_url provided
         return "http://localhost:3001"
 
-    def _generate_validation_comment(self) -> str:
-        """Generate validation instruction comment with placeholder for hash."""
+    def _generate_validation_comment(self, variant: str, options: Dict[str, Any]) -> str:
+        """
+        Generate validation instruction comment with stable variant-based URL.
+
+        Args:
+            variant: The variant name (e.g., 'grobid', 'gemini')
+            options: Extraction options containing base_url
+
+        Returns:
+            XML comment with validation instructions
+        """
         # Get dynamic base URL
-        base_url = self._get_base_url()
+        base_url = self._get_base_url(options)
+
+        # Use clean schema endpoint URL
+        schema_url = f"{base_url}/api/v1/schema/rng/{variant}"
 
         validation_instruction = f"""
 <!--
 To validate TEI documents against this schema, add this processing instruction
 to the beginning of your TEI document (after the XML declaration):
-<?xml-model href="{base_url}/api/files/{{SCHEMA_HASH}}" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+<?xml-model href="{schema_url}" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
 -->"""
         return validation_instruction
 

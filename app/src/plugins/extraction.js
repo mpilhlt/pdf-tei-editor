@@ -597,7 +597,7 @@ async function promptForExtractionOptions(options={}) {
     'collection': String(ui.extractionOptions.collectionName.value),
     'extractor': String(ui.extractionOptions.modelIndex.value)
   }
-  
+
   // Collect values from dynamic options
   const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
   /** @type {NodeListOf<SlSelect|SlInput>} */
@@ -608,10 +608,15 @@ async function promptForExtractionOptions(options={}) {
     const typedInput = /** @type {SlSelect|SlInput} */(input)
     const name = typedInput.name
     let value = typedInput.value
-    
+
     // Special handling for instructions - convert to actual instruction text
     if (name === 'instructions' && instructions[parseInt(String(value))]) {
       value = instructions[parseInt(String(value))]
+    }
+
+    // Skip empty variant_id values - they'll be provided from options/state
+    if (name === 'variant_id' && (!value || value === '')) {
+      continue
     }
 
     formData[name] = String(value)

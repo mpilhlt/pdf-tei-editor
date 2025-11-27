@@ -295,7 +295,7 @@ async function load({ xml, pdf }) {
     await app.updateState({ pdf: null, xml: null, diff: null })
     logger.info("Loading PDF: " + pdf)
     // Convert document identifier to static file URL
-    const pdfUrl = `/api/files/${pdf}`
+    const pdfUrl = `/api/files/${pdf}` // TODO unhardcode this!
     promises.push(pdfViewer.load(pdfUrl))
   }
 
@@ -372,22 +372,39 @@ async function load({ xml, pdf }) {
     })
   }
 
-  // Set collection based on loaded documents if not already set
-  if (currentState.fileData && (pdf || xml) && !currentState.collection) {
+  // Set collection and variant based on loaded documents
+  if (currentState.fileData && (pdf || xml)) {
     for (const file of currentState.fileData) {
       const fileData = /** @type {any} */ (file);
+
+      let foundMatch = false;
+
       // Check source id
       if (pdf && fileData.source && fileData.source.id === pdf) {
-        stateChanges.collection = fileData.collections[0];
-        break;
-      }
-      // Check XML id in artifacts
-      if (xml) {
-        const hasArtifactMatch = fileData.artifacts && fileData.artifacts.some(/** @param {any} artifact */ artifact => artifact.id === xml);
-        if (hasArtifactMatch) {
+        if (!currentState.collection) {
           stateChanges.collection = fileData.collections[0];
-          break;
         }
+        foundMatch = true;
+      }
+
+      // Check XML id in artifacts (don't skip this even if PDF was found)
+      if (xml) {
+        const matchingArtifact = fileData.artifacts && fileData.artifacts.find(/** @param {any} artifact */ artifact => artifact.id === xml);
+        if (matchingArtifact) {
+          if (!currentState.collection) {
+            stateChanges.collection = fileData.collections[0];
+          }
+          // Always set variant from artifact (it's the source of truth for the loaded document)
+          if (matchingArtifact.variant) {
+            stateChanges.variant = matchingArtifact.variant;
+          }
+          foundMatch = true;
+        }
+      }
+
+      // Only break if we found what we're looking for
+      if (foundMatch) {
+        break;
       }
     }
   }

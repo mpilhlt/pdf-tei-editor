@@ -130,8 +130,8 @@ def list_files(
         if doc_group.source.id == file_metadata.stable_id:
             continue
 
-        # Build artifact for TEI files
-        if file_metadata.file_type == 'tei':
+        # Build artifact for TEI and RNG files
+        if file_metadata.file_type in ['tei', 'rng']:
             artifact = _build_artifact(file_metadata)
             doc_group.artifacts.append(artifact)
 

@@ -10,7 +10,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
-import { addEdition } from '../../../app/src/modules/tei-utils.js';
+import { addEdition, encodeXmlEntities } from '../../../app/src/modules/tei-utils.js';
 
 describe('TEI Utils', () => {
   describe('addEdition', () => {
@@ -98,6 +98,80 @@ describe('TEI Utils', () => {
       // Check that no fileref was added
       const filerefElements = xmlDoc.querySelectorAll('idno[type="fileref"]');
       assert.strictEqual(filerefElements.length, 0, 'Should not add fileref when it did not exist');
+    });
+  });
+
+  describe('encodeXmlEntities', () => {
+    it('should preserve comments with angle brackets', () => {
+      const input = '<root><!-- Comment with & < > characters --><text>Content & text</text></root>';
+      const expected = '<root><!-- Comment with & < > characters --><text>Content &amp; text</text></root>';
+      const result = encodeXmlEntities(input);
+      assert.strictEqual(result, expected);
+    });
+
+    it('should preserve comment with processing instruction (RNG schema case)', () => {
+      const input = `<!--
+To validate TEI documents against this schema, add this processing instruction
+to the beginning of your TEI document (after the XML declaration):
+<?xml-model href="http://example.com/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+
+V1 - corrected
+
+-->
+<root>Content & text</root>`;
+      const expected = `<!--
+To validate TEI documents against this schema, add this processing instruction
+to the beginning of your TEI document (after the XML declaration):
+<?xml-model href="http://example.com/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+
+V1 - corrected
+
+-->
+<root>Content &amp; text</root>`;
+      const result = encodeXmlEntities(input);
+      assert.strictEqual(result, expected);
+    });
+
+    it('should preserve CDATA sections', () => {
+      const input = '<root><![CDATA[Content with & < > characters]]><text>Content & text</text></root>';
+      const expected = '<root><![CDATA[Content with & < > characters]]><text>Content &amp; text</text></root>';
+      const result = encodeXmlEntities(input);
+      assert.strictEqual(result, expected);
+    });
+
+    it('should preserve processing instructions', () => {
+      const input = '<?xml-stylesheet href="style.css" type="text/css"?><root>Content & text</root>';
+      const expected = '<?xml-stylesheet href="style.css" type="text/css"?><root>Content &amp; text</root>';
+      const result = encodeXmlEntities(input);
+      assert.strictEqual(result, expected);
+    });
+
+    it('should handle multiple comments', () => {
+      const input = '<root><!-- Comment 1 with > --><text>Content & text</text><!-- Comment 2 with < --></root>';
+      const expected = '<root><!-- Comment 1 with > --><text>Content &amp; text</text><!-- Comment 2 with < --></root>';
+      const result = encodeXmlEntities(input);
+      assert.strictEqual(result, expected);
+    });
+
+    it('should encode required entities in content', () => {
+      const input = '<root>Test & text</root>';
+      const expected = '<root>Test &amp; text</root>';
+      const result = encodeXmlEntities(input);
+      assert.strictEqual(result, expected);
+    });
+
+    it('should preserve quotes by default', () => {
+      const input = `<root>Test "quoted" and 'apostrophe' text</root>`;
+      const expected = `<root>Test "quoted" and 'apostrophe' text</root>`;
+      const result = encodeXmlEntities(input);
+      assert.strictEqual(result, expected);
+    });
+
+    it('should encode quotes when option enabled', () => {
+      const input = `<root>Test "quoted" and 'apostrophe' text</root>`;
+      const expected = `<root>Test &quot;quoted&quot; and &apos;apostrophe&apos; text</root>`;
+      const result = encodeXmlEntities(input, { encodeQuotes: true });
+      assert.strictEqual(result, expected);
     });
   });
 });

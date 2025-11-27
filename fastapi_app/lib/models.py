@@ -106,6 +106,7 @@ class FileUpdate(BaseModel):
     Sync tracking fields (sync_status, local_modified_at, updated_at)
     are set automatically.
     """
+    id: Optional[str] = None  # Allow updating content hash when file content changes
     filename: Optional[str] = None
     file_size: Optional[int] = None
     label: Optional[str] = None

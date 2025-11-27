@@ -137,7 +137,8 @@ from .routers import (
     validation,
     extraction,
     sync,
-    sse
+    sse,
+    schema
 )
 
 # Versioned API router (v1)
@@ -158,6 +159,7 @@ api_v1.include_router(files_locks.router)  # Before files_serve (catch-all)
 api_v1.include_router(files_heartbeat.router)  # Before files_serve (catch-all)
 api_v1.include_router(sync.router)  # Phase 6: Sync endpoints
 api_v1.include_router(sse.router)  # Phase 6: SSE stream
+api_v1.include_router(schema.router)  # Schema serving (before files_serve)
 api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
 
 # Health check endpoint (unversioned)

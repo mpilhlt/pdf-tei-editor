@@ -65,8 +65,15 @@ def serve_file_by_id(
 
     logger.debug(f"Serving file: {document_id}")
 
-    # Look up file by ID or stable_id
+    # Look up file by ID, stable_id, or doc_id (for schemas)
     file_metadata = repo.get_file_by_id_or_stable_id(document_id)
+
+    # If not found and looks like a schema doc_id, try gold standard lookup
+    if not file_metadata and document_id.startswith("schema-"):
+        file_metadata = repo.get_gold_standard(document_id)
+        if file_metadata:
+            logger.debug(f"Found schema by doc_id: {document_id}")
+
     if not file_metadata:
         logger.warning(f"File not in database: {document_id}")
         raise HTTPException(status_code=404, detail=f"File not found: {document_id}")

@@ -8,7 +8,7 @@ Provides endpoints for:
 For FastAPI migration - Phase 5.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pathlib import Path
 import logging
 from typing import Optional, List
@@ -74,6 +74,7 @@ def list_available_extractors(
 @router.post("", response_model=ExtractResponse)
 def extract_metadata(
     request: ExtractRequest,
+    http_request: Request,
     repo: FileRepository = Depends(get_file_repository),
     storage: FileStorage = Depends(get_file_storage),
     current_user: dict = Depends(require_authenticated_user),
@@ -183,9 +184,10 @@ def extract_metadata(
             pdf_path = str(file_path)
 
         # Perform extraction
-        # Pass doc_id through options so extractors can set the correct fileref
+        # Pass doc_id and base_url through options so extractors can set the correct fileref and URLs
         extraction_options = {**(request.options or {})}
         extraction_options['doc_id'] = file_metadata.doc_id
+        extraction_options['base_url'] = str(http_request.base_url).rstrip('/')
 
         try:
             tei_xml = extractor.extract(
@@ -382,17 +384,20 @@ def _save_xml_extraction_result(
     """
     Save XML extraction result as standalone file.
 
-    Used for schema extraction or XML-to-XML transformations.
+    For RNG schemas:
+    - Uses schema-rng-{variant_id} as stable doc_id
+    - First extraction creates gold standard
+    - Subsequent extractions create versioned files
 
     Args:
         content: Extracted XML content
         extractor_id: ID of the extractor used
-        options: Extraction options (may include collection)
+        options: Extraction options (must include 'variant_id' for RNG)
         repo: File repository
         storage: File storage
 
     Returns:
-        Dict with 'xml' hash
+        Dict with 'xml' hash/stable_id
     """
     import hashlib
     from datetime import datetime
@@ -401,50 +406,105 @@ def _save_xml_extraction_result(
     if extractor_id == "rng":
         file_type = 'rng'
         default_label = "RelaxNG Schema"
+
+        # For RNG schemas, require variant_id and use schema-rng-{variant_id} as doc_id
+        variant = options.get('variant_id')
+        if not variant:
+            raise ValueError("variant_id is required in options for RNG extraction")
+
+        doc_id = f"schema-rng-{variant}"
+
     else:
         file_type = 'tei'
         default_label = extractor_id
+        variant = None
+
+        # For other XML extractions, generate doc_id from timestamp and hash
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        content_bytes = content.encode('utf-8')
+        content_hash = hashlib.sha256(content_bytes).hexdigest()[:8]
+        doc_id = f"{extractor_id}_{timestamp}_{content_hash}"
 
     # Save file to storage
     content_bytes = content.encode('utf-8')
     file_hash, file_path = storage.save_file(content_bytes, file_type)
 
-    # For standalone files, generate a doc_id from content hash and timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    content_hash = hashlib.sha256(content_bytes).hexdigest()[:8]
-    doc_id = f"{extractor_id}_{timestamp}_{content_hash}"
-
     # Get collection from options
     collection = options.get('collection', '__inbox')
 
-    # For standalone files, use file_type as variant to enable filtering
-    # This allows users to filter by "rng", "xslt", etc.
-    file_variant = file_type if file_type != 'tei' else None
+    # Check if file with this hash already exists (same content)
+    try:
+        existing_hash_file = repo.get_file_by_id(file_hash)
+        if existing_hash_file:
+            logger.info(f"File with hash {file_hash[:8]}... already exists, returning stable_id: {existing_hash_file.stable_id}")
+            return {'xml': existing_hash_file.stable_id}
+    except ValueError:
+        pass  # Hash doesn't exist, continue
 
-    # Create file metadata record
-    file_create = FileCreate(
-        id=file_hash,
-        stable_id=None,  # Will be auto-generated
-        filename=f"{doc_id}.{file_type}.xml",
-        doc_id=doc_id,
-        file_type=file_type,
-        file_size=len(content_bytes),
-        doc_collections=[collection],
-        doc_metadata={},  # Must be dict, not None
-        variant=file_variant,
-        version=None,  # Gold files have no version number
-        is_gold_standard=True,  # First extraction is gold standard
-        label=default_label,
-        file_metadata={'extractor': extractor_id}
-    )
+    # For RNG files, check if gold standard exists for this variant
+    if extractor_id == "rng":
+        existing_gold = repo.get_gold_standard(doc_id)
 
-    # Check if file with this hash already exists
-    existing_file = repo.get_file_by_id(file_hash)
-    if existing_file:
-        logger.info(f"File already exists with hash {file_hash[:8]}..., returning existing stable_id: {existing_file.stable_id}")
-        return {
-            'xml': existing_file.stable_id
-        }
+        if existing_gold:
+            # Gold exists - create new version
+            latest_version = repo.get_latest_tei_version(doc_id, variant)
+            next_version = (latest_version.version + 1) if latest_version else 1
+
+            logger.info(f"Creating RNG schema version {next_version} for {doc_id}")
+
+            file_create = FileCreate(
+                id=file_hash,
+                stable_id=None,  # Will be auto-generated
+                filename=f"{doc_id}.v{next_version}.rng.xml",
+                doc_id=doc_id,
+                file_type=file_type,
+                file_size=len(content_bytes),
+                doc_collections=[collection],
+                doc_metadata={},
+                variant=variant,  # Use variant_id so schema is associated with TEI docs it validates
+                version=next_version,
+                is_gold_standard=False,
+                label=f"{default_label} v{next_version}",
+                file_metadata={'extractor': extractor_id}
+            )
+        else:
+            # No gold exists - create gold standard
+            logger.info(f"Creating RNG schema gold standard for {doc_id}")
+
+            file_create = FileCreate(
+                id=file_hash,
+                stable_id=None,  # Will be auto-generated
+                filename=f"{doc_id}.rng.xml",
+                doc_id=doc_id,
+                file_type=file_type,
+                file_size=len(content_bytes),
+                doc_collections=[collection],
+                doc_metadata={},
+                variant=variant,  # Use variant_id so schema is associated with TEI docs it validates
+                version=None,  # Gold has no version
+                is_gold_standard=True,
+                label=default_label,
+                file_metadata={'extractor': extractor_id}
+            )
+    else:
+        # For non-RNG files, use file_type as variant to enable filtering
+        file_variant = file_type if file_type != 'tei' else None
+
+        file_create = FileCreate(
+            id=file_hash,
+            stable_id=None,  # Will be auto-generated
+            filename=f"{doc_id}.{file_type}.xml",
+            doc_id=doc_id,
+            file_type=file_type,
+            file_size=len(content_bytes),
+            doc_collections=[collection],
+            doc_metadata={},
+            variant=file_variant,
+            version=None,
+            is_gold_standard=True,
+            label=default_label,
+            file_metadata={'extractor': extractor_id}
+        )
 
     # Insert into database
     inserted_file = repo.insert_file(file_create)

@@ -96,6 +96,64 @@ class TestXmlEntityEncoding(unittest.TestCase):
         result = encode_xml_entities(xml_input)
         self.assertEqual(result, expected)
 
+    def test_comments_not_encoded(self):
+        """Test that content inside XML comments is not encoded."""
+        xml_input = """<root><!-- Comment with & < > characters --><text>Content & text</text></root>"""
+        expected = """<root><!-- Comment with & < > characters --><text>Content &amp; text</text></root>"""
+        result = encode_xml_entities(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_comment_with_processing_instruction(self):
+        """Test comment containing processing instruction (like in RNG schema)."""
+        xml_input = """<!--
+To validate TEI documents against this schema, add this processing instruction
+to the beginning of your TEI document (after the XML declaration):
+<?xml-model href="http://example.com/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+
+V1 - corrected
+
+-->
+<root>Content & text</root>"""
+        expected = """<!--
+To validate TEI documents against this schema, add this processing instruction
+to the beginning of your TEI document (after the XML declaration):
+<?xml-model href="http://example.com/schema.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
+
+V1 - corrected
+
+-->
+<root>Content &amp; text</root>"""
+        result = encode_xml_entities(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_cdata_not_encoded(self):
+        """Test that content inside CDATA sections is not encoded."""
+        xml_input = """<root><![CDATA[Content with & < > characters]]><text>Content & text</text></root>"""
+        expected = """<root><![CDATA[Content with & < > characters]]><text>Content &amp; text</text></root>"""
+        result = encode_xml_entities(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_processing_instructions_not_encoded(self):
+        """Test that content inside processing instructions is not encoded."""
+        xml_input = """<?xml-stylesheet href="style.css" type="text/css"?><root>Content & text</root>"""
+        expected = """<?xml-stylesheet href="style.css" type="text/css"?><root>Content &amp; text</root>"""
+        result = encode_xml_entities(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_multiple_comments(self):
+        """Test multiple comments in same document."""
+        xml_input = """<root><!-- Comment 1 with > --><text>Content & text</text><!-- Comment 2 with < --></root>"""
+        expected = """<root><!-- Comment 1 with > --><text>Content &amp; text</text><!-- Comment 2 with < --></root>"""
+        result = encode_xml_entities(xml_input)
+        self.assertEqual(result, expected)
+
+    def test_nested_angle_brackets_in_comment(self):
+        """Test comment with multiple angle brackets (like malformed comment issue)."""
+        xml_input = """<root><!-- <?xml-model href="test.rng"?> --><text>Content</text></root>"""
+        expected = """<root><!-- <?xml-model href="test.rng"?> --><text>Content</text></root>"""
+        result = encode_xml_entities(xml_input)
+        self.assertEqual(result, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

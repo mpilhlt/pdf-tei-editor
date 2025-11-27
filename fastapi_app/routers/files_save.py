@@ -301,7 +301,7 @@ async def save_file(
 
         # Save to storage (hash might change if content changed)
             xml_bytes = xml_string.encode('utf-8')
-            saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
+            saved_hash, storage_path = file_storage.save_file(xml_bytes, existing_file.file_type, increment_ref=False)
             file_size = len(xml_bytes)
 
             # Only update if hash actually changed

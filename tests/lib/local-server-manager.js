@@ -72,6 +72,9 @@ export class LocalServerManager extends ServerManager {
   /**
    * Kill any existing FastAPI/uvicorn servers on the configured port
    *
+   * Only kills processes on the specific port, not all uvicorn processes.
+   * This prevents killing dev servers running on other ports (e.g., port 8000).
+   *
    * @private
    * @returns {Promise<void>}
    */
@@ -79,32 +82,39 @@ export class LocalServerManager extends ServerManager {
     logger.info(`Killing any running FastAPI servers on port ${this.port}`);
 
     if (platform() === 'win32') {
-      // Windows: use taskkill
+      // Windows: kill by port only
       try {
         const { exec } = await import('child_process');
         await new Promise((resolve) => {
-          exec(
-            'taskkill /F /IM python.exe /FI "WINDOWTITLE eq *uvicorn*"',
-            () => resolve()
-          );
-        });
-      } catch (err) {
-        // Ignore errors
-      }
-    } else {
-      // Unix: kill by pattern - run commands separately for reliability
-      try {
-        const { exec } = await import('child_process');
-        await new Promise((resolve) => {
-          exec('pkill -9 -f "uvicorn.*run_fastapi"', () => {
-            exec('pkill -9 -f "bin/start-dev"', () => resolve());
+          exec(`netstat -ano | findstr :${this.port}`, (err, stdout) => {
+            if (err || !stdout.trim()) {
+              resolve();
+              return;
+            }
+            // Extract PIDs from netstat output
+            const pids = new Set();
+            for (const line of stdout.split('\n')) {
+              const match = line.match(/\s+(\d+)\s*$/);
+              if (match) pids.add(match[1]);
+            }
+            if (pids.size === 0) {
+              resolve();
+              return;
+            }
+            const killPromises = Array.from(pids).map(
+              (pid) =>
+                new Promise((res) => {
+                  exec(`taskkill /F /PID ${pid}`, () => res());
+                })
+            );
+            Promise.all(killPromises).then(resolve).catch(resolve);
           });
         });
       } catch (err) {
         // Ignore errors
       }
-
-      // Also kill by port
+    } else {
+      // Unix: kill by port only (more targeted than pattern matching)
       try {
         const { exec } = await import('child_process');
         await new Promise((resolve, reject) => {
@@ -130,7 +140,7 @@ export class LocalServerManager extends ServerManager {
 
     // Wait for ports to be released
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    console.log('[SUCCESS] Servers stopped');
+    console.log('[SUCCESS] Servers on port', this.port, 'stopped');
   }
 
   /**
@@ -581,23 +591,31 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
             exec(`taskkill /F /T /PID ${this.serverProcess.pid}`, () => resolve());
           });
         } else {
-          // Unix: kill entire process tree (parent + all children)
+          // Unix: kill by port only to avoid killing other dev servers
           const { exec } = await import('child_process');
           const pid = this.serverProcess.pid;
 
-          // Use process group kill to terminate all related processes
-          // Run pkill commands separately for more reliable execution
+          // Kill processes on the specific port only
           await new Promise((resolve) => {
-            exec('pkill -9 -f "uvicorn.*run_fastapi"', () => {
-              exec('pkill -9 -f "bin/start-dev"', () => {
-                // Also try to kill the parent process directly
+            exec(`lsof -ti:${this.port}`, (err, stdout) => {
+              if (err || !stdout.trim()) {
+                // No processes found on port, try killing parent process directly
                 try {
                   process.kill(pid, 'SIGKILL');
                 } catch (err) {
                   // Process may already be dead
                 }
                 resolve();
-              });
+                return;
+              }
+              const pids = stdout.trim().split('\n');
+              const killPromises = pids.map(
+                (pid) =>
+                  new Promise((res) => {
+                    exec(`kill -9 ${pid}`, () => res());
+                  })
+              );
+              Promise.all(killPromises).then(resolve).catch(resolve);
             });
           });
 
