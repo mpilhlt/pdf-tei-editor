@@ -217,3 +217,17 @@ class HeartbeatResponse(BaseModel):
     """Response for POST /api/files/heartbeat"""
     status: str         # 'lock_refreshed'
     # No cache_status in FastAPI (deprecated)
+
+
+class GarbageCollectRequest(BaseModel):
+    """Request for POST /api/files/garbage_collect"""
+    deleted_before: datetime  # ISO timestamp - purge files deleted before this time
+    sync_status: Optional[str] = None  # Optional filter by sync_status
+    # Extensible for additional filters
+
+
+class GarbageCollectResponse(BaseModel):
+    """Response for POST /api/files/garbage_collect"""
+    purged_count: int  # Number of database records purged
+    files_deleted: int  # Number of physical files deleted
+    storage_freed: int  # Total bytes freed from storage

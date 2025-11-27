@@ -980,3 +980,63 @@ class FileRepository:
 
             if self.logger:
                 self.logger.debug(f"Applied remote metadata to file: {file_id}")
+
+    def get_deleted_files_for_gc(
+        self,
+        deleted_before: datetime,
+        sync_status: Optional[str] = None
+    ) -> List[FileMetadata]:
+        """
+        Get deleted files eligible for garbage collection.
+
+        Filters are additive - all conditions must match if they have a value.
+
+        Args:
+            deleted_before: Purge files with updated_at before this timestamp
+            sync_status: Optional filter by sync_status
+
+        Returns:
+            List of FileMetadata models for deleted files eligible for garbage collection
+        """
+        conditions = ["deleted = 1", "updated_at < ?"]
+        params = [deleted_before.isoformat()]
+
+        if sync_status is not None:
+            conditions.append("sync_status = ?")
+            params.append(sync_status)
+
+        where_clause = " AND ".join(conditions)
+        query = f"SELECT * FROM files WHERE {where_clause}"
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, tuple(params))
+            rows = cursor.fetchall()
+
+            return [self._row_to_model(row) for row in rows]
+
+    def permanently_delete_file(self, file_id: str) -> None:
+        """
+        Permanently delete a file record from the database.
+
+        This is for garbage collection only - removes the database record entirely.
+        Does NOT handle physical file deletion or reference counting
+        (caller must handle that separately).
+
+        Args:
+            file_id: File ID (hash)
+
+        Raises:
+            ValueError: If file_id not found
+        """
+        query = "DELETE FROM files WHERE id = ?"
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (file_id,))
+
+            if cursor.rowcount == 0:
+                raise ValueError(f"File not found: {file_id}")
+
+            if self.logger:
+                self.logger.debug(f"Permanently deleted file record: {file_id}")

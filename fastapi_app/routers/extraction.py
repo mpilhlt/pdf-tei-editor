@@ -287,25 +287,32 @@ def _save_pdf_extraction_result(
     except Exception as e:
         logger.warning(f"Failed to parse TEI metadata for label: {e}")
 
-    # Create file metadata record
-    file_create = FileCreate(
-        id=tei_hash,
-        stable_id=None,  # Will be auto-generated
-        filename=f"{pdf_metadata.doc_id}-extracted.xml",
-        doc_id=pdf_metadata.doc_id,
-        file_type='tei',
-        file_size=len(tei_bytes),
-        doc_collections=doc_collections,
-        doc_metadata={},  # TEI files don't store doc metadata
-        variant=variant,
-        version=None,  # Gold files have no version number
-        is_gold_standard=True,  # First extraction is gold standard
-        label=label,
-        file_metadata={'extractor': options.get('extractor', 'unknown')}
-    )
+    # Check if file with this hash already exists (e.g., re-running same extraction)
+    existing_file = repo.get_file_by_id(tei_hash)
+    if existing_file:
+        logger.info(f"TEI file already exists with hash {tei_hash[:8]}..., returning existing stable_id: {existing_file.stable_id}")
+        # Still update PDF metadata if we have new metadata
+        inserted_file = existing_file
+    else:
+        # Create file metadata record
+        file_create = FileCreate(
+            id=tei_hash,
+            stable_id=None,  # Will be auto-generated
+            filename=f"{pdf_metadata.doc_id}-extracted.xml",
+            doc_id=pdf_metadata.doc_id,
+            file_type='tei',
+            file_size=len(tei_bytes),
+            doc_collections=doc_collections,
+            doc_metadata={},  # TEI files don't store doc metadata
+            variant=variant,
+            version=None,  # Gold files have no version number
+            is_gold_standard=True,  # First extraction is gold standard
+            label=label,
+            file_metadata={'extractor': options.get('extractor', 'unknown')}
+        )
 
-    # Insert into database
-    inserted_file = repo.insert_file(file_create)
+        # Insert into database
+        inserted_file = repo.insert_file(file_create)
 
     # Update PDF metadata from extracted TEI
     if tei_metadata:
@@ -319,22 +326,26 @@ def _save_pdf_extraction_result(
         pdf_label = None
         if 'title' in doc_metadata:
             title = doc_metadata['title']
-            # Optionally include first author and date for more context
+            # Format: Author (Year) Title
             author_part = ""
             if 'authors' in doc_metadata and doc_metadata['authors']:
                 first_author = doc_metadata['authors'][0]
                 if 'family' in first_author:
-                    author_part = first_author['family'] + ", "
+                    author_part = first_author['family']
 
             date_part = ""
             if 'date' in doc_metadata:
-                date_part = f" ({doc_metadata['date']})"
+                date_part = f"({doc_metadata['date']})"
 
-            # Truncate long titles
-            if len(title) > 60:
-                title = title[:57] + "..."
-
-            pdf_label = f"{author_part}{title}{date_part}"
+            # Build label with author and date first, then title
+            if author_part and date_part:
+                pdf_label = f"{author_part} {date_part} {title}"
+            elif author_part:
+                pdf_label = f"{author_part} {title}"
+            elif date_part:
+                pdf_label = f"{date_part} {title}"
+            else:
+                pdf_label = title
         elif tei_metadata.get('doc_id'):
             # Use DOI/doc_id if available
             pdf_label = tei_metadata['doc_id']
@@ -389,8 +400,10 @@ def _save_xml_extraction_result(
     # Determine file type from extractor
     if extractor_id == "rng":
         file_type = 'rng'
+        default_label = "RelaxNG Schema"
     else:
         file_type = 'tei'
+        default_label = extractor_id
 
     # Save file to storage
     content_bytes = content.encode('utf-8')
@@ -404,6 +417,10 @@ def _save_xml_extraction_result(
     # Get collection from options
     collection = options.get('collection', '__inbox')
 
+    # For standalone files, use file_type as variant to enable filtering
+    # This allows users to filter by "rng", "xslt", etc.
+    file_variant = file_type if file_type != 'tei' else None
+
     # Create file metadata record
     file_create = FileCreate(
         id=file_hash,
@@ -414,12 +431,20 @@ def _save_xml_extraction_result(
         file_size=len(content_bytes),
         doc_collections=[collection],
         doc_metadata={},  # Must be dict, not None
-        variant=None,
+        variant=file_variant,
         version=None,  # Gold files have no version number
         is_gold_standard=True,  # First extraction is gold standard
-        label=extractor_id,
+        label=default_label,
         file_metadata={'extractor': extractor_id}
     )
+
+    # Check if file with this hash already exists
+    existing_file = repo.get_file_by_id(file_hash)
+    if existing_file:
+        logger.info(f"File already exists with hash {file_hash[:8]}..., returning existing stable_id: {existing_file.stable_id}")
+        return {
+            'xml': existing_file.stable_id
+        }
 
     # Insert into database
     inserted_file = repo.insert_file(file_create)

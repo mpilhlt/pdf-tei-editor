@@ -129,6 +129,7 @@ from .routers import (
     files_upload,
     files_save,
     files_delete,
+    files_gc,
     files_move,
     files_copy,
     files_locks,
@@ -150,6 +151,7 @@ api_v1.include_router(files_list.router)
 api_v1.include_router(files_upload.router)
 api_v1.include_router(files_save.router)
 api_v1.include_router(files_delete.router)
+api_v1.include_router(files_gc.router)
 api_v1.include_router(files_move.router)
 api_v1.include_router(files_copy.router)
 api_v1.include_router(files_locks.router)  # Before files_serve (catch-all)

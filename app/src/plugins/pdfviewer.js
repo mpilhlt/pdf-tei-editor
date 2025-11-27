@@ -130,15 +130,18 @@ async function update(state) {
   
   // Update title and filename widgets
   if (state.pdf) {
-    filenameWidget.text = getFileDataById(state.pdf)?.file?.fileref || ''
+    filenameWidget.text = getFileDataById(state.pdf)?.file?.doc_id || ''
     try {
       const title = getDocumentTitle(state.pdf);
       titleWidget.text = title || 'PDF Document';
+      titleWidget.tooltip = title || 'PDF Document';
     } catch (error) {
       titleWidget.text = 'PDF Document';
+      titleWidget.tooltip = 'PDF Document';
     }
   } else if (titleWidget) {
     titleWidget.text = '';
+    titleWidget.tooltip = '';
     filenameWidget.text = '';
   }
 }

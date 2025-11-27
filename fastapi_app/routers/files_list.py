@@ -89,25 +89,45 @@ def list_files(
             # Get PDF file for this document to get collections/metadata
             pdf_file = repo.get_pdf_for_document(doc_id)
 
-            if not pdf_file:
-                logger.warning(f"No PDF found for document {doc_id}, skipping")
-                continue
+            if pdf_file:
+                # Normal case: document has a PDF source
+                source_item = _build_file_item(pdf_file)
+                documents_map[doc_id] = DocumentGroupModel(
+                    doc_id=doc_id,
+                    collections=pdf_file.doc_collections or [],
+                    doc_metadata=pdf_file.doc_metadata or {},
+                    source=source_item,
+                    artifacts=[]
+                )
+            else:
+                # Standalone file case (e.g., RNG schema) - file is its own source
+                # This handles XML-to-XML extractions that don't have a PDF source
+                source_item = _build_file_item(file_metadata)
 
-            # Build source file item
-            source_item = _build_file_item(pdf_file)
+                # For standalone files with variants, create an artifact entry for filtering
+                # This allows variant filtering to work (e.g., filter by "rng")
+                artifacts = []
+                if file_metadata.variant:
+                    # Create artifact from the source file for filtering purposes
+                    artifact = _build_artifact(file_metadata)
+                    artifacts.append(artifact)
 
-            documents_map[doc_id] = DocumentGroupModel(
-                doc_id=doc_id,
-                collections=pdf_file.doc_collections or [],
-                doc_metadata=pdf_file.doc_metadata or {},
-                source=source_item,
-                artifacts=[]
-            )
+                documents_map[doc_id] = DocumentGroupModel(
+                    doc_id=doc_id,
+                    collections=file_metadata.doc_collections or [],
+                    doc_metadata=file_metadata.doc_metadata or {},
+                    source=source_item,
+                    artifacts=artifacts
+                )
 
         doc_group = documents_map[doc_id]
 
-        # Skip PDF files (already added as source above)
+        # Skip source files (already added as source above)
         if file_metadata.file_type == 'pdf':
+            continue
+
+        # Skip standalone files that are their own source (already added as source + artifact if variant exists)
+        if doc_group.source.id == file_metadata.stable_id:
             continue
 
         # Build artifact for TEI files

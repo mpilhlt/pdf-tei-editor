@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-11-26T19:33:11.021Z
+ * Generated from OpenAPI schema at 2025-11-27T07:27:38.210Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -163,6 +163,19 @@
 /**
  * @typedef {Object} FileListResponseModel
  * @property {Array<DocumentGroupModel>} files
+ */
+
+/**
+ * @typedef {Object} GarbageCollectRequest
+ * @property {string} deleted_before
+ * @property {string=} sync_status
+ */
+
+/**
+ * @typedef {Object} GarbageCollectResponse
+ * @property {number} purged_count
+ * @property {number} files_deleted
+ * @property {number} storage_freed
  */
 
 /**
@@ -601,6 +614,39 @@ export class ApiClientV1 {
    */
   async filesDelete(requestBody) {
     const endpoint = `/files/delete`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Garbage collect soft-deleted files older than the specified timestamp.
+   * Permanently removes files that have been soft-deleted and meet all filter criteria:
+   * - deleted=1 (soft-deleted)
+   * - updated_at < deleted_before timestamp
+   * - sync_status matches (if provided)
+   * Filters are additive - all conditions must match if they have a value.
+   * Security:
+   * - Admin role required for timestamps younger than 24 hours (prevents accidental deletion)
+   * - All users can garbage collect files older than 24 hours
+   * This operation:
+   * 1. Finds all deleted files matching the criteria
+   * 2. Removes physical files from storage
+   * 3. Permanently deletes database records
+   * 4. Returns statistics about purged files
+   * Args:
+   * body: GarbageCollectRequest with timestamp and optional filters
+   * repo: File repository (injected)
+   * storage: File storage (injected)
+   * current_user: Current user dict (injected)
+   * Returns:
+   * GarbageCollectResponse with purge statistics
+   * Raises:
+   * HTTPException: 403 if non-admin user tries to purge files deleted within 24 hours
+   *
+   * @param {GarbageCollectRequest} requestBody
+   * @returns {Promise<GarbageCollectResponse>}
+   */
+  async filesGarbageCollect(requestBody) {
+    const endpoint = `/files/garbage_collect`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

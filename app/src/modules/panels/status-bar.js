@@ -70,6 +70,8 @@ class StatusBar extends HTMLElement {
         ::slotted(.title-widget) {
           flex-grow: 1;
           min-width: 0;
+          max-width: 100%;
+          overflow: hidden;
         }
 
         /* Dynamic overflow hiding - applied via JavaScript */
@@ -132,17 +134,20 @@ class StatusBar extends HTMLElement {
   checkAndResolveOverflow() {
     const containerRect = this.getBoundingClientRect();
     const availableWidth = containerRect.width;
-    
+
     if (availableWidth === 0) return; // Not rendered yet
+
+    // First, check and hide title widgets that are too narrow to be useful
+    this.checkTitleWidgetMinimumWidth();
 
     // Get all widgets with their measurements
     const allWidgets = this.getAllWidgetsWithPriority();
     const totalWidth = this.calculateTotalWidth(allWidgets);
-    
+
     // Add a small safety margin to prevent edge cases
     const safetyMargin = 5;
     const effectiveAvailableWidth = availableWidth - safetyMargin;
-    
+
     if (totalWidth > effectiveAvailableWidth) {
       this.hideWidgetsToFit(allWidgets, effectiveAvailableWidth);
     } else {
@@ -150,24 +155,87 @@ class StatusBar extends HTMLElement {
     }
   }
 
+  checkTitleWidgetMinimumWidth() {
+    const MIN_TITLE_WIDTH = 100;
+    const containerRect = this.getBoundingClientRect();
+    const availableWidth = containerRect.width;
+
+    const leftSlot = this.shadowRoot.querySelector('slot[name="left"]');
+    const centerSlot = this.shadowRoot.querySelector('slot[name="center"]');
+    const rightSlot = this.shadowRoot.querySelector('slot[name="right"]');
+
+    [leftSlot, centerSlot, rightSlot].forEach(slot => {
+      if (slot) {
+        const slottedElements = slot.assignedElements();
+
+        // Calculate space used by non-title widgets in this slot
+        let nonTitleWidthInSlot = 0;
+        slottedElements.forEach(widget => {
+          if (!widget.classList.contains('title-widget') && !widget.hasAttribute('data-overflow-hidden')) {
+            const rect = widget.getBoundingClientRect();
+            nonTitleWidthInSlot += rect.width + 4; // Include gap
+          }
+        });
+
+        // Calculate space used by other slots
+        let otherSlotsWidth = 0;
+        [leftSlot, centerSlot, rightSlot].forEach(otherSlot => {
+          if (otherSlot !== slot && otherSlot) {
+            const otherSlotElements = otherSlot.assignedElements();
+            otherSlotElements.forEach(widget => {
+              if (!widget.hasAttribute('data-overflow-hidden')) {
+                const rect = widget.getBoundingClientRect();
+                otherSlotsWidth += rect.width + 4;
+              }
+            });
+          }
+        });
+
+        // Calculate available space for title widget
+        const padding = 16; // 8px left + 8px right
+        const gaps = 16; // Gaps between sections
+        const availableForTitle = availableWidth - padding - gaps - nonTitleWidthInSlot - otherSlotsWidth;
+
+        // Now check title widgets in this slot
+        slottedElements.forEach(widget => {
+          if (widget.classList.contains('title-widget')) {
+            if (availableForTitle < MIN_TITLE_WIDTH) {
+              // Hide title widget when available space is too narrow
+              widget.setAttribute('data-overflow-hidden', '');
+              this.hiddenWidgets.add(widget);
+            } else {
+              // Show title widget when there's enough space
+              widget.removeAttribute('data-overflow-hidden');
+              this.hiddenWidgets.delete(widget);
+            }
+          }
+        });
+      }
+    });
+  }
+
   getAllWidgetsWithPriority() {
     const widgets = [];
-    
+
     // Get all slotted elements
     const leftSlot = this.shadowRoot.querySelector('slot[name="left"]');
     const centerSlot = this.shadowRoot.querySelector('slot[name="center"]');
     const rightSlot = this.shadowRoot.querySelector('slot[name="right"]');
-    
+
     [leftSlot, centerSlot, rightSlot].forEach(slot => {
       if (slot) {
         const slottedElements = slot.assignedElements();
         slottedElements.forEach(widget => {
-          const priority = parseInt(widget.dataset.priority) || 0;
-          widgets.push({ element: widget, priority, slot: slot.name });
+          // Title widgets handle their own overflow with ellipsis and minimum width check
+          // They are excluded from normal priority-based hiding
+          if (!widget.classList.contains('title-widget')) {
+            const priority = parseInt(widget.dataset.priority) || 0;
+            widgets.push({ element: widget, priority, slot: slot.name });
+          }
         });
       }
     });
-    
+
     return widgets;
   }
 
