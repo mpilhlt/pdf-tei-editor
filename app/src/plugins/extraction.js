@@ -351,7 +351,7 @@ async function promptForExtractionOptions(options={}) {
   collectionSelectBox.innerHTML=""
   const collectionData = ui.toolbar.pdf.dataset.collections || '[]'
   const collections = JSON.parse(collectionData)
-  collections.unshift('__inbox')
+  collections.unshift('_inbox')
   for (const collection_name of collections){
     const option = Object.assign(new SlOption, {
       value: collection_name,

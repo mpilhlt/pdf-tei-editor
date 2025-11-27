@@ -9,6 +9,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Optional
+from .data_utils import get_data_file_path
 
 
 # Platform-specific imports for file locking
@@ -50,7 +51,7 @@ def load_full_config(db_dir: Path) -> dict:
     Returns:
         Configuration dictionary
     """
-    config_file = db_dir / 'config.json'
+    config_file = get_data_file_path(db_dir, 'config')
 
     if not config_file.exists():
         # Create empty config if it doesn't exist
@@ -98,7 +99,7 @@ def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
         Tuple of (success: bool, message: str)
     """
     try:
-        config_file = db_dir / 'config.json'
+        config_file = get_data_file_path(db_dir, 'config')
         config_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Use file locking for thread safety
@@ -166,7 +167,7 @@ def delete_config_value(key: str, db_dir: Path) -> tuple[bool, str]:
         Tuple of (success: bool, message: str)
     """
     try:
-        config_file = db_dir / 'config.json'
+        config_file = get_data_file_path(db_dir, 'config')
 
         if not config_file.exists():
             return False, f"Configuration file not found"

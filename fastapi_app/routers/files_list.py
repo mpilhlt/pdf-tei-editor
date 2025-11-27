@@ -32,6 +32,7 @@ from ..lib.dependencies import (
 )
 from ..lib.locking import get_all_active_locks
 from ..lib.access_control import DocumentAccessFilter
+from ..lib.user_utils import get_user_collections
 from ..config import get_settings
 from ..lib.logging_utils import get_logger
 
@@ -151,8 +152,26 @@ def list_files(
         logger.error(f"Error getting lock info: {e}")
         # Continue without lock info
 
-    # Apply access control filtering
-    files_data = list(documents_map.values())
+    # Apply collection-based filtering first
+    settings = get_settings()
+    accessible_collections = get_user_collections(current_user, settings.db_dir)
+
+    if accessible_collections is not None:
+        # User has limited collection access - filter documents
+        logger.debug(f"Filtering by collections: {accessible_collections}")
+        files_data = []
+        for doc_group in documents_map.values():
+            doc_collections = doc_group.collections or []
+            # Check if document has any collection the user can access
+            if any(col in accessible_collections for col in doc_collections):
+                files_data.append(doc_group)
+        logger.debug(f"After collection filtering: {len(files_data)} documents")
+    else:
+        # User has access to all collections (admin or wildcard)
+        files_data = list(documents_map.values())
+        logger.debug(f"User has access to all collections")
+
+    # Apply document-level access control filtering
     files_data = DocumentAccessFilter.filter_files_by_access(files_data, current_user)
 
     logger.debug(f"After access control: {len(files_data)} documents")

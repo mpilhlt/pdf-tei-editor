@@ -39,6 +39,26 @@ npm run manage user add-role <username> <rolename>
 npm run manage user remove-role <username> <rolename>
 ```
 
+### Group Management
+
+The system supports group-based access control for organizing users and managing access to collections:
+
+```bash
+# Add a group to a user
+npm run manage user add-group <username> <groupid>
+
+# Remove a group from a user
+npm run manage user remove-group <username> <groupid>
+
+# List all groups
+npm run manage group list
+
+# List all collections
+npm run manage collection list
+```
+
+For comprehensive CLI documentation including group and collection management, see the [CLI Reference](manual/cli.md).
+
 ### Example: Setting Up a New Admin User
 
 ```bash

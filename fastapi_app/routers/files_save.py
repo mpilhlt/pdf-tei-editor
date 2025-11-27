@@ -32,6 +32,7 @@ from ..lib.file_repository import FileRepository
 from ..lib.file_storage import FileStorage
 from ..lib.locking import acquire_lock, release_lock
 from ..lib.logging_utils import get_logger
+from ..lib.user_utils import user_has_collection_access
 from ..config import get_settings
 from ..lib.models import FileCreate, FileUpdate
 from ..lib.models_files import SaveFileRequest, SaveFileResponse
@@ -50,6 +51,44 @@ def _user_has_role(user: dict, role: str) -> bool:
     result = role in user.get('roles', [])
     logger.debug(f"_user_has_role: user={user.get('username')}, roles={user.get('roles')}, checking role={role} -> {result}")
     return result
+
+
+def _validate_collection_access(user: dict, doc_collections: list, db_dir, logger_inst) -> list:
+    """Validate that user has access to at least one of the document's collections.
+
+    Args:
+        user: User dictionary
+        doc_collections: List of collection IDs the document belongs to
+        db_dir: Path to db directory
+        logger_inst: Logger instance
+
+    Returns:
+        List of collection IDs (may be modified to include "_inbox" if empty)
+
+    Raises:
+        HTTPException: If user doesn't have access to any of the document's collections
+    """
+    # If document has no collections, assign to "_inbox" by default
+    if not doc_collections:
+        logger_inst.info(f"Document has no collections, assigning to '_inbox' by default")
+        doc_collections = ["_inbox"]
+
+    # Check if user has access to any of the document's collections
+    has_access = any(
+        user_has_collection_access(user, col_id, db_dir)
+        for col_id in doc_collections
+    )
+
+    if not has_access:
+        logger_inst.warning(
+            f"User {user.get('username')} denied access to collections {doc_collections}"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=f"You do not have access to any of this document's collections: {', '.join(doc_collections)}"
+        )
+
+    return doc_collections
 
 
 def _extract_metadata_from_xml(xml_string: str, file_id_hint: Optional[str], logger) -> tuple[str, Optional[str]]:
@@ -276,6 +315,13 @@ async def save_file(
         # Update existing file
             logger_inst.info(f"Updating existing file: {existing_file.id[:8]}")
 
+        # Validate collection access (may assign "_inbox" if empty)
+            doc_collections = _validate_collection_access(user, existing_file.doc_collections or [], settings.db_dir, logger_inst)
+
+            # Update file collections if they were modified
+            if doc_collections != existing_file.doc_collections:
+                existing_file.doc_collections = doc_collections
+
         # Check permissions based on file type
             logger_inst.debug(f"Permission check: user={user.get('username')}, roles={user.get('roles')}, file.is_gold={existing_file.is_gold_standard}, file.version={existing_file.version}")
 
@@ -345,6 +391,13 @@ async def save_file(
 
             logger_inst.info(f"Creating version {next_version} for doc_id={doc_id}, variant={variant}")
 
+        # Get PDF file to inherit collections
+            pdf_file = file_repo.get_pdf_for_document(doc_id)
+            doc_collections = pdf_file.doc_collections if pdf_file else []
+
+        # Validate collection access before creating new version (may assign "_inbox" if empty)
+            doc_collections = _validate_collection_access(user, doc_collections, settings.db_dir, logger_inst)
+
         # Save to storage
             xml_bytes = xml_string.encode('utf-8')
             saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
@@ -366,10 +419,6 @@ async def save_file(
         # Acquire lock
             if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
-
-        # Get PDF file to inherit collections
-            pdf_file = file_repo.get_pdf_for_document(doc_id)
-            doc_collections = pdf_file.doc_collections if pdf_file else []
 
         # Insert new version
             created_file = file_repo.insert_file(FileCreate(
@@ -400,6 +449,13 @@ async def save_file(
 
             logger_inst.info(f"Creating new gold standard for doc_id={doc_id}, variant={variant}")
 
+        # Get PDF file to inherit collections
+            pdf_file = file_repo.get_pdf_for_document(doc_id)
+            doc_collections = pdf_file.doc_collections if pdf_file else []
+
+        # Validate collection access before creating new gold standard (may assign "_inbox" if empty)
+            doc_collections = _validate_collection_access(user, doc_collections, settings.db_dir, logger_inst)
+
         # Save to storage
             xml_bytes = xml_string.encode('utf-8')
             saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
@@ -408,10 +464,6 @@ async def save_file(
         # Acquire lock
             if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
-
-        # Get PDF file to inherit collections
-            pdf_file = file_repo.get_pdf_for_document(doc_id)
-            doc_collections = pdf_file.doc_collections if pdf_file else []
 
         # Insert new gold standard
             filename = f"{file_id}.{variant}.tei.xml" if variant else f"{file_id}.tei.xml"

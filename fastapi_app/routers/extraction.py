@@ -276,7 +276,8 @@ def _save_pdf_extraction_result(
     tei_hash, tei_path = storage.save_file(tei_bytes, 'tei')
 
     # Get collections from PDF metadata (TEI files inherit PDF collections)
-    doc_collections = pdf_metadata.doc_collections or []
+    # Default to "_inbox" if PDF has no collections
+    doc_collections = pdf_metadata.doc_collections or ["_inbox"]
 
     # Parse TEI to extract metadata
     label = None
@@ -430,7 +431,7 @@ def _save_xml_extraction_result(
     file_hash, file_path = storage.save_file(content_bytes, file_type)
 
     # Get collection from options
-    collection = options.get('collection', '__inbox')
+    collection = options.get('collection', '_inbox')
 
     # Check if file with this hash already exists (same content)
     try:

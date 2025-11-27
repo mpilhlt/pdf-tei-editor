@@ -21,7 +21,7 @@ Collections are organizational containers that group related documents together:
 - **Root Collections**: Top-level organizational units
 - **Nested Organization**: Collections can contain sub-collections
 - **Cross-Collection Access**: Documents can be referenced across collections
-- **Default Collection**: New documents go to `__inbox` by default
+- **Default Collection**: New documents go to `_inbox` by default
 
 ## Viewing Collections
 

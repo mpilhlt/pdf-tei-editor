@@ -167,6 +167,7 @@ async def upload_file(
     doc_id = re.sub(r'\s+', '_', original_name)
 
     # Save metadata to database
+    # Assign uploaded files to "_inbox" collection by default
     file_create = FileCreate(
         id=file_hash,
         filename=f"{file_hash}.{file_type}",
@@ -174,6 +175,7 @@ async def upload_file(
         file_type=file_type,
         file_size=len(content),
         label=label,
+        doc_collections=["_inbox"],
         file_metadata={
             "original_filename": file.filename,
             "upload_source": "upload_endpoint",

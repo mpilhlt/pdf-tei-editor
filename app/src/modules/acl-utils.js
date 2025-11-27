@@ -11,10 +11,16 @@ import { getFileDataByHash } from './file-data-utils.js'
  * @param {UserData|null} user - User object
  * @param {string|string[]} role - Role name or array of role names
  * @returns {boolean}
+ * @note If user has "*" in their roles array, they match any role check
  */
 export function userHasRole(user, role) {
   if (!user || !user.roles) {
     return false
+  }
+
+  // Wildcard "*" in user's roles grants access to any role check
+  if (user.roles.includes('*')) {
+    return true
   }
 
   if (Array.isArray(role)) {
@@ -29,10 +35,16 @@ export function userHasRole(user, role) {
  * @param {UserData|null} user - User object
  * @param {string[]} roles - Array of role names
  * @returns {boolean}
+ * @note If user has "*" in their roles array, they match any role check
  */
 export function userHasAllRoles(user, roles) {
   if (!user || !user.roles || !Array.isArray(roles)) {
     return false
+  }
+
+  // Wildcard "*" in user's roles grants access to any role check
+  if (user.roles.includes('*')) {
+    return true
   }
 
   return roles.every(role => user.roles.includes(role))

@@ -1,4 +1,4 @@
-# Access Control and Permissions
+# Document-level Access Control and Permissions
 
 > Note: the permission system is not fully working yet and has therefore been disabled for the moment. The following (ai-generated) document outlines its capabilities. 
 

@@ -181,7 +181,7 @@ def _move_uploaded_pdf_to_permanent_location(upload_path: str, options: dict) ->
         file_id = Path(upload_path).stem
     
     # Determine target directory
-    collection_name = options.get("collection") or "__inbox"
+    collection_name = options.get("collection") or "_inbox"
     target_dir = Path(DATA_ROOT) / "pdf" / collection_name
     
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -274,7 +274,7 @@ def _save_xml_extraction_result(content: str, extractor_id: str, extraction_opti
     DATA_ROOT = current_app.config['DATA_ROOT']
 
     # Determine collection from options (same as PDF extraction)
-    collection_name = extraction_options.get("collection") or "__inbox"
+    collection_name = extraction_options.get("collection") or "_inbox"
 
     # For schema extraction, save with .rng extension (not as variant)
     # This makes schema files discoverable as a separate file type

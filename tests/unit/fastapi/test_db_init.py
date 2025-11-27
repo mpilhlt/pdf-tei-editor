@@ -168,43 +168,48 @@ class TestDbInit:
         assert (new_db_dir / "config.json").exists()
 
 
-class TestRealPaths:
-    """Test with actual fastapi_app paths."""
+@pytest.mark.integration
+class TestProjectStructure:
+    """Integration tests that verify the actual project structure.
+
+    These tests check that required config files exist in the project.
+    They are marked with @pytest.mark.integration so they can be skipped
+    in pure unit test runs.
+    """
 
     def test_config_directory_exists(self):
-        """Verify fastapi_app/config exists with required files."""
-        config_dir = Path(__file__).parent.parent.parent / "config"
+        """Verify config directory exists with required files."""
+        # Go up from tests/unit/fastapi/ to project root
+        project_root = Path(__file__).parent.parent.parent.parent
+        config_dir = project_root / "config"
 
         assert config_dir.exists(), "config/ directory should exist"
         assert (config_dir / "config.json").exists(), "config.json should exist"
         assert (config_dir / "users.json").exists(), "users.json should exist"
         assert (config_dir / "prompt.json").exists(), "prompt.json should exist"
 
-    def test_users_json_has_reviewer(self):
-        """Verify reviewer user exists in config defaults."""
-        config_dir = Path(__file__).parent.parent.parent / "config"
+    def test_default_users_have_required_roles(self):
+        """Verify default user configuration has admin with reviewer role."""
+        # Go up from tests/unit/fastapi/ to project root
+        project_root = Path(__file__).parent.parent.parent.parent
+        config_dir = project_root / "config"
         users_path = config_dir / "users.json"
 
         with open(users_path) as f:
             users = json.load(f)
 
-        # Check reviewer exists
-        reviewer = next((u for u in users if u["username"] == "reviewer"), None)
-        assert reviewer is not None, "Reviewer user should exist in defaults"
-        assert "reviewer" in reviewer.get("roles", []), "Reviewer should have reviewer role"
+        # Check admin exists and has reviewer role
+        admin = next((u for u in users if u["username"] == "admin"), None)
+        assert admin is not None, "Admin user should exist in defaults"
+        assert "reviewer" in admin.get("roles", []), "Admin should have reviewer role"
 
-    def test_ensure_db_initialized_with_defaults(self):
-        """Test ensure_db_initialized uses correct default paths."""
-        # This test just verifies it runs without error
-        # (doesn't actually initialize to avoid affecting running system)
+    def test_data_directory_structure(self):
+        """Verify the data directory structure exists."""
+        # Go up from tests/unit/fastapi/ to project root
+        project_root = Path(__file__).parent.parent.parent.parent
+        config_dir = project_root / "config"
+        data_dir = project_root / "data"
 
-        from fastapi_app.lib.db_init import ensure_db_initialized
-        from pathlib import Path
-
-        # Just verify the function can find the paths
-        config_dir = Path(__file__).parent.parent.parent / "config"
-        db_dir = Path(__file__).parent.parent.parent / "db"
-
-        assert config_dir.exists(), "Default config path should exist"
-        # Note: We don't call ensure_db_initialized() here to avoid
-        # affecting the running system during tests
+        assert config_dir.exists(), "config/ directory should exist"
+        assert data_dir.exists(), "data/ directory should exist"
+        # db directory is created on demand, so we don't assert it exists
