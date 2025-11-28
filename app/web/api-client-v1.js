@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-10-16T16:42:51.102Z
+ * Generated from OpenAPI schema at 2025-11-28T08:18:23.529Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -10,6 +10,22 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
+ */
+
+/**
+ * @typedef {Object} ArtifactModel
+ * @property {string} id
+ * @property {string} filename
+ * @property {string} file_type
+ * @property {string} label
+ * @property {number} file_size
+ * @property {string} created_at
+ * @property {string} updated_at
+ * @property {string=} variant
+ * @property {number=} version
+ * @property {boolean} is_gold_standard
+ * @property {boolean} is_locked
+ * @property {Object<string, any>=} access_control
  */
 
 /**
@@ -37,6 +53,13 @@
  * @typedef {Object} CheckLockResponse
  * @property {boolean} is_locked
  * @property {string=} locked_by
+ */
+
+/**
+ * @typedef {Object} Collection
+ * @property {string} id - Unique collection identifier
+ * @property {string} name - Display name for the collection
+ * @property {string=} description - Collection description
  */
 
 /**
@@ -90,6 +113,31 @@
  */
 
 /**
+ * @typedef {Object} CreateGroupRequest
+ * @property {string} id - Unique group identifier
+ * @property {string} name - Group display name
+ * @property {string=} description - Group description
+ * @property {Array<string>=} collections - List of collection IDs
+ */
+
+/**
+ * @typedef {Object} CreateRoleRequest
+ * @property {string} id - Unique role identifier
+ * @property {string} roleName - Role display name
+ * @property {string=} description - Role description
+ */
+
+/**
+ * @typedef {Object} CreateUserRequest
+ * @property {string} username - Unique username
+ * @property {string} passwd_hash - User password (will be hashed)
+ * @property {string=} fullname - User's full name
+ * @property {string=} email - User's email address
+ * @property {Array<string>=} roles - List of user roles
+ * @property {Array<string>=} groups - List of groups
+ */
+
+/**
  * @typedef {Object} DeleteFilesRequest
  * @property {Array<string>} files
  */
@@ -100,14 +148,12 @@
  */
 
 /**
- * @typedef {Object} DocumentGroup
+ * @typedef {Object} DocumentGroupModel
  * @property {string} doc_id
- * @property {Array<string>} doc_collections
+ * @property {Array<string>} collections
  * @property {Object<string, any>} doc_metadata
- * @property {FileListItem=} pdf
- * @property {Array<FileListItem>=} versions
- * @property {Array<FileListItem>=} gold
- * @property {Object<string, any>=} variants
+ * @property {FileItemModel} source
+ * @property {Array<ArtifactModel>} artifacts
  */
 
 /**
@@ -132,35 +178,49 @@
  * @property {Array<string>} input - Supported input types (e.g., ['pdf'], ['xml'])
  * @property {Array<string>} output - Supported output types (e.g., ['xml'])
  * @property {boolean} available - Whether the extractor is currently available
+ * @property {Object<string, any>=} options - Configuration options supported by the extractor
  */
 
 /**
- * @typedef {Object} FileListItem
+ * @typedef {Object} FileItemModel
  * @property {string} id
  * @property {string} filename
- * @property {string} doc_id
  * @property {string} file_type
- * @property {string=} label
- * @property {string=} variant
- * @property {number=} version
- * @property {boolean=} is_gold_standard
- * @property {number=} file_size
+ * @property {string} label
+ * @property {number} file_size
  * @property {string} created_at
  * @property {string} updated_at
- * @property {Array<string>=} doc_collections
- * @property {Object<string, any>=} doc_metadata
- * @property {boolean=} is_locked
- * @property {Object<string, any>=} access_control
  */
 
 /**
- * @typedef {Object} FileListResponse
- * @property {Array<DocumentGroup>} files
+ * @typedef {Object} FileListResponseModel
+ * @property {Array<DocumentGroupModel>} files
+ */
+
+/**
+ * @typedef {Object} GarbageCollectRequest
+ * @property {string} deleted_before
+ * @property {string=} sync_status
+ */
+
+/**
+ * @typedef {Object} GarbageCollectResponse
+ * @property {number} purged_count
+ * @property {number} files_deleted
+ * @property {number} storage_freed
  */
 
 /**
  * @typedef {Object} GetLocksResponse
  * @property {Array<string>} locked_files
+ */
+
+/**
+ * @typedef {Object} Group
+ * @property {string} id - Unique group identifier
+ * @property {string} name - Group display name
+ * @property {string=} description - Group description
+ * @property {Array<string>=} collections - List of collection IDs accessible to this group
  */
 
 /**
@@ -186,11 +246,6 @@
  */
 
 /**
- * @typedef {Object} ListExtractorsResponse
- * @property {Array<ExtractorInfo>=} extractors - List of available extractors
- */
-
-/**
  * @typedef {Object} LoginRequest
  * @property {string} username
  * @property {string} passwd_hash
@@ -200,7 +255,7 @@
  * @typedef {Object} LoginResponse
  * @property {string} username
  * @property {string=} fullname
- * @property {string=} role
+ * @property {Array<string>=} roles
  * @property {string} sessionId
  */
 
@@ -234,6 +289,13 @@
  */
 
 /**
+ * @typedef {Object} Role
+ * @property {string} id - Unique role identifier
+ * @property {string} roleName - Role display name
+ * @property {string=} description - Role description
+ */
+
+/**
  * @typedef {Object} SaveFileRequest
  * @property {string} xml_string
  * @property {string} file_id
@@ -244,7 +306,7 @@
 /**
  * @typedef {Object} SaveFileResponse
  * @property {string} status
- * @property {string} hash
+ * @property {string} file_id
  */
 
 /**
@@ -262,7 +324,7 @@
  * @typedef {Object} StatusResponse
  * @property {string} username
  * @property {string=} fullname
- * @property {string=} role
+ * @property {Array<string>=} roles
  */
 
 /**
@@ -295,9 +357,41 @@
  */
 
 /**
+ * @typedef {Object} UpdateGroupRequest
+ * @property {string=} name - Group display name
+ * @property {string=} description - Group description
+ * @property {Array<string>=} collections - List of collection IDs
+ */
+
+/**
+ * @typedef {Object} UpdateRoleRequest
+ * @property {string=} roleName - Role display name
+ * @property {string=} description - Role description
+ */
+
+/**
+ * @typedef {Object} UpdateUserRequest
+ * @property {string=} fullname - User's full name
+ * @property {string=} email - User's email address
+ * @property {string=} passwd_hash - New password (will be hashed)
+ * @property {Array<string>=} roles - List of user roles
+ * @property {Array<string>=} groups - List of groups
+ */
+
+/**
  * @typedef {Object} UploadResponse
  * @property {string} type
  * @property {string} filename
+ */
+
+/**
+ * @typedef {Object} User
+ * @property {string} username - Unique username
+ * @property {string=} fullname - User's full name
+ * @property {string=} email - User's email address
+ * @property {Array<string>=} roles - List of user roles
+ * @property {Array<string>=} groups - List of groups user belongs to
+ * @property {string=} session_id - Current session ID
  */
 
 /**
@@ -419,7 +513,7 @@ export class ApiClientV1 {
    *
    * @returns {Promise<Array<InstructionItem>>}
    */
-  async configGetInstructions() {
+  async configListInstructions() {
     const endpoint = `/config/instructions`
     return this.callApi(endpoint);
   }
@@ -445,6 +539,303 @@ export class ApiClientV1 {
   async configState() {
     const endpoint = `/config/state`
     return this.callApi(endpoint);
+  }
+
+  /**
+   * List all collections.
+   * Returns all collections without filtering. Requires admin authentication.
+   * Returns:
+   * List of Collection objects
+   *
+   * @returns {Promise<Array<Collection>>}
+   */
+  async listCollections() {
+    const endpoint = `/collections`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create a new collection.
+   * Args:
+   * collection: Collection data
+   * current_user: Current user dict (injected)
+   * Returns:
+   * Created Collection object
+   * Raises:
+   * HTTPException: 400 if validation fails or collection exists
+   *
+   * @param {Collection} requestBody
+   * @returns {Promise<void>}
+   */
+  async createCollections(requestBody) {
+    const endpoint = `/collections`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get a specific collection by ID.
+   * Args:
+   * collection_id: Collection identifier
+   * current_user: Current user dict (injected)
+   * Returns:
+   * Collection object
+   * Raises:
+   * HTTPException: 404 if collection not found
+   *
+   * @param {string} collection_id
+   * @returns {Promise<Collection>}
+   */
+  async getCollections(collection_id) {
+    const endpoint = `/collections/${collection_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update an existing collection.
+   * Args:
+   * collection_id: Collection identifier
+   * collection: Updated collection data
+   * current_user: Current user dict (injected)
+   * Returns:
+   * Updated Collection object
+   * Raises:
+   * HTTPException: 404 if collection not found, 400 if validation fails
+   *
+   * @param {string} collection_id
+   * @param {Collection} requestBody
+   * @returns {Promise<Collection>}
+   */
+  async updateCollections(collection_id, requestBody) {
+    const endpoint = `/collections/${collection_id}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete a collection.
+   * Args:
+   * collection_id: Collection identifier
+   * current_user: Current user dict (injected)
+   * Raises:
+   * HTTPException: 404 if collection not found
+   *
+   * @param {string} collection_id
+   * @returns {Promise<void>}
+   */
+  async deleteCollections(collection_id) {
+    const endpoint = `/collections/${collection_id}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List all users.
+   * Requires admin role.
+   * Returns:
+   * List of User objects (passwords excluded)
+   *
+   * @returns {Promise<Array<User>>}
+   */
+  async listUsers() {
+    const endpoint = `/users`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create a new user.
+   * Requires admin role.
+   * Returns:
+   * Created user information (password excluded)
+   *
+   * @param {CreateUserRequest} requestBody
+   * @returns {Promise<User>}
+   */
+  async createUsers(requestBody) {
+    const endpoint = `/users`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get a specific user by username.
+   * Requires admin role.
+   * Returns:
+   * User information (password excluded)
+   *
+   * @param {string} username
+   * @returns {Promise<User>}
+   */
+  async getUsers(username) {
+    const endpoint = `/users/${username}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update an existing user.
+   * Requires admin role.
+   * Returns:
+   * Updated user information (password excluded)
+   *
+   * @param {string} username
+   * @param {UpdateUserRequest} requestBody
+   * @returns {Promise<User>}
+   */
+  async updateUsers(username, requestBody) {
+    const endpoint = `/users/${username}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete a user.
+   * Requires admin role.
+   * Cannot delete yourself.
+   * Returns:
+   * Success message
+   *
+   * @param {string} username
+   * @returns {Promise<any>}
+   */
+  async deleteUsers(username) {
+    const endpoint = `/users/${username}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List all groups.
+   * Requires admin role.
+   * Returns:
+   * List of Group objects
+   *
+   * @returns {Promise<Array<Group>>}
+   */
+  async listGroups() {
+    const endpoint = `/groups`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create a new group.
+   * Requires admin role.
+   * Returns:
+   * Created group information
+   *
+   * @param {CreateGroupRequest} requestBody
+   * @returns {Promise<Group>}
+   */
+  async createGroups(requestBody) {
+    const endpoint = `/groups`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get a specific group by ID.
+   * Requires admin role.
+   * Returns:
+   * Group information
+   *
+   * @param {string} group_id
+   * @returns {Promise<Group>}
+   */
+  async getGroups(group_id) {
+    const endpoint = `/groups/${group_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update an existing group.
+   * Requires admin role.
+   * Returns:
+   * Updated group information
+   *
+   * @param {string} group_id
+   * @param {UpdateGroupRequest} requestBody
+   * @returns {Promise<Group>}
+   */
+  async updateGroups(group_id, requestBody) {
+    const endpoint = `/groups/${group_id}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete a group.
+   * Requires admin role.
+   * Returns:
+   * Success message
+   *
+   * @param {string} group_id
+   * @returns {Promise<any>}
+   */
+  async deleteGroups(group_id) {
+    const endpoint = `/groups/${group_id}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List all roles.
+   * Requires admin role.
+   * Returns:
+   * List of Role objects
+   *
+   * @returns {Promise<Array<Role>>}
+   */
+  async listRoles() {
+    const endpoint = `/roles`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create a new role.
+   * Requires admin role.
+   * Returns:
+   * Created role information
+   *
+   * @param {CreateRoleRequest} requestBody
+   * @returns {Promise<Role>}
+   */
+  async createRoles(requestBody) {
+    const endpoint = `/roles`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get a specific role by ID.
+   * Requires admin role.
+   * Returns:
+   * Role information
+   *
+   * @param {string} role_id
+   * @returns {Promise<Role>}
+   */
+  async getRoles(role_id) {
+    const endpoint = `/roles/${role_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update an existing role.
+   * Requires admin role.
+   * Returns:
+   * Updated role information
+   *
+   * @param {string} role_id
+   * @param {UpdateRoleRequest} requestBody
+   * @returns {Promise<Role>}
+   */
+  async updateRoles(role_id, requestBody) {
+    const endpoint = `/roles/${role_id}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete a role.
+   * Requires admin role.
+   * Cannot delete built-in roles (admin, user, reviewer, annotator).
+   * Returns:
+   * Success message
+   *
+   * @param {string} role_id
+   * @returns {Promise<any>}
+   */
+  async deleteRoles(role_id) {
+    const endpoint = `/roles/${role_id}`
+    return this.callApi(endpoint, 'DELETE');
   }
 
   /**
@@ -485,7 +876,7 @@ export class ApiClientV1 {
    * Returns:
    * List of extractor information including input/output types and availability
    *
-   * @returns {Promise<ListExtractorsResponse>}
+   * @returns {Promise<Array<ExtractorInfo>>}
    */
   async extractList() {
     const endpoint = `/extract/list`
@@ -518,12 +909,12 @@ export class ApiClientV1 {
 
   /**
    * List all files grouped by document.
-   * Returns files in document-centric structure:
+   * Returns files in simplified document-centric structure:
    * - One entry per document (doc_id)
-   * - PDF file + TEI versions + gold standards + variants
+   * - Source file (PDF or primary XML) + flattened artifacts array
    * - Lock information for each file
    * - Access control filtering applied
-   * - Abbreviated hashes (5+ chars) in all IDs
+   * - Stable IDs throughout
    * Note: 'refresh' parameter ignored - database is always current.
    * Args:
    * variant: Optional variant filter (e.g., "grobid")
@@ -531,14 +922,13 @@ export class ApiClientV1 {
    * repo: File repository (injected)
    * session_id: Current session ID (injected)
    * current_user: Current user dict (injected)
-   * abbreviator: Hash abbreviator (injected)
    * Returns:
-   * FileListResponse with list of DocumentGroup objects
+   * FileListResponseModel with files property containing List of DocumentGroupModel objects
    *
    * @param {Object=} params - Query parameters
    * @param {(string | null)=} params.variant
    * @param {boolean=} params.refresh
-   * @returns {Promise<FileListResponse>}
+   * @returns {Promise<FileListResponseModel>}
    */
   async filesList(params) {
     const endpoint = `/files/list`
@@ -600,6 +990,39 @@ export class ApiClientV1 {
    */
   async filesDelete(requestBody) {
     const endpoint = `/files/delete`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Garbage collect soft-deleted files older than the specified timestamp.
+   * Permanently removes files that have been soft-deleted and meet all filter criteria:
+   * - deleted=1 (soft-deleted)
+   * - updated_at < deleted_before timestamp
+   * - sync_status matches (if provided)
+   * Filters are additive - all conditions must match if they have a value.
+   * Security:
+   * - Admin role required for timestamps younger than 24 hours (prevents accidental deletion)
+   * - All users can garbage collect files older than 24 hours
+   * This operation:
+   * 1. Finds all deleted files matching the criteria
+   * 2. Removes physical files from storage
+   * 3. Permanently deletes database records
+   * 4. Returns statistics about purged files
+   * Args:
+   * body: GarbageCollectRequest with timestamp and optional filters
+   * repo: File repository (injected)
+   * storage: File storage (injected)
+   * current_user: Current user dict (injected)
+   * Returns:
+   * GarbageCollectResponse with purge statistics
+   * Raises:
+   * HTTPException: 403 if non-admin user tries to purge files deleted within 24 hours
+   *
+   * @param {GarbageCollectRequest} requestBody
+   * @returns {Promise<GarbageCollectResponse>}
+   */
+  async filesGarbageCollect(requestBody) {
+    const endpoint = `/files/garbage_collect`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 
@@ -864,6 +1287,31 @@ export class ApiClientV1 {
   async sseTestEcho(requestBody) {
     const endpoint = `/sse/test/echo`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Serve schema by type and variant name.
+   * Provides clean, stable URLs for schema validation:
+   * - /api/v1/schema/rng/grobid
+   * - /api/v1/schema/xsd/myschema
+   * Args:
+   * schema_type: Schema type (e.g., 'rng', 'xsd')
+   * variant: Variant name (e.g., 'grobid', 'gemini')
+   * repo: File repository (injected)
+   * storage: File storage (injected)
+   * current_user: Current user dict (injected)
+   * Returns:
+   * FileResponse with schema XML content
+   * Raises:
+   * HTTPException: 404 if schema not found, 403 if access denied
+   *
+   * @param {string} schema_type
+   * @param {string} variant
+   * @returns {Promise<any>}
+   */
+  async schema(schema_type, variant) {
+    const endpoint = `/schema/${schema_type}/${variant}`
+    return this.callApi(endpoint);
   }
 
   /**

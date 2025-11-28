@@ -75,7 +75,7 @@ def list_all_collections(
                 name=col.get('name', col.get('id', '')),
                 description=col.get('description', '')
             )
-            for col in all_collections
+            for col in all_collections # type: ignore
         ]
 
         return collections

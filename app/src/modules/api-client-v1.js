@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-11-28T07:37:25.615Z
+ * Generated from OpenAPI schema at 2025-11-28T08:21:35.965Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -513,7 +513,7 @@ export class ApiClientV1 {
    *
    * @returns {Promise<Array<InstructionItem>>}
    */
-  async configGetInstructions() {
+  async configListInstructions() {
     const endpoint = `/config/instructions`
     return this.callApi(endpoint);
   }
@@ -549,7 +549,7 @@ export class ApiClientV1 {
    *
    * @returns {Promise<Array<Collection>>}
    */
-  async collections() {
+  async listCollections() {
     const endpoint = `/collections`
     return this.callApi(endpoint);
   }
@@ -567,7 +567,7 @@ export class ApiClientV1 {
    * @param {Collection} requestBody
    * @returns {Promise<void>}
    */
-  async collections(requestBody) {
+  async createCollections(requestBody) {
     const endpoint = `/collections`
     return this.callApi(endpoint, 'POST', requestBody);
   }
@@ -585,7 +585,7 @@ export class ApiClientV1 {
    * @param {string} collection_id
    * @returns {Promise<Collection>}
    */
-  async collections(collection_id) {
+  async getCollections(collection_id) {
     const endpoint = `/collections/${collection_id}`
     return this.callApi(endpoint);
   }
@@ -605,7 +605,7 @@ export class ApiClientV1 {
    * @param {Collection} requestBody
    * @returns {Promise<Collection>}
    */
-  async collections(collection_id, requestBody) {
+  async updateCollections(collection_id, requestBody) {
     const endpoint = `/collections/${collection_id}`
     return this.callApi(endpoint, 'PUT', requestBody);
   }
@@ -621,7 +621,7 @@ export class ApiClientV1 {
    * @param {string} collection_id
    * @returns {Promise<void>}
    */
-  async collections(collection_id) {
+  async deleteCollections(collection_id) {
     const endpoint = `/collections/${collection_id}`
     return this.callApi(endpoint, 'DELETE');
   }
@@ -634,7 +634,7 @@ export class ApiClientV1 {
    *
    * @returns {Promise<Array<User>>}
    */
-  async users() {
+  async listUsers() {
     const endpoint = `/users`
     return this.callApi(endpoint);
   }
@@ -648,7 +648,7 @@ export class ApiClientV1 {
    * @param {CreateUserRequest} requestBody
    * @returns {Promise<User>}
    */
-  async users(requestBody) {
+  async createUsers(requestBody) {
     const endpoint = `/users`
     return this.callApi(endpoint, 'POST', requestBody);
   }
@@ -662,7 +662,7 @@ export class ApiClientV1 {
    * @param {string} username
    * @returns {Promise<User>}
    */
-  async users(username) {
+  async getUsers(username) {
     const endpoint = `/users/${username}`
     return this.callApi(endpoint);
   }
@@ -677,7 +677,7 @@ export class ApiClientV1 {
    * @param {UpdateUserRequest} requestBody
    * @returns {Promise<User>}
    */
-  async users(username, requestBody) {
+  async updateUsers(username, requestBody) {
     const endpoint = `/users/${username}`
     return this.callApi(endpoint, 'PUT', requestBody);
   }
@@ -692,7 +692,7 @@ export class ApiClientV1 {
    * @param {string} username
    * @returns {Promise<any>}
    */
-  async users(username) {
+  async deleteUsers(username) {
     const endpoint = `/users/${username}`
     return this.callApi(endpoint, 'DELETE');
   }
@@ -705,7 +705,7 @@ export class ApiClientV1 {
    *
    * @returns {Promise<Array<Group>>}
    */
-  async groups() {
+  async listGroups() {
     const endpoint = `/groups`
     return this.callApi(endpoint);
   }
@@ -719,7 +719,7 @@ export class ApiClientV1 {
    * @param {CreateGroupRequest} requestBody
    * @returns {Promise<Group>}
    */
-  async groups(requestBody) {
+  async createGroups(requestBody) {
     const endpoint = `/groups`
     return this.callApi(endpoint, 'POST', requestBody);
   }
@@ -733,7 +733,7 @@ export class ApiClientV1 {
    * @param {string} group_id
    * @returns {Promise<Group>}
    */
-  async groups(group_id) {
+  async getGroups(group_id) {
     const endpoint = `/groups/${group_id}`
     return this.callApi(endpoint);
   }
@@ -748,7 +748,7 @@ export class ApiClientV1 {
    * @param {UpdateGroupRequest} requestBody
    * @returns {Promise<Group>}
    */
-  async groups(group_id, requestBody) {
+  async updateGroups(group_id, requestBody) {
     const endpoint = `/groups/${group_id}`
     return this.callApi(endpoint, 'PUT', requestBody);
   }
@@ -762,7 +762,7 @@ export class ApiClientV1 {
    * @param {string} group_id
    * @returns {Promise<any>}
    */
-  async groups(group_id) {
+  async deleteGroups(group_id) {
     const endpoint = `/groups/${group_id}`
     return this.callApi(endpoint, 'DELETE');
   }
@@ -775,7 +775,7 @@ export class ApiClientV1 {
    *
    * @returns {Promise<Array<Role>>}
    */
-  async roles() {
+  async listRoles() {
     const endpoint = `/roles`
     return this.callApi(endpoint);
   }
@@ -789,7 +789,7 @@ export class ApiClientV1 {
    * @param {CreateRoleRequest} requestBody
    * @returns {Promise<Role>}
    */
-  async roles(requestBody) {
+  async createRoles(requestBody) {
     const endpoint = `/roles`
     return this.callApi(endpoint, 'POST', requestBody);
   }
@@ -803,7 +803,7 @@ export class ApiClientV1 {
    * @param {string} role_id
    * @returns {Promise<Role>}
    */
-  async roles(role_id) {
+  async getRoles(role_id) {
     const endpoint = `/roles/${role_id}`
     return this.callApi(endpoint);
   }
@@ -818,7 +818,7 @@ export class ApiClientV1 {
    * @param {UpdateRoleRequest} requestBody
    * @returns {Promise<Role>}
    */
-  async roles(role_id, requestBody) {
+  async updateRoles(role_id, requestBody) {
     const endpoint = `/roles/${role_id}`
     return this.callApi(endpoint, 'PUT', requestBody);
   }
@@ -833,7 +833,7 @@ export class ApiClientV1 {
    * @param {string} role_id
    * @returns {Promise<any>}
    */
-  async roles(role_id) {
+  async deleteRoles(role_id) {
     const endpoint = `/roles/${role_id}`
     return this.callApi(endpoint, 'DELETE');
   }

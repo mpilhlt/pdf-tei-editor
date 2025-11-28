@@ -111,6 +111,7 @@ const api = {
   LockedError,
   ConnectionError,
   ServerError,
+  apiClient,
   callApi,
   getFileList,
   validateXml,
@@ -413,7 +414,7 @@ async function extract(file_id, options) {
  * @returns {Promise<Array<Object>>} An array of {active,label,text} objects
  */
 async function loadInstructions() {
-  return await apiClient.configGetInstructions();
+  return await apiClient.configListInstructions();
 }
 
 /**
@@ -507,7 +508,7 @@ async function copyFiles(pdf, xml, destinationCollection) {
  * @returns {Promise<{collections: Array<{id: string, name: string, description: string}>}>}
  */
 async function getCollections() {
-  return await apiClient.collectionsList();
+  return await apiClient.listCollections();
 }
 
 /**
@@ -518,7 +519,7 @@ async function getCollections() {
  * @returns {Promise<{success: boolean, message: string, collection: {id: string, name: string, description: string}}>}
  */
 async function createCollection(id, name, description = "") {
-  return await apiClient.collectionsCreate({
+  return await apiClient.createCollections({
     id,
     name: name || id,
     description

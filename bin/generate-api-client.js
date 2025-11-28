@@ -150,17 +150,17 @@ function convertType(schema, forProperty = false) {
  * /api/v1/config/instructions POST -> configSaveInstructions
  * /api/v1/validate/autocomplete-data POST -> validateAutocompleteData
  * /api/v1/files/check_lock POST -> filesCheckLock
+ *
+ * @param {string} path - API path
+ * @param {string} httpMethod - HTTP method (get, post, put, delete, patch)
+ * @param {Set<string>} pathsWithMultipleMethods - Set of paths that have multiple HTTP methods
  */
-function generateMethodName(path, httpMethod) {
+function generateMethodName(path, httpMethod, pathsWithMultipleMethods) {
   // Remove /api/v1/ prefix and split into parts
   const pathParts = path
     .replace('/api/v1/', '')
     .split('/')
     .filter(p => p && !p.startsWith('{'));  // Remove empty and {param} parts
-
-  // Check if we need to add method prefix (for same path with different HTTP methods)
-  const needsMethodPrefix = httpMethod === 'post' && pathParts[pathParts.length - 1] !== 'login' &&
-    pathParts[pathParts.length - 1] !== 'logout' && pathParts[pathParts.length - 1] !== 'set';
 
   // Build method name - convert hyphens and underscores to camelCase
   let parts = pathParts.map((part, index) => {
@@ -175,17 +175,37 @@ function generateMethodName(path, httpMethod) {
     return camelWords.join('');
   });
 
-  // Add prefix for POST methods on shared endpoints
-  if (needsMethodPrefix) {
-    const lastPart = parts[parts.length - 1];
-    if (lastPart === 'Instructions') {
-      parts[parts.length - 1] = 'SaveInstructions';
-    }
-  }
+  // Check if path has parameters
+  const hasPathParams = path.includes('{');
 
-  // Add prefix for GET methods on shared endpoints if they return lists
-  if (httpMethod === 'get' && parts[parts.length - 1] === 'Instructions') {
-    parts[parts.length - 1] = 'GetInstructions';
+  // If this path has multiple HTTP methods, add semantic verb prefix
+  if (pathsWithMultipleMethods.has(path)) {
+    const lastPart = parts[parts.length - 1];
+
+    // Map HTTP methods to semantic prefixes
+    // For GET: use "List" if no params (listing operation), "Get" if has params (get single item)
+    const verbMap = {
+      'get': (!hasPathParams ? 'List' : 'Get'),
+      'post': lastPart === 'Instructions' ? 'Save' : 'Create',
+      'put': 'Update',
+      'patch': 'Patch',
+      'delete': 'Delete'
+    };
+
+    const prefix = verbMap[httpMethod] || httpMethod.charAt(0).toUpperCase() + httpMethod.slice(1);
+
+    // Insert prefix before the last part for better readability
+    // e.g., config + Instructions + POST -> configSaveInstructions
+    // e.g., collections + GET (no params) -> listCollections
+    // e.g., collections/{id} + GET -> getCollections
+    const prefixedLastPart = prefix + lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+
+    // If this is the only part (at index 0), lowercase the first letter
+    if (parts.length === 1) {
+      parts[0] = prefixedLastPart.charAt(0).toLowerCase() + prefixedLastPart.slice(1);
+    } else {
+      parts[parts.length - 1] = prefixedLastPart;
+    }
   }
 
   return parts.join('');
@@ -236,6 +256,34 @@ function generateClientCode(schema) {
   const v1Paths = Object.entries(schema.paths || {})
     .filter(([path]) => path.startsWith('/api/v1/'));
 
+  // First pass: identify paths with multiple HTTP methods
+  const pathMethodCounts = new Map();
+  for (const [path, pathItem] of v1Paths) {
+    const httpMethods = Object.keys(pathItem).filter(m =>
+      ['get', 'post', 'put', 'delete', 'patch'].includes(m)
+    );
+
+    // Skip paths with SSE or multipart endpoints
+    const hasSkippableEndpoint = httpMethods.some(method => {
+      const operation = pathItem[method];
+      const requestBodyContent = operation.requestBody?.content;
+      const responseContent = operation.responses?.['200']?.content;
+      return (requestBodyContent && requestBodyContent['multipart/form-data']) ||
+             (responseContent && responseContent['text/event-stream']);
+    });
+
+    if (!hasSkippableEndpoint) {
+      pathMethodCounts.set(path, httpMethods.length);
+    }
+  }
+
+  // Paths that have multiple HTTP methods need disambiguation
+  const pathsWithMultipleMethods = new Set(
+    Array.from(pathMethodCounts.entries())
+      .filter(([_, count]) => count > 1)
+      .map(([path, _]) => path)
+  );
+
   for (const [path, pathItem] of v1Paths) {
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!['get', 'post', 'put', 'delete', 'patch'].includes(method)) continue;
@@ -254,7 +302,7 @@ function generateClientCode(schema) {
         continue;
       }
 
-      const methodName = generateMethodName(path, method);
+      const methodName = generateMethodName(path, method, pathsWithMultipleMethods);
       const description = operation.description || operation.summary || '';
       const requestBody = operation.requestBody?.content?.['application/json']?.schema;
       const responseSchema = operation.responses?.['200']?.content?.['application/json']?.schema;

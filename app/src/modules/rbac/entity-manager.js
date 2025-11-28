@@ -2,11 +2,12 @@
  * Entity Manager for RBAC Entities
  *
  * Provides generic CRUD operations for all RBAC entity types.
- * Handles API communication and state management.
+ * Handles API communication and state management using typed API client methods.
  */
 
 /**
  * @import { EntitySchema } from './entity-schemas.js'
+ * @import { ApiClientV1 } from '../api-client-v1.js'
  */
 
 import { getEntitySchema, validateEntity } from './entity-schemas.js'
@@ -17,7 +18,7 @@ import { getEntitySchema, validateEntity } from './entity-schemas.js'
 export class EntityManager {
   /**
    * @param {string} entityType - Entity type (user, group, role, collection)
-   * @param {Function} apiClient - API client function (e.g., client.callApi)
+   * @param {ApiClientV1} apiClient - Typed API client instance
    */
   constructor(entityType, apiClient) {
     this.entityType = entityType
@@ -34,18 +35,12 @@ export class EntityManager {
   }
 
   /**
-   * Get the API endpoint base for this entity type
+   * Get the method name prefix for this entity type
+   * Capitalizes first letter: user -> User, group -> Group
    * @returns {string}
    */
-  getEndpointBase() {
-    // Map entity types to API endpoints
-    const endpoints = {
-      user: '/users',
-      group: '/groups',
-      role: '/roles',
-      collection: '/collections'
-    }
-    return endpoints[this.entityType] || `/${this.entityType}s`
+  getMethodPrefix() {
+    return this.entityType.charAt(0).toUpperCase() + this.entityType.slice(1) + 's'
   }
 
   /**
@@ -54,8 +49,9 @@ export class EntityManager {
    */
   async loadAll() {
     try {
-      const endpoint = this.getEndpointBase()
-      const response = await this.apiClient(endpoint, 'GET')
+      // Call typed list method: listUsers(), listGroups(), etc.
+      const methodName = 'list' + this.getMethodPrefix()
+      const response = await this.apiClient[methodName]()
 
       // Response structure might vary by entity type
       // Collections API returns {collections: [...]}
@@ -83,8 +79,9 @@ export class EntityManager {
    */
   async getById(id) {
     try {
-      const endpoint = `${this.getEndpointBase()}/${encodeURIComponent(id)}`
-      const response = await this.apiClient(endpoint, 'GET')
+      // Call typed get method: getUsers(username), getGroups(group_id), etc.
+      const methodName = 'get' + this.getMethodPrefix()
+      const response = await this.apiClient[methodName](id)
       return response
     } catch (error) {
       console.error(`Failed to get ${this.entityType} ${id}:`, error)
@@ -105,8 +102,9 @@ export class EntityManager {
     }
 
     try {
-      const endpoint = this.getEndpointBase()
-      const response = await this.apiClient(endpoint, 'POST', data)
+      // Call typed create method: createUsers(data), createGroups(data), etc.
+      const methodName = 'create' + this.getMethodPrefix()
+      const response = await this.apiClient[methodName](data)
 
       // Add to local cache
       this.entities.push(response)
@@ -132,8 +130,9 @@ export class EntityManager {
     }
 
     try {
-      const endpoint = `${this.getEndpointBase()}/${encodeURIComponent(id)}`
-      const response = await this.apiClient(endpoint, 'PUT', data)
+      // Call typed update method: updateUsers(id, data), updateGroups(id, data), etc.
+      const methodName = 'update' + this.getMethodPrefix()
+      const response = await this.apiClient[methodName](id, data)
 
       // Update local cache
       const index = this.entities.findIndex(e => e[this.schema.idField] === id)
@@ -155,8 +154,9 @@ export class EntityManager {
    */
   async delete(id) {
     try {
-      const endpoint = `${this.getEndpointBase()}/${encodeURIComponent(id)}`
-      await this.apiClient(endpoint, 'DELETE')
+      // Call typed delete method: deleteUsers(id), deleteGroups(id), etc.
+      const methodName = 'delete' + this.getMethodPrefix()
+      await this.apiClient[methodName](id)
 
       // Remove from local cache
       this.entities = this.entities.filter(e => e[this.schema.idField] !== id)
@@ -210,7 +210,7 @@ export class EntityManager {
 
 /**
  * Create entity managers for all RBAC entity types
- * @param {Function} apiClient - API client function
+ * @param {ApiClientV1} apiClient - Typed API client instance
  * @returns {Record<string, EntityManager>}
  */
 export function createEntityManagers(apiClient) {

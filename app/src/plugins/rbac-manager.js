@@ -95,8 +95,8 @@ async function install(state) {
 
   updateUi()
 
-  // Create entity managers
-  entityManagers = createEntityManagers(client.callApi)
+  // Create entity managers with typed API client
+  entityManagers = createEntityManagers(client.apiClient)
 
   // Set up event listeners
   setupEventListeners()
@@ -357,8 +357,17 @@ function showEntityForm() {
   const schema = getEntitySchema(currentEntityType)
   if (!schema) return
 
-  // Hide empty state
-  dialog.querySelector('[name="emptyState"]').style.display = 'none'
+  const formContainer = dialog.querySelector('[name="formContainer"]')
+
+  // Hide empty state if it exists
+  const emptyState = formContainer.querySelector('[name="emptyState"]')
+  if (emptyState) {
+    emptyState.style.display = 'none'
+  }
+
+  // Remove any existing forms
+  const existingForms = formContainer.querySelectorAll('form')
+  existingForms.forEach(form => form.remove())
 
   // Update form title
   const formTitle = dialog.querySelector('[name="formTitle"]')
@@ -381,10 +390,6 @@ function showEntityForm() {
     }
   }
 
-  // Clear form container
-  const formContainer = dialog.querySelector('[name="formContainer"]')
-  formContainer.innerHTML = ''
-
   // Render form
   const form = renderEntityForm(currentEntityType, entityData, optionsData, isNewEntity)
   formContainer.appendChild(form)
@@ -397,13 +402,37 @@ function showEmptyState() {
   /** @type {rbacManagerDialogPart & SlDialog} */
   const dialog = /** @type {any} */(ui.rbacManagerDialog)
 
-  dialog.querySelector('[name="emptyState"]').style.display = 'flex'
+  const formContainer = dialog.querySelector('[name="formContainer"]')
+
+  // Get or create empty state element
+  let emptyState = formContainer.querySelector('[name="emptyState"]')
+  if (!emptyState) {
+    // Re-create empty state if it was removed
+    emptyState = document.createElement('div')
+    emptyState.setAttribute('name', 'emptyState')
+    emptyState.style.display = 'flex'
+    emptyState.style.flexDirection = 'column'
+    emptyState.style.alignItems = 'center'
+    emptyState.style.justifyContent = 'center'
+    emptyState.style.height = '100%'
+    emptyState.style.color = 'var(--sl-color-neutral-500)'
+    emptyState.innerHTML = `
+      <sl-icon name="inbox" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
+      <p style="margin: 0;">Select an item from the list or create a new one</p>
+    `
+    formContainer.appendChild(emptyState)
+  } else {
+    emptyState.style.display = 'flex'
+  }
+
+  // Remove any form elements
+  const forms = formContainer.querySelectorAll('form')
+  forms.forEach(form => form.remove())
+
+  // Update UI state
   dialog.querySelector('[name="formTitle"]').textContent = 'Select an item'
   dialog.querySelector('[name="saveBtn"]').disabled = true
   dialog.querySelector('[name="deleteBtn"]').disabled = true
-
-  // Clear form
-  dialog.querySelector('[name="formContainer"]').innerHTML = ''
 }
 
 /**
