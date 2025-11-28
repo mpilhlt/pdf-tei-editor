@@ -139,7 +139,10 @@ from .routers import (
     sync,
     sse,
     schema,
-    collections
+    collections,
+    users,
+    groups,
+    roles
 )
 
 # Versioned API router (v1)
@@ -148,6 +151,9 @@ api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 api_v1.include_router(auth.router)
 api_v1.include_router(config.router)
 api_v1.include_router(collections.router)
+api_v1.include_router(users.router)
+api_v1.include_router(groups.router)
+api_v1.include_router(roles.router)
 api_v1.include_router(validation.router)
 api_v1.include_router(extraction.router)
 api_v1.include_router(files_list.router)

@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-11-27T22:16:51.554Z
+ * Generated from OpenAPI schema at 2025-11-28T07:37:25.615Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -63,11 +63,6 @@
  */
 
 /**
- * @typedef {Object} CollectionsListResponse
- * @property {Array<Collection>} collections - List of collections accessible to the user
- */
-
-/**
  * @typedef {Object} ConfigSetRequest
  * @property {string} key
  * @property {any} value
@@ -118,17 +113,28 @@
  */
 
 /**
- * @typedef {Object} CreateCollectionRequest
- * @property {string} id - Unique collection identifier (only letters, numbers, hyphens, underscores)
- * @property {string=} name - Display name (defaults to id if not provided)
- * @property {string=} description - Collection description
+ * @typedef {Object} CreateGroupRequest
+ * @property {string} id - Unique group identifier
+ * @property {string} name - Group display name
+ * @property {string=} description - Group description
+ * @property {Array<string>=} collections - List of collection IDs
  */
 
 /**
- * @typedef {Object} CreateCollectionResponse
- * @property {boolean} success - Whether the operation succeeded
- * @property {string} message - Result message
- * @property {Collection=} collection - Created collection details
+ * @typedef {Object} CreateRoleRequest
+ * @property {string} id - Unique role identifier
+ * @property {string} roleName - Role display name
+ * @property {string=} description - Role description
+ */
+
+/**
+ * @typedef {Object} CreateUserRequest
+ * @property {string} username - Unique username
+ * @property {string} passwd_hash - User password (will be hashed)
+ * @property {string=} fullname - User's full name
+ * @property {string=} email - User's email address
+ * @property {Array<string>=} roles - List of user roles
+ * @property {Array<string>=} groups - List of groups
  */
 
 /**
@@ -210,6 +216,14 @@
  */
 
 /**
+ * @typedef {Object} Group
+ * @property {string} id - Unique group identifier
+ * @property {string} name - Group display name
+ * @property {string=} description - Group description
+ * @property {Array<string>=} collections - List of collection IDs accessible to this group
+ */
+
+/**
  * @typedef {Object} HTTPValidationError
  * @property {Array<ValidationError>=} detail
  */
@@ -275,6 +289,13 @@
  */
 
 /**
+ * @typedef {Object} Role
+ * @property {string} id - Unique role identifier
+ * @property {string} roleName - Role display name
+ * @property {string=} description - Role description
+ */
+
+/**
  * @typedef {Object} SaveFileRequest
  * @property {string} xml_string
  * @property {string} file_id
@@ -336,9 +357,41 @@
  */
 
 /**
+ * @typedef {Object} UpdateGroupRequest
+ * @property {string=} name - Group display name
+ * @property {string=} description - Group description
+ * @property {Array<string>=} collections - List of collection IDs
+ */
+
+/**
+ * @typedef {Object} UpdateRoleRequest
+ * @property {string=} roleName - Role display name
+ * @property {string=} description - Role description
+ */
+
+/**
+ * @typedef {Object} UpdateUserRequest
+ * @property {string=} fullname - User's full name
+ * @property {string=} email - User's email address
+ * @property {string=} passwd_hash - New password (will be hashed)
+ * @property {Array<string>=} roles - List of user roles
+ * @property {Array<string>=} groups - List of groups
+ */
+
+/**
  * @typedef {Object} UploadResponse
  * @property {string} type
  * @property {string} filename
+ */
+
+/**
+ * @typedef {Object} User
+ * @property {string} username - Unique username
+ * @property {string=} fullname - User's full name
+ * @property {string=} email - User's email address
+ * @property {Array<string>=} roles - List of user roles
+ * @property {Array<string>=} groups - List of groups user belongs to
+ * @property {string=} session_id - Current session ID
  */
 
 /**
@@ -489,41 +542,300 @@ export class ApiClientV1 {
   }
 
   /**
-   * List all collections accessible to the current user.
-   * For users with wildcard access (admin role, * in roles/groups), returns all collections.
-   * For regular users, returns only collections their groups have access to.
-   * Anonymous users get an empty list.
-   * Args:
-   * current_user: Current user dict or None (injected)
+   * List all collections.
+   * Returns all collections without filtering. Requires admin authentication.
    * Returns:
-   * CollectionsListResponse with accessible collections
+   * List of Collection objects
    *
-   * @returns {Promise<CollectionsListResponse>}
+   * @returns {Promise<Array<Collection>>}
    */
-  async collectionsList() {
-    const endpoint = `/collections/list`
+  async collections() {
+    const endpoint = `/collections`
     return this.callApi(endpoint);
   }
 
   /**
    * Create a new collection.
-   * Requires admin or reviewer role.
-   * Collection ID must be unique and contain only letters, numbers, hyphens, and underscores.
-   * If name is not provided, uses id as the display name.
    * Args:
-   * body: CreateCollectionRequest with collection details
+   * collection: Collection data
    * current_user: Current user dict (injected)
    * Returns:
-   * CreateCollectionResponse with success status and created collection
+   * Created Collection object
    * Raises:
-   * HTTPException: 401 if not authenticated, 403 if insufficient permissions, 400 if validation fails
+   * HTTPException: 400 if validation fails or collection exists
    *
-   * @param {CreateCollectionRequest} requestBody
-   * @returns {Promise<CreateCollectionResponse>}
+   * @param {Collection} requestBody
+   * @returns {Promise<void>}
    */
-  async collectionsCreate(requestBody) {
-    const endpoint = `/collections/create`
+  async collections(requestBody) {
+    const endpoint = `/collections`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get a specific collection by ID.
+   * Args:
+   * collection_id: Collection identifier
+   * current_user: Current user dict (injected)
+   * Returns:
+   * Collection object
+   * Raises:
+   * HTTPException: 404 if collection not found
+   *
+   * @param {string} collection_id
+   * @returns {Promise<Collection>}
+   */
+  async collections(collection_id) {
+    const endpoint = `/collections/${collection_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update an existing collection.
+   * Args:
+   * collection_id: Collection identifier
+   * collection: Updated collection data
+   * current_user: Current user dict (injected)
+   * Returns:
+   * Updated Collection object
+   * Raises:
+   * HTTPException: 404 if collection not found, 400 if validation fails
+   *
+   * @param {string} collection_id
+   * @param {Collection} requestBody
+   * @returns {Promise<Collection>}
+   */
+  async collections(collection_id, requestBody) {
+    const endpoint = `/collections/${collection_id}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete a collection.
+   * Args:
+   * collection_id: Collection identifier
+   * current_user: Current user dict (injected)
+   * Raises:
+   * HTTPException: 404 if collection not found
+   *
+   * @param {string} collection_id
+   * @returns {Promise<void>}
+   */
+  async collections(collection_id) {
+    const endpoint = `/collections/${collection_id}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List all users.
+   * Requires admin role.
+   * Returns:
+   * List of User objects (passwords excluded)
+   *
+   * @returns {Promise<Array<User>>}
+   */
+  async users() {
+    const endpoint = `/users`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create a new user.
+   * Requires admin role.
+   * Returns:
+   * Created user information (password excluded)
+   *
+   * @param {CreateUserRequest} requestBody
+   * @returns {Promise<User>}
+   */
+  async users(requestBody) {
+    const endpoint = `/users`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get a specific user by username.
+   * Requires admin role.
+   * Returns:
+   * User information (password excluded)
+   *
+   * @param {string} username
+   * @returns {Promise<User>}
+   */
+  async users(username) {
+    const endpoint = `/users/${username}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update an existing user.
+   * Requires admin role.
+   * Returns:
+   * Updated user information (password excluded)
+   *
+   * @param {string} username
+   * @param {UpdateUserRequest} requestBody
+   * @returns {Promise<User>}
+   */
+  async users(username, requestBody) {
+    const endpoint = `/users/${username}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete a user.
+   * Requires admin role.
+   * Cannot delete yourself.
+   * Returns:
+   * Success message
+   *
+   * @param {string} username
+   * @returns {Promise<any>}
+   */
+  async users(username) {
+    const endpoint = `/users/${username}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List all groups.
+   * Requires admin role.
+   * Returns:
+   * List of Group objects
+   *
+   * @returns {Promise<Array<Group>>}
+   */
+  async groups() {
+    const endpoint = `/groups`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create a new group.
+   * Requires admin role.
+   * Returns:
+   * Created group information
+   *
+   * @param {CreateGroupRequest} requestBody
+   * @returns {Promise<Group>}
+   */
+  async groups(requestBody) {
+    const endpoint = `/groups`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get a specific group by ID.
+   * Requires admin role.
+   * Returns:
+   * Group information
+   *
+   * @param {string} group_id
+   * @returns {Promise<Group>}
+   */
+  async groups(group_id) {
+    const endpoint = `/groups/${group_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update an existing group.
+   * Requires admin role.
+   * Returns:
+   * Updated group information
+   *
+   * @param {string} group_id
+   * @param {UpdateGroupRequest} requestBody
+   * @returns {Promise<Group>}
+   */
+  async groups(group_id, requestBody) {
+    const endpoint = `/groups/${group_id}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete a group.
+   * Requires admin role.
+   * Returns:
+   * Success message
+   *
+   * @param {string} group_id
+   * @returns {Promise<any>}
+   */
+  async groups(group_id) {
+    const endpoint = `/groups/${group_id}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List all roles.
+   * Requires admin role.
+   * Returns:
+   * List of Role objects
+   *
+   * @returns {Promise<Array<Role>>}
+   */
+  async roles() {
+    const endpoint = `/roles`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create a new role.
+   * Requires admin role.
+   * Returns:
+   * Created role information
+   *
+   * @param {CreateRoleRequest} requestBody
+   * @returns {Promise<Role>}
+   */
+  async roles(requestBody) {
+    const endpoint = `/roles`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Get a specific role by ID.
+   * Requires admin role.
+   * Returns:
+   * Role information
+   *
+   * @param {string} role_id
+   * @returns {Promise<Role>}
+   */
+  async roles(role_id) {
+    const endpoint = `/roles/${role_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Update an existing role.
+   * Requires admin role.
+   * Returns:
+   * Updated role information
+   *
+   * @param {string} role_id
+   * @param {UpdateRoleRequest} requestBody
+   * @returns {Promise<Role>}
+   */
+  async roles(role_id, requestBody) {
+    const endpoint = `/roles/${role_id}`
+    return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * Delete a role.
+   * Requires admin role.
+   * Cannot delete built-in roles (admin, user, reviewer, annotator).
+   * Returns:
+   * Success message
+   *
+   * @param {string} role_id
+   * @returns {Promise<any>}
+   */
+  async roles(role_id) {
+    const endpoint = `/roles/${role_id}`
+    return this.callApi(endpoint, 'DELETE');
   }
 
   /**

@@ -249,6 +249,29 @@ def remove_collection_from_group(db_dir: Path, group_id: str, collection_id: str
         return False, f"Group '{group_id}' does not have collection '{collection_id}'."
 
 
+def create_group(group_id: str, name: str, description: str = "", collections: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Creates a new group dictionary.
+
+    Args:
+        group_id: The group ID
+        name: The group name
+        description: The group description (optional)
+        collections: List of collection IDs (defaults to [])
+
+    Returns:
+        Group dictionary
+    """
+    if collections is None:
+        collections = []
+
+    return {
+        "id": group_id,
+        "name": name,
+        "description": description,
+        "collections": collections
+    }
+
+
 def list_groups(db_dir: Path) -> List[Dict[str, Any]]:
     """Lists all groups.
 

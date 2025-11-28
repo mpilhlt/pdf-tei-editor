@@ -39,6 +39,7 @@ import { plugin as toolbarPlugin } from './plugins/toolbar.js'
 import { plugin as syncPlugin, api as sync } from './plugins/sync.js'
 import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
 import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
+import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
 
 /** @type {Array<Plugin|PluginConfig>} */
 const plugins = [
@@ -67,8 +68,9 @@ const plugins = [
   infoPlugin, 
   moveFilesPlugin, 
   ssePlugin,
-  accessControlPlugin, 
-  heartbeatPlugin, 
+  accessControlPlugin,
+  heartbeatPlugin,
+  rbacManagerPlugin,
   startPlugin
 ]
 

@@ -245,6 +245,87 @@ npm run test:e2e:debug
 await page.pause();
 ```
 
+## Best Practices from Real Implementation
+
+### Always Use Existing Helper Functions
+
+**Critical**: Never reimplement authentication, API calls, or other common test utilities. This causes maintenance burden and bugs.
+
+**Example from RBAC Tests** ([rbac_crud.test.js](../tests/api/v1/rbac_crud.test.js)):
+
+```javascript
+// ❌ WRONG - Reimplementing login
+async function loginAsAdmin() {
+  const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify({
+      username: 'admin',
+      password: 'admin'  // Wrong field name!
+    })
+  });
+  return data.session_id;  // Wrong property name!
+}
+
+// ✅ CORRECT - Use existing helper
+import { createAdminSession, hashPassword } from '../helpers/test-auth.js';
+
+async function loginAsAdmin() {
+  const { sessionId } = await createAdminSession(API_BASE);
+  return sessionId;
+}
+```
+
+**Why This Matters**:
+
+1. **Correct Implementation**: Helpers use proper field names (`passwd_hash` not `password`)
+2. **Proper Hashing**: Helpers hash passwords correctly using `hashPassword()`
+3. **Correct Headers**: Helpers use `X-Session-Id` (case-sensitive, lowercase 'd')
+4. **Single Source of Truth**: When auth changes, only helper needs updating
+
+### Common Helper Locations
+
+```javascript
+// Authentication and API calls
+import {
+  login,
+  createAdminSession,
+  hashPassword,
+  authenticatedApiCall
+} from '../helpers/test-auth.js';
+
+// Test logging and state verification
+import {
+  setupTestConsoleCapture,
+  waitForTestMessage
+} from './helpers/test-logging.js';
+```
+
+### Backend Authentication Requirements
+
+When implementing FastAPI endpoints that require authentication:
+
+```python
+from ..lib.dependencies import get_current_user
+from fastapi import Depends
+
+# ✅ CORRECT - Dependency injection
+def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    # ... check admin role ...
+    return current_user
+
+@router.get("/endpoint")
+def endpoint(current_user: dict = Depends(require_admin)):
+    # Endpoint implementation
+```
+
+**Key Points**:
+
+- Use `Depends(get_current_user)` to inject authentication
+- FastAPI automatically handles session extraction from headers
+- Session header must be `X-Session-Id` (case-sensitive)
+
 ## Important Notes
 
 - **API tests run against local server** - No containers needed, faster iteration
@@ -252,6 +333,7 @@ await page.pause();
 - **Use `--keep-db`** - When debugging to preserve state between runs
 - **Clean up locks** - Always release locks in test cleanup
 - **Fixtures auto-load** - Defined in `tests/api/fixtures/` and `tests/e2e/fixtures/`
+- **Use helper functions** - Check `tests/*/helpers/` before reimplementing common patterns
 
 ## See Also
 

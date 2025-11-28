@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from .data_utils import get_data_file_path, load_json_file
+from .data_utils import get_data_file_path, load_json_file, load_entity_data
 
 
 def get_available_roles(db_dir: Path) -> Optional[List[str]]:
@@ -86,3 +86,50 @@ def get_role_details(role_id: str, db_dir: Path) -> Optional[Dict[str, Any]]:
         return None
     except (FileNotFoundError, ValueError):
         return None
+
+
+def find_role(role_id: str, roles_data: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Finds a role by ID.
+
+    Args:
+        role_id: The role ID to search for
+        roles_data: List of role dictionaries
+
+    Returns:
+        Role dictionary if found, None otherwise
+    """
+    for role in roles_data:
+        if role.get('id') == role_id:
+            return role
+    return None
+
+
+def role_exists(role_id: str, roles_data: List[Dict[str, Any]]) -> bool:
+    """Checks if a role exists.
+
+    Args:
+        role_id: The role ID to check
+        roles_data: List of role dictionaries
+
+    Returns:
+        True if role exists, False otherwise
+    """
+    return find_role(role_id, roles_data) is not None
+
+
+def create_role(role_id: str, role_name: str, description: str = "") -> Dict[str, Any]:
+    """Creates a new role dictionary.
+
+    Args:
+        role_id: The role ID
+        role_name: The role display name
+        description: The role description (optional)
+
+    Returns:
+        Role dictionary
+    """
+    return {
+        "id": role_id,
+        "roleName": role_name,
+        "description": description
+    }

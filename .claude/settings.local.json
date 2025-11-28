@@ -23,7 +23,8 @@
       "Bash(source ~/.nvm/nvm.sh)",
       "Bash(nvm use:*)",
       "Bash(npm run test:unit:js:*)",
-      "Bash(npm run generate-client:*)"
+      "Bash(npm run generate-client:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
