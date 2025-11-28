@@ -24,7 +24,10 @@
       "Bash(nvm use:*)",
       "Bash(npm run test:unit:js:*)",
       "Bash(npm run generate-client:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(cp:*)"
     ],
     "deny": [],
     "ask": []

@@ -12,14 +12,14 @@ from lxml import etree
 
 from . import BaseExtractor
 from .http_utils import get_retry_session
-from server.lib.doi_utils import fetch_doi_metadata
-from server.lib.tei_utils import (
+from ..lib.doi_utils import fetch_doi_metadata
+from ..lib.tei_utils import (
     create_tei_header,
     create_edition_stmt,
     create_revision_desc_with_status,
     serialize_tei_with_formatted_header
 )
-from server.lib.debug_utils import log_extraction_response, log_xml_parsing_error
+from ..lib.debug_utils import log_extraction_response, log_xml_parsing_error
 
 
 class GrobidTrainingExtractor(BaseExtractor):

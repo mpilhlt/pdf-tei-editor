@@ -2,7 +2,7 @@
 
 The PDF-TEI Editor features a three-panel layout designed for efficient comparison and editing of PDF documents and their corresponding TEI markup.
 
-![Main Interface](images/interface-overview.png)
+![Main Interface](../images/interface-overview.png)
 
 ## Main Layout
 

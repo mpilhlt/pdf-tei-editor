@@ -4,7 +4,7 @@ The PDF-TEI-Editor uses JSON configuration files to manage application settings.
 
 ## Configuration Files
 
-- **`db/config.json`** - Runtime configuration (user-specific, gitignored)
+- **`data/db/config.json`** - Runtime configuration (user-specific, gitignored)
 - **`config/config.json`** - Default configuration (version-controlled)
 
 ## CLI Commands
@@ -12,7 +12,7 @@ The PDF-TEI-Editor uses JSON configuration files to manage application settings.
 ### Get Configuration Values
 
 ```bash
-# Get value from db/config.json
+# Get value from data/db/config.json
 ./bin/manage.py config get <key>
 
 # Get value from config/config.json
@@ -22,10 +22,10 @@ The PDF-TEI-Editor uses JSON configuration files to manage application settings.
 ### Set Configuration Values
 
 ```bash
-# Set in db/config.json only
+# Set in data/db/config.json only
 ./bin/manage.py config set <key> <json_value>
 
-# Set in both db/config.json and config/config.json
+# Set in both data/db/config.json and config/config.json
 ./bin/manage.py config set <key> <json_value> --default
 
 # Set value constraints
@@ -38,7 +38,7 @@ The PDF-TEI-Editor uses JSON configuration files to manage application settings.
 ### Delete Configuration Keys
 
 ```bash
-# Delete from db/config.json only
+# Delete from data/db/config.json only
 ./bin/manage.py config delete <key>
 
 # Delete from both files

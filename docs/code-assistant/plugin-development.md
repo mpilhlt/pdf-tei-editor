@@ -1,5 +1,9 @@
 # Plugin Development Guide
 
+Guide for creating and working with plugins in the PDF-TEI Editor.
+
+For detailed plugin architecture, see [architecture.md](./architecture.md#plugin-system-architecture).
+
 ## Creating New Plugin Classes
 
 ```javascript
@@ -74,58 +78,22 @@ export const myPlugin = MyPlugin.getInstance();
 
 ## State Management in Plugins
 
+The application uses **immutable state management** with functional programming principles.
+
+### Core Rules
+
 - **Never mutate state directly** - always use `dispatchStateChange()`
 - **Use `onStateUpdate()` for reactions** - more efficient than legacy `state.update`
 - **Access current state via `this.state`** - read-only property
 - **Store plugin-specific state in `state.ext`** - avoids naming conflicts
 - **Use `hasStateChanged()` for conditional logic** - available via PluginContext
 
-## Common Patterns
-
-```javascript
-// Conditional state updates
-async onStateUpdate(changedKeys) {
-  if (changedKeys.includes('user') && this.state.user) {
-    await this.setupUserUI();
-  }
-}
-
-// Plugin-specific state
-async savePreferences(prefs) {
-  await this.dispatchStateChange({
-    ext: {
-      [this.name]: { preferences: prefs }
-    }
-  });
-}
-
-// Accessing plugin-specific state
-get preferences() {
-  return this.state?.ext?.[this.name]?.preferences || {};
-}
-```
-
-## State Management
-
-The application uses **immutable state management** with functional programming principles:
-
-### Core Concepts
-
-- **Immutable Updates**: Each state change creates a new state object, preserving the previous state
-- **State History**: The system maintains a history of the last 10 states for debugging and potential undo functionality
-- **Change Detection**: Plugins use `hasStateChanged()` instead of manual caching to detect state changes
-- **State Snapshots**: Plugins receive immutable state snapshots via function parameters, never import the global state
-
 ### State Management Architecture
 
 State is managed through the `StateManager` class and `Application` orchestrator:
 
 ```javascript
-// Legacy plugins - BC wrappers in app.js (UPDATED API)
-import { updateState, hasStateChanged } from '../app.js';
-await updateState({ pdf: 'new-file.pdf', xml: 'new-file.xml' }) // Note: No currentState parameter
-
-// New Plugin classes - via PluginContext
+// Plugin classes - via PluginContext
 class MyPlugin extends Plugin {
   async someAction() {
     // Dispatch state changes through context
@@ -157,9 +125,9 @@ class MyPlugin extends Plugin {
 **Key Components:**
 
 - `StateManager` - Handles immutable state updates, change detection, history
-- `Application.updateState(changes)` - Orchestrates state changes and plugin notifications (single parameter API)
+- `Application.updateState(changes)` - Orchestrates state changes and plugin notifications
 - `PluginContext` - Provides controlled access to state utilities for Plugin classes
-- Legacy BC wrappers - `updateState(changes)` and `hasStateChanged()` exported from app.js (updated to single parameter)
+- Legacy BC wrappers - `updateState(changes)` and `hasStateChanged()` exported from app.js
 
 ### Plugin State Handling Best Practices
 
@@ -170,57 +138,107 @@ class MyPlugin extends Plugin {
 5. **Use state.ext for plugin-specific state**: Store plugin-specific state in `state.ext` to avoid TypeScript errors
 6. **Use updateStateExt()**: For updating extension properties immutably
 
-### Memory Management
-
-- State history is automatically limited to 10 entries to prevent memory leaks
-- Older states are garbage collected when the limit is exceeded
-- The `previousState` chain is properly broken to allow garbage collection
-
 ### State Architecture Principles
 
 - **Plugin endpoints are reactive observers, not state mutators**: Plugin `update()` functions receive immutable state snapshots and react to changes by updating UI or internal plugin state. They do not return modified state objects.
 - **Only state utilities create new state objects**: Functions like `updateState()` and `updateStateExt()` are responsible for creating new immutable state objects. Plugin endpoints observe and react to state changes.
 - **Parallel plugin execution**: Since plugins don't mutate state, multiple plugins can process the same state snapshot concurrently without conflicts.
 - **State initialization is sequential**: During app initialization, state operations are chained sequentially to build up the initial state before plugins start reacting to changes.
-- **CRITICAL: Never call app.updateState() in endpoints that receive the state**: Plugin functions which receive the state must never update it as this creates infinite loops. They are observers/reactors, not mutators. Consider them "observe" functions rather than "update" functions.
-- **State mutation only in event handlers**: Only user event handlers (like button clicks) and async operations (like API responses) should call `app.updateState()`. 
-- **Event handlers must use current state**: In legacy code. event handlers registered during plugin installation receive stale state references. This needs to be refactored. For plugin objects, store the current state in a closured variable and updated it by an `onStateUpdate` endpoint. Use this updated reference in event handlers instead of the installation-time state parameter!
+- **CRITICAL: Never call app.updateState() in endpoints that receive the state**: Plugin functions which receive the state must never update it as this creates infinite loops. They are observers/reactors, not mutators.
+- **State mutation only in event handlers**: Only user event handlers (like button clicks) and async operations (like API responses) should call `app.updateState()`.
+- **Event handlers must use current state**: In legacy code, event handlers registered during plugin installation receive stale state references. For plugin objects, store the current state in a closured variable and update it via an `onStateUpdate` endpoint. Use this updated reference in event handlers instead of the installation-time state parameter!
 
-## State Management Integration
+## Common Patterns
 
-**Plugin Objects:**
+```javascript
+// Conditional state updates
+async onStateUpdate(changedKeys) {
+  if (changedKeys.includes('user') && this.state.user) {
+    await this.setupUserUI();
+  }
+}
 
- `state.update` endpoints should be migrated to use `onStateUpdate` instead
+// Plugin-specific state
+async savePreferences(prefs) {
+  await this.dispatchStateChange({
+    ext: {
+      [this.name]: { preferences: prefs }
+    }
+  });
+}
+
+// Accessing plugin-specific state
+get preferences() {
+  return this.state?.ext?.[this.name]?.preferences || {};
+}
+```
+
+## Legacy Plugin Objects
+
+Plugin objects should migrate from `state.update` to `onStateUpdate`:
 
 ```javascript
 import { updateState, hasStateChanged } from '../app.js';
 
-let currentState
+let currentState;
 
-async function update(state) {
-  currentState = state
+async function onStateUpdate(changedKeys, state) {
+  currentState = state;
+  if (changedKeys.includes('user')) {
+    // React to user changes
+  }
 }
 
 async function someAction() {
-  if (hasStateChanged(currentState, 'user')) {
-    // React to user changes
-  }
+  // Use currentState, not installation-time state
   await updateState({ pdf: 'new.pdf' });
+}
+
+export default {
+  name: 'my-plugin',
+  deps: ['dependency1'],
+  install: async (state) => { /* setup */ },
+  onStateUpdate
+};
+```
+
+## Memory Management
+
+- State history is automatically limited to 10 entries to prevent memory leaks
+- Older states are garbage collected when the limit is exceeded
+- The `previousState` chain is properly broken to allow garbage collection
+
+## Anti-Patterns to Avoid
+
+❌ **DO NOT** import global state:
+```javascript
+import { state } from '../app.js';  // WRONG
+```
+
+❌ **DO NOT** mutate state directly:
+```javascript
+this.state.user = newUser;  // WRONG
+```
+
+❌ **DO NOT** update state in `onStateUpdate`:
+```javascript
+async onStateUpdate(changedKeys) {
+  await this.dispatchStateChange({ ... });  // WRONG - creates infinite loop
 }
 ```
 
-**Plugin Classes:**
-
+✅ **DO** dispatch state changes from event handlers:
 ```javascript
-class MyPlugin extends Plugin {
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('user')) {
-      // React to user changes
-    }
-  }
+async handleButtonClick() {
+  await this.dispatchStateChange({ user: newUser });  // CORRECT
+}
+```
 
-  async someAction() {
-    await this.dispatchStateChange({ pdf: 'new.pdf' });
+✅ **DO** react to state changes in `onStateUpdate`:
+```javascript
+async onStateUpdate(changedKeys) {
+  if (changedKeys.includes('user')) {
+    this.updateUI();  // CORRECT - observe and react
   }
 }
 ```

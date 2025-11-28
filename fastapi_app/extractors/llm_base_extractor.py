@@ -2,7 +2,7 @@ import os
 import json
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
-from server.extractors import BaseExtractor
+from . import BaseExtractor
 
 
 class LLMBaseExtractor(BaseExtractor, ABC):

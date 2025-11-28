@@ -6,6 +6,7 @@ Includes FastAPI-specific helpers for request handling.
 """
 
 import re
+import socket
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -25,6 +26,22 @@ class ApiError(RuntimeError):
 
 
 # Pure utility functions (no dependencies)
+
+
+def has_internet() -> bool:
+    """
+    Test internet connectivity by attempting to connect to Google's DNS server.
+    This is faster than HTTP requests as it only checks connectivity without data transfer.
+
+    Returns:
+        True if internet connection is available, False otherwise
+    """
+    try:
+        socket.setdefaulttimeout(3)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("8.8.8.8", 53))
+        return True
+    except socket.error:
+        return False
 
 
 def make_timestamp() -> str:

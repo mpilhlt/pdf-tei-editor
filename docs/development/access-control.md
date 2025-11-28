@@ -277,9 +277,20 @@ created_file = file_repo.insert_file(FileCreate(
 ))
 ```
 
+## RBAC Manager Plugin
+
+The frontend RBAC Manager plugin ([app/src/plugins/rbac-manager.js](../../app/src/plugins/rbac-manager.js)) provides a user interface for managing access control. It allows administrators to:
+
+- View and manage users, groups, and collections
+- Assign users to groups
+- Configure group collection access
+- Manage user roles
+
+The RBAC Manager integrates with the backend API endpoints to provide real-time access control management.
+
 ## Management CLI
 
-The `bin/manage.py` script provides commands to manage users, groups, and collections.
+The `bin/manage.py` script provides commands to manage users, groups, and collections from the command line.
 
 ### User Management
 

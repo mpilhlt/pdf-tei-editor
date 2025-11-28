@@ -25,7 +25,7 @@ from ..lib.schema_validator import validate, extract_schema_locations, get_schem
 from ..lib.autocomplete_generator import generate_autocomplete_map
 
 # For internet connectivity check
-from server.lib.server_utils import has_internet
+from ..lib.server_utils import has_internet
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/validate", tags=["validation"])

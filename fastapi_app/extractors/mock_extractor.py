@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 from lxml import etree
 
 from . import BaseExtractor
-from server.lib.tei_utils import create_tei_document, create_tei_header, serialize_tei_with_formatted_header
+from ..lib.tei_utils import create_tei_document, create_tei_header, serialize_tei_with_formatted_header
 
 
 class MockExtractor(BaseExtractor):

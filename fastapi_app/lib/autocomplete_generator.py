@@ -8,7 +8,7 @@ For FastAPI migration - Phase 5.
 """
 
 from typing import Dict
-from server.lib.relaxng_to_codemirror import generate_autocomplete_map
+from .relaxng_to_codemirror import generate_autocomplete_map
 
 # Re-export the function
 __all__ = ['generate_autocomplete_map']

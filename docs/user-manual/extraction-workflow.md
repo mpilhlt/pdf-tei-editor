@@ -1,6 +1,6 @@
 # PDF-TEI Editor Workflow for Training/Evaluation Datasets
 
-![](images/4e00d137-4d2b-4559-8c3f-cb04a4bdf2ed.png)
+![](../images/4e00d137-4d2b-4559-8c3f-cb04a4bdf2ed.png)
 
 For the creation of datasets that are to be used to train models or evaluate their performance, the basic workflow of the PDF-TEI Editor is this:
 
@@ -15,13 +15,13 @@ This workflow provides isolation of edits and an explicit audit trail that links
 
 (Reviewer role)
 
-![](images/25be8247-c81c-4f9e-99ff-19484dd4ece1.png)
+![](../images/25be8247-c81c-4f9e-99ff-19484dd4ece1.png)
 
 By clicking on the first button in the "Extraction" button group, choose a PDF, which is uploaded. 
 
 You are then asked to edit the extractor configuration
 
-![](images/7aa1883e-5437-4ae6-85f5-205b467806d5.png)
+![](../images/7aa1883e-5437-4ae6-85f5-205b467806d5.png)
 
 If the PDF has a DOI, enter it here to retrieve document metadata which will automatically be added to the TEI header element. 
 
@@ -40,17 +40,17 @@ Unless the selected model has been trained with suffient high-quality data, the 
 
 Edits are always be done in copies, which merged by the reviewers into the "gold" version when they are ready.
 
-![](images/351c69f0-ab9d-46ec-bf3d-6b045d08e8eb.png)
+![](../images/351c69f0-ab9d-46ec-bf3d-6b045d08e8eb.png)
 
-- To create a copy of "gold", click on the first button in the "Document" button group (![](images/29e5e3f5-bab6-4bd2-a981-7e230371e052.png)). In the dialog that appears, enter a "Version name" which clearly identifies the version (i.e. "Corrections by John") This creates a new version of the TEI document. You can provide additional comments in the "description" field if necessary, but that is optional.
+- To create a copy of "gold", click on the first button in the "Document" button group (![](../images/29e5e3f5-bab6-4bd2-a981-7e230371e052.png)). In the dialog that appears, enter a "Version name" which clearly identifies the version (i.e. "Corrections by John") This creates a new version of the TEI document. You can provide additional comments in the "description" field if necessary, but that is optional.
 - Work on this document as instructed by the annotation rules until you are ready to submit it to a reviewer. 
 
-![](images/6abdcf0a-a077-4f6c-9bb3-a4d92f541bb7.png)
+![](../images/6abdcf0a-a077-4f6c-9bb3-a4d92f541bb7.png)
 
-- By toggling "Autosearch" (![](images/f406965d-50ae-4b71-8ff2-7def8a998185.png)) in the footer of the PDF Viewer, you can search the contents of a `<biblStruct>` in the PDF automatically. This works only for the "Llamore" extraction, and isn't always reliable, so you might want to turn it on and off based on how it performs. 
+- By toggling "Autosearch" (![](../images/f406965d-50ae-4b71-8ff2-7def8a998185.png)) in the footer of the PDF Viewer, you can search the contents of a `<biblStruct>` in the PDF automatically. This works only for the "Llamore" extraction, and isn't always reliable, so you might want to turn it on and off based on how it performs. 
 
 - You can leave comments anywhere by enclosing them in the xml comment markup: `<!-- this is a comment -->`
-- When you are done, click on the "Save document revision" button (![](images/e0f8ad27-fb47-47fa-bde3-023f2353e0b8.png)). In the dialog's "Description" field, you can specify more exactly what you have been correcting, and add addtional comments if needed.
+- When you are done, click on the "Save document revision" button (![](../images/e0f8ad27-fb47-47fa-bde3-023f2353e0b8.png)). In the dialog's "Description" field, you can specify more exactly what you have been correcting, and add addtional comments if needed.
 
 ### 3. Merge revisions into the "gold" version
 
@@ -58,13 +58,13 @@ Edits are always be done in copies, which merged by the reviewers into the "gold
 
 Once annotators have finished their work:
 
-![](images/a3406244-c930-480e-a353-9bddb75bc016.png)
+![](../images/a3406244-c930-480e-a353-9bddb75bc016.png)
 
 - By selecting the gold version in the "Target XML" selectbox and the annotator's version in the "Compare with version" selectbox, reviewers can  compare the "gold" version with the changes in the annotator's version.
 
-![](images/4a18b5b1-814f-43fe-8d92-271696910960.png)
+![](../images/4a18b5b1-814f-43fe-8d92-271696910960.png)
 
-- The editor shows the differences visually and the reviewer can selectively accept ("Change") or reject ("Keep") changes. You can also use the "Tag/Div Navigation" panel which is shown when the switch in the PDF Viewer's status bar (![](images/f406965d-50ae-4b71-8ff2-7def8a998185.png)) is toggled, to navigate between locations with changes ("Prev. Diff", "Next Diff") or "Accept all changes" /"Reject all changes".
+- The editor shows the differences visually and the reviewer can selectively accept ("Change") or reject ("Keep") changes. You can also use the "Tag/Div Navigation" panel which is shown when the switch in the PDF Viewer's status bar (![](../images/f406965d-50ae-4b71-8ff2-7def8a998185.png)) is toggled, to navigate between locations with changes ("Prev. Diff", "Next Diff") or "Accept all changes" /"Reject all changes".
 - Once a version has been merged into "gold", it can be deleted. However, it is recommended to keep the versions for later reference.
 
 ### 4. Retraining of model with gold dataset

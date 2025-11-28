@@ -7,9 +7,9 @@ from typing import Dict, Any, Optional
 from lxml import etree
 
 from . import BaseExtractor
-from server.lib.doi_utils import fetch_doi_metadata
-from server.lib.tei_utils import create_tei_document, create_tei_header, serialize_tei_with_formatted_header
-from server.lib.debug_utils import log_extraction_response, log_xml_parsing_error
+from ..lib.doi_utils import fetch_doi_metadata
+from ..lib.tei_utils import create_tei_document, create_tei_header, serialize_tei_with_formatted_header
+from ..lib.debug_utils import log_extraction_response, log_xml_parsing_error
 import datetime
 
 # Try to import LLamore dependencies

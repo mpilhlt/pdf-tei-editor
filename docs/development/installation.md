@@ -102,4 +102,4 @@ For comprehensive security considerations in deployment scenarios, see the [**â†
 ## Additional Resources
 
 - **[User Management](user-management.md)** - Managing users and authentication
-- **[XML Validation](xml-validation.md)** - Schema validation system
+- **[XML Validation](validation.md)** - Schema validation system

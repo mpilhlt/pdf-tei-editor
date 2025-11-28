@@ -13,7 +13,7 @@ Keep in mind this is the FastAPI migration branch, so things could be different 
 
 ### Testing Commands
 
-See [prompts/testing-guide.md](prompts/testing-guide.md) for complete testing documentation.
+See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for complete testing documentation.
 
 ```bash
 # Run tests for changed files (most common)
@@ -57,47 +57,46 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 
 ### Key Directories:
 
-Read `prompts/architecture.md` when you need to understand the system design.
-
+Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.
 
 - `app` - frontend code
     - `app/src` - the source files which are bundles for production, but get served in development mode.
     - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
-    - `app/src/plugins` - Plugin objects and classes (Read `prompts/plugin-development.md` when creating new plugins)
+    - `app/src/plugins` - Plugin objects and classes (Read [docs/code-assistant/plugin-development.md](docs/code-assistant/plugin-development.md) when creating new plugins)
     - `app/src/templates` - html templates used by the plugins to create UI parts
 - `bin` - executable files used on the command line
 - `config` - the default content of files in `data/db`
-- `data` - file data 
-- `data/db` - application data stored in subject-specific json files 
-- `server` - the python backend based on a Flask server (deprecated)
-- `fastapi_app` - the new python backend based on a FastAPI server
-- `tests` - JavaScript and Python unit tests and E2E tests using a containerized version of the application (Read `prompts/testing-guide.md` when creating or debuggingtests)
+- `data` - file data
+- `data/db` - application data stored in subject-specific json files
+- `fastapi_app` - the python backend based on FastAPI
+- `tests` - JavaScript and Python unit tests and E2E tests (Read [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) when creating or debugging tests)
 
 
 ## Detailed Documentation
 
-For comprehensive guides, see the modular documentation in the `prompts/` directory:
+For comprehensive guides, see the documentation in the `docs/code-assistant/` directory:
 
-- **[Development Commands](prompts/development-commands.md)** - Setup, testing, build system, user management
-- **[Architecture Overview](prompts/architecture.md)** - Backend, frontend, plugin system, UI components, templates
-- **[Testing Guide](prompts/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
-- **[Plugin Development](prompts/plugin-development.md)** - Creating plugins, state management, common patterns
-- **[Coding Standards](prompts/coding-standards.md)** - JSDoc requirements, best practices, conventions
+- **[Architecture Overview](docs/code-assistant/architecture.md)** - Backend, frontend, plugin system, UI components, templates
+- **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
+- **[Development Commands](docs/code-assistant/development-commands.md)** - Setup, testing, build system, user management
+- **[Plugin Development](docs/code-assistant/plugin-development.md)** - Creating plugins, state management, common patterns
+- **[Testing Guide](docs/code-assistant/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
+- **[API Client](docs/code-assistant/api-client.md)** - FastAPI client usage, type safety, patterns
 
 ## Important Reminders
 
 ### Development Workflow
 
 1. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode
-2. Backend changes: Server auto-reloads automatically (Flask dev server detects changes)
+2. Backend changes: Server auto-reloads automatically (FastAPI dev server detects changes)
 3. Schema updates: Delete `schema/cache/` to refresh XSD cache
 4. Building is only needed for production and is handled by pre-push git hooks
 
 ### Critical Rules
 
-- **Command Execution**: ALWAYS use `uv run python` for Python commands and `source ~/.nvm/nvm.sh && nvm use && node` for Node.js commands
-- **Suggest Prompt Updates**: if something in the prompts referenced here does not align with the consistent code patterns, suggest to update the prompts, if only to acknowledge legacy patterns.
-- **NEVER start, restart, or suggest restarting the Flask server** - It auto-restarts on changes, tests should be done using the containerized server
+- **Command Execution**: ALWAYS use `uv run python` for Python commands and `node` for Node.js commands
+- **Suggest Prompt Updates**: if something in the documentation does not align with the consistent code patterns, suggest to update the documentation
+- **NEVER start, restart, or suggest restarting the dev server** - It auto-restarts on changes, tests should use the test runners
 - **ALWAYS add comprehensive JSDoc headers** - Use specific types instead of generic "object"
 - **Plugin endpoints are observers, not mutators** - Never update the state in functions that receive it, otherwise there will be unwanted state mutation or infinite loops.
 - **Use UI navigation via the `ui` object instead of DOM node navigation** for fast lookup and alignment of runtime UI structure and documentation

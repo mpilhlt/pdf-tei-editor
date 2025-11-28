@@ -1,7 +1,7 @@
 import os
 from typing import Dict, Any, List
 import json
-from server.extractors.llm_base_extractor import LLMBaseExtractor
+from .llm_base_extractor import LLMBaseExtractor
 from .http_utils import get_retry_session
 
 class KisskiExtractor(LLMBaseExtractor):

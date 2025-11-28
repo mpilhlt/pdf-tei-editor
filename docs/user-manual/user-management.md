@@ -57,7 +57,7 @@ npm run manage group list
 npm run manage collection list
 ```
 
-For comprehensive CLI documentation including group and collection management, see the [CLI Reference](manual/cli.md).
+For comprehensive CLI documentation including group and collection management, see the [Development Commands](../code-assistant/development-commands.md).
 
 ### Example: Setting Up a New Admin User
 

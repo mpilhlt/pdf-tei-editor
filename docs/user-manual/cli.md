@@ -44,12 +44,14 @@ npm run manage user add <username> [options]
 ```
 
 **Options**:
+
 - `--password <password>`: User password (prompted if not provided)
 - `--fullname <name>`: Full name of the user
 - `--email <email>`: Email address
 - `--roles <roles>`: Comma-separated list of roles (e.g., "user,annotator")
 
 **Example**:
+
 ```bash
 npm run manage user add alice --password secret123 --fullname "Alice Smith" --email "alice@example.com" --roles "user,annotator"
 ```
@@ -73,6 +75,7 @@ npm run manage user set <username> <property> <value>
 **Properties**: `fullname`, `username`, `email`
 
 **Example**:
+
 ```bash
 npm run manage user set alice email alice.smith@example.com
 ```
@@ -96,6 +99,7 @@ npm run manage user add-role <username> [rolename]
 ```
 
 **Example**:
+
 ```bash
 npm run manage user add-role alice reviewer
 ```
@@ -117,6 +121,7 @@ npm run manage user add-group <username> [groupid]
 ```
 
 **Example**:
+
 ```bash
 npm run manage user add-group alice editors
 ```
@@ -150,9 +155,11 @@ npm run manage group add <groupid> <name> [options]
 ```
 
 **Options**:
+
 - `--description <text>`: Description of the group
 
 **Example**:
+
 ```bash
 npm run manage group add editors "Editors Group" --description "Group for content editors"
 ```
@@ -176,6 +183,7 @@ npm run manage group set <groupid> <property> <value>
 **Properties**: `id`, `name`, `description`
 
 **Example**:
+
 ```bash
 npm run manage group set editors description "Updated description"
 ```
@@ -189,6 +197,7 @@ npm run manage group add-collection <groupid> [collectionid]
 ```
 
 **Example**:
+
 ```bash
 npm run manage group add-collection editors manuscripts
 ```
@@ -222,9 +231,11 @@ npm run manage collection add <collectionid> <name> [options]
 ```
 
 **Options**:
+
 - `--description <text>`: Description of the collection
 
 **Example**:
+
 ```bash
 npm run manage collection add manuscripts "Manuscript Collection" --description "Historical manuscripts"
 ```
@@ -248,6 +259,7 @@ npm run manage collection set <collectionid> <property> <value>
 **Properties**: `id`, `name`, `description`
 
 **Example**:
+
 ```bash
 npm run manage collection set manuscripts name "Medieval Manuscripts"
 ```
@@ -263,9 +275,11 @@ npm run manage config get <key> [options]
 ```
 
 **Options**:
+
 - `--default`: Read from config/config.json instead of data/db/config.json
 
 **Example**:
+
 ```bash
 npm run manage config get session.timeout
 ```
@@ -279,6 +293,7 @@ npm run manage config set <key> <value> [options]
 ```
 
 **Options**:
+
 - `--values <json-array>`: Set the values constraint for this key (JSON array)
 - `--type <type>`: Set the type constraint for this key
 - `--default`: Set in both db/config.json and config/config.json
@@ -286,6 +301,7 @@ npm run manage config set <key> <value> [options]
 **Note**: The value must be valid JSON.
 
 **Examples**:
+
 ```bash
 # Set a string value
 npm run manage config set app.name '"My App"'
@@ -309,6 +325,7 @@ npm run manage config delete <key> [options]
 ```
 
 **Options**:
+
 - `--default`: Delete from both db/config.json and config/config.json
 
 ## Help Command
@@ -322,6 +339,7 @@ npm run manage help [command]
 ```
 
 **Examples**:
+
 ```bash
 # General help
 npm run manage help

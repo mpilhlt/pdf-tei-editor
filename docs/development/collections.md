@@ -192,3 +192,9 @@ for (const collection_name of file.collections) {
 1. Verify creation succeeded: Check `data/db/collections.json`
 2. Ensure RBAC allows access: User's groups must include the collection
 3. Check if file data was reloaded after creation
+
+## Related Documentation
+
+- [Access Control System](access-control.md) - RBAC and collection-based access control
+- [Architecture Overview](architecture.md) - Complete system architecture
+- [API Reference](api-reference.md) - Complete FastAPI endpoint documentation

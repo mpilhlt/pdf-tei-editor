@@ -1,17 +1,17 @@
-# Testing Guide (For Claude Code)
+# Testing Guide
 
-This document provides Claude Code with essential testing information. For comprehensive human-facing documentation, see [docs/testing.md](../docs/testing.md).
+Essential testing information for code assistants. For comprehensive testing documentation, see [../development/testing.md](../development/testing.md).
 
 ## Test Structure
 
 ```
 tests/
-├── unit/{js,fastapi,flask}/  # Unit tests
-├── api/v1/                    # API integration tests (*.test.js)
-├── e2e/tests/                 # E2E Playwright tests (*.spec.js)
-├── backend-test-runner.js     # API test runner
-├── e2e-runner.js             # E2E test runner
-└── smart-test-runner.js      # Intelligent test selection
+├── unit/{js,fastapi}/         # Unit tests
+├── api/v1/                     # API integration tests (*.test.js)
+├── e2e/tests/                  # E2E Playwright tests (*.spec.js)
+├── backend-test-runner.js      # API test runner
+├── e2e-runner.js              # E2E test runner
+└── smart-test-runner.js       # Intelligent test selection
 ```
 
 ## Quick Commands
@@ -28,8 +28,8 @@ npm run test:unit:fastapi     # Python units
 npm run test:api              # All API tests
 npm run test:api -- --grep "save"  # Specific tests
 
-# E2E tests (Playwright with containers)
-npm run test:e2e              # All E2E tests
+# E2E tests (Playwright)
+npm run test:e2e              # All E2E tests with local server
 npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
 ```
@@ -38,7 +38,7 @@ npm run test:e2e:debug        # Step-through debugging
 
 ### Unit Tests
 
-- **Location**: `tests/unit/{js,fastapi,flask}/`
+- **Location**: `tests/unit/{js,fastapi}/`
 - **Purpose**: Test isolated functions/classes
 - **Run**: `npm run test:unit`
 
@@ -56,7 +56,7 @@ npm run test:e2e:debug        # Step-through debugging
 - **Naming**: `*.spec.js`
 - **Purpose**: Test full workflows in browser
 - **Run**: `npm run test:e2e`
-- **Features**: Playwright, containerized, `window.ui` navigation, `testLog()` for state verification
+- **Features**: Playwright, `window.ui` navigation, `testLog()` for state verification
 
 ## Writing Tests
 
@@ -134,63 +134,30 @@ test('should do something', async ({ page }) => {
 1. **Use `@testCovers` annotations** - Enables smart test selection
 2. **Clean up after tests** - Release locks, delete test files
 3. **API tests run locally** - Fast iteration with `backend-test-runner.js`
-4. **E2E tests use containers** - Isolation via `e2e-runner.js`
-5. **Use helper functions** - Check `tests/*/helpers/` for existing utilities
-
-## Test Runners
-
-### backend-test-runner.js (API Tests)
-
-```bash
-# Local server (fastest, auto-starts/stops)
-npm run test:api
-
-# Options
---grep <pattern>      # Filter tests
---keep-db            # Preserve database
---verbose            # Detailed output
---no-cleanup         # Keep server running
-```
-
-Features:
-
-- Auto-starts local FastAPI server
-- Auto-wipes database (use `--keep-db` to preserve)
-- Loads fixtures from `tests/api/fixtures/`
-- Runs Node.js test runner on `tests/api/v1/*.test.js`
-
-### e2e-runner.js (E2E Tests)
-
-```bash
-# Local server (fastest)
-npm run test:e2e
-
-# Debugging
-npm run test:e2e:headed    # Show browser
-npm run test:e2e:debug     # Playwright debugger
-
-# Options
---grep <pattern>      # Filter tests
---browser <name>      # chromium|firefox|webkit
---headed             # Show browser UI
---debug              # Step-through debugging
-```
-
-Features:
-
-- Runs Playwright tests in `tests/e2e/tests/*.spec.js`
-- Uses local server by default
-- Containerized mode available with `--container`
+4. **E2E tests use local server by default** - Isolation and speed
+5. **ALWAYS use helper functions** - Never reimplement auth or API utilities
 
 ## Common Patterns
 
 ### Authentication in API Tests
 
 ```javascript
-import { login, authenticatedApiCall } from '../helpers/test-auth.js';
+import { login, authenticatedApiCall, createAdminSession } from '../helpers/test-auth.js';
 
+// Regular user login
 const session = await login('reviewer', 'reviewer', BASE_URL);
-const result = await authenticatedApiCall(session.sessionId, '/api/endpoint', 'POST', data, BASE_URL);
+
+// Admin session
+const adminSession = await createAdminSession(BASE_URL);
+
+// Authenticated API call
+const result = await authenticatedApiCall(
+  session.sessionId,
+  '/api/endpoint',
+  'POST',
+  data,
+  BASE_URL
+);
 ```
 
 ### UI Navigation in E2E Tests
@@ -215,72 +182,32 @@ const log = await waitForTestMessage(consoleLogs, 'FILE_SAVED');
 expect(log.value.file_id).toBeTruthy();
 ```
 
-## Debugging
+## Critical: Always Use Helper Functions
 
-### API Tests
+**Never reimplement authentication, API calls, or common test utilities.** This causes maintenance burden and bugs.
 
-```bash
-# Verbose output
-npm run test:api -- --verbose --grep "save"
-
-# Keep server running for manual testing
-npm run test:api -- --no-cleanup
-
-# Manual API testing
-curl -X POST http://localhost:8000/api/files/save \
-  -H "Content-Type: application/json" \
-  -d '{"file_id":"test","xml_string":"<TEI/>"}'
-```
-
-### E2E Tests
-
-```bash
-# Show browser
-npm run test:e2e:headed
-
-# Step-through debugging
-npm run test:e2e:debug
-
-# Add breakpoints in test code
-await page.pause();
-```
-
-## Best Practices from Real Implementation
-
-### Always Use Existing Helper Functions
-
-**Critical**: Never reimplement authentication, API calls, or other common test utilities. This causes maintenance burden and bugs.
-
-**Example from RBAC Tests** ([rbac_crud.test.js](../tests/api/v1/rbac_crud.test.js)):
-
+❌ **WRONG** - Reimplementing login:
 ```javascript
-// ❌ WRONG - Reimplementing login
 async function loginAsAdmin() {
   const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
     method: 'POST',
     body: JSON.stringify({
       username: 'admin',
-      password: 'admin'  // Wrong field name!
+      password: 'admin'  // Wrong! Should be passwd_hash with hashing
     })
   });
-  return data.session_id;  // Wrong property name!
 }
+```
 
-// ✅ CORRECT - Use existing helper
-import { createAdminSession, hashPassword } from '../helpers/test-auth.js';
+✅ **CORRECT** - Use existing helper:
+```javascript
+import { createAdminSession } from '../helpers/test-auth.js';
 
 async function loginAsAdmin() {
   const { sessionId } = await createAdminSession(API_BASE);
   return sessionId;
 }
 ```
-
-**Why This Matters**:
-
-1. **Correct Implementation**: Helpers use proper field names (`passwd_hash` not `password`)
-2. **Proper Hashing**: Helpers hash passwords correctly using `hashPassword()`
-3. **Correct Headers**: Helpers use `X-Session-Id` (case-sensitive, lowercase 'd')
-4. **Single Source of Truth**: When auth changes, only helper needs updating
 
 ### Common Helper Locations
 
@@ -300,15 +227,51 @@ import {
 } from './helpers/test-logging.js';
 ```
 
-### Backend Authentication Requirements
+## Debugging
+
+### API Tests
+
+```bash
+# Verbose output
+npm run test:api -- --verbose --grep "save"
+
+# Keep server running for manual testing
+npm run test:api -- --no-cleanup
+
+# Keep database for inspection
+npm run test:api -- --keep-db
+```
+
+### E2E Tests
+
+```bash
+# Show browser
+npm run test:e2e:headed
+
+# Step-through debugging
+npm run test:e2e:debug
+
+# Add breakpoints in test code
+await page.pause();
+```
+
+## Important Notes
+
+- **API tests run against local server** - No containers needed, faster iteration
+- **E2E tests use local server by default** - Containerized mode available but slower
+- **Use `--keep-db`** - When debugging to preserve state between runs
+- **Clean up locks** - Always release locks in test cleanup
+- **Fixtures auto-load** - Defined in `tests/api/fixtures/` and `tests/e2e/fixtures/`
+- **Check helpers first** - Look in `tests/*/helpers/` before implementing utilities
+
+## Backend Authentication Requirements
 
 When implementing FastAPI endpoints that require authentication:
 
 ```python
 from ..lib.dependencies import get_current_user
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
-# ✅ CORRECT - Dependency injection
 def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -321,23 +284,6 @@ def endpoint(current_user: dict = Depends(require_admin)):
 ```
 
 **Key Points**:
-
 - Use `Depends(get_current_user)` to inject authentication
-- FastAPI automatically handles session extraction from headers
-- Session header must be `X-Session-Id` (case-sensitive)
-
-## Important Notes
-
-- **API tests run against local server** - No containers needed, faster iteration
-- **E2E tests can run local or containerized** - Local is default and faster
-- **Use `--keep-db`** - When debugging to preserve state between runs
-- **Clean up locks** - Always release locks in test cleanup
-- **Fixtures auto-load** - Defined in `tests/api/fixtures/` and `tests/e2e/fixtures/`
-- **Use helper functions** - Check `tests/*/helpers/` before reimplementing common patterns
-
-## See Also
-
-- [Full Testing Documentation](../docs/testing.md) - Comprehensive guide for humans
-- [package.json](../package.json) - All test commands
-- `tests/lib/` - Test infrastructure utilities
-- `tests/*/helpers/` - Shared test helper functions
+- FastAPI automatically handles session extraction from `X-Session-Id` header
+- Session header is case-sensitive: `X-Session-Id`

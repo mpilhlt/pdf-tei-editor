@@ -1,12 +1,17 @@
 # Application Architecture
 
-## Backend (Python/Flask)
+Quick reference for understanding the application structure.
 
-- **Main server**: `server/flask_app.py` - Flask application with dynamic blueprint registration
-- **API routes**: `server/api/` - Each file defines a blueprint (auth.py, files.py, etc.)
-- **Utilities**: `server/lib/` - Server-side utilities and helpers
+For comprehensive architecture details, see [development/architecture.md](../development/architecture.md).
+
+## Backend (Python/FastAPI)
+
+- **Main application**: `fastapi_app/main.py` - FastAPI application with router registration
+- **API routes**: `fastapi_app/routers/` - Each file defines route handlers (files_*.py, users.py, etc.)
+- **Business logic**: `fastapi_app/lib/` - Server-side utilities and core logic
 - **Data storage**: `data/` directory for PDFs and TEI/XML files
-- **Configuration**: `config/` and `db/` directories for app settings and user data
+- **Configuration**: `config/` (defaults) and `data/db/` (runtime) for app settings and user data
+- **Database**: `data/db/metadata.db` - SQLite database for file metadata
 
 ## Frontend (JavaScript/ES Modules)
 
@@ -15,12 +20,13 @@
   - `app/src/app.js` - Main application bootstrap and plugin registration
   - `app/src/endpoints.js` - Defines plugin extension points
   - `app/src/ui.js` - UI element management and DOM structure
+  - `app/src/state.js` - Application state object definition
 - **Templates**: `app/src/templates/` - HTML templates for UI components
 - **Build output**: `app/web/` - Compiled/bundled frontend assets
 
 ## Plugin System Architecture
 
-The application uses a sophisticated dual-architecture plugin system supporting both legacy and modern patterns:
+The application uses a dual-architecture plugin system supporting both object-based and class-based patterns.
 
 ### Architecture Overview
 
@@ -31,24 +37,22 @@ The application uses a sophisticated dual-architecture plugin system supporting 
 
 ### Plugin Types
 
-**Plugin Objects**:
+**Plugin Objects** (legacy pattern):
 
-The object-based style is compatible with the original implementation of the plugin system. It is less involved, but requires manual management of state updates. The legacy endpoint "state.update" (with full state) is being migrated to the "onStateUpdate" endpoint which receives (changedKeys, fullState).
+Object-based style compatible with original implementation. Requires manual state management.
 
 ```javascript
 const plugin = {
   name: "my-plugin",
   deps: ['dependency1'],
   install: async (state) => { /* setup UI */ },
-  state: {
-    update: async (state) => { /* react to changes */ }
-  }
+  onStateUpdate: async (changedKeys, fullState) => { /* react to changes */ }
 };
 ```
 
-**Plugin Classes**:
+**Plugin Classes** (recommended):
 
-Plugin classes offer automatic state management (it can be accessed as the `state` property of the plugin)
+Plugin classes offer automatic state management via the `this.state` property.
 
 ```javascript
 class MyPlugin extends Plugin {
@@ -62,51 +66,27 @@ class MyPlugin extends Plugin {
 }
 ```
 
+For detailed plugin development patterns, see [plugin-development.md](./plugin-development.md).
+
 ### Plugin Endpoints System
 
 Plugins expose functionality through endpoints defined in `endpoints.js`:
 
 **Lifecycle Endpoints:**
-
 - `install` - Plugin initialization and DOM setup
 - `start` - Application startup after all plugins installed
 - `shutdown` - Cleanup on application exit
 
 **State Management Endpoints:**
-
-- `state.update` - Deprecated: React to state changes (full state)
-- `updateInternalState` - New: Silent state sync for Plugin classes
-- `onStateUpdate` - New: Reactive notifications with changed keys and full state
+- `updateInternalState` - Silent state sync for Plugin classes
+- `onStateUpdate` - Reactive notifications with changed keys and full state
 
 **Custom Endpoints:**
-
-- Plugin-specific endpoints should be exposed via `getEndpoints()` method
-
-### Dual System Support
-
-The system simultaneously supports both architectures:
-
-1. **Legacy `state.update`** - Called with full state for backward compatibility
-2. **New `updateInternalState`** - Silent state sync for Plugin instances
-3. **New `onStateUpdate`** - Reactive notifications with changed properties
-
-Plugin objects and PLugin classes both have their use cases:
-
-- Plugin objects are great for simple plugins that do not need to expose an API, but are endpoint-centered. They need to manage state manually by listening to the `updateInternalState`
-- Plugin classes are better for more complex plugins, which need to work alot with the application state and profit from the methods inherited from the plugin class.
-
-### Migration Path
-
-1. **Plugin Objects** → Continue working with BC wrappers but should be migrated to not use the `state-update` endpoint any more
-2. **New Plugin Classes** → Gradual migration with full feature parity
-3. **Singleton Pattern** → Plugin classes use `createInstance()`/`getInstance()`
-4. **Controlled Access** → PluginContext facade limits plugin-application coupling
-5. **Test Coverage** - Separate tests for legacy and new systems 
-
+- Plugin-specific endpoints exposed via `getEndpoints()` method
 
 ## UI Component System
 
-The application uses a typed UI hierarchy system with the following rules:
+The application uses a typed UI hierarchy system:
 
 ### UI Part Naming Convention
 
@@ -127,7 +107,7 @@ The application uses a typed UI hierarchy system with the following rules:
 - Elements serve as both DOM elements and navigation objects - no `self` property needed
 - Access DOM methods directly: `ui.dialog.show()` instead of `ui.dialog.self.show()`
 
-### Examples
+### Example
 
 ```javascript
 // UI part definition
@@ -150,7 +130,7 @@ ui.dialog.message.innerHTML = text  // Access child element
 
 ## Template Registration System
 
-The application uses a modern template registration system that supports both development and production modes:
+The application uses a modern template registration system supporting both development and production modes:
 
 ### Overview
 
@@ -192,51 +172,8 @@ async function install(state) {
 3. **Synchronous creation**: Use `createFromTemplate()` or `createSingleFromTemplate()` in install functions
 4. **Call updateUi() when needed**: If elements aren't automatically added to DOM with parent node
 
-### Template Functions
-
-- **`registerTemplate(id, path)`**: Pre-loads template content (async)
-- **`createFromTemplate(id, parent?, params?)`**: Creates array of elements (sync)
-- **`createSingleFromTemplate(id, parent?, params?)`**: Creates single element (sync)
-- **`createHtmlElements()`**: Legacy function, still supported
-
-### Parameter Substitution
-
-Templates support `${param}` syntax for dynamic content:
-
-```html
-<!-- Template file: button.html -->
-<sl-button variant="${variant}" size="${size}">${text}</sl-button>
-```
-
-```javascript
-// Usage with parameters
-const saveBtn = createSingleFromTemplate('button', null, {
-  variant: 'primary',
-  size: 'small',
-  text: 'Save Document'
-});
-```
-
 ### Build System Integration
 
 - **Development**: Templates loaded via fetch from `app/src/templates/`
 - **Production**: `bin/bundle-templates.js` analyzes code and generates `templates.json`
 - **Build process**: Template bundling runs automatically during `npm run build`
-
-### Migration from Plugin Objects to Plugin Classes
-
-When converting existing plugins:
-
-1. Replace `createHtmlElements` imports with template registration functions
-2. Add `await registerTemplate()` calls at module level
-3. Replace `(await createHtmlElements())[0]` with `createSingleFromTemplate()`
-4. Update typedefs to remove `self` properties
-5. Ensure `updateUi()` is called when needed
-
-### Best Practices
-
-- Use descriptive template IDs that match their purpose
-- Keep templates in `app/src/templates/` directory
-- Use `createSingleFromTemplate()` when you know template produces one element
-- Always await template registration before using templates
-- Import all UI functions from `ui.js` for consistency
