@@ -301,8 +301,9 @@ export function extractFormData(form) {
       // Extract from checkbox group
       const checkboxGroup = form.querySelector(`.checkbox-group[data-name="${field.name}"]`)
       if (checkboxGroup) {
-        const checkboxes = checkboxGroup.querySelectorAll('sl-checkbox:checked')
-        data[field.name] = Array.from(checkboxes).map(cb => cb.value)
+        const allCheckboxes = checkboxGroup.querySelectorAll('sl-checkbox')
+        const checkedCheckboxes = Array.from(allCheckboxes).filter(cb => cb.checked)
+        data[field.name] = checkedCheckboxes.map(cb => cb.value)
       } else {
         data[field.name] = []
       }

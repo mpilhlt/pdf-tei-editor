@@ -167,7 +167,8 @@ async function openDialog() {
     // Switch to default tab (users)
     await switchTab('user')
   } catch (error) {
-    logger.error(`Failed to open RBAC manager: ${String(error)}`)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error(`Failed to open RBAC manager: ${errorMessage}`)
     notify('Failed to load RBAC data', 'danger')
   }
 }
@@ -181,7 +182,8 @@ async function loadAllEntities() {
   for (const entityType of getEntityTypes()) {
     promises.push(
       entityManagers[entityType].loadAll().catch(err => {
-        logger.warn(`Failed to load ${entityType}s: ${String(err)}`)
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        logger.warn(`Failed to load ${entityType}s: ${errorMessage}`)
         return []
       })
     )
@@ -483,14 +485,15 @@ async function saveEntity() {
     // Refresh form to show updated data
     showEntityForm()
   } catch (error) {
-    logger.error(`Failed to save entity: ${String(error)}`)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error(`Failed to save entity: ${errorMessage}`)
 
     // Show validation errors
     if (error instanceof Error && error.message.startsWith('Validation failed:')) {
       const errors = error.message.replace('Validation failed: ', '').split(', ')
       displayFormErrors(form, errors)
     } else {
-      displayFormErrors(form, [String(error)])
+      displayFormErrors(form, [errorMessage])
     }
   }
 }
@@ -528,8 +531,9 @@ async function deleteEntity() {
     // Show empty state
     showEmptyState()
   } catch (error) {
-    logger.error(`Failed to delete entity: ${String(error)}`)
-    notify(`Failed to delete ${schema.singularLabel}: ${String(error)}`, 'danger')
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error(`Failed to delete entity: ${errorMessage}`)
+    notify(`Failed to delete ${schema.singularLabel}: ${errorMessage}`, 'danger')
   }
 }
 

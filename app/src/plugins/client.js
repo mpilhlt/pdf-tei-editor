@@ -233,19 +233,30 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
       throw new ServerError("Failed to parse error response as JSON");
     }
 
-    if (response.status === 200) {
+    // Check for all 2XX success status codes (200, 201, 204, etc.)
+    if (response.ok) {
       // simple legacy error protocol if the server doesn't return a special status code
       // this is deprecated and should be removed
       if (result && typeof result === "object" && result.error) {
         throw new Error(result.error);
       }
-      // success! 
+      // success!
       return result
     }
 
     // handle error responses
     // FastAPI uses 'detail', Flask uses 'error'
-    const message = result.detail || result.error
+    let message = result.detail || result.error
+
+    // FastAPI validation errors (422) return detail as an array of error objects
+    if (response.status === 422 && Array.isArray(message)) {
+      // Format validation errors into readable messages
+      const errorMessages = message.map(err => {
+        const field = err.loc ? err.loc.slice(1).join('.') : 'unknown'
+        return `${field}: ${err.msg}`
+      })
+      message = `Validation failed: ${errorMessages.join(', ')}`
+    }
 
     // handle app-specific error types
     switch (response.status) {
@@ -505,7 +516,7 @@ async function copyFiles(pdf, xml, destinationCollection) {
 
 /**
  * Gets the list of collections accessible to the current user
- * @returns {Promise<{collections: Array<{id: string, name: string, description: string}>}>}
+ * @returns {Promise<Array<{id: string, name: string, description: string}>>}
  */
 async function getCollections() {
   return await apiClient.listCollections();

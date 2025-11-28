@@ -275,9 +275,10 @@ def _save_pdf_extraction_result(
     tei_bytes = tei_xml.encode('utf-8')
     tei_hash, tei_path = storage.save_file(tei_bytes, 'tei')
 
-    # Get collections from PDF metadata (TEI files inherit PDF collections)
-    # Default to "_inbox" if PDF has no collections
-    doc_collections = pdf_metadata.doc_collections or ["_inbox"]
+    # Get collection from options (user-selected in extraction dialog)
+    # Default to "_inbox" if not specified
+    selected_collection = options.get('collection', '_inbox')
+    doc_collections = [selected_collection]
 
     # Parse TEI to extract metadata
     label = None

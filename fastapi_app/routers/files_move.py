@@ -69,14 +69,13 @@ def move_files(
             detail="Insufficient permissions to move this document"
         )
 
-    # Update collections (add destination if not already present)
+    # Update collections (replace with destination collection for move operation)
     current_collections = pdf_file.doc_collections or []
+    updated_collections = [body.destination_collection]
 
-    if body.destination_collection not in current_collections:
-        updated_collections = current_collections + [body.destination_collection]
-
+    if updated_collections != current_collections:
         logger.info(
-            f"Adding collection {body.destination_collection} to document {pdf_file.doc_id}: "
+            f"Moving document {pdf_file.doc_id} to collection {body.destination_collection}: "
             f"{current_collections} -> {updated_collections}"
         )
 

@@ -35,6 +35,13 @@ class Collection(BaseModel):
     description: Optional[str] = Field(default="", description="Collection description")
 
 
+def require_authenticated(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
+    """Dependency that requires authentication."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return current_user
+
+
 def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
     """Dependency that requires admin authentication."""
     if not current_user:
@@ -54,12 +61,12 @@ def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> d
 
 @router.get("", response_model=List[Collection])
 def list_all_collections(
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_authenticated)
 ):
     """
     List all collections.
 
-    Returns all collections without filtering. Requires admin authentication.
+    Returns all collections without filtering. Requires authentication.
 
     Returns:
         List of Collection objects
@@ -87,7 +94,7 @@ def list_all_collections(
 @router.get("/{collection_id}", response_model=Collection)
 def get_collection(
     collection_id: str,
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_authenticated)
 ):
     """
     Get a specific collection by ID.

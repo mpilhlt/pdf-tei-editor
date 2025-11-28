@@ -27,13 +27,16 @@ class FiledataPlugin extends Plugin {
    * @param {PluginContext} context 
    */  
   constructor(context) {
-    super(context, { 
+    super(context, {
       name: 'filedata',
-      deps: ['logger', 'client', 'dialog', 'xmleditor'] 
+      deps: ['logger', 'client', 'dialog', 'xmleditor']
     });
-    
+
     /** @type {StatusText | null} */
     this.savingStatusWidget = null;
+
+    /** @private Flag to prevent concurrent reload operations */
+    this._reloadInProgress = false;
   }
 
   /**
@@ -63,57 +66,67 @@ class FiledataPlugin extends Plugin {
    * @returns {Promise<ApplicationState>} Updated state with new file data
    */
   async reload(options = {}) {
+    // Prevent concurrent reload operations
+    if (this._reloadInProgress) {
+      logger.debug("Ignoring reload request - reload already in progress");
+      return this.state;
+    }
+
+    this._reloadInProgress = true;
     logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
 
-    // Get file list response - API returns {files: [...]} structure
-    const response = await client.getFileList(null, options.refresh);
-
-    /** @type {DocumentItem[]} */
-    let data = response?.files || [];
-    if (!data || data.length === 0) {
-      data = []; // Ensure data is an empty array instead of null/undefined
-    }
-
-    // Create ID lookup index when fileData is loaded
-    if (data && data.length > 0) {
-      logger.debug('Creating ID lookup index for file data');
-      createIdLookupIndex(data);
-    } else {
-      // Initialize empty ID lookup index to prevent errors
-      logger.debug('Initializing empty ID lookup index');
-      createIdLookupIndex([]);
-    }
-
-    // Load collections from server
-    let collections = [];
     try {
-      const collectionsResponse = await client.getCollections();
-      collections = collectionsResponse?.collections || [];
-      logger.debug(`Loaded ${collections.length} collections from server`);
+      // Get file list response - API returns {files: [...]} structure
+      const response = await client.getFileList(null, options.refresh);
 
-      // Validate that all document collections exist in the collections list
-      const collectionIds = new Set(collections.map(c => c.id));
-      data.forEach((doc, index) => {
-        if (doc.collections && doc.collections.length > 0) {
-          const invalidCollections = doc.collections.filter(colId => !collectionIds.has(colId));
-          if (invalidCollections.length > 0) {
-            logger.warn(
-              `Document ${doc.doc_id} references non-existent collection(s): ${invalidCollections.join(', ')}`
-            );
+      /** @type {DocumentItem[]} */
+      let data = response?.files || [];
+      if (!data || data.length === 0) {
+        data = []; // Ensure data is an empty array instead of null/undefined
+      }
+
+      // Create ID lookup index when fileData is loaded
+      if (data && data.length > 0) {
+        logger.debug('Creating ID lookup index for file data');
+        createIdLookupIndex(data);
+      } else {
+        // Initialize empty ID lookup index to prevent errors
+        logger.debug('Initializing empty ID lookup index');
+        createIdLookupIndex([]);
+      }
+
+      // Load collections from server
+      let collections = [];
+      try {
+        collections = await client.getCollections();
+        logger.debug(`Loaded ${collections.length} collections from server`);
+
+        // Validate that all document collections exist in the collections list
+        const collectionIds = new Set(collections.map(c => c.id));
+        data.forEach((doc, index) => {
+          if (doc.collections && doc.collections.length > 0) {
+            const invalidCollections = doc.collections.filter(colId => !collectionIds.has(colId));
+            if (invalidCollections.length > 0) {
+              logger.warn(
+                `Document ${doc.doc_id} references non-existent collection(s): ${invalidCollections.join(', ')}`
+              );
+            }
           }
-        }
-      });
-    } catch (error) {
-      logger.error(`Failed to load collections: ${error}`);
-      // Continue with empty collections list - file operations will still work
-    }
+        });
+      } catch (error) {
+        logger.error(`Failed to load collections: ${error}`);
+        // Continue with empty collections list - file operations will still work
+      }
 
-    // Store fileData and collections in state and propagate them
-    const newState = await this.dispatchStateChange({
-      fileData: data,
-      collections
-    });
-    return newState
+      // Store fileData and collections in state and propagate them
+      const newState = await this.dispatchStateChange({
+        fileData: data,
+        collections
+      });
+      return newState;
+    } finally {
+      this._reloadInProgress = false;
+    }
   }
 
   /**

@@ -353,13 +353,6 @@ async function promptForExtractionOptions(options={}) {
   // Get collections from state (includes RBAC-filtered collections)
   const collections = currentState?.collections || [];
 
-  // Add _inbox as first option
-  const inboxOption = Object.assign(new SlOption, {
-    value: '_inbox',
-    textContent: 'Inbox'
-  })
-  collectionSelectBox.append(inboxOption)
-
   // Add accessible collections from state
   for (const collection of collections){
     const option = Object.assign(new SlOption, {
@@ -372,8 +365,6 @@ async function promptForExtractionOptions(options={}) {
   // Set collection value - prioritize options parameter, then first available collection
   const collectionValue = options.collection || (collections.length > 0 ? collections[0].id : "_inbox");
   collectionSelectBox.value = collectionValue
-  // if we have a collection, it cannot be changed
-  collectionSelectBox.disabled = Boolean(options.collection)
 
   // configure model selectbox with available extractors
   /** @type {SlSelect|null} */

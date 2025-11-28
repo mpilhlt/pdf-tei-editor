@@ -55,6 +55,13 @@ class UpdateGroupRequest(BaseModel):
     collections: Optional[List[str]] = Field(None, description="List of collection IDs")
 
 
+def require_authenticated(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
+    """Dependency that requires authentication."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return current_user
+
+
 def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
     """Verify user is authenticated and has admin role."""
     if not current_user:
@@ -74,12 +81,12 @@ def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> d
 
 @router.get("", response_model=List[Group])
 def list_groups(
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_authenticated)
 ):
     """
     List all groups.
 
-    Requires admin role.
+    Requires authentication.
 
     Returns:
         List of Group objects
@@ -111,12 +118,12 @@ def list_groups(
 @router.get("/{group_id}", response_model=Group)
 def get_group(
     group_id: str,
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_authenticated)
 ):
     """
     Get a specific group by ID.
 
-    Requires admin role.
+    Requires authentication.
 
     Returns:
         Group information

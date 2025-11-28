@@ -13,6 +13,7 @@ import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '
 import Plugin from '../modules/plugin-base.js';
 import { logger, client, config } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
+import { FiledataPlugin } from '../plugins.js';
 
 // 
 // UI Type Definitions
@@ -143,15 +144,24 @@ class AuthenticationPlugin extends Plugin {
       // Not authenticated, proceed to show login dialog
        authData = await this.showLoginDialog();
     }
-    
+
     // Only update sessionId if userData contains one (from login), not from status check
     const stateUpdate = { user: authData };
     if (authData.sessionId) {
       // @ts-ignore
       stateUpdate.sessionId = authData.sessionId;
     }
-    
+
     await this.dispatchStateChange(stateUpdate);
+
+    // Reload file data after authentication to get user-specific files
+    try {
+      await FiledataPlugin.getInstance().reload({ refresh: true });
+      logger.debug('File data reloaded after authentication');
+    } catch (error) {
+      logger.error('Failed to reload file data after authentication: ' + String(error));
+    }
+
     return authData;
   }
 
@@ -201,6 +211,14 @@ class AuthenticationPlugin extends Plugin {
       });
       // re-login
       await this.showLoginDialog();
+
+      // Reload file data after re-login to get new user's files
+      try {
+        await FiledataPlugin.getInstance().reload({ refresh: true });
+        logger.debug('File data reloaded after logout/re-login');
+      } catch (error) {
+        logger.error('Failed to reload file data after re-login: ' + String(error));
+      }
     } catch (error) {
       logger.critical('Logout failed:' + error);
     }

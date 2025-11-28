@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-11-28T08:21:35.965Z
+ * Generated from OpenAPI schema at 2025-11-28T11:48:34.524Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -543,7 +543,7 @@ export class ApiClientV1 {
 
   /**
    * List all collections.
-   * Returns all collections without filtering. Requires admin authentication.
+   * Returns all collections without filtering. Requires authentication.
    * Returns:
    * List of Collection objects
    *
@@ -628,7 +628,7 @@ export class ApiClientV1 {
 
   /**
    * List all users.
-   * Requires admin role.
+   * Requires authentication.
    * Returns:
    * List of User objects (passwords excluded)
    *
@@ -655,7 +655,7 @@ export class ApiClientV1 {
 
   /**
    * Get a specific user by username.
-   * Requires admin role.
+   * Requires authentication.
    * Returns:
    * User information (password excluded)
    *
@@ -699,7 +699,7 @@ export class ApiClientV1 {
 
   /**
    * List all groups.
-   * Requires admin role.
+   * Requires authentication.
    * Returns:
    * List of Group objects
    *
@@ -726,7 +726,7 @@ export class ApiClientV1 {
 
   /**
    * Get a specific group by ID.
-   * Requires admin role.
+   * Requires authentication.
    * Returns:
    * Group information
    *
@@ -769,7 +769,7 @@ export class ApiClientV1 {
 
   /**
    * List all roles.
-   * Requires admin role.
+   * Requires authentication.
    * Returns:
    * List of Role objects
    *
@@ -796,7 +796,7 @@ export class ApiClientV1 {
 
   /**
    * Get a specific role by ID.
-   * Requires admin role.
+   * Requires authentication.
    * Returns:
    * Role information
    *

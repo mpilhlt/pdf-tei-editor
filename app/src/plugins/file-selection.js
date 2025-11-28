@@ -164,7 +164,7 @@ async function update(state) {
       // Only repopulate in these cases:
       // 1. User selections changed (xml, pdf, diff, variant)
       // 2. FileData changed AND current selections are no longer valid
-      const shouldRepopulate = selectionsChanged || (fileDataChanged && selectionsValid);
+      const shouldRepopulate = selectionsChanged || (fileDataChanged && !selectionsValid);
 
       if (shouldRepopulate) {
         await populateSelectboxes(state);
@@ -255,6 +255,7 @@ let variants
 let collections
 let isUpdatingProgrammatically = false
 let isInStateUpdateCycle = false
+let isPopulatingSelectboxes = false
 
 /**
  * Populates the variant selectbox with unique variants from fileData
@@ -321,25 +322,34 @@ async function populateVariantSelectbox(state) {
  * @param {ApplicationState} state
  */
 async function populateSelectboxes(state) {
+  // Prevent concurrent population
+  if (isPopulatingSelectboxes) {
+    logger.debug("Ignoring populateSelectboxes request - already in progress");
+    return;
+  }
+
   if (!state.fileData) {
     throw new Error("fileData hasn't been loaded yet")
   }
+
+  isPopulatingSelectboxes = true;
   logger.debug("Populating selectboxes")
 
-  // Populate variant selectbox first
-  await populateVariantSelectbox(state);
+  try {
+    // Populate variant selectbox first
+    await populateVariantSelectbox(state);
 
-  // Clear existing options
-  for (const name of ["pdf", "xml", "diff"]) {
-    // @ts-ignore
-    ui.toolbar[name].innerHTML = ""
-  }
+    // Clear existing options
+    for (const name of ["pdf", "xml", "diff"]) {
+      // @ts-ignore
+      ui.toolbar[name].innerHTML = ""
+    }
 
-  // If no files, keep selectboxes empty
-  if (state.fileData.length === 0) {
-    logger.debug("No files to display, selectboxes cleared")
-    return
-  }
+    // If no files, keep selectboxes empty
+    if (state.fileData.length === 0) {
+      logger.debug("No files to display, selectboxes cleared")
+      return
+    }
 
   const fileData = state.fileData;
 
@@ -372,6 +382,10 @@ async function populateSelectboxes(state) {
     return a.localeCompare(b);
   });
   ui.toolbar.pdf.dataset.collections = JSON.stringify(collections)
+
+  // Track if we've populated XML/diff dropdowns for the selected file
+  // (to prevent duplicates when a file is in multiple collections)
+  let hasPopulatedVersionsForSelectedFile = false;
 
   // get items to be selected from app state or use first element
   for (const collection_name of collections) {
@@ -421,7 +435,10 @@ async function populateSelectboxes(state) {
       const isSelectedFile = (fileIdentifier === state.pdf) ||
                              (file.source && file.source.file_type !== 'pdf' && fileIdentifier === state.xml);
 
-      if (isSelectedFile) {
+      // Only populate XML/diff dropdowns once for the selected file (prevent duplicates when file is in multiple collections)
+      if (isSelectedFile && !hasPopulatedVersionsForSelectedFile) {
+        hasPopulatedVersionsForSelectedFile = true;
+
         // populate the version and diff selectboxes depending on the selected file
         if (file.artifacts) {
           // Filter artifacts based on variant selection
@@ -500,9 +517,9 @@ async function populateSelectboxes(state) {
     }
     ui.toolbar.pdf.appendChild(new SlDivider);
   }
-
-
-
+  } finally {
+    isPopulatingSelectboxes = false;
+  }
 }
 
 // Event handlers

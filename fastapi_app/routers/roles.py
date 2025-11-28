@@ -52,6 +52,13 @@ class UpdateRoleRequest(BaseModel):
     description: Optional[str] = Field(None, description="Role description")
 
 
+def require_authenticated(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
+    """Dependency that requires authentication."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return current_user
+
+
 def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
     """Verify user is authenticated and has admin role."""
     if not current_user:
@@ -71,12 +78,12 @@ def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> d
 
 @router.get("", response_model=List[Role])
 def list_roles(
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_authenticated)
 ):
     """
     List all roles.
 
-    Requires admin role.
+    Requires authentication.
 
     Returns:
         List of Role objects
@@ -107,12 +114,12 @@ def list_roles(
 @router.get("/{role_id}", response_model=Role)
 def get_role(
     role_id: str,
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_authenticated)
 ):
     """
     Get a specific role by ID.
 
-    Requires admin role.
+    Requires authentication.
 
     Returns:
         Role information
