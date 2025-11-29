@@ -6,7 +6,7 @@ Keep in mind this is the FastAPI migration branch, so things could be different 
 
 ## General tone
 
-- Don't be too congratulatory. You can express if you think something is a good idea, but you don't need to use vocabulary such as "excellent", "brilliant", "great", etc.
+- ALWAYS be concise. Only include information that is relevant to the implementation. Omit any kind of motivational or congratulatory language. Do NOT use vocabulary such as "excellent", "brilliant", "great", etc.
 - If you think there might be a problem with the user's idea, push back. Don't assume the user's ideas are necessarily correct. Ask if you should go with their idea, but also suggest alternatives.
 
 ## Quick Reference
@@ -55,22 +55,21 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 - Plugin invocation endpoints/ extension points definition: `app/src/endpoints.js`
 - Application state object definition: `app/src/state.js`
 
-### Key Directories:
+### Key Directories
 
 Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.
 
 - `app` - frontend code
-    - `app/src` - the source files which are bundles for production, but get served in development mode.
-    - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
-    - `app/src/plugins` - Plugin objects and classes (Read [docs/code-assistant/plugin-development.md](docs/code-assistant/plugin-development.md) when creating new plugins)
-    - `app/src/templates` - html templates used by the plugins to create UI parts
+  - `app/src` - the source files which are bundles for production, but get served in development mode.
+  - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
+  - `app/src/plugins` - Plugin objects and classes (Read [docs/code-assistant/plugin-development.md](docs/code-assistant/plugin-development.md) when creating new plugins)
+  - `app/src/templates` - html templates used by the plugins to create UI parts
 - `bin` - executable files used on the command line
 - `config` - the default content of files in `data/db`
 - `data` - file data
 - `data/db` - application data stored in subject-specific json files
 - `fastapi_app` - the python backend based on FastAPI
 - `tests` - JavaScript and Python unit tests and E2E tests (Read [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) when creating or debugging tests)
-
 
 ## Detailed Documentation
 
@@ -104,10 +103,16 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - ** when inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message so that these commands can be found and removed later.
 - If during debugging you learn something that is not contained in the code assistant documentation, add it to the respective file!
 
-### Planning documents and completion reports
+## Planning documents, todo documents, github issues
 
-If you are asked to create planning documents for complex, multi-phase tasks, only include technically relevant information needed for the implementation or for later reference, e.g. for writing documentation on the new code,
-
+- If you are asked to create planning documents for complex, multi-phase tasks, only include technically relevant information needed for the implementation or for later reference, e.g. for writing documentation on the new code
 - Omit discussion of the advantages of a particular solution unless specifically asked to discuss pros and cons or provide alternatives in a planning document.
 - When migrating code to a new state, do not mention the legacy state unless absolutely necessary (for example, when code is concerns with migration of data) and there is no need to discuss the improvements provided by the new solution. This also applies to writing in-code documentation and comments.
-- In completion documents, omit statistical information on the number of changed lines, methods etc. or lists of code changes. Just summarize what the new code does and provide examples if the usage is different from before, so that you can update existing documentation.
+
+## Completion documents and summaries
+
+- When told to work on a todo document or github issue, add a summary of what was done at the end of the document or issue comment.
+- Omit statistical information on the number of changed lines, methods etc. or lists of code changes. Just summarize what the new code does and provide examples if the usage is different from before, so that you can update existing documentation.
+- The summary should be concise and only include information relevant to understanding the implementation. Omit discussion of advantages, alternatives, or motivational language.
+- If there were any significant challenges or deviations from the original plan, briefly mention them in a factual manner.
+- The goal is to provide a clear understanding of what was implemented without unnecessary detail.

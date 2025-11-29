@@ -1,0 +1,12 @@
+[
+  {
+    "id": "default",
+    "name": "Default Collection",
+    "description": "Default collection for documents"
+  },
+  {
+    "id": "_inbox",
+    "name": "Inbox",
+    "description": "Collection for newly extracted documents"
+  }  
+]

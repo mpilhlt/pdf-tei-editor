@@ -58,6 +58,15 @@ export default plugin
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
 await registerTemplate('rbac-manager-button', 'rbac-manager-button.html')
 
+// Icons used in rbac-manager templates (needed for build system to include them)
+// <sl-icon name="person"></sl-icon>
+// <sl-icon name="people"></sl-icon>
+// <sl-icon name="shield"></sl-icon>
+// <sl-icon name="shield-lock"></sl-icon>
+// <sl-icon name="plus"></sl-icon>
+// <sl-icon name="check"></sl-icon>
+// <sl-icon name="trash"></sl-icon>
+
 // Plugin state
 /** @type {ApplicationState | null} */
 let currentState = null

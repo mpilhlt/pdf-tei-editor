@@ -29,10 +29,7 @@ import { ContainerServerManager } from './lib/container-server-manager.js';
 import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
 import { loadEnvFile } from './lib/env-loader.js';
 import { loadFixture, importFixtureFiles } from './lib/fixture-loader.js';
-import { logger } from 'api/helpers/test-logger.js';
-import { logger } from 'api/helpers/test-logger.js';
-import { logger } from 'api/helpers/test-logger.js';
-import { logger } from 'api/helpers/test-logger.js';
+import { logger } from './api/helpers/test-logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
@@ -131,6 +128,59 @@ class PlaywrightRunner {
   }
 
   /**
+   * Check if application is built and build if necessary
+   */
+  async ensureApplicationBuilt() {
+    const { existsSync, statSync } = await import('fs');
+    const appJsPath = resolve(projectRoot, 'app/web/app.js');
+    const srcDir = resolve(projectRoot, 'app/src');
+
+    logger.info('Checking if application is built...');
+
+    // Check if build exists
+    if (!existsSync(appJsPath)) {
+      logger.info('Built application not found, building...');
+      execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
+      logger.success('Application built successfully');
+      return true;
+    }
+
+    // Check if build is outdated (compare timestamps)
+    const appJsTime = statSync(appJsPath).mtimeMs;
+    let needsRebuild = false;
+
+    // Check if any source files are newer than the build
+    try {
+      const srcFiles = execSync(`find "${srcDir}" -type f -name "*.js"`, { encoding: 'utf-8' })
+        .split('\n')
+        .filter(f => f.trim());
+
+      for (const srcFile of srcFiles) {
+        if (existsSync(srcFile)) {
+          const srcTime = statSync(srcFile).mtimeMs;
+          if (srcTime > appJsTime) {
+            needsRebuild = true;
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      // If we can't check, assume build is ok
+      logger.info('Could not check source file timestamps, assuming build is current');
+    }
+
+    if (needsRebuild) {
+      logger.info('Source files have changed, rebuilding...');
+      execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
+      logger.success('Application rebuilt successfully');
+    } else {
+      logger.success('Application is already built and up-to-date');
+    }
+
+    return true;
+  }
+
+  /**
    * Start the server (local or containerized)
    * @param {ServerOptions} options
    */
@@ -204,7 +254,7 @@ class PlaywrightRunner {
   async runPlaywrightTests(options) {
     console.log('\n🧪 Running Playwright tests...');
     console.log(`🌐 Browser: ${options.browser}`);
-    logger.info('Mode: ${options.headed ? 'headed' : 'headless'}');
+    logger.info(`Mode: ${options.headed ? 'headed' : 'headless'}`);
 
     // Build Playwright command
     const cmd = ['playwright', 'test'];
@@ -231,7 +281,7 @@ class PlaywrightRunner {
       cmd.push('--max-failures=1');
     }
 
-    logger.info('Executing: npx ${cmd.join(' ')}');
+    logger.info(`Executing: npx ${cmd.join(' ')}`);
 
     // Get base URL from server manager
     const baseUrl = this.serverManager?.getBaseUrl();
@@ -319,6 +369,12 @@ class PlaywrightRunner {
       // Check Playwright installation
       const hasPlaywright = await this.checkPlaywrightInstalled();
       if (!hasPlaywright) {
+        return 1;
+      }
+
+      // Ensure application is built (E2E tests run against production build)
+      const isBuilt = await this.ensureApplicationBuilt();
+      if (!isBuilt) {
         return 1;
       }
 
