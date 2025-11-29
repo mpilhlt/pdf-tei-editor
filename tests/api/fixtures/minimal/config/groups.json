@@ -1,0 +1,14 @@
+[
+  {
+    "id": "default",
+    "name": "Default Group",
+    "description": "Default group for all test users",
+    "collections": ["_inbox", "default"]
+  },
+  {
+    "id": "admin",
+    "name": "Administrator Group",
+    "description": "Group for administrators, with access to all collections",
+    "collections": ["*"]
+  }
+]

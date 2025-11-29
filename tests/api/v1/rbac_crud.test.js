@@ -168,13 +168,17 @@ async function getEntity(entityType, sessionId, id) {
 async function updateEntity(entityType, sessionId, id, payload) {
   const schema = entitySchemas[entityType];
 
+  // Include the id in the payload as required by the API
+  const updatePayload = { ...schema.updatePayload, ...payload };
+  updatePayload[schema.idField] = id;
+
   const response = await fetch(`${API_BASE}${schema.endpoint}/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'X-Session-Id': sessionId
     },
-    body: JSON.stringify(payload || schema.updatePayload)
+    body: JSON.stringify(updatePayload)
   });
 
   assert.strictEqual(response.status, 200, `Update ${entityType} should succeed`);
@@ -195,10 +199,13 @@ async function deleteEntity(entityType, sessionId, id) {
     headers: { 'X-Session-Id': sessionId }
   });
 
-  assert.strictEqual(response.status, 200, `Delete ${entityType} should succeed`);
-  const data = await response.json();
+  // Accept both 200 (with JSON body) and 204 (no content)
+  assert.ok(response.status === 200 || response.status === 204, `Delete ${entityType} should succeed`);
 
-  assert.strictEqual(data.success, true, 'Delete should return success');
+  if (response.status === 200) {
+    const data = await response.json();
+    assert.strictEqual(data.success, true, 'Delete should return success');
+  }
 }
 
 /**

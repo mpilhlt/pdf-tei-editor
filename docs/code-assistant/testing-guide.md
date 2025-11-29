@@ -50,6 +50,40 @@ npm run test:e2e:debug        # Step-through debugging
 - **Run**: `npm run test:api`
 - **Features**: Local server, auto-cleanup, fixtures from `tests/api/fixtures/`
 
+#### Fixture System
+
+API tests use a two-phase fixture loading system:
+
+**Phase 1: Config Loading** (before server starts)
+
+- Copies JSON config files from `tests/api/fixtures/{fixture-name}/config/` to `tests/api/runtime/config/`
+- Config files: `users.json`, `groups.json`, `roles.json`, `collections.json`
+- Server reads these during initialization to set up RBAC
+
+**Phase 2: File Import** (after server starts)
+
+- Imports PDF/XML files from `tests/api/fixtures/{fixture-name}/files/` using `bin/import_files.py`
+- Files are imported into the `default` collection (matches default group access)
+- Creates database entries and stores files in content-addressable hash-sharded structure
+- TEI files in the fixture directory are detected as gold standard files and linked to their PDFs
+
+**Available Fixtures**:
+
+- `minimal`: Basic config with minimal users/groups (no files)
+- `standard`: Standard config + sample PDF/TEI files for testing
+
+**Access Control Considerations**:
+
+- Fixture files are imported into the `default` collection
+- Test users need appropriate group membership to access fixture files
+- Standard fixture users (`reviewer`, `annotator`, `user`) are in the `default` group with access to `_inbox` and `default` collections
+- `admin` user has wildcard access (`*`) to all collections
+
+**CRITICAL:** Do not alter fixtures
+
+- Tests should NOT permanently modify fixture files or delete them in cleanup - they're shared across tests and automatically cleaned up when the runtime directory is wiped.
+- Ideally, make a copy of the fixture file or add new files to alter/delete, at a minimun restore altered files after the test.
+
 ### E2E Tests
 
 - **Location**: `tests/e2e/tests/`
@@ -187,6 +221,7 @@ expect(log.value.file_id).toBeTruthy();
 **Never reimplement authentication, API calls, or common test utilities.** This causes maintenance burden and bugs.
 
 ❌ **WRONG** - Reimplementing login:
+
 ```javascript
 async function loginAsAdmin() {
   const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
@@ -200,6 +235,7 @@ async function loginAsAdmin() {
 ```
 
 ✅ **CORRECT** - Use existing helper:
+
 ```javascript
 import { createAdminSession } from '../helpers/test-auth.js';
 
@@ -226,6 +262,18 @@ import {
   waitForTestMessage
 } from './helpers/test-logging.js';
 ```
+
+## Troubleshooting
+
+### Missing Dependencies
+
+If tests fail with "test failed" or module import errors, ensure all dependencies are installed:
+
+```bash
+npm install
+```
+
+This is particularly important for SSE tests which require the `eventsource-client` package.
 
 ## Debugging
 
@@ -284,6 +332,7 @@ def endpoint(current_user: dict = Depends(require_admin)):
 ```
 
 **Key Points**:
+
 - Use `Depends(get_current_user)` to inject authentication
 - FastAPI automatically handles session extraction from `X-Session-Id` header
 - Session header is case-sensitive: `X-Session-Id`

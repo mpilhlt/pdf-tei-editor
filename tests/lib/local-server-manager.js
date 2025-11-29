@@ -301,7 +301,7 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
       // The wrapper script has issues with piped stdio on Windows
       const uvicornArgs = platform() === 'win32'
         ? ['run', 'uvicorn', 'run_fastapi:app', '--host', this.host, '--port', String(this.port), '--log-level', 'info']
-        : ['run', 'python', 'bin/'];
+        : ['run', 'python', 'bin/start-dev'];
 
       this.serverProcess = spawn('uv', uvicornArgs, {
         cwd: this.projectRoot,

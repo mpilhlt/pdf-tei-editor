@@ -78,7 +78,8 @@ def garbage_collect_files(
     time_difference = now - deleted_before
     is_recent = time_difference < timedelta(hours=24)
 
-    is_admin = 'admin' in current_user.get('roles', [])
+    user_roles = current_user.get('roles', [])
+    is_admin = '*' in user_roles or 'admin' in user_roles
 
     if is_recent and not is_admin:
         logger.warning(

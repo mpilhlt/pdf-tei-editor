@@ -17,9 +17,9 @@ let globalSession = null;
 describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
   const testState = {
-    testDocId: 'move-test-doc-001',
-    testCollection: 'test-collection',
-    destinationCollection: 'moved-collection',
+    // Use existing PDF from fixtures
+    testDocId: '10.5771__2699-1284-2024-3-149',
+    destinationCollection: '_inbox', // Move to _inbox (reviewer has access via default group)
     pdfHash: null,
     teiHash: null
   };
@@ -37,69 +37,50 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
   test('Setup: Create test files for move tests', async () => {
     const session = await getSession();
 
-    // Create PDF and TEI files
-    const pdfPath = `/data/pdf/${testState.testCollection}/${testState.testDocId}.pdf`;
-    const teiPath = `/data/tei/${testState.testCollection}/${testState.testDocId}.tei.xml`;
-
-    // For PDF, we need to use upload endpoint (save is for TEI only)
-    // For now, just create TEI file
-    const testContent = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Move test document ${testState.testDocId}</text></TEI>`;
-
-    const teiResult = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
-      file_id: teiPath,
-      xml_string: testContent
-    }, BASE_URL);
-
-    testState.teiHash = teiResult.file_id;
-
-    // Release lock
-    await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: teiPath
-    }, BASE_URL);
-
-    logger.success('Test files created for move tests');
-  });
-
-  test('POST /api/files/move should move files to new collection', async () => {
-    const session = await getSession();
-
-    // Get file list to find PDF hash
+    // Get file list to find any available PDF from fixtures
     const fileList = await authenticatedApiCall(session.sessionId, '/files/list', 'GET', null, BASE_URL);
 
-    let pdfHash = null;
-    let teiHash = null;
-
+    // Find the first document with a PDF source
     for (const docGroup of fileList.files) {
-      if (docGroup.doc_id === testState.testDocId) {
-        // New structure uses 'source' instead of 'pdf'
-        if (docGroup.source) {
-          pdfHash = docGroup.source.id;
-        }
-        // New structure uses artifacts array instead of versions
+      if (docGroup.source && docGroup.source.file_type === 'pdf') {
+        testState.testDocId = docGroup.doc_id;
+        testState.pdfHash = docGroup.source.id;
         if (docGroup.artifacts && docGroup.artifacts.length > 0) {
-          teiHash = docGroup.artifacts[0].id;
+          testState.teiHash = docGroup.artifacts[0].id;
         }
         break;
       }
     }
 
-    if (!pdfHash) {
-      logger.warn('Could not find PDF for move test, skipping');
-      return;
+    if (!testState.pdfHash) {
+      throw new Error('Could not find PDF fixture for move test');
     }
 
-    testState.pdfHash = pdfHash;
-    testState.teiHash = teiHash || testState.teiHash;
+    if (!testState.teiHash) {
+      throw new Error('Could not find TEI artifact for move test');
+    }
 
-    // Move files to new collection
+    logger.success(`Found test PDF for move tests: ${testState.testDocId}`);
+  });
+
+  test('POST /api/files/move should move files to new collection', async () => {
+    const session = await getSession();
+
+    // Move files to new collection using hashes from setup
     const result = await authenticatedApiCall(session.sessionId, '/files/move', 'POST', {
-      pdf_id: pdfHash,
+      pdf_id: testState.pdfHash,
       xml_id: testState.teiHash,
       destination_collection: testState.destinationCollection
     }, BASE_URL);
 
     assert(result.new_pdf_id, 'Should return new PDF ID');
     assert(result.new_xml_id, 'Should return new XML ID');
+
+    // Verify file is now only in destination collection
+    const fileList = await authenticatedApiCall(session.sessionId, '/files/list', 'GET', null, BASE_URL);
+    const movedDoc = fileList.files.find(doc => doc.doc_id === testState.testDocId);
+    assert(movedDoc, 'Document should still exist');
+    assert(movedDoc.collections.includes(testState.destinationCollection), 'Should be in destination collection');
 
     logger.success(`Files moved successfully: PDF=${result.new_pdf_id}, XML=${result.new_xml_id}`);
   });
@@ -183,17 +164,9 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
   test('Cleanup: Delete test files and logout', async () => {
     const session = await getSession();
 
-    // Clean up test files
-    if (testState.teiHash) {
-      try {
-        await authenticatedApiCall(session.sessionId, '/files/delete', 'POST', {
-          files: [testState.teiHash]
-        }, BASE_URL);
-        logger.success('Test files deleted');
-      } catch (error) {
-        logger.warn(`Failed to delete test files:: ${error.message}`);
-      }
-    }
+    // Note: Don't delete fixture files - they may be used by other tests
+    // The move operation modifies collections but doesn't create new files
+    // Test framework cleans up the entire runtime directory after all tests
 
     // Logout
     if (globalSession) {

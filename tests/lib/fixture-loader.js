@@ -118,7 +118,7 @@ export async function importFixtureFiles(fixtureFilesPath, runtimePath, projectR
     importScript,
     '--db-path', dbPath,
     '--storage-root', storageRoot,
-    '--collection', 'example', // Default collection for fixture files
+    '--collection', 'default', // Default collection for fixture files (matches default group access)
     fixtureFilesPath
   ];
 

@@ -16,8 +16,8 @@ let globalSession = null;
 describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
 
   const testState = {
-    testDocId: 'copy-test-doc-001',
-    testCollection: 'test-collection',
+    // Use existing PDF from fixtures
+    testDocId: '10.5771__2699-1284-2024-3-149',
     destinationCollection: 'copied-collection',
     pdfHash: null,
     teiHash: null
@@ -36,59 +36,39 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
   test('Setup: Create test files for copy tests', async () => {
     const session = await getSession();
 
-    // Create TEI file
-    const testContent = `<?xml version="1.0" encoding="UTF-8"?><TEI><text>Copy test document ${testState.testDocId}</text></TEI>`;
-    const teiPath = `/data/tei/${testState.testCollection}/${testState.testDocId}.tei.xml`;
+    // Get file list to find any available PDF from fixtures
+    const fileList = await authenticatedApiCall(session.sessionId, '/files/list', 'GET', null, BASE_URL);
 
-    const teiResult = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
-      file_id: teiPath,
-      xml_string: testContent
-    }, BASE_URL);
+    // Find the first document with a PDF source
+    for (const docGroup of fileList.files) {
+      if (docGroup.source && docGroup.source.file_type === 'pdf') {
+        testState.testDocId = docGroup.doc_id;
+        testState.pdfHash = docGroup.source.id;
+        if (docGroup.artifacts && docGroup.artifacts.length > 0) {
+          testState.teiHash = docGroup.artifacts[0].id;
+        }
+        break;
+      }
+    }
 
-    testState.teiHash = teiResult.file_id;
+    if (!testState.pdfHash) {
+      throw new Error('Could not find PDF fixture for copy test');
+    }
 
-    // Release lock
-    await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
-      file_id: teiPath
-    }, BASE_URL);
-
-    logger.success('Test files created for copy tests');
+    logger.success(`Found test PDF for copy tests: ${testState.testDocId}`);
   });
 
   test('POST /api/v1/files/copy should copy files to new collection', async () => {
     const session = await getSession();
 
-    // Get file list to find PDF hash
+    // Get original collections before copy
     const fileList = await authenticatedApiCall(session.sessionId, '/files/list', 'GET', null, BASE_URL);
+    const originalDoc = fileList.files.find(doc => doc.doc_id === testState.testDocId);
+    const originalCollections = originalDoc.collections || [];
 
-    let pdfHash = null;
-    let teiHash = null;
-    let originalCollections = [];
-
-    for (const docGroup of fileList.files) {
-      if (docGroup.doc_id === testState.testDocId) {
-        if (docGroup.source) {
-          pdfHash = docGroup.source.id;
-        }
-        if (docGroup.artifacts && docGroup.artifacts.length > 0) {
-          teiHash = docGroup.artifacts[0].id;
-        }
-        originalCollections = docGroup.collections || [];
-        break;
-      }
-    }
-
-    if (!pdfHash) {
-      logger.warn('Could not find PDF for copy test, skipping');
-      return;
-    }
-
-    testState.pdfHash = pdfHash;
-    testState.teiHash = teiHash || testState.teiHash;
-
-    // Copy files to new collection
+    // Copy files to new collection using hashes from setup
     const result = await authenticatedApiCall(session.sessionId, '/files/copy', 'POST', {
-      pdf_id: pdfHash,
+      pdf_id: testState.pdfHash,
       xml_id: testState.teiHash,
       destination_collection: testState.destinationCollection
     }, BASE_URL);
@@ -101,7 +81,11 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
 
     const copiedDoc = updatedFileList.files.find(doc => doc.doc_id === testState.testDocId);
     assert(copiedDoc, 'Document should still exist');
-    assert(copiedDoc.collections.includes(testState.testCollection), 'Should still be in original collection');
+
+    // Should have all original collections plus the new one
+    for (const col of originalCollections) {
+      assert(copiedDoc.collections.includes(col), `Should still be in original collection: ${col}`);
+    }
     assert(copiedDoc.collections.includes(testState.destinationCollection), 'Should be in destination collection');
 
     logger.success(`Files copied successfully: PDF=${result.new_pdf_id}, XML=${result.new_xml_id}`);
@@ -186,17 +170,9 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
   test('Cleanup: Delete test files and logout', async () => {
     const session = await getSession();
 
-    // Clean up test files
-    if (testState.teiHash) {
-      try {
-        await authenticatedApiCall(session.sessionId, '/files/delete', 'POST', {
-          files: [testState.teiHash]
-        }, BASE_URL);
-        logger.success('Test files deleted');
-      } catch (error) {
-        logger.warn(`Failed to delete test files: ${error.message}`);
-      }
-    }
+    // Note: Don't delete fixture files - they may be used by other tests
+    // The copy operation creates references to existing files, not new files
+    // Test framework cleans up the entire runtime directory after all tests
 
     // Logout
     if (globalSession) {

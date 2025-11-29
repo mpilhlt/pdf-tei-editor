@@ -102,6 +102,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **Use UI navigation via the `ui` object instead of DOM node navigation** for fast lookup and alignment of runtime UI structure and documentation
 - **Use testLog() for E2E test validation** - Don't rely on DOM queries
 - ** when inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message so that these commands can be found and removed later.
+- If during debugging you learn something that is not contained in the code assistant documentation, add it to the respective file!
 
 ### Planning documents and completion reports
 
