@@ -2,7 +2,7 @@
  * Debug test - minimal test to see what's happening
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/pause-on-failure.js';
 import { setupTestConsoleCapture } from './helpers/test-logging.js';
 
 test.describe('Debug - Simple Load', () => {

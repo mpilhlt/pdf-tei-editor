@@ -2,10 +2,10 @@
  * E2E Frontend Tests for Role-based UI Permissions
  * @testCovers app/src/plugins/access-control.js
  * @testCovers app/src/state.js
- * 
+ *
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/pause-on-failure.js';
 import { navigateAndLogin, performLogout } from './helpers/login-helper.js';
 import { setupTestConsoleCapture, setupErrorFailure, waitForTestMessage } from './helpers/test-logging.js';
 

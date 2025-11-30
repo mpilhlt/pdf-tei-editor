@@ -3,10 +3,10 @@
  * These tests ensure the application loads without critical errors.
  *
  * @testCovers app/src/*
- * 
+ *
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/pause-on-failure.js';
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
 
 test.describe('Application Loading', () => {

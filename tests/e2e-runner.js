@@ -45,6 +45,7 @@ const program = createTestRunnerCommand({
     new Option('--headed', 'run tests in headed mode (show browser)'),
     new Option('--debugger', 'enable Playwright debugger'),
     new Option('--debug-messages', 'enable verbose E2E debug output'),
+    new Option('--pause-on-failure', 'pause on test failure without closing browser (implies --headed)'),
     new Option('--workers <number>', 'number of parallel workers')
       .default('1'),
     new Option('--fail-fast', 'abort on first test failure'),
@@ -56,6 +57,10 @@ const program = createTestRunnerCommand({
     '',
     '# Debug with browser visible',
     'node tests/e2e-runner.js --headed --debugger',
+    '',
+    '# Pause on failure for inspection',
+    'node tests/e2e-runner.js --pause-on-failure',
+    'node tests/e2e-runner.js --pause-on-failure --grep "new version"',
     '',
     '# Use minimal fixture for smoke tests',
     'node tests/e2e-runner.js --fixture minimal',
@@ -91,6 +96,7 @@ const cliOptions = program.opts();
  * @property {boolean} headed - Run in headed mode
  * @property {boolean} debugger - Enable debugger
  * @property {boolean} debugMessages - Enable debug output
+ * @property {boolean} pauseOnFailure - Pause on failure for inspection
  * @property {number} workers - Number of parallel workers
  * @property {string|null} grep - Test filter pattern
  * @property {string|null} grepInvert - Test exclude pattern
@@ -256,13 +262,17 @@ class PlaywrightRunner {
     console.log(`🌐 Browser: ${options.browser}`);
     logger.info(`Mode: ${options.headed ? 'headed' : 'headless'}`);
 
+    if (options.pauseOnFailure) {
+      logger.info('Pause-on-failure mode: Browser will remain open on test failures');
+    }
+
     // Build Playwright command
     const cmd = ['playwright', 'test'];
 
     if (options.browser) {
       cmd.push(`--project=${options.browser}`);
     }
-    if (options.headed) {
+    if (options.headed || options.pauseOnFailure) {
       cmd.push('--headed');
     }
     if (options.debugger) {
@@ -294,6 +304,7 @@ class PlaywrightRunner {
         ...process.env,
         E2E_BASE_URL: baseUrl,
         E2E_DEBUG: options.debugMessages ? 'true' : 'false',
+        E2E_PAUSE_ON_FAILURE: options.pauseOnFailure ? 'true' : 'false',
       },
     });
 
@@ -356,6 +367,7 @@ class PlaywrightRunner {
       headed: cliOptions.headed,
       debugger: cliOptions.debugger,
       debugMessages: cliOptions.debugMessages,
+      pauseOnFailure: cliOptions.pauseOnFailure,
       workers: parseInt(cliOptions.workers, 10),
       grep: cliOptions.grep || null,
       grepInvert: cliOptions.grepInvert || null,

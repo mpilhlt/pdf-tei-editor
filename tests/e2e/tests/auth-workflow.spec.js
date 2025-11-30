@@ -3,12 +3,12 @@
  *
  * @testCovers app/src/plugins/authentication.js
  * @testCovers server/api/auth.py
- * 
+ *
  */
 
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/pause-on-failure.js';
 
 test.describe('Authentication Workflow', () => {
 

@@ -73,6 +73,7 @@ npm run test:api:container     # Containerized (CI-ready)
 npm run test:e2e               # Local server (fastest)
 npm run test:e2e:headed        # Show browser UI
 npm run test:e2e:debug         # Step-through debugging
+npm run test:e2e:pause         # Pause on failure for inspection
 npm run test:e2e:container     # Containerized (CI-ready)
 
 # Run specific tests
@@ -281,7 +282,7 @@ E2E tests use Playwright to test the full application stack in a browser against
  * @testCovers fastapi_app/routers/auth.py
  */
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/pause-on-failure.js';
 import { performLogin, performLogout } from './helpers/login-helper.js';
 
 test.describe('Authentication Workflow', () => {
@@ -490,9 +491,24 @@ npm run test:e2e:headed -- --grep "auth"
 # Step-through debugging (Playwright debugger)
 npm run test:e2e:debug -- --grep "auth"
 
+# Pause on failure (keeps browser open for inspection)
+npm run test:e2e:pause -- --grep "auth"
+
 # Add breakpoints in test code
 await page.pause(); // Pauses execution
 ```
+
+**Pause-on-Failure Mode**:
+When using `npm run test:e2e:pause`, failed tests will:
+
+- Disable the timeout and keep the browser open indefinitely
+- Allow you to inspect UI state, use DevTools, and examine application state
+- Display detailed error information in the terminal
+- Wait until you press Ctrl+C to exit
+
+This is particularly useful for debugging timeout errors where dialogs don't appear or elements aren't found.
+
+**Implementation**: All E2E tests import from `../fixtures/pause-on-failure.js` by default, which enables this feature when the `--pause-on-failure` flag is used. During normal test runs, the fixture has no effect.
 
 ### Common Issues
 

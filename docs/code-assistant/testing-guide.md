@@ -32,6 +32,7 @@ npm run test:api -- --grep "save"  # Specific tests
 npm run test:e2e              # All E2E tests with local server
 npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
+npm run test:e2e:pause        # Pause on failure for inspection
 ```
 
 ## Test Types
@@ -145,7 +146,7 @@ describe('Feature Name', () => {
 
 ```javascript
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/pause-on-failure.js';
 
 test('should do something', async ({ page }) => {
   await page.goto('http://localhost:8000');
@@ -296,12 +297,31 @@ npm run test:api -- --keep-db
 # Show browser
 npm run test:e2e:headed
 
-# Step-through debugging
+# Step-through debugging (Playwright inspector)
 npm run test:e2e:debug
+
+# Pause on failure (browser stays open for inspection)
+npm run test:e2e:pause
+npm run test:e2e:pause -- --grep "new version"
 
 # Add breakpoints in test code
 await page.pause();
 ```
+
+When using `--pause-on-failure`, tests that fail will:
+
+- Disable the test timeout
+- Keep the browser open indefinitely at the failure state
+- Allow inspection of UI, DevTools, and application state
+- Wait until you press Ctrl+C to continue
+
+**Note**: All E2E tests should import from the pause-on-failure fixture by default:
+
+```javascript
+import { test, expect } from '../fixtures/pause-on-failure.js';
+```
+
+This has no effect during normal test runs - it only activates when `--pause-on-failure` is used.
 
 ## Important Notes
 

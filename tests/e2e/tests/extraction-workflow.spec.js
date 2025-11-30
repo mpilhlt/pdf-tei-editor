@@ -5,12 +5,12 @@
  * @testCovers app/src/plugins/xmleditor.js
  * @testCovers app/src/plugins/services.js
  * @testCovers server/api/files.py
- * 
+ *
  */
 
 /** @import { namedElementsTree } from '../../../app/src/ui.js' */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/pause-on-failure.js';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
 
