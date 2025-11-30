@@ -137,7 +137,6 @@ const api = {
   acquireLock,
   releaseLock,
   getAllLockedFileIds,
-  getCacheStatus,
   login,
   logout,
   status
@@ -618,15 +617,6 @@ async function getAllLockedFileIds() {
   return await apiClient.filesLocks();
 }
 
-/**
- * Gets the current file data cache status from the server.
- * @deprecated This endpoint is deprecated in FastAPI - database is always current
- * @returns {Promise<{dirty: boolean, last_modified: number|null, last_checked: number|null}>} Cache status object
- */
-async function getCacheStatus() {
-  // TODO: Remove this method - no longer exists in FastAPI (database is always current)
-  return await callApi('/files/cache_status', 'GET');
-}
 
 /**
  * Uploads a file selected by the user to a specified URL using `fetch()`.

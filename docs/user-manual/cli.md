@@ -411,31 +411,6 @@ npm run manage group list
 npm run manage collection list
 ```
 
-## Troubleshooting
-
-### Command Not Found
-
-If you get a "command not found" error, make sure you're in the project root directory and have run `npm install`.
-
-### Permission Errors
-
-If you get permission errors accessing data files, check the file permissions:
-
-```bash
-ls -la data/db/
-ls -la config/
-```
-
-### Invalid JSON Error
-
-When setting configuration values, remember that the value must be valid JSON:
-
-- Strings must be quoted: `'"value"'`
-- Numbers: `42`
-- Booleans: `true` or `false`
-- Arrays: `'["a","b","c"]'`
-- Objects: `'{"key":"value"}'`
-
 ## Related Documentation
 
 - [User Management](../user-management.md) - Detailed user management guide

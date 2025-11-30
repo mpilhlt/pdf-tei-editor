@@ -6,7 +6,7 @@
  * @import { ApplicationState, Plugin } from '../app.js' 
  */
 import ui from '../ui.js'
-import { app, logger, client, updateState, fileselection, dialog, authentication } from '../app.js'
+import { logger, client, updateState, dialog, authentication } from '../app.js'
 import { notify } from '../modules/sl-utils.js'
 
 /**
@@ -104,24 +104,14 @@ function start(state, timeoutSeconds = 60) {
     }
 
     try {
-      let heartbeatResponse = null;
-      let cacheStatus = null;
-
       // Only send heartbeat lock refresh if we're in edit mode
       if (!currentState.editorReadOnly) {
         logger.debug(`Sending heartbeat to server to keep file lock alive for ${filePath}`);
-        heartbeatResponse = await client.sendHeartbeat(filePath);
-        cacheStatus = heartbeatResponse?.cache_status;
+        await client.sendHeartbeat(filePath);
       } else {
-        // In read-only mode, just check cache status without trying to refresh lock
-        logger.debug(`Read-only mode: checking cache status without lock refresh for ${filePath}`);
-        cacheStatus = await client.getCacheStatus();
-      }
-
-      // Check if file data cache is dirty and only reload if necessary
-      if (cacheStatus?.dirty) {
-        logger.debug("File data cache is dirty, reloading file list");
-        await fileselection.reload({ refresh: true });
+        // In read-only mode, skip heartbeat - no lock to maintain
+        logger.debug(`Read-only mode: skipping heartbeat for ${filePath}`);
+        return;
       }
 
       // If we are here, the request was successful. Check if we were offline before.
