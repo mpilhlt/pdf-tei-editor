@@ -33,6 +33,9 @@ npm run test:e2e              # All E2E tests with local server
 npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
 npm run test:e2e:pause        # Pause on failure for inspection
+
+# Container infrastructure test (standalone validation)
+npm run test:e2e:container-infra  # Validate container setup
 ```
 
 ## Test Types
@@ -92,6 +95,31 @@ API tests use a two-phase fixture loading system:
 - **Purpose**: Test full workflows in browser
 - **Run**: `npm run test:e2e`
 - **Features**: Playwright, `window.ui` navigation, `testLog()` for state verification
+
+#### Container Infrastructure Test
+
+Validates container setup before running E2E tests:
+
+- **File**: `tests/e2e/tests/docker-infrastructure.spec.js`
+- **Run**: `npm run test:e2e:container-infra` (standalone) or automatically when running `npm run test:e2e:container`
+- **Auto-run**: Automatically runs when container is rebuilt (not with `--no-rebuild`)
+
+**What it checks:**
+
+- Container is running and healthy
+- Directory structure is correct (`data/db/`, `data/files/`)
+- Database is initialized
+- Demo data has been imported
+- Test fixtures (users, roles) are loaded
+- Application mode is set to "testing"
+- File storage is accessible
+
+**Behavior:**
+
+- Runs automatically after `npm run test:e2e:container` (with rebuild)
+- Skipped when using `npm run test:e2e:container:cached` (no rebuild)
+- Can be run standalone with `npm run test:e2e:container-infra`
+- **Hard failure:** If infrastructure test fails, E2E tests abort (infrastructure issue, not app bug)
 
 ## Writing Tests
 

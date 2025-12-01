@@ -85,7 +85,6 @@ npm run start:prod
 ./bin/start-prod 0.0.0.0 3001
 ```
 
-Uses waitress WSGI server optimized for production with multiple threads.
 
 ### Production Configuration
 
@@ -226,9 +225,9 @@ sudo bin/deploy-container.sh \
   --type production \
   --admin-password "$ADMIN_PASSWORD" \
   --demo-password "$DEMO_PASSWORD" \
-  --data-dir /secure/pdf-data \
-  --config-dir /secure/pdf-config \
-  --db-dir /secure/pdf-db
+  --data-dir /secure/pte-data \
+  --config-dir /secure/pte-config \
+  --db-dir /secure/pte-db
 ```
 
 ## Monitoring and Maintenance

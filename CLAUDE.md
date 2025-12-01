@@ -46,6 +46,27 @@ npm run build
 FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 ```
 
+### Container Commands
+
+```bash
+# Start container (Docker/Podman auto-detected)
+npm run container:start
+npm run container:start -- --tag v1.0.0 --port 8080
+
+# Stop container
+npm run container:stop
+npm run container:stop -- --name pdf-tei-editor-v1.0.0 --remove
+
+# Build container image locally
+npm run container:build -- v1.0.0
+
+# Build without cache
+npm run container:build:no-cache -- v1.0.0
+
+# Build and push to registry
+npm run container:push -- v1.0.0
+```
+
 ### Key Files
 
 - Entry point: `app/src/app.js`

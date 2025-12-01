@@ -246,11 +246,48 @@ class PlaywrightRunner {
         rebuild: !options.noRebuild,
         env,
       });
+
+      // Run infrastructure test after building container (but not when using --no-rebuild)
+      if (!options.noRebuild) {
+        console.log('\n🔍 Running container infrastructure test...');
+        const infraTestPassed = await this.runContainerInfrastructureTest();
+        if (!infraTestPassed) {
+          throw new Error('Container infrastructure test failed. Container setup is invalid.');
+        }
+        logger.success('Container infrastructure test passed');
+      }
     }
 
     const baseUrl = this.serverManager.getBaseUrl();
     logger.success(`Server ready at ${baseUrl}`);
     return baseUrl;
+  }
+
+  /**
+   * Run container infrastructure test
+   * @returns {Promise<boolean>} - True if tests passed
+   */
+  async runContainerInfrastructureTest() {
+    return new Promise((resolve) => {
+      const child = spawn('npx', [
+        'playwright',
+        'test',
+        'tests/e2e/tests/docker-infrastructure.spec.js',
+        '--reporter=list'
+      ], {
+        stdio: 'inherit',
+        cwd: projectRoot
+      });
+
+      child.on('close', (code) => {
+        resolve(code === 0);
+      });
+
+      child.on('error', (error) => {
+        console.error('Failed to run infrastructure test:', error.message);
+        resolve(false);
+      });
+    });
   }
 
   /**

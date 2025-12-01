@@ -27,7 +27,8 @@
       "Bash(grep:*)",
       "Bash(mkdir:*)",
       "Bash(git ls-tree:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

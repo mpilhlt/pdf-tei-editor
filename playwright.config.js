@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import { detectContainerTool } from './tests/lib/detect-container-tool.js';
+
+// Detect container tool (docker or podman)
+const { composeCmd } = detectContainerTool();
 
 // Configuration from environment variables
 // Priority: E2E_BASE_URL > E2E_CONTAINER_URL > constructed from E2E_HOST:E2E_PORT
@@ -55,12 +59,14 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'docker compose -f docker-compose.test.yml up --build',
-    url: E2E_BASE_URL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000, // 2 minutes for container startup
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
+  ...(process.env.E2E_SKIP_WEBSERVER ? {} : {
+    webServer: {
+      command: `${composeCmd} -f docker-compose.test.yml up --build`,
+      url: E2E_BASE_URL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000, // 2 minutes for container startup
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  }),
 });

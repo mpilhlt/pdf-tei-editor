@@ -60,7 +60,11 @@ if [ -n "$APP_DEMO_PASSWORD" ]; then
     fi
 fi
 
-
+# Import demo data if present
+if [ -f /app/docker/import-demo-data.sh ]; then
+    echo "Importing demo data..."
+    /app/docker/import-demo-data.sh
+fi
 
 # Start the PDF TEI Editor application bound to all interfaces for Docker
 exec .venv/bin/python bin/start-prod 0.0.0.0 $PORT

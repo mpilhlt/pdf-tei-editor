@@ -19,7 +19,7 @@ const debugLog = (...args) => {
  * @param {string} pdfFilePath - Path to PDF file to extract
  * @param {string} extractorModel - Extractor model to use (default: 'llamore-gemini')
  */
-export async function performPdfExtraction(page, consoleLogs, pdfFilePath = 'demo/data/pdf/example/10.5771__2699-1284-2024-3-149.pdf', extractorModel = 'llamore-gemini') {
+export async function performPdfExtraction(page, consoleLogs, pdfFilePath = 'tests/e2e/fixtures/pdf/test-document.pdf', extractorModel = 'llamore-gemini') {
   // Set up file input handling before clicking the button
   const fileChooserPromise = page.waitForEvent('filechooser');
 

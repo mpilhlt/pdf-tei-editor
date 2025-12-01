@@ -1,5 +1,6 @@
 import { ServerManager } from './server-manager.js';
 import { getPortWithFallback } from './port-allocator.js';
+import { detectContainerTool } from './detect-container-tool.js';
 import { execSync } from 'child_process';
 import { promises as fs } from 'fs';
 import { join, relative } from 'path';
@@ -27,9 +28,6 @@ export class ContainerServerManager extends ServerManager {
   constructor(options = {}) {
     super();
     this.projectRoot = join(__dirname, '..', '..');
-    this.containerCmd = null;
-    this.composeCmd = null;
-    this.usePodman = false;
     this.testRunId = `test-${Date.now()}-${process.pid}`;
     this.containerName = `pdf-tei-editor-test-${this.testRunId}`;
     this.isContainerStarted = false;
@@ -44,7 +42,15 @@ export class ContainerServerManager extends ServerManager {
     };
 
     // Detect container tool
-    this.detectContainerTool();
+    const detected = detectContainerTool();
+    this.containerCmd = detected.containerCmd;
+    this.composeCmd = detected.composeCmd;
+    this.usePodman = detected.usePodman;
+
+    logger.info(`Using ${this.containerCmd} as container tool`);
+    if (this.composeCmd) {
+      logger.info(`Found compose command: ${this.composeCmd}`);
+    }
   }
 
   /**
@@ -64,59 +70,6 @@ export class ContainerServerManager extends ServerManager {
     return `http://${this.config.host}:${this.config.port}`;
   }
 
-  /**
-   * Detect available container tool (podman or docker) with compose support
-   *
-   * @private
-   */
-  detectContainerTool() {
-    try {
-      execSync('command -v podman', { stdio: 'ignore' });
-      this.containerCmd = 'podman';
-      this.usePodman = true;
-      logger.info('Using podman as container tool');
-      logger.info('Preferring native podman commands over compose tools');
-
-      // Check for compose tools (for compatibility)
-      try {
-        execSync('command -v podman-compose', { stdio: 'ignore' });
-        this.composeCmd = 'podman-compose';
-        logger.info('Found podman-compose (available but using native podman)');
-      } catch {
-        try {
-          execSync('command -v docker-compose', { stdio: 'ignore' });
-          this.composeCmd = 'docker-compose';
-          logger.info('Found docker-compose (available but using native podman)');
-        } catch {
-          logger.info('No compose tool found, using direct podman commands');
-        }
-      }
-    } catch {
-      try {
-        execSync('command -v docker', { stdio: 'ignore' });
-        this.containerCmd = 'docker';
-        this.usePodman = false;
-        logger.info('Using docker as container tool');
-
-        // Check for docker compose
-        try {
-          execSync('docker compose version', { stdio: 'ignore' });
-          this.composeCmd = 'docker compose';
-          logger.info('Found docker compose');
-        } catch {
-          try {
-            execSync('command -v docker-compose', { stdio: 'ignore' });
-            this.composeCmd = 'docker-compose';
-            logger.info('Found docker-compose');
-          } catch {
-            throw new Error('Docker Compose is required but not installed');
-          }
-        }
-      } catch {
-        throw new Error('Neither podman nor docker found. Please install one of them.');
-      }
-    }
-  }
 
   /**
    * Build container image

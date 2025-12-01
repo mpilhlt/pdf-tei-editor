@@ -20,8 +20,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # Paths
-    DATA_ROOT: str = "data"
-    DB_DIR: str = "data/db"
+    DATA_ROOT: str = "data"  # Parent directory containing files/ and db/ subdirectories
     CONFIG_DIR: str = ""  # Optional: override default config location (for tests)
     UPLOAD_DIR: str = ""
 
@@ -51,7 +50,8 @@ class Settings(BaseSettings):
 
     @property
     def db_dir(self) -> Path:
-        return Path(self.DB_DIR)
+        """Database directory - always data_root/db"""
+        return self.data_root / "db"
 
     @property
     def config_dir(self) -> Path | None:

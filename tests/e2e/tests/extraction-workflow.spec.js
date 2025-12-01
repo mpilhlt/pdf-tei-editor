@@ -228,7 +228,7 @@ test.describe.serial('Extraction Workflow', () => {
       debugLog('Test log status:', testLogStatus);
 
       // Step 1: Upload PDF file
-      await uploadPDFFile(page, 'demo/data/pdf/example/10.5771__2699-1284-2024-3-149.pdf');
+      await uploadPDFFile(page, 'tests/e2e/fixtures/pdf/test-document.pdf');
 
       // Step 2: Wait for upload completion
       await waitForPDFUploadCompletion(page, consoleLogs);
