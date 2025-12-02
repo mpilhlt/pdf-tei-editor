@@ -404,7 +404,7 @@ class FileImporter:
 
         # Import TEI files
         for tei_path in doc_files.get('tei', []):
-            self._import_tei(tei_path, doc_id, pdf_file_id)
+            self._import_tei(tei_path, doc_id, pdf_file_id, default_collection)
 
     def _import_pdf(
         self,
@@ -460,7 +460,8 @@ class FileImporter:
         self,
         tei_path: Path,
         doc_id: str,
-        pdf_file_id: Optional[str]
+        pdf_file_id: Optional[str],
+        collection: Optional[str] = None
     ) -> None:
         """Import a TEI/XML file"""
 
@@ -549,6 +550,7 @@ class FileImporter:
             variant=variant,
             version=version,
             is_gold_standard=is_gold,
+            doc_collections=[collection] if collection else [],
             file_metadata={
                 'original_path': str(tei_path),
                 'imported_at': datetime.now().isoformat(),

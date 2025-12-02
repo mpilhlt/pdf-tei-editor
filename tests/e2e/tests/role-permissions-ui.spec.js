@@ -5,7 +5,7 @@
  *
  */
 
-import { test, expect } from '../fixtures/pause-on-failure.js';
+import { test, expect } from '../fixtures/debug-on-failure.js';
 import { navigateAndLogin, performLogout } from './helpers/login-helper.js';
 import { setupTestConsoleCapture, setupErrorFailure, waitForTestMessage } from './helpers/test-logging.js';
 

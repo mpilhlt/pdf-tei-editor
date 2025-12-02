@@ -1,9 +1,14 @@
-name: Build unstable
+name: Build and Push Docker Image
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
 
-concurrency: 
-  group: unstable
+concurrency:
+  group: ${{ github.ref }}
 #  cancel-in-progress: true
 
 
@@ -15,10 +20,22 @@ jobs:
       - name: Create more disk space
         run: |
           sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc 
-          sudo rm -rf "/usr/local/share/boost" 
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - uses: actions/checkout@v2
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push
         id: docker_build
         uses: mr-smithers-excellent/docker-build-push@v5
@@ -28,6 +45,7 @@ jobs:
           image: ${{ secrets.DOCKERHUB_USERNAME }}/pdf-tei-editor
           registry: docker.io
           pushImage: ${{ github.event_name != 'pull_request' }}
-          tags: latest
+          tags: ${{ steps.version.outputs.is_tag == 'true' && format('{0},latest', steps.version.outputs.tag) || 'latest' }}
+
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}

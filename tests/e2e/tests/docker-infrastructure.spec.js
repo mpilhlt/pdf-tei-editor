@@ -11,7 +11,11 @@
 
 import { test, expect } from '@playwright/test';
 
+// Skip all container infrastructure tests when running in local mode
+const isContainerMode = process.env.E2E_MODE === 'container';
+
 test.describe('Container Infrastructure', () => {
+  test.skip(!isContainerMode, 'Container tests only run in container mode');
   test('should have container running and healthy', async ({ request }) => {
     test.setTimeout(30000);
 

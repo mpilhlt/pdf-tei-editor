@@ -12,14 +12,14 @@
  * @import { api as ServicesApi } from '../../app/src/plugins/services.js'
  */
 
-// Use custom test fixture for pause-on-failure support
-import { test, expect } from '../fixtures/pause-on-failure.js';
+// Use custom test fixture for debug-on-failure support
+import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
 import { selectFirstDocuments } from './helpers/extraction-helper.js';
 
 // Enable debug output only when E2E_DEBUG environment variable is set
-const DEBUG = process.env.E2E_DEBUG === 'true';
+const DEBUG = ['true', '1', 'yes', 'on'].includes(process.env.E2E_DEBUG);
 const debugLog = (...args) => {
   if (DEBUG) {
     console.log('[DEBUG]', ...args);
@@ -53,26 +53,42 @@ test.describe('Document Actions', () => {
       // Navigate and login as reviewer (required for document actions)
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
 
-      // Select the first available PDF and XML documents (should exist from previous tests)
-      await selectFirstDocuments(page);
-
       // Wait a moment for state to update
       await page.waitForTimeout(1000);
+
+      // Select the first available PDF and XML documents (should exist from previous tests)
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true)
 
       // Debug: Check button state and available documents
       const debugInfo = await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
+        /** @type {any} */
+        const app = /** @type {any} */(window).app;
+        const state = app.getCurrentState();
         return {
           pdfOptionsCount: ui.toolbar.pdf.querySelectorAll('sl-option').length,
           xmlOptionsCount: ui.toolbar.xml.querySelectorAll('sl-option').length,
           pdfValue: ui.toolbar.pdf.value,
           xmlValue: ui.toolbar.xml.value,
           createNewVersionDisabled: ui.toolbar.documentActions.createNewVersion.disabled,
-          saveRevisionDisabled: ui.toolbar.documentActions.saveRevision.disabled
+          saveRevisionDisabled: ui.toolbar.documentActions.saveRevision.disabled,
+          userGroups: state.user?.groups,
+          stateXml: state.xml,
+          statePdf: state.pdf
         };
       });
-      debugLog('Debug info:', debugInfo);
+      console.log('[TEST DEBUG]', JSON.stringify(debugInfo, null, 2));
+
+      // Verify button is enabled before clicking
+      const isButtonEnabled = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return !ui.toolbar.documentActions.createNewVersion.disabled;
+      });
+
+      expect(isButtonEnabled).toBe(true);
 
       // Click on create new version button
       await page.evaluate(() => {
@@ -146,7 +162,8 @@ test.describe('Document Actions', () => {
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
 
       // Select the first available PDF and XML documents (should exist from previous tests)
-      await selectFirstDocuments(page);
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
 
       // Wait a moment for state to update
       await page.waitForTimeout(1000);
@@ -165,6 +182,15 @@ test.describe('Document Actions', () => {
         };
       });
       debugLog('Debug info:', debugInfo);
+
+      // Verify button is enabled before clicking
+      const isButtonEnabled = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return !ui.toolbar.documentActions.saveRevision.disabled;
+      });
+
+      expect(isButtonEnabled).toBe(true);
 
       // Click save revision button
       await page.evaluate(() => {

@@ -46,22 +46,30 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing database from config: {e}")
         raise
 
-    # Now load config and sync application mode between environment and config
-    # Priority: FASTAPI_APPLICATION_MODE env var > config.json
-    from .lib.config_utils import load_full_config
+    # Now load config and sync settings between environment and config
+    # Priority: Environment variables > config.json
+    from .lib.config_utils import load_full_config, set_config_value
     config = load_full_config(settings.db_dir)
 
     if "FASTAPI_APPLICATION_MODE" in os.environ:
         # Environment variable takes precedence
         app_mode = os.environ["FASTAPI_APPLICATION_MODE"]
-        config["application"] = config.get("application", {})
-        config["application"]["mode"] = app_mode
+        set_config_value("application.mode", app_mode, settings.db_dir)
         logger.info(f"Application mode from environment: {app_mode}")
     else:
         # Get from config and set environment variable
         app_mode = config.get("application", {}).get("mode", settings.application_mode)
         os.environ["FASTAPI_APPLICATION_MODE"] = app_mode
         logger.info(f"Application mode from config: {app_mode}")
+
+    # Sync docs.from-github setting from environment
+    if "DOCS_FROM_GITHUB" in os.environ:
+        docs_from_github = os.environ["DOCS_FROM_GITHUB"].lower() in ("true", "1", "yes")
+        set_config_value("docs.from-github", docs_from_github, settings.db_dir)
+        logger.info(f"Documentation source from environment: {'GitHub' if docs_from_github else 'local'}")
+    else:
+        docs_from_github = config.get("docs.from-github", False)
+        logger.info(f"Documentation source from config: {'GitHub' if docs_from_github else 'local'}")
 
     # Ensure directories exist
     settings.data_root.mkdir(parents=True, exist_ok=True)

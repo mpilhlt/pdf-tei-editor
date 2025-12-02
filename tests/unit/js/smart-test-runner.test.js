@@ -477,4 +477,67 @@ class TestExample(unittest.TestCase):
     console.log('Custom changed files:', customChangedFiles);
   });
 
+  test('should match tests via transitive dependencies', async () => {
+    // Create runner without ignoring api-client-v1.js for this test
+    const runner = new SmartTestRunner({ ignoreChanges: [] });
+
+    // Build reverse dependency graph
+    const reverseDeps = await runner.buildReverseDependencyGraph();
+
+    // Check that api-client-v1.js has reverse dependencies
+    const apiClientFile = 'app/src/modules/api-client-v1.js';
+    assert(reverseDeps.has(apiClientFile), 'Reverse deps should include api-client-v1.js');
+
+    // Get files that transitively depend on api-client-v1.js
+    const affected = runner.getTransitivelyAffectedFiles(apiClientFile, reverseDeps);
+
+    // Should include files that import it
+    assert(affected.has('app/src/plugins/client.js'), 'Should include direct importer client.js');
+
+    // Should include files that transitively depend on it
+    assert(affected.has('app/src/app.js'), 'Should include transitive dependency app.js');
+
+    console.log(`Files transitively affected by ${apiClientFile}:`, Array.from(affected).sort());
+
+    // Now test that changing api-client-v1.js triggers tests that cover app.js
+    const customChangedFiles = [apiClientFile];
+    const { tests: testsToRun } = await runner.getTestsToRun({ changedFiles: customChangedFiles });
+
+    // E2E test has @testCovers app/src/*, which should match all affected files
+    const hasE2ETest = testsToRun.e2e.some(test => test.includes('app-loading'));
+    assert(hasE2ETest, 'Should select E2E test that covers app/src/* via transitive dependencies');
+
+    console.log('Tests selected for api-client-v1.js change:', testsToRun);
+  });
+
+  test('should ignore auto-generated files from change detection', async () => {
+    // Default runner has api-client-v1.js in ignore list
+    const runner = new SmartTestRunner();
+
+    // Test that api-client-v1.js is ignored
+    const changedFiles = runner.getChangedFiles(['app/src/modules/api-client-v1.js', 'app/src/app.js']);
+
+    assert(!changedFiles.includes('app/src/modules/api-client-v1.js'), 'Should ignore api-client-v1.js');
+    assert(changedFiles.includes('app/src/app.js'), 'Should include app.js');
+
+    console.log('Filtered changed files:', changedFiles);
+
+    // Test with regex pattern
+    const runnerWithPattern = new SmartTestRunner({
+      ignoreChanges: [/.*-generated\.js$/, 'app/src/modules/api-client-v1.js']
+    });
+
+    const changedFiles2 = runnerWithPattern.getChangedFiles([
+      'app/src/modules/api-client-v1.js',
+      'app/src/foo-generated.js',
+      'app/src/app.js'
+    ]);
+
+    assert(!changedFiles2.includes('app/src/modules/api-client-v1.js'), 'Should ignore api-client-v1.js');
+    assert(!changedFiles2.includes('app/src/foo-generated.js'), 'Should ignore foo-generated.js via pattern');
+    assert(changedFiles2.includes('app/src/app.js'), 'Should include app.js');
+
+    console.log('Filtered changed files with pattern:', changedFiles2);
+  });
+
 });

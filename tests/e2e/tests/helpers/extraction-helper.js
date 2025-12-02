@@ -63,8 +63,16 @@ export async function performPdfExtraction(page, consoleLogs, pdfFilePath = 'tes
 }
 
 /**
+ * @typedef LoadResult
+ * @property {Boolean} success
+ * @property {String} reason
+ * @property {{xml,pdf}} [loadParams]
+ */
+
+/**
  * Selects the first available PDF and XML documents by simulating user clicks
  * @param {import('@playwright/test').Page} page - Playwright page object
+ * @return {Promise<LoadResult>}
  */
 export async function selectFirstDocuments(page) {
   // Debug: Check what documents are available first
@@ -169,8 +177,6 @@ export async function selectFirstDocuments(page) {
     const pdfValue = ui.toolbar.pdf.value;
     const xmlValue = ui.toolbar.xml.value;
 
-    console.log('[TEST DEBUG] Load attempt:', { pdfValue, xmlValue, hasServices: !!services, hasLoadFunction: !!(services?.load) });
-
     if (pdfValue || xmlValue) {
       // Call the load function through services
       const loadParams = {};
@@ -180,10 +186,8 @@ export async function selectFirstDocuments(page) {
       if (services && services.load) {
         try {
           await services.load(loadParams);
-          console.log('[TEST DEBUG] Load completed successfully');
           return { success: true, loadParams };
         } catch (error) {
-          console.log('[TEST DEBUG] Load failed:', error);
           return { success: false, error: String(error) };
         }
       } else {
@@ -193,4 +197,5 @@ export async function selectFirstDocuments(page) {
     return { success: false, reason: 'no files to load' };
   });
   debugLog('Load result:', loadResult);
+  return loadResult;
 }

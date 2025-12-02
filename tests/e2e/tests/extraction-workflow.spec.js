@@ -10,7 +10,7 @@
 
 /** @import { namedElementsTree } from '../../../app/src/ui.js' */
 
-import { test, expect } from '../fixtures/pause-on-failure.js';
+import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
 

@@ -34,7 +34,7 @@
         "test:e2e:local": "node tests/e2e-runner.js --local",
         "test:e2e:headed": "node tests/e2e-runner.js --local --headed --keep-db",
         "test:e2e:debug": "node tests/e2e-runner.js --local --headed --debugger --keep-db",
-        "test:e2e:pause": "node tests/e2e-runner.js --local --pause-on-failure --keep-db",
+        "test:e2e:debug-failure": "node tests/e2e-runner.js --local --debug-on-failure --keep-db",
         "test:e2e:container-infra": "E2E_BASE_URL=http://localhost:8000 E2E_SKIP_WEBSERVER=1 npx playwright test tests/e2e/tests/docker-infrastructure.spec.js",
         "test:e2e:container": "node tests/e2e-runner.js --container",
         "test:e2e:container:cached": "node tests/e2e-runner.js --container --no-rebuild",

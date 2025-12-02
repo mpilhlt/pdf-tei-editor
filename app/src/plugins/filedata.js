@@ -78,7 +78,7 @@ class FiledataPlugin extends Plugin {
     try {
       // Get file list response - API returns {files: [...]} structure
       const response = await client.getFileList(null, options.refresh);
-
+    
       /** @type {DocumentItem[]} */
       let data = response?.files || [];
       if (!data || data.length === 0) {

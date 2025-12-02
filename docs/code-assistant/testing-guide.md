@@ -32,7 +32,7 @@ npm run test:api -- --grep "save"  # Specific tests
 npm run test:e2e              # All E2E tests with local server
 npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
-npm run test:e2e:pause        # Pause on failure for inspection
+npm run test:e2e:debug-failure # Capture debug artifacts on failure (headless)
 
 # Container infrastructure test (standalone validation)
 npm run test:e2e:container-infra  # Validate container setup
@@ -135,6 +135,25 @@ test('should save file', async () => {
 });
 ```
 
+### Ignoring Auto-Generated Files
+
+The smart test runner automatically ignores certain files from change detection:
+
+- `app/src/modules/api-client-v1.js` (auto-generated from OpenAPI schema)
+
+To ignore additional files, configure in the test runner:
+
+```javascript
+const runner = new SmartTestRunner({
+  ignoreChanges: [
+    'app/src/modules/api-client-v1.js',  // Exact file path
+    /.*-generated\.js$/                  // Regex pattern
+  ]
+});
+```
+
+This prevents unnecessary test runs when only metadata (like timestamps) changes in auto-generated files.
+
 This enables smart test selection via `npm run test:changed`.
 
 ### API Test Template
@@ -174,7 +193,7 @@ describe('Feature Name', () => {
 
 ```javascript
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
-import { test, expect } from '../fixtures/pause-on-failure.js';
+import { test, expect } from '../fixtures/debug-on-failure.js';
 
 test('should do something', async ({ page }) => {
   await page.goto('http://localhost:8000');
@@ -328,28 +347,67 @@ npm run test:e2e:headed
 # Step-through debugging (Playwright inspector)
 npm run test:e2e:debug
 
-# Pause on failure (browser stays open for inspection)
-npm run test:e2e:pause
-npm run test:e2e:pause -- --grep "new version"
+# Post-mortem debugging (capture artifacts on failure, headless)
+npm run test:e2e:debug-failure
+npm run test:e2e:debug-failure -- --grep "new version"
+
+# Combine with headed mode to watch test execution
+npm run test:e2e -- --debug-on-failure --headed
 
 # Add breakpoints in test code
 await page.pause();
 ```
 
-When using `--pause-on-failure`, tests that fail will:
+#### Debug-on-Failure Mode
 
-- Disable the test timeout
-- Keep the browser open indefinitely at the failure state
-- Allow inspection of UI, DevTools, and application state
-- Wait until you press Ctrl+C to continue
+When using `--debug-on-failure`, tests run in **headless mode** (faster) and capture comprehensive debug information on failure:
 
-**Note**: All E2E tests should import from the pause-on-failure fixture by default:
+**Captured Artifacts:**
 
-```javascript
-import { test, expect } from '../fixtures/pause-on-failure.js';
+- Console messages → `console-messages.json`
+- Page errors → `page-errors.json`
+- **Network traffic → `network-log.json`** (all HTTP requests/responses with bodies)
+- Screenshots (automatically via Playwright)
+- Video recording of test execution
+
+**Behavior:**
+
+- Stops on first failure (`--max-failures=1`)
+- Runs headless by default (use `--headed` flag to watch execution)
+- All artifacts saved to `tests/e2e/test-results/<test-name>/`
+
+**Network Log Format:**
+
+```json
+[
+  {
+    "type": "request",
+    "timestamp": "2025-01-15T10:30:00.000Z",
+    "method": "GET",
+    "url": "http://localhost:8000/api/v1/files",
+    "headers": {...},
+    "postData": null
+  },
+  {
+    "type": "response",
+    "timestamp": "2025-01-15T10:30:00.100Z",
+    "method": "GET",
+    "url": "http://localhost:8000/api/v1/files",
+    "status": 200,
+    "statusText": "OK",
+    "headers": {...},
+    "body": "{\"files\": [...]}"
+  }
+]
 ```
 
-This has no effect during normal test runs - it only activates when `--pause-on-failure` is used.
+**Note**: All E2E tests should import from the debug-on-failure fixture by default:
+
+```javascript
+import { test, expect } from '../fixtures/debug-on-failure.js';
+```
+
+This has no effect during normal test runs - it only activates when `--debug-on-failure` is used.
 
 ## Important Notes
 

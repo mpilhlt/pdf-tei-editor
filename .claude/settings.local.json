@@ -28,7 +28,12 @@
       "Bash(mkdir:*)",
       "Bash(git ls-tree:*)",
       "Bash(cp:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(npm run test:changed:*)",
+      "Bash(npx madge:*)",
+      "Bash(DEBUG=1 npm run test:changed:*)",
+      "Bash(E2E_DEBUG=true npm run test:e2e:*)",
+      "Bash(npm run test:e2e:*)"
     ],
     "deny": [],
     "ask": []

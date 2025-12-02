@@ -8,7 +8,7 @@
 
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
 
-import { test, expect } from '../fixtures/pause-on-failure.js';
+import { test, expect } from '../fixtures/debug-on-failure.js';
 
 test.describe('Authentication Workflow', () => {
 

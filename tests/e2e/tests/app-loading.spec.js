@@ -6,7 +6,7 @@
  *
  */
 
-import { test, expect } from '../fixtures/pause-on-failure.js';
+import { test, expect } from '../fixtures/debug-on-failure.js';
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
 
 test.describe('Application Loading', () => {
