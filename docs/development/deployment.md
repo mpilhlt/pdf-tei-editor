@@ -78,6 +78,9 @@ bin/setup-cron.sh \
 For non-containerized production deployments:
 
 ```bash
+# Configure environment for production
+cp .env.production .env
+
 # Start production server
 npm run start:prod
 
@@ -98,7 +101,7 @@ npm run start:prod
    }
    ```
 
-2. **Configure environment variables** in `.env`:
+2. **Configure environment variables** in `.env` (copy from `.env.production`):
 
    ```bash
    GEMINI_API_KEY=your_gemini_api_key_here

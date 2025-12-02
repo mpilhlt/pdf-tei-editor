@@ -35,6 +35,9 @@ Then visit: **http://localhost:8000**
 git clone https://github.com/mpilhlt/pdf-tei-editor.git
 cd pdf-tei-editor
 
+# Configure environment
+cp .env.development .env
+
 # Install dependencies
 npm install
 

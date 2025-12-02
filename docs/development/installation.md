@@ -32,10 +32,13 @@ Then visit: **<http://localhost:8000>**
 git clone https://github.com/mpilhlt/pdf-tei-editor.git
 cd pdf-tei-editor
 
+# Configure environment for development
+cp .env.development .env
+
 # Install Python dependencies
 uv sync
 
-# Install Node.js dependencies  
+# Install Node.js dependencies
 npm install
 ```
 
@@ -71,7 +74,7 @@ For production deployments, containerized deployments, and comprehensive deploym
 To extract references from PDF, the [LLamore library](https://github.com/mpilhlt/llamore) is used. For LLamore to work, you need a Gemini API Key:
 
 1. Get a key at <https://aistudio.google.com>
-2. Rename `.env.dist` to `.env`
+2. Ensure you've copied the appropriate `.env.development` or `.env.production` file to `.env`
 3. Add your key to the `.env` file
 
 ## Security Considerations
