@@ -19,6 +19,18 @@ cd /app
 # Create data directories
 mkdir -p data/db data/files data/versions config
 
+# Initialize config from defaults
+echo "Initializing configuration..."
+for config_file in /app/config/*.json; do
+    if [ -f "$config_file" ]; then
+        filename=$(basename "$config_file")
+        if [ ! -f "/app/data/db/$filename" ]; then
+            echo "Copying default $filename..."
+            cp "$config_file" "/app/data/db/$filename"
+        fi
+    fi
+done
+
 # Import data if IMPORT_DATA_PATH is set
 if [ -n "$IMPORT_DATA_PATH" ] && [ -f "/app/docker/import-demo-data.sh" ]; then
     echo "Importing data from $IMPORT_DATA_PATH..."

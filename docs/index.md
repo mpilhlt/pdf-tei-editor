@@ -28,6 +28,7 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 - **[Extraction Workflow](user-manual/extraction-workflow.md)** - Creating TEI from PDFs
 - **[Editing Workflow](user-manual/editing-workflow.md)** - Editing and validating TEI
 - **[Collection Management](user-manual/collection-management.md)** - Organizing documents
+- **[Import & Export](user-manual/import-export.md)** - Bulk import/export of files
 - **[Sync Workflow](user-manual/sync-workflow.md)** - WebDAV synchronization
 - **[User Management](user-manual/user-management.md)** - Managing users and permissions
 
@@ -35,6 +36,7 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 
 - **Manage Users** - [User Management](user-manual/user-management.md)
 - **Set Permissions** - [Access Control](user-manual/access-control.md)
+- **Import Files** - [Import & Export](user-manual/import-export.md)
 - **Configure Sync** - [Sync Workflow](user-manual/sync-workflow.md)
 
 

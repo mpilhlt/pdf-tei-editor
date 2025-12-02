@@ -9,6 +9,7 @@ Tests:
 - Skip directories configuration
 - File grouping by document ID
 - Metadata extraction and inheritance
+- Gold standard detection using patterns (filename and directory)
 
 @testCovers fastapi_app/lib/file_importer.py
 """
@@ -462,6 +463,98 @@ startxref
         # Check it's the correct PDF file
         self.assertEqual(files[0].filename, "doc.pdf")
         self.assertEqual(files[0].file_type, "pdf")
+
+    def test_gold_pattern_in_filename(self):
+        """Test gold detection using filename pattern."""
+        # Create TEI files with .gold. pattern in filename
+        # Use different titles to ensure different content/hashes
+        self.create_test_tei(self.import_dir / "doc1.gold.tei.xml", doc_id="10.1234/doc1", title="Gold Standard")
+        self.create_test_tei(self.import_dir / "doc1.tei.xml", doc_id="10.1234/doc1", title="Working Version")
+        self.create_test_tei(self.import_dir / "doc2.tei.xml", doc_id="10.1234/doc2", title="Document 2")
+
+        # Import with gold pattern matching '.gold.'
+        importer = FileImporter(
+            self.db, self.storage, self.repo,
+            gold_pattern=r'\.gold\.'
+        )
+        stats = importer.import_directory(self.import_dir)
+
+        # Verify all files imported
+        self.assertEqual(stats['files_scanned'], 3)
+        self.assertEqual(stats['files_imported'], 3)
+
+        # Verify gold status
+        files = self.repo.list_files()
+        self.assertEqual(len(files), 3)
+
+        # Find files by filename
+        gold_file = next((f for f in files if 'gold' in f.filename), None)
+        non_gold_files = [f for f in files if 'gold' not in f.filename]
+
+        self.assertIsNotNone(gold_file)
+        self.assertEqual(len(non_gold_files), 2)
+
+        # Verify gold status
+        self.assertTrue(gold_file.is_gold_standard)
+        for f in non_gold_files:
+            self.assertFalse(f.is_gold_standard)
+
+    def test_gold_pattern_in_directory(self):
+        """Test gold detection using directory pattern (default behavior)."""
+        # Create directory structure with tei/ subdirectory
+        tei_dir = self.import_dir / "tei"
+        tei_dir.mkdir()
+
+        self.create_test_tei(tei_dir / "doc1.tei.xml", doc_id="10.1234/doc1")
+        self.create_test_tei(self.import_dir / "doc2.tei.xml", doc_id="10.1234/doc2")
+
+        # Import with default gold pattern (looks for tei directory)
+        importer = FileImporter(self.db, self.storage, self.repo)
+        stats = importer.import_directory(self.import_dir)
+
+        # Verify all files imported
+        self.assertEqual(stats['files_scanned'], 2)
+        self.assertEqual(stats['files_imported'], 2)
+
+        # Verify gold status
+        files = self.repo.list_files()
+        self.assertEqual(len(files), 2)
+
+        # File in tei/ dir should be gold
+        gold_file = next((f for f in files if f.filename == "doc1.tei.xml"), None)
+        non_gold_file = next((f for f in files if f.filename == "doc2.tei.xml"), None)
+
+        self.assertIsNotNone(gold_file)
+        self.assertIsNotNone(non_gold_file)
+
+        self.assertTrue(gold_file.is_gold_standard)
+        self.assertFalse(non_gold_file.is_gold_standard)
+
+    def test_gold_pattern_custom_directory(self):
+        """Test gold detection with custom directory name."""
+        # Create directory structure with custom gold directory
+        gold_dir = self.import_dir / "gold_standard"
+        gold_dir.mkdir()
+
+        self.create_test_tei(gold_dir / "doc1.tei.xml", doc_id="10.1234/doc1")
+        self.create_test_tei(self.import_dir / "doc2.tei.xml", doc_id="10.1234/doc2")
+
+        # Import with custom gold directory name
+        importer = FileImporter(
+            self.db, self.storage, self.repo,
+            gold_dir_name="gold_standard"
+        )
+        stats = importer.import_directory(self.import_dir)
+
+        # Verify gold status
+        files = self.repo.list_files()
+        self.assertEqual(len(files), 2)
+
+        gold_file = next((f for f in files if f.filename == "doc1.tei.xml"), None)
+        non_gold_file = next((f for f in files if f.filename == "doc2.tei.xml"), None)
+
+        self.assertTrue(gold_file.is_gold_standard)
+        self.assertFalse(non_gold_file.is_gold_standard)
 
 
 if __name__ == '__main__':

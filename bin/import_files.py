@@ -5,6 +5,7 @@ Import PDF and XML files from any directory into FastAPI database.
 Usage:
     python bin/import_files.py demo/data --collection example
     python bin/import_files.py /path/to/files --collection my_collection --dry-run
+    python bin/import_files.py /path/to/files --gold-pattern '\\.gold\\.'
 """
 
 import argparse
@@ -54,6 +55,17 @@ Examples:
   # Files in /path/to/data/corpus1/pdf/file.pdf -> collection "corpus1" (skips "pdf" dir)
   # Files in /path/to/data/corpus2/tei/file.xml -> collection "corpus2" (skips "tei" dir)
   # Files in /path/to/data/file.pdf -> no collection
+
+  # Use filename pattern for gold standard detection
+  python bin/import_files.py /path/to/files --gold-pattern '\\.gold\\.'
+  # Files like 'xyz.gold.tei.xml' marked as gold, doc_id becomes 'xyz.tei.xml'
+
+  python bin/import_files.py /path/to/files --gold-pattern '_gold_'
+  # Files like 'xyz_gold_file.tei.xml' marked as gold, doc_id becomes 'xyzfile.tei.xml'
+
+  Note: By default, *.tei.xml files in a directory called "tei" are treated as gold files.
+  Use --gold-pattern to customize gold detection via regex matching on path or filename.
+
         """
     )
     parser.add_argument('directory',
@@ -76,7 +88,14 @@ Examples:
     parser.add_argument('--clean', action='store_true',
                        help='Clear all existing data from database before importing')
     parser.add_argument('--gold-dir-name', default='tei',
-                       help='Name of directory containing gold standard files (default: tei)')
+                       help='Name of directory containing gold standard files (default: tei). '
+                            'Only used if --gold-pattern is not specified.')
+    parser.add_argument('--gold-pattern',
+                       help='Regular expression pattern to detect gold standard files. '
+                            'Can match either the full path or filename. If matched in filename, '
+                            'the pattern is stripped before parsing doc_id. '
+                            'Examples: r\'\\.gold\\.\' for .gold. in name, r\'_gold_\' for _gold_ in name. '
+                            'Default: matches files in directory with name from --gold-dir-name.')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
     args = parser.parse_args()
@@ -117,11 +136,17 @@ Examples:
 
     # Pass skip_dirs only if recursive_collections is enabled
     skip_dirs = args.skip_dirs if args.recursive_collections else None
-    importer = FileImporter(db, storage, repo, args.dry_run, skip_dirs, args.gold_dir_name)
+    importer = FileImporter(
+        db, storage, repo, args.dry_run, skip_dirs,
+        args.gold_dir_name, args.gold_pattern
+    )
 
     # Import
     logger.info(f"Importing from {directory}")
-    logger.info(f"Gold standard directory: {args.gold_dir_name}")
+    if args.gold_pattern:
+        logger.info(f"Gold standard pattern: {args.gold_pattern}")
+    else:
+        logger.info(f"Gold standard directory: {args.gold_dir_name}")
     if args.recursive_collections:
         logger.info("Using subdirectory names as collection names")
         logger.info(f"Skipping directories: {', '.join(args.skip_dirs)}")

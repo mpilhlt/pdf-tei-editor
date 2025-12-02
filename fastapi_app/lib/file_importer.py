@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, TypedDict
 from datetime import datetime
 import logging
+import re
 from lxml import etree
 
 from .file_storage import FileStorage
@@ -55,7 +56,8 @@ class FileImporter:
         repo: FileRepository,
         dry_run: bool = False,
         skip_collection_dirs: Optional[List[str]] = None,
-        gold_dir_name: str = 'tei'
+        gold_dir_name: str = 'tei',
+        gold_pattern: Optional[str] = None
     ):
         """
         Args:
@@ -66,7 +68,16 @@ class FileImporter:
             skip_collection_dirs: Directory names to skip when determining collection
                 from path (e.g., ['pdf', 'tei', 'versions']). These are organizational
                 directories that should not be used as collection names.
-            gold_dir_name: Name of directory containing gold standard files (default: 'tei')
+            gold_dir_name: Name of directory containing gold standard files (default: 'tei').
+                Only used if gold_pattern is not specified.
+            gold_pattern: Regular expression pattern to detect gold standard files.
+                Can match either the full path or the filename. If matched in filename,
+                the pattern is stripped before parsing doc_id. Default: matches files in
+                a directory named 'tei' (platform-independent).
+                Examples:
+                  - '/tei/' - files in 'tei' directory (default behavior)
+                  - r'\.gold\.' - files with '.gold.' in name (e.g., 'xyz.gold.tei.xml')
+                  - '_gold_' - files with '_gold_' in name
         """
         self.db = db
         self.storage = storage
@@ -78,6 +89,18 @@ class FileImporter:
             (name.lower() for name in skip_collection_dirs)
             if skip_collection_dirs else []
         )
+
+        # Compile gold pattern regex
+        if gold_pattern:
+            try:
+                self.gold_pattern = re.compile(gold_pattern)
+            except re.error as e:
+                logger.error(f"Invalid gold pattern '{gold_pattern}': {e}")
+                raise ValueError(f"Invalid gold pattern: {e}")
+        else:
+            # Default: match files in 'tei' directory (platform-independent)
+            # Match /tei/ or \tei\ in path
+            self.gold_pattern = re.compile(r'[/\\]' + re.escape(gold_dir_name) + r'[/\\]')
 
         self.stats: ImportStats = {
             'files_scanned': 0,
@@ -225,6 +248,25 @@ class FileImporter:
         logger.info(f"Scanned {len(files)} files in {directory}")
         return files
 
+    def _normalize_filename_for_matching(self, path: Path) -> Path:
+        """
+        Normalize filename for doc_id matching by stripping gold pattern.
+
+        If gold pattern matches the filename, strip it for matching purposes.
+        This allows 'xyz.gold.tei.xml' to match with 'xyz.pdf' when using
+        filename-based gold detection.
+
+        Returns:
+            Path with normalized filename for matching
+        """
+        filename = path.name
+        if self.gold_pattern.search(filename):
+            # Strip pattern from filename
+            cleaned_filename = self.gold_pattern.sub('', filename)
+            # Return path with cleaned filename
+            return path.parent / cleaned_filename
+        return path
+
     def _group_by_document(
         self,
         files: List[Path],
@@ -234,6 +276,7 @@ class FileImporter:
         Group files by document ID using intelligent matching.
 
         Uses DocIdResolver to match PDFs and TEIs even with different encodings.
+        Normalizes filenames by stripping gold pattern before matching.
 
         Returns:
             {doc_id: {'pdf': [path], 'tei': [path1, path2], 'metadata': {...}}}
@@ -242,7 +285,16 @@ class FileImporter:
         pdf_files = [f for f in files if f.suffix == '.pdf']
         tei_files = [f for f in files if f.suffix == '.xml']
 
-        # First pass: Extract metadata from all TEI files
+        # Normalize TEI filenames for matching (strip gold pattern if in filename)
+        # Keep mapping from normalized to original paths
+        tei_normalized_to_original: Dict[Path, Path] = {}
+        tei_normalized = []
+        for tei_path in tei_files:
+            normalized = self._normalize_filename_for_matching(tei_path)
+            tei_normalized.append(normalized)
+            tei_normalized_to_original[normalized] = tei_path
+
+        # First pass: Extract metadata from all TEI files (using original paths)
         tei_metadata: Dict[Path, Dict] = {}
         for tei_path in tei_files:
             try:
@@ -253,18 +305,24 @@ class FileImporter:
                 logger.error(f"Failed to parse TEI {tei_path}: {e}")
                 tei_metadata[tei_path] = {}
 
+        # Create metadata dict keyed by normalized paths for resolver
+        tei_metadata_normalized: Dict[Path, Dict] = {}
+        for normalized_path in tei_normalized:
+            original_path = tei_normalized_to_original[normalized_path]
+            tei_metadata_normalized[normalized_path] = tei_metadata[original_path]
+
         # Second pass: Match PDFs to TEIs and resolve doc_ids
         documents: Dict[str, DocumentFiles] = {}
 
         for pdf_path in pdf_files:
-            # Find matching TEI files for this PDF
+            # Find matching TEI files for this PDF using normalized names
             matching_teis = self.resolver.find_matching_teis(
-                pdf_path, tei_files, tei_metadata
+                pdf_path, tei_normalized, tei_metadata_normalized
             )
 
             # Resolve doc_id using all available information
             doc_id, doc_id_type = self.resolver.resolve_doc_id_for_pdf(
-                pdf_path, matching_teis, tei_metadata
+                pdf_path, matching_teis, tei_metadata_normalized
             )
 
             # Initialize document group
@@ -279,10 +337,11 @@ class FileImporter:
 
             documents[doc_id]['pdf'].append(pdf_path)
 
-            # Add all matching TEIs to this document group
-            for tei_path, metadata in matching_teis:
-                if tei_path not in documents[doc_id]['tei']:
-                    documents[doc_id]['tei'].append(tei_path)
+            # Add all matching TEIs to this document group (using original paths)
+            for normalized_tei_path, metadata in matching_teis:
+                original_tei_path = tei_normalized_to_original[normalized_tei_path]
+                if original_tei_path not in documents[doc_id]['tei']:
+                    documents[doc_id]['tei'].append(original_tei_path)
 
         # Third pass: Handle orphaned TEI files (no matching PDF)
         for tei_path in tei_files:
@@ -310,8 +369,9 @@ class FileImporter:
                         }
                     documents[doc_id]['tei'].append(tei_path)
                 else:
-                    # No doc_id - use filename
-                    doc_id = tei_path.stem.replace('.tei', '')
+                    # No doc_id - use filename (normalized for gold pattern)
+                    normalized_path = self._normalize_filename_for_matching(tei_path)
+                    doc_id = normalized_path.stem.replace('.tei', '')
                     logger.warning(f"No doc_id for TEI {tei_path.name}, using filename: {doc_id}")
                     if doc_id not in documents:
                         documents[doc_id] = {
@@ -437,16 +497,20 @@ class FileImporter:
         # Extract variant from TEI metadata
         variant = metadata.get('variant')
 
-        # Determine if this is a gold standard file based on directory structure
-        # IMPORTANT: This directory-based approach needs replacement before Phase 10
-        # because it can lead to inconsistent state (no gold file for a variant).
-        # If files are moved/imported from non-standard directories, we may end up
-        # with variants that have no gold standard version.
-        # TODO (Phase 10): Implement explicit gold marking in TEI metadata or use
-        # a database migration to ensure exactly one gold per (doc_id, variant) pair.
-        path_parts_lower = [p.lower() for p in tei_path.parts]
-        is_in_gold_dir = self.gold_dir_name in path_parts_lower
-        is_gold = is_in_gold_dir
+        # Determine if this is a gold standard file using pattern matching
+        # Test both full path and filename against the pattern
+        full_path_str = str(tei_path.as_posix())  # Platform-independent path
+        filename = tei_path.name
+
+        is_gold = bool(self.gold_pattern.search(full_path_str))
+
+        # If pattern matches filename, strip it for doc_id determination
+        # This allows patterns like '.gold.' to mark files and be stripped
+        # e.g., 'xyz.gold.tei.xml' -> 'xyz.tei.xml' for doc_id parsing
+        if self.gold_pattern.search(filename):
+            # Strip pattern from filename for doc_id resolution
+            cleaned_filename = self.gold_pattern.sub('', filename)
+            logger.debug(f"Stripped gold pattern from filename: {filename} -> {cleaned_filename}")
 
         # Determine version number by counting existing files with same doc_id + variant
         # Version numbering is sequential: 0, 1, 2, 3...

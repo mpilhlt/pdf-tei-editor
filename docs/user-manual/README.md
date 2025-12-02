@@ -28,6 +28,7 @@ New to the PDF-TEI Editor? Start here:
 | [Collection Management](collection-management.md) | How to organize documents into collections |
 | [Access Control](access-control.md) | How to manage document permissions |
 | [Merging Workflow](merging-workflow.md) | How to compare and merge document versions |
+| [Import & Export](import-export.md) | How to import PDF/TEI files and export data |
 
 ### Advanced Features
 
@@ -36,6 +37,7 @@ New to the PDF-TEI Editor? Start here:
 | [Sync Workflow](sync-workflow.md) | How to synchronize with WebDAV servers |
 | [User Management](user-management.md) | How to manage users and roles (administrators) |
 | [CLI Reference](cli.md) | Command-line interface for user and collection management |
+| [Import & Export](import-export.md) | Bulk import/export and backup strategies |
 
 ### Quick Setup
 

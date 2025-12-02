@@ -842,6 +842,10 @@ async function saveRevision(state) {
     await addTeiHeaderInfo(respStmt, undefined, revisionChange)
     if (!state.xml) throw new Error('No XML file loaded')
 
+    // Mark editor as clean to prevent autosave from triggering
+    // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)
+    xmlEditor.markAsClean()
+
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
 
@@ -918,6 +922,11 @@ async function createNewVersion(state) {
     // This ensures the new version has unique content (won't conflict with existing content hash)
     await addTeiHeaderInfo(respStmt, editionStmt)
 
+    // Mark editor as clean to prevent autosave from triggering
+    // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)
+    // We want to explicitly control the save with new_version=true below
+    xmlEditor.markAsClean()
+
     // Save as new version with the modified content
     // The backend will:
     // 1. Resolve doc_id from currentFileId (the source file)
@@ -931,12 +940,13 @@ async function createNewVersion(state) {
     // Mark as clean since we just saved
     xmlEditor.markAsClean()
 
-    // Update state to reflect the new file_id without reloading from backend
-    // (editor already has the correct content from addTeiHeaderInfo)
-    await app.updateState({ xml: newFileId })
-
-    // reload the file data to display the new name and inform the user
+    // Reload the file data first to include the new version
     await fileselection.reload({refresh:true})
+
+    // Then update state to reflect the new file_id
+    // (editor already has the correct content from addTeiHeaderInfo)
+    // This will trigger file-selection update with the refreshed fileData
+    await app.updateState({ xml: newFileId })
 
     notify("Document was duplicated. You are now editing the copy.")
     
