@@ -1,0 +1,91 @@
+"""
+File delete API router for FastAPI.
+
+Implements POST /api/files/delete - Soft delete files.
+
+Key changes from Flask:
+- Soft delete (set deleted=1) instead of physical removal
+- No .deleted marker files needed
+- Database update sets sync_status='pending_delete' for sync tracking
+- Physical files remain in storage until garbage collection
+  (can be implemented later as administrative task)
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import List
+
+from ..lib.file_repository import FileRepository
+from ..lib.file_storage import FileStorage
+from ..lib.models_files import DeleteFilesRequest, DeleteFilesResponse
+from ..lib.dependencies import (
+    get_file_repository,
+    get_file_storage,
+    require_authenticated_user
+)
+from ..lib.access_control import check_file_access
+from ..lib.logging_utils import get_logger
+
+
+logger = get_logger(__name__)
+router = APIRouter(prefix="/files", tags=["files"])
+
+
+@router.post("/delete", response_model=DeleteFilesResponse)
+def delete_files(
+    body: DeleteFilesRequest,
+    repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
+    current_user: dict = Depends(require_authenticated_user)
+) -> DeleteFilesResponse:
+    """
+    Delete files (soft delete with reference counting).
+
+    Sets deleted=1 and sync_status='pending_delete' in database.
+
+    Reference counting ensures physical files are deleted only when:
+    - No database entries reference the file (ref_count = 0)
+    - Safe for deduplication (same content shared by multiple entries)
+
+    Args:
+        body: DeleteFilesRequest with list of file IDs (stable_id or full hash)
+        repo: File repository (injected)
+        storage: File storage with reference counting (injected)
+        current_user: Current user dict (injected)
+
+    Returns:
+        {"result": "ok"}
+
+    Raises:
+        HTTPException: 403 if insufficient permissions
+    """
+    logger.debug(f"Deleting {len(body.files)} files, user={current_user}")
+
+    for file_id in body.files:
+        # Skip empty identifiers (including whitespace-only)
+        if not file_id or not file_id.strip():
+            logger.warning("Ignoring empty file identifier")
+            continue
+
+        # Look up file by ID or stable_id
+        file_metadata = repo.get_file_by_id_or_stable_id(file_id)
+        if not file_metadata:
+            logger.warning(f"File not found for deletion: {file_id}")
+            continue  # Skip non-existent files
+
+        # Check write permissions
+        if not check_file_access(file_metadata, current_user, 'write'):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Insufficient permissions to delete {file_id}"
+            )
+
+        # Soft delete in database (FileRepository handles reference counting)
+        logger.info(f"Soft deleting file: {file_id} (hash: {file_metadata.id[:16]}...)")
+        try:
+            repo.delete_file(file_metadata.id)
+
+        except ValueError as e:
+            logger.error(f"Failed to delete file {file_id}: {e}")
+            # Continue with other files
+
+    return DeleteFilesResponse(result="ok")

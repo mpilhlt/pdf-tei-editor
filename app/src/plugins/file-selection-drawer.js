@@ -3,10 +3,10 @@
  * Uses a SlDrawer with SlTree for hierarchical file selection
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem } from '../ui.js'
- * @import { FileListItem } from '../modules/file-data-utils.js'
+ * @import { DocumentItem } from '../modules/file-data-utils.js'
  */
 
 /**
@@ -30,9 +30,9 @@ import {
   filterFileDataByVariant,
   filterFileDataByLabel,
   groupFilesByCollection,
-  filterFileContentByVariant,
   findMatchingGold,
-  findFileByPdfHash
+  findFileBySourceId,
+  getCollectionName
 } from '../modules/file-data-utils.js'
 
 /**
@@ -286,8 +286,12 @@ async function populateFileTree(state) {
   
   // Group by collection
   const groupedFiles = groupFilesByCollection(filteredData);
-  const collections = Object.keys(groupedFiles).sort();
-  
+  const collections = Object.keys(groupedFiles).sort((a, b) => {
+    if (a === "__unfiled") return -1;
+    if (b === "__unfiled") return 1;
+    return a.localeCompare(b);
+  });
+
   // Clear existing tree
   fileTree.innerHTML = '';
 
@@ -297,33 +301,32 @@ async function populateFileTree(state) {
     if (!state.pdf && !state.xml) return false;
     const files = groupedFiles[collectionName];
     return files.some(file => {
-      // Expand if this collection contains the current PDF
-      if (state.pdf && file.pdf.hash === state.pdf) return true;
+      // Expand if this collection contains the current source
+      if (state.pdf && file.source?.id === state.pdf) return true;
       // Expand if this collection contains the current XML
       if (state.xml) {
-        const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
-        return [...versionsToShow, ...goldToShow].some(item => item.hash === state.xml);
+        return file.artifacts?.some(artifact => artifact.id === state.xml);
       }
       return false;
     });
   };
 
-  /** @type { (file:FileListItem) => boolean} */
+  /** @type { (file:DocumentItem) => boolean} */
   const shouldExpandPdf = (file) => {
     if (!state.pdf && !state.xml) return false;
-    // Expand if this is the current PDF
-    if (state.pdf && file.pdf.hash === state.pdf) return true;
-    // Expand if this PDF contains the current XML
+    // Expand if this is the current source
+    if (state.pdf && file.source?.id === state.pdf) return true;
+    // Expand if this source contains the current XML
     if (state.xml) {
-      const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
-      return [...versionsToShow, ...goldToShow].some(item => item.hash === state.xml);
+      return file.artifacts?.some(artifact => artifact.id === state.xml);
     }
     return false;
   };
-  
+
   // Build tree structure programmatically
   for (const collectionName of collections) {
-    const collectionDisplayName = collectionName.replaceAll("_", " ").trim();
+    // Display "Unfiled" for the special __unfiled collection
+    const collectionDisplayName = getCollectionName(collectionName, state.collections);
     
     // Create collection item
     const collectionItem = document.createElement('sl-tree-item');
@@ -332,20 +335,37 @@ async function populateFileTree(state) {
     collectionItem.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
     
     const files = groupedFiles[collectionName]
-      .sort((a, b) => (a.label < b.label) ? -1 : (a.label > b.label) ? 1 : 0);
-    
+      .sort((a, b) => {
+        const aLabel = a.source?.label || a.doc_metadata?.title || a.doc_id;
+        const bLabel = b.source?.label || b.doc_metadata?.title || b.doc_id;
+        return (aLabel < bLabel) ? -1 : (aLabel > bLabel) ? 1 : 0;
+      });
+
     for (const file of files) {
-      // Get filtered content for this file
-      const { versionsToShow, goldToShow } = filterFileContentByVariant(file, state.variant);
-      
-      // Create PDF document item
+      // Filter artifacts based on variant
+      let artifactsToShow = file.artifacts || [];
+      if (state.variant === "none") {
+        artifactsToShow = artifactsToShow.filter(a => !a.variant);
+      } else if (state.variant && state.variant !== "") {
+        artifactsToShow = artifactsToShow.filter(a => a.variant === state.variant);
+      }
+
+      // Separate gold and versions
+      const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
+      const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
+
+      // Create source/PDF document item
       const pdfItem = document.createElement('sl-tree-item');
       pdfItem.expanded = shouldExpandPdf(file);
       pdfItem.className = 'pdf-item';
-      pdfItem.dataset.type = 'pdf';
-      pdfItem.dataset.hash = file.pdf.hash;
-      pdfItem.dataset.collection = file.collection;
-      pdfItem.innerHTML = `<sl-icon name="file-pdf"></sl-icon><span>${file.label}</span>`;
+      // Use actual file type - distinguish between PDF sources and XML-only sources (like RNG)
+      pdfItem.dataset.type = file.source?.file_type === 'pdf' ? 'pdf' : 'xml-only';
+      pdfItem.dataset.hash = file.source?.id || '';
+      pdfItem.dataset.collection = file.collections[0];
+      const displayLabel = file.source?.label || file.doc_metadata?.title || file.doc_id;
+      // Use appropriate icon based on file type
+      const icon = file.source?.file_type === 'pdf' ? 'file-pdf' : 'file-earmark-code';
+      pdfItem.innerHTML = `<sl-icon name="${icon}"></sl-icon><span>${displayLabel}</span>`;
       
       // Add Gold section if there are gold entries
       if (goldToShow.length > 0) {
@@ -359,9 +379,9 @@ async function populateFileTree(state) {
           const goldItem = document.createElement('sl-tree-item');
           goldItem.className = 'gold-item';
           goldItem.dataset.type = 'gold';
-          goldItem.dataset.hash = gold.hash;
-          goldItem.dataset.pdfHash = file.pdf.hash;
-          goldItem.dataset.collection = file.collection;
+          goldItem.dataset.hash = gold.id;
+          goldItem.dataset.pdfHash = file.source?.id || '';
+          goldItem.dataset.collection = file.collections[0];
           goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked);
           goldSection.appendChild(goldItem);
         });
@@ -380,9 +400,9 @@ async function populateFileTree(state) {
           const versionItem = document.createElement('sl-tree-item');
           versionItem.className = 'version-item';
           versionItem.dataset.type = 'version';
-          versionItem.dataset.hash = version.hash;
-          versionItem.dataset.pdfHash = file.pdf.hash;
-          versionItem.dataset.collection = file.collection;
+          versionItem.dataset.hash = version.id;
+          versionItem.dataset.pdfHash = file.source?.id || '';
+          versionItem.dataset.collection = file.collections[0];
           versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked);
           versionsSection.appendChild(versionItem);
         });
@@ -415,10 +435,10 @@ async function selectCurrentStateItem(state, fileTree) {
   
   let itemToSelect = null;
   
-  // Priority: XML item (gold/version) over PDF item
+  // Priority: XML item (gold/version/xml-only) over PDF item
   if (state.xml) {
-    // Find XML item (gold or version) with matching hash
-    itemToSelect = fileTree.querySelector(`[data-type="gold"][data-hash="${state.xml}"], [data-type="version"][data-hash="${state.xml}"]`);
+    // Find XML item (gold, version, or xml-only source) with matching hash
+    itemToSelect = fileTree.querySelector(`[data-type="gold"][data-hash="${state.xml}"], [data-type="version"][data-hash="${state.xml}"], [data-type="xml-only"][data-hash="${state.xml}"]`);
   } else if (state.pdf) {
     // Find PDF item with matching hash
     itemToSelect = fileTree.querySelector(`[data-type="pdf"][data-hash="${state.pdf}"]`);
@@ -481,30 +501,36 @@ async function onFileTreeSelection(event, state) {
   
   // Don't handle section clicks
   if (type === 'section') return;
-  
+
   // Prepare state updates
   const stateUpdates = {};
-  
+
   if (type === 'pdf') {
     // User selected a PDF document
     stateUpdates.pdf = hash;
     stateUpdates.collection = collection;
-    
-    // Find matching gold file for this PDF and variant
-    const selectedFile = findFileByPdfHash(state.fileData, hash);
+
+    // Find matching gold file for this source and variant
+    const selectedFile = findFileBySourceId(state.fileData, hash);
     if (selectedFile) {
       const matchingGold = findMatchingGold(selectedFile, state.variant);
       if (matchingGold) {
-        stateUpdates.xml = matchingGold.hash;
+        stateUpdates.xml = matchingGold.id;
       } else {
         stateUpdates.xml = null;
       }
     }
+  } else if (type === 'xml-only') {
+    // User selected an XML-only source file (RNG schema, standalone TEI, etc.)
+    // The source IS the XML file
+    stateUpdates.xml = hash;
+    stateUpdates.pdf = null; // Clear PDF for XML-only files
+    stateUpdates.collection = collection;
   } else if (type === 'gold' || type === 'version') {
     // User selected an XML file (gold or version)
     stateUpdates.xml = hash;
     stateUpdates.collection = collection;
-    
+
     // Ensure the corresponding PDF is loaded
     if (pdfHash && pdfHash !== state.pdf) {
       stateUpdates.pdf = pdfHash;

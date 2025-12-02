@@ -1,69 +1,94 @@
 #!/usr/bin/env python3
 
-# CLI for running the Flask server in production mode with waitress.
+# CLI for running the FastAPI server in production mode with uvicorn.
 
-import os, sys
+import os
+import sys
+import subprocess
 from pathlib import Path
 
+# Add project root to path for imports
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from server.flask_app import app
+from fastapi_app.lib.server_startup import (
+    load_environment,
+    check_port_in_use,
+    get_pid_on_port,
+    get_host_and_port,
+    setup_log_directory,
+    print_server_running_message,
+    print_server_starting_message
+)
+
 
 if __name__ == '__main__':
-    # host and port default to localhost:3001 unless overridden by CLI arguments
-    host = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
-    
-    # Set up logging to file while keeping console output
-    log_dir = Path(os.environ.get('LOG_DIR', project_root / "log"))
-    log_dir.mkdir(exist_ok=True)  # Create log directory if it doesn't exist
-    log_file = log_dir / "server.log"
-    
-    # Create a custom print function that writes to both console and file
-    original_stdout = sys.stdout
-    original_stderr = sys.stderr
-    
-    class TeeOutput:
-        def __init__(self, *files):
-            self.files = files
-        def write(self, obj):
-            for f in self.files:
-                f.write(obj)
-                f.flush()
-        def flush(self):
-            for f in self.files:
-                f.flush()
-    
-    # Open log file and redirect both stdout and stderr
-    with open(log_file, 'w', buffering=1) as log_f:
+    # Load environment variables
+    load_environment(project_root)
+
+    # Get host and port
+    host, port = get_host_and_port()
+
+    # Check if server is already running
+    if check_port_in_use(port):
+        pid = get_pid_on_port(port)
+        print_server_running_message(host, port, pid)
+        sys.exit(0)
+
+    # Set up logging
+    log_file = setup_log_directory(project_root)
+    print_server_starting_message(host, port, log_file, mode="production")
+
+    # Build uvicorn command for production
+    cmd = [
+        'uv', 'run', 'uvicorn',
+        'run_fastapi:app',
+        '--host', host,
+        '--port', str(port),
+        '--log-level', 'info',
+        '--timeout-graceful-shutdown', '5',
+        '--workers', '4'  # Multiple workers for production
+    ]
+
+    try:
+        # Run uvicorn and tee output to log file
         # In test environment, log only to file to keep console clean
-        if os.environ.get('TEST_IN_PROGRESS'):
-            sys.stdout = log_f
-            sys.stderr = log_f
-        else:
-            # In normal production, tee to both console and file
-            sys.stdout = TeeOutput(original_stdout, log_f)
-            sys.stderr = TeeOutput(original_stderr, log_f)
-        
-        print()
-        print("===================================================================================")
-        print(f"Starting production server with waitress on {host}:{port}")
-        print(f"Load https://your-domain.com/ to access the application")
-        print(f"Server output being logged to: {log_file}")
-        print("===================================================================================")
-        print()
-        
-        try:
-            # Import waitress here to avoid import errors if not installed
-            from waitress import serve
-            serve(app, host=host, port=port, threads=6)
-        except ImportError:
-            print("ERROR: waitress is not installed. Install it with: pip install waitress")
-            sys.exit(1)
-        except KeyboardInterrupt:
-            print("\nShutting down production server...")
-        finally:
-            # Restore original stdout/stderr
-            sys.stdout = original_stdout
-            sys.stderr = original_stderr
+        test_mode = os.environ.get('TEST_IN_PROGRESS')
+
+        with open(log_file, 'w', buffering=1) as log_f:
+            if test_mode:
+                # Test mode: log only to file
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=log_f,
+                    stderr=subprocess.STDOUT,
+                    cwd=str(project_root)
+                )
+                process.wait()
+            else:
+                # Normal production: tee to both console and file
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    cwd=str(project_root)
+                )
+
+                # Stream output to both console and log file
+                for line in process.stdout: # type:ignore
+                    print(line, end='')
+                    log_f.write(line)
+                    log_f.flush()
+
+                process.wait()
+
+    except KeyboardInterrupt:
+        print("\nShutting down FastAPI server...")
+        if process:
+            process.terminate()
+            process.wait()
+    except Exception as e:
+        print(f"Error starting FastAPI server: {e}", file=sys.stderr)
+        sys.exit(1)

@@ -40,6 +40,7 @@ const moveBtn = Object.assign(document.createElement('sl-button'), {
  * @typedef {object} MoveFilesDialog
  * @property {SlSelect} collectionName
  * @property {SlButton} newCollectionBtn
+ * @property {import('../ui.js').SlCheckbox} copyMode
  * @property {SlButton} cancel
  * @property {SlButton} submit
  */
@@ -67,19 +68,49 @@ async function install(state) {
   moveBtn.addEventListener('click', () => {
     if (currentState) showMoveFilesDialog(currentState);
   })
-  ui.moveFilesDialog.newCollectionBtn.addEventListener('click', () => {
-    const newCollectionName = prompt("Enter new collection name (Only letters, numbers, '-' and '_'):");
-    if (newCollectionName) {
-      if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionName)) {
-        dialog.error("Invalid collection name. Only lowercase letters, numbers, hyphens, and underscores are allowed.");
+  ui.moveFilesDialog.newCollectionBtn.addEventListener('click', async () => {
+    const newCollectionId = prompt("Enter new collection ID (Only letters, numbers, '-' and '_'):");
+    if (newCollectionId) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionId)) {
+        dialog.error("Invalid collection ID. Only letters, numbers, hyphens, and underscores are allowed.");
         return;
       }
-      const option = Object.assign(document.createElement('sl-option'), {
-        value: newCollectionName,
-        textContent: newCollectionName.replaceAll("_", " ").trim()
-      });
-      ui.moveFilesDialog.collectionName.append(option);
-      ui.moveFilesDialog.collectionName.value = newCollectionName;
+
+      const newCollectionName = prompt("Enter collection display name (optional, leave blank to use ID):");
+
+      try {
+        const result = await client.createCollection(newCollectionId, newCollectionName || newCollectionId);
+        if (result.success) {
+          // Remove placeholder option if it exists
+          const placeholderOption = ui.moveFilesDialog.collectionName.querySelector('sl-option[disabled]');
+          if (placeholderOption) {
+            placeholderOption.remove();
+          }
+
+          // Add new collection to select box
+          const option = Object.assign(document.createElement('sl-option'), {
+            value: newCollectionId,
+            textContent: newCollectionName || newCollectionId
+          });
+          ui.moveFilesDialog.collectionName.append(option);
+          ui.moveFilesDialog.collectionName.value = newCollectionId;
+          notify(result.message);
+
+          // Reload file data to update collections in state
+          await fileselection.reload();
+        }
+      } catch (error) {
+        dialog.error(`Error creating collection: ${String(error)}`);
+      }
+    }
+  });
+
+  // Update button label when copy mode changes
+  ui.moveFilesDialog.copyMode.addEventListener('sl-change', () => {
+    const isCopyMode = ui.moveFilesDialog.copyMode.checked;
+    const submitLabel = ui.moveFilesDialog.querySelector('[name="submitLabel"]');
+    if (submitLabel) {
+      submitLabel.textContent = isCopyMode ? 'Copy' : 'Move';
     }
   });
 }
@@ -89,23 +120,41 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function showMoveFilesDialog(state) {
-  const { xml, pdf } = state;
+  const { xml, pdf, collections } = state;
   if (!xml || !pdf) {
-    dialog.error("Cannot move files, PDF or XML path is missing.");
+    dialog.error("Cannot move/copy files, PDF or XML path is missing.");
     return;
   }
 
-  const currentCollection = pdf.split('/')[3];
+  // Reset copy mode checkbox and button label
+  ui.moveFilesDialog.copyMode.checked = false;
+  const submitLabel = ui.moveFilesDialog.querySelector('[name="submitLabel"]');
+  if (submitLabel) {
+    submitLabel.textContent = 'Move';
+  }
 
+  // Populate collections from state
   const collectionSelectBox = ui.moveFilesDialog.collectionName;
   collectionSelectBox.innerHTML = "";
-  const collections = JSON.parse(ui.toolbar.pdf.dataset.collections || '[]').filter(c => c !== currentCollection);
-  for (const collection_name of collections) {
-    const option = Object.assign(document.createElement('sl-option'), {
-      value: collection_name,
-      textContent: collection_name.replaceAll("_", " ").trim()
+
+  if (!collections || collections.length === 0) {
+    // No collections available - show a message but allow creating new one
+    const placeholderOption = Object.assign(document.createElement('sl-option'), {
+      value: '',
+      textContent: '(No collections available - click "New" to create one)',
+      disabled: true
     });
-    collectionSelectBox.append(option);
+    collectionSelectBox.append(placeholderOption);
+    collectionSelectBox.value = '';
+  } else {
+    // Add all accessible collections
+    for (const collection of collections) {
+      const option = Object.assign(document.createElement('sl-option'), {
+        value: collection.id,
+        textContent: collection.name
+      });
+      collectionSelectBox.append(option);
+    }
   }
 
   try {
@@ -116,7 +165,7 @@ async function showMoveFilesDialog(state) {
       ui.moveFilesDialog.addEventListener('sl-hide', e => e.preventDefault(), { once: true });
     });
   } catch (e) {
-    logger.warn("User cancelled move files dialog");
+    logger.warn("User cancelled move/copy files dialog");
     return;
   } finally {
     ui.moveFilesDialog.hide();
@@ -124,19 +173,36 @@ async function showMoveFilesDialog(state) {
 
   const destinationCollection = String(collectionSelectBox.value);
   if (!destinationCollection) {
-    dialog.error("No collection selected.");
+    dialog.error("No collection selected. Please select a collection or create a new one.");
     return;
   }
 
-  ui.spinner.show('Moving files, please wait...');
+  const isCopyMode = ui.moveFilesDialog.copyMode.checked;
+  const operationName = isCopyMode ? 'Copying' : 'Moving';
+
+  ui.spinner.show(`${operationName} files, please wait...`);
   try {
     state = app.getCurrentState()
-    const { new_pdf_path, new_xml_path } = await client.moveFiles(pdf, xml, destinationCollection);
+    let result;
+    if (isCopyMode) {
+      result = await client.copyFiles(pdf, xml, destinationCollection);
+    } else {
+      result = await client.moveFiles(pdf, xml, destinationCollection);
+    }
+
+    // Reload file data to reflect changes
     await fileselection.reload();
-    await services.load({ pdf: new_pdf_path, xml: new_xml_path });
-    notify(`Files moved  to "${destinationCollection}"`);
+
+    // Load the files at their new/copied location (IDs remain the same)
+    await services.load({ pdf: result.new_pdf_id, xml: result.new_xml_id });
+
+    // Get collection name for notification
+    const destCollection = collections.find(c => c.id === destinationCollection);
+    const collectionName = destCollection ? destCollection.name : destinationCollection;
+
+    notify(`Files ${isCopyMode ? 'copied' : 'moved'} to "${collectionName}"`);
   } catch (error) {
-    dialog.error(`Error moving files: ${String(error)}`);
+    dialog.error(`Error ${isCopyMode ? 'copying' : 'moving'} files: ${String(error)}`);
   } finally {
     ui.spinner.hide();
   }

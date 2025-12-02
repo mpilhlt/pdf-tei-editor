@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
+import { Command } from 'commander';
 import madge from 'madge';
-import { parse as parseComments } from 'comment-parser';
+import { logger } from './api/helpers/test-logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname); // Go up from tests to project root
 
-const DEBUG = process.argv.includes('--debug');
+let DEBUG = false;
+/**
+ * @param {...any} args
+ */
 const debugLog = (...args) => {
   if (DEBUG) {
     console.log('[DEBUG]', ...args);
@@ -30,60 +34,60 @@ class SmartTestRunner {
 
   async discoverTestFiles() {
     const testsDir = join(projectRoot, 'tests');
-    if (!existsSync(testsDir)) return { js: [], py: [], e2e: { playwright: [], backend: [] } };
+    if (!existsSync(testsDir)) return { js: [], py: [], api: [], e2e: [] };
 
+    const { glob } = await import('glob');
+
+    // Helper to normalize paths for glob (use forward slashes even on Windows)
+    const normalizeGlobPattern = (path) => path.replace(/\\/g, '/');
+
+    // Helper to convert absolute paths to relative and normalize to forward slashes
+    const makeRelative = (file) => relative(projectRoot, file).replace(/\\/g, '/');
+
+    // Discover JS unit tests in tests/unit/ (recursively)
+    const unitDir = join(testsDir, 'unit');
     const jsTests = [];
+    if (existsSync(unitDir)) {
+      const jsPattern = normalizeGlobPattern(join(unitDir, '**/*.test.js'));
+      const jsFiles = await glob(jsPattern);
+      jsTests.push(...jsFiles.map(makeRelative));
+    }
+
+    // Discover Python unit tests in tests/unit/ (recursively)
     const pyTests = [];
-
-    // Discover JS tests in tests/js/ only
-    const jsDir = join(testsDir, 'js');
-    if (existsSync(jsDir)) {
-      const jsFiles = readdirSync(jsDir);
-      jsTests.push(...jsFiles
-        .filter(file => file.endsWith('.test.js') || file.endsWith('.cjs'))
-        .map(file => `tests/js/${file}`)
-      );
+    if (existsSync(unitDir)) {
+      const pyPattern = normalizeGlobPattern(join(unitDir, '**/test_*.py'));
+      const pyFiles = await glob(pyPattern);
+      pyTests.push(...pyFiles.map(makeRelative));
     }
 
-    // Discover Python tests in tests/py/
-    const pyDir = join(testsDir, 'py');
-    if (existsSync(pyDir)) {
-      const pyFiles = readdirSync(pyDir);
-      pyTests.push(...pyFiles
-        .filter(file => file.startsWith('test_') && file.endsWith('.py'))
-        .map(file => `tests/py/${file}`)
-      );
+    // Discover API tests in tests/api/ (backend API integration tests)
+    const apiTests = [];
+    const apiDir = join(testsDir, 'api');
+    if (existsSync(apiDir)) {
+      const apiPattern = normalizeGlobPattern(join(apiDir, '**/*.test.js'));
+      const apiFiles = await glob(apiPattern);
+      apiTests.push(...apiFiles.map(makeRelative));
     }
 
-    // Discover e2e tests recursively (both Playwright .spec.js and backend .test.js)
+    // Discover E2E tests in tests/e2e/ (Playwright frontend E2E tests)
+    const e2eTests = [];
     const e2eDir = join(testsDir, 'e2e');
-    const playwrightTests = [];
-    const backendTests = [];
-
     if (existsSync(e2eDir)) {
-      const { glob } = await import('glob');
-
-      // Use recursive glob patterns to find files in subdirectories
-      const playwrightPattern = join(e2eDir, '**/*.spec.js');
-      const backendPattern = join(e2eDir, '**/*.test.js');
-
-      const playwrightFiles = await glob(playwrightPattern);
-      const backendFiles = await glob(backendPattern);
-
-      playwrightTests.push(...playwrightFiles.map(file => {
-        return file.replace(projectRoot + '/', ''); // Make relative to project root
-      }));
-      backendTests.push(...backendFiles.map(file => {
-        return file.replace(projectRoot + '/', ''); // Make relative to project root
-      }));
+      const e2ePattern = normalizeGlobPattern(join(e2eDir, '**/*.spec.js'));
+      const e2eFiles = await glob(e2ePattern);
+      e2eTests.push(...e2eFiles.map(makeRelative));
     }
 
     if (!process.argv.includes('--tap')) {
-      console.log(`📋 Discovered ${jsTests.length} JS tests, ${pyTests.length} Python tests, ${playwrightTests.length} Playwright E2E tests, and ${backendTests.length} Backend E2E tests`);
+      logger.info(`Discovered ${jsTests.length} JS unit tests, ${pyTests.length} Python unit tests, ${apiTests.length} API tests, ${e2eTests.length} E2E tests`);
     }
-    return { js: jsTests, py: pyTests, e2e: { playwright: playwrightTests, backend: backendTests } };
+    return { js: jsTests, py: pyTests, api: apiTests, e2e: e2eTests };
   }
 
+  /**
+   * @param {string} filePath
+   */
   parseTestAnnotations(filePath) {
     debugLog(`ENTERING parseTestAnnotations for ${filePath}`);
     try {
@@ -110,6 +114,7 @@ class SmartTestRunner {
                 }
             }
 
+            // Parse @env annotations (VAR_NAME, VAR=VALUE, or .env file paths)
             const envRegex = /@env\s+([^\n]+)/g;
             while ((match = envRegex.exec(commentBlock)) !== null) {
                 const envSpec = match[1].trim();
@@ -146,7 +151,7 @@ class SmartTestRunner {
             }
           }
 
-          // Find all @env annotations
+          // Parse @env annotations (VAR_NAME, VAR=VALUE, or .env file paths)
           const envRegex = /@env\s+([^\n]+)/g;
           while ((match = envRegex.exec(docstring)) !== null) {
             const envSpec = match[1].trim();
@@ -169,7 +174,7 @@ class SmartTestRunner {
    * @param {string[]} testFiles
    */
   async analyzeJSDependencies(testFiles) {
-    if (!process.argv.includes('--tap')) console.log('🔍 Analyzing JavaScript dependencies...');
+    if (!process.argv.includes('--tap')) logger.info('Analyzing JavaScript dependencies...');
     /** @type {Record<string, {dependencies: string[], alwaysRun: boolean, envVars: string[]}>} */
     const jsDeps = {};
     /** @type {string[]} */
@@ -232,7 +237,7 @@ class SmartTestRunner {
    * @param {string[]} testFiles
    */
   async analyzePyDependencies(testFiles) {
-    if (!process.argv.includes('--tap')) console.log('🔍 Analyzing Python dependencies...');
+    if (!process.argv.includes('--tap')) logger.info('Analyzing Python dependencies...');
     /** @type {Record<string, {dependencies: string[], alwaysRun: boolean, envVars: string[]}>} */
     const pyDeps = {};
     /** @type {string[]} */
@@ -328,7 +333,7 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {{tap?: boolean, all?: boolean, changedFiles?: string[] | null}}
+   * @param {{tap?: boolean, all?: boolean, changedFiles?: string[] | null}} options
    */
   async analyzeDependencies(options = {}) {
     if (options.tap) {
@@ -339,20 +344,41 @@ class SmartTestRunner {
     if (!process.argv.includes('--tap')) console.log('🔬 Running dependency analysis...');
 
     const testFiles = await this.discoverTestFiles();
-    const allE2ETests = [...testFiles.e2e.playwright, ...testFiles.e2e.backend];
-    const [jsResult, pyResult, e2eResult] = await Promise.all([
+    const [jsResult, pyResult, apiResult, e2eResult] = await Promise.all([
       this.analyzeJSDependencies(testFiles.js),
       this.analyzePyDependencies(testFiles.py),
-      this.analyzeE2EDependencies(allE2ETests)
+      this.analyzeE2EDependencies(testFiles.api),
+      this.analyzeE2EDependencies(testFiles.e2e)
     ]);
 
-    const allDeps = { ...jsResult.dependencies, ...pyResult.dependencies, ...e2eResult.dependencies };
-    const allAlwaysRun = [...jsResult.alwaysRunTests, ...pyResult.alwaysRunTests, ...e2eResult.alwaysRunTests];
-    
+    const allDeps = { ...jsResult.dependencies, ...pyResult.dependencies, ...apiResult.dependencies, ...e2eResult.dependencies };
+    const allAlwaysRun = [...jsResult.alwaysRunTests, ...pyResult.alwaysRunTests, ...apiResult.alwaysRunTests, ...e2eResult.alwaysRunTests];
+
     return {
       dependencies: allDeps,
       alwaysRunTests: allAlwaysRun
     };
+  }
+
+  /**
+   * Categorize @env annotations into environment variables and .env files
+   * @param {Set<string>} envVars - Set of env annotations
+   * @returns {{vars: string[], files: string[]}} Categorized env vars and files
+   */
+  categorizeEnvVars(envVars) {
+    const vars = [];
+    const files = [];
+
+    for (const envSpec of envVars) {
+      // Check if it's a .env file path
+      if (envSpec.startsWith('.env')) {
+        files.push(envSpec);
+      } else {
+        vars.push(envSpec);
+      }
+    }
+
+    return { vars, files };
   }
 
   /**
@@ -384,9 +410,9 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {string}
-   * @param {string[]}
-   * @param {{dependencies: Record<string, {dependencies: string[], alwaysRun: boolean}>}}
+   * @param {string} testFile
+   * @param {string[]} changedFiles
+   * @param {{dependencies: Record<string, {dependencies: string[], alwaysRun: boolean}>}} analysisResult
    */
   shouldRunTest(testFile, changedFiles, analysisResult) {
     const testData = analysisResult.dependencies[testFile];
@@ -433,7 +459,7 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {{all?: boolean, tap?: boolean, changedFiles?: string[] | null}}
+   * @param {{all?: boolean, tap?: boolean, changedFiles?: string[] | null}} options
    */
   async getTestsToRun(options = {}) {
     const testFiles = await this.discoverTestFiles();
@@ -446,7 +472,7 @@ class SmartTestRunner {
     }
 
     const changedFiles = this.getChangedFiles(options.changedFiles);
-    if (!options.tap) console.log('📁 Changed files:', changedFiles.length > 0 ? changedFiles.join(', ') : 'none');
+    if (!options.tap) logger.info('Changed files:', changedFiles.length > 0 ? changedFiles.join(', ') : 'none');
 
     const analysisResult = await this.analyzeDependencies(options);
     debugLog('Analysis result:', JSON.stringify(analysisResult, null, 2));
@@ -459,13 +485,13 @@ class SmartTestRunner {
       const alwaysRunPy = testFiles.py.filter(test =>
         analysisResult.alwaysRunTests.includes(test)
       );
-      const alwaysRunPlaywright = testFiles.e2e.playwright.filter(test =>
+      const alwaysRunApi = testFiles.api.filter(test =>
         analysisResult.alwaysRunTests.includes(test)
       );
-      const alwaysRunBackend = testFiles.e2e.backend.filter(test =>
+      const alwaysRunE2e = testFiles.e2e.filter(test =>
         analysisResult.alwaysRunTests.includes(test)
       );
-      const tests = { js: alwaysRunJs, py: alwaysRunPy, e2e: { playwright: alwaysRunPlaywright, backend: alwaysRunBackend } };
+      const tests = { js: alwaysRunJs, py: alwaysRunPy, api: alwaysRunApi, e2e: alwaysRunE2e };
       debugLog('No changed files, running only always-run tests:', tests);
       return { tests, analysisResult };
     }
@@ -478,20 +504,29 @@ class SmartTestRunner {
       this.shouldRunTest(test, changedFiles, analysisResult)
     );
 
-    const playwrightTests = testFiles.e2e.playwright.filter(test =>
-      this.shouldRunTest(test, changedFiles, analysisResult)
-    );
-    const backendTests = testFiles.e2e.backend.filter(test =>
+    const apiTests = testFiles.api.filter(test =>
       this.shouldRunTest(test, changedFiles, analysisResult)
     );
 
-    const tests = { js: jsTests, py: pyTests, e2e: { playwright: playwrightTests, backend: backendTests } };
+    const e2eTests = testFiles.e2e.filter(test =>
+      this.shouldRunTest(test, changedFiles, analysisResult)
+    );
+
+    const tests = { js: jsTests, py: pyTests, api: apiTests, e2e: e2eTests };
     debugLog('Selected tests to run based on changes:', tests);
     return { tests, analysisResult };
   }
 
   /**
-   * @param {{tap?: boolean, dryRun?: boolean, all?: boolean, changedFiles?: string[] | null, dotenvPath?: string | null}}
+   * @typedef {Object} RunOptions
+   * @property {boolean} [tap] - Output in TAP format
+   * @property {boolean} [dryRun] - Show which tests would run without executing
+   * @property {boolean} [all] - Run all tests regardless of changes
+   * @property {string[] | null} [changedFiles] - Custom list of changed files to analyze
+   */
+
+  /**
+   * @param {RunOptions} options
    */
   async run(options = {}) {
     const isTap = options.tap;
@@ -505,81 +540,105 @@ class SmartTestRunner {
 
     const { tests: testsToRun, analysisResult } = await this.getTestsToRun(options);
 
-    const jsCommand = testsToRun.js.length > 0 ? `node --test ${isTap ? '--test-reporter=tap' : ''} ${testsToRun.js.join(' ')}` : null;
-    const pyCommand = testsToRun.py.length > 0 ? `uv run pytest ${isTap ? '--tap-stream' : ''} ${testsToRun.py.join(' ')} -v` : null;
-    
-    // Collect environment variables from selected E2E tests
-    const playwrightEnvVars = new Set();
-    if (testsToRun.e2e && testsToRun.e2e.playwright) {
-      for (const testFile of testsToRun.e2e.playwright) {
+    const jsCommand = testsToRun.js.length > 0 ? `node tests/unit-test-runner.js ${isTap ? '--tap' : ''} ${testsToRun.js.join(' ')}` : null;
+    const pyCommand = testsToRun.py.length > 0 ? `uv run python tests/unit-test-runner.py ${isTap ? '--tap' : ''} ${testsToRun.py.join(' ')}` : null;
+
+    // Collect environment variables from API tests
+    const apiEnvVars = new Set();
+    if (testsToRun.api && testsToRun.api.length > 0) {
+      for (const testFile of testsToRun.api) {
         const testData = analysisResult.dependencies[testFile];
         if (testData && testData.envVars) {
-          testData.envVars.forEach(envVar => playwrightEnvVars.add(envVar));
+          testData.envVars.forEach(envVar => apiEnvVars.add(envVar));
         }
       }
     }
-    const backendEnvVars = new Set();
-    if (testsToRun.e2e && testsToRun.e2e.backend) {
-      for (const testFile of testsToRun.e2e.backend) {
-          const testData = analysisResult.dependencies[testFile];
-          if (testData && testData.envVars) {
-              testData.envVars.forEach(envVar => backendEnvVars.add(envVar));
-          }
+
+    // Collect environment variables from E2E tests
+    const e2eEnvVars = new Set();
+    if (testsToRun.e2e && testsToRun.e2e.length > 0) {
+      for (const testFile of testsToRun.e2e) {
+        const testData = analysisResult.dependencies[testFile];
+        if (testData && testData.envVars) {
+          testData.envVars.forEach(envVar => e2eEnvVars.add(envVar));
+        }
       }
     }
 
-    // Build E2E commands with environment variables and dotenv path
-    let playwrightCommand = null;
-    if (testsToRun.e2e && testsToRun.e2e.playwright && testsToRun.e2e.playwright.length > 0) {
-      const testFiles = testsToRun.e2e.playwright.map(f => f.replace('tests/e2e/', '').replace('.spec.js', '')).join('|');
-      const grepArg = `--grep "${testFiles}"`;
-      const envArgs = Array.from(playwrightEnvVars).map(envVar => `--env "${envVar}"`).join(' ');
-      const dotenvArg = options.dotenvPath ? `--dotenv-path "${options.dotenvPath}"` : '';
-      const extraArgs = [grepArg, envArgs, dotenvArg].filter(Boolean).join(' ');
-      playwrightCommand = `node tests/e2e-runner.js --playwright ${extraArgs}`;
+    // Build API test command (backend API integration tests)
+    let apiCommand = null;
+    if (testsToRun.api && testsToRun.api.length > 0) {
+      const testFiles = testsToRun.api.join(' ');
+      const { vars: apiVars, files: apiFiles } = this.categorizeEnvVars(apiEnvVars);
+
+      // Check for conflicting .env files
+      if (apiFiles.length > 1) {
+        throw new Error(
+          `API test suite has conflicting .env files specified:\n${apiFiles.map(f => `  - ${f}`).join('\n')}\n` +
+          `Please ensure all API tests use the same .env file or use --env variables instead.`
+        );
+      }
+
+      const envArgsStr = apiVars.map(v => `--env "${v}"`).join(' ');
+      const envFileArg = apiFiles.length > 0 ? `--env-file "${apiFiles[0]}"` : '';
+      const extraArgs = [envArgsStr, envFileArg].filter(Boolean).join(' ');
+      // Route API tests to backend-test-runner (.env auto-detected from test directory)
+      apiCommand = `node tests/backend-test-runner.js ${extraArgs} ${testFiles}`.trim();
     }
 
-    let backendCommand = null;
-    if (testsToRun.e2e && testsToRun.e2e.backend && testsToRun.e2e.backend.length > 0) {
-        const testFiles = testsToRun.e2e.backend.map(f => f.replace('tests/e2e/', '').replace('.test.js', '')).join('|');
-        const grepArg = `--grep "${testFiles}"`;
-        const envArgs = Array.from(backendEnvVars).map(envVar => `--env "${envVar}"`).join(' ');
-        const dotenvArg = options.dotenvPath ? `--dotenv-path "${options.dotenvPath}"` : '';
-        const extraArgs = [grepArg, envArgs, dotenvArg].filter(Boolean).join(' ');
-        backendCommand = `node tests/e2e-runner.js --backend ${extraArgs}`;
+    // Build E2E command (Playwright frontend tests)
+    let e2eCommand = null;
+    if (testsToRun.e2e && testsToRun.e2e.length > 0) {
+      const testFiles = testsToRun.e2e.map(f => f.replace('tests/e2e/', '').replace('.spec.js', '')).join('|');
+      const grepArg = `--grep "${testFiles}"`;
+      const { vars: e2eVars, files: e2eFiles } = this.categorizeEnvVars(e2eEnvVars);
+
+      // Check for conflicting .env files
+      if (e2eFiles.length > 1) {
+        throw new Error(
+          `E2E test suite has conflicting .env files specified:\n${e2eFiles.map(f => `  - ${f}`).join('\n')}\n` +
+          `Please ensure all E2E tests use the same .env file or use --env variables instead.`
+        );
+      }
+
+      const envArgsStr = e2eVars.map(v => `--env "${v}"`).join(' ');
+      const envFileArg = e2eFiles.length > 0 ? `--env-file "${e2eFiles[0]}"` : '';
+      const extraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
+      // Use e2e-runner.js for Playwright tests in local mode (.env auto-detected)
+      e2eCommand = `node tests/e2e-runner.js --local ${extraArgs}`;
     }
 
     const testSuites = [
-        {name: 'JavaScript tests', command: jsCommand, tap: isTap},
-        {name: 'Python tests', command: pyCommand, tap: isTap},
-        {name: 'E2E Playwright tests', command: playwrightCommand, tap: false},
-        {name: 'E2E Backend tests', command: backendCommand, tap: false}
+        {name: 'JavaScript unit tests', command: jsCommand, tap: isTap},
+        {name: 'Python unit tests', command: pyCommand, tap: isTap},
+        {name: 'API tests', command: apiCommand, tap: false},
+        {name: 'E2E tests', command: e2eCommand, tap: false}
     ].filter(s => s.command);
 
     if (dryRun) {
-        console.log('🔍 Dry run - showing tests that would run:');
+        logger.info('Dry run - showing tests that would run:');
         if (testsToRun.js.length > 0) {
-          console.log('\n  📄 JavaScript tests:');
+          console.log('\n  📄 JavaScript unit tests:');
           testsToRun.js.forEach(test => console.log(`    - ${test}`));
         }
         if (testsToRun.py.length > 0) {
-          console.log('\n  🐍 Python tests:');
+          console.log('\n  🐍 Python unit tests:');
           testsToRun.py.forEach(test => console.log(`    - ${test}`));
         }
-        if (testsToRun.e2e && testsToRun.e2e.playwright && testsToRun.e2e.playwright.length > 0) {
-          console.log('\n  🌐 E2E Playwright tests:');
-          testsToRun.e2e.playwright.forEach(test => console.log(`    - ${test}`));
+        if (testsToRun.api && testsToRun.api.length > 0) {
+          console.log('\n  🔌 API tests:');
+          testsToRun.api.forEach(test => console.log(`    - ${test}`));
         }
-        if (testsToRun.e2e && testsToRun.e2e.backend && testsToRun.e2e.backend.length > 0) {
-            console.log('\n  🌐 E2E Backend tests:');
-            testsToRun.e2e.backend.forEach(test => console.log(`    - ${test}`));
+        if (testsToRun.e2e && testsToRun.e2e.length > 0) {
+            console.log('\n  🌐 E2E tests:');
+            testsToRun.e2e.forEach(test => console.log(`    - ${test}`));
         }
 
         if (testSuites.length === 0) {
             console.log('\n✅ No relevant tests would run');
         } else {
-            const totalE2ETests = ((testsToRun.e2e && testsToRun.e2e.playwright) ? testsToRun.e2e.playwright.length : 0) + ((testsToRun.e2e && testsToRun.e2e.backend) ? testsToRun.e2e.backend.length : 0);
-            console.log(`\n📊 Total: ${testsToRun.js.length + testsToRun.py.length + totalE2ETests} tests would run across ${testSuites.length} suite(s)`);
+            const totalTests = testsToRun.js.length + testsToRun.py.length + (testsToRun.api?.length || 0) + (testsToRun.e2e?.length || 0);
+            console.log(`\n📊 Total: ${totalTests} tests would run across ${testSuites.length} suite(s)`);
             console.log('\n📋 Commands that would be executed:');
             testSuites.forEach(suite => {
               if (suite.command) {
@@ -596,27 +655,27 @@ class SmartTestRunner {
     }
 
     if (testSuites.length === 0) {
-      if (!isTap) console.log('✅ No relevant tests to run');
+      if (!isTap) logger.success('No relevant tests to run');
       return;
     }
 
     if (!isTap) {
         console.log(`🧪 Running ${testSuites.length} test suite(s):`);
         if (testsToRun.js.length > 0) {
-          console.log('  JavaScript tests:');
+          console.log('  JavaScript unit tests:');
           testsToRun.js.forEach(test => console.log(`    - ${test}`));
         }
         if (testsToRun.py.length > 0) {
-          console.log('  Python tests:');
+          console.log('  Python unit tests:');
           testsToRun.py.forEach(test => console.log(`    - ${test}`));
         }
-        if (testsToRun.e2e.playwright.length > 0) {
-          console.log('  E2E Playwright tests:');
-          testsToRun.e2e.playwright.forEach(test => console.log(`    - ${test}`));
+        if (testsToRun.api && testsToRun.api.length > 0) {
+          console.log('  API tests:');
+          testsToRun.api.forEach(test => console.log(`    - ${test}`));
         }
-        if (testsToRun.e2e.backend.length > 0) {
-            console.log('  E2E Backend tests:');
-            testsToRun.e2e.backend.forEach(test => console.log(`    - ${test}`));
+        if (testsToRun.e2e && testsToRun.e2e.length > 0) {
+            console.log('  E2E tests:');
+            testsToRun.e2e.forEach(test => console.log(`    - ${test}`));
         }
     }
 
@@ -652,115 +711,58 @@ class SmartTestRunner {
   }
 }
 
-/**
- * @param {string[]} args
- */
-function parseArgs(args) {
-    const parsed = {
-        all: false,
-        help: false,
-        tap: false,
-        dryRun: false,
-        debug: false,
-        forceAnalysis: false,
-        /** @type {string[] | null} */
-        changedFiles: null,
-        /** @type {string | null} */
-        dotenvPath: null
-    };
-
-    for (let i = 0; i < args.length; i++) {
-        const arg = args[i];
-
-        switch (arg) {
-            case '--all':
-                parsed.all = true;
-                break;
-            case '--help':
-            case '-h':
-                parsed.help = true;
-                break;
-            case '--tap':
-                parsed.tap = true;
-                break;
-            case '--dry-run':
-                parsed.dryRun = true;
-                break;
-            case '--debug':
-                parsed.debug = true;
-                break;
-            case '--force-analysis':
-                parsed.forceAnalysis = true;
-                break;
-            case '--changed-files':
-                if (i + 1 < args.length) {
-                    parsed.changedFiles = args[i + 1].split(',').map((/** @type {string} */ f) => f.trim());
-                    i++; // Skip the next argument as it's the file list
-                }
-                break;
-            case '--dotenv-path':
-                if (i + 1 < args.length) {
-                    parsed.dotenvPath = args[i + 1];
-                    i++; // Skip the next argument as it's the dotenv path
-                }
-                break;
-        }
-    }
-
-    return parsed;
-}
-
-function showHelp() {
-    console.log('🧠 Smart Test Runner - Intelligent test execution based on file dependencies');
-    console.log('');
-    console.log('Usage:');
-    console.log('  node tests/smart-test-runner.js [options]');
-    console.log('');
-    console.log('Options:');
-    console.log('  --all                    Run all tests regardless of changes');
-    console.log('  --changed-files <files>  Comma-separated list of changed files to analyze');
-    console.log('  --dry-run                Show which tests would run without executing them');
-    console.log('  --dotenv-path <path>     Path to .env file for E2E tests (passed to e2e-runner.js)');
-    console.log('  --tap                    Output results in TAP format');
-    console.log('  --debug                  Enable debug logging');
-    console.log('  --help, -h               Show this help message');
-    console.log('');
-    console.log('Examples:');
-    console.log('  node tests/smart-test-runner.js');
-    console.log('  node tests/smart-test-runner.js --all');
-    console.log('  node tests/smart-test-runner.js --changed-files app/src/ui.js,server/api/auth.py');
-    console.log('  node tests/smart-test-runner.js --changed-files app/src/ui.js --dry-run --debug');
-    console.log('  node tests/smart-test-runner.js --dotenv-path .env.testing');
-    console.log('  node tests/smart-test-runner.js --tap');
-    console.log('');
-    console.log('How it works:');
-    console.log('  • Analyzes test files for @testCovers annotations');
-    console.log('  • Detects JavaScript import dependencies automatically');
-    console.log('  • Runs only tests affected by changed files');
-    console.log('  • Always runs tests marked with @testCovers *');
-}
-
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-    const args = parseArgs(process.argv.slice(2));
+    // Create Commander program
+    const program = new Command();
 
-    if (args.help) {
-        showHelp();
-        process.exit(0);
-    }
+    program
+        .name('smart-test-runner')
+        .description('Intelligent test execution based on file dependencies')
+        .version('1.0.0')
+        .option('--all', 'run all tests regardless of changes')
+        .option('--dry-run', 'show which tests would run without executing them')
+        .option('--tap', 'output results in TAP format')
+        .option('--debug', 'enable debug logging')
+        .arguments('[files...]')
+        .usage('[options] [files...]')
+        .addHelpText('after', `
+Arguments:
+  files...    List of files for which tests should be run
+
+Examples:
+  node tests/smart-test-runner.js
+  node tests/smart-test-runner.js --all
+  node tests/smart-test-runner.js app/src/ui.js server/api/auth.py
+  node tests/smart-test-runner.js app/src/ui.js --dry-run --debug
+  node tests/smart-test-runner.js --tap
+
+How it works:
+  • Analyzes test files for @testCovers and @env annotations
+  • Detects JavaScript import dependencies automatically
+  • Runs only tests affected by changed files
+  • Always runs tests marked with @testCovers *
+  • @env annotations support VAR_NAME or VAR=VALUE format
+  • .env files are auto-detected from test directories`);
+
+    program.parse(process.argv);
+
+    const options = program.opts();
+    const files = program.args;
+
+    // Set DEBUG flag for debugLog
+    DEBUG = options.debug || false;
 
     const runner = new SmartTestRunner();
 
-    const options = {
-        all: args.all,
-        tap: args.tap,
-        dryRun: args.dryRun,
-        changedFiles: args.changedFiles,
-        dotenvPath: args.dotenvPath,
-        forceAnalysis: args.forceAnalysis
+    const runOptions = {
+        all: options.all || false,
+        tap: options.tap || false,
+        dryRun: options.dryRun || false,
+        changedFiles: files.length > 0 ? files : null
     };
 
-    runner.run(options).catch(error => {
+    runner.run(runOptions).catch(error => {
         console.error('Smart test runner failed:', error);
         process.exit(1);
     });

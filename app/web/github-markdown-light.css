@@ -1,0 +1,58 @@
+/**
+ * Force light mode for GitHub Markdown CSS
+ * Overrides dark mode regardless of system preferences
+ */
+.markdown-body[data-theme="light"] {
+  /* light */
+  color-scheme: light !important;
+  --focus-outlineColor: #0969da !important;
+  --fgColor-default: #1f2328 !important;
+  --fgColor-muted: #59636e !important;
+  --fgColor-accent: #0969da !important;
+  --fgColor-success: #1a7f37 !important;
+  --fgColor-attention: #9a6700 !important;
+  --fgColor-danger: #d1242f !important;
+  --fgColor-done: #8250df !important;
+  --bgColor-default: #ffffff !important;
+  --bgColor-muted: #f6f8fa !important;
+  --bgColor-neutral-muted: #818b981f !important;
+  --bgColor-attention-muted: #fff8c5 !important;
+  --borderColor-default: #d1d9e0 !important;
+  --borderColor-muted: #d1d9e0b3 !important;
+  --borderColor-neutral-muted: #d1d9e0b3 !important;
+  --borderColor-accent-emphasis: #0969da !important;
+  --borderColor-success-emphasis: #1a7f37 !important;
+  --borderColor-attention-emphasis: #9a6700 !important;
+  --borderColor-danger-emphasis: #cf222e !important;
+  --borderColor-done-emphasis: #8250df !important;
+  --color-prettylights-syntax-comment: #59636e !important;
+  --color-prettylights-syntax-constant: #0550ae !important;
+  --color-prettylights-syntax-constant-other-reference-link: #0a3069 !important;
+  --color-prettylights-syntax-entity: #6639ba !important;
+  --color-prettylights-syntax-storage-modifier-import: #1f2328 !important;
+  --color-prettylights-syntax-entity-tag: #0550ae !important;
+  --color-prettylights-syntax-keyword: #cf222e !important;
+  --color-prettylights-syntax-string: #0a3069 !important;
+  --color-prettylights-syntax-variable: #953800 !important;
+  --color-prettylights-syntax-brackethighlighter-unmatched: #82071e !important;
+  --color-prettylights-syntax-brackethighlighter-angle: #59636e !important;
+  --color-prettylights-syntax-invalid-illegal-text: #f6f8fa !important;
+  --color-prettylights-syntax-invalid-illegal-bg: #82071e !important;
+  --color-prettylights-syntax-carriage-return-text: #f6f8fa !important;
+  --color-prettylights-syntax-carriage-return-bg: #cf222e !important;
+  --color-prettylights-syntax-string-regexp: #116329 !important;
+  --color-prettylights-syntax-markup-list: #3b2300 !important;
+  --color-prettylights-syntax-markup-heading: #0550ae !important;
+  --color-prettylights-syntax-markup-italic: #1f2328 !important;
+  --color-prettylights-syntax-markup-bold: #1f2328 !important;
+  --color-prettylights-syntax-markup-deleted-text: #82071e !important;
+  --color-prettylights-syntax-markup-deleted-bg: #ffebe9 !important;
+  --color-prettylights-syntax-markup-inserted-text: #116329 !important;
+  --color-prettylights-syntax-markup-inserted-bg: #dafbe1 !important;
+  --color-prettylights-syntax-markup-changed-text: #953800 !important;
+  --color-prettylights-syntax-markup-changed-bg: #ffd8b5 !important;
+  --color-prettylights-syntax-markup-ignored-text: #d1d9e0 !important;
+  --color-prettylights-syntax-markup-ignored-bg: #0550ae !important;
+  --color-prettylights-syntax-meta-diff-range: #8250df !important;
+  --color-prettylights-syntax-sublimelinter-gutter-mark: #818b98 !important;
+}

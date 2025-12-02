@@ -1,0 +1,272 @@
+"""
+Collection management API router for FastAPI.
+
+Implements standard REST endpoints:
+- GET /api/v1/collections - List all collections
+- POST /api/v1/collections - Create a new collection
+- GET /api/v1/collections/{collection_id} - Get collection details
+- PUT /api/v1/collections/{collection_id} - Update collection
+- DELETE /api/v1/collections/{collection_id} - Delete collection
+"""
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from typing import List, Optional
+
+from ..lib.collection_utils import (
+    get_collections_with_details,
+    add_collection,
+    find_collection,
+    remove_collection,
+    set_collection_property
+)
+from ..lib.dependencies import get_current_user
+from ..lib.logging_utils import get_logger
+from ..config import get_settings
+
+logger = get_logger(__name__)
+router = APIRouter(prefix="/collections", tags=["collections"])
+
+
+class Collection(BaseModel):
+    """Collection information model."""
+    id: str = Field(..., description="Unique collection identifier")
+    name: str = Field(..., description="Display name for the collection")
+    description: Optional[str] = Field(default="", description="Collection description")
+
+
+def require_authenticated(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
+    """Dependency that requires authentication."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return current_user
+
+
+def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
+    """Dependency that requires admin authentication."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    user_roles = current_user.get('roles', [])
+    is_admin = '*' in user_roles or 'admin' in user_roles
+
+    if not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient permissions. Admin role required."
+        )
+
+    return current_user
+
+
+@router.get("", response_model=List[Collection])
+def list_all_collections(
+    current_user: dict = Depends(require_authenticated)
+):
+    """
+    List all collections.
+
+    Returns all collections without filtering. Requires authentication.
+
+    Returns:
+        List of Collection objects
+    """
+    settings = get_settings()
+
+    try:
+        all_collections = get_collections_with_details(settings.db_dir)
+
+        collections = [
+            Collection(
+                id=col.get('id', ''),
+                name=col.get('name', col.get('id', '')),
+                description=col.get('description', '')
+            )
+            for col in all_collections # type: ignore
+        ]
+
+        return collections
+    except Exception as e:
+        logger.error(f"Error listing collections: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving collections: {str(e)}")
+
+
+@router.get("/{collection_id}", response_model=Collection)
+def get_collection(
+    collection_id: str,
+    current_user: dict = Depends(require_authenticated)
+):
+    """
+    Get a specific collection by ID.
+
+    Args:
+        collection_id: Collection identifier
+        current_user: Current user dict (injected)
+
+    Returns:
+        Collection object
+
+    Raises:
+        HTTPException: 404 if collection not found
+    """
+    settings = get_settings()
+
+    try:
+        all_collections = get_collections_with_details(settings.db_dir)
+        collection = find_collection(collection_id, all_collections)
+
+        if not collection:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
+        return Collection(
+            id=collection.get('id', ''),
+            name=collection.get('name', collection.get('id', '')),
+            description=collection.get('description', '')
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting collection: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving collection: {str(e)}")
+
+
+@router.post("", response_model=Collection, status_code=201)
+def create_collection_rest(
+    collection: Collection,
+    current_user: dict = Depends(require_admin)
+):
+    """
+    Create a new collection.
+
+    Args:
+        collection: Collection data
+        current_user: Current user dict (injected)
+
+    Returns:
+        Created Collection object
+
+    Raises:
+        HTTPException: 400 if validation fails or collection exists
+    """
+    settings = get_settings()
+
+    # Validate collection ID format
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]+$', collection.id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid collection ID. Only letters, numbers, hyphens, and underscores are allowed."
+        )
+
+    try:
+        success, message = add_collection(
+            db_dir=settings.db_dir,
+            collection_id=collection.id,
+            name=collection.name,
+            description=collection.description or ""
+        )
+
+        if success:
+            logger.info(f"Collection '{collection.id}' created by user '{current_user.get('username')}'")
+            return collection
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating collection: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating collection: {str(e)}")
+
+
+@router.put("/{collection_id}", response_model=Collection)
+def update_collection(
+    collection_id: str,
+    collection: Collection,
+    current_user: dict = Depends(require_admin)
+):
+    """
+    Update an existing collection.
+
+    Args:
+        collection_id: Collection identifier
+        collection: Updated collection data
+        current_user: Current user dict (injected)
+
+    Returns:
+        Updated Collection object
+
+    Raises:
+        HTTPException: 404 if collection not found, 400 if validation fails
+    """
+    settings = get_settings()
+
+    try:
+        # Check if collection exists
+        all_collections = get_collections_with_details(settings.db_dir)
+        existing = find_collection(collection_id, all_collections)
+
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
+        # Update name if changed
+        if collection.name != existing.get('name'):
+            success, message = set_collection_property(
+                settings.db_dir, collection_id, 'name', collection.name
+            )
+            if not success:
+                raise HTTPException(status_code=400, detail=message)
+
+        # Update description if changed
+        if collection.description != existing.get('description', ''):
+            success, message = set_collection_property(
+                settings.db_dir, collection_id, 'description', collection.description or ""
+            )
+            if not success:
+                raise HTTPException(status_code=400, detail=message)
+
+        # Note: ID changes are not allowed for collections (immutable)
+        if collection.id != collection_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Collection ID cannot be changed"
+            )
+
+        logger.info(f"Collection '{collection_id}' updated by user '{current_user.get('username')}'")
+        return collection
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating collection: {e}")
+        raise HTTPException(status_code=500, detail=f"Error updating collection: {str(e)}")
+
+
+@router.delete("/{collection_id}", status_code=204)
+def delete_collection(
+    collection_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """
+    Delete a collection.
+
+    Args:
+        collection_id: Collection identifier
+        current_user: Current user dict (injected)
+
+    Raises:
+        HTTPException: 404 if collection not found
+    """
+    settings = get_settings()
+
+    try:
+        success, message = remove_collection(settings.db_dir, collection_id)
+
+        if success:
+            logger.info(f"Collection '{collection_id}' deleted by user '{current_user.get('username')}'")
+            return
+        else:
+            raise HTTPException(status_code=404, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting collection: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting collection: {str(e)}")

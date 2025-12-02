@@ -5,17 +5,17 @@
  * and managing file-related state updates.
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
- * @import { FileListItem } from '../modules/file-data-utils.js'
+ * @import { DocumentItem } from '../modules/file-data-utils.js'
  */
 
 import { endpoints as ep } from '../app.js'
 import { Plugin } from '../modules/plugin-base.js'
 import { logger, client, dialog, xmlEditor } from '../app.js'
-import { createHashLookupIndex } from '../modules/file-data-utils.js'
+import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import ui from '../ui.js'
 
@@ -27,13 +27,16 @@ class FiledataPlugin extends Plugin {
    * @param {PluginContext} context 
    */  
   constructor(context) {
-    super(context, { 
+    super(context, {
       name: 'filedata',
-      deps: ['logger', 'client', 'dialog', 'xmleditor'] 
+      deps: ['logger', 'client', 'dialog', 'xmleditor']
     });
-    
+
     /** @type {StatusText | null} */
     this.savingStatusWidget = null;
+
+    /** @private Flag to prevent concurrent reload operations */
+    this._reloadInProgress = false;
   }
 
   /**
@@ -43,9 +46,9 @@ class FiledataPlugin extends Plugin {
     await super.install(state);
     logger.debug(`Installing plugin "${this.name}"`);
 
-    // Initialize empty hash lookup index to prevent errors during plugin initialization
-    logger.debug('Initializing empty hash lookup index during installation');
-    createHashLookupIndex([]);
+    // Initialize empty ID lookup index to prevent errors during plugin initialization
+    logger.debug('Initializing empty ID lookup index during installation');
+    createIdLookupIndex([]);
 
     // Create status widget for save operations
     this.savingStatusWidget = PanelUtils.createText({
@@ -63,35 +66,74 @@ class FiledataPlugin extends Plugin {
    * @returns {Promise<ApplicationState>} Updated state with new file data
    */
   async reload(options = {}) {
+    // Prevent concurrent reload operations
+    if (this._reloadInProgress) {
+      logger.debug("Ignoring reload request - reload already in progress");
+      return this.state;
+    }
+
+    this._reloadInProgress = true;
     logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
-    
-    /** @type {FileListItem[]} */
-    let data = await client.getFileList(null, options.refresh);
-    if (!data || data.length === 0) {
-      dialog.error("No files found");
-      data = []; // Ensure data is an empty array instead of null/undefined
+
+    try {
+      // Get file list response - API returns {files: [...]} structure
+      const response = await client.getFileList(null, options.refresh);
+
+      /** @type {DocumentItem[]} */
+      let data = response?.files || [];
+      if (!data || data.length === 0) {
+        data = []; // Ensure data is an empty array instead of null/undefined
+      }
+
+      // Create ID lookup index when fileData is loaded
+      if (data && data.length > 0) {
+        logger.debug('Creating ID lookup index for file data');
+        createIdLookupIndex(data);
+      } else {
+        // Initialize empty ID lookup index to prevent errors
+        logger.debug('Initializing empty ID lookup index');
+        createIdLookupIndex([]);
+      }
+
+      // Load collections from server
+      let collections = [];
+      try {
+        collections = await client.getCollections();
+        logger.debug(`Loaded ${collections.length} collections from server`);
+
+        // Validate that all document collections exist in the collections list
+        const collectionIds = new Set(collections.map(c => c.id));
+        data.forEach((doc, index) => {
+          if (doc.collections && doc.collections.length > 0) {
+            const invalidCollections = doc.collections.filter(colId => !collectionIds.has(colId));
+            if (invalidCollections.length > 0) {
+              logger.warn(
+                `Document ${doc.doc_id} references non-existent collection(s): ${invalidCollections.join(', ')}`
+              );
+            }
+          }
+        });
+      } catch (error) {
+        logger.error(`Failed to load collections: ${error}`);
+        // Continue with empty collections list - file operations will still work
+      }
+
+      // Store fileData and collections in state and propagate them
+      const newState = await this.dispatchStateChange({
+        fileData: data,
+        collections
+      });
+      return newState;
+    } finally {
+      this._reloadInProgress = false;
     }
-    
-    // Create hash lookup index when fileData is loaded
-    if (data && data.length > 0) {
-      logger.debug('Creating hash lookup index for file data');
-      createHashLookupIndex(data);
-    } else {
-      // Initialize empty hash lookup index to prevent errors
-      logger.debug('Initializing empty hash lookup index');
-      createHashLookupIndex([]);
-    }
-    
-    // Store fileData in state and propagate it
-    const newState = await this.dispatchStateChange({fileData: data});
-    return newState
   }
 
   /**
    * Saves the current XML content to a file
    * @param {string} fileHash The hash identifying the XML file on the server
-   * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version 
-   * @returns {Promise<{hash:string, status:string}>} An object with a path property, containing the path to the saved version
+   * @param {Boolean?} saveAsNewVersion Optional flag to save the file content as a new version
+   * @returns {Promise<{file_id:string, status:string}>} An object with file_id (stable file identifier) and status
    * @throws {Error}
    */
   async saveXml(fileHash, saveAsNewVersion = false) {
@@ -107,7 +149,7 @@ class FiledataPlugin extends Plugin {
       const xmlContent = xmlEditor.getXML()
 
       const result = await client.saveXml(xmlContent, fileHash, saveAsNewVersion);
-      return /** @type {{hash: string, status: string}} */ (result);
+      return /** @type {{file_id: string, status: string}} */ (result);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       console.error("Error while saving XML:", errorMessage);

@@ -9,7 +9,7 @@ import { PDFJSViewer } from '../modules/pdfviewer.js'
 import { PanelUtils, StatusText } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor, hasStateChanged } from '../app.js'
-import { getDocumentTitle, getFileDataByHash } from '../modules/file-data-utils.js'
+import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
 
 //
 // UI Parts
@@ -128,17 +128,20 @@ async function update(state) {
     }
   }
   
-  // Update title and fileame widgets
+  // Update title and filename widgets
   if (state.pdf) {
-    filenameWidget.text = getFileDataByHash(state.pdf)?.file?.fileref || ''
+    filenameWidget.text = getFileDataById(state.pdf)?.file?.doc_id || ''
     try {
       const title = getDocumentTitle(state.pdf);
       titleWidget.text = title || 'PDF Document';
+      titleWidget.tooltip = title || 'PDF Document';
     } catch (error) {
       titleWidget.text = 'PDF Document';
+      titleWidget.tooltip = 'PDF Document';
     }
   } else if (titleWidget) {
     titleWidget.text = '';
+    titleWidget.tooltip = '';
     filenameWidget.text = '';
   }
 }

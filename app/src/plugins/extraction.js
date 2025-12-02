@@ -345,25 +345,26 @@ async function promptForExtractionOptions(options={}) {
   const doiValue = options.doi || documentMetadata.doi || "";
   ui.extractionOptions.doi.value = doiValue;
 
-  // configure collections selectbox 
+  // configure collections selectbox
   /** @type {SlSelect|null} */
   const collectionSelectBox = ui.extractionOptions.collectionName
   collectionSelectBox.innerHTML=""
-  const collectionData = ui.toolbar.pdf.dataset.collections || '[]'
-  const collections = JSON.parse(collectionData)
-  collections.unshift('__inbox')
-  for (const collection_name of collections){
+
+  // Get collections from state (includes RBAC-filtered collections)
+  const collections = currentState?.collections || [];
+
+  // Add accessible collections from state
+  for (const collection of collections){
     const option = Object.assign(new SlOption, {
-      value: collection_name,
-      textContent: collection_name.replaceAll("_", " ").trim()
+      value: collection.id,
+      textContent: collection.name
     })
     collectionSelectBox.append(option)
   }
+
   // Set collection value - prioritize options parameter, then first available collection
-  const collectionValue = options.collection || (collections.length > 0 ? collections[0] : "");
+  const collectionValue = options.collection || (collections.length > 0 ? collections[0].id : "_inbox");
   collectionSelectBox.value = collectionValue
-  // if we have a collection, it cannot be changed
-  collectionSelectBox.disabled = Boolean(options.collection)
 
   // configure model selectbox with available extractors
   /** @type {SlSelect|null} */
@@ -597,7 +598,7 @@ async function promptForExtractionOptions(options={}) {
     'collection': String(ui.extractionOptions.collectionName.value),
     'extractor': String(ui.extractionOptions.modelIndex.value)
   }
-  
+
   // Collect values from dynamic options
   const dynamicOptionsContainer = ui.extractionOptions.querySelector('[name="dynamicOptions"]')
   /** @type {NodeListOf<SlSelect|SlInput>} */
@@ -608,10 +609,15 @@ async function promptForExtractionOptions(options={}) {
     const typedInput = /** @type {SlSelect|SlInput} */(input)
     const name = typedInput.name
     let value = typedInput.value
-    
+
     // Special handling for instructions - convert to actual instruction text
     if (name === 'instructions' && instructions[parseInt(String(value))]) {
       value = instructions[parseInt(String(value))]
+    }
+
+    // Skip empty variant_id values - they'll be provided from options/state
+    if (name === 'variant_id' && (!value || value === '')) {
+      continue
     }
 
     formData[name] = String(value)

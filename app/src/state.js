@@ -10,8 +10,16 @@
  */
 
 /**
+ * Collection information
+ * @typedef {object} CollectionInfo
+ * @property {string} id - Unique collection identifier
+ * @property {string} name - Display name for the collection
+ * @property {string} description - Collection description
+ */
+
+/**
  * The application state, which is often passed to the plugin endpoints
- * 
+ *
  * @typedef {object} ApplicationState
  * @property {string|null} sessionId - The session id of the particular app instance in a browser tab/window
  * @property {string|null} pdf - The document identifier for the PDF file in the viewer
@@ -25,9 +33,10 @@
  * @property {UserData|null} user - The currently logged-in user
  * @property {string|null} collection - The collection the current document is in
  * @property {FileListItem[]|null} fileData - The file data loaded from the server
+ * @property {CollectionInfo[]|null} collections - The list of accessible collections
  * @property {boolean} hasInternet - Whether the backend has internet access
  * @property {Record<string, any>} ext - Extension object for plugins to store additional state properties
- * @property {ApplicationState|null} previousState - Links to the previous state object 
+ * @property {ApplicationState|null} previousState - Links to the previous state object
  */
 
 /**
@@ -46,6 +55,7 @@ const initialState = {
   user: null,
   collection: null,
   fileData: null,
+  collections: null,
   offline: false,
   hasInternet: false,
   ext: {},

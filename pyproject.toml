@@ -26,14 +26,19 @@ llamore = { git = "https://github.com/mpilhlt/llamore.git" }
 
 [dependency-groups]
 dev = [
+    "cheroot>=10.0.0",
     "lxml-stubs>=0.5.1",
     "mypy>=1.18.2",
     "pydeps>=3.0.1",
     "pytest>=8.4.0",
     "pytest-tap>=3.3",
+    "wsgidav>=4.3.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = [
   "."
+]
+markers = [
+  "integration: marks tests as integration tests that check actual project structure (deselect with '-m \"not integration\"')"
 ]

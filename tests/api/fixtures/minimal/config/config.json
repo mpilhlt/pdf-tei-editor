@@ -1,0 +1,16 @@
+{
+  "session.timeout": 3600,
+  "extraction.instructions": [],
+  "test.key": "test value",
+  "test.key.type": "string",
+  "test.number": 42,
+  "test.number.type": "number",
+  "test.boolean": true,
+  "test.boolean.type": "boolean",
+  "test.array": [
+    1,
+    2,
+    3
+  ],
+  "test.array.type": "array"
+}

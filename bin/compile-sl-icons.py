@@ -50,8 +50,15 @@ def copy_icons(icon_names, shoelace_base_path, destination_path):
     if not os.path.exists(destination_path):
         os.makedirs(destination_path, exist_ok=True)
 
+    # Filter out variable placeholders like ${icon}, ${btn.name}, etc.
+    filtered_icons = [name for name in icon_names if not ('${' in name or '{' in name)]
+    skipped_count = len(icon_names) - len(filtered_icons)
+
+    if skipped_count > 0:
+        print(f"Skipped {skipped_count} variable placeholder(s)")
+
     copied_count = 0
-    for icon_name in sorted(icon_names):
+    for icon_name in sorted(filtered_icons):
         src_icon_path = os.path.join(shoelace_base_path, f"{icon_name}.svg")
         dest_icon_path = os.path.join(destination_path, f"{icon_name}.svg")
 
@@ -65,7 +72,7 @@ def copy_icons(icon_names, shoelace_base_path, destination_path):
         else:
             print(f"Warning: Source icon not found for '{icon_name}': {src_icon_path}")
 
-    print(f"Copied {copied_count}/{len(icon_names)} icons.")
+    print(f"Copied {copied_count}/{len(filtered_icons)} icons.")
 
 # --- Main ---
 if __name__ == "__main__":

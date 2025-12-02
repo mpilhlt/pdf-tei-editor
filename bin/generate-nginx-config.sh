@@ -13,11 +13,11 @@ fi
 
 FQDN=$1
 PORT=$2
-OUTPUT_FILE=${3:-"/etc/nginx/sites-available/pdf-tei-editor-${FQDN}"}
+OUTPUT_FILE=${3:-"/etc/nginx/sites-available/${FQDN}"}
 
 echo "Generating nginx configuration for $FQDN -> localhost:$PORT"
 
-cat > "$OUTPUT_FILE" << EOF
+cat > "$OU¥¥¥¥¥ TPUT_FILE" << EOF
 # PDF TEI Editor demo configuration for $FQDN
 server {
     server_name $FQDN;

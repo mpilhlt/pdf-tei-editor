@@ -9,6 +9,23 @@ PORT=${PORT:-8000}
 # Change to app directory
 cd /app
 
+# Initialize database directory if it doesn't exist
+if [ ! -d "/app/data/db" ]; then
+    echo "Initializing database directory..."
+    mkdir -p /app/data/db
+fi
+
+# Copy default config files if they don't exist
+for config_file in /app/config/*.json; do
+    if [ -f "$config_file" ]; then
+        filename=$(basename "$config_file")
+        if [ ! -f "/app/data/db/$filename" ]; then
+            echo "Copying default $filename..."
+            cp "$config_file" "/app/data/db/$filename"
+        fi
+    fi
+done
+
 
 # Create default accounts if no environment variables are set
 if [ -z "$APP_ADMIN_PASSWORD" ] && [ -z "$APP_DEMO_PASSWORD" ]; then
@@ -34,14 +51,18 @@ if [ -n "$APP_LOGIN_MESSAGE" ]; then
 fi
 
 
-# Update admin password if APP_ADMIN_PASSWORD is set
+# Create or update admin user if APP_ADMIN_PASSWORD is set
 if [ -n "$APP_ADMIN_PASSWORD" ]; then
     echo "Setting up admin user from environment variable..."
-    if .venv/bin/python bin/manage.py user update-password admin "$APP_ADMIN_PASSWORD";
+    if .venv/bin/python bin/manage.py user add admin \
+            --password "$APP_ADMIN_PASSWORD" \
+            --fullname "Administrator" \
+            --roles "admin" \
+            --email "admin@localhost";
     then
-        echo "Admin password updated successfully"
+        echo "Admin user created successfully"
     else
-        echo "Warning: Failed to update admin user password"
+        echo "Warning: Failed to create admin user"
     fi
 fi
 
@@ -60,7 +81,11 @@ if [ -n "$APP_DEMO_PASSWORD" ]; then
     fi
 fi
 
-
+# Import demo data if present
+if [ -f /app/docker/import-demo-data.sh ]; then
+    echo "Importing demo data..."
+    /app/docker/import-demo-data.sh
+fi
 
 # Start the PDF TEI Editor application bound to all interfaces for Docker
 exec .venv/bin/python bin/start-prod 0.0.0.0 $PORT

@@ -10,9 +10,10 @@ services:
       # Mount test data directory for easier test file management
       - ./tests/e2e/fixtures:/app/test-data:ro
     environment:
-      - FLASK_ENV=testing
+      - FASTAPI_APPLICATION_MODE=testing  # Replaces FLASK_ENV
       - PYTHONPATH=/app
       - TEST_IN_PROGRESS=${TEST_IN_PROGRESS:-}
+      - IMPORT_DATA_PATH=docker/demo-data
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
       interval: 5s

@@ -81,20 +81,25 @@ RUN uv run python bin/compile-sl-icons.py \
 # Stage 3: Production runtime (minimal final image)
 FROM base as production
 
-# Copy only production files from builder (no node_modules needed!)
+# Copy only production files from builder
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/app/web /app/app/web
-COPY --from=builder /app/server /app/server
+COPY --from=builder /app/fastapi_app /app/fastapi_app
 COPY --from=builder /app/config /app/config
-COPY --from=builder /app/config /app/db
+# Note: data/db/ is created at runtime from config/ by db_init.py
 
 # Set production mode in the container
 RUN sed -i 's/"application.mode": "development"/"application.mode": "production"/' /app/config/config.json
 COPY --from=builder /app/bin /app/bin
 COPY --from=builder /app/schema /app/schema
-COPY --from=builder /app/demo/data /app/data
 COPY --from=builder /app/package.json /app/package.json
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+COPY --from=builder /app/run_fastapi.py /app/run_fastapi.py
+
+# Copy demo data and import script
+COPY docker/demo-data /app/docker/demo-data
+COPY docker/import-demo-data.sh /app/docker/import-demo-data.sh
+RUN chmod +x /app/docker/import-demo-data.sh
 
 # Expose port
 EXPOSE 8000
@@ -110,9 +115,8 @@ FROM production as test
 
 # Copy test fixtures and helpers for E2E tests
 COPY tests/e2e/fixtures /app/tests/e2e/fixtures
-COPY tests/e2e/backend/helpers /app/tests/e2e/backend/helpers
-COPY tests/e2e/frontend/helpers /app/tests/e2e/frontend/helpers
-COPY tests/py/fixtures /app/tests/py/fixtures
+COPY tests/e2e/tests/helpers /app/tests/e2e/tests/helpers
+COPY tests/api/helpers /app/tests/api/helpers
 
 # Expose port
 EXPOSE 8001

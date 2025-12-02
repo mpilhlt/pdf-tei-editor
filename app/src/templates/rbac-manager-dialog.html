@@ -1,0 +1,77 @@
+<sl-dialog name="rbacManagerDialog" label="RBAC Management" class="rbac-manager-dialog" style="--width: 80vw; --height: 80vh;">
+  <!-- Tab Navigation -->
+  <div name="tabContainer" style="border-bottom: 1px solid var(--sl-color-neutral-300); margin-bottom: 1rem; display: flex; gap: 0.25rem;">
+    <sl-button name="tabUser" variant="default" data-entity-type="user">
+      <sl-icon slot="prefix" name="person"></sl-icon>
+      Users
+    </sl-button>
+    <sl-button name="tabGroup" variant="default" data-entity-type="group">
+      <sl-icon slot="prefix" name="people"></sl-icon>
+      Groups
+    </sl-button>
+    <sl-button name="tabRole" variant="default" data-entity-type="role">
+      <sl-icon slot="prefix" name="shield"></sl-icon>
+      Roles
+    </sl-button>
+    <sl-button name="tabCollection" variant="default" data-entity-type="collection">
+      <sl-icon slot="prefix" name="folder"></sl-icon>
+      Collections
+    </sl-button>
+  </div>
+
+  <!-- Main Content Area -->
+  <div name="contentArea" style="display: flex; flex: 1; gap: 1rem; overflow: hidden; height: 70vh;">
+
+    <!-- Left Panel: Entity List -->
+    <div name="entityListPanel" style="flex: 0 0 300px; display: flex; flex-direction: column; border: 1px solid var(--sl-color-neutral-300); border-radius: var(--sl-border-radius-medium); padding: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h3 name="entityListTitle" style="margin: 0; font-size: 1rem;">Items</h3>
+          <sl-button name="addEntityBtn" size="small" variant="primary">
+            <sl-icon slot="prefix" name="plus"></sl-icon>
+            Add
+          </sl-button>
+        </div>
+
+        <!-- Search Input -->
+        <sl-input name="searchInput" placeholder="Search..." size="small" style="margin-bottom: 0.5rem;">
+          <sl-icon slot="prefix" name="search"></sl-icon>
+        </sl-input>
+
+        <!-- Entity List -->
+        <div name="entityList" style="flex: 1; overflow-y: auto; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium); padding: 0.5rem;">
+          <!-- Entity items will be inserted here -->
+        </div>
+      </div>
+
+      <!-- Right Panel: Entity Form -->
+      <div name="formPanel" style="flex: 1; display: flex; flex-direction: column; border: 1px solid var(--sl-color-neutral-300); border-radius: var(--sl-border-radius-medium); padding: 1rem;">
+        <div name="formHeader" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--sl-color-neutral-200); padding-bottom: 0.5rem;">
+          <h3 name="formTitle" style="margin: 0; font-size: 1rem;">Select an item</h3>
+          <div name="formActions" style="display: flex; gap: 0.5rem;">
+            <sl-button name="saveBtn" variant="primary" size="small" disabled>
+              <sl-icon slot="prefix" name="check"></sl-icon>
+              Save
+            </sl-button>
+            <sl-button name="deleteBtn" variant="danger" size="small" disabled>
+              <sl-icon slot="prefix" name="trash"></sl-icon>
+              Delete
+            </sl-button>
+          </div>
+        </div>
+
+        <!-- Form Container -->
+        <div name="formContainer" style="flex: 1; overflow-y: auto;">
+          <div name="emptyState" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--sl-color-neutral-500);">
+            <sl-icon name="inbox" style="font-size: 3rem; margin-bottom: 1rem;"></sl-icon>
+            <p style="margin: 0;">Select an item from the list or create a new one</p>
+          </div>
+          <!-- Dynamic form will be inserted here -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Dialog Footer -->
+  <sl-button slot="footer" name="closeBtn" variant="neutral">Close</sl-button>
+</sl-dialog>

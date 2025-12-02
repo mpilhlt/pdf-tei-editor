@@ -18,7 +18,7 @@ import {
   sync, accessControl, testLog
 } from '../app.js'
 import FiledataPlugin from './filedata.js'
-import { getFileDataByHash } from '../modules/file-data-utils.js'
+import { getFileDataById } from '../modules/file-data-utils.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
@@ -295,7 +295,7 @@ async function load({ xml, pdf }) {
     await app.updateState({ pdf: null, xml: null, diff: null })
     logger.info("Loading PDF: " + pdf)
     // Convert document identifier to static file URL
-    const pdfUrl = `/api/files/${pdf}`
+    const pdfUrl = `/api/files/${pdf}` // TODO unhardcode this!
     promises.push(pdfViewer.load(pdfUrl))
   }
 
@@ -372,23 +372,39 @@ async function load({ xml, pdf }) {
     })
   }
 
-  // Set collection based on loaded documents if not already set
-  if (currentState.fileData && (pdf || xml) && !currentState.collection) {
+  // Set collection and variant based on loaded documents
+  if (currentState.fileData && (pdf || xml)) {
     for (const file of currentState.fileData) {
       const fileData = /** @type {any} */ (file);
-      // Check PDF hash
-      if (pdf && fileData.pdf && fileData.pdf.hash === pdf) {
-        stateChanges.collection = fileData.collection;
-        break;
-      }
-      // Check XML hash in gold or versions
-      if (xml) {
-        const hasGoldMatch = fileData.gold && fileData.gold.some(/** @param {any} gold */ gold => gold.hash === xml);
-        const hasVersionMatch = fileData.versions && fileData.versions.some(/** @param {any} version */ version => version.hash === xml);
-        if (hasGoldMatch || hasVersionMatch) {
-          stateChanges.collection = fileData.collection;
-          break;
+
+      let foundMatch = false;
+
+      // Check source id
+      if (pdf && fileData.source && fileData.source.id === pdf) {
+        if (!currentState.collection) {
+          stateChanges.collection = fileData.collections[0];
         }
+        foundMatch = true;
+      }
+
+      // Check XML id in artifacts (don't skip this even if PDF was found)
+      if (xml) {
+        const matchingArtifact = fileData.artifacts && fileData.artifacts.find(/** @param {any} artifact */ artifact => artifact.id === xml);
+        if (matchingArtifact) {
+          if (!currentState.collection) {
+            stateChanges.collection = fileData.collections[0];
+          }
+          // Always set variant from artifact (it's the source of truth for the loaded document)
+          if (matchingArtifact.variant) {
+            stateChanges.variant = matchingArtifact.variant;
+          }
+          foundMatch = true;
+        }
+      }
+
+      // Only break if we found what we're looking for
+      if (foundMatch) {
+        break;
       }
     }
   }
@@ -496,7 +512,7 @@ async function deleteCurrentVersion(state) {
   if (state.pdf && typeof xmlValue === 'string') {
 
     // Only check for gold status if this is a PDF-XML file
-    const fileData = getFileDataByHash(xmlValue);
+    const fileData = getFileDataById(xmlValue);
     if (fileData && fileData.type === 'gold' && !userHasRole(state.user, ['admin', 'reviewer'])) {
       dialog.error("You cannot delete the gold version")
     }
@@ -539,28 +555,28 @@ async function deleteAllVersions() {
   if (!currentState?.fileData) {
     throw new Error("No file data");
   }
-  // Get the current PDF to find all its versions
-  const currentPdf = ui.toolbar.pdf.value;
-  const selectedFile = currentState.fileData.find(file => file.pdf.hash === currentPdf);
+  // Get the current source to find all its versions
+  const currentSource = ui.toolbar.pdf.value;
+  const selectedFile = currentState.fileData.find(file => file.source?.id === currentSource);
 
-  if (!selectedFile || !selectedFile.versions) {
-    return; // No versions to delete
+  if (!selectedFile || !selectedFile.artifacts) {
+    return; // No artifacts to delete
   }
 
-  // Filter versions based on current variant selection (same logic as file-selection.js)
-  let versionsToDelete = selectedFile.versions;
+  // Filter artifacts to get only versions (non-gold) based on current variant selection
+  let artifactsToDelete = selectedFile.artifacts.filter(/** @param {any} a */ a => !a.is_gold_standard);
   const { variant } = currentState;
 
   if (variant === "none") {
-    // Delete only versions without variant_id
-    versionsToDelete = selectedFile.versions.filter(/** @param {any} version */ version => !version.variant_id);
+    // Delete only versions without variant
+    artifactsToDelete = artifactsToDelete.filter(/** @param {any} artifact */ artifact => !artifact.variant);
   } else if (variant && variant !== "") {
-    // Delete only versions with the selected variant_id
-    versionsToDelete = selectedFile.versions.filter(/** @param {any} version */ version => version.variant_id === variant);
+    // Delete only versions with the selected variant
+    artifactsToDelete = artifactsToDelete.filter(/** @param {any} artifact */ artifact => artifact.variant === variant);
   }
   // If variant is "" (All), delete all versions
 
-  const filePathsToDelete = versionsToDelete.map(/** @param {any} version */ version => version.hash);
+  const filePathsToDelete = artifactsToDelete.map(/** @param {any} artifact */ artifact => artifact.id);
   
   if (filePathsToDelete.length > 0) {
     const variantText = variant === "none" ? "without variant" : 
@@ -584,27 +600,28 @@ async function deleteAllVersions() {
     
     // Find and load the appropriate gold version for the current variant
     let goldToLoad = null;
-    if (selectedFile.gold) {
+    if (selectedFile.artifacts) {
+      const goldArtifacts = selectedFile.artifacts.filter(/** @param {any} a */ a => a.is_gold_standard);
       if (variant === "none") {
-        // Load gold version without variant_id
-        goldToLoad = selectedFile.gold.find(/** @param {any} gold */ gold => !gold.variant_id);
+        // Load gold version without variant
+        goldToLoad = goldArtifacts.find(/** @param {any} gold */ gold => !gold.variant);
       } else if (variant && variant !== "") {
-        // Load gold version with matching variant_id
-        goldToLoad = selectedFile.gold.find(/** @param {any} gold */ gold => gold.variant_id === variant);
+        // Load gold version with matching variant
+        goldToLoad = goldArtifacts.find(/** @param {any} gold */ gold => gold.variant === variant);
       } else {
         // Load first available gold version
-        goldToLoad = selectedFile.gold[0];
+        goldToLoad = goldArtifacts[0];
       }
     }
-    
+
     if (goldToLoad) {
-      await load({ xml: goldToLoad.hash });
+      await load({ xml: goldToLoad.id });
     }
     
-    const variantText = variant === "none" ? "without variant" : 
+    const variantText = variant === "none" ? "without variant" :
                       variant && variant !== "" ? `with variant "${variant}"` : "";
     notify(`All versions ${variantText} have been deleted`)
-    sync.syncFiles(state)
+    sync.syncFiles(currentState)
       .then(summary => summary && console.debug(summary))
       .catch(e => console.error(e))
   } catch (error) {
@@ -669,23 +686,24 @@ async function downloadXml(state) {
   }
   let xml = xmlEditor.getXML()
   if (await config.get('xml.encode-entities.server')) {
-    xml = tei_utils.encodeXmlEntities(xml)
+    const encodeQuotes = await config.get('xml.encode-quotes', false)
+    xml = tei_utils.encodeXmlEntities(xml, { encodeQuotes })
   }
   const blob = new Blob([xml], { type: 'application/xml' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
 
-  const fileData = getFileDataByHash(state.xml);
+  const fileData = getFileDataById(state.xml);
   console.warn(fileData)
   let filename = fileData?.file?.fileref || state.xml;
 
-  // Add variant name to filename if variant_id exists
-  // The item could be a version or gold file which has variant_id
-  const variantId = fileData?.item?.variant_id;
-  if (variantId) {
-    // Extract the variant name from variant_id (e.g., "grobid.training.segmentation" -> "training.segmentation")
-    const variantName = variantId.replace(/^grobid\./, '');
+  // Add variant name to filename if variant exists
+  // The item could be a version or gold file which has variant
+  const variant = fileData?.item?.variant;
+  if (variant) {
+    // Extract the variant name from variant (e.g., "grobid.training.segmentation" -> "training.segmentation")
+    const variantName = variant.replace(/^grobid\./, '');
     filename = `${filename}.${variantName}`;
   }
 
@@ -824,6 +842,10 @@ async function saveRevision(state) {
     await addTeiHeaderInfo(respStmt, undefined, revisionChange)
     if (!state.xml) throw new Error('No XML file loaded')
 
+    // Mark editor as clean to prevent autosave from triggering
+    // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)
+    xmlEditor.markAsClean()
+
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
 
@@ -892,26 +914,39 @@ async function createNewVersion(state) {
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     if (!state.xml) throw new Error('No XML file loaded');
-    
-    // save new version first
-    const filedata = FiledataPlugin.getInstance()
-    let { hash } = await filedata.saveXml(state.xml, /* save as new version */ true)
 
-    testLog('NEW_VERSION_CREATED', { oldHash: state.xml, newHash: hash });
+    // Keep reference to current file (used to determine doc_id for the new version)
+    const currentFileId = state.xml
 
-    // update the state to load the new document
-    await load({ xml: hash })
-
-    // now modify the header
+    // Modify the header FIRST, before saving as new version
+    // This ensures the new version has unique content (won't conflict with existing content hash)
     await addTeiHeaderInfo(respStmt, editionStmt)
 
-    // save the modified content back to the same timestamped version file
-    await filedata.saveXml(hash)
-    xmlEditor.markAsClean() 
+    // Mark editor as clean to prevent autosave from triggering
+    // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)
+    // We want to explicitly control the save with new_version=true below
+    xmlEditor.markAsClean()
 
-    // reload the file data to display the new name and inform the user
+    // Save as new version with the modified content
+    // The backend will:
+    // 1. Resolve doc_id from currentFileId (the source file)
+    // 2. Create a new version file with incremented version number
+    // 3. Return the new file's stable_id
+    const filedata = FiledataPlugin.getInstance()
+    let { file_id: newFileId } = await filedata.saveXml(currentFileId, /* save as new version */ true)
+
+    testLog('NEW_VERSION_CREATED', { oldFileId: currentFileId, newFileId });
+
+    // Mark as clean since we just saved
+    xmlEditor.markAsClean()
+
+    // Reload the file data first to include the new version
     await fileselection.reload({refresh:true})
-    await app.updateState({ xml: hash }) // should have been done 
+
+    // Then update state to reflect the new file_id
+    // (editor already has the correct content from addTeiHeaderInfo)
+    // This will trigger file-selection update with the refreshed fileData
+    await app.updateState({ xml: newFileId })
 
     notify("Document was duplicated. You are now editing the copy.")
     

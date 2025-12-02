@@ -54,7 +54,7 @@ export function getRespStmtById(xmlDoc, id) {
  */
 export function addRespStmt(xmlDoc, respStmt) {
   const { persName, persId, resp } = respStmt
-  if (!persName || !resp || !persId) {
+  if (!(persName || persId) || !resp ) {
     throw new Error("Missing required parameters: persName, resp, or persId.");
   }
   if (getRespStmtById(xmlDoc, persId)) {
@@ -73,7 +73,7 @@ export function addRespStmt(xmlDoc, respStmt) {
   const respStmtElem = xmlDoc.createElementNS(teiNamespaceURI, 'respStmt');
   const persNameElem = xmlDoc.createElementNS(teiNamespaceURI, 'persName');
   persNameElem.setAttributeNS(xmlNamespace, 'xml:id', persId);
-  persNameElem.textContent = persName;
+  persNameElem.textContent = persName || persId;
   respStmtElem.appendChild(persNameElem);
 
   const respElem = xmlDoc.createElementNS(teiNamespaceURI, 'resp');
@@ -176,9 +176,18 @@ export function addEdition(xmlDoc, edition) {
   const editionStmts = xmlDoc.getElementsByTagName('editionStmt');
   const titleStmt = titleStmts[0]
 
+  // Preserve fileref from existing editionStmt if present
+  let existingFileref = null;
   if (editionStmts.length > 0) {
-    const lastEditionStmt = editionStmts[editionStmts.length - 1]
-    fileDesc.replaceChild(editionStmt, lastEditionStmt)
+    const lastEditionStmt = editionStmts[editionStmts.length - 1];
+    const editions = lastEditionStmt.getElementsByTagName('edition');
+    if (editions.length > 0) {
+      const idnos = editions[0].querySelectorAll('idno[type="fileref"]');
+      if (idnos.length > 0) {
+        existingFileref = idnos[0].cloneNode(true);
+      }
+    }
+    fileDesc.replaceChild(editionStmt, lastEditionStmt);
   } else {
     if (titleStmt.nextSibling) {
       fileDesc.insertBefore(editionStmt, titleStmt.nextSibling);
@@ -187,21 +196,26 @@ export function addEdition(xmlDoc, edition) {
     }
   }
 
-  // <edition> 
+  // <edition>
   const editionElem = xmlDoc.createElementNS(teiNamespaceURI, 'edition'); // Fixed: creating <edition> element
 
-  // <date> 
+  // <date>
   const dateElem = xmlDoc.createElementNS(teiNamespaceURI, 'date'); // Fixed: creating <date> element
   dateElem.setAttribute('when', currentDateString); // Keeping ISO string as per original code.
   dateElem.textContent = date.toLocaleDateString() + " " + date.toLocaleTimeString();
   editionElem.appendChild(dateElem); // Appending <date> to <edition>
 
-  // <title>  
+  // <title>
   const titleElem = xmlDoc.createElementNS(teiNamespaceURI, 'title');
   titleElem.textContent = title;
   editionElem.appendChild(titleElem);
 
-  // <note> 
+  // Preserve fileref if it existed
+  if (existingFileref) {
+    editionElem.appendChild(existingFileref);
+  }
+
+  // <note>
   if (note && note.trim() !== '') {
     const noteElem = xmlDoc.createElementNS(teiNamespaceURI, 'note');
     noteElem.textContent = note;
@@ -216,19 +230,33 @@ export function addEdition(xmlDoc, edition) {
  * The order of replacements is important to avoid double-escaping.
  * Ampersand (&) must be replaced first.
  *
+ * By default, only escapes characters strictly required in XML text content:
+ * - & (ampersand)
+ * - < (less-than)
+ * - > (greater-than)
+ *
  * @param {string} unsafeString The raw string that may contain special characters.
+ * @param {Object} [options] Options for escaping
+ * @param {boolean} [options.encodeQuotes=false] If true, also encode quotes and apostrophes (not required by XML spec for text content)
  * @returns {string} The string with special characters converted to XML entities.
  */
-export function escapeXml(unsafeString) {
+export function escapeXml(unsafeString, options = {}) {
   if (typeof unsafeString !== 'string') {
     return '';
   }
-  return unsafeString
+  let result = unsafeString
     .replaceAll(/&/g, '&amp;')
     .replaceAll(/</g, '&lt;')
-    .replaceAll(/>/g, '&gt;')
-    .replaceAll(/"/g, '&quot;')
-    .replaceAll(/'/g, '&apos;');
+    .replaceAll(/>/g, '&gt;');
+
+  // Only encode quotes if explicitly requested
+  if (options.encodeQuotes) {
+    result = result
+      .replaceAll(/"/g, '&quot;')
+      .replaceAll(/'/g, '&apos;');
+  }
+
+  return result;
 }
 
 /**
@@ -254,29 +282,138 @@ export function unescapeXml(escapedString) {
  * Escapes special characters in XML content using a manual string-parsing approach.
  *
  * This function iterates through the string, keeping track of whether the
- * current position is inside a tag or in the content between tags, and
- * only applies escaping to the content portion.
+ * current position is inside a tag, comment, CDATA, or processing instruction.
+ * Only applies escaping to regular text content, not to special XML constructs.
+ *
+ * By default, only escapes characters strictly required in XML text content:
+ * - & (ampersand)
+ * - < (less-than)
+ * - > (greater-than)
  *
  * @param {string} xmlString The raw XML string to be processed.
+ * @param {Object} [options] Options for escaping
+ * @param {boolean} [options.encodeQuotes=false] If true, also encode quotes and apostrophes (not required by XML spec for text content)
  * @returns {string} A new XML string with its node content properly escaped.
  */
-export function encodeXmlEntities(xmlString) {
+export function encodeXmlEntities(xmlString, options = {}) {
   if (typeof xmlString !== 'string') {
     return "";
   }
 
   let inTag = false;
+  let inComment = false;
+  let inCdata = false;
+  let inPi = false; // processing instruction
   const resultParts = [];
   let contentBuffer = [];
+  let i = 0;
+  const length = xmlString.length;
 
-  for (const char of xmlString) {
+  while (i < length) {
+    const char = xmlString[i];
+
+    // Check for comment start: <!--
+    if (!inComment && !inCdata && !inPi && i + 3 < length) {
+      if (xmlString.substring(i, i + 4) === '<!--') {
+        // Flush content buffer
+        if (contentBuffer.length > 0) {
+          const contentToProcess = contentBuffer.join('');
+          const unescapedContent = unescapeXml(contentToProcess);
+          const escapedContent = escapeXml(unescapedContent, options);
+          resultParts.push(escapedContent);
+          contentBuffer = [];
+        }
+
+        inComment = true;
+        resultParts.push('<!--');
+        i += 4;
+        continue;
+      }
+    }
+
+    // Check for comment end: -->
+    if (inComment && i + 2 < length) {
+      if (xmlString.substring(i, i + 3) === '-->') {
+        inComment = false;
+        resultParts.push('-->');
+        i += 3;
+        continue;
+      }
+    }
+
+    // Check for CDATA start: <![CDATA[
+    if (!inComment && !inCdata && !inPi && i + 8 < length) {
+      if (xmlString.substring(i, i + 9) === '<![CDATA[') {
+        // Flush content buffer
+        if (contentBuffer.length > 0) {
+          const contentToProcess = contentBuffer.join('');
+          const unescapedContent = unescapeXml(contentToProcess);
+          const escapedContent = escapeXml(unescapedContent, options);
+          resultParts.push(escapedContent);
+          contentBuffer = [];
+        }
+
+        inCdata = true;
+        resultParts.push('<![CDATA[');
+        i += 9;
+        continue;
+      }
+    }
+
+    // Check for CDATA end: ]]>
+    if (inCdata && i + 2 < length) {
+      if (xmlString.substring(i, i + 3) === ']]>') {
+        inCdata = false;
+        resultParts.push(']]>');
+        i += 3;
+        continue;
+      }
+    }
+
+    // Check for processing instruction start: <?
+    if (!inComment && !inCdata && !inPi && i + 1 < length) {
+      if (xmlString.substring(i, i + 2) === '<?') {
+        // Flush content buffer
+        if (contentBuffer.length > 0) {
+          const contentToProcess = contentBuffer.join('');
+          const unescapedContent = unescapeXml(contentToProcess);
+          const escapedContent = escapeXml(unescapedContent, options);
+          resultParts.push(escapedContent);
+          contentBuffer = [];
+        }
+
+        inPi = true;
+        resultParts.push('<?');
+        i += 2;
+        continue;
+      }
+    }
+
+    // Check for processing instruction end: ?>
+    if (inPi && i + 1 < length) {
+      if (xmlString.substring(i, i + 2) === '?>') {
+        inPi = false;
+        resultParts.push('?>');
+        i += 2;
+        continue;
+      }
+    }
+
+    // Handle special sections (comment, CDATA, PI) - pass through unchanged
+    if (inComment || inCdata || inPi) {
+      resultParts.push(char);
+      i++;
+      continue;
+    }
+
+    // Normal tag/content handling
     if (char === '<') {
       // When a '<' is found, the preceding text in the buffer is content.
       // Un-escape it first to prevent double-escaping, then re-escape it.
       if (contentBuffer.length > 0) {
         const contentToProcess = contentBuffer.join('');
         const unescapedContent = unescapeXml(contentToProcess);
-        const escapedContent = escapeXml(unescapedContent);
+        const escapedContent = escapeXml(unescapedContent, options);
         resultParts.push(escapedContent);
         contentBuffer = []; // Reset the buffer.
       }
@@ -298,13 +435,15 @@ export function encodeXmlEntities(xmlString) {
         contentBuffer.push(char);
       }
     }
+
+    i++;
   }
 
   // After the loop, process any final remaining content from the buffer.
   if (contentBuffer.length > 0) {
     const contentToProcess = contentBuffer.join('');
     const unescapedContent = unescapeXml(contentToProcess);
-    const escapedContent = escapeXml(unescapedContent);
+    const escapedContent = escapeXml(unescapedContent, options);
     resultParts.push(escapedContent);
   }
 

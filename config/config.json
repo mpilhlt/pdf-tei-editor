@@ -7,6 +7,7 @@
   ],
   "xml.encode-entities.server": true,
   "xml.encode-entities.client": false,
+  "xml.encode-quotes": false,
   "heartbeat.interval": 30,
   "session.timeout": 86400,
   "state.showInUrl": [

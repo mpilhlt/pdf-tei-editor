@@ -2,36 +2,77 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Keep in mind this is the FastAPI migration branch, so things could be different than what is written here - see the migration step completion documents in `fastapi_app/prompts`.
+
 ## General tone
 
-- Don't be too congratulatory. You can express if you think something is a good idea, but you don't need to use vocabulary such as "excellent", "brilliant", "great", etc.
+- ALWAYS be concise. Only include information that is relevant to the implementation. Omit any kind of motivational or congratulatory language. Do NOT use vocabulary such as "excellent", "brilliant", "great", etc.
 - If you think there might be a problem with the user's idea, push back. Don't assume the user's ideas are necessarily correct. Ask if you should go with their idea, but also suggest alternatives.
 
 ## Quick Reference
 
-### Essential Commands
+### Testing Commands
+
+See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for complete testing documentation.
 
 ```bash
-# Run only tests for changed files
+# Run tests for changed files (most common)
 npm run test:changed
 
-# Run all JavaScript unit tests
-npm run test:js
+# Unit tests
+npm run test:unit:js          # JavaScript units
+npm run test:unit:fastapi     # Python units
 
-# Run all Python integration tests
-npm run test:py
+# API integration tests (local server, fast)
+npm run test:api
+npm run test:api -- --grep "save"
 
-# Run end-to-end tests in containerized environment, requires environment variables to work 
-npm run test:e2e            # all E2E test, don't use this- always run more specific tests
-npm run test:e2e:backend    # Backend integration tests only
+# E2E tests (Playwright)
+npm run test:e2e
+npm run test:e2e:headed       # Show browser
+npm run test:e2e:debug        # Step-through debugging
+```
 
-# Pass environment variables to E2E test containers
-npm run test:e2e -- --env SOME_ENVIRONMENT_VAR
-npm run test:e2e -- --grep "extraction" --env SOME_ENVIRONMENT_VAR
+### Development Commands
 
-# Use custom .env file for E2E tests
-npm run test:e2e -- --dotenv-path .env.testing
+```bash
+# Start dev server
+npm run start:dev
 
+# Build for production
+npm run build
+
+# Bypass authentication for development/testing
+FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
+```
+
+### Container Commands
+
+```bash
+# Build container image locally (Docker/Podman auto-detected)
+npm run container:build
+npm run container:build -- --tag v1.0.0
+npm run container:build:no-cache -- --tag v1.0.0
+
+# Build and push to registry
+npm run container:push
+npm run container:push -- --tag v1.0.0 --no-build
+
+# Start container
+npm run container:start
+npm run container:start -- --tag v1.0.0 --port 8080
+npm run container:start -- --rebuild              # Rebuild before starting
+npm run container:start -- --rebuild --no-cache   # Rebuild without cache
+
+# Stop container
+npm run container:stop
+npm run container:stop -- --name pdf-tei-editor-v1.0.0 --remove
+npm run container:stop -- --all
+
+# Restart container
+npm run container:restart
+npm run container:restart -- --name pdf-tei-editor-v1.0.0
+npm run container:restart -- --rebuild             # Rebuild before restarting
 ```
 
 ### Key Files
@@ -43,47 +84,64 @@ npm run test:e2e -- --dotenv-path .env.testing
 - Plugin invocation endpoints/ extension points definition: `app/src/endpoints.js`
 - Application state object definition: `app/src/state.js`
 
-### Key Directories:
+### Key Directories
 
-Read `prompts/architecture.md` when you need to understand the system design
+Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.
 
 - `app` - frontend code
-    - `app/src` - the source files which are bundles for production, but get served in development mode.
-    - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
-    - `app/src/plugins` - Plugin objects and classes (Read `prompts/plugin-development.md` when creating new plugins)
-    - `app/src/templates` - html templates used by the plugins to create UI parts
+  - `app/src` - the source files which are bundles for production, but get served in development mode.
+  - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
+  - `app/src/plugins` - Plugin objects and classes (Read [docs/code-assistant/plugin-development.md](docs/code-assistant/plugin-development.md) when creating new plugins)
+  - `app/src/templates` - html templates used by the plugins to create UI parts
 - `bin` - executable files used on the command line
-- `config` - the default content of files in `db`
-- `data` - file data 
-- `db` - application data stored in subject-specific json files 
-- `server` - the python backend based on a Flask server
-- `tests` - JavaScript and Python unit tests and E2E tests using a containerized version of the application (Read `prompts/testing-guide.md` when creating or debuggingtests)
-
+- `config` - the default content of files in `data/db`
+- `data` - file data
+- `data/db` - application data stored in subject-specific json files
+- `fastapi_app` - the python backend based on FastAPI
+- `tests` - JavaScript and Python unit tests and E2E tests (Read [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) when creating or debugging tests)
 
 ## Detailed Documentation
 
-For comprehensive guides, see the modular documentation in the `prompts/` directory:
+For comprehensive guides, see the documentation in the `docs/code-assistant/` directory:
 
-- **[Development Commands](prompts/development-commands.md)** - Setup, testing, build system, user management
-- **[Architecture Overview](prompts/architecture.md)** - Backend, frontend, plugin system, UI components, templates
-- **[Testing Guide](prompts/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
-- **[Plugin Development](prompts/plugin-development.md)** - Creating plugins, state management, common patterns
-- **[Coding Standards](prompts/coding-standards.md)** - JSDoc requirements, best practices, conventions
+- **[Architecture Overview](docs/code-assistant/architecture.md)** - Backend, frontend, plugin system, UI components, templates
+- **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
+- **[Development Commands](docs/code-assistant/development-commands.md)** - Setup, testing, build system, user management
+- **[Plugin Development](docs/code-assistant/plugin-development.md)** - Creating plugins, state management, common patterns
+- **[Testing Guide](docs/code-assistant/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
+- **[API Client](docs/code-assistant/api-client.md)** - FastAPI client usage, type safety, patterns
 
 ## Important Reminders
 
 ### Development Workflow
 
 1. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode
-2. Backend changes: Server auto-reloads automatically (Flask dev server detects changes)
+2. Backend changes: Server auto-reloads automatically (FastAPI dev server detects changes)
 3. Schema updates: Delete `schema/cache/` to refresh XSD cache
 4. Building is only needed for production and is handled by pre-push git hooks
 
 ### Critical Rules
 
-- **Suggest Prompt Updates**: if something in the prompts referenced here does not align with the consistent code patterns, suggest to update the prompts, if only to acknowledge legacy patterns.
-- **NEVER start, restart, or suggest restarting the Flask server** - It auto-restarts on changes, tests should be done using the containerized server
+- **Command Execution**: ALWAYS use `uv run python` for Python commands and `node` for Node.js commands
+- **Suggest Prompt Updates**: if something in the documentation does not align with the consistent code patterns, suggest to update the documentation
+- **NEVER start, restart, or suggest restarting the dev server** - It auto-restarts on changes, tests should use the test runners
 - **ALWAYS add comprehensive JSDoc headers** - Use specific types instead of generic "object"
 - **Plugin endpoints are observers, not mutators** - Never update the state in functions that receive it, otherwise there will be unwanted state mutation or infinite loops.
 - **Use UI navigation via the `ui` object instead of DOM node navigation** for fast lookup and alignment of runtime UI structure and documentation
 - **Use testLog() for E2E test validation** - Don't rely on DOM queries
+- ** when inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message so that these commands can be found and removed later.
+- If during debugging you learn something that is not contained in the code assistant documentation, add it to the respective file!
+
+## Planning documents, todo documents, github issues
+
+- If you are asked to create planning documents for complex, multi-phase tasks, only include technically relevant information needed for the implementation or for later reference, e.g. for writing documentation on the new code
+- Omit discussion of the advantages of a particular solution unless specifically asked to discuss pros and cons or provide alternatives in a planning document.
+- When migrating code to a new state, do not mention the legacy state unless absolutely necessary (for example, when code is concerns with migration of data) and there is no need to discuss the improvements provided by the new solution. This also applies to writing in-code documentation and comments.
+
+## Completion documents and summaries
+
+- When told to work on a todo document or github issue, add a summary of what was done at the end of the document or issue comment.
+- Omit statistical information on the number of changed lines, methods etc. or lists of code changes. Just summarize what the new code does and provide examples if the usage is different from before, so that you can update existing documentation.
+- The summary should be concise and only include information relevant to understanding the implementation. Omit discussion of advantages, alternatives, or motivational language.
+- If there were any significant challenges or deviations from the original plan, briefly mention them in a factual manner.
+- The goal is to provide a clear understanding of what was implemented without unnecessary detail.

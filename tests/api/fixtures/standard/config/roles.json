@@ -1,0 +1,22 @@
+[
+    {
+        "id": "admin",
+        "roleName": "Administrator",
+        "description": "Application management, user configuration"
+    },
+    {
+        "id": "user",
+        "roleName": "User",
+        "description": "Application usage that requires no special authorization"
+    }, 
+    {
+        "id": "annotator",
+        "roleName": "Annotator",
+        "description": "Document annotation, subject to review"
+    }, 
+    {
+        "id": "reviewer",
+        "roleName": "Reviewer",
+        "description": "Reviewing of anotated documents, gold file management"
+    }
+]

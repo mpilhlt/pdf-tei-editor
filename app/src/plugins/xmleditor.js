@@ -16,7 +16,7 @@ import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
-import { getDocumentTitle, getFileDataByHash } from '../modules/file-data-utils.js'
+import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
 import { isGoldFile } from '../modules/acl-utils.js'
 
@@ -322,7 +322,7 @@ async function update(state) {
     .forEach(widget => widget.style.display = state.xml ? 'inline-flex' : 'none')
 
   // Update title widget with document title
-  const fileData = getFileDataByHash(state.xml)
+  const fileData = getFileDataById(state.xml)
   if (fileData?.item) {
     const versionType = isGoldFile(state.xml) ? "Gold" : "Version"
     const versionName = fileData.item.version_name || fileData.item.label || '';
@@ -437,10 +437,10 @@ async function saveIfDirty() {
     if (result.status == "unchanged") {
       logger.debug(`File has not changed`)
     } else {
-      logger.debug(`Saved file with hash ${result.hash}`)
-      if (result.hash && result.hash !== fileHash) {
-        // Update state to use new hash
-        await app.updateState({ xml: result.hash })
+      logger.debug(`Saved file with file_id ${result.file_id}`)
+      if (result.file_id && result.file_id !== fileHash) {
+        // Update state to use new file_id
+        await app.updateState({ xml: result.file_id })
       }
     }
     xmlEditor.markAsClean()
