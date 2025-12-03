@@ -38,6 +38,7 @@
         "test:e2e:container-infra": "E2E_BASE_URL=http://localhost:8000 E2E_SKIP_WEBSERVER=1 npx playwright test tests/e2e/tests/docker-infrastructure.spec.js",
         "test:e2e:container": "node tests/e2e-runner.js --container",
         "test:e2e:container:cached": "node tests/e2e-runner.js --container --no-rebuild",
+        "test:container": "node bin/test-container-startup.js",
         "container:start": "node bin/container.js start",
         "container:stop": "node bin/container.js stop",
         "container:restart": "node bin/container.js restart",

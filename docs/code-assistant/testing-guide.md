@@ -34,8 +34,9 @@ npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
 npm run test:e2e:debug-failure # Capture debug artifacts on failure (headless)
 
-# Container infrastructure test (standalone validation)
-npm run test:e2e:container-infra  # Validate container setup
+# Container tests
+npm run test:container         # Test container build and startup
+npm run test:e2e:container-infra  # Validate container setup (requires running container)
 ```
 
 ## Test Types
@@ -96,13 +97,26 @@ API tests use a two-phase fixture loading system:
 - **Run**: `npm run test:e2e`
 - **Features**: Playwright, `window.ui` navigation, `testLog()` for state verification
 
-#### Container Infrastructure Test
+#### Container Testing
 
-Validates container setup before running E2E tests:
+**Test Container Startup** (`npm run test:container`):
 
+- **Purpose**: Quickly validate that the container builds correctly and starts successfully
+- **What it does**:
+  - Builds the test container from scratch
+  - Starts the container
+  - Waits for the `/health` endpoint to respond
+  - Shows container details (name, URL)
+  - Cleans up and stops the container
+- **Use when**: Testing changes to `Dockerfile`, `docker/entrypoint-test.sh`, or server startup
+
+**Container Infrastructure Test** (`npm run test:e2e:container-infra`):
+
+- **Purpose**: Validates container setup before running E2E tests
 - **File**: `tests/e2e/tests/docker-infrastructure.spec.js`
-- **Run**: `npm run test:e2e:container-infra` (standalone) or automatically when running `npm run test:e2e:container`
+- **Run**: Standalone or automatically when running `npm run test:e2e:container`
 - **Auto-run**: Automatically runs when container is rebuilt (not with `--no-rebuild`)
+- **Requires**: A running container (use `npm run container:start` or `npm run test:container` first)
 
 **What it checks:**
 

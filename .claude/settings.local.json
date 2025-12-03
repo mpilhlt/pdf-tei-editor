@@ -40,7 +40,11 @@
       "Bash(for i in 1 2 3 4 5)",
       "Bash(break)",
       "Bash(npm test:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(podman ps:*)",
+      "Bash(podman inspect:*)",
+      "Bash(npm run test:api:container:cached:*)",
+      "Bash(podman build:*)"
     ],
     "deny": [],
     "ask": []
