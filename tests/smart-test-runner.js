@@ -21,15 +21,104 @@ const debugLog = (...args) => {
 };
 
 /**
+ * @typedef {Object} SmartTestRunnerOptions
+ * @property {string[]} [baseDirs=['app/src', 'fastapi_app']] - Base directories to analyze
+ * @property {RegExp[]} [excludeRegExp=[/node_modules/, /\.husky/]] - Patterns to exclude from analysis
+ * @property {string[]} [fileExtensions=['js']] - File extensions to analyze
+ * @property {(string|RegExp)[]} [ignoreChanges=[]] - Files or patterns to ignore from change detection (e.g., auto-generated files)
+ */
+
+/**
  * Smart test runner that analyzes dependencies to run only relevant tests
- * 
+ *
  * Test files can use JSDoc annotations to control behavior:
  * - @testCovers path/to/file.js - Explicitly declare dependencies
  * - @testCovers * - Mark as critical test that always runs
  */
 class SmartTestRunner {
-  constructor() {
-    // Removed caching system for simplicity and reliability
+  /**
+   * @param {SmartTestRunnerOptions} [options]
+   */
+  constructor(options = {}) {
+    this.options = {
+      baseDirs: options.baseDirs || ['app/src', 'fastapi_app'],
+      excludeRegExp: options.excludeRegExp || [/node_modules/, /\.husky/],
+      fileExtensions: options.fileExtensions || ['js'],
+      ignoreChanges: options.ignoreChanges || ['app/src/modules/api-client-v1.js']
+    };
+    /** @type {Map<string, Set<string>> | null} */
+    this.reverseDepsCache = null;
+  }
+
+  /**
+   * Build a reverse dependency graph showing what files depend on each file
+   * @returns {Promise<Map<string, Set<string>>>} Map from file to set of files that import it
+   */
+  async buildReverseDependencyGraph() {
+    if (this.reverseDepsCache) {
+      return this.reverseDepsCache;
+    }
+
+    debugLog('Building reverse dependency graph for:', this.options.baseDirs);
+    /** @type {Map<string, Set<string>>} */
+    const reverseDeps = new Map();
+
+    // Build graph for JavaScript files
+    if (this.options.baseDirs.includes('app/src')) {
+      const result = await madge('app/src', {
+        baseDir: projectRoot,
+        fileExtensions: this.options.fileExtensions,
+        excludeRegExp: this.options.excludeRegExp
+      });
+
+      const tree = result.obj();
+
+      for (const [file, deps] of Object.entries(tree)) {
+        // Normalize file path to full format
+        const normalizedFile = file.startsWith('app/src/') ? file : `app/src/${file}`;
+
+        for (const dep of deps) {
+          // Normalize dep path to full format
+          const normalizedDep = dep.startsWith('app/src/') ? dep : `app/src/${dep}`;
+
+          if (!reverseDeps.has(normalizedDep)) {
+            reverseDeps.set(normalizedDep, new Set());
+          }
+          reverseDeps.get(normalizedDep).add(normalizedFile);
+        }
+      }
+    }
+
+    // TODO: Add Python dependency analysis if needed in the future
+
+    this.reverseDepsCache = reverseDeps;
+    debugLog(`Built reverse dependency graph with ${reverseDeps.size} entries`);
+    return reverseDeps;
+  }
+
+  /**
+   * Get all files transitively affected by a change to the given file
+   * @param {string} changedFile - The file that changed
+   * @param {Map<string, Set<string>>} reverseDeps - The reverse dependency graph
+   * @returns {Set<string>} All files affected by the change
+   */
+  getTransitivelyAffectedFiles(changedFile, reverseDeps) {
+    const affected = new Set([changedFile]);
+    const queue = [changedFile];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      const importers = reverseDeps.get(current) || new Set();
+
+      for (const importer of importers) {
+        if (!affected.has(importer)) {
+          affected.add(importer);
+          queue.push(importer);
+        }
+      }
+    }
+
+    return affected;
   }
 
   async discoverTestFiles() {
@@ -382,13 +471,35 @@ class SmartTestRunner {
   }
 
   /**
+   * Check if a file should be ignored from change detection
+   * @param {string} filePath - File path to check
+   * @returns {boolean} True if file should be ignored
+   */
+  shouldIgnoreChange(filePath) {
+    for (const pattern of this.options.ignoreChanges) {
+      if (pattern instanceof RegExp) {
+        if (pattern.test(filePath)) {
+          debugLog(`Ignoring change to ${filePath} (matches pattern ${pattern})`);
+          return true;
+        }
+      } else if (typeof pattern === 'string') {
+        if (filePath === pattern) {
+          debugLog(`Ignoring change to ${filePath} (exact match)`);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * @param {string[] | null} customFiles
    * @returns {string[]}
    */
   getChangedFiles(customFiles = null) {
     if (customFiles) {
       debugLog('Using custom changed files:', customFiles);
-      return customFiles;
+      return customFiles.filter(f => !this.shouldIgnoreChange(f));
     }
 
     try {
@@ -400,7 +511,8 @@ class SmartTestRunner {
       const allChanged = [...new Set([
         ...staged.split('\n').filter(f => f.trim()),
         ...modified.split('\n').filter(f => f.trim())
-      ])];
+      ])].filter(f => !this.shouldIgnoreChange(f));
+
       debugLog('Found changed files from git:', allChanged);
       return allChanged;
     } catch (error) {
@@ -413,8 +525,9 @@ class SmartTestRunner {
    * @param {string} testFile
    * @param {string[]} changedFiles
    * @param {{dependencies: Record<string, {dependencies: string[], alwaysRun: boolean}>}} analysisResult
+   * @param {Map<string, Set<string>>} reverseDeps
    */
-  shouldRunTest(testFile, changedFiles, analysisResult) {
+  shouldRunTest(testFile, changedFiles, analysisResult, reverseDeps) {
     const testData = analysisResult.dependencies[testFile];
     if (!testData) {
       debugLog(`No analysis data for ${testFile}, skipping.`);
@@ -428,30 +541,39 @@ class SmartTestRunner {
     }
 
     const testDeps = testData.dependencies || [];
-    
+
     return changedFiles.some((/** @type {string} */ changedFile) => {
+      // Build set of all files affected by this change (transitive)
+      const affectedFiles = this.getTransitivelyAffectedFiles(changedFile, reverseDeps);
+
       return testDeps.some((/** @type {string} */ dep) => {
         let match = false;
+
         // Support directory matches (ending with /)
         if (dep.endsWith('/')) {
-          match = changedFile.startsWith(dep);
+          // Check if any affected file starts with this directory
+          match = changedFile.startsWith(dep) || Array.from(affectedFiles).some(f => f.startsWith(dep));
         }
         // Support partial matches (ending with -)
         else if (dep.endsWith('-')) {
-          match = changedFile.startsWith(dep);
+          match = changedFile.startsWith(dep) || Array.from(affectedFiles).some(f => f.startsWith(dep));
         }
         // Support wildcard matches (containing *)
         else if (dep.includes('*')) {
           const pattern = dep.replace(/\*/g, '.*');
           const regex = new RegExp(`^${pattern}`);
-          match = regex.test(changedFile);
+          match = regex.test(changedFile) || Array.from(affectedFiles).some(f => regex.test(f));
         }
-        // Exact file match
+        // Exact file match - check both changed file and all affected files
         else {
-            match = changedFile === dep || changedFile.startsWith(dep.replace(/\.js$/, ''));
+          match = changedFile === dep ||
+                  changedFile.startsWith(dep.replace(/\.js$/, '')) ||
+                  affectedFiles.has(dep) ||
+                  Array.from(affectedFiles).some(f => f.startsWith(dep.replace(/\.js$/, '')));
         }
-        if(match) {
-            debugLog(`Match found for ${testFile}: changed file '${changedFile}' matches dependency '${dep}'`);
+
+        if (match) {
+          debugLog(`Match found for ${testFile}: changed file '${changedFile}' (or its dependents) matches dependency '${dep}'`);
         }
         return match;
       });
@@ -477,6 +599,9 @@ class SmartTestRunner {
     const analysisResult = await this.analyzeDependencies(options);
     debugLog('Analysis result:', JSON.stringify(analysisResult, null, 2));
 
+    // Build reverse dependency graph for transitive matching
+    const reverseDeps = await this.buildReverseDependencyGraph();
+
     if (changedFiles.length === 0) {
       // No changes, run only always-run tests
       const alwaysRunJs = testFiles.js.filter(test =>
@@ -497,19 +622,19 @@ class SmartTestRunner {
     }
 
     const jsTests = testFiles.js.filter(test =>
-      this.shouldRunTest(test, changedFiles, analysisResult)
+      this.shouldRunTest(test, changedFiles, analysisResult, reverseDeps)
     );
 
     const pyTests = testFiles.py.filter(test =>
-      this.shouldRunTest(test, changedFiles, analysisResult)
+      this.shouldRunTest(test, changedFiles, analysisResult, reverseDeps)
     );
 
     const apiTests = testFiles.api.filter(test =>
-      this.shouldRunTest(test, changedFiles, analysisResult)
+      this.shouldRunTest(test, changedFiles, analysisResult, reverseDeps)
     );
 
     const e2eTests = testFiles.e2e.filter(test =>
-      this.shouldRunTest(test, changedFiles, analysisResult)
+      this.shouldRunTest(test, changedFiles, analysisResult, reverseDeps)
     );
 
     const tests = { js: jsTests, py: pyTests, api: apiTests, e2e: e2eTests };
@@ -529,6 +654,7 @@ class SmartTestRunner {
    * @param {RunOptions} options
    */
   async run(options = {}) {
+    const startTime = Date.now();
     const isTap = options.tap;
     const dryRun = options.dryRun;
 
@@ -568,7 +694,12 @@ class SmartTestRunner {
     // Build API test command (backend API integration tests)
     let apiCommand = null;
     if (testsToRun.api && testsToRun.api.length > 0) {
-      const testFiles = testsToRun.api.join(' ');
+      // Convert test file paths to grep pattern
+      const testNames = testsToRun.api.map(f =>
+        f.replace('tests/api/v1/', '').replace('.test.js', '')
+      ).join('|');
+      const grepArg = `--grep "${testNames}"`;
+
       const { vars: apiVars, files: apiFiles } = this.categorizeEnvVars(apiEnvVars);
 
       // Check for conflicting .env files
@@ -581,9 +712,9 @@ class SmartTestRunner {
 
       const envArgsStr = apiVars.map(v => `--env "${v}"`).join(' ');
       const envFileArg = apiFiles.length > 0 ? `--env-file "${apiFiles[0]}"` : '';
-      const extraArgs = [envArgsStr, envFileArg].filter(Boolean).join(' ');
+      const extraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
       // Route API tests to backend-test-runner (.env auto-detected from test directory)
-      apiCommand = `node tests/backend-test-runner.js ${extraArgs} ${testFiles}`.trim();
+      apiCommand = `node tests/backend-test-runner.js ${extraArgs}`.trim();
     }
 
     // Build E2E command (Playwright frontend tests)
@@ -646,6 +777,9 @@ class SmartTestRunner {
               }
             });
         }
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        console.log(`⏱️  Total time: ${duration}s`);
         return;
     }
 
@@ -656,6 +790,11 @@ class SmartTestRunner {
 
     if (testSuites.length === 0) {
       if (!isTap) logger.success('No relevant tests to run');
+      if (!isTap) {
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        console.log(`⏱️  Total time: ${duration}s`);
+      }
       return;
     }
 
@@ -681,6 +820,7 @@ class SmartTestRunner {
 
     let testCounter = 1;
     let allTestsPassed = true;
+    const failedSuites = [];
 
     for (const suite of testSuites) {
         try {
@@ -699,15 +839,25 @@ class SmartTestRunner {
                 console.log(`not ok ${testCounter++} - ${suite.name}`);
             }
             allTestsPassed = false;
+            failedSuites.push(suite.name);
         }
     }
 
+    const endTime = Date.now();
+    const duration = ((endTime - startTime) / 1000).toFixed(2);
+
     if (!allTestsPassed) {
-        if (!isTap) console.error('\n❌ Tests failed');
+        if (!isTap) {
+          console.error('\n❌ Tests failed');
+          console.error('\n📋 Failed test suites:');
+          failedSuites.forEach(suite => console.error(`  ❌ ${suite}`));
+        }
+        if (!isTap) console.log(`⏱️  Total time: ${duration}s`);
         process.exit(1);
     }
 
     if (!isTap) console.log('\n✅ All tests passed');
+    if (!isTap) console.log(`⏱️  Total time: ${duration}s`);
   }
 }
 

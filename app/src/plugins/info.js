@@ -12,7 +12,7 @@
 import ui, { updateUi } from '../ui.js'
 import { SlButton } from '../ui.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
-import { dialog,logger } from '../app.js'
+import { dialog, logger, config } from '../app.js'
 import markdownit from 'markdown-it'
 
 /**
@@ -24,7 +24,8 @@ const api = {
   goBack,
   goHome,
   goForward,
-  close
+  close,
+  setEnableCache
 }
 
 /**
@@ -69,10 +70,27 @@ await registerTemplate('info-toolbar-button', 'info-toolbar-button.html');
  * @see https://github.com/markdown-it/markdown-it
  * @type {MarkdownIt}
  */
-let md; 
+let md;
 const localDocsBasePath = "../../docs"
-const remoteDocsBasePath = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/docs"
-const githubEditBasePath = "https://github.com/mpilhlt/pdf-tei-editor/edit/main/docs"
+
+/**
+ * Remote documentation base path (constructed from version)
+ * @type {string}
+ */
+let remoteDocsBasePath = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/docs"
+
+/**
+ * GitHub edit base path (constructed from version)
+ * @type {string}
+ */
+let githubEditBasePath = "https://github.com/mpilhlt/pdf-tei-editor/edit/main/docs"
+
+/**
+ * Configuration for documentation caching
+ * Set to false during development to always fetch fresh content
+ * @type {boolean}
+ */
+let enableCache = true
 
 /**
  * Loads the application version from version.js
@@ -164,10 +182,15 @@ async function install(state) {
   ui.loginDialog.insertAdjacentElement("beforeend", aboutButton)
   updateUi()
 
-  // Load and inject version information
+  // Load and inject version information, and construct remote paths
   loadVersion().then(version => {
     if (version) {
       ui.infoDrawer.versionInfo.textContent = `v${version}`
+      // Construct remote paths using version tag
+      const versionTag = `v${version}`
+      remoteDocsBasePath = `https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/tags/${versionTag}/docs`
+      githubEditBasePath = `https://github.com/mpilhlt/pdf-tei-editor/edit/${versionTag}/docs`
+      logger.debug(`Remote docs path: ${remoteDocsBasePath}`)
     }
   }).catch(error => {
     logger.debug('Failed to load version:', error)
@@ -225,27 +248,40 @@ async function load(mdPath, addToHistory = true){
   // remove existing content
   ui.infoDrawer.content.innerHTML = ""
   
-  // load markdown 
+  // load markdown
   let markdown
   let isOnline = false
-  
-  try {
-    // First, try to load from remote if online
-    isOnline = await checkOnlineConnectivity()
-    if (isOnline) {
-      logger.debug(`Loading documentation from remote: ${mdPath}`)
-      markdown = await (await fetch(`${remoteDocsBasePath}/${mdPath}`)).text()
-    } else {
-      throw new Error("No online connectivity")
-    }
-  } catch(error) {
-    // Fallback to local filesystem
+  const fetchOptions = enableCache ? {} : { cache: 'no-cache' }
+  const useGitHubDocs = await config.get("docs.from-github")
+
+  if (!useGitHubDocs) {
+    // Local docs: Use local files
     try {
-      logger.debug(`Falling back to local documentation: ${mdPath}`)
-      markdown = await (await fetch(`${localDocsBasePath}/${mdPath}`)).text()
-    } catch(localError) {
-      dialog.error(`Failed to load documentation: ${localError.message}`)
-      return 
+      logger.debug(`Loading documentation from local: ${mdPath}`)
+      markdown = await (await fetch(`${localDocsBasePath}/${mdPath}`, fetchOptions)).text()
+    } catch(error) {
+      dialog.error(`Failed to load local documentation: ${error.message}`)
+      return
+    }
+  } else {
+    // GitHub docs: Try remote first, fallback to local if offline
+    try {
+      isOnline = await checkOnlineConnectivity()
+      if (isOnline) {
+        logger.debug(`Loading documentation from GitHub: ${mdPath}`)
+        markdown = await (await fetch(`${remoteDocsBasePath}/${mdPath}`, fetchOptions)).text()
+      } else {
+        throw new Error("No online connectivity")
+      }
+    } catch(error) {
+      // Fallback to local filesystem
+      try {
+        logger.debug(`Falling back to local documentation: ${mdPath}`)
+        markdown = await (await fetch(`${localDocsBasePath}/${mdPath}`, fetchOptions)).text()
+      } catch(localError) {
+        dialog.error(`Failed to load documentation: ${localError.message}`)
+        return
+      }
     }
   }
   
@@ -332,4 +368,13 @@ function showHelpFromLoginDialog() {
     ui.loginDialog.show()
   }, {once:true})
   api.open()
+}
+
+/**
+ * Sets whether to enable browser caching for documentation
+ * @param {boolean} value - true to enable caching, false to always fetch fresh content
+ */
+function setEnableCache(value) {
+  enableCache = value
+  logger.debug(`Documentation caching ${value ? 'enabled' : 'disabled'}`)
 }

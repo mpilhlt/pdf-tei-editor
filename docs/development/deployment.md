@@ -101,7 +101,24 @@ npm run start:prod
    }
    ```
 
-2. **Configure environment variables** in `.env` (copy from `.env.production`):
+2. **Enable GitHub documentation** (optional but recommended):
+
+   By default, the application serves documentation from local files bundled with the code. For production deployments, you can enable loading documentation directly from GitHub, which allows users to see updated documentation without rebuilding or redeploying the application.
+
+   Set the environment variable in `.env`:
+
+   ```bash
+   DOCS_FROM_GITHUB=true
+   ```
+
+   This fetches documentation from the GitHub repository tag matching your application version (e.g., `v0.1.0`). The application automatically falls back to local documentation if GitHub is unreachable.
+
+   **Benefits:**
+   - Documentation updates are immediately available without redeployment
+   - Useful for long-running production instances
+   - Reduces time between documentation improvements and user visibility
+
+3. **Configure environment variables** in `.env` (copy from `.env.production`):
 
    ```bash
    GEMINI_API_KEY=your_gemini_api_key_here
@@ -119,7 +136,7 @@ npm run start:prod
    APP_DEMO_PASSWORD=demo_user_password
    ```
 
-3. **Set up reverse proxy** (nginx example):
+4. **Set up reverse proxy** (nginx example):
 
    ```nginx
    server {

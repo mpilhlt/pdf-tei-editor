@@ -2,18 +2,18 @@
  * Global setup for Playwright E2E tests
  *
  * This file configures global test behavior including:
- * - Pause-on-failure mode for debugging
+ * - Debug-on-failure mode for capturing extended debug artifacts
  */
 
 import { test as base } from '@playwright/test';
 
-// Check if pause-on-failure mode is enabled
-const PAUSE_ON_FAILURE = process.env.E2E_PAUSE_ON_FAILURE === 'true';
+// Check if debug-on-failure mode is enabled
+const DEBUG_ON_FAILURE = process.env.E2E_DEBUG_ON_FAILURE === 'true';
 
-if (PAUSE_ON_FAILURE) {
-  console.log('\n⚠️  Pause-on-failure mode enabled');
-  console.log('   Tests will pause when they fail, allowing you to inspect the browser state');
-  console.log('   Browser will remain open until you manually close it\n');
+if (DEBUG_ON_FAILURE) {
+  console.log('\n⚠️  Debug-on-failure mode enabled');
+  console.log('   Tests will stop on first failure and capture extended debug artifacts');
+  console.log('   Debug data saved to tests/e2e/test-results/<test-name>/\n');
 }
 
 /**

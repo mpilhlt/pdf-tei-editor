@@ -181,9 +181,6 @@ See [Code Assistant Documentation](../code-assistant/README.md) for concise tech
 - [Testing Guide](../code-assistant/testing-guide.md) - Test structure and patterns
 - [Development Commands](../code-assistant/development-commands.md) - Command reference
 
-### For End Users
-
-See [User Manual](../user-manual/README.md) for end-user documentation.
 
 ## Contributing
 

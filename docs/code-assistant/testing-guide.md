@@ -32,10 +32,11 @@ npm run test:api -- --grep "save"  # Specific tests
 npm run test:e2e              # All E2E tests with local server
 npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
-npm run test:e2e:pause        # Pause on failure for inspection
+npm run test:e2e:debug-failure # Capture debug artifacts on failure (headless)
 
-# Container infrastructure test (standalone validation)
-npm run test:e2e:container-infra  # Validate container setup
+# Container tests
+npm run test:container         # Test container build and startup
+npm run test:e2e:container-infra  # Validate container setup (requires running container)
 ```
 
 ## Test Types
@@ -96,13 +97,26 @@ API tests use a two-phase fixture loading system:
 - **Run**: `npm run test:e2e`
 - **Features**: Playwright, `window.ui` navigation, `testLog()` for state verification
 
-#### Container Infrastructure Test
+#### Container Testing
 
-Validates container setup before running E2E tests:
+**Test Container Startup** (`npm run test:container`):
 
+- **Purpose**: Quickly validate that the container builds correctly and starts successfully
+- **What it does**:
+  - Builds the test container from scratch
+  - Starts the container
+  - Waits for the `/health` endpoint to respond
+  - Shows container details (name, URL)
+  - Cleans up and stops the container
+- **Use when**: Testing changes to `Dockerfile`, `docker/entrypoint-test.sh`, or server startup
+
+**Container Infrastructure Test** (`npm run test:e2e:container-infra`):
+
+- **Purpose**: Validates container setup before running E2E tests
 - **File**: `tests/e2e/tests/docker-infrastructure.spec.js`
-- **Run**: `npm run test:e2e:container-infra` (standalone) or automatically when running `npm run test:e2e:container`
+- **Run**: Standalone or automatically when running `npm run test:e2e:container`
 - **Auto-run**: Automatically runs when container is rebuilt (not with `--no-rebuild`)
+- **Requires**: A running container (use `npm run container:start` or `npm run test:container` first)
 
 **What it checks:**
 
@@ -134,6 +148,61 @@ test('should save file', async () => {
   // Test code
 });
 ```
+
+### Suppressing Expected Log Output
+
+When testing code that produces expected warnings or log messages, use `assertLogs` to suppress output and verify the messages:
+
+**Python Tests:**
+
+```python
+import logging
+
+def test_expected_warning(self):
+    """Test that verifies expected warning is logged."""
+    # Suppress and capture expected warnings
+    with self.assertLogs('module.name', level='WARNING') as cm:
+        result = function_that_warns()
+
+    # Verify expected warning was logged
+    self.assertTrue(any('expected message' in msg for msg in cm.output))
+
+    # Continue with assertions
+    self.assertEqual(result, expected_value)
+```
+
+This pattern:
+
+- Suppresses console output during test runs (keeps test output clean)
+- Captures log messages for verification
+- Ensures expected warnings/errors are actually being logged
+- Prevents test pollution when warnings are intentional
+
+**When to use:**
+
+- Testing error handling that logs warnings
+- Testing validation that produces expected errors
+- Testing deprecated functionality that warns
+- Any scenario where log output is part of the expected behavior
+
+### Ignoring Auto-Generated Files
+
+The smart test runner automatically ignores certain files from change detection:
+
+- `app/src/modules/api-client-v1.js` (auto-generated from OpenAPI schema)
+
+To ignore additional files, configure in the test runner:
+
+```javascript
+const runner = new SmartTestRunner({
+  ignoreChanges: [
+    'app/src/modules/api-client-v1.js',  // Exact file path
+    /.*-generated\.js$/                  // Regex pattern
+  ]
+});
+```
+
+This prevents unnecessary test runs when only metadata (like timestamps) changes in auto-generated files.
 
 This enables smart test selection via `npm run test:changed`.
 
@@ -174,7 +243,7 @@ describe('Feature Name', () => {
 
 ```javascript
 /** @import { namedElementsTree } from '../../app/src/ui.js' */
-import { test, expect } from '../fixtures/pause-on-failure.js';
+import { test, expect } from '../fixtures/debug-on-failure.js';
 
 test('should do something', async ({ page }) => {
   await page.goto('http://localhost:8000');
@@ -328,28 +397,67 @@ npm run test:e2e:headed
 # Step-through debugging (Playwright inspector)
 npm run test:e2e:debug
 
-# Pause on failure (browser stays open for inspection)
-npm run test:e2e:pause
-npm run test:e2e:pause -- --grep "new version"
+# Post-mortem debugging (capture artifacts on failure, headless)
+npm run test:e2e:debug-failure
+npm run test:e2e:debug-failure -- --grep "new version"
+
+# Combine with headed mode to watch test execution
+npm run test:e2e -- --debug-on-failure --headed
 
 # Add breakpoints in test code
 await page.pause();
 ```
 
-When using `--pause-on-failure`, tests that fail will:
+#### Debug-on-Failure Mode
 
-- Disable the test timeout
-- Keep the browser open indefinitely at the failure state
-- Allow inspection of UI, DevTools, and application state
-- Wait until you press Ctrl+C to continue
+When using `--debug-on-failure`, tests run in **headless mode** (faster) and capture comprehensive debug information on failure:
 
-**Note**: All E2E tests should import from the pause-on-failure fixture by default:
+**Captured Artifacts:**
 
-```javascript
-import { test, expect } from '../fixtures/pause-on-failure.js';
+- Console messages → `console-messages.json`
+- Page errors → `page-errors.json`
+- **Network traffic → `network-log.json`** (all HTTP requests/responses with bodies)
+- Screenshots (automatically via Playwright)
+- Video recording of test execution
+
+**Behavior:**
+
+- Stops on first failure (`--max-failures=1`)
+- Runs headless by default (use `--headed` flag to watch execution)
+- All artifacts saved to `tests/e2e/test-results/<test-name>/`
+
+**Network Log Format:**
+
+```json
+[
+  {
+    "type": "request",
+    "timestamp": "2025-01-15T10:30:00.000Z",
+    "method": "GET",
+    "url": "http://localhost:8000/api/v1/files",
+    "headers": {...},
+    "postData": null
+  },
+  {
+    "type": "response",
+    "timestamp": "2025-01-15T10:30:00.100Z",
+    "method": "GET",
+    "url": "http://localhost:8000/api/v1/files",
+    "status": 200,
+    "statusText": "OK",
+    "headers": {...},
+    "body": "{\"files\": [...]}"
+  }
+]
 ```
 
-This has no effect during normal test runs - it only activates when `--pause-on-failure` is used.
+**Note**: All E2E tests should import from the debug-on-failure fixture by default:
+
+```javascript
+import { test, expect } from '../fixtures/debug-on-failure.js';
+```
+
+This has no effect during normal test runs - it only activates when `--debug-on-failure` is used.
 
 ## Important Notes
 

@@ -2,25 +2,6 @@
 
 A viewer/editor web application for comparing PDF sources with TEI extraction and annotation results, specifically designed for creating gold standard datasets of TEI documents from legal and humanities literature.
 
-## Key Features
-
-- **Dual-pane interface** with synchronized PDF viewer and XML editor
-- **AI-powered extraction** supporting multiple extraction engines (GROBID, etc.)
-- **Version management** with branching, merging, and comparison tools
-- **Schema validation** with automatic TEI compliance checking
-- **Access control** with role-based permissions and collection management
-- **Collection organization** for managing document sets
-- **WebDAV synchronization** for external system integration
-- **Revision tracking** with detailed change documentation
-
-## Target Use Cases
-
-- Creating gold standard datasets for reference extraction research
-- Manual validation and correction of AI-extracted bibliographic data
-- Collaborative annotation of legal and humanities literature
-- Training data preparation for machine learning models
-- Quality assurance for large-scale digitization projects
-
 ## User Manual
 
 - **[Getting Started](user-manual/getting-started.md)** - First login and basic workflow
@@ -34,11 +15,14 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 
 ## Administration
 
+- **Install the application** - [Installation](./development/installation.md)
 - **Manage Users** - [User Management](user-manual/user-management.md)
-- **Set Permissions** - [Access Control](user-manual/access-control.md)
-- **Import Files** - [Import & Export](user-manual/import-export.md)
+- **Import and Export Files** - [Import & Export](user-manual/import-export.md)
 - **Configure Sync** - [Sync Workflow](user-manual/sync-workflow.md)
 
+## Developer Information
+
+Information on how to add new features or fix program bugs, please consult the [developer documentation](./development/index.md).
 
 ## About
 

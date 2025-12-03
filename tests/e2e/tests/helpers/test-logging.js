@@ -3,6 +3,9 @@
  *
  * Provides conditional logging functionality that only outputs when
  * application.mode is set to "testing"
+ * 
+ * NOTE: This code is also included into the client-side app bundle, so 
+ * do not use any code that depends on a NodeJS context
  */
 
 /**

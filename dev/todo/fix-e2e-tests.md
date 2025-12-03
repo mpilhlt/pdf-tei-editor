@@ -127,4 +127,96 @@ Current allowed error patterns:
 
 **Error:** `TimeoutError: page.waitForSelector: Timeout 5000ms exceeded` waiting for `sl-dialog[name="newRevisionChangeDialog"][open]`
 
-**Next Steps:** Investigate why these dialogs are not opening - possible permission issues or UI button not being clickable
+**Investigation (2025-12-02):**
+
+Root cause identified: Users cannot see any files after login because of two backend bugs:
+
+**Bug 1: Missing `groups` field in test users** ✅ FIXED
+- **Location:** `tests/e2e/fixtures/standard/config/users.json`, `tests/e2e/fixtures/minimal/config/users.json`
+- **Problem:** Test users lacked the `groups` field required for collection-based access control
+- **Fix:** Added `groups: ["default"]` to all non-admin test users, `groups: ["admin"]` to admin user
+
+**Bug 2: TEI files not assigned to collections** ✅ FIXED
+- **Location:** `fastapi_app/lib/file_importer.py`
+- **Problem:** The `_import_tei()` method didn't accept or assign collections to TEI files. Only PDF files got `doc_collections`. The files list API filters by collections (line 166 in `files_list.py`), checking if ANY document collection matches user's accessible collections. TEI files with empty `doc_collections: []` failed this check.
+- **Fix:**
+  - Modified `_import_tei()` to accept `collection` parameter (line 464)
+  - Pass collection from `_import_document()` to `_import_tei()` (line 407)
+  - Added `doc_collections=[collection] if collection else []` to TEI FileCreate (line 553)
+
+**Test Debug Output:**
+```json
+{
+  "pdfOptionsCount": 0,
+  "xmlOptionsCount": 0,
+  "pdfValue": "",
+  "xmlValue": "",
+  "createNewVersionDisabled": true,
+  "saveRevisionDisabled": true,
+  "stateXml": null,
+  "statePdf": null
+}
+```
+
+**Backend Verification:**
+- Files ARE in database with correct collections: `SELECT id, filename, doc_collections FROM files;`
+  - PDF: `["default"]` ✓
+  - TEI: `["default"]` ✓ (after fix)
+- User has correct groups: `testreviewer.groups = ["default"]` ✓
+- User can access collections: `get_user_collections()` returns `['_inbox', 'default']` ✓
+- API calls succeed: `GET /api/v1/files/list` returns 200 OK ✓
+
+**Remaining Issue:**
+
+Despite backend fixes, files still don't appear in UI after login (0 files in dropdowns). The authentication plugin correctly calls `FiledataPlugin.getInstance().reload({ refresh: true })` after login ([authentication.js:159](app/src/plugins/authentication.js#L159)), and the file-selection plugin should repopulate dropdowns when `fileData` state changes ([file-selection.js:159-170](app/src/plugins/file-selection.js#L159-L170)).
+
+**Next Steps:**
+1. Debug why fileData state isn't propagating to UI after authentication reload
+2. Check timing: Does reload complete before test checks for files?
+3. Verify file-selection plugin's `update()` is being called with new fileData
+4. Check if there's a race condition between authentication reload and test execution
+5. Consider adding wait for fileData to be populated in test helper
+
+## Debug-on-Failure Feature (2025-12-02) ✅
+
+Implemented a comprehensive debugging feature for E2E test failures:
+
+**Files Changed:**
+
+- [tests/e2e-runner.js](tests/e2e-runner.js) - Added `--debug-on-failure` CLI option, stops on first failure, captures debug artifacts
+- [tests/e2e/fixtures/debug-on-failure.js](tests/e2e/fixtures/debug-on-failure.js) - Captures console messages and page errors to JSON files
+- [playwright.config.js](playwright.config.js) - Enables screenshot/video capture on failure when debug-on-failure is active
+- [tests/e2e/tests/docker-infrastructure.spec.js](tests/e2e/tests/docker-infrastructure.spec.js) - Skip container tests in local mode using `E2E_MODE` env var
+
+**How It Works:**
+
+When `--debug-on-failure` is enabled:
+
+1. Tests stop after first failure (`--max-failures=1`)
+2. Debug artifacts are captured automatically:
+   - Console messages saved to `console-messages.json`
+   - Page errors saved to `page-errors.json`
+   - Screenshots captured by Playwright
+   - Video recording captured by Playwright
+3. All artifacts saved to: `tests/e2e/test-results/<test-name>/`
+4. Server and test runner shut down cleanly
+
+**Usage:**
+
+```bash
+npm run test:e2e:debug-failure                              # Run all tests, stop on first failure
+npm run test:e2e:debug-failure -- --grep "test name"       # Run specific test with debug capture
+```
+
+**Debug Artifacts Generated:**
+
+- `console-messages.json` - All browser console output with timestamps and locations
+- `page-errors.json` - JavaScript errors with stack traces
+- `test-failed-1.png` - Screenshot at time of failure (Playwright)
+- `video.webm` - Video recording of entire test (Playwright)
+
+**Note:** For interactive debugging with Inspector, use:
+
+```bash
+npm run test:e2e:debug -- --grep "test name"  # Opens Playwright Inspector
+```

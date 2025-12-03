@@ -117,9 +117,11 @@ async function install(state) {
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
     select.addEventListener('sl-change', async evt => {
+      console.warn("[DEBUG]",{isUpdatingProgrammatically, isInStateUpdateCycle})
       // Ignore programmatic changes to prevent double-loading
       if (isUpdatingProgrammatically) {
         return;
+
       }
       // Ignore user changes during reactive state update cycle to prevent infinite loops
       if (isInStateUpdateCycle) {
@@ -159,15 +161,11 @@ async function update(state) {
     if (hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant', 'fileData') && state.fileData) {
       const fileDataChanged = hasStateChanged(state, 'fileData');
       const selectionsChanged = hasStateChanged(state, 'xml', 'pdf', 'diff', 'variant');
-      const selectionsValid = isCurrentSelectionValid(state);
 
-      // Only repopulate in these cases:
-      // 1. User selections changed (xml, pdf, diff, variant)
-      // 2. FileData changed AND current selections are no longer valid
-      const shouldRepopulate = selectionsChanged || (fileDataChanged && !selectionsValid);
-
-      if (shouldRepopulate) {
+      if (selectionsChanged || fileDataChanged) {
         await populateSelectboxes(state);
+      } else {
+        logger.debug("Not repopulating selectboxes.")
       }
     }
 
@@ -434,7 +432,7 @@ async function populateSelectboxes(state) {
       // Check if this is the currently selected file (either by PDF hash or XML hash for XML-only files)
       const isSelectedFile = (fileIdentifier === state.pdf) ||
                              (file.source && file.source.file_type !== 'pdf' && fileIdentifier === state.xml);
-
+console.log("[DEBUG]", {fileIdentifier, isSelectedFile, hasPopulatedVersionsForSelectedFile})
       // Only populate XML/diff dropdowns once for the selected file (prevent duplicates when file is in multiple collections)
       if (isSelectedFile && !hasPopulatedVersionsForSelectedFile) {
         hasPopulatedVersionsForSelectedFile = true;

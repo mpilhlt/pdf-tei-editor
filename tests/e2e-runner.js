@@ -45,7 +45,7 @@ const program = createTestRunnerCommand({
     new Option('--headed', 'run tests in headed mode (show browser)'),
     new Option('--debugger', 'enable Playwright debugger'),
     new Option('--debug-messages', 'enable verbose E2E debug output'),
-    new Option('--pause-on-failure', 'pause on test failure without closing browser (implies --headed)'),
+    new Option('--debug-on-failure', 'capture extended debug artifacts on test failure'),
     new Option('--workers <number>', 'number of parallel workers')
       .default('1'),
     new Option('--fail-fast', 'abort on first test failure'),
@@ -58,9 +58,9 @@ const program = createTestRunnerCommand({
     '# Debug with browser visible',
     'node tests/e2e-runner.js --headed --debugger',
     '',
-    '# Pause on failure for inspection',
-    'node tests/e2e-runner.js --pause-on-failure',
-    'node tests/e2e-runner.js --pause-on-failure --grep "new version"',
+    '# Capture debug artifacts on failure',
+    'node tests/e2e-runner.js --debug-on-failure',
+    'node tests/e2e-runner.js --debug-on-failure --grep "new version"',
     '',
     '# Use minimal fixture for smoke tests',
     'node tests/e2e-runner.js --fixture minimal',
@@ -96,7 +96,7 @@ const cliOptions = program.opts();
  * @property {boolean} headed - Run in headed mode
  * @property {boolean} debugger - Enable debugger
  * @property {boolean} debugMessages - Enable debug output
- * @property {boolean} pauseOnFailure - Pause on failure for inspection
+ * @property {boolean} debugOnFailure - Capture debug artifacts on failure
  * @property {number} workers - Number of parallel workers
  * @property {string|null} grep - Test filter pattern
  * @property {string|null} grepInvert - Test exclude pattern
@@ -299,8 +299,8 @@ class PlaywrightRunner {
     console.log(`🌐 Browser: ${options.browser}`);
     logger.info(`Mode: ${options.headed ? 'headed' : 'headless'}`);
 
-    if (options.pauseOnFailure) {
-      logger.info('Pause-on-failure mode: Browser will remain open on test failures');
+    if (options.debugOnFailure) {
+      logger.info('Debug-on-failure mode: Will stop on first failure and capture debug artifacts');
     }
 
     // Build Playwright command
@@ -309,7 +309,7 @@ class PlaywrightRunner {
     if (options.browser) {
       cmd.push(`--project=${options.browser}`);
     }
-    if (options.headed || options.pauseOnFailure) {
+    if (options.headed) {
       cmd.push('--headed');
     }
     if (options.debugger) {
@@ -324,14 +324,16 @@ class PlaywrightRunner {
     if (options.grepInvert) {
       cmd.push('--grep-invert', options.grepInvert);
     }
-    if (options.failFast) {
+    if (options.failFast || options.debugOnFailure) {
+      // Debug-on-failure requires stopping on first failure
       cmd.push('--max-failures=1');
     }
 
     logger.info(`Executing: npx ${cmd.join(' ')}`);
 
-    // Get base URL from server manager
+    // Get base URL and mode from server manager
     const baseUrl = this.serverManager?.getBaseUrl();
+    const mode = this.serverManager instanceof ContainerServerManager ? 'container' : 'local';
 
     // Run Playwright tests
     const testProcess = spawn('npx', cmd, {
@@ -340,8 +342,9 @@ class PlaywrightRunner {
       env: {
         ...process.env,
         E2E_BASE_URL: baseUrl,
+        E2E_MODE: mode,
         E2E_DEBUG: options.debugMessages ? 'true' : 'false',
-        E2E_PAUSE_ON_FAILURE: options.pauseOnFailure ? 'true' : 'false',
+        E2E_DEBUG_ON_FAILURE: options.debugOnFailure ? 'true' : 'false',
       },
     });
 
@@ -352,6 +355,9 @@ class PlaywrightRunner {
           resolve(code);
         } else {
           console.log('\n💥 Some Playwright tests failed!');
+          if (options.debugOnFailure) {
+            console.log('   Debug artifacts saved to tests/e2e/test-results/\n');
+          }
           reject(new Error(`Tests failed with exit code ${code}`));
         }
       });
@@ -404,7 +410,7 @@ class PlaywrightRunner {
       headed: cliOptions.headed,
       debugger: cliOptions.debugger,
       debugMessages: cliOptions.debugMessages,
-      pauseOnFailure: cliOptions.pauseOnFailure,
+      debugOnFailure: cliOptions.debugOnFailure,
       workers: parseInt(cliOptions.workers, 10),
       grep: cliOptions.grep || null,
       grepInvert: cliOptions.grepInvert || null,

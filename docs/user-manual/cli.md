@@ -411,8 +411,56 @@ npm run manage group list
 npm run manage collection list
 ```
 
+## Testing Commands
+
+### test:container
+
+Tests that the application container builds and starts correctly.
+
+```bash
+npm run test:container
+```
+
+**What it does**:
+
+1. Builds the test container from the current codebase
+2. Starts the container
+3. Waits for the health check endpoint to respond
+4. Displays container information (name, URL, health status)
+5. Stops and removes the container
+
+**Use cases**:
+
+- Validate `Dockerfile` changes
+- Test modifications to `docker/entrypoint-test.sh`
+- Verify server startup configuration
+- Quick validation before pushing container-related changes
+
+**Output example**:
+
+```
+🧪 Testing container startup...
+
+📦 Building and starting container...
+[container build output...]
+
+✅ Container started successfully!
+
+📊 Container details:
+   Name: pdf-tei-editor-test-1234567890
+   URL: http://localhost:8000
+   Health: http://localhost:8000/health
+
+🧹 Cleaning up...
+
+✅ Test completed successfully!
+```
+
+**Note**: This command rebuilds the container each time. For faster iterations during development, use `npm run container:start` to keep a container running.
+
 ## Related Documentation
 
 - [User Management](../user-management.md) - Detailed user management guide
 - [Access Control](../access-control.md) - Access control concepts
 - [Configuration](../configuration.md) - Application configuration
+- [Testing Guide](../code-assistant/testing-guide.md) - Complete testing documentation

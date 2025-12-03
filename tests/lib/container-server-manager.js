@@ -38,7 +38,7 @@ export class ContainerServerManager extends ServerManager {
       host: options.host || process.env.E2E_HOST || 'localhost',
       explicitPort: options.port, // Explicit port from options (undefined if not set)
       port: null, // Actual port, set during start()
-      containerPort: options.containerPort || parseInt(process.env.E2E_CONTAINER_PORT || '8011'),
+      containerPort: options.containerPort || parseInt(process.env.E2E_CONTAINER_PORT || '8000'), // Server runs on 8000 inside container
     };
 
     // Detect container tool
@@ -209,6 +209,7 @@ export class ContainerServerManager extends ServerManager {
     // Start container with test environment
     logger.info('Starting test container...');
     const portMapping = `${this.config.port}:${this.config.containerPort}`;
+    console.log(`[DEBUG] Port mapping: ${portMapping} (host:container)`);
 
     // Build environment arguments
     const testEnvVars = ['TEST_IN_PROGRESS=1'];
@@ -219,7 +220,17 @@ export class ContainerServerManager extends ServerManager {
     const envArgs =
       testEnvVars.length > 0 ? testEnvVars.map((e) => `--env ${e}`).join(' ') : '';
 
-    const runCmd = `${this.containerCmd} run -d --name ${this.containerName} -p ${portMapping} ${envArgs} pdf-tei-editor-test:latest`;
+    // Mount test data directories if DATA_ROOT is set
+    let volumeArgs = '';
+    if (env.DATA_ROOT) {
+      const dataRoot = join(this.projectRoot, env.DATA_ROOT);
+      // Mount the entire test runtime directory as /app/data in the container
+      volumeArgs = `-v ${dataRoot}:/app/data`;
+      console.log(`[DEBUG] Mounting test data: ${dataRoot} -> /app/data`);
+    }
+
+    const runCmd = `${this.containerCmd} run -d --name ${this.containerName} -p ${portMapping} ${envArgs} ${volumeArgs} pdf-tei-editor-test:latest`;
+    console.log(`[DEBUG] Run command: ${runCmd}`);
     const containerId = execSync(runCmd, {
       encoding: 'utf8',
       cwd: this.projectRoot,
@@ -278,30 +289,34 @@ export class ContainerServerManager extends ServerManager {
    * @param {number} timeoutSec - Timeout in seconds
    */
   async waitForApplicationReady(timeoutSec = 120) {
-    console.log('⏳ Waiting for application to be ready...');
+    const healthUrl = `http://${this.config.host}:${this.config.port}/health`;
+    console.log(`⏳ Waiting for application to be ready at ${healthUrl}...`);
 
     let counter = 0;
 
     while (counter < timeoutSec) {
       try {
-        if (this.usePodman) {
-          // Check if container is running and application is responding
-          const healthCheckUrl = `http://${this.config.host}:${this.config.containerPort}/health`;
-          execSync(
-            `${this.containerCmd} exec ${this.containerName} curl -f ${healthCheckUrl} >/dev/null 2>&1`,
-            { stdio: 'pipe' }
-          );
-        } else {
-          // Use curl from host
-          execSync(`curl -f http://${this.config.host}:${this.config.port}/health >/dev/null 2>&1`, {
-            stdio: 'pipe',
-          });
-        }
+        // Check health endpoint from host (works for both Docker and Podman)
+        // The container exposes containerPort (8000) mapped to config.port on the host
+        execSync(`curl -f -v ${healthUrl}`, {
+          encoding: 'utf8',
+          stdio: 'pipe',
+        });
 
         logger.success('Application is ready');
         return;
       } catch (err) {
         // Not ready yet, continue waiting
+        if (counter === 0 || counter % 5 === 0) {
+          // Show progress every 5 seconds with more detail
+          const errOutput = err.stderr ? err.stderr.toString() : (err instanceof Error ? err.message : String(err));
+          console.log(`[DEBUG ${counter}s] Health check at ${healthUrl} failed:`);
+          console.log(`  curl exit code: ${err.status}`);
+          if (errOutput) {
+            const lines = errOutput.split('\n').slice(0, 5); // Show first 5 lines
+            console.log(`  ${lines.join('\n  ')}`);
+          }
+        }
       }
 
       if (counter === 60) {
@@ -356,7 +371,7 @@ export class ContainerServerManager extends ServerManager {
       try {
         if (this.usePodman) {
           serverLogs = execSync(
-            `${this.containerCmd} exec ${this.containerName} cat /app/log/server.log`,
+            `${this.containerCmd} exec ${this.containerName} cat /app/log/fastapi-server.log`,
             {
               encoding: 'utf8',
               cwd: this.projectRoot,
@@ -364,7 +379,7 @@ export class ContainerServerManager extends ServerManager {
           );
         } else {
           serverLogs = execSync(
-            `${this.composeCmd} -f docker-compose.test.yml exec -T pdf-tei-editor-test cat /app/log/server.log`,
+            `${this.composeCmd} -f docker-compose.test.yml exec -T pdf-tei-editor-test cat /app/log/fastapi-server.log`,
             {
               encoding: 'utf8',
               cwd: this.projectRoot,

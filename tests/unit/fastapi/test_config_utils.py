@@ -169,6 +169,7 @@ class TestConfigUtils(unittest.TestCase):
     def test_concurrent_writes(self):
         """Test that file locking handles concurrent writes."""
         import threading
+        import time
 
         results = []
 
@@ -192,13 +193,26 @@ class TestConfigUtils(unittest.TestCase):
         for key, success in results:
             self.assertTrue(success, f"Write failed for {key}")
 
-        # Verify all values are present
-        import time
-        time.sleep(0.1)  # Small delay to ensure all writes are flushed
-        config = load_full_config(self.db_dir)
-        for i in range(10):
-            self.assertIn(f'key{i}', config, f"key{i} not found in config. Config keys: {list(config.keys())}")
-            self.assertEqual(config[f'key{i}'], f'value{i}')
+        # Verify all values are present with retry logic for file system delays
+        max_retries = 5
+        retry_delay = 0.1
+        for attempt in range(max_retries):
+            config = load_full_config(self.db_dir)
+            missing_keys = [f'key{i}' for i in range(10) if f'key{i}' not in config]
+
+            if not missing_keys:
+                # All keys present, verify values
+                for i in range(10):
+                    self.assertEqual(config[f'key{i}'], f'value{i}')
+                break
+            elif attempt < max_retries - 1:
+                # Keys still missing, wait and retry
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                # Final attempt failed
+                self.fail(f"Keys {missing_keys} not found after {max_retries} retries. "
+                         f"Config keys: {list(config.keys())}")
 
     def test_dot_notation_keys(self):
         """Test that dot notation keys work correctly."""
