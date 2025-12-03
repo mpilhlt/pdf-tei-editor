@@ -135,6 +135,42 @@ test('should save file', async () => {
 });
 ```
 
+### Suppressing Expected Log Output
+
+When testing code that produces expected warnings or log messages, use `assertLogs` to suppress output and verify the messages:
+
+**Python Tests:**
+
+```python
+import logging
+
+def test_expected_warning(self):
+    """Test that verifies expected warning is logged."""
+    # Suppress and capture expected warnings
+    with self.assertLogs('module.name', level='WARNING') as cm:
+        result = function_that_warns()
+
+    # Verify expected warning was logged
+    self.assertTrue(any('expected message' in msg for msg in cm.output))
+
+    # Continue with assertions
+    self.assertEqual(result, expected_value)
+```
+
+This pattern:
+
+- Suppresses console output during test runs (keeps test output clean)
+- Captures log messages for verification
+- Ensures expected warnings/errors are actually being logged
+- Prevents test pollution when warnings are intentional
+
+**When to use:**
+
+- Testing error handling that logs warnings
+- Testing validation that produces expected errors
+- Testing deprecated functionality that warns
+- Any scenario where log output is part of the expected behavior
+
 ### Ignoring Auto-Generated Files
 
 The smart test runner automatically ignores certain files from change detection:

@@ -56,11 +56,59 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
       throw new Error('Could not find PDF fixture for move test');
     }
 
+    // If no TEI artifact exists, create one
     if (!testState.teiHash) {
-      throw new Error('Could not find TEI artifact for move test');
+      const teiContent = `<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Test document for move test</title>
+      </titleStmt>
+      <publicationStmt>
+        <p>Test publication</p>
+      </publicationStmt>
+      <sourceDesc>
+        <p>Test source</p>
+      </sourceDesc>
+    </fileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <div>
+        <p>Test content for move operations</p>
+      </div>
+    </body>
+  </text>
+</TEI>`;
+
+      const saveResponse = await authenticatedApiCall(
+        session.sessionId,
+        '/files/save',
+        'POST',
+        {
+          file_id: testState.testDocId,
+          xml_string: teiContent,
+          new_version: false
+        },
+        BASE_URL
+      );
+
+      testState.teiHash = saveResponse.file_id;
+
+      // Release lock after creating file
+      await authenticatedApiCall(
+        session.sessionId,
+        '/files/release_lock',
+        'POST',
+        { file_id: testState.teiHash },
+        BASE_URL
+      );
+
+      logger.success(`Created TEI artifact for move tests: ${testState.teiHash}`);
     }
 
-    logger.success(`Found test PDF for move tests: ${testState.testDocId}`);
+    logger.success(`Setup complete - PDF: ${testState.pdfHash}, TEI: ${testState.teiHash}`);
   });
 
   test('POST /api/files/move should move files to new collection', async () => {

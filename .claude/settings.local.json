@@ -33,7 +33,14 @@
       "Bash(npx madge:*)",
       "Bash(DEBUG=1 npm run test:changed:*)",
       "Bash(E2E_DEBUG=true npm run test:e2e:*)",
-      "Bash(npm run test:e2e:*)"
+      "Bash(npm run test:e2e:*)",
+      "Bash(for i in {1..5})",
+      "Bash(do echo \"=== Run $i ===\")",
+      "Bash(done)",
+      "Bash(for i in 1 2 3 4 5)",
+      "Bash(break)",
+      "Bash(npm test:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []

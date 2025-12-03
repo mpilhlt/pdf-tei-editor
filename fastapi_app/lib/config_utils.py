@@ -6,6 +6,7 @@ No Flask or FastAPI dependencies - all parameters are explicitly passed.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -146,6 +147,8 @@ def set_config_value(key: str, value: Any, db_dir: Path) -> tuple[bool, str]:
             f.seek(0)
             f.truncate()
             json.dump(config_data, f, indent=2)
+            f.flush()  # Ensure data is written to disk
+            os.fsync(f.fileno())  # Force OS-level flush
 
             _unlock_file(f)
 
@@ -188,6 +191,8 @@ def delete_config_value(key: str, db_dir: Path) -> tuple[bool, str]:
                 f.seek(0)
                 f.truncate()
                 json.dump(config_data, f, indent=2)
+                f.flush()  # Ensure data is written to disk
+                os.fsync(f.fileno())  # Force OS-level flush
 
                 _unlock_file(f)
                 return True, f"Deleted key '{key}'"

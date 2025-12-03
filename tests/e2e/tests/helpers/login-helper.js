@@ -9,6 +9,7 @@
  * @import {Application} from '../../../../app/src/modules/application.js'
  */
 
+import { debugLog } from './debug-helpers.js';
 
 /**
  * Performs login flow for E2E tests
@@ -121,40 +122,37 @@ export async function ensureCleanState(page) {
  */
 export async function releaseAllLocks(page) {
   try {
-    console.log('Starting lock cleanup...');
+    debugLog('Starting lock cleanup...');
     // Add timeout to prevent hanging
-    await Promise.race([
+    const result = await Promise.race([
       page.evaluate(async () => {
         try {
-          console.log('Getting client object...');
           /** @type {ClientApi} */
           const client = /** @type {any} */(window).client;
           if (!client) {
-            console.log('No client object found');
-            return;
+            return { success: false, reason: 'No client object found' };
           }
 
-          console.log('Getting locked file IDs...');
-          const lockedFileIds = await client.getAllLockedFileIds();
-          console.log('Found locked files:', lockedFileIds);
+          const response = await client.getAllLockedFileIds();
+
+          // The API returns {locked_files: [...]} not a plain array
+          const lockedFileIds = response?.locked_files || [];
 
           for (const fileId of lockedFileIds) {
-            console.log('Releasing lock for:', fileId);
             await client.releaseLock(fileId);
-            console.log('Released lock for:', fileId);
           }
-          console.log('All locks released successfully');
+          return { success: true, count: lockedFileIds.length };
         } catch (error) {
           // Ignore all errors during lock cleanup
-          console.debug('Lock cleanup failed:', error);
+          return { success: false, error: String(error) };
         }
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Lock cleanup timeout after 10 seconds')), 10000))
     ]);
-    console.log('Lock cleanup completed');
+    debugLog('Lock cleanup completed:', result);
   } catch (evalError) {
     // Even page.evaluate might fail, just continue
-    console.log('Lock cleanup evaluation failed:', evalError.message);
+    debugLog('Lock cleanup evaluation failed:', evalError.message);
   }
 }
 

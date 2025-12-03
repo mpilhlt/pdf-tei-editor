@@ -24,7 +24,7 @@ const ALLOWED_ERROR_PATTERNS = [
 const TEST_USERS = {
   user: { username: 'testuser', password: 'testpass', expectedRoles: ['user'] },
   annotator: { username: 'testannotator', password: 'annotatorpass', expectedRoles: ['annotator', 'user'] },
-  reviewer: { username: 'testreviewer', password: 'reviewerpass', expectedRoles: ['reviewer', 'user'] },
+  reviewer: { username: 'testreviewer', password: 'reviewerpass', expectedRoles: ['reviewer', 'annotator', 'user'] },
   admin: { username: 'testadmin', password: 'adminpass', expectedRoles: ['admin', 'reviewer', 'annotator', 'user'] }
 };
 

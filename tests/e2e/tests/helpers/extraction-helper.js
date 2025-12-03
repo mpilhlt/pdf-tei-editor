@@ -3,14 +3,7 @@
  */
 
 import { waitForTestMessage } from './test-logging.js';
-
-// Enable debug output only when E2E_DEBUG environment variable is set
-const DEBUG = process.env.E2E_DEBUG === 'true';
-const debugLog = (...args) => {
-  if (DEBUG) {
-    console.log('[DEBUG]', ...args);
-  }
-};
+import { debugLog } from './debug-helpers.js';
 
 /**
  * Performs PDF extraction workflow

@@ -117,9 +117,11 @@ async function install(state) {
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
     select.addEventListener('sl-change', async evt => {
+      console.warn("[DEBUG]",{isUpdatingProgrammatically, isInStateUpdateCycle})
       // Ignore programmatic changes to prevent double-loading
       if (isUpdatingProgrammatically) {
         return;
+
       }
       // Ignore user changes during reactive state update cycle to prevent infinite loops
       if (isInStateUpdateCycle) {

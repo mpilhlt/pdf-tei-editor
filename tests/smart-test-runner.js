@@ -654,6 +654,7 @@ class SmartTestRunner {
    * @param {RunOptions} options
    */
   async run(options = {}) {
+    const startTime = Date.now();
     const isTap = options.tap;
     const dryRun = options.dryRun;
 
@@ -693,7 +694,12 @@ class SmartTestRunner {
     // Build API test command (backend API integration tests)
     let apiCommand = null;
     if (testsToRun.api && testsToRun.api.length > 0) {
-      const testFiles = testsToRun.api.join(' ');
+      // Convert test file paths to grep pattern
+      const testNames = testsToRun.api.map(f =>
+        f.replace('tests/api/v1/', '').replace('.test.js', '')
+      ).join('|');
+      const grepArg = `--grep "${testNames}"`;
+
       const { vars: apiVars, files: apiFiles } = this.categorizeEnvVars(apiEnvVars);
 
       // Check for conflicting .env files
@@ -706,9 +712,9 @@ class SmartTestRunner {
 
       const envArgsStr = apiVars.map(v => `--env "${v}"`).join(' ');
       const envFileArg = apiFiles.length > 0 ? `--env-file "${apiFiles[0]}"` : '';
-      const extraArgs = [envArgsStr, envFileArg].filter(Boolean).join(' ');
+      const extraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
       // Route API tests to backend-test-runner (.env auto-detected from test directory)
-      apiCommand = `node tests/backend-test-runner.js ${extraArgs} ${testFiles}`.trim();
+      apiCommand = `node tests/backend-test-runner.js ${extraArgs}`.trim();
     }
 
     // Build E2E command (Playwright frontend tests)
@@ -771,6 +777,9 @@ class SmartTestRunner {
               }
             });
         }
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        console.log(`⏱️  Total time: ${duration}s`);
         return;
     }
 
@@ -781,6 +790,11 @@ class SmartTestRunner {
 
     if (testSuites.length === 0) {
       if (!isTap) logger.success('No relevant tests to run');
+      if (!isTap) {
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        console.log(`⏱️  Total time: ${duration}s`);
+      }
       return;
     }
 
@@ -806,6 +820,7 @@ class SmartTestRunner {
 
     let testCounter = 1;
     let allTestsPassed = true;
+    const failedSuites = [];
 
     for (const suite of testSuites) {
         try {
@@ -824,15 +839,25 @@ class SmartTestRunner {
                 console.log(`not ok ${testCounter++} - ${suite.name}`);
             }
             allTestsPassed = false;
+            failedSuites.push(suite.name);
         }
     }
 
+    const endTime = Date.now();
+    const duration = ((endTime - startTime) / 1000).toFixed(2);
+
     if (!allTestsPassed) {
-        if (!isTap) console.error('\n❌ Tests failed');
+        if (!isTap) {
+          console.error('\n❌ Tests failed');
+          console.error('\n📋 Failed test suites:');
+          failedSuites.forEach(suite => console.error(`  ❌ ${suite}`));
+        }
+        if (!isTap) console.log(`⏱️  Total time: ${duration}s`);
         process.exit(1);
     }
 
     if (!isTap) console.log('\n✅ All tests passed');
+    if (!isTap) console.log(`⏱️  Total time: ${duration}s`);
   }
 }
 

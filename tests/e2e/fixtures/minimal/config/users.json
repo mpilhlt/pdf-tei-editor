@@ -21,7 +21,7 @@
         "username": "testreviewer",
         "fullname": "Test Reviewer",
         "email": "testreviewer@example.com",
-        "roles": ["reviewer", "user"],
+        "roles": ["reviewer", "annotator", "user"],
         "groups": ["default"],
         "passwd_hash": "2464d37eb1d8957212a3e38c7f84def1cb7313355ef124f7f07011da06ecf333",
         "session_id": null

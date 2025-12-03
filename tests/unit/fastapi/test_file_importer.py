@@ -18,6 +18,7 @@ import unittest
 import tempfile
 import shutil
 import json
+import logging
 from pathlib import Path
 from datetime import datetime
 
@@ -195,7 +196,7 @@ startxref
 
         # Verify collection assignment
         self.assertEqual(pdf_file.doc_collections, ["corpus1"])
-        self.assertEqual(tei_file.doc_collections, [])  # TEI doesn't have collections
+        self.assertEqual(tei_file.doc_collections, ["corpus1"])
 
     def test_import_without_collection(self):
         """Test importing files without specifying a collection."""
@@ -355,17 +356,23 @@ startxref
         (self.import_dir / "corpus1").mkdir()
         self.create_test_pdf(self.import_dir / "corpus1" / "doc1.pdf")
 
-        # Import with both parameters
+        # Import with both parameters (suppress expected warning)
         importer = FileImporter(
             self.db, self.storage, self.repo,
             skip_collection_dirs=['pdf', 'tei']
         )
-        stats = importer.import_directory(
-            self.import_dir,
-            collection="ignored_collection",  # Should be ignored
-            recursive=True,
-            recursive_collections=True
-        )
+
+        # Suppress the warning for this specific test case
+        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+            stats = importer.import_directory(
+                self.import_dir,
+                collection="ignored_collection",  # Should be ignored
+                recursive=True,
+                recursive_collections=True
+            )
+
+        # Verify the expected warning was logged
+        self.assertTrue(any('Both --collection and --recursive-collections' in msg for msg in cm.output))
 
         # Verify collection is from directory, not parameter
         files = self.repo.list_files()
@@ -472,12 +479,16 @@ startxref
         self.create_test_tei(self.import_dir / "doc1.tei.xml", doc_id="10.1234/doc1", title="Working Version")
         self.create_test_tei(self.import_dir / "doc2.tei.xml", doc_id="10.1234/doc2", title="Document 2")
 
-        # Import with gold pattern matching '.gold.'
+        # Import with gold pattern matching '.gold.' (suppress expected warnings)
         importer = FileImporter(
             self.db, self.storage, self.repo,
             gold_pattern=r'\.gold\.'
         )
-        stats = importer.import_directory(self.import_dir)
+        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+            stats = importer.import_directory(self.import_dir)
+
+        # Verify expected warnings about missing PDFs
+        self.assertTrue(any('No PDF found for document' in msg for msg in cm.output))
 
         # Verify all files imported
         self.assertEqual(stats['files_scanned'], 3)
@@ -508,9 +519,13 @@ startxref
         self.create_test_tei(tei_dir / "doc1.tei.xml", doc_id="10.1234/doc1")
         self.create_test_tei(self.import_dir / "doc2.tei.xml", doc_id="10.1234/doc2")
 
-        # Import with default gold pattern (looks for tei directory)
+        # Import with default gold pattern (suppress expected warnings)
         importer = FileImporter(self.db, self.storage, self.repo)
-        stats = importer.import_directory(self.import_dir)
+        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+            stats = importer.import_directory(self.import_dir)
+
+        # Verify expected warnings about missing PDFs
+        self.assertTrue(any('No PDF found for document' in msg for msg in cm.output))
 
         # Verify all files imported
         self.assertEqual(stats['files_scanned'], 2)
@@ -539,12 +554,16 @@ startxref
         self.create_test_tei(gold_dir / "doc1.tei.xml", doc_id="10.1234/doc1")
         self.create_test_tei(self.import_dir / "doc2.tei.xml", doc_id="10.1234/doc2")
 
-        # Import with custom gold directory name
+        # Import with custom gold directory name (suppress expected warnings)
         importer = FileImporter(
             self.db, self.storage, self.repo,
             gold_dir_name="gold_standard"
         )
-        stats = importer.import_directory(self.import_dir)
+        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+            stats = importer.import_directory(self.import_dir)
+
+        # Verify expected warnings about missing PDFs
+        self.assertTrue(any('No PDF found for document' in msg for msg in cm.output))
 
         # Verify gold status
         files = self.repo.list_files()

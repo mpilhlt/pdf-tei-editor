@@ -13,6 +13,7 @@
 import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
+import { debugLog } from './helpers/debug-helpers.js';
 
 // Define allowed error patterns for extraction workflow
 const ALLOWED_ERROR_PATTERNS = [
@@ -27,17 +28,6 @@ const ALLOWED_ERROR_PATTERNS = [
   'Error loading XML.*Resource at /api/files/.* does not exist', // File loading during migration (Phase 9c)
   'Missing PDF file.*Unexpected server response \\(404\\).*retrieving PDF.*api/files' // PDF.js file loading during migration (Phase 9c)
 ];
-
-// Enable debug output only when E2E_DEBUG environment variable is set
-const DEBUG = process.env.E2E_DEBUG === 'true';
-/**
- * @param {...any} args - Debug log arguments
- */
-const debugLog = (...args) => {
-  if (DEBUG) {
-    console.log('[DEBUG]', ...args);
-  }
-};
 
 // Helper functions are now imported from test-logging.js
 
