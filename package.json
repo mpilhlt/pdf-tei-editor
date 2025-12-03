@@ -67,7 +67,7 @@
     },
     "devDependencies": {
         "@jsenv/importmap-node-module": "^7.1.1",
-        "@playwright/test": "^1.55.0",
+        "@playwright/test": "^1.56.1",
         "@rollup/plugin-node-resolve": "^16.0.1",
         "@types/node": "^24.9.1",
         "@types/uuid": "^10.0.0",
