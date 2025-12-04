@@ -31,6 +31,7 @@ tests/api/runtime/db/
 tests/api/runtime/files/
 tests/api/runtime/logs/
 tests/e2e/runtime/
+tests/**/temp-*
 
 # Legacy FastAPI database files (to be removed)
 fastapi_app/db/*.json
