@@ -503,10 +503,10 @@ class SmartTestRunner {
     }
 
     try {
-      // Get staged files
-      const staged = execSync('git diff --cached --name-only', { encoding: 'utf8' });
+      // Get staged files (suppress stderr to avoid git errors in containerized environments)
+      const staged = execSync('git diff --cached --name-only 2>/dev/null', { encoding: 'utf8' });
       // Get modified files
-      const modified = execSync('git diff --name-only', { encoding: 'utf8' });
+      const modified = execSync('git diff --name-only 2>/dev/null', { encoding: 'utf8' });
 
       const allChanged = [...new Set([
         ...staged.split('\n').filter(f => f.trim()),
@@ -719,6 +719,7 @@ class SmartTestRunner {
 
     // Build E2E command (Playwright frontend tests)
     let e2eCommand = null;
+    let e2eCommands = [];
     if (testsToRun.e2e && testsToRun.e2e.length > 0) {
       const testFiles = testsToRun.e2e.map(f => f.replace('tests/e2e/', '').replace('.spec.js', '')).join('|');
       const grepArg = `--grep "${testFiles}"`;
@@ -734,16 +735,24 @@ class SmartTestRunner {
 
       const envArgsStr = e2eVars.map(v => `--env "${v}"`).join(' ');
       const envFileArg = e2eFiles.length > 0 ? `--env-file "${e2eFiles[0]}"` : '';
-      const extraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
-      // Use e2e-runner.js for Playwright tests in local mode (.env auto-detected)
-      e2eCommand = `node tests/e2e-runner.js --local ${extraArgs}`;
+
+      // Parse browsers - can be comma-separated list
+      const browsers = options.browser ? options.browser.split(',').map(b => b.trim()) : ['chromium'];
+
+      // Create E2E test suite entry for each browser
+      const baseExtraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
+      e2eCommands = browsers.map(browser => ({
+        name: `E2E tests (${browser})`,
+        command: `node tests/e2e-runner.js --local --browser ${browser} ${baseExtraArgs}`.trim(),
+        tap: false
+      }));
     }
 
     const testSuites = [
         {name: 'JavaScript unit tests', command: jsCommand, tap: isTap},
         {name: 'Python unit tests', command: pyCommand, tap: isTap},
         {name: 'API tests', command: apiCommand, tap: false},
-        {name: 'E2E tests', command: e2eCommand, tap: false}
+        ...(e2eCommands || [])
     ].filter(s => s.command);
 
     if (dryRun) {
@@ -874,6 +883,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         .option('--dry-run', 'show which tests would run without executing them')
         .option('--tap', 'output results in TAP format')
         .option('--debug', 'enable debug logging')
+        .option('--browser <browsers>', 'browser(s) to use for E2E tests (comma-separated, default: chromium)', 'chromium')
         .arguments('[files...]')
         .usage('[options] [files...]')
         .addHelpText('after', `

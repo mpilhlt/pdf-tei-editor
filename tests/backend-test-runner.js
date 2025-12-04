@@ -24,7 +24,7 @@ import { glob } from 'glob';
 import { fileURLToPath } from 'url';
 import { dirname, join, relative, resolve } from 'path';
 import { LocalServerManager } from './lib/local-server-manager.js';
-import { ContainerServerManager } from './lib/container-server-manager.js';
+// import { ContainerServerManager } from './lib/container-server-manager.js'; // Removed - not used in new container approach
 import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
 import { loadEnvFile } from './lib/env-loader.js';
 import { loadFixture, importFixtureFiles } from './lib/fixture-loader.js';
@@ -401,13 +401,10 @@ async function main() {
       };
       serverManager = new LocalServerManager(managerOptions);
     } else {
-      // Pass host and port to ContainerServerManager
-      const managerOptions = {
-        host,
-        port: port ? parseInt(port, 10) : undefined,
-        containerPort: options.env.E2E_CONTAINER_PORT ? parseInt(options.env.E2E_CONTAINER_PORT, 10) : undefined,
-      };
-      serverManager = new ContainerServerManager(managerOptions);
+      // Container mode removed - use `npm run test:container` instead
+      throw new Error(
+        '--container mode is no longer supported. Use `npm run test:container` to run tests inside a container.'
+      );
     }
 
     logger.info(`Starting ${serverManager.getType()} server`);

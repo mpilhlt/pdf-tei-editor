@@ -2,7 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 import { detectContainerTool } from './tests/lib/detect-container-tool.js';
 
 // Detect container tool (docker or podman)
-const { composeCmd } = detectContainerTool();
+// Skip detection if E2E_SKIP_WEBSERVER is set (running inside container)
+let composeCmd = 'docker';
+if (!process.env.E2E_SKIP_WEBSERVER) {
+  ({ composeCmd } = detectContainerTool());
+}
 
 // Configuration from environment variables
 // Priority: E2E_BASE_URL > E2E_CONTAINER_URL > constructed from E2E_HOST:E2E_PORT
