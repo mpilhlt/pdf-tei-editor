@@ -10,6 +10,7 @@ import { PanelUtils, StatusText } from '../modules/panels/index.js'
 import ui, { updateUi } from '../ui.js'
 import { logger, services, xmlEditor, hasStateChanged } from '../app.js'
 import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
+import { notify } from '../modules/sl-utils.js'
 
 //
 // UI Parts
@@ -94,6 +95,24 @@ async function install(state) {
     variant: 'neutral',
     name: 'filenameWidget'
   })
+
+  // Make clickable to copy doc_id to clipboard if clipboard API is available
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    filenameWidget.clickable = true
+    filenameWidget.tooltip = 'Click to copy document id'
+    filenameWidget.addEventListener('widget-click', () => {
+      const docId = filenameWidget.text
+      if (docId) {
+        navigator.clipboard.writeText(docId).then(() => {
+          notify(`Document id '${docId}' copied to clipboard`, 'success', 'clipboard-check')
+        }).catch(err => {
+          console.error('Failed to copy to clipboard:', err)
+          notify('Failed to copy to clipboard', 'danger', 'exclamation-triangle')
+        })
+      }
+    })
+  }
+
   headerBar.add(filenameWidget, 'right', 1)
   
   // Add autosearch switch to PDF viewer statusbar
