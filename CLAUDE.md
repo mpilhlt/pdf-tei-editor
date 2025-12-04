@@ -31,6 +31,13 @@ npm run test:api -- --grep "save"
 npm run test:e2e
 npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
+
+# Container tests (runs all tests inside container)
+npm run test:container                           # Run with cache
+npm run test:container -- --no-cache             # Rebuild all layers
+npm run test:container -- path/to/changed/file.js  # Specific files
+npm run test:container -- --browser firefox      # Use specific browser for E2E
+npm run test:container -- --browser chromium,firefox,webkit  # Test multiple browsers
 ```
 
 ### Development Commands
@@ -73,6 +80,11 @@ npm run container:stop -- --all
 npm run container:restart
 npm run container:restart -- --name pdf-tei-editor-v1.0.0
 npm run container:restart -- --rebuild             # Rebuild before restarting
+
+# Run tests in container (CI mode)
+npm run test:container                           # Run with cache
+npm run test:container -- --no-cache             # Rebuild all layers
+npm run test:container -- path/to/file.js        # Run for specific files
 ```
 
 ### Key Files

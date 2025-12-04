@@ -1,108 +1,141 @@
-# Containerized Tests - Fix Required
+# Containerized Tests - COMPLETED
 
-## Status: BLOCKED
+## Status: ✅ COMPLETED
 
-The GitHub Actions workflow for PR testing is disabled due to containerized API tests failing.
+The containerized test infrastructure has been simplified and is now working.
 
-## Problem
+## Solution Summary
 
-When running API tests with `npm run test:api:container:cached`, most tests fail with configuration and data mismatches. The core issue is that **test fixtures are not accessible to the containerized backend**.
+Option A (Run Tests Inside Container) was implemented - the simplest and most effective approach.
 
-### Specific Issues
+### Previous Approach (REMOVED)
 
-1. **Configuration mismatch**: Tests expect `session.timeout = 3600` but container returns `86400`
-   - Root cause: Test configs in `tests/api/runtime/config/` aren't being used by the container
-   - The entrypoint script was modified to check for mounted test configs at `/app/data/config/`
-   - Volume mount was added: `tests/api/runtime:/app/data`
-   - But config values still don't match
+- Complex client-server architecture with tests running on host against containerized server
+- Fixture mounting issues causing config mismatches
+- Health checks, port management, cleanup complexity
+- Files removed:
+  - `tests/lib/container-server-manager.js`
+  - `docker/entrypoint-test.sh`
+  - `bin/test-container-startup.js`
+  - `docker-compose.test.yml`
+  - npm scripts: `test:api:container`, `test:api:container:cached`, `test:e2e:container`, `test:e2e:container:cached`
 
-2. **Test data isolation**: Local tests use individual fixture data per test suite
-   - Files in `tests/api/fixtures/` and `tests/e2e/fixtures/`
-   - These fixtures are not available to the containerized backend
-   - Tests expect specific users, files, and data that don't exist in the container
+### New Approach (IMPLEMENTED)
 
-3. **Setup phase differences**:
-   - Local tests: Fixtures loaded by `fixture-loader.js` into `tests/api/runtime/`
-   - Container tests: Uses baked-in fixtures from image + volume-mounted runtime
-   - The fixture loading happens on the host, but container can't see the setup
+- Tests run entirely inside the container (not against it)
+- Single command: `npm run test:container [--no-cache] [test args...]`
+- Real-time streaming output (not a black box)
+- All fixtures baked into container image at build time
+- No config mismatches - test environment initialized inside container
+- GitHub Actions re-enabled with proper Docker layer caching
 
-## What Was Fixed
+## Implementation Details
 
-1. **Port mapping**: Fixed default containerPort from 8011 to 8000 ([tests/lib/container-server-manager.js:41](tests/lib/container-server-manager.js#L41))
+### Files Created
 
-2. **Volume mounting**: Added mount for test data directory ([tests/lib/container-server-manager.js:223-230](tests/lib/container-server-manager.js#L223-L230))
+1. **[Dockerfile](Dockerfile)** - Added `ci` stage (stage 4, removed obsolete test stage)
+   - Includes full test suite and all dependencies
+   - Sets `PYTHONUNBUFFERED=1` for real-time output streaming
+   - Inherits from `base` stage with all dev dependencies
+   - Installs all Playwright browsers early for caching (separate layer after npm install)
 
-3. **Entrypoint script**: Modified to prefer test configs from mounted volume ([docker/entrypoint-test.sh:22-45](docker/entrypoint-test.sh#L22-L45))
+2. **[docker/entrypoint-ci.sh](docker/entrypoint-ci.sh)** - New CI entrypoint
+   - Minimal setup - tests are self-contained with fixtures
+   - Smart argument detection: adds `--all` flag when only flags provided (no file paths)
+   - Preserves smart test selection when file paths are provided
+   - Executes `node tests/smart-test-runner.js` with appropriate arguments
+   - Uses `exec` for proper signal handling and exit codes
 
-4. **Health check debugging**: Improved error logging with curl verbose output
+3. **[bin/test-container.js](bin/test-container.js)** - Container test runner
+   - Detects Docker/Podman
+   - Builds `pdf-tei-editor:ci` image
+   - Runs container with `stdio: 'inherit'` for streaming output
+   - Passes through all arguments to smart test runner
+   - Returns container's exit code
 
-5. **Test script**: Fixed method name from `getUrl()` to `getBaseUrl()` ([bin/test-container-startup.js:28](bin/test-container-startup.js#L28))
+### Files Modified
 
-## What Still Needs Work
+1. **[package.json](package.json)**
+   - Replaced `test:container` with new implementation
+   - Removed obsolete container test scripts
 
-### Option A: Full Fixture Mounting (Recommended)
+2. **[.github/workflows/pr-tests.yml](.github/workflows/pr-tests.yml)**
+   - Re-enabled PR triggers (was disabled)
+   - Removed Node.js and Python setup steps (not needed - runs in container)
+   - Changed build target from `test` to `ci`
+   - Simplified test execution to `docker run --rm pdf-tei-editor:ci [args]`
+   - Updated PR comment messages
 
-Mount all test fixtures into the container so it has access to the same test data:
+## Usage
 
-1. Modify `docker/entrypoint-test.sh` to detect and use mounted test fixtures
-2. Update `tests/lib/container-server-manager.js` to mount additional volumes:
-   - `tests/api/fixtures:/app/test-fixtures`
-   - `tests/e2e/fixtures:/app/e2e-fixtures`
-3. Ensure fixture loading happens inside the container or data is pre-populated
-
-### Option B: Simplified Test Fixtures
-
-Create a minimal, self-contained fixture set specifically for containerized testing:
-
-1. Create `tests/api/container-fixtures/` with minimal config and data
-2. Bake these into the container image at build time
-3. Modify tests to work with this simplified fixture set when running in container mode
-
-### Option C: Hybrid Approach
-
-Use environment variables to override config values:
-
-1. Modify FastAPI config loading to prefer environment variables over file-based config
-2. Pass all test configuration via environment variables
-3. Still mount test data directory for file fixtures
-
-## Test Commands
+### Local Development
 
 ```bash
-# Test specific suite
-npm run test:api:container:cached -- --grep "config"
-
-# Test with rebuild
-npm run test:api:container -- --grep "config"
-
-# Test container startup
+# Run all tests in container
 npm run test:container
+
+# Run with no cache (rebuild all layers)
+npm run test:container -- --no-cache
+
+# Run tests for specific files
+npm run test:container -- path/to/changed/file.js
+
+# Run all tests
+npm run test:container -- --all
+
+# Run E2E tests with specific browser
+npm run test:container -- --browser firefox
+npm run test:container -- --browser webkit
+
+# Run E2E tests with multiple browsers
+npm run test:container -- --browser chromium,firefox,webkit
 ```
 
-## Related Files
+### CI/CD (GitHub Actions)
 
-- `.github/workflows/pr-tests.yml` - Disabled workflow
-- `tests/backend-test-runner.js` - Test runner with container mode
-- `tests/lib/container-server-manager.js` - Container lifecycle management
-- `tests/lib/fixture-loader.js` - Fixture loading (host-side)
-- `docker/entrypoint-test.sh` - Container initialization
-- `tests/api/v1/.env.test` - Test environment variables
-- `tests/api/runtime/` - Runtime data directory (mounted)
-- `tests/api/fixtures/` - Test fixture presets (NOT mounted currently)
+The workflow automatically:
 
-## Next Steps
+1. Builds the `ci` container image with Docker layer caching
+2. Runs tests inside container with changed file detection
+3. Streams output in real-time to GitHub Actions logs
+4. Reports results as PR comments
 
-1. Investigate fixture-loader.js to understand full fixture setup process
-2. Decide on approach (A, B, or C above)
-3. Implement chosen approach
-4. Verify all API tests pass with containerized backend
-5. Re-enable GitHub Actions workflow
-6. Test on CI to ensure Docker layer caching works properly
+## Benefits
 
-## Notes
+1. **Simpler Architecture** - Tests run in container, not against it
+2. **No Fixture Issues** - All fixtures baked into image at build time
+3. **No Config Mismatches** - Test environment initialized inside container
+4. **Faster CI** - No startup delays, health checks, or cleanup needed
+5. **Consistent Interface** - Same test runner API locally or in container
+6. **Better Caching** - Full Docker layer caching for dependencies
+7. **Real-time Feedback** - Test output streams to console as it runs (not a black box)
 
-- Container builds successfully and server starts
-- Health check passes
-- Port mapping works correctly (8020:8000)
-- Volume mount for runtime data works
-- The issue is purely about test fixture/config availability
+## Technical Notes
+
+### Streaming Output
+
+- Container uses `PYTHONUNBUFFERED=1` to prevent output buffering
+- Node.js spawns container with `stdio: 'inherit'` for real-time streaming
+- GitHub Actions shows test progress as it runs
+
+### Change Detection
+
+- Git change detection doesn't work inside container (no git repository context)
+- Entrypoint intelligently detects argument types:
+  - **No arguments**: Automatically adds `--all` flag
+  - **Only flags** (e.g., `--browser firefox`): Automatically adds `--all` flag
+  - **File paths present**: Uses smart test selection for those specific files
+- GitHub Actions passes changed files as arguments from host git diff
+
+### Test Runners
+
+- `tests/backend-test-runner.js` and `tests/e2e-runner.js` still have `--container` mode code
+- These are NOT USED by the new approach (kept for potential local use)
+- The new `npm run test:container` runs the entire smart test runner inside the container
+- Test runners always run locally (either on host via `npm test` or in container via `npm run test:container`)
+
+### Container Images
+
+- **Production**: `pdf-tei-editor:latest` (stage: production) - minimal runtime-only image
+- **Test Server**: `pdf-tei-editor:test` (stage: test) - DEPRECATED, not used anymore
+- **CI Runner**: `pdf-tei-editor:ci` (stage: ci) - includes full test suite and dev dependencies

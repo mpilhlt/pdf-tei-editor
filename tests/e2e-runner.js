@@ -25,7 +25,7 @@ import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { Option } from 'commander';
 import { LocalServerManager } from './lib/local-server-manager.js';
-import { ContainerServerManager } from './lib/container-server-manager.js';
+// import { ContainerServerManager } from './lib/container-server-manager.js'; // Removed - not used in new container approach
 import { createTestRunnerCommand, processEnvArgs, resolveMode, validateFixture } from './lib/cli-builder.js';
 import { loadEnvFile } from './lib/env-loader.js';
 import { loadFixture, importFixtureFiles } from './lib/fixture-loader.js';
@@ -108,7 +108,7 @@ const cliOptions = program.opts();
  */
 class PlaywrightRunner {
   constructor() {
-    /** @type {LocalServerManager | ContainerServerManager | null} */
+    /** @type {LocalServerManager | null} */
     this.serverManager = null;
   }
 
@@ -241,21 +241,10 @@ class PlaywrightRunner {
         );
       }
     } else {
-      this.serverManager = new ContainerServerManager();
-      await this.serverManager.start({
-        rebuild: !options.noRebuild,
-        env,
-      });
-
-      // Run infrastructure test after building container (but not when using --no-rebuild)
-      if (!options.noRebuild) {
-        console.log('\n🔍 Running container infrastructure test...');
-        const infraTestPassed = await this.runContainerInfrastructureTest();
-        if (!infraTestPassed) {
-          throw new Error('Container infrastructure test failed. Container setup is invalid.');
-        }
-        logger.success('Container infrastructure test passed');
-      }
+      // Container mode removed - use `npm run test:container` instead
+      throw new Error(
+        '--container mode is no longer supported. Use `npm run test:container` to run tests inside a container.'
+      );
     }
 
     const baseUrl = this.serverManager.getBaseUrl();
@@ -333,7 +322,7 @@ class PlaywrightRunner {
 
     // Get base URL and mode from server manager
     const baseUrl = this.serverManager?.getBaseUrl();
-    const mode = this.serverManager instanceof ContainerServerManager ? 'container' : 'local';
+    const mode = 'local'; // Always local - container mode removed
 
     // Run Playwright tests
     const testProcess = spawn('npx', cmd, {

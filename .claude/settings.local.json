@@ -44,7 +44,9 @@
       "Bash(podman ps:*)",
       "Bash(podman inspect:*)",
       "Bash(npm run test:api:container:cached:*)",
-      "Bash(podman build:*)"
+      "Bash(podman build:*)",
+      "Bash(npm run test:container:*)",
+      "Bash(timeout 600 npm run test:container:*)"
     ],
     "deny": [],
     "ask": []

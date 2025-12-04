@@ -67,14 +67,19 @@ npm run test:unit:fastapi      # FastAPI Python unit tests
 
 # API Integration Tests (FastAPI backend)
 npm run test:api               # Local server (fastest)
-npm run test:api:container     # Containerized (CI-ready)
 
 # End-to-End Tests (Playwright)
 npm run test:e2e               # Local server (fastest)
 npm run test:e2e:headed        # Show browser UI
 npm run test:e2e:debug         # Step-through debugging
 npm run test:e2e:debug-failure # Capture debug artifacts on failure
-npm run test:e2e:container     # Containerized (CI-ready)
+
+# Container Tests (runs all tests inside container, same as CI)
+npm run test:container                                  # Run with cache
+npm run test:container -- --no-cache                    # Rebuild all layers
+npm run test:container -- path/to/file.js               # Test specific files
+npm run test:container -- --browser firefox             # Use specific browser
+npm run test:container -- --browser chromium,firefox,webkit  # Test multiple browsers
 
 # Run specific tests
 npm run test:api -- --grep "save"
@@ -83,7 +88,7 @@ npm run test:e2e -- --grep "authentication"
 
 ### Test Runner Options
 
-All test runners support common flags:
+Local test runners (`test:api`, `test:e2e`) support:
 
 ```bash
 # Filter tests by pattern
@@ -94,13 +99,22 @@ All test runners support common flags:
 --clean-db                     # Wipe database (default for local)
 --keep-db                      # Preserve database between runs
 
-# Container options
---no-rebuild                   # Skip container rebuild (faster)
---container                    # Use container instead of local
+# Browser selection (E2E only)
+--browser <name>               # Use specific browser (chromium, firefox, webkit)
 
 # Other options
 --verbose                      # Show detailed output
 --no-cleanup                   # Keep server running after tests
+```
+
+Container test runner (`test:container`) options:
+
+```bash
+--no-cache                     # Rebuild all Docker layers (ignore cache)
+--browser <browsers>           # Comma-separated list for E2E tests
+--all                          # Run all tests (skip smart selection)
+--grep <pattern>               # Filter tests by pattern
+# Plus any other smart-test-runner.js options
 ```
 
 ## Unit Tests
@@ -150,12 +164,12 @@ def test_password_hashing():
 
 ## API Integration Tests
 
-API integration tests validate backend endpoints without a browser. They run against either a local FastAPI server or containerized backend.
+API integration tests validate backend endpoints without a browser. They run against a local FastAPI server.
 
 **Location**: `tests/api/v1/`
 **Naming**: `*.test.js`
 **Runner**: `backend-test-runner.js`
-**Command**: `npm run test:api` (local) or `npm run test:api:container`
+**Command**: `npm run test:api`
 
 ### Key Features
 
@@ -252,18 +266,18 @@ npm run test:api -- --keep-db
 # Specific tests
 npm run test:api -- --grep "save"
 
-# Containerized (CI)
-npm run test:api:container
+# In container (CI environment)
+npm run test:container -- --grep "save"
 ```
 
 ## End-to-End Tests
 
-E2E tests use Playwright to test the full application stack in a browser against a containerized instance.
+E2E tests use Playwright to test the full application stack in a browser.
 
 **Location**: `tests/e2e/tests/`
 **Naming**: `*.spec.js`
 **Runner**: `e2e-runner.js`
-**Command**: `npm run test:e2e`
+**Command**: `npm run test:e2e` (local) or `npm run test:container` (containerized)
 
 ### Key Features
 
@@ -361,8 +375,9 @@ npm run test:e2e -- --browser firefox
 # Specific tests
 npm run test:e2e -- --grep "authentication"
 
-# Containerized (CI)
-npm run test:e2e:container
+# In container (CI environment)
+npm run test:container -- --browser chromium
+npm run test:container -- --browser chromium,firefox,webkit  # Multiple browsers
 ```
 
 ## Smart Test Runner
@@ -378,17 +393,21 @@ The smart test runner automatically selects tests based on file dependencies, dr
 ### Usage
 
 ```bash
-# Run tests for changed files (git diff)
+# Run tests for changed files (git diff) - local server
 npm run test:changed
 
-# Specify changed files manually
-node tests/smart-test-runner.js --changed-files app/src/plugins/auth.js,fastapi_app/routers/auth.py
+# Run tests for changed files - in container (CI environment)
+npm run test:container
+
+# Test specific files
+npm run test:container -- app/src/plugins/auth.js fastapi_app/routers/auth.py
 
 # Dry run (show which tests would run)
 node tests/smart-test-runner.js --changed-files app/src/ui.js --dry-run
 
 # Run all tests
-npm test
+npm test  # Local
+npm run test:container -- --all  # Container
 ```
 
 ### Test Coverage Annotations
@@ -549,20 +568,32 @@ E2E_DEBUG=true npm run test:e2e
 Smart test runner automatically runs on `git push`:
 
 ```bash
-# Runs affected tests only
+# Runs affected tests only (local server)
 git push
 ```
 
-### CI Pipeline
+### CI Pipeline (GitHub Actions)
+
+The CI pipeline runs tests inside a container:
 
 ```bash
-# Run all tests in CI
-npm run test:all
+# GitHub Actions workflow runs:
+# 1. Build CI container image (pdf-tei-editor:ci)
+# 2. Run smart test runner inside container with changed files
+# 3. Stream output in real-time
+# 4. Report results as PR comment
 
-# Use containers for isolation
-npm run test:api:container
-npm run test:e2e:container
+# Local equivalent:
+npm run test:container
 ```
+
+**CI Architecture:**
+
+- Tests run entirely inside container (not against it)
+- All fixtures and code baked into image at build time
+- Real-time streaming output (not a black box)
+- Docker layer caching for fast builds
+- Smart test selection based on changed files
 
 ## Test Fixtures
 

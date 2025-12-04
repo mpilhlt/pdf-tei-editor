@@ -110,19 +110,36 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-# Stage 4: Test-optimized variant (inherits from production)
-FROM production as test
+# Stage 4: CI test runner (runs tests internally, not as a server)
+FROM base as ci
 
-# Copy test fixtures and helpers for E2E tests
-COPY tests/e2e/fixtures /app/tests/e2e/fixtures
-COPY tests/e2e/tests/helpers /app/tests/e2e/tests/helpers
-COPY tests/api/helpers /app/tests/api/helpers
+# Copy dependency files first
+COPY package.json package-lock.json* ./
+COPY pyproject.toml uv.lock ./
 
-# Expose port
-EXPOSE 8001
+# Install ALL dependencies (including dev dependencies for testing)
+RUN uv sync --frozen && npm install --ignore-scripts --no-audit --no-fund
 
-# Override entrypoint for test environment
-COPY docker/entrypoint-test.sh /entrypoint-test.sh
-RUN chmod +x /entrypoint-test.sh
+# Install Playwright browsers immediately after dependencies for early caching
+# This creates a separate layer that will be cached unless dependencies change
+RUN npx playwright install --with-deps
 
-ENTRYPOINT ["/entrypoint-test.sh"]
+# Copy source code and tests
+COPY . .
+
+# Build the application (needed for some tests)
+RUN uv run python bin/compile-sl-icons.py \
+    && uv run python bin/download-pdfjs \
+    && node bin/build.js
+
+# Set environment for unbuffered output (critical for streaming)
+ENV PYTHONUNBUFFERED=1 \
+    NODE_OPTIONS="--enable-source-maps" \
+    TEST_IN_PROGRESS=1 \
+    E2E_SKIP_WEBSERVER=1
+
+# Copy CI entrypoint
+COPY docker/entrypoint-ci.sh /entrypoint-ci.sh
+RUN chmod +x /entrypoint-ci.sh
+
+ENTRYPOINT ["/entrypoint-ci.sh"]

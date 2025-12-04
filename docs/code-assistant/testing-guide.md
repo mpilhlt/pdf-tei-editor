@@ -34,9 +34,12 @@ npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
 npm run test:e2e:debug-failure # Capture debug artifacts on failure (headless)
 
-# Container tests
-npm run test:container         # Test container build and startup
-npm run test:e2e:container-infra  # Validate container setup (requires running container)
+# Container tests (runs all tests inside container)
+npm run test:container                                  # Run with cache
+npm run test:container -- --no-cache                    # Rebuild all layers
+npm run test:container -- path/to/file.js               # Test specific files
+npm run test:container -- --browser firefox             # Use specific browser
+npm run test:container -- --browser chromium,firefox,webkit  # Test multiple browsers
 ```
 
 ## Test Types
@@ -99,41 +102,50 @@ API tests use a two-phase fixture loading system:
 
 #### Container Testing
 
-**Test Container Startup** (`npm run test:container`):
+**Run Tests Inside Container** (`npm run test:container`):
 
-- **Purpose**: Quickly validate that the container builds correctly and starts successfully
+- **Purpose**: Run all tests in an isolated container environment (same as CI)
 - **What it does**:
-  - Builds the test container from scratch
-  - Starts the container
-  - Waits for the `/health` endpoint to respond
-  - Shows container details (name, URL)
-  - Cleans up and stops the container
-- **Use when**: Testing changes to `Dockerfile`, `docker/entrypoint-test.sh`, or server startup
+  - Builds the `ci` container image with all dependencies and test code
+  - Runs tests inside the container (not against it)
+  - Streams output in real-time to your terminal
+  - Uses smart test runner with dependency analysis
+  - Supports all test runner options (browsers, grep, specific files)
+- **Use when**:
+  - Testing changes that require a clean environment
+  - Validating behavior in production-like container
+  - Reproducing CI failures locally
+  - Testing Dockerfile or dependency changes
 
-**Container Infrastructure Test** (`npm run test:e2e:container-infra`):
+**Examples:**
 
-- **Purpose**: Validates container setup before running E2E tests
-- **File**: `tests/e2e/tests/docker-infrastructure.spec.js`
-- **Run**: Standalone or automatically when running `npm run test:e2e:container`
-- **Auto-run**: Automatically runs when container is rebuilt (not with `--no-rebuild`)
-- **Requires**: A running container (use `npm run container:start` or `npm run test:container` first)
+```bash
+# Run all tests with caching (fastest for iterative testing)
+npm run test:container
 
-**What it checks:**
+# Force rebuild (use after Dockerfile or dependency changes)
+npm run test:container -- --no-cache
 
-- Container is running and healthy
-- Directory structure is correct (`data/db/`, `data/files/`)
-- Database is initialized
-- Demo data has been imported
-- Test fixtures (users, roles) are loaded
-- Application mode is set to "testing"
-- File storage is accessible
+# Test specific files
+npm run test:container -- app/src/plugins/authentication.js
 
-**Behavior:**
+# Run E2E tests with specific browser
+npm run test:container -- --browser firefox
 
-- Runs automatically after `npm run test:e2e:container` (with rebuild)
-- Skipped when using `npm run test:e2e:container:cached` (no rebuild)
-- Can be run standalone with `npm run test:e2e:container-infra`
-- **Hard failure:** If infrastructure test fails, E2E tests abort (infrastructure issue, not app bug)
+# Test multiple browsers
+npm run test:container -- --browser chromium,firefox,webkit
+
+# Run all tests (skip smart selection)
+npm run test:container -- --all
+```
+
+**Technical Details:**
+
+- Tests run inside container using `docker/entrypoint-ci.sh`
+- All fixtures and test code baked into image at build time
+- Real-time streaming via `PYTHONUNBUFFERED=1` and `stdio: 'inherit'`
+- Playwright browsers installed early for optimal layer caching
+- Exit code matches test results (0 = success, non-zero = failure)
 
 ## Writing Tests
 
