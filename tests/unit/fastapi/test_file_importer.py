@@ -471,8 +471,50 @@ startxref
         self.assertEqual(files[0].filename, "doc.pdf")
         self.assertEqual(files[0].file_type, "pdf")
 
+    def test_gold_by_version_marker_default(self):
+        """Test gold detection using version marker (default behavior)."""
+        # Create TEI files - ones without .vN. are gold
+        # Use different titles to ensure different content/hashes
+        self.create_test_tei(self.import_dir / "doc1.tei.xml", doc_id="10.1234/doc1", title="Gold Standard")
+        self.create_test_tei(self.import_dir / "doc1.v1.tei.xml", doc_id="10.1234/doc1", title="Version 1")
+        self.create_test_tei(self.import_dir / "doc2.tei.xml", doc_id="10.1234/doc2", title="Document 2 Gold")
+        self.create_test_tei(self.import_dir / "doc2.v2.tei.xml", doc_id="10.1234/doc2", title="Document 2 Version 2")
+
+        # Import with default settings (no gold_pattern - uses version marker logic)
+        importer = FileImporter(self.db, self.storage, self.repo)
+        with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
+            stats = importer.import_directory(self.import_dir)
+
+        # Verify expected warnings about missing PDFs
+        self.assertTrue(any('No PDF found for document' in msg for msg in cm.output))
+
+        # Verify all files imported
+        self.assertEqual(stats['files_scanned'], 4)
+        self.assertEqual(stats['files_imported'], 4)
+
+        # Verify gold status
+        files = self.repo.list_files()
+        self.assertEqual(len(files), 4)
+
+        # Files without .vN. should be gold
+        doc1_gold = next((f for f in files if f.filename == "doc1.tei.xml"), None)
+        doc1_v1 = next((f for f in files if f.filename == "doc1.v1.tei.xml"), None)
+        doc2_gold = next((f for f in files if f.filename == "doc2.tei.xml"), None)
+        doc2_v2 = next((f for f in files if f.filename == "doc2.v2.tei.xml"), None)
+
+        self.assertIsNotNone(doc1_gold)
+        self.assertIsNotNone(doc1_v1)
+        self.assertIsNotNone(doc2_gold)
+        self.assertIsNotNone(doc2_v2)
+
+        # Verify gold status
+        self.assertTrue(doc1_gold.is_gold_standard)
+        self.assertFalse(doc1_v1.is_gold_standard)
+        self.assertTrue(doc2_gold.is_gold_standard)
+        self.assertFalse(doc2_v2.is_gold_standard)
+
     def test_gold_pattern_in_filename(self):
-        """Test gold detection using filename pattern."""
+        """Test gold detection using filename pattern (legacy mode)."""
         # Create TEI files with .gold. pattern in filename
         # Use different titles to ensure different content/hashes
         self.create_test_tei(self.import_dir / "doc1.gold.tei.xml", doc_id="10.1234/doc1", title="Gold Standard")
@@ -511,7 +553,7 @@ startxref
             self.assertFalse(f.is_gold_standard)
 
     def test_gold_pattern_in_directory(self):
-        """Test gold detection using directory pattern (default behavior)."""
+        """Test gold detection using directory pattern (legacy mode)."""
         # Create directory structure with tei/ subdirectory
         tei_dir = self.import_dir / "tei"
         tei_dir.mkdir()
@@ -519,8 +561,8 @@ startxref
         self.create_test_tei(tei_dir / "doc1.tei.xml", doc_id="10.1234/doc1")
         self.create_test_tei(self.import_dir / "doc2.tei.xml", doc_id="10.1234/doc2")
 
-        # Import with default gold pattern (suppress expected warnings)
-        importer = FileImporter(self.db, self.storage, self.repo)
+        # Import with gold directory pattern (suppress expected warnings)
+        importer = FileImporter(self.db, self.storage, self.repo, gold_dir_name='tei')
         with self.assertLogs('fastapi_app.lib.file_importer', level='WARNING') as cm:
             stats = importer.import_directory(self.import_dir)
 

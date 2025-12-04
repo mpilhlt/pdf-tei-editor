@@ -401,7 +401,8 @@ class FileExporter:
         - PDFs: <encoded_doc_id>.pdf
         - Gold TEI (with variant): <encoded_doc_id>.<variant>.tei.xml
         - Gold TEI (no variant): <encoded_doc_id>.tei.xml
-        - Versioned TEI: <encoded_doc_id>.<variant>-v<version>.tei.xml
+        - Versioned TEI (with variant): <encoded_doc_id>.<variant>.v<version>.tei.xml
+        - Versioned TEI (no variant): <encoded_doc_id>.v<version>.tei.xml
 
         Args:
             file_meta: File metadata
@@ -422,12 +423,14 @@ class FileExporter:
         elif file_meta.file_type == 'tei':
             # Check if this is a non-gold file (archived version)
             if not file_meta.is_gold_standard:
-                # Non-gold file: doc_id.variant-vN.tei.xml
-                variant_part = file_meta.variant or "default"
+                # Non-gold file: doc_id.variant.vN.tei.xml (or doc_id.vN.tei.xml if no variant)
                 version_num = file_meta.version if file_meta.version is not None else 0
-                return f"{encoded_doc_id}.{variant_part}-v{version_num}{extension}"
+                if file_meta.variant:
+                    return f"{encoded_doc_id}.{file_meta.variant}.v{version_num}{extension}"
+                else:
+                    return f"{encoded_doc_id}.v{version_num}{extension}"
             else:
-                # Gold file
+                # Gold file (no version marker)
                 if file_meta.variant:
                     # With variant: doc_id.variant.tei.xml
                     return f"{encoded_doc_id}.{file_meta.variant}{extension}"

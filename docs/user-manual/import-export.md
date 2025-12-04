@@ -107,34 +107,40 @@ python bin/import_files.py /path/to/data --recursive-collections \
 
 Gold standard files are reference versions used for comparison and validation.
 
-### Directory-Based Detection (Default)
+### Version Marker Detection (Default)
 
-By default, files in a `tei` directory are marked as gold standard:
+By default, files **without** a `.vN.` version marker are treated as gold standard:
 
 ```bash
 python bin/import_files.py /path/to/files
 ```
 
-**Directory structure example:**
+**Filename examples:**
 
 ```
 /path/to/files/
-├── tei/
-│   └── doc1.tei.xml    # Gold standard
-└── doc1.tei.xml        # Regular version
+├── doc1.pdf
+├── doc1.tei.xml              # Gold (no version marker)
+├── doc1.grobid.tei.xml       # Gold with variant (no version marker)
+├── doc1.v1.tei.xml           # Version 1 (not gold)
+└── doc1.grobid.v2.tei.xml    # Version 2 with variant (not gold)
 ```
 
-### Custom Gold Directory
+**Version pattern:** The default pattern `\.v\d+\.` matches `.v1.`, `.v2.`, etc. Files with this pattern are NOT gold.
 
-Use a different directory name for gold files:
+### Custom Version Pattern
+
+Use a custom pattern to identify versions:
 
 ```bash
-python bin/import_files.py /path/to/files --gold-dir-name gold_standard
+python bin/import_files.py /path/to/files --version-pattern '\.version\d+\.'
 ```
 
-### Pattern-Based Detection
+This would match `.version1.`, `.version2.`, etc.
 
-Use a regular expression to detect gold files by filename:
+### Legacy: Pattern-Based Gold Detection
+
+For backward compatibility with legacy imports, you can still use pattern-based gold detection:
 
 ```bash
 python bin/import_files.py /path/to/files --gold-pattern '\.gold\.'
@@ -142,8 +148,8 @@ python bin/import_files.py /path/to/files --gold-pattern '\.gold\.'
 
 **Filename examples:**
 
-- `doc1.gold.tei.xml` → Marked as gold, doc_id becomes `doc1.tei.xml`
-- `doc1.tei.xml` → Regular version
+- `doc1.gold.tei.xml` → Marked as gold, pattern stripped for matching
+- `doc1.tei.xml` → Not gold (no pattern match)
 
 **Common patterns:**
 
@@ -151,14 +157,11 @@ python bin/import_files.py /path/to/files --gold-pattern '\.gold\.'
 # Files with .gold. in name
 python bin/import_files.py /path/to/files --gold-pattern '\.gold\.'
 
-# Files with _gold_ in name
-python bin/import_files.py /path/to/files --gold-pattern '_gold_'
-
-# Files with [GOLD] prefix
-python bin/import_files.py /path/to/files --gold-pattern '\[GOLD\]'
+# Files in 'tei' directory
+python bin/import_files.py /path/to/files --gold-dir-name tei
 ```
 
-**Important:** When a pattern matches the filename, it is stripped before determining the document ID. This allows gold files to be matched with their corresponding PDFs and non-gold versions.
+**Important:** When `--gold-pattern` is provided, it overrides the default version marker detection.
 
 ## File Organization
 
@@ -173,10 +176,10 @@ The importer uses intelligent filename matching to group related files:
 
 **TEI files:**
 
-- `10.1234_article.tei.xml`
-- `article.tei.xml`
-- `article.v1.tei.xml` (version variant)
-- `article.gold.tei.xml` (gold standard)
+- `10.1234_article.tei.xml` (gold - no version marker)
+- `10.1234_article.grobid.tei.xml` (gold with variant)
+- `article.v1.tei.xml` (version 1)
+- `article.grobid.v2.tei.xml` (version 2 with variant)
 
 ### Document ID Resolution
 

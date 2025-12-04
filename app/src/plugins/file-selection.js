@@ -117,7 +117,7 @@ async function install(state) {
   for (const [select, handler] of handlers) {
     // add event handler for the selectbox
     select.addEventListener('sl-change', async evt => {
-      console.warn("[DEBUG]",{isUpdatingProgrammatically, isInStateUpdateCycle})
+      
       // Ignore programmatic changes to prevent double-loading
       if (isUpdatingProgrammatically) {
         return;
@@ -432,7 +432,7 @@ async function populateSelectboxes(state) {
       // Check if this is the currently selected file (either by PDF hash or XML hash for XML-only files)
       const isSelectedFile = (fileIdentifier === state.pdf) ||
                              (file.source && file.source.file_type !== 'pdf' && fileIdentifier === state.xml);
-console.log("[DEBUG]", {fileIdentifier, isSelectedFile, hasPopulatedVersionsForSelectedFile})
+
       // Only populate XML/diff dropdowns once for the selected file (prevent duplicates when file is in multiple collections)
       if (isSelectedFile && !hasPopulatedVersionsForSelectedFile) {
         hasPopulatedVersionsForSelectedFile = true;

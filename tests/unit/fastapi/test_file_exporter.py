@@ -243,8 +243,8 @@ class TestFileExporter(unittest.TestCase):
         self.assertTrue(gold_file.exists())
 
         # Versions should not exist when include_versions=False
-        v1_file = self.export_dir / "versions" / "10.1111__test.grobid-0.8.1-v1.tei.xml"
-        v2_file = self.export_dir / "versions" / "10.1111__test.grobid-0.8.1-v2.tei.xml"
+        v1_file = self.export_dir / "versions" / "10.1111__test.grobid-0.8.1.v1.tei.xml"
+        v2_file = self.export_dir / "versions" / "10.1111__test.grobid-0.8.1.v2.tei.xml"
         self.assertFalse(v1_file.exists())
         self.assertFalse(v2_file.exists())
 
@@ -255,8 +255,8 @@ class TestFileExporter(unittest.TestCase):
         # Should export all files (1 gold + 2 non-gold versions)
         self.assertEqual(stats2['files_exported'], 3)
         gold_file2 = export_dir2 / "tei" / "10.1111__test.grobid-0.8.1.tei.xml"
-        v1_file2 = export_dir2 / "versions" / "10.1111__test.grobid-0.8.1-v1.tei.xml"
-        v2_file2 = export_dir2 / "versions" / "10.1111__test.grobid-0.8.1-v2.tei.xml"
+        v1_file2 = export_dir2 / "versions" / "10.1111__test.grobid-0.8.1.v1.tei.xml"
+        v2_file2 = export_dir2 / "versions" / "10.1111__test.grobid-0.8.1.v2.tei.xml"
         self.assertTrue(gold_file2.exists())
         self.assertTrue(v1_file2.exists())
         self.assertTrue(v2_file2.exists())
