@@ -7,28 +7,37 @@
  * write-protected main branch by creating release via PR workflow.
  *
  * Usage:
- *   node bin/release.js patch   # Bump patch version (0.7.0 -> 0.7.1)
- *   node bin/release.js minor   # Bump minor version (0.7.0 -> 0.8.0)
- *   node bin/release.js major   # Bump major version (0.7.0 -> 1.0.0)
+ *   node bin/release.js patch            # Bump patch version (0.7.0 -> 0.7.1)
+ *   node bin/release.js minor            # Bump minor version (0.7.0 -> 0.8.0)
+ *   node bin/release.js major            # Bump major version (0.7.0 -> 1.0.0)
+ *   node bin/release.js patch --dry-run  # Test without pushing
  */
 
 import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 
 const VALID_TYPES = ['patch', 'minor', 'major'];
+let DRY_RUN = false;
 
 /**
  * Execute command and return output
  * @param {string} command - Command to execute
  * @param {boolean} silent - Whether to suppress output
+ * @param {boolean} skipInDryRun - Skip command in dry-run mode
  * @returns {string} Command output
  */
-function exec(command, silent = false) {
+function exec(command, silent = false, skipInDryRun = false) {
+  if (DRY_RUN && skipInDryRun) {
+    console.log(`[DRY RUN] Would execute: ${command}`);
+    return '';
+  }
+
   try {
-    return execSync(command, {
+    const result = execSync(command, {
       encoding: 'utf8',
       stdio: silent ? 'pipe' : 'inherit'
-    }).trim();
+    });
+    return result ? result.trim() : '';
   } catch (error) {
     console.error(`Command failed: ${command}`);
     console.error(error.message);
@@ -67,6 +76,9 @@ function isWorkingDirectoryClean() {
  * @param {string} releaseType - Type of release (patch, minor, major)
  */
 function release(releaseType) {
+  if (DRY_RUN) {
+    console.log(`\n🧪 DRY RUN MODE - No changes will be pushed\n`);
+  }
   console.log(`\n🚀 Starting ${releaseType} release process...\n`);
 
   // Validate release type
@@ -99,7 +111,7 @@ function release(releaseType) {
   if (currentBranch === 'main') {
     console.log('\n🔀 On main branch, creating release branch...');
     releaseBranch = `release/${releaseType}-${Date.now()}`;
-    exec(`git checkout -b ${releaseBranch}`);
+    exec(`git checkout -b ${releaseBranch}`, false, true);
     console.log(`✅ Created and switched to branch: ${releaseBranch}`);
   } else {
     releaseBranch = currentBranch;
@@ -123,22 +135,34 @@ function release(releaseType) {
   // Check if there are any changes after client generation
   if (!isWorkingDirectoryClean()) {
     console.log('⚠️  API client was regenerated. Committing changes...');
-    exec('git add app/src/modules/api-client-v1.js');
-    exec('git commit -m "Update API client before release"');
+    exec('git add app/src/modules/api-client-v1.js', false, true);
+    exec('git commit -m "Update API client before release"', false, true);
   }
 
   // Bump version using npm version command
   console.log(`\n⬆️  Bumping ${releaseType} version...`);
-  exec(`npm version ${releaseType} -m "Release v%s"`);
+  exec(`npm version ${releaseType} -m "Release v%s"`, false, true);
 
-  // Get new version
-  const newVersion = getCurrentVersion();
+  // Get new version (in dry-run, simulate the version bump)
+  let newVersion;
+  if (DRY_RUN) {
+    const [major, minor, patch] = currentVersion.split('.').map(Number);
+    if (releaseType === 'major') {
+      newVersion = `${major + 1}.0.0`;
+    } else if (releaseType === 'minor') {
+      newVersion = `${major}.${minor + 1}.0`;
+    } else {
+      newVersion = `${major}.${minor}.${patch + 1}`;
+    }
+  } else {
+    newVersion = getCurrentVersion();
+  }
   console.log(`✅ Version bumped: ${currentVersion} → ${newVersion}`);
 
   // Push the branch and tags
   console.log('\n📤 Pushing changes to remote...');
-  exec(`git push origin ${releaseBranch}`);
-  exec(`git push origin v${newVersion}`);
+  exec(`git push origin ${releaseBranch}`, false, true);
+  exec(`git push origin v${newVersion}`, false, true);
 
   // If we created a release branch, prompt for PR creation
   if (currentBranch === 'main') {
@@ -150,16 +174,20 @@ function release(releaseType) {
     console.log('   4. GitHub Actions will build and publish the release');
 
     // Try to create PR using gh CLI if available
-    try {
-      const ghInstalled = exec('which gh', true);
-      if (ghInstalled) {
-        console.log('\n🔧 Creating PR using GitHub CLI...');
-        exec(`gh pr create --title "Release v${newVersion}" --body "Release version ${newVersion}" --base main --head ${releaseBranch}`);
-        console.log('✅ PR created successfully!');
+    if (!DRY_RUN) {
+      try {
+        const ghInstalled = exec('which gh', true);
+        if (ghInstalled) {
+          console.log('\n🔧 Creating PR using GitHub CLI...');
+          exec(`gh pr create --title "Release v${newVersion}" --body "Release version ${newVersion}" --base main --head ${releaseBranch}`, false, true);
+          console.log('✅ PR created successfully!');
+        }
+      } catch {
+        console.log('\n💡 Tip: Install GitHub CLI (gh) to automatically create PRs');
+        console.log('   brew install gh');
       }
-    } catch {
-      console.log('\n💡 Tip: Install GitHub CLI (gh) to automatically create PRs');
-      console.log('   brew install gh');
+    } else {
+      console.log('\n[DRY RUN] Would create PR using GitHub CLI if available');
     }
   } else {
     console.log('\n✅ Release pushed successfully!');
@@ -167,21 +195,31 @@ function release(releaseType) {
     console.log('   GitHub Actions will build and publish the release');
   }
 
-  console.log('\n🎉 Release process complete!\n');
+  if (DRY_RUN) {
+    console.log('\n🧪 DRY RUN COMPLETE - No changes were pushed\n');
+  } else {
+    console.log('\n🎉 Release process complete!\n');
+  }
 }
 
 // Parse command line arguments
-const releaseType = process.argv[2];
+const args = process.argv.slice(2);
+const releaseType = args[0];
+const dryRunFlag = args.includes('--dry-run');
 
 if (!releaseType) {
   console.error('\n❌ Missing release type argument\n');
   console.error('Usage:');
-  console.error('  node bin/release.js patch   # Bump patch version (0.7.0 -> 0.7.1)');
-  console.error('  node bin/release.js minor   # Bump minor version (0.7.0 -> 0.8.0)');
-  console.error('  node bin/release.js major   # Bump major version (0.7.0 -> 1.0.0)');
+  console.error('  node bin/release.js patch            # Bump patch version (0.7.0 -> 0.7.1)');
+  console.error('  node bin/release.js minor            # Bump minor version (0.7.0 -> 0.8.0)');
+  console.error('  node bin/release.js major            # Bump major version (0.7.0 -> 1.0.0)');
+  console.error('  node bin/release.js patch --dry-run  # Test without pushing\n');
   console.error('');
   process.exit(1);
 }
+
+// Set dry-run mode
+DRY_RUN = dryRunFlag;
 
 // Run release
 release(releaseType);
