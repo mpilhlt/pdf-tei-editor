@@ -184,11 +184,14 @@ See [Code Assistant Documentation](../code-assistant/README.md) for concise tech
 
 ## Contributing
 
-1. Read relevant documentation before making changes
-2. Follow [Coding Standards](../code-assistant/coding-standards.md)
-3. Write tests for new features
-4. Update documentation
-5. Run tests before committing: `npm run test:changed`
+See [Contributing Guide](contributing.md) for complete best practices on:
+
+- Conventional commit message format
+- Code quality requirements
+- Pull request guidelines
+- Testing requirements
+- Release process
+- Documentation updates
 
 ## Need Help?
 

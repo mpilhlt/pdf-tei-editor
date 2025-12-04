@@ -18,9 +18,10 @@
  */
 
 import { spawn } from 'child_process';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -247,8 +248,10 @@ function extractTypeDefs(schema) {
 
 /**
  * Generate client code from OpenAPI schema
+ * @param {Object} schema - OpenAPI schema
+ * @param {string} timestamp - ISO timestamp to embed in the header
  */
-function generateClientCode(schema) {
+function generateClientCode(schema, timestamp) {
   const methods = [];
   const typeDefs = extractTypeDefs(schema);
 
@@ -403,7 +406,7 @@ function generateClientCode(schema) {
   let code = `/**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at ${new Date().toISOString()}
+ * Generated from OpenAPI schema at ${timestamp}
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -456,19 +459,42 @@ async function main() {
     const schema = await fetchOpenAPISchema();
     console.log(`Fetched schema with ${Object.keys(schema.paths || {}).length} endpoints`);
 
-    // Generate client code
-    const clientCode = generateClientCode(schema);
+    // Check if file exists and read existing content
+    let existingCode = null;
+    let existingTimestamp = null;
+    if (existsSync(OUTPUT_FILE)) {
+      existingCode = await readFile(OUTPUT_FILE, 'utf-8');
+      // Extract timestamp from existing file
+      const timestampMatch = existingCode.match(/Generated from OpenAPI schema at (.+)/);
+      if (timestampMatch) {
+        existingTimestamp = timestampMatch[1];
+      }
+    }
 
-    // Ensure output directory exists
-    await mkdir(dirname(OUTPUT_FILE), { recursive: true });
+    // Generate client code with existing timestamp (to compare content)
+    const testTimestamp = existingTimestamp || new Date().toISOString();
+    const clientCode = generateClientCode(schema, testTimestamp);
 
-    // Write to file
-    await writeFile(OUTPUT_FILE, clientCode, 'utf-8');
-    console.log(`✅ Generated API client: ${OUTPUT_FILE}`);
+    // Compare content without timestamp
+    if (existingCode && existingCode === clientCode) {
+      console.log(`✅ API client unchanged: ${OUTPUT_FILE}`);
+      console.log('   Skipping write (no changes detected)');
+    } else {
+      // Content changed, generate with new timestamp
+      const newTimestamp = new Date().toISOString();
+      const updatedClientCode = generateClientCode(schema, newTimestamp);
 
-    // Count methods
-    const methodCount = (clientCode.match(/async \w+\(/g) || []).length;
-    console.log(`   Generated ${methodCount} methods`);
+      // Ensure output directory exists
+      await mkdir(dirname(OUTPUT_FILE), { recursive: true });
+
+      // Write to file
+      await writeFile(OUTPUT_FILE, updatedClientCode, 'utf-8');
+      console.log(`✅ Generated API client: ${OUTPUT_FILE}`);
+
+      // Count methods
+      const methodCount = (updatedClientCode.match(/async \w+\(/g) || []).length;
+      console.log(`   Generated ${methodCount} methods`);
+    }
 
   } catch (error) {
     console.error('❌ Error generating client:', error.message);

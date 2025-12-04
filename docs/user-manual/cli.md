@@ -458,6 +458,94 @@ npm run test:container
 
 **Note**: This command rebuilds the container each time. For faster iterations during development, use `npm run container:start` to keep a container running.
 
+## Release Commands
+
+### release:patch / release:minor / release:major
+
+Creates a new release with automatic version bumping, testing, and git tagging.
+
+```bash
+npm run release:patch   # Bump patch version (0.7.0 -> 0.7.1)
+npm run release:minor   # Bump minor version (0.7.0 -> 0.8.0)
+npm run release:major   # Bump major version (0.7.0 -> 1.0.0)
+```
+
+**Options**:
+
+- `--dry-run`: Test the release process without pushing changes
+- `--skip-tests`: Skip test execution (not recommended)
+
+**Examples**:
+
+```bash
+# Test release process without making changes
+npm run release:minor -- --dry-run
+
+# Create release and skip tests
+npm run release:patch -- --skip-tests
+
+# Combine options
+npm run release:minor -- --dry-run --skip-tests
+```
+
+**What it does**:
+
+1. Validates working directory is clean
+2. Fetches latest changes from remote
+3. Creates release branch if on main (for write-protected branches)
+4. Runs full test suite (unless `--skip-tests`)
+5. Regenerates API client if needed
+6. Bumps version in `package.json` and creates git commit
+7. Creates git tag (e.g., `v0.8.0`)
+8. Pushes branch and tag to remote (unless `--dry-run`)
+9. Attempts to create PR using GitHub CLI if available
+
+**Release workflow for write-protected main branch**:
+
+When running from the `main` branch, the script creates a release branch (e.g., `release/minor-1733320000`) and pushes it along with the tag. You then:
+
+1. Create a PR from the release branch to main
+2. Review and merge the PR
+3. GitHub Actions will build and publish the release using the pushed tag
+
+**Direct release workflow**:
+
+When running from a feature branch, the script pushes directly to that branch with the tag, suitable for testing or when working on non-protected branches.
+
+**Output example**:
+
+```
+🚀 Starting minor release process...
+
+📍 Current branch: main
+📦 Current version: 0.7.0
+
+📥 Fetching latest changes from remote...
+
+🔀 On main branch, creating release branch...
+✅ Created and switched to branch: release/minor-1733320000
+
+🧪 Running tests...
+✅ All tests passed
+
+🔄 Generating API client...
+
+⬆️  Bumping minor version...
+✅ Version bumped: 0.7.0 → 0.8.0
+
+📤 Pushing changes to remote...
+
+📋 Release branch pushed successfully!
+
+📝 Next steps:
+   1. Create a PR from release/minor-1733320000 to main
+   2. Review and merge the PR
+   3. The tag v0.8.0 has already been pushed
+   4. GitHub Actions will build and publish the release
+
+🎉 Release process complete!
+```
+
 ## Related Documentation
 
 - [User Management](../user-management.md) - Detailed user management guide

@@ -1,6 +1,6 @@
 {
     "name": "pdf-tei-editor",
-    "version": "0.7.0",
+    "version": "0.8.1",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
@@ -9,8 +9,9 @@
         "prepare": "husky",
         "test": "npm run test:all",
         "postinstall": "uv run python bin/download-pdfjs && npm run build",
-        "version-patch": "npm version patch -m 'Release v%s'",
-        "version-minor": "npm version minor -m 'Release v%s'",
+        "release:patch": "node bin/release.js patch",
+        "release:minor": "node bin/release.js minor",
+        "release:major": "node bin/release.js major",
         "generate-client": "node bin/generate-api-client.js app/src/modules/api-client-v1.js",
         "generate-client:check": "node bin/check-client-outdated.js",
         "manage": "node bin/manage.js",

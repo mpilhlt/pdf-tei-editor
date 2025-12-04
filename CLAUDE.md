@@ -150,6 +150,12 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - Omit discussion of the advantages of a particular solution unless specifically asked to discuss pros and cons or provide alternatives in a planning document.
 - When migrating code to a new state, do not mention the legacy state unless absolutely necessary (for example, when code is concerns with migration of data) and there is no need to discuss the improvements provided by the new solution. This also applies to writing in-code documentation and comments.
 
+## Commit messages and contributing best practices
+
+- When asked to document best practices for contributors, add information to [docs/development/contributing.md](docs/development/contributing.md)
+- This includes commit message conventions, code quality requirements, pull request guidelines, testing requirements, and release processes
+- Use conventional commit format: `<type>: <description>` where type is feat, fix, docs, refactor, test, or chore
+
 ## Completion documents and summaries
 
 - When told to work on a todo document or github issue, add a summary of what was done at the end of the document or issue comment.

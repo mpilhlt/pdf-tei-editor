@@ -1,40 +1,50 @@
 # PDF Viewer Title Bar Display Issues
 
 ## Context
+
 The PDF viewer has a headerbar that displays:
+
 - **Left side**: Title widget showing document title (format: "Author (Year) Title")
 - **Right side**: Filename widget showing doc_id
 
 ## Completed Changes
 
 ### 1. Fixed doc_id Display
+
 **File**: `app/src/plugins/pdfviewer.js:133`
 
 Changed from accessing non-existent `.file?.fileref` to `.file?.doc_id`:
+
 ```javascript
 filenameWidget.text = getFileDataById(state.pdf)?.file?.doc_id || ''
 ```
 
 ### 2. Updated Label Format in Backend
+
 **File**: `fastapi_app/routers/extraction.py:320-341`
 
 Changed label format from "Author, Title (Year)" to "Author (Year) Title":
+
 - Puts shorter author/date info first
 - Leaves more space for title to display before truncation
 - Example: "van Gestel (2013) Why Methodology Matters..."
 
 ### 3. Added Tooltip to Title Widget
+
 **File**: `app/src/plugins/pdfviewer.js:137-144`
 
 Added tooltip property to show full title on hover when truncated:
+
 ```javascript
 titleWidget.tooltip = title || 'PDF Document';
 ```
 
 ### 4. Enhanced CSS for Title Widget Ellipsis
+
 **File**: `app/src/modules/panels/status-bar.js:70-75`
 
 Updated CSS for `.title-widget` class:
+
 ```css
 ::slotted(.title-widget) {
   flex-grow: 1;
@@ -49,12 +59,15 @@ The `StatusText` component already had `text-overflow: ellipsis` configured.
 ## Remaining Issue: Minimum Width Threshold
 
 ### Problem
+
 On very narrow viewports, the title gets compressed to unusable text like "van..." which provides no context. The title widget should be completely hidden when the available space becomes too narrow to be useful (< 100px).
 
 ### Attempted Solution
+
 **File**: `app/src/modules/panels/status-bar.js:158-215`
 
 Added `checkTitleWidgetMinimumWidth()` method that:
+
 1. Calculates available space for title widget by subtracting other widgets' widths
 2. Hides title widget when available space < 100px
 3. Shows title widget when available space >= 100px

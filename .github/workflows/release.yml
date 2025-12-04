@@ -1,0 +1,136 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog generation
+
+      - name: Get previous tag
+        id: previoustag
+        run: |
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${{ github.ref_name }}$" | head -n 1)
+          echo "tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREVIOUS_TAG"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG="${{ steps.previoustag.outputs.tag }}"
+          CURRENT_TAG="${{ github.ref_name }}"
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # First release - get all commits
+            COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges)
+          else
+            # Get commits between tags
+            COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges ${PREVIOUS_TAG}..${CURRENT_TAG})
+          fi
+
+          # Parse commits by conventional commit type, filtering out chore
+          FEATURES=""
+          FIXES=""
+          DOCS=""
+          REFACTOR=""
+          TESTS=""
+          OTHER=""
+
+          while IFS= read -r commit; do
+            # Skip empty lines
+            [ -z "$commit" ] && continue
+
+            # Extract type from conventional commit format
+            if [[ "$commit" =~ ^feat[:\(] ]]; then
+              FEATURES="${FEATURES}- ${commit#feat: }\n"
+            elif [[ "$commit" =~ ^fix[:\(] ]]; then
+              FIXES="${FIXES}- ${commit#fix: }\n"
+            elif [[ "$commit" =~ ^docs[:\(] ]]; then
+              DOCS="${DOCS}- ${commit#docs: }\n"
+            elif [[ "$commit" =~ ^refactor[:\(] ]]; then
+              REFACTOR="${REFACTOR}- ${commit#refactor: }\n"
+            elif [[ "$commit" =~ ^test[:\(] ]]; then
+              TESTS="${TESTS}- ${commit#test: }\n"
+            elif [[ "$commit" =~ ^chore[:\(] ]]; then
+              # Skip chore commits
+              continue
+            else
+              # Include non-conventional commits
+              OTHER="${OTHER}- ${commit}\n"
+            fi
+          done <<< "$COMMITS"
+
+          # Create changelog with Docker Hub link
+          DOCKER_IMAGE_TAG="${CURRENT_TAG#v}"  # Remove 'v' prefix for Docker tag
+
+          {
+            echo "## Changes"
+            echo ""
+
+            if [ -n "$FEATURES" ]; then
+              echo "### Features"
+              echo ""
+              echo -e "$FEATURES"
+            fi
+
+            if [ -n "$FIXES" ]; then
+              echo "### Bug Fixes"
+              echo ""
+              echo -e "$FIXES"
+            fi
+
+            if [ -n "$DOCS" ]; then
+              echo "### Documentation"
+              echo ""
+              echo -e "$DOCS"
+            fi
+
+            if [ -n "$REFACTOR" ]; then
+              echo "### Refactoring"
+              echo ""
+              echo -e "$REFACTOR"
+            fi
+
+            if [ -n "$TESTS" ]; then
+              echo "### Tests"
+              echo ""
+              echo -e "$TESTS"
+            fi
+
+            if [ -n "$OTHER" ]; then
+              echo "### Other Changes"
+              echo ""
+              echo -e "$OTHER"
+            fi
+
+            echo "## Docker Image"
+            echo ""
+            echo '```bash'
+            echo "docker pull cboulanger/pdf-tei-editor:${DOCKER_IMAGE_TAG}"
+            echo "docker pull cboulanger/pdf-tei-editor:latest"
+            echo '```'
+            echo ""
+            echo "[View on Docker Hub](https://hub.docker.com/r/cboulanger/pdf-tei-editor/tags?name=${DOCKER_IMAGE_TAG})"
+          } > changelog.md
+
+          echo "Changelog generated"
+          cat changelog.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: changelog.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
