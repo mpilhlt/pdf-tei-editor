@@ -7,10 +7,11 @@
  * write-protected main branch by creating release via PR workflow.
  *
  * Usage:
- *   node bin/release.js patch            # Bump patch version (0.7.0 -> 0.7.1)
- *   node bin/release.js minor            # Bump minor version (0.7.0 -> 0.8.0)
- *   node bin/release.js major            # Bump major version (0.7.0 -> 1.0.0)
- *   node bin/release.js patch --dry-run  # Test without pushing
+ *   node bin/release.js patch                  # Bump patch version (0.7.0 -> 0.7.1)
+ *   node bin/release.js minor                  # Bump minor version (0.7.0 -> 0.8.0)
+ *   node bin/release.js major                  # Bump major version (0.7.0 -> 1.0.0)
+ *   node bin/release.js patch --dry-run        # Test without pushing
+ *   node bin/release.js minor --skip-tests     # Skip test execution
  */
 
 import { execSync } from 'child_process';
@@ -18,6 +19,7 @@ import { readFileSync } from 'fs';
 
 const VALID_TYPES = ['patch', 'minor', 'major'];
 let DRY_RUN = false;
+let SKIP_TESTS = false;
 
 /**
  * Execute command and return output
@@ -119,21 +121,26 @@ function release(releaseType) {
   }
 
   // Run tests
-  console.log('\n🧪 Running tests...');
-  try {
-    exec('npm run test:all');
-    console.log('✅ All tests passed');
-  } catch (error) {
-    console.error('❌ Tests failed. Cannot proceed with release.');
-    process.exit(1);
+  if (SKIP_TESTS) {
+    console.log('\n⚠️  Skipping tests (--skip-tests flag provided)');
+  } else {
+    console.log('\n🧪 Running tests...');
+    try {
+      exec('npm run test:all');
+      console.log('✅ All tests passed');
+    } catch (error) {
+      console.error('❌ Tests failed. Cannot proceed with release.');
+      process.exit(1);
+    }
   }
 
   // Generate API client to ensure it's up to date
   console.log('\n🔄 Generating API client...');
   exec('npm run generate-client');
 
-  // Check if there are any changes after client generation
-  if (!isWorkingDirectoryClean()) {
+  // Check if API client was changed after generation
+  const apiClientStatus = exec('git status --porcelain app/src/modules/api-client-v1.js', true);
+  if (apiClientStatus.length > 0) {
     console.log('⚠️  API client was regenerated. Committing changes...');
     exec('git add app/src/modules/api-client-v1.js', false, true);
     exec('git commit -m "Update API client before release"', false, true);
@@ -205,20 +212,23 @@ function release(releaseType) {
 const args = process.argv.slice(2);
 const releaseType = args[0];
 const dryRunFlag = args.includes('--dry-run');
+const skipTestsFlag = args.includes('--skip-tests');
 
 if (!releaseType) {
   console.error('\n❌ Missing release type argument\n');
   console.error('Usage:');
-  console.error('  node bin/release.js patch            # Bump patch version (0.7.0 -> 0.7.1)');
-  console.error('  node bin/release.js minor            # Bump minor version (0.7.0 -> 0.8.0)');
-  console.error('  node bin/release.js major            # Bump major version (0.7.0 -> 1.0.0)');
-  console.error('  node bin/release.js patch --dry-run  # Test without pushing\n');
+  console.error('  node bin/release.js patch                  # Bump patch version (0.7.0 -> 0.7.1)');
+  console.error('  node bin/release.js minor                  # Bump minor version (0.7.0 -> 0.8.0)');
+  console.error('  node bin/release.js major                  # Bump major version (0.7.0 -> 1.0.0)');
+  console.error('  node bin/release.js patch --dry-run        # Test without pushing');
+  console.error('  node bin/release.js minor --skip-tests     # Skip test execution\n');
   console.error('');
   process.exit(1);
 }
 
-// Set dry-run mode
+// Set flags
 DRY_RUN = dryRunFlag;
+SKIP_TESTS = skipTestsFlag;
 
 // Run release
 release(releaseType);
