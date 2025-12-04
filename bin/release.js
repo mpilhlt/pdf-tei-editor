@@ -170,7 +170,7 @@ function release(releaseType) {
 
   // Bump version using npm version command
   console.log(`\n⬆️  Bumping ${releaseType} version...`);
-  exec(`npm version ${releaseType} -m "Release v%s"`, false, true);
+  exec(`npm version ${releaseType} -m "chore(release): v%s"`, false, true);
 
   // Get new version (in dry-run, simulate the version bump)
   let newVersion;
