@@ -124,9 +124,31 @@ function release(releaseType) {
   if (SKIP_TESTS) {
     console.log('\n⚠️  Skipping tests (--skip-tests flag provided)');
   } else {
-    console.log('\n🧪 Running tests...');
+    // Get files changed since last release tag
+    let changedFilesSinceLastTag;
     try {
-      exec('npm run test:all');
+      const lastTag = exec('git describe --tags --abbrev=0 2>/dev/null', true);
+      if (lastTag) {
+        console.log(`\n🧪 Running tests for files changed since ${lastTag}...`);
+        changedFilesSinceLastTag = exec(`git diff --name-only ${lastTag} HEAD`, true);
+      } else {
+        console.log('\n🧪 No previous release tag found, running all tests...');
+        changedFilesSinceLastTag = '';
+      }
+    } catch {
+      console.log('\n🧪 Could not determine last release tag, running all tests...');
+      changedFilesSinceLastTag = '';
+    }
+
+    try {
+      if (changedFilesSinceLastTag) {
+        // Pass changed files to smart test runner
+        const files = changedFilesSinceLastTag.split('\n').filter(f => f.trim()).join(' ');
+        exec(`node tests/smart-test-runner.js ${files}`);
+      } else {
+        // Run all tests if we can't determine changed files
+        exec('npm run test:all');
+      }
       console.log('✅ All tests passed');
     } catch (error) {
       console.error('❌ Tests failed. Cannot proceed with release.');
