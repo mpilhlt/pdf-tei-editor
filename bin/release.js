@@ -63,33 +63,10 @@ function isWorkingDirectoryClean() {
 }
 
 /**
- * Confirm action with user
- * @param {string} message - Message to display
- * @returns {boolean} True if confirmed
- */
-function confirm(message) {
-  console.log(`\n${message}`);
-  console.log('Press Enter to continue, or Ctrl+C to cancel...');
-
-  // In non-interactive mode, assume yes
-  if (!process.stdin.isTTY) {
-    return true;
-  }
-
-  const { readFileSync: readSync } = await import('fs');
-  try {
-    readSync(0, 'utf8');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Main release function
  * @param {string} releaseType - Type of release (patch, minor, major)
  */
-async function release(releaseType) {
+function release(releaseType) {
   console.log(`\n🚀 Starting ${releaseType} release process...\n`);
 
   // Validate release type
@@ -207,7 +184,4 @@ if (!releaseType) {
 }
 
 // Run release
-release(releaseType).catch(error => {
-  console.error('\n❌ Release failed:', error.message);
-  process.exit(1);
-});
+release(releaseType);
