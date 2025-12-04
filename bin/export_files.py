@@ -37,7 +37,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Export all gold files with default grouping (by type: pdf/, tei/)
+  # Export all gold files with default grouping (by collection)
   python bin/export_files.py export/
 
   # Export specific collections
@@ -68,9 +68,9 @@ Examples:
   python bin/export_files.py --dry-run export/
 
 Grouping Strategies:
-  type (default):  export/pdf/, export/tei/, export/versions/
-  collection:      export/corpus1/pdf/, export/corpus1/tei/, ...
-  variant:         export/pdf/, export/grobid-0.8.1/, export/metatei/, ...
+  collection (default): export/corpus1/, export/corpus2/, ...
+  type:                 export/pdf/, export/tei/, export/versions/
+  variant:              export/pdf/, export/grobid-0.8.1/, export/metatei/, ...
 
 Filename Format:
   PDFs:               <doc_id>.pdf
@@ -88,8 +88,8 @@ Filename Format:
     parser.add_argument('--regex', help='Regular expression to filter filenames')
     parser.add_argument('--versions', action='store_true',
                        help='Include versioned TEI files (default: only gold files)')
-    parser.add_argument('--group-by', choices=['type', 'collection', 'variant'], default='type',
-                       help='Directory grouping strategy (default: type)')
+    parser.add_argument('--group-by', choices=['type', 'collection', 'variant'], default='collection',
+                       help='Directory grouping strategy (default: collection)')
     parser.add_argument('--transform-filename', metavar='EXPR', action='append',
                        help='sed-style filename transformation (/search/replace/), can be specified multiple times')
     parser.add_argument('--db-path', help='Database path (default: data/db/metadata.db)')

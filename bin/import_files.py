@@ -87,15 +87,23 @@ Examples:
                        help='Do not scan subdirectories')
     parser.add_argument('--clean', action='store_true',
                        help='Clear all existing data from database before importing')
-    parser.add_argument('--gold-dir-name', default='tei',
-                       help='Name of directory containing gold standard files (default: tei). '
-                            'Only used if --gold-pattern is not specified.')
+    parser.add_argument('--gold-dir-name', default=None,
+                       help='Name of directory containing gold standard files. '
+                            'Only used if --gold-pattern is not specified. '
+                            'If neither --gold-pattern nor --gold-dir-name is provided, '
+                            'files without .vN. version markers are treated as gold (default behavior).')
     parser.add_argument('--gold-pattern',
                        help='Regular expression pattern to detect gold standard files. '
                             'Can match either the full path or filename. If matched in filename, '
                             'the pattern is stripped before parsing doc_id. '
                             'Examples: r\'\\.gold\\.\' for .gold. in name, r\'_gold_\' for _gold_ in name. '
                             'Default: matches files in directory with name from --gold-dir-name.')
+    parser.add_argument('--version-pattern',
+                       help='Regular expression pattern to detect and strip version markers from filenames '
+                            'for matching purposes. Allows multiple versions of a file to match with the same PDF. '
+                            'Examples: r\'\\.version\\d+\\.\' for .version1., .version2., etc.; '
+                            'r\'-v\\d+-\' for -v1-, -v2-, etc. '
+                            'Default: None (no version pattern stripping).')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
     args = parser.parse_args()
@@ -138,15 +146,19 @@ Examples:
     skip_dirs = args.skip_dirs if args.recursive_collections else None
     importer = FileImporter(
         db, storage, repo, args.dry_run, skip_dirs,
-        args.gold_dir_name, args.gold_pattern
+        args.gold_dir_name, args.gold_pattern, args.version_pattern
     )
 
     # Import
     logger.info(f"Importing from {directory}")
     if args.gold_pattern:
         logger.info(f"Gold standard pattern: {args.gold_pattern}")
-    else:
+    elif args.gold_dir_name:
         logger.info(f"Gold standard directory: {args.gold_dir_name}")
+    else:
+        logger.info("Gold standard detection: files without .vN. version markers")
+    if args.version_pattern:
+        logger.info(f"Version pattern: {args.version_pattern}")
     if args.recursive_collections:
         logger.info("Using subdirectory names as collection names")
         logger.info(f"Skipping directories: {', '.join(args.skip_dirs)}")

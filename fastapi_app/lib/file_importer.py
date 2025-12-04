@@ -56,8 +56,9 @@ class FileImporter:
         repo: FileRepository,
         dry_run: bool = False,
         skip_collection_dirs: Optional[List[str]] = None,
-        gold_dir_name: str = 'tei',
-        gold_pattern: Optional[str] = None
+        gold_dir_name: Optional[str] = None,
+        gold_pattern: Optional[str] = None,
+        version_pattern: Optional[str] = None
     ):
         """
         Args:
@@ -78,13 +79,20 @@ class FileImporter:
                   - '/tei/' - files in 'tei' directory (default behavior)
                   - r'\.gold\.' - files with '.gold.' in name (e.g., 'xyz.gold.tei.xml')
                   - '_gold_' - files with '_gold_' in name
+            version_pattern: Regular expression pattern to detect and strip version markers
+                from filenames for matching purposes. If matched in filename, the pattern
+                is stripped before matching with PDF files.
+                Examples:
+                  - r'\.v\d+\.' - matches '.v1.', '.v2.', etc. (default)
+                  - r'\.version\d+\.' - matches '.version1.', '.version2.', etc.
+                Default: r'\.v\d+\.' (matches .v1., .v2., etc.)
         """
         self.db = db
         self.storage = storage
         self.repo = repo
         self.dry_run = dry_run
         self.resolver = DocIdResolver()
-        self.gold_dir_name = gold_dir_name.lower()
+        self.gold_dir_name = gold_dir_name.lower() if gold_dir_name else None
         self.skip_collection_dirs = set(
             (name.lower() for name in skip_collection_dirs)
             if skip_collection_dirs else []
@@ -97,10 +105,24 @@ class FileImporter:
             except re.error as e:
                 logger.error(f"Invalid gold pattern '{gold_pattern}': {e}")
                 raise ValueError(f"Invalid gold pattern: {e}")
-        else:
-            # Default: match files in 'tei' directory (platform-independent)
+        elif gold_dir_name:
+            # If gold_dir_name is provided but no pattern, create directory pattern
             # Match /tei/ or \tei\ in path
             self.gold_pattern = re.compile(r'[/\\]' + re.escape(gold_dir_name) + r'[/\\]')
+        else:
+            # No pattern - use version marker logic instead
+            self.gold_pattern = None
+
+        # Compile version pattern regex
+        if version_pattern:
+            try:
+                self.version_pattern = re.compile(version_pattern)
+            except re.error as e:
+                logger.error(f"Invalid version pattern '{version_pattern}': {e}")
+                raise ValueError(f"Invalid version pattern: {e}")
+        else:
+            # Default: match .vN. pattern (.v1., .v2., etc.)
+            self.version_pattern = re.compile(r'\.v\d+\.')
 
         self.stats: ImportStats = {
             'files_scanned': 0,
@@ -250,20 +272,32 @@ class FileImporter:
 
     def _normalize_filename_for_matching(self, path: Path) -> Path:
         """
-        Normalize filename for doc_id matching by stripping gold pattern.
+        Normalize filename for doc_id matching by stripping gold and version patterns.
 
         If gold pattern matches the filename, strip it for matching purposes.
         This allows 'xyz.gold.tei.xml' to match with 'xyz.pdf' when using
         filename-based gold detection.
 
+        If version pattern matches the filename, strip it for matching purposes.
+        This allows 'xyz.version1.tei.xml' and 'xyz.version2.tei.xml' to match
+        with 'xyz.pdf' when using version patterns.
+
         Returns:
             Path with normalized filename for matching
         """
         filename = path.name
-        if self.gold_pattern.search(filename):
-            # Strip pattern from filename
-            cleaned_filename = self.gold_pattern.sub('', filename)
-            # Return path with cleaned filename
+        cleaned_filename = filename
+
+        # Strip gold pattern if present
+        if self.gold_pattern and self.gold_pattern.search(cleaned_filename):
+            cleaned_filename = self.gold_pattern.sub('', cleaned_filename)
+
+        # Strip version pattern if present
+        if self.version_pattern and self.version_pattern.search(cleaned_filename):
+            cleaned_filename = self.version_pattern.sub('', cleaned_filename)
+
+        # Return path with cleaned filename if anything changed
+        if cleaned_filename != filename:
             return path.parent / cleaned_filename
         return path
 
@@ -498,20 +532,31 @@ class FileImporter:
         # Extract variant from TEI metadata
         variant = metadata.get('variant')
 
-        # Determine if this is a gold standard file using pattern matching
-        # Test both full path and filename against the pattern
-        full_path_str = str(tei_path.as_posix())  # Platform-independent path
+        # Determine if this is a gold standard file
+        # Default: gold = file without .vN. version marker in filename
+        # Can be overridden with gold_pattern (for legacy imports)
         filename = tei_path.name
 
-        is_gold = bool(self.gold_pattern.search(full_path_str))
+        # Check for version marker (.v1., .v2., etc.)
+        has_version_marker = bool(re.search(r'\.v\d+\.', filename))
 
-        # If pattern matches filename, strip it for doc_id determination
-        # This allows patterns like '.gold.' to mark files and be stripped
-        # e.g., 'xyz.gold.tei.xml' -> 'xyz.tei.xml' for doc_id parsing
-        if self.gold_pattern.search(filename):
-            # Strip pattern from filename for doc_id resolution
-            cleaned_filename = self.gold_pattern.sub('', filename)
-            logger.debug(f"Stripped gold pattern from filename: {filename} -> {cleaned_filename}")
+        # If gold_pattern is provided, use it (for backward compatibility)
+        # Otherwise, use version marker logic: no version = gold
+        if self.gold_pattern:
+            full_path_str = str(tei_path.as_posix())
+            is_gold = bool(self.gold_pattern.search(full_path_str))
+
+            # If pattern matches filename, strip it for doc_id determination
+            # This allows patterns like '.gold.' to mark files and be stripped
+            # e.g., 'xyz.gold.tei.xml' -> 'xyz.tei.xml' for doc_id parsing
+            if self.gold_pattern.search(filename):
+                # Strip pattern from filename for doc_id resolution
+                cleaned_filename = self.gold_pattern.sub('', filename)
+                logger.debug(f"Stripped gold pattern from filename: {filename} -> {cleaned_filename}")
+        else:
+            # Default behavior: files without version marker are gold
+            is_gold = not has_version_marker
+            logger.debug(f"Gold determination for {filename}: has_version_marker={has_version_marker}, is_gold={is_gold}")
 
         # Determine version number by counting existing files with same doc_id + variant
         # Version numbering is sequential: 0, 1, 2, 3...
