@@ -161,8 +161,7 @@ function release(releaseType) {
 
   // Push the branch and tags
   console.log('\n📤 Pushing changes to remote...');
-  exec(`git push origin ${releaseBranch}`, false, true);
-  exec(`git push origin v${newVersion}`, false, true);
+  exec(`git push --follow-tags origin ${releaseBranch}`, false, true);
 
   // If we created a release branch, prompt for PR creation
   if (currentBranch === 'main') {
