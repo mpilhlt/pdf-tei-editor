@@ -113,6 +113,9 @@ def get_collection(
 
     try:
         all_collections = get_collections_with_details(settings.db_dir)
+        if all_collections is None:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
         collection = find_collection(collection_id, all_collections)
 
         if not collection:
@@ -203,6 +206,9 @@ def update_collection(
     try:
         # Check if collection exists
         all_collections = get_collections_with_details(settings.db_dir)
+        if all_collections is None:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
         existing = find_collection(collection_id, all_collections)
 
         if not existing:

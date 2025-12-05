@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-04T08:46:35.096Z
+ * Generated from OpenAPI schema at 2025-12-05T23:06:12.610Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -40,6 +40,11 @@
  */
 
 /**
+ * @typedef {Object} Body_import_files_api_v1_import_post
+ * @property {string} file - Zip archive containing files to import
+ */
+
+/**
  * @typedef {Object} Body_upload_file_api_v1_files_upload_post
  * @property {string} file
  */
@@ -60,6 +65,14 @@
  * @property {string} id - Unique collection identifier
  * @property {string} name - Display name for the collection
  * @property {string=} description - Collection description
+ */
+
+/**
+ * @typedef {Object} CollectionDeleteResponse
+ * @property {boolean} success - Whether deletion was successful
+ * @property {string} collection_id - ID of the deleted collection
+ * @property {number} files_updated - Number of files updated (collection removed)
+ * @property {number} files_deleted - Number of files marked as deleted
  */
 
 /**
@@ -611,15 +624,20 @@ export class ApiClientV1 {
   }
 
   /**
-   * Delete a collection.
+   * Delete a collection and clean up file metadata.
+   * For each file in the collection:
+   * - Removes the collection from the file's collections list
+   * - If the file has no other collections, marks it as deleted
    * Args:
    * collection_id: Collection identifier
    * current_user: Current user dict (injected)
+   * Returns:
+   * CollectionDeleteResponse with deletion statistics
    * Raises:
    * HTTPException: 404 if collection not found
    *
    * @param {string} collection_id
-   * @returns {Promise<void>}
+   * @returns {Promise<CollectionDeleteResponse>}
    */
   async deleteCollections(collection_id) {
     const endpoint = `/collections/${collection_id}`
@@ -1164,6 +1182,36 @@ export class ApiClientV1 {
   async filesHeartbeat(requestBody) {
     const endpoint = `/files/heartbeat`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Export files as a downloadable zip archive.
+   * Requires valid session authentication. Exports files filtered by:
+   * - Collections: If specified, only those collections (filtered by user access)
+   * - Variants: Optional variant filtering with glob pattern support
+   * - User access control: Only collections user has access to
+   * Args:
+   * collections: Comma-separated collection names (optional)
+   * variants: Comma-separated variant names (optional)
+   * include_versions: Include versioned TEI files (default: False)
+   * group_by: Directory grouping: "type", "collection", or "variant"
+   * db: Database manager (injected)
+   * repo: File repository (injected)
+   * storage: File storage (injected)
+   * current_user: Current user dict (injected)
+   * Returns:
+   * FileResponse with zip archive for download
+   *
+   * @param {Object=} params - Query parameters
+   * @param {(string | null)=} params.collections
+   * @param {(string | null)=} params.variants
+   * @param {boolean=} params.include_versions
+   * @param {string=} params.group_by
+   * @returns {Promise<any>}
+   */
+  async export(params) {
+    const endpoint = `/export`
+    return this.callApi(endpoint, 'GET', params);
   }
 
   /**
