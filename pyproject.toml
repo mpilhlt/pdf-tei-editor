@@ -32,6 +32,7 @@ dev = [
     "pydeps>=3.0.1",
     "pytest>=8.4.0",
     "pytest-tap>=3.3",
+    "send2trash>=1.8.0",
     "wsgidav>=4.3.0",
 ]
 
