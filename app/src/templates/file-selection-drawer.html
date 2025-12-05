@@ -1,5 +1,5 @@
 <!-- File selection drawer -->
-<sl-drawer name="fileDrawer" label="Select Document" placement="start" style="--size: 400px;">
+<sl-drawer name="fileDrawer" label="Collection &amp; Files" placement="start" style="--size: 400px;">
   <div style="display: flex; flex-direction: column; height: 100%;">
     
     <!-- Filter area at top -->
@@ -37,7 +37,7 @@
     
   </div>
   
-  <!-- Footer with import, export, and close buttons -->
+  <!-- Footer with import, export, delete, and close buttons -->
   <div slot="footer" style="display: flex; justify-content: space-between; padding: 1rem; border-top: 1px solid var(--sl-color-neutral-200);">
     <div style="display: flex; gap: 0.5rem;">
       <sl-tooltip content="Import files from ZIP archive">
@@ -50,6 +50,12 @@
         <sl-button name="exportButton" variant="primary" size="small" disabled>
           <sl-icon name="download" slot="prefix"></sl-icon>
           Export
+        </sl-button>
+      </sl-tooltip>
+      <sl-tooltip content="Delete selected collection">
+        <sl-button name="deleteButton" variant="danger" size="small" disabled>
+          <sl-icon name="trash" slot="prefix"></sl-icon>
+          Delete
         </sl-button>
       </sl-tooltip>
     </div>

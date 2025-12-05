@@ -240,17 +240,32 @@ def update_collection(
         raise HTTPException(status_code=500, detail=f"Error updating collection: {str(e)}")
 
 
-@router.delete("/{collection_id}", status_code=204)
+class CollectionDeleteResponse(BaseModel):
+    """Response model for collection deletion."""
+    success: bool = Field(..., description="Whether deletion was successful")
+    collection_id: str = Field(..., description="ID of the deleted collection")
+    files_updated: int = Field(..., description="Number of files updated (collection removed)")
+    files_deleted: int = Field(..., description="Number of files marked as deleted")
+
+
+@router.delete("/{collection_id}", response_model=CollectionDeleteResponse)
 def delete_collection(
     collection_id: str,
     current_user: dict = Depends(require_admin)
 ):
     """
-    Delete a collection.
+    Delete a collection and clean up file metadata.
+
+    For each file in the collection:
+    - Removes the collection from the file's collections list
+    - If the file has no other collections, marks it as deleted
 
     Args:
         collection_id: Collection identifier
         current_user: Current user dict (injected)
+
+    Returns:
+        CollectionDeleteResponse with deletion statistics
 
     Raises:
         HTTPException: 404 if collection not found
@@ -258,11 +273,20 @@ def delete_collection(
     settings = get_settings()
 
     try:
-        success, message = remove_collection(settings.db_dir, collection_id)
+        success, message, stats = remove_collection(settings.db_dir, collection_id)
 
         if success:
-            logger.info(f"Collection '{collection_id}' deleted by user '{current_user.get('username')}'")
-            return
+            logger.info(
+                f"Collection '{collection_id}' deleted by user '{current_user.get('username')}': "
+                f"{stats.get('files_updated', 0)} files updated, "
+                f"{stats.get('files_deleted', 0)} files deleted"
+            )
+            return CollectionDeleteResponse(
+                success=True,
+                collection_id=collection_id,
+                files_updated=stats.get('files_updated', 0),
+                files_deleted=stats.get('files_deleted', 0)
+            )
         else:
             raise HTTPException(status_code=404, detail=message)
     except HTTPException:

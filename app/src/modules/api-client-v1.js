@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-05T12:35:24.774Z
+ * Generated from OpenAPI schema at 2025-12-05T22:28:50.482Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -65,6 +65,14 @@
  * @property {string} id - Unique collection identifier
  * @property {string} name - Display name for the collection
  * @property {string=} description - Collection description
+ */
+
+/**
+ * @typedef {Object} CollectionDeleteResponse
+ * @property {boolean} success - Whether deletion was successful
+ * @property {string} collection_id - ID of the deleted collection
+ * @property {number} files_updated - Number of files updated (collection removed)
+ * @property {number} files_deleted - Number of files marked as deleted
  */
 
 /**
@@ -616,15 +624,20 @@ export class ApiClientV1 {
   }
 
   /**
-   * Delete a collection.
+   * Delete a collection and clean up file metadata.
+   * For each file in the collection:
+   * - Removes the collection from the file's collections list
+   * - If the file has no other collections, marks it as deleted
    * Args:
    * collection_id: Collection identifier
    * current_user: Current user dict (injected)
+   * Returns:
+   * CollectionDeleteResponse with deletion statistics
    * Raises:
    * HTTPException: 404 if collection not found
    *
    * @param {string} collection_id
-   * @returns {Promise<void>}
+   * @returns {Promise<CollectionDeleteResponse>}
    */
   async deleteCollections(collection_id) {
     const endpoint = `/collections/${collection_id}`

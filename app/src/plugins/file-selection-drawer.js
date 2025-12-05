@@ -29,6 +29,7 @@
  * @property {SlButton} importButton
  * @property {HTMLInputElement} importFileInput
  * @property {SlButton} exportButton
+ * @property {SlButton} deleteButton
  * @property {SlButton} closeDrawer
  */
 import ui, { updateUi, SlOption } from '../ui.js'
@@ -186,6 +187,13 @@ async function install(state) {
     }
   });
 
+  // Handle delete button
+  ui.fileDrawer.deleteButton.addEventListener('click', async () => {
+    if (currentState) {
+      await handleDelete(currentState);
+    }
+  });
+
   // Handle import button
   ui.fileDrawer.importButton.addEventListener('click', () => {
     // Trigger hidden file input
@@ -234,11 +242,11 @@ function close() {
 async function update(state) {
   // Store current state for lazy loading
   currentState = state;
-  
+
   // Check if relevant state properties have changed
   if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData') && state.fileData) {
     await populateVariantSelect(state);
-    
+
     // Only populate tree if drawer is visible, otherwise mark for lazy update
     const drawer = ui.fileDrawer;
     if (drawer && drawer.open) {
@@ -247,16 +255,47 @@ async function update(state) {
       needsTreeUpdate = true;
     }
   }
-  
+
   // Always update selected values (with guard to prevent triggering events)
   if (ui.fileDrawer?.variantSelect) {
-    
+
     isUpdatingProgrammatically = true;
     try {
       ui.fileDrawer.variantSelect.value = state.variant || "";
     } finally {
       isUpdatingProgrammatically = false;
     }
+  }
+
+  // Update button visibility based on user role
+  updateButtonVisibility(state);
+}
+
+/**
+ * Updates the visibility of import/export/delete buttons based on user role
+ * @param {ApplicationState} state
+ */
+function updateButtonVisibility(state) {
+  const user = state.user;
+  const hasReviewerRole = user && user.roles && (
+    user.roles.includes('*') ||
+    user.roles.includes('admin') ||
+    user.roles.includes('reviewer')
+  );
+
+  // Show buttons only if user has reviewer role or higher
+  const importButton = ui.fileDrawer.importButton;
+  const exportButton = ui.fileDrawer.exportButton;
+  const deleteButton = ui.fileDrawer.deleteButton;
+
+  if (hasReviewerRole) {
+    importButton.style.display = '';
+    exportButton.style.display = '';
+    deleteButton.style.display = '';
+  } else {
+    importButton.style.display = 'none';
+    exportButton.style.display = 'none';
+    deleteButton.style.display = 'none';
   }
 }
 
@@ -685,11 +724,17 @@ function onSelectAllChange() {
 }
 
 /**
- * Updates the export button enabled/disabled state based on selected collections
+ * Updates the export and delete button enabled/disabled state based on selected collections
  */
 function updateExportButtonState() {
   const exportButton = ui.fileDrawer.exportButton;
-  exportButton.disabled = selectedCollections.size === 0;
+  const deleteButton = ui.fileDrawer.deleteButton;
+
+  const hasSelection = selectedCollections.size > 0;
+  exportButton.disabled = !hasSelection;
+
+  // Delete button is only enabled for exactly one selected collection
+  deleteButton.disabled = selectedCollections.size !== 1;
 }
 
 /**
@@ -817,5 +862,95 @@ async function handleImport(state) {
     const importButton = ui.fileDrawer.importButton;
     importButton.disabled = false;
     importButton.loading = false;
+  }
+}
+
+/**
+ * Handles delete button click with confirmation
+ * @param {ApplicationState} state
+ */
+async function handleDelete(state) {
+  // Should only be enabled for exactly one collection
+  if (selectedCollections.size !== 1) {
+    logger.warn("Delete button clicked but selection count is not 1");
+    return;
+  }
+
+  const collectionId = Array.from(selectedCollections)[0];
+
+  // Get collection name for confirmation dialog
+  const collectionName = getCollectionName(collectionId, state.collections);
+
+  // Show confirmation dialog
+  const confirmed = confirm(
+    `Do you really want to delete collection '${collectionName}' and its content?\n\n` +
+    `This will remove the collection and mark all files that are only in this collection as deleted.`
+  );
+
+  if (!confirmed) {
+    logger.debug(`Collection deletion cancelled by user: ${collectionId}`);
+    return;
+  }
+
+  if (!state.sessionId) {
+    logger.error("Cannot delete collection: no session ID available");
+    notify("Cannot delete collection: not authenticated", "danger", "exclamation-triangle");
+    return;
+  }
+
+  logger.info(`Deleting collection: ${collectionId}`);
+
+  try {
+    // Disable delete button during operation
+    const deleteButton = ui.fileDrawer.deleteButton;
+    deleteButton.disabled = true;
+    deleteButton.loading = true;
+
+    // Call DELETE endpoint
+    const url = `/api/v1/collections/${encodeURIComponent(collectionId)}`;
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'X-Session-ID': state.sessionId
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || `Delete failed: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    logger.info(
+      `Collection '${collectionId}' deleted: ${result.files_updated} files updated, ` +
+      `${result.files_deleted} files deleted`
+    );
+
+    // Show success message
+    let message = `Collection '${collectionName}' deleted successfully.`;
+    if (result.files_updated > 0 || result.files_deleted > 0) {
+      message += ` ${result.files_updated} files updated, ${result.files_deleted} files deleted.`;
+    }
+    notify(message, "success", "check-circle");
+
+    // Clear selection
+    selectedCollections.clear();
+    updateExportButtonState();
+
+    // Close drawer
+    close();
+
+    // Reload file data to reflect changes
+    await FiledataPlugin.getInstance().reload({ refresh: true });
+
+  } catch (error) {
+    logger.error("Delete failed: " + String(error));
+    notify(`Delete failed: ${error.message}`, "danger", "exclamation-octagon");
+  } finally {
+    // Re-enable delete button
+    const deleteButton = ui.fileDrawer.deleteButton;
+    deleteButton.disabled = selectedCollections.size !== 1;
+    deleteButton.loading = false;
   }
 }
