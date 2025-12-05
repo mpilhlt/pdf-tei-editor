@@ -326,9 +326,11 @@ const log = await waitForTestMessage(consoleLogs, 'FILE_SAVED');
 expect(log.value.file_id).toBeTruthy();
 ```
 
-### Checking Disabled State for Shoelace Components
+### Checking State for Shoelace Components
 
-Playwright's `toBeDisabled()` and `toBeEnabled()` check the accessibility tree state, which doesn't always align with Shoelace web component's `disabled` attribute. Use attribute checks instead:
+Playwright's accessibility-based matchers don't work properly with Shoelace web components. Always check attributes directly:
+
+**Disabled State:**
 
 ```javascript
 // ❌ WRONG - May fail for Shoelace components
@@ -340,7 +342,19 @@ await expect(button).toHaveAttribute('disabled', '');  // Disabled
 await expect(button).not.toHaveAttribute('disabled'); // Enabled
 ```
 
-This applies to all Shoelace components (`<sl-button>`, `<sl-input>`, etc.) that use the `disabled` attribute.
+**Checked State:**
+
+```javascript
+// ❌ WRONG - Fails with "Not a checkbox or radio button"
+await expect(checkbox).toBeChecked();
+await expect(checkbox).not.toBeChecked();
+
+// ✅ CORRECT - Check checked attribute directly
+await expect(checkbox).toHaveAttribute('checked', '');  // Checked
+await expect(checkbox).not.toHaveAttribute('checked'); // Unchecked
+```
+
+This applies to all Shoelace components (`<sl-button>`, `<sl-checkbox>`, `<sl-input>`, etc.).
 
 ## Critical: Always Use Helper Functions
 
