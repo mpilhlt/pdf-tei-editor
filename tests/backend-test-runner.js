@@ -457,14 +457,21 @@ async function main() {
     exitCode = 1;
   } finally {
     // Step 7: Cleanup
+    // Store the test result exit code before cleanup to ensure cleanup errors don't override it
+    const testExitCode = exitCode;
+
     if (serverManager) {
       try {
         await serverManager.stop({ keepRunning: options.noCleanup });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         logger.warn(`Error during cleanup: ${errorMessage}`);
+        // Don't change exit code if tests passed - cleanup errors are non-fatal
       }
     }
+
+    // Restore the test result exit code (in case cleanup modified it somehow)
+    exitCode = testExitCode;
   }
 
   process.exit(exitCode);
@@ -477,8 +484,13 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-  logger.warn('Terminated');
-  process.exit(143);
+  // SIGTERM during cleanup is expected (from server cleanup killing processes on port)
+  // Only log in verbose mode to avoid confusing test output
+  if (process.env.VERBOSE) {
+    logger.warn('Received SIGTERM during cleanup');
+  }
+  // Don't exit with non-zero code if we received SIGTERM during normal cleanup
+  // The finally block will handle proper cleanup
 });
 
 // Run
