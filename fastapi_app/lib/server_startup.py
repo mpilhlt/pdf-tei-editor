@@ -63,6 +63,31 @@ def get_pid_on_port(port: int = 8000) -> Optional[int]:
     return None
 
 
+def kill_server_on_port(port: int = 8000) -> bool:
+    """
+    Kill the server process running on the specified port.
+
+    Args:
+        port: Port number to check
+
+    Returns:
+        True if a process was killed, False otherwise
+    """
+    pid = get_pid_on_port(port)
+    if pid:
+        try:
+            print(f"Killing server process on port {port} (PID: {pid})...")
+            subprocess.run(['kill', str(pid)], check=True)
+            # Wait a moment for the process to terminate
+            import time
+            time.sleep(1)
+            return True
+        except subprocess.SubprocessError as e:
+            print(f"Error killing process: {e}", file=sys.stderr)
+            return False
+    return False
+
+
 def get_host_and_port() -> Tuple[str, int]:
     """
     Determine host and port from environment variables or CLI arguments.

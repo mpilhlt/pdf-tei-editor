@@ -5,21 +5,30 @@
 
 /**
  * @import { ApplicationState } from '../state.js'
- * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem } from '../ui.js'
+ * @import { SlSelect, SlTree, SlButton, SlInput, SlTreeItem, SlCheckbox, UIPart } from '../ui.js'
  * @import { DocumentItem } from '../modules/file-data-utils.js'
  */
 
 /**
- * The button to trigger the file drawer 
+ * The button to trigger the file drawer
  * @typedef {object} fileDrawerTriggerPart
  */
 
 /**
- * The file drawer 
- * @typedef {object} fileDrawerPart  
+ * @typedef {object} selectAllContainerPart
+ * @property {SlCheckbox} selectAllCheckbox
+ */
+
+/**
+ * The file drawer
+ * @typedef {object} fileDrawerPart
  * @property {SlSelect} variantSelect
  * @property {SlInput} labelFilter
+ * @property {UIPart<HTMLDivElement, selectAllContainerPart>} selectAllContainer
  * @property {SlTree} fileTree
+ * @property {SlButton} importButton
+ * @property {HTMLInputElement} importFileInput
+ * @property {SlButton} exportButton
  * @property {SlButton} closeDrawer
  */
 import ui, { updateUi, SlOption } from '../ui.js'
@@ -34,6 +43,8 @@ import {
   findFileBySourceId,
   getCollectionName
 } from '../modules/file-data-utils.js'
+import { notify } from '../modules/sl-utils.js'
+import { FiledataPlugin } from '../plugins.js'
 
 /**
  * Creates a label for a document with optional lock icon
@@ -79,6 +90,8 @@ let needsTreeUpdate = false;
 /** @type {ApplicationState} */
 let currentState;
 let isUpdatingProgrammatically = false;
+/** @type {Set<string>} */
+let selectedCollections = new Set();
 
 //
 // Implementation
@@ -100,7 +113,7 @@ async function install(state) {
   
   // Update UI to register new elements
   updateUi();
-  
+
   // Wire up event handlers - now the UI elements exist
   triggerButton.addEventListener('click', () => {
     open();
@@ -119,10 +132,8 @@ async function install(state) {
   // Handle variant selection changes
   ui.fileDrawer.variantSelect.addEventListener('sl-change', () => {
     
-    
     // Ignore programmatic changes to prevent double-loading
     if (isUpdatingProgrammatically) {
-      
       return;
     }
     
@@ -147,19 +158,44 @@ async function install(state) {
   
   // Handle tree selection changes
   drawer.addEventListener('sl-selection-change', (event) => {
-    
-    
+
+
     // Ignore programmatic changes to prevent double-loading
     if (isUpdatingProgrammatically) {
-      
+
       return;
     }
-    
+
     // Use currentState instead of stale installation-time state
     if (currentState) {
       onFileTreeSelection(event, currentState);
     } else {
       console.warn("File tree selection ignored: no current state available");
+    }
+  });
+
+  // Handle select all/none checkbox
+  ui.fileDrawer.selectAllContainer.selectAllCheckbox.addEventListener('sl-change', () => {
+    onSelectAllChange();
+  });
+
+  // Handle export button
+  ui.fileDrawer.exportButton.addEventListener('click', () => {
+    if (currentState) {
+      handleExport(currentState);
+    }
+  });
+
+  // Handle import button
+  ui.fileDrawer.importButton.addEventListener('click', () => {
+    // Trigger hidden file input
+    ui.fileDrawer.importFileInput.click();
+  });
+
+  // Handle file input change (user selected a file)
+  ui.fileDrawer.importFileInput.addEventListener('change', async () => {
+    if (currentState) {
+      await handleImport(currentState);
     }
   });
 }
@@ -183,6 +219,11 @@ async function open() {
  */
 function close() {
   logger.debug("Closing file selection drawer");
+
+  // Clear selected collections on close
+  selectedCollections.clear();
+  updateExportButtonState();
+
   ui.fileDrawer.hide();
 }
 
@@ -323,16 +364,47 @@ async function populateFileTree(state) {
     return false;
   };
 
+  // Show/hide select-all container based on whether collections exist
+  const selectAllContainer = ui.fileDrawer.selectAllContainer;
+  selectAllContainer.style.display = collections.length > 0 ? 'block' : 'none';
+
   // Build tree structure programmatically
   for (const collectionName of collections) {
     // Display "Unfiled" for the special __unfiled collection
     const collectionDisplayName = getCollectionName(collectionName, state.collections);
-    
-    // Create collection item
+
+    // Create collection item with checkbox
     const collectionItem = document.createElement('sl-tree-item');
     collectionItem.expanded = shouldExpandCollection(collectionName);
     collectionItem.className = 'collection-item';
-    collectionItem.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
+    collectionItem.dataset.collection = collectionName;
+
+    // Create checkbox
+    const checkbox = document.createElement('sl-checkbox');
+    checkbox.size = 'small';
+    checkbox.checked = selectedCollections.has(collectionName);
+
+    // Stop click events from propagating to prevent tree expansion/collapse
+    checkbox.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    checkbox.addEventListener('sl-change', (e) => {
+      e.stopPropagation();
+      onCollectionCheckboxChange(collectionName, checkbox.checked);
+    });
+
+    // Create label with folder icon
+    const label = document.createElement('span');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    label.style.gap = '0.5rem';
+    label.innerHTML = `<sl-icon name="folder"></sl-icon><span>${collectionDisplayName}</span>`;
+
+    // Clear and append children
+    collectionItem.innerHTML = '';
+    collectionItem.appendChild(checkbox);
+    collectionItem.appendChild(label);
     
     const files = groupedFiles[collectionName]
       .sort((a, b) => {
@@ -423,6 +495,9 @@ async function populateFileTree(state) {
   } finally {
     isUpdatingProgrammatically = false;
   }
+
+  // Update export button state to match current selections
+  updateExportButtonState();
 }
 
 /**
@@ -564,5 +639,183 @@ async function onFileTreeSelection(event, state) {
       // The error will be handled by services.load() internally
     }
   }
+}
 
+/**
+ * Handles collection checkbox change
+ * @param {string} collectionName
+ * @param {boolean} checked
+ */
+function onCollectionCheckboxChange(collectionName, checked) {
+  if (checked) {
+    selectedCollections.add(collectionName);
+  } else {
+    selectedCollections.delete(collectionName);
+  }
+  updateExportButtonState();
+}
+
+/**
+ * Handles select all/none checkbox change
+ */
+function onSelectAllChange() {
+  const selectAllCheckbox = ui.fileDrawer.selectAllContainer.selectAllCheckbox;
+  const fileTree = ui.fileDrawer.fileTree;
+  const checked = selectAllCheckbox.checked;
+
+  // Find all collection checkboxes and update them
+  const collectionItems = fileTree.querySelectorAll('.collection-item');
+
+  collectionItems.forEach(item => {
+    const checkbox = /** @type {SlCheckbox} */ (item.querySelector('sl-checkbox'));
+    const collectionName = item.dataset.collection;
+    if (checkbox && collectionName) {
+      checkbox.checked = checked;
+
+      // Manually update selectedCollections since programmatic checkbox changes don't fire sl-change
+      if (checked) {
+        selectedCollections.add(collectionName);
+      } else {
+        selectedCollections.delete(collectionName);
+      }
+    }
+  });
+
+  updateExportButtonState();
+}
+
+/**
+ * Updates the export button enabled/disabled state based on selected collections
+ */
+function updateExportButtonState() {
+  const exportButton = ui.fileDrawer.exportButton;
+  exportButton.disabled = selectedCollections.size === 0;
+}
+
+/**
+ * Handles export button click
+ * @param {ApplicationState} state
+ */
+function handleExport(state) {
+  if (selectedCollections.size === 0) return;
+  if (!state.sessionId) {
+    logger.error("Cannot export: no session ID available");
+    return;
+  }
+
+  const collections = Array.from(selectedCollections).join(',');
+
+  // Build URL with collections and optional variant filter
+  const params = new URLSearchParams({
+    sessionId: state.sessionId,
+    collections: collections
+  });
+
+  // Add variant filter if a specific variant is selected
+  const variantSelect = ui.fileDrawer.variantSelect;
+  const selectedVariant = variantSelect.value;
+  if (selectedVariant && selectedVariant !== '') {
+    params.append('variants', selectedVariant);
+  }
+
+  const url = `/api/v1/export?${params.toString()}`;
+
+  logger.debug(`Exporting collections: ${collections}${selectedVariant ? ` (variant: ${selectedVariant})` : ''}`);
+
+  // Trigger download using a temporary anchor element to avoid page navigation
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'export.zip';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
+ * Handles import button click and file upload
+ * @param {ApplicationState} state
+ */
+async function handleImport(state) {
+  const fileInput = ui.fileDrawer.importFileInput;
+  const file = fileInput.files?.[0];
+
+  if (!file) {
+    logger.debug("No file selected for import");
+    return;
+  }
+
+  if (!state.sessionId) {
+    logger.error("Cannot import: no session ID available");
+    notify("Cannot import: not authenticated", "danger", "exclamation-triangle");
+    return;
+  }
+
+  logger.info(`Importing file: ${file.name} (${file.size} bytes)`);
+
+  try {
+    // Disable import button during upload
+    const importButton = ui.fileDrawer.importButton;
+    importButton.disabled = true;
+    importButton.loading = true;
+
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Upload to import endpoint with recursive_collections enabled
+    const url = `/api/v1/import?sessionId=${encodeURIComponent(state.sessionId)}&recursive_collections=true`;
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || `Import failed: ${response.statusText}`);
+    }
+
+    const stats = await response.json();
+
+    logger.info(
+      `Import completed: ${stats.files_imported} imported, ` +
+      `${stats.files_skipped} skipped, ${stats.errors?.length || 0} errors`
+    );
+
+    // Show success message
+    let message = `Imported ${stats.files_imported} files`;
+    if (stats.files_skipped > 0) {
+      message += `, skipped ${stats.files_skipped}`;
+    }
+    if (stats.errors && stats.errors.length > 0) {
+      message += `, ${stats.errors.length} errors`;
+      notify(message, "warning", "exclamation-triangle");
+      // Log errors for debugging
+      stats.errors.forEach(err => {
+        logger.error(`Import error for ${err.doc_id}: ${err.error}`);
+      });
+    } else {
+      notify(message, "success", "check-circle");
+    }
+
+    // Clear file input
+    fileInput.value = '';
+
+    // Close drawer
+    close();
+
+    // Reload file data to show newly imported files
+    await FiledataPlugin.getInstance().reload({ refresh: true });
+
+  } catch (error) {
+    logger.error("Import failed: " + String(error));
+    notify(`Import failed: ${error.message}`, "danger", "exclamation-octagon");
+
+    // Clear file input on error
+    fileInput.value = '';
+  } finally {
+    // Re-enable import button
+    const importButton = ui.fileDrawer.importButton;
+    importButton.disabled = false;
+    importButton.loading = false;
+  }
 }

@@ -46,7 +46,10 @@
       "Bash(npm run test:api:container:cached:*)",
       "Bash(podman build:*)",
       "Bash(npm run test:container:*)",
-      "Bash(timeout 600 npm run test:container:*)"
+      "Bash(timeout 600 npm run test:container:*)",
+      "Bash(xargs cat:*)",
+      "Bash(npm run build:*)",
+      "Bash(uv sync:*)"
     ],
     "deny": [],
     "ask": []

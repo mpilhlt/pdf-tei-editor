@@ -21,6 +21,7 @@ from fastapi_app.lib.database import DatabaseManager
 from fastapi_app.lib.file_storage import FileStorage
 from fastapi_app.lib.file_repository import FileRepository
 from fastapi_app.lib.file_importer import FileImporter
+from fastapi_app.lib.file_zip_importer import FileZipImporter
 from fastapi_app.config import get_settings
 
 # Setup logging
@@ -69,7 +70,7 @@ Examples:
         """
     )
     parser.add_argument('directory',
-                       help='Directory containing PDF and XML files')
+                       help='Directory or zip file containing PDF and XML files')
     parser.add_argument('--collection', help='Collection name for imported files')
     parser.add_argument('--recursive-collections', action='store_true',
                        help='Use subdirectory names as collection names. '
@@ -106,6 +107,8 @@ Examples:
                             'Default: None (no version pattern stripping).')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
+    parser.add_argument('--zip', action='store_true',
+                       help='Treat directory argument as a zip file to import')
     args = parser.parse_args()
 
     if args.verbose:
@@ -117,14 +120,22 @@ Examples:
     storage_root = Path(args.storage_root) if args.storage_root else (settings.data_root / "files")
     directory = Path(args.directory)
 
-    # Validate directory
+    # Validate directory or zip file
     if not directory.exists():
-        logger.error(f"Directory does not exist: {directory}")
+        logger.error(f"Path does not exist: {directory}")
         sys.exit(1)
 
-    if not directory.is_dir():
-        logger.error(f"Not a directory: {directory}")
-        sys.exit(1)
+    if args.zip:
+        if not directory.is_file():
+            logger.error(f"Not a file: {directory}")
+            sys.exit(1)
+        if not directory.suffix == '.zip':
+            logger.error(f"Not a zip file: {directory}")
+            sys.exit(1)
+    else:
+        if not directory.is_dir():
+            logger.error(f"Not a directory: {directory}")
+            sys.exit(1)
 
     # Initialize components
     logger.info(f"Database: {db_path}")
@@ -142,39 +153,75 @@ Examples:
             logger.warning("Clearing all data from database...")
             db.clear_all_data()
 
-    # Pass skip_dirs only if recursive_collections is enabled
-    skip_dirs = args.skip_dirs if args.recursive_collections else None
-    importer = FileImporter(
-        db, storage, repo, args.dry_run, skip_dirs,
-        args.gold_dir_name, args.gold_pattern, args.version_pattern
-    )
+    # Import from zip or directory
+    if args.zip:
+        # Import from zip file
+        logger.info(f"Importing from zip file: {directory}")
 
-    # Import
-    logger.info(f"Importing from {directory}")
-    if args.gold_pattern:
-        logger.info(f"Gold standard pattern: {args.gold_pattern}")
-    elif args.gold_dir_name:
-        logger.info(f"Gold standard directory: {args.gold_dir_name}")
+        zip_importer = FileZipImporter(db, storage, repo, args.dry_run)
+
+        if args.gold_pattern:
+            logger.info(f"Gold standard pattern: {args.gold_pattern}")
+        elif args.gold_dir_name:
+            logger.info(f"Gold standard directory: {args.gold_dir_name}")
+        else:
+            logger.info("Gold standard detection: files without .vN. version markers")
+        if args.version_pattern:
+            logger.info(f"Version pattern: {args.version_pattern}")
+        if args.recursive_collections:
+            logger.info("Using subdirectory names as collection names")
+            logger.info(f"Skipping directories: {', '.join(args.skip_dirs)}")
+            logger.info("Files in root directory will have no collection")
+        elif args.collection:
+            logger.info(f"Collection: {args.collection}")
+        if args.dry_run:
+            logger.info("[DRY RUN MODE - No changes will be made]")
+
+        skip_dirs = args.skip_dirs if args.recursive_collections else None
+        stats = zip_importer.import_from_zip(
+            zip_path=directory,
+            collection=args.collection,
+            recursive_collections=args.recursive_collections,
+            skip_dirs=skip_dirs,
+            gold_dir_name=args.gold_dir_name,
+            gold_pattern=args.gold_pattern,
+            version_pattern=args.version_pattern
+        )
+        zip_importer.cleanup()
     else:
-        logger.info("Gold standard detection: files without .vN. version markers")
-    if args.version_pattern:
-        logger.info(f"Version pattern: {args.version_pattern}")
-    if args.recursive_collections:
-        logger.info("Using subdirectory names as collection names")
-        logger.info(f"Skipping directories: {', '.join(args.skip_dirs)}")
-        logger.info("Files in root directory will have no collection")
-    elif args.collection:
-        logger.info(f"Collection: {args.collection}")
-    if args.dry_run:
-        logger.info("[DRY RUN MODE - No changes will be made]")
+        # Import from directory
+        # Pass skip_dirs only if recursive_collections is enabled
+        skip_dirs = args.skip_dirs if args.recursive_collections else None
+        importer = FileImporter(
+            db, storage, repo, args.dry_run, skip_dirs,
+            args.gold_dir_name, args.gold_pattern, args.version_pattern
+        )
 
-    recursive = not args.no_recursive
-    stats = importer.import_directory(
-        directory,
-        args.collection,
-        recursive,
-        args.recursive_collections
-    )
+        logger.info(f"Importing from directory: {directory}")
+        if args.gold_pattern:
+            logger.info(f"Gold standard pattern: {args.gold_pattern}")
+        elif args.gold_dir_name:
+            logger.info(f"Gold standard directory: {args.gold_dir_name}")
+        else:
+            logger.info("Gold standard detection: files without .vN. version markers")
+        if args.version_pattern:
+            logger.info(f"Version pattern: {args.version_pattern}")
+        if args.recursive_collections:
+            logger.info("Using subdirectory names as collection names")
+            logger.info(f"Skipping directories: {', '.join(args.skip_dirs)}")
+            logger.info("Files in root directory will have no collection")
+        elif args.collection:
+            logger.info(f"Collection: {args.collection}")
+        if args.dry_run:
+            logger.info("[DRY RUN MODE - No changes will be made]")
+
+        recursive = not args.no_recursive
+        stats = importer.import_directory(
+            directory,
+            args.collection,
+            recursive,
+            args.recursive_collections
+        )
 
     # Report
     print("\n" + "="*60)

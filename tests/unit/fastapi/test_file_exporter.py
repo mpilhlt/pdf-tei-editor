@@ -126,7 +126,7 @@ class TestFileExporter(unittest.TestCase):
         return file_hash
 
     def test_export_single_pdf(self):
-        """Test exporting a single PDF file."""
+        """Test exporting a single PDF file with matching TEI."""
         # Add PDF
         pdf_content = self.create_test_pdf("unique pdf 1")
         self.add_file(
@@ -136,20 +136,34 @@ class TestFileExporter(unittest.TestCase):
             collections=["corpus1"]
         )
 
+        # Add matching gold TEI (required for PDF to be exported)
+        tei_content = self.create_test_tei("10.1111/test")
+        self.add_file(
+            doc_id="10.1111/test",
+            file_type="tei",
+            content=tei_content,
+            variant="grobid",
+            is_gold=True
+        )
+
         # Export
         exporter = FileExporter(self.db, self.storage, self.repo)
         stats = exporter.export_files(self.export_dir)
 
-        # Verify stats
-        self.assertEqual(stats['files_scanned'], 1)
-        self.assertEqual(stats['files_exported'], 1)
+        # Verify stats (1 PDF + 1 TEI = 2 files)
+        self.assertEqual(stats['files_scanned'], 2)
+        self.assertEqual(stats['files_exported'], 2)
         self.assertEqual(stats['files_skipped'], 0)
         self.assertEqual(len(stats['errors']), 0)
 
-        # Verify file exists
+        # Verify PDF file exists
         exported_file = self.export_dir / "pdf" / "10.1111__test.pdf"
         self.assertTrue(exported_file.exists())
         self.assertEqual(exported_file.read_bytes(), pdf_content)
+
+        # Verify TEI file exists
+        tei_file = self.export_dir / "tei" / "10.1111__test.grobid.tei.xml"
+        self.assertTrue(tei_file.exists())
 
     def test_export_tei_with_variant(self):
         """Test exporting TEI file with variant in filename."""
@@ -263,17 +277,22 @@ class TestFileExporter(unittest.TestCase):
 
     def test_filter_by_collection(self):
         """Test filtering by collection."""
-        # Add files to different collections
+        # Add files to different collections with matching TEI files
         self.add_file("10.1111/test1", "pdf", self.create_test_pdf("pdf1"), ["corpus1"])
+        self.add_file("10.1111/test1", "tei", self.create_test_tei("10.1111/test1"), variant="grobid", is_gold=True)
+
         self.add_file("10.1111/test2", "pdf", self.create_test_pdf("pdf2"), ["corpus2"])
+        self.add_file("10.1111/test2", "tei", self.create_test_tei("10.1111/test2"), variant="grobid", is_gold=True)
+
         self.add_file("10.1111/test3", "pdf", self.create_test_pdf("pdf3"), ["corpus1", "corpus2"])
+        self.add_file("10.1111/test3", "tei", self.create_test_tei("10.1111/test3"), variant="grobid", is_gold=True)
 
         # Export only corpus1
         exporter = FileExporter(self.db, self.storage, self.repo)
         stats = exporter.export_files(self.export_dir, collections=["corpus1"])
 
-        # Should export test1 and test3 (both in corpus1)
-        self.assertEqual(stats['files_exported'], 2)
+        # Should export test1 and test3 (both in corpus1): 2 PDFs + 2 TEIs = 4 files
+        self.assertEqual(stats['files_exported'], 4)
         self.assertTrue((self.export_dir / "pdf" / "10.1111__test1.pdf").exists())
         self.assertTrue((self.export_dir / "pdf" / "10.1111__test3.pdf").exists())
 
@@ -296,17 +315,22 @@ class TestFileExporter(unittest.TestCase):
 
     def test_filter_by_regex(self):
         """Test filtering filenames by regex."""
-        # Add files
+        # Add files with matching TEI files
         self.add_file("10.1111/test1", "pdf", self.create_test_pdf())
+        self.add_file("10.1111/test1", "tei", self.create_test_tei("10.1111/test1"), variant="grobid", is_gold=True)
+
         self.add_file("10.1111/test2", "pdf", self.create_test_pdf())
+        self.add_file("10.1111/test2", "tei", self.create_test_tei("10.1111/test2"), variant="grobid", is_gold=True)
+
         self.add_file("10.5771/other", "pdf", self.create_test_pdf())
+        self.add_file("10.5771/other", "tei", self.create_test_tei("10.5771/other"), variant="grobid", is_gold=True)
 
         # Export only files matching "test"
         exporter = FileExporter(self.db, self.storage, self.repo)
         stats = exporter.export_files(self.export_dir, regex=r"test")
 
-        # Should export only test1 and test2
-        self.assertEqual(stats['files_exported'], 2)
+        # Should export only test1 and test2: 2 PDFs + 2 TEIs = 4 files
+        self.assertEqual(stats['files_exported'], 4)
         self.assertTrue((self.export_dir / "pdf" / "10.1111__test1.pdf").exists())
         self.assertTrue((self.export_dir / "pdf" / "10.1111__test2.pdf").exists())
         self.assertFalse((self.export_dir / "pdf" / "10.5771__other.pdf").exists())
@@ -364,9 +388,10 @@ class TestFileExporter(unittest.TestCase):
 
     def test_multi_collection_duplication(self):
         """Test that files in multiple collections are exported to each."""
-        # Add file in multiple collections
+        # Add file in multiple collections with matching TEI
         pdf_content = self.create_test_pdf()
         self.add_file("10.1111/test", "pdf", pdf_content, collections=["corpus1", "corpus2"])
+        self.add_file("10.1111/test", "tei", self.create_test_tei("10.1111/test"), variant="grobid", is_gold=True)
 
         # Export with group_by=collection
         exporter = FileExporter(self.db, self.storage, self.repo)
@@ -376,14 +401,15 @@ class TestFileExporter(unittest.TestCase):
         self.assertTrue((self.export_dir / "corpus1" / "pdf" / "10.1111__test.pdf").exists())
         self.assertTrue((self.export_dir / "corpus2" / "pdf" / "10.1111__test.pdf").exists())
 
-        # Should count as 2 exports (duplicated)
-        self.assertEqual(stats['files_exported'], 2)
+        # Should count as 4 exports (PDF + TEI duplicated to both collections)
+        self.assertEqual(stats['files_exported'], 4)
 
     def test_filename_encoding(self):
         """Test DOI encoding in filenames."""
-        # Add file with DOI containing special chars
+        # Add file with DOI containing special chars with matching TEI
         pdf_content = self.create_test_pdf()
         self.add_file("10.1234/test:file<name>", "pdf", pdf_content)
+        self.add_file("10.1234/test:file<name>", "tei", self.create_test_tei("10.1234/test:file<name>"), variant="grobid", is_gold=True)
 
         # Export
         exporter = FileExporter(self.db, self.storage, self.repo)
@@ -395,9 +421,10 @@ class TestFileExporter(unittest.TestCase):
 
     def test_filename_transform(self):
         """Test sed-style filename transformation."""
-        # Add file
+        # Add file with matching TEI
         pdf_content = self.create_test_pdf()
         self.add_file("10.1111/test", "pdf", pdf_content)
+        self.add_file("10.1111/test", "tei", self.create_test_tei("10.1111/test"), variant="grobid", is_gold=True)
 
         # Export with transform to remove DOI prefix
         exporter = FileExporter(self.db, self.storage, self.repo)
@@ -412,9 +439,10 @@ class TestFileExporter(unittest.TestCase):
 
     def test_multiple_filename_transforms(self):
         """Test multiple sequential filename transformations."""
-        # Add file
+        # Add file with matching TEI
         pdf_content = self.create_test_pdf()
         self.add_file("10.1111/test-file", "pdf", pdf_content)
+        self.add_file("10.1111/test-file", "tei", self.create_test_tei("10.1111/test-file"), variant="grobid", is_gold=True)
 
         # Export with multiple transforms applied sequentially
         # First: remove DOI prefix, Second: replace hyphens with underscores
@@ -433,15 +461,16 @@ class TestFileExporter(unittest.TestCase):
 
     def test_dry_run(self):
         """Test dry run mode."""
-        # Add file
+        # Add file with matching TEI
         self.add_file("10.1111/test", "pdf", self.create_test_pdf())
+        self.add_file("10.1111/test", "tei", self.create_test_tei("10.1111/test"), variant="grobid", is_gold=True)
 
         # Export in dry run mode
         exporter = FileExporter(self.db, self.storage, self.repo, dry_run=True)
         stats = exporter.export_files(self.export_dir)
 
-        # Stats should show export
-        self.assertEqual(stats['files_exported'], 1)
+        # Stats should show export (1 PDF + 1 TEI = 2 files)
+        self.assertEqual(stats['files_exported'], 2)
 
         # But file should not exist
         exported_file = self.export_dir / "pdf" / "10.1111__test.pdf"

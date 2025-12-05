@@ -12,9 +12,18 @@ npm run start:dev
 # Development mode with source files (append ?dev to URL)
 # http://localhost:3001?dev
 
+# Kill running server and restart
+npm run start:dev -- --restart
+
 # Bypass authentication for development/testing
 FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 ```
+
+**Options**:
+
+- `--restart`: Kill any existing server process on the port and start fresh
+
+**Note**: The `--restart` flag works for both `npm run start:dev` and `npm run start:prod`.
 
 ## Build System
 

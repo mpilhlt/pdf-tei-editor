@@ -411,6 +411,74 @@ npm run manage group list
 npm run manage collection list
 ```
 
+## Development Commands
+
+### dev:reset
+
+Resets the application by moving the data directory and log files to trash.
+
+```bash
+npm run dev:reset
+npm run dev:reset -- --restart  # Also restart the server
+```
+
+**Options**:
+
+- `--restart`: Restart the development server after reset
+
+**What it does**:
+
+1. Prompts for confirmation before proceeding
+2. Moves the entire `data` directory to trash (users, files, configuration)
+3. Moves all files in the `log` directory to trash
+4. Optionally restarts the development server with `--restart` flag
+
+**Warning**: This action is destructive and will delete:
+
+- All user accounts and sessions
+- All uploaded files and their metadata
+- All application configuration
+- All log files
+
+**Use cases**:
+
+- Reset development environment to clean state
+- Clear test data between development cycles
+- Start fresh after configuration changes
+
+**Output example**:
+
+```
+WARNING: This will move the 'data' directory and 'log' directory contents to trash.
+This action will delete:
+  - All user accounts and sessions
+  - All uploaded files and their metadata
+  - All application configuration
+  - All log files
+
+Are you sure you want to continue? (yes/no): yes
+Moving /path/to/data to trash...
+Data directory successfully moved to trash.
+Moving 3 log file(s) to trash...
+Log files successfully moved to trash.
+
+Reset complete. Use 'npm run start:dev' to start the server with fresh configuration.
+```
+
+**With `--restart` flag**:
+
+```
+...
+Moving 3 log file(s) to trash...
+Log files successfully moved to trash.
+
+Restarting development server...
+Killing server process on port 8000 (PID: 12345)...
+Starting FastAPI development server...
+```
+
+**Note**: Files are moved to the system trash/recycle bin and can be recovered if needed.
+
 ## Testing Commands
 
 ### test:container

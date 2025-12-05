@@ -45,6 +45,11 @@ npm run test:container -- --browser chromium,firefox,webkit  # Test multiple bro
 ```bash
 # Start dev server
 npm run start:dev
+npm run start:dev -- --restart    # Kill running server and restart
+
+# Reset application (move data/log to trash)
+npm run dev:reset                 # Reset only
+npm run dev:reset -- --restart    # Reset and restart server
 
 # Build for production
 npm run build
@@ -96,6 +101,12 @@ npm run test:container -- path/to/file.js        # Run for specific files
 - Plugin invocation endpoints/ extension points definition: `app/src/endpoints.js`
 - Application state object definition: `app/src/state.js`
 
+### Application State
+
+The application state object is defined in `app/src/state.js` and contains:
+
+- `sessionId`: Session ID for API authentication (available after login, passed as `X-Session-ID` header value or query parameter for authentication with the endpoints)
+
 ### Key Directories
 
 Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.
@@ -108,7 +119,8 @@ Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) 
 - `bin` - executable files used on the command line
 - `config` - the default content of files in `data/db`
 - `data` - file data
-- `data/db` - application data stored in subject-specific json files
+- `data/db` - application data stored in subject-specific json files and SQLite databases
+  - `data/db/metadata.db` - Main file metadata database (SQLite) - ALWAYS use this for file queries, NOT files.db
 - `fastapi_app` - the python backend based on FastAPI
 - `tests` - JavaScript and Python unit tests and E2E tests (Read [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) when creating or debugging tests)
 
@@ -138,13 +150,38 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **Suggest Prompt Updates**: if something in the documentation does not align with the consistent code patterns, suggest to update the documentation
 - **NEVER start, restart, or suggest restarting the dev server** - It auto-restarts on changes, tests should use the test runners
 - **ALWAYS add comprehensive JSDoc headers** - Use specific types instead of generic "object"
+- **Check testing guide before writing/debugging tests** - ALWAYS consult [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing new tests or debugging test failures. It contains critical patterns, helper functions, and known issues (like Shoelace component testing)
+- **Suppress expected error output in tests** - When tests validate error handling that logs errors or warnings, ALWAYS use `assertLogs` context manager to suppress console output. This keeps test output clean and verifies the error is logged. Example: `with self.assertLogs('module.name', level='ERROR') as cm:` wrapping the code that produces expected errors. Never let expected errors pollute test output.
 - **Plugin endpoints are observers, not mutators** - Never update the state in functions that receive it, otherwise there will be unwanted state mutation or infinite loops.
 - **Use UI navigation via the `ui` object instead of DOM node navigation** for fast lookup and alignment of runtime UI structure and documentation
+- **UI elements are always available after `updateUi()`** - After calling `updateUi()`, assume all UI elements are properly registered in the ui object. Never use defensive optional chaining (`ui.foo?.bar`) - if elements are missing, it indicates a logic error that needs fixing
+- **UI element hierarchy** - Named elements inside other named elements create a hierarchy. Access nested elements via `ui.parent.child.grandchild`, not `ui.parent.grandchild`. Example: if a checkbox with `name="myCheckbox"` is inside a div with `name="myContainer"`, access it as `ui.parent.myContainer.myCheckbox`
+- **Tooltip wrappers don't need names** - SlTooltip components are wrappers and don't need `name` attributes. Only the element inside (like a button) needs a name
+- **Programmatic checkbox changes don't fire events** - Setting `checkbox.checked` programmatically does NOT trigger `sl-change` events in Shoelace components. Must manually update state when programmatically changing checkbox states
 - **Use testLog() for E2E test validation** - Don't rely on DOM queries
+- **User notifications** - Use `notify(message, variant, icon)` from `app/src/modules/sl-utils.js` for toast notifications. Variants: "primary", "success", "warning", "danger". Common icons: "check-circle", "exclamation-triangle", "exclamation-octagon", "info-circle"
+- **Reload file data** - Use `FiledataPlugin.getInstance().reload({ refresh: true })` to reload file data from the server. Import `FiledataPlugin` from `../plugins.js`
 - ** when inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message so that these commands can be found and removed later.
 - If during debugging you learn something that is not contained in the code assistant documentation, add it to the respective file!
 
 ## Planning documents, todo documents, github issues
+
+### Standard Feature Implementation Workflow
+
+When implementing a new feature, follow this workflow:
+
+1. **Create implementation plan** in `dev/todo/<feature-name>-implementation.md`
+   - Document technical requirements and API endpoints
+   - List UI components to add
+   - Outline implementation steps
+   - Include code examples for key patterns
+2. **Work on the implementation** following the plan
+3. **Document results** in the same plan document under "Implementation Progress"
+   - List completed changes with file references and line numbers
+   - Document key implementation details and patterns used
+   - Include lessons learned for future reference
+
+### Planning Document Content
 
 - If you are asked to create planning documents for complex, multi-phase tasks, only include technically relevant information needed for the implementation or for later reference, e.g. for writing documentation on the new code
 - Omit discussion of the advantages of a particular solution unless specifically asked to discuss pros and cons or provide alternatives in a planning document.

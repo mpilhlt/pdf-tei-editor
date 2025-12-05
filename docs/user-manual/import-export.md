@@ -4,7 +4,89 @@ This guide explains how to import PDF and TEI/XML files into the PDF-TEI Editor 
 
 ## Overview
 
-The PDF-TEI Editor uses a content-addressable file storage system with SQLite metadata. Files can be imported using the `import_files.py` script, which automatically:
+The PDF-TEI Editor uses a content-addressable file storage system with SQLite metadata. Files can be imported and exported in two ways:
+
+1. **Web Interface** - Buttons in the file selection drawer
+2. **Command Line** - Python scripts for batch operations and automation
+
+## Using the Web Interface
+
+### Exporting Files
+
+The export feature allows you to download collections as ZIP archives directly from the web interface:
+
+1. **Open the File Selection Drawer**
+   - Click the <sl-icon name="list"></sl-icon> icon in the toolbar
+
+2. **Select Collections to Export**
+   - Check the collections you want to export
+   - Use "Select all/none" to quickly select or deselect all collections
+
+3. **Filter by Variant (Optional)**
+   - Use the variant dropdown to filter which TEI files to export
+   - When a variant is selected, only PDFs with matching TEI files of that variant are exported
+
+4. **Click Export**
+   - The Export button is enabled when at least one collection is selected
+   - Click to download a ZIP file containing your selected collections
+   - Files are organized by collection and type (PDF/TEI)
+
+**Export Behavior:**
+
+- Only exports **PDF-TEI pairs** where both files exist
+- Only exports **gold standard** TEI files by default (no versions)
+- When variant filter is applied, only exports PDFs that have a matching TEI file with that variant
+- Files are organized in the ZIP with collection-based grouping:
+  ```
+  export.zip
+  ├── collection1/
+  │   ├── pdf/
+  │   │   └── document.pdf
+  │   └── tei/
+  │       └── document.tei.xml
+  └── collection2/
+      └── ...
+  ```
+
+### Importing Files via UI
+
+The import feature allows you to upload ZIP archives containing PDF and TEI files:
+
+1. **Open the File Selection Drawer**
+   - Click the folder icon in the toolbar
+
+2. **Click Import**
+   - Located next to the Export button in the drawer footer
+   - Opens a file selection dialog
+
+3. **Select ZIP Archive**
+   - Choose a ZIP file from your computer
+   - The ZIP should contain files in one of these structures:
+     - Type-grouped: `pdf/`, `tei/`, `versions/`
+     - Collection-grouped: `collection1/pdf/`, `collection1/tei/` or `collection1/file1.pdf`
+     - Variant-grouped: `pdf/`, `grobid-0.8.1/`
+
+4. **Wait for Upload**
+   - Progress indicator shows during upload and import
+   - Files are automatically imported and assigned to collections
+   - Collections are created automatically if they don't exist
+
+5. **View Results**
+   - Success notification shows number of files imported
+   - File tree refreshes automatically to show new files
+   - Any errors are displayed in the notification
+
+**Import Behavior:**
+
+- Collections are automatically created from directory structure
+- Files are deduplicated using content hashing
+- Metadata is extracted from filenames and TEI content
+- Files are validated before import
+- metadata files are automatically filtered out
+
+## Command Line Tools
+
+The PDF-TEI Editor provides command-line scripts for automated batch operations. Files can be imported using the `import_files.py` script, which automatically:
 
 - Detects document IDs from filenames or TEI metadata
 - Groups related PDF and TEI files together
@@ -12,7 +94,7 @@ The PDF-TEI Editor uses a content-addressable file storage system with SQLite me
 - Identifies gold standard files
 - Stores files in hash-sharded storage for deduplication
 
-## Importing Files
+## Importing Files with CLI
 
 ### Basic Import
 
@@ -427,6 +509,118 @@ echo "TEIs: $(find /path/to/files -name '*.xml' | wc -l)"
 # Check for valid XML (requires xmllint)
 find /path/to/files -name "*.xml" -exec xmllint --noout {} \;
 ```
+
+## API Endpoints
+
+### Export Endpoint
+
+Files can be exported programmatically via the REST API at `/api/v1/export`.
+
+**Endpoint:** `GET /api/v1/export`
+
+**Authentication:** Requires valid session ID via query parameter `?sessionId=xxx`
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sessionId` | string | **Required.** Session ID for authentication |
+| `collections` | string | Comma-separated list of collections to export (e.g., `corpus1,corpus2`). If not specified, exports all collections the user has access to |
+| `variants` | string | Comma-separated list of variants to export. Supports glob patterns (e.g., `grobid*`) |
+| `include_versions` | boolean | Include versioned TEI files (default: `false`) |
+| `group_by` | string | Directory grouping strategy: `collection` (default), `type`, or `variant` |
+
+**Access Control:**
+
+- Only collections the user has access to are exported
+- Admin users have access to all collections
+- Regular users are limited by their group memberships
+
+**Response:**
+
+Returns a ZIP file as an HTTP attachment (`application/zip`) with the filename `export.zip`.
+
+**Grouping Strategies:**
+
+- `collection` (default): Groups files by collection name
+
+  ```text
+  export.zip
+  ├── corpus1/
+  │   ├── pdf/
+  │   │   └── document.pdf
+  │   └── tei/
+  │       └── document.tei.xml
+  └── corpus2/
+      └── ...
+  ```
+
+- `type`: Groups files by file type
+
+  ```text
+  export.zip
+  ├── pdf/
+  │   └── document.pdf
+  ├── tei/
+  │   └── document.tei.xml
+  └── versions/
+      └── document.v1.tei.xml
+  ```
+
+- `variant`: Groups TEI files by variant name
+
+  ```text
+  export.zip
+  ├── pdf/
+  │   └── document.pdf
+  ├── grobid-0.8.1/
+  │   └── document.tei.xml
+  └── metatei/
+      └── document.tei.xml
+  ```
+
+**Example Usage:**
+
+Export all accessible collections:
+
+```bash
+curl -O "http://localhost:8000/api/v1/export?sessionId=YOUR_SESSION_ID"
+```
+
+Export specific collections:
+
+```bash
+curl -O "http://localhost:8000/api/v1/export?sessionId=YOUR_SESSION_ID&collections=corpus1,corpus2"
+```
+
+Export with type-based grouping:
+
+```bash
+curl -O "http://localhost:8000/api/v1/export?sessionId=YOUR_SESSION_ID&group_by=type"
+```
+
+Export grobid variants only:
+
+```bash
+curl -O "http://localhost:8000/api/v1/export?sessionId=YOUR_SESSION_ID&variants=grobid*"
+```
+
+Export including all versions:
+
+```bash
+curl -O "http://localhost:8000/api/v1/export?sessionId=YOUR_SESSION_ID&include_versions=true"
+```
+
+**Error Responses:**
+
+- `401 Unauthorized`: No valid session provided
+- `403 Forbidden`: User has no access to any requested collections
+- `400 Bad Request`: Invalid parameters (e.g., invalid `group_by` value)
+- `500 Internal Server Error`: Export failed due to server error
+
+### Import Endpoint
+
+*Coming soon* - API endpoint for programmatic file import
 
 ## Related Documentation
 
