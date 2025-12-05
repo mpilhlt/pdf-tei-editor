@@ -326,6 +326,22 @@ const log = await waitForTestMessage(consoleLogs, 'FILE_SAVED');
 expect(log.value.file_id).toBeTruthy();
 ```
 
+### Checking Disabled State for Shoelace Components
+
+Playwright's `toBeDisabled()` and `toBeEnabled()` check the accessibility tree state, which doesn't always align with Shoelace web component's `disabled` attribute. Use attribute checks instead:
+
+```javascript
+// ❌ WRONG - May fail for Shoelace components
+await expect(button).toBeDisabled();
+await expect(button).toBeEnabled();
+
+// ✅ CORRECT - Check disabled attribute directly
+await expect(button).toHaveAttribute('disabled', '');  // Disabled
+await expect(button).not.toHaveAttribute('disabled'); // Enabled
+```
+
+This applies to all Shoelace components (`<sl-button>`, `<sl-input>`, etc.) that use the `disabled` attribute.
+
 ## Critical: Always Use Helper Functions
 
 **Never reimplement authentication, API calls, or common test utilities.** This causes maintenance burden and bugs.
