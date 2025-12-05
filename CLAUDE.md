@@ -107,6 +107,13 @@ The application state object is defined in `app/src/state.js` and contains:
 
 - `sessionId`: Session ID for API authentication (available after login, passed as `X-Session-ID` header value or query parameter for authentication with the endpoints)
 
+### Database Access
+
+- **ALWAYS use API methods** from `fastapi_app/lib/file_repository.py`, `fastapi_app/lib/database.py`, and related modules to read and mutate database items
+- **AVOID raw SQL queries** except in exceptional cases where no API method exists
+- **If a read/write operation is missing**, add it to the appropriate repository/module rather than using ad-hoc SQL
+- This prevents breaking changes when the database schema evolves
+
 ### Key Directories
 
 Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.

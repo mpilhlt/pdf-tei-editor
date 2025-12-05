@@ -127,25 +127,75 @@ def add_collection(db_dir: Path, collection_id: str, name: str, description: str
     return True, f"Collection '{collection_id}' added successfully."
 
 
-def remove_collection(db_dir: Path, collection_id: str) -> tuple[bool, str]:
-    """Removes a collection from the collections.json file.
+def remove_collection(db_dir: Path, collection_id: str) -> tuple[bool, str, dict]:
+    """Removes a collection from the collections.json file and cleans up file metadata.
+
+    For each file in the collection:
+    - Removes the collection from the file's doc_collections array
+    - If the file has no other collections after removal, marks it as deleted
 
     Args:
         db_dir: Path to the db directory
         collection_id: The collection ID to remove
 
     Returns:
-        Tuple of (success: bool, message: str)
+        Tuple of (success: bool, message: str, stats: dict)
+        where stats contains 'files_updated' and 'files_deleted' counts
     """
     collections_data = load_entity_data(db_dir, 'collections')
 
     if not collection_exists(collection_id, collections_data):
-        return False, f"Collection '{collection_id}' not found."
+        return False, f"Collection '{collection_id}' not found.", {}
 
+    # Import database utilities
+    from .database import DatabaseManager
+    from .file_repository import FileRepository
+    from .models import FileUpdate
+
+    # Initialize database access
+    db_path = db_dir / "metadata.db"
+    db_manager = DatabaseManager(db_path)
+    file_repo = FileRepository(db_manager)
+
+    files_updated = 0
+    files_deleted = 0
+
+    # Get all files that contain this collection
+    files_with_collection = file_repo.get_files_by_collection(collection_id, include_deleted=False)
+
+    # Update each file's collection list
+    for file_metadata in files_with_collection:
+        doc_collections = file_metadata.doc_collections.copy()
+
+        # Remove the collection from the array
+        if collection_id in doc_collections:
+            doc_collections.remove(collection_id)
+
+            # Update the file
+            if len(doc_collections) == 0:
+                # No collections left - mark as deleted
+                file_repo.mark_deleted(file_metadata.id)
+                files_deleted += 1
+            else:
+                # Still has other collections - just update the array
+                file_repo.update_file(file_metadata.id, FileUpdate(doc_collections=doc_collections))
+                files_updated += 1
+
+    # Remove collection from collections.json
     collections_data = [collection for collection in collections_data
                         if collection.get('id') != collection_id]
     save_entity_data(db_dir, 'collections', collections_data)
-    return True, f"Collection '{collection_id}' removed successfully."
+
+    stats = {
+        'files_updated': files_updated,
+        'files_deleted': files_deleted
+    }
+
+    message = f"Collection '{collection_id}' removed successfully."
+    if files_updated > 0 or files_deleted > 0:
+        message += f" {files_updated} files updated, {files_deleted} files marked as deleted."
+
+    return True, message, stats
 
 
 def set_collection_property(db_dir: Path, collection_id: str, property_name: str, value: str) -> tuple[bool, str]:

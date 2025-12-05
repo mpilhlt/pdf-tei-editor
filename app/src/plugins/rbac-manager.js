@@ -501,8 +501,10 @@ async function saveEntity() {
     if (error instanceof Error && error.message.startsWith('Validation failed:')) {
       const errors = error.message.replace('Validation failed: ', '').split(', ')
       displayFormErrors(form, errors)
+      notify(`Failed to save ${getEntitySchema(currentEntityType)?.singularLabel}: ${errorMessage}`, 'danger')
     } else {
       displayFormErrors(form, [errorMessage])
+      notify(`Failed to save ${getEntitySchema(currentEntityType)?.singularLabel}: ${errorMessage}`, 'danger')
     }
   }
 }

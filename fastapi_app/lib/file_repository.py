@@ -595,6 +595,32 @@ class FileRepository:
                 return self._row_to_model(row)
             return None
 
+    def get_files_by_collection(self, collection_id: str, include_deleted: bool = False) -> List[FileMetadata]:
+        """
+        Get all files that belong to a specific collection.
+
+        Args:
+            collection_id: Collection identifier
+            include_deleted: If True, include soft-deleted files
+
+        Returns:
+            List of FileMetadata models
+        """
+        deleted_filter = "" if include_deleted else "AND deleted = 0"
+        query = f"""
+            SELECT * FROM files
+            WHERE json_extract(doc_collections, '$') LIKE ?
+            {deleted_filter}
+            ORDER BY created_at
+        """
+
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (f'%"{collection_id}"%',))
+            rows = cursor.fetchall()
+
+            return [self._row_to_model(row) for row in rows]
+
     def get_latest_tei_version(
         self,
         doc_id: str,

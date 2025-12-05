@@ -18,7 +18,7 @@
  */
 
 import { spawn } from 'child_process';
-import { writeFile, mkdir, readFile } from 'fs/promises';
+import { writeFile, mkdir, readFile, utimes } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
@@ -479,6 +479,10 @@ async function main() {
     if (existingCode && existingCode === clientCode) {
       console.log(`✅ API client unchanged: ${OUTPUT_FILE}`);
       console.log('   Skipping write (no changes detected)');
+
+      // Touch the file to update mtime for git hooks
+      const now = new Date();
+      await utimes(OUTPUT_FILE, now, now);
     } else {
       // Content changed, generate with new timestamp
       const newTimestamp = new Date().toISOString();
