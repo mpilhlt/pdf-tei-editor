@@ -115,7 +115,7 @@ test.describe('Export Workflow', () => {
           // All collection checkboxes should be checked
           for (let i = 0; i < count; i++) {
             const checkbox = collectionCheckboxes.nth(i);
-            await expect(checkbox).toBeChecked();
+            await expect(checkbox).toHaveAttribute('checked', '');
           }
 
           // Export button should be enabled
@@ -129,7 +129,7 @@ test.describe('Export Workflow', () => {
           // All collection checkboxes should be unchecked
           for (let i = 0; i < count; i++) {
             const checkbox = collectionCheckboxes.nth(i);
-            await expect(checkbox).not.toBeChecked();
+            await expect(checkbox).not.toHaveAttribute('checked');
           }
 
           // Export button should be disabled
