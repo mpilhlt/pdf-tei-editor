@@ -232,10 +232,14 @@ class TestFileZipImporter(unittest.TestCase):
 
         importer = FileZipImporter(self.db, self.storage, self.repo)
 
-        with self.assertRaises(RuntimeError) as ctx:
-            importer.import_from_zip(zip_path)
+        # Suppress expected error log output
+        with self.assertLogs('fastapi_app.lib.file_zip_importer', level='ERROR') as log_cm:
+            with self.assertRaises(RuntimeError) as ctx:
+                importer.import_from_zip(zip_path)
 
         self.assertIn("empty", str(ctx.exception).lower())
+        # Verify error was logged
+        self.assertTrue(any('Import from zip failed' in msg for msg in log_cm.output))
         importer.cleanup()
 
     def test_import_invalid_zip(self):
