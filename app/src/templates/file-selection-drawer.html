@@ -25,6 +25,11 @@
     
     <!-- Tree area - fills remaining space -->
     <div style="flex: 1; padding: 1rem; overflow-y: auto; min-height: 0; display: block; width: 100%;">
+      <!-- Select all/none checkbox (hidden by default, shown when collections exist) -->
+      <div name="selectAllContainer" style="display: none; margin-bottom: 0.5rem;">
+        <sl-checkbox name="selectAllCheckbox" size="small">Select all/none</sl-checkbox>
+      </div>
+
       <sl-tree name="fileTree" selection="leaf" style="width: 100%; min-height: 200px; display: block;">
         <!-- Will be populated dynamically -->
       </sl-tree>
@@ -32,10 +37,27 @@
     
   </div>
   
-  <!-- Footer with close button -->
-  <div slot="footer" style="display: flex; justify-content: flex-end; padding: 1rem; border-top: 1px solid var(--sl-color-neutral-200);">
+  <!-- Footer with import, export, and close buttons -->
+  <div slot="footer" style="display: flex; justify-content: space-between; padding: 1rem; border-top: 1px solid var(--sl-color-neutral-200);">
+    <div style="display: flex; gap: 0.5rem;">
+      <sl-tooltip content="Import files from ZIP archive">
+        <sl-button name="importButton" variant="default" size="small">
+          <sl-icon name="upload" slot="prefix"></sl-icon>
+          Import
+        </sl-button>
+      </sl-tooltip>
+      <sl-tooltip content="Export selected collections">
+        <sl-button name="exportButton" variant="primary" size="small" disabled>
+          <sl-icon name="download" slot="prefix"></sl-icon>
+          Export
+        </sl-button>
+      </sl-tooltip>
+    </div>
     <sl-button name="closeDrawer" variant="default" size="small">
       Close
     </sl-button>
   </div>
+
+  <!-- Hidden file input for import -->
+  <input type="file" name="importFileInput" accept=".zip" style="display: none;">
 </sl-drawer>

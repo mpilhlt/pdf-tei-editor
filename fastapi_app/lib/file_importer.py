@@ -19,6 +19,8 @@ from .models import FileCreate, FileUpdate
 from .tei_utils import extract_tei_metadata
 from .hash_utils import generate_file_hash
 from .doc_id_resolver import DocIdResolver
+from .collection_utils import add_collection, load_entity_data
+from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +266,10 @@ class FileImporter:
                 if path.name.endswith('.deleted'):
                     continue
 
+                # Skip macOS metadata files
+                if '__MACOSX' in path.parts or path.name.startswith('._'):
+                    continue
+
                 files.append(path)
                 self.stats['files_scanned'] += 1
 
@@ -427,6 +433,34 @@ class FileImporter:
         default_collection: Optional[str]
     ) -> None:
         """Import a single document (PDF + TEI files)"""
+
+        # Auto-create collection if it doesn't exist
+        if default_collection:
+            try:
+                settings = get_settings()
+                db_dir = settings.db_dir
+                collections_data = load_entity_data(db_dir, 'collections')
+
+                # Check if collection exists
+                collection_exists = any(
+                    c.get('id') == default_collection
+                    for c in collections_data
+                )
+
+                if not collection_exists:
+                    # Create new collection with ID and name from directory name
+                    success, message = add_collection(
+                        db_dir,
+                        collection_id=default_collection,
+                        name=default_collection,
+                        description=""
+                    )
+                    if success:
+                        logger.info(f"Auto-created collection: {default_collection}")
+                    else:
+                        logger.warning(f"Failed to create collection '{default_collection}': {message}")
+            except Exception as e:
+                logger.error(f"Error checking/creating collection '{default_collection}': {e}")
 
         # Import PDF first (contains document metadata)
         pdf_paths = doc_files.get('pdf', [])

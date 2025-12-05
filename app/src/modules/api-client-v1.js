@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-04T08:44:09.816Z
+ * Generated from OpenAPI schema at 2025-12-05T12:35:24.774Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -37,6 +37,11 @@
 /**
  * @typedef {Object} AutocompleteDataResponse
  * @property {Object<string, any>} data - CodeMirror autocomplete map with element definitions
+ */
+
+/**
+ * @typedef {Object} Body_import_files_api_v1_import_post
+ * @property {string} file - Zip archive containing files to import
  */
 
 /**
@@ -1164,6 +1169,36 @@ export class ApiClientV1 {
   async filesHeartbeat(requestBody) {
     const endpoint = `/files/heartbeat`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Export files as a downloadable zip archive.
+   * Requires valid session authentication. Exports files filtered by:
+   * - Collections: If specified, only those collections (filtered by user access)
+   * - Variants: Optional variant filtering with glob pattern support
+   * - User access control: Only collections user has access to
+   * Args:
+   * collections: Comma-separated collection names (optional)
+   * variants: Comma-separated variant names (optional)
+   * include_versions: Include versioned TEI files (default: False)
+   * group_by: Directory grouping: "type", "collection", or "variant"
+   * db: Database manager (injected)
+   * repo: File repository (injected)
+   * storage: File storage (injected)
+   * current_user: Current user dict (injected)
+   * Returns:
+   * FileResponse with zip archive for download
+   *
+   * @param {Object=} params - Query parameters
+   * @param {(string | null)=} params.collections
+   * @param {(string | null)=} params.variants
+   * @param {boolean=} params.include_versions
+   * @param {string=} params.group_by
+   * @returns {Promise<any>}
+   */
+  async export(params) {
+    const endpoint = `/export`
+    return this.callApi(endpoint, 'GET', params);
   }
 
   /**
