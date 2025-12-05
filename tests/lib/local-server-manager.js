@@ -303,6 +303,9 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
         ? ['run', 'uvicorn', 'run_fastapi:app', '--host', this.host, '--port', String(this.port), '--log-level', 'info']
         : ['run', 'python', 'bin/start-dev'];
 
+      // Spawn the server process
+      // Note: We don't use detached mode because we rely on lsof to find and kill
+      // all processes on the port, which is more reliable than process groups
       this.serverProcess = spawn('uv', uvicornArgs, {
         cwd: this.projectRoot,
         stdio: 'pipe',
@@ -582,59 +585,85 @@ WEBDAV_REMOTE_ROOT=${webdavConfig.WEBDAV_REMOTE_ROOT}
 
     // Stop FastAPI server
     if (this.serverProcess) {
-      console.log(`[INFO] Stopping FastAPI server (PID: ${this.serverProcess.pid})`);
+      const serverPid = this.serverProcess.pid;
+      console.log(`[INFO] Stopping FastAPI server (PID: ${serverPid})`);
       try {
         if (platform() === 'win32') {
           // Windows: kill process tree
           const { exec } = await import('child_process');
           await new Promise((resolve) => {
-            exec(`taskkill /F /T /PID ${this.serverProcess.pid}`, () => resolve());
+            exec(`taskkill /F /T /PID ${serverPid}`, () => resolve());
           });
         } else {
-          // Unix: kill by port only to avoid killing other dev servers
+          // Unix: Use graceful shutdown (SIGTERM first, then SIGKILL if needed)
           const { exec } = await import('child_process');
-          const pid = this.serverProcess.pid;
 
-          // Kill processes on the specific port only
+          // Try graceful shutdown first (SIGTERM to all processes on the port)
+          // Use lsof to find all processes on the port (more reliable than process groups with uv/uvicorn)
           await new Promise((resolve) => {
             exec(`lsof -ti:${this.port}`, (err, stdout) => {
               if (err || !stdout.trim()) {
-                // No processes found on port, try killing parent process directly
+                // No processes found on port, try killing just the parent process
                 try {
-                  process.kill(pid, 'SIGKILL');
+                  process.kill(serverPid, 'SIGTERM');
                 } catch (err) {
-                  // Process may already be dead
+                  // Process may already be dead, which is fine
                 }
                 resolve();
                 return;
               }
+              // Send SIGTERM to all processes on the port
               const pids = stdout.trim().split('\n');
               const killPromises = pids.map(
                 (pid) =>
                   new Promise((res) => {
-                    exec(`kill -9 ${pid}`, () => res());
+                    exec(`kill -TERM ${pid}`, () => res());
                   })
               );
               Promise.all(killPromises).then(resolve).catch(resolve);
             });
           });
 
-          // Wait for processes to die (SIGKILL should be immediate but give it time)
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          // Wait for graceful shutdown (give it 3 seconds)
+          await new Promise((resolve) => setTimeout(resolve, 3000));
 
-          // Wait for parent process to exit
-          if (this.serverProcess && this.serverProcess.exitCode === null) {
+          // Check if port is now free
+          let gracefulShutdown = false;
+          await new Promise((resolve) => {
+            exec(`lsof -ti:${this.port}`, (err, stdout) => {
+              gracefulShutdown = err || !stdout.trim();
+              resolve();
+            });
+          });
+
+          // If graceful shutdown failed, force kill processes on the port
+          if (!gracefulShutdown) {
             await new Promise((resolve) => {
-              const timeout = setTimeout(() => resolve(), 2000);
-              this.serverProcess?.once('exit', () => {
-                clearTimeout(timeout);
-                resolve();
+              exec(`lsof -ti:${this.port}`, (err, stdout) => {
+                if (err || !stdout.trim()) {
+                  // Port is already free
+                  resolve();
+                  return;
+                }
+                // Force kill all processes on the port
+                const pids = stdout.trim().split('\n');
+                const killPromises = pids.map(
+                  (pid) =>
+                    new Promise((res) => {
+                      exec(`kill -9 ${pid}`, () => res());
+                    })
+                );
+                Promise.all(killPromises).then(resolve).catch(resolve);
               });
             });
+
+            // Wait for forced kill to complete
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
       } catch (err) {
-        // Ignore errors
+        // Log error but don't throw - cleanup failures shouldn't fail the test run
+        console.warn(`[WARNING] Error stopping server: ${err.message}`);
       }
       this.serverProcess = null;
     }

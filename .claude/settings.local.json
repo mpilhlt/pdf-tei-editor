@@ -49,7 +49,8 @@
       "Bash(timeout 600 npm run test:container:*)",
       "Bash(xargs cat:*)",
       "Bash(npm run build:*)",
-      "Bash(uv sync:*)"
+      "Bash(uv sync:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
