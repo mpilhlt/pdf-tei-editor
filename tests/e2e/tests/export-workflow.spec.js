@@ -16,6 +16,9 @@ const ALLOWED_ERROR_PATTERNS = [
   'offsetParent is not set.*cannot scroll'
 ];
 
+// Test credentials
+const TEST_ADMIN = { username: 'testadmin', password: 'adminpass' };
+
 test.describe('Export Workflow', () => {
 
   test('should show export UI in file drawer', async ({ page }) => {
@@ -23,7 +26,7 @@ test.describe('Export Workflow', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
     try {
-      await navigateAndLogin(page, 'admin', 'admin');
+      await navigateAndLogin(page, TEST_ADMIN.username, TEST_ADMIN.password);
       await page.waitForTimeout(1000);
 
       // Open file drawer
@@ -35,6 +38,9 @@ test.describe('Export Workflow', () => {
       const drawer = page.locator('sl-drawer[name="fileDrawer"]');
       await expect(drawer).toHaveAttribute('open', '');
 
+      // Wait for drawer content to fully render
+      await page.waitForTimeout(300);
+
       // Check for select all checkbox (should be visible if collections exist)
       const selectAllContainer = page.locator('[name="selectAllContainer"]');
       const isVisible = await selectAllContainer.isVisible();
@@ -43,7 +49,9 @@ test.describe('Export Workflow', () => {
         // If collections exist, verify export button and checkboxes
         const exportButton = page.locator('sl-button[name="exportButton"]');
         await expect(exportButton).toBeVisible();
-        await expect(exportButton).toBeDisabled(); // Should be disabled initially
+
+        // Check disabled state via attribute (Shoelace uses disabled attribute)
+        await expect(exportButton).toHaveAttribute('disabled', ''); // Should be disabled initially
 
         // Find collection checkboxes
         const collectionCheckboxes = page.locator('.collection-item sl-checkbox');
@@ -54,15 +62,15 @@ test.describe('Export Workflow', () => {
           await collectionCheckboxes.first().click();
           await page.waitForTimeout(200);
 
-          // Export button should now be enabled
-          await expect(exportButton).toBeEnabled();
+          // Export button should now be enabled (no disabled attribute)
+          await expect(exportButton).not.toHaveAttribute('disabled');
 
           // Uncheck the collection
           await collectionCheckboxes.first().click();
           await page.waitForTimeout(200);
 
           // Export button should be disabled again
-          await expect(exportButton).toBeDisabled();
+          await expect(exportButton).toHaveAttribute('disabled', '');
         }
       }
 
@@ -82,7 +90,7 @@ test.describe('Export Workflow', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
     try {
-      await navigateAndLogin(page, 'admin', 'admin');
+      await navigateAndLogin(page, TEST_ADMIN.username, TEST_ADMIN.password);
       await page.waitForTimeout(1000);
 
       // Open file drawer
@@ -112,7 +120,7 @@ test.describe('Export Workflow', () => {
 
           // Export button should be enabled
           const exportButton = page.locator('sl-button[name="exportButton"]');
-          await expect(exportButton).toBeEnabled();
+          await expect(exportButton).not.toHaveAttribute('disabled');
 
           // Click select all again to uncheck
           await selectAllCheckbox.click();
@@ -125,7 +133,7 @@ test.describe('Export Workflow', () => {
           }
 
           // Export button should be disabled
-          await expect(exportButton).toBeDisabled();
+          await expect(exportButton).toHaveAttribute('disabled', '');
         }
       }
 

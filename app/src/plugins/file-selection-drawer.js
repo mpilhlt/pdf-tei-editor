@@ -219,6 +219,11 @@ async function open() {
  */
 function close() {
   logger.debug("Closing file selection drawer");
+
+  // Clear selected collections on close
+  selectedCollections.clear();
+  updateExportButtonState();
+
   ui.fileDrawer.hide();
 }
 
@@ -490,6 +495,9 @@ async function populateFileTree(state) {
   } finally {
     isUpdatingProgrammatically = false;
   }
+
+  // Update export button state to match current selections
+  updateExportButtonState();
 }
 
 /**
