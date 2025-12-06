@@ -42,7 +42,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies for smart test runner
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Check if tests are needed
         id: check-tests
