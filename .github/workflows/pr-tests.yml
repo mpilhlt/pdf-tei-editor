@@ -22,20 +22,6 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for proper git diff
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image for tests
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          target: ci
-          push: false
-          load: true
-          tags: pdf-tei-editor:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       - name: Get changed files
         id: changed-files
         run: |
@@ -50,7 +36,55 @@ jobs:
           echo "files=$CHANGED_FILES" >> $GITHUB_OUTPUT
           echo "Changed files: $CHANGED_FILES"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies for smart test runner
+        run: npm ci --ignore-scripts
+
+      - name: Check if tests are needed
+        id: check-tests
+        run: |
+          # Run smart test runner in dry-run mode to check if any tests would run
+          if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
+            echo "Checking which tests need to run for changed files..."
+            npm run test:changed -- --dry-run ${{ steps.changed-files.outputs.files }} > /tmp/test-check.log 2>&1 || true
+          else
+            echo "No files changed, checking for always-run tests..."
+            npm run test:changed -- --dry-run > /tmp/test-check.log 2>&1 || true
+          fi
+
+          cat /tmp/test-check.log
+
+          # Check if the output indicates no tests would run
+          if grep -q "No relevant tests would run" /tmp/test-check.log || grep -q "Total: 0 tests would run" /tmp/test-check.log; then
+            echo "needs_tests=false" >> $GITHUB_OUTPUT
+            echo "No tests need to run"
+          else
+            echo "needs_tests=true" >> $GITHUB_OUTPUT
+            echo "Tests need to run"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check-tests.outputs.needs_tests == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for tests
+        if: steps.check-tests.outputs.needs_tests == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: ci
+          push: false
+          load: true
+          tags: pdf-tei-editor:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Run tests in container
+        if: steps.check-tests.outputs.needs_tests == 'true'
         run: |
           # Run tests inside container - output streams in real-time
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
@@ -69,15 +103,17 @@ jobs:
           script: |
             const fs = require('fs');
             const jobStatus = '${{ job.status }}';
+            const needsTests = '${{ steps.check-tests.outputs.needs_tests }}';
             const runId = context.runId;
             const serverUrl = context.serverUrl;
             const repo = context.repo;
 
             let body = '## Test Results\n\n';
 
-            if (jobStatus === 'success') {
+            if (needsTests === 'false') {
+              body += '✅ **No tests needed!**\n\n';
+            } else if (jobStatus === 'success') {
               body += '✅ **All tests passed!**\n\n';
-              body += 'Tests were run in a containerized environment. Changed files were analyzed and only relevant tests were executed.\n';
             } else {
               body += '❌ **Tests failed**\n\n';
               body += '### Failed Test Suites\n\n';
@@ -88,8 +124,6 @@ jobs:
               body += '2. Run tests locally: `npm run test:changed`\n';
               body += '3. Run tests in container: `npm run test:container`\n';
             }
-
-            body += `\n---\n*Changed files: ${{ steps.changed-files.outputs.files || 'none' }}*`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
