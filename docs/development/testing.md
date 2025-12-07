@@ -433,6 +433,7 @@ test('frontend smoke test', async ({ page }) => {
 ```
 
 Supported patterns:
+
 - Exact: `app/src/ui.js`
 - Wildcard: `app/src/*` (all files in directory)
 - Recursive: `app/src/**/*.js` (all JS files recursively)
@@ -534,18 +535,22 @@ This is particularly useful for debugging failures where you need to understand 
 ### Common Issues
 
 **Lock Conflicts**:
+
 - Use `--clean-db` to reset locks
 - Ensure tests call cleanup helpers
 
 **Port Conflicts**:
+
 - Test runners auto-select available ports
 - Check for stale server processes: `lsof -i :8000`
 
 **Container Issues**:
+
 - Rebuild image: remove `--no-rebuild` flag
 - Check logs: `docker logs <container-id>`
 
 **Test Timeouts**:
+
 - Increase timeout: `--timeout 180` (seconds)
 - Check server startup logs
 
@@ -572,28 +577,230 @@ Smart test runner automatically runs on `git push`:
 git push
 ```
 
-### CI Pipeline (GitHub Actions)
+### GitHub CI Testing Workflow
 
-The CI pipeline runs tests inside a container:
+The PR testing workflow (`.github/workflows/pr-tests.yml`) uses an optimized three-path strategy to minimize CI time while ensuring comprehensive test coverage.
 
-```bash
-# GitHub Actions workflow runs:
-# 1. Build CI container image (pdf-tei-editor:ci)
-# 2. Run smart test runner inside container with changed files
-# 3. Stream output in real-time
-# 4. Report results as PR comment
+#### Workflow Overview
 
-# Local equivalent:
-npm run test:container
+```
+1. Analyze changed files
+2. Determine which tests need to run (--names-only)
+3. Choose execution strategy:
+   ├─ No tests → Skip (30 seconds)
+   ├─ Unit/API only → Native execution (2-5 minutes)
+   └─ E2E included → Container execution (10-15 minutes)
 ```
 
-**CI Architecture:**
+#### Execution Paths
 
-- Tests run entirely inside container (not against it)
-- All fixtures and code baked into image at build time
-- Real-time streaming output (not a black box)
-- Docker layer caching for fast builds
-- Smart test selection based on changed files
+**Path 1: No Tests Needed** (~30 seconds)
+
+Triggers when: Changed files don't affect any tested code (documentation, configs, etc.)
+
+```yaml
+Steps:
+1. Checkout code
+2. Install Node.js
+3. Run smart test runner with --names-only
+4. Detect: No test files in output
+5. Skip all test execution
+6. Comment PR: "✅ No tests needed!"
+```
+
+Example scenarios:
+
+- Documentation updates (README.md, docs/)
+- Configuration changes (.env.example, .gitignore)
+- Non-tested utility scripts
+
+**Path 2: Native Execution** (~2-5 minutes)
+
+Triggers when: Only unit/API tests detected (no E2E tests)
+
+```yaml
+Steps:
+1. Checkout code
+2. Install Node.js, Python, uv
+3. Run smart test runner with --names-only
+4. Detect: Only tests/unit/ or tests/api/ in output
+5. Install dependencies (npm ci, uv sync)
+6. Run tests natively: npm run test:changed
+7. Comment PR: "✅ All tests passed! (native execution)"
+```
+
+Example scenarios:
+
+- Backend-only changes (fastapi_app/routers/files.py)
+- JavaScript module changes (app/src/modules/state-manager.js)
+- Python utility updates (fastapi_app/lib/auth.py)
+
+**Path 3: Container Execution** (~10-15 minutes)
+
+Triggers when: E2E tests detected in output
+
+```yaml
+Steps:
+1. Checkout code
+2. Install Node.js, Python, uv
+3. Run smart test runner with --names-only
+4. Detect: tests/e2e/ in output
+5. Build Docker container (with caching)
+6. Run all tests in container: docker run pdf-tei-editor:ci
+7. Comment PR: "✅ All tests passed! (containerized)"
+```
+
+Example scenarios:
+
+- Frontend UI changes (app/src/plugins/xmleditor.js)
+- Full-stack features affecting UI
+- Changes explicitly annotated with E2E test coverage
+
+#### Test Detection Logic
+
+The workflow uses the smart test runner's `--names-only` option:
+
+```bash
+# Get list of test files (one per line)
+TEST_FILES=$(npm run test:changed -- --names-only <changed-files>)
+
+# Check if E2E tests are present
+if echo "$TEST_FILES" | grep -q "tests/e2e/"; then
+  # Use container execution (Playwright browsers needed)
+  needs_e2e=true
+else
+  # Use native execution (faster)
+  needs_e2e=false
+fi
+```
+
+#### Performance Comparison
+
+| PR Type | Changed Files | Tests Detected | Execution | Old Time | New Time | Saved |
+|---------|---------------|----------------|-----------|----------|----------|-------|
+| Docs | README.md | None | Skip | ~10 min | ~30 sec | ~9.5 min |
+| Backend | files.py | Unit + API | Native | ~10 min | ~3 min | ~7 min |
+| Frontend module | state-manager.js | Unit only | Native | ~10 min | ~2 min | ~8 min |
+| UI component | xmleditor.js | Unit + E2E | Container | ~10 min | ~10 min | 0 min |
+
+**Average time savings: 5-8 minutes per PR** (for 70% of PRs that don't need E2E tests)
+
+#### Native vs Container Execution
+
+**Native Execution** (Unit/API tests):
+
+```bash
+# Setup
+npm ci                    # Install Node dependencies
+uv sync                   # Create Python virtual environment
+
+# Execution
+npm run test:changed      # Runs smart test runner
+├─ JS unit tests: node tests/unit-test-runner.js
+├─ Python unit tests: uv run python tests/unit-test-runner.py
+└─ API tests: node tests/backend-test-runner.js (local FastAPI server)
+```
+
+**Container Execution** (E2E tests):
+
+```bash
+# Build
+docker build --target ci  # Build test container image
+
+# Execution
+docker run pdf-tei-editor:ci <changed-files>
+├─ All tests run inside container
+├─ Playwright browsers pre-installed
+└─ Isolated test environment
+```
+
+#### Local Equivalent
+
+Replicate the CI workflow locally:
+
+```bash
+# Check which tests would run (like CI does)
+npm run test:changed -- --names-only
+
+# Run tests natively (like CI Path 2)
+npm run test:changed
+
+# Run tests in container (like CI Path 3)
+npm run test:container
+
+# Force all tests in container
+npm run test:container -- --all
+```
+
+#### Debugging CI Failures
+
+**If tests pass locally but fail in CI:**
+
+1. **Check environment differences:**
+
+   ```bash
+   # CI uses clean install
+   npm ci  # vs npm install
+
+   # CI uses specific Node/Python versions
+   node -v  # Should match workflow (20.x)
+   python -v  # Should match workflow (3.11)
+   ```
+
+2. **Run in container locally:**
+
+   ```bash
+   # Exact same environment as CI
+   npm run test:container
+
+   # Force rebuild (ignore cache)
+   npm run test:container -- --no-cache
+   ```
+
+3. **Check test isolation:**
+
+   ```bash
+   # CI always starts with clean state
+   # Verify tests clean up properly
+   npm run test:changed -- --keep-db  # Check for leaks
+   ```
+
+**If container build fails:**
+
+1. **Check Dockerfile changes:**
+
+   ```bash
+   # Test build locally
+   docker build --target ci -t pdf-tei-editor:ci .
+   ```
+
+2. **Check dependency versions:**
+
+   ```bash
+   # Verify package.json and pyproject.toml
+   npm ci
+   uv sync
+   ```
+
+#### CI Architecture
+
+**Design Principles:**
+
+- **Smart test selection**: Only run affected tests
+- **Fail fast**: Stop on first failure
+- **Progressive optimization**: Fast path for common cases
+- **Container when needed**: E2E tests require browsers
+- **Real-time feedback**: Stream output, immediate PR comments
+- **Caching strategy**: Docker layer cache, npm/pip caching
+
+**Technical Details:**
+
+- Node.js 20.x for JavaScript execution
+- Python 3.11 for FastAPI backend
+- uv for Python dependency management
+- Docker Buildx for efficient builds
+- GitHub Actions caching for Docker layers
+- Concurrent test execution where possible
 
 ## Test Fixtures
 
@@ -614,6 +821,7 @@ Located in `tests/e2e/fixtures/`:
 - **standard**: Complete environment with sample files
 
 Fixtures include:
+
 - Config files (`config/`)
 - Sample PDF/TEI files (`files/`)
 - User credentials

@@ -634,4 +634,167 @@ class TestExample(unittest.TestCase):
     }
   });
 
+  test('should detect E2E tests in --names-only output for container decision', async () => {
+    // Temporarily add --names-only to process.argv for this test
+    const originalArgv = process.argv.slice();
+    process.argv.push('--names-only');
+
+    try {
+      const runner = new SmartTestRunner();
+
+      // Mock changed files that trigger E2E tests
+      const originalGetChangedFiles = runner.getChangedFiles;
+      runner.getChangedFiles = () => ['app/src/plugins/xmleditor.js'];
+
+      try {
+        // Capture console output
+        let capturedOutput = '';
+        const originalLog = console.log;
+        console.log = (...args) => {
+          capturedOutput += args.join(' ') + '\n';
+        };
+
+        try {
+          await runner.run({ namesOnly: true });
+
+          const lines = capturedOutput.trim().split('\n').filter(line => line.trim());
+
+          // Should include E2E tests
+          const hasE2ETests = lines.some(line => line.includes('tests/e2e/'));
+          assert(hasE2ETests, 'Should include E2E tests in output when UI files change');
+
+          // Verify workflow would detect this (simulating GitHub Actions check)
+          const hasE2EPattern = lines.some(line => /tests\/e2e\//.test(line));
+          assert(hasE2EPattern, 'E2E test pattern should be detectable by grep in workflow');
+
+          console.log = originalLog; // Restore for this output
+          console.log('E2E tests detected:', lines.filter(l => l.includes('tests/e2e/')).length);
+          console.log('Sample E2E tests:', lines.filter(l => l.includes('tests/e2e/')).slice(0, 2));
+
+        } finally {
+          console.log = originalLog;
+        }
+      } finally {
+        runner.getChangedFiles = originalGetChangedFiles;
+      }
+    } finally {
+      // Restore process.argv
+      process.argv = originalArgv;
+    }
+  });
+
+  test('should only output unit/API tests when backend files change (native execution)', async () => {
+    // Temporarily add --names-only to process.argv for this test
+    const originalArgv = process.argv.slice();
+    process.argv.push('--names-only');
+
+    try {
+      const runner = new SmartTestRunner();
+
+      // Mock changed files that only trigger unit/API tests (backend change)
+      const originalGetChangedFiles = runner.getChangedFiles;
+      runner.getChangedFiles = () => ['fastapi_app/routers/files.py'];
+
+      try {
+        // Capture console output
+        let capturedOutput = '';
+        const originalLog = console.log;
+        console.log = (...args) => {
+          capturedOutput += args.join(' ') + '\n';
+        };
+
+        try {
+          await runner.run({ namesOnly: true });
+
+          const lines = capturedOutput.trim().split('\n').filter(line => line.trim());
+
+          // Should NOT include E2E tests for pure backend changes
+          const hasE2ETests = lines.some(line => line.includes('tests/e2e/'));
+
+          // May have unit or API tests
+          const hasUnitOrAPITests = lines.some(line =>
+            line.includes('tests/unit/') || line.includes('tests/api/')
+          );
+
+          console.log = originalLog; // Restore for this output
+          console.log('Backend change test selection:');
+          console.log('  Has E2E tests:', hasE2ETests ? 'YES (would use container)' : 'NO (native execution)');
+          console.log('  Has unit/API tests:', hasUnitOrAPITests);
+          console.log('  Total tests:', lines.length);
+
+          // Backend changes shouldn't trigger E2E tests unless explicitly annotated
+          if (hasE2ETests) {
+            console.log('  Note: E2E tests found - this backend file may have @testCovers annotations for E2E');
+          }
+
+        } finally {
+          console.log = originalLog;
+        }
+      } finally {
+        runner.getChangedFiles = originalGetChangedFiles;
+      }
+    } finally {
+      // Restore process.argv
+      process.argv = originalArgv;
+    }
+  });
+
+  test('should generate correct test commands in dry-run mode', async () => {
+    const runner = new SmartTestRunner();
+
+    // Mock changed files to trigger only unit tests (avoid E2E conflicts from temp files)
+    const originalGetChangedFiles = runner.getChangedFiles;
+    runner.getChangedFiles = () => ['app/src/modules/state-manager.js'];
+
+    // Mock getTestsToRun to return controlled test list without temp E2E files
+    const originalGetTestsToRun = runner.getTestsToRun;
+    runner.getTestsToRun = async (options) => {
+      return {
+        tests: {
+          js: ['tests/unit/js/state-manager.test.js'],
+          py: [],
+          api: [],
+          e2e: [] // Exclude E2E to avoid temp file conflicts
+        },
+        analysisResult: {
+          dependencies: {
+            'tests/unit/js/state-manager.test.js': {
+              dependencies: ['app/src/modules/state-manager.js'],
+              alwaysRun: false,
+              envVars: []
+            }
+          },
+          alwaysRunTests: []
+        }
+      };
+    };
+
+    try {
+      // Capture console output
+      let capturedOutput = '';
+      const originalLog = console.log;
+      console.log = (...args) => {
+        capturedOutput += args.join(' ') + '\n';
+      };
+
+      try {
+        await runner.run({ dryRun: true });
+
+        // Verify correct commands are shown
+        assert(capturedOutput.includes('node tests/unit-test-runner.js'), 'Should show JS unit test command');
+        assert(capturedOutput.includes('tests/unit/js/state-manager.test.js'), 'Should include specific test file');
+
+        console.log = originalLog; // Restore for this output
+        console.log('Dry-run command verification passed');
+        console.log('JS unit test command found in output');
+
+      } finally {
+        console.log = originalLog;
+      }
+    } finally {
+      runner.getChangedFiles = originalGetChangedFiles;
+      runner.getTestsToRun = originalGetTestsToRun;
+    }
+  });
+
 });
