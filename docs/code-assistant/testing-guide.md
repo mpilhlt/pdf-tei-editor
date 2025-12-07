@@ -20,6 +20,10 @@ tests/
 # Run tests for changed files only (use this most often)
 npm run test:changed
 
+# Check which tests would run without executing them
+npm run test:changed -- --dry-run
+npm run test:changed -- --names-only  # Output only test file names
+
 # Unit tests
 npm run test:unit:js          # JavaScript units
 npm run test:unit:fastapi     # Python units

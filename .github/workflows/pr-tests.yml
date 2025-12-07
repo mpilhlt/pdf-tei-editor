@@ -47,24 +47,23 @@ jobs:
       - name: Check if tests are needed
         id: check-tests
         run: |
-          # Run smart test runner in dry-run mode to check if any tests would run
+          # Run smart test runner with --names-only to get list of tests
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Checking which tests need to run for changed files..."
-            npm run test:changed -- --dry-run ${{ steps.changed-files.outputs.files }} > /tmp/test-check.log 2>&1 || true
+            TEST_FILES=$(npm run test:changed -- --names-only ${{ steps.changed-files.outputs.files }} 2>/dev/null | grep -v '^>' || true)
           else
             echo "No files changed, checking for always-run tests..."
-            npm run test:changed -- --dry-run > /tmp/test-check.log 2>&1 || true
+            TEST_FILES=$(npm run test:changed -- --names-only 2>/dev/null | grep -v '^>' || true)
           fi
 
-          cat /tmp/test-check.log
-
-          # Check if the output indicates no tests would run
-          if grep -q "No relevant tests would run" /tmp/test-check.log || grep -q "Total: 0 tests would run" /tmp/test-check.log; then
+          # Check if any test files were found
+          if [ -z "$TEST_FILES" ]; then
             echo "needs_tests=false" >> $GITHUB_OUTPUT
             echo "No tests need to run"
           else
             echo "needs_tests=true" >> $GITHUB_OUTPUT
-            echo "Tests need to run"
+            echo "Tests to run:"
+            echo "$TEST_FILES"
           fi
 
       - name: Set up Docker Buildx
@@ -112,8 +111,10 @@ jobs:
 
             if (needsTests === 'false') {
               body += '✅ **No tests needed!**\n\n';
+              body += 'Changed files were analyzed and no relevant tests were found. This PR does not affect any tested code.\n';
             } else if (jobStatus === 'success') {
               body += '✅ **All tests passed!**\n\n';
+              body += 'Tests were run in a containerized environment. Changed files were analyzed and only relevant tests were executed.\n';
             } else {
               body += '❌ **Tests failed**\n\n';
               body += '### Failed Test Suites\n\n';

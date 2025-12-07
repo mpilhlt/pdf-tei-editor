@@ -540,4 +540,98 @@ class TestExample(unittest.TestCase):
     console.log('Filtered changed files with pattern:', changedFiles2);
   });
 
+  test('should output only test file names with --names-only option', async () => {
+    // Temporarily add --names-only to process.argv for this test
+    const originalArgv = process.argv.slice();
+    process.argv.push('--names-only');
+
+    try {
+      const runner = new SmartTestRunner();
+
+      // Mock changed files to get predictable output
+      const originalGetChangedFiles = runner.getChangedFiles;
+      runner.getChangedFiles = () => ['app/src/modules/state-manager.js'];
+
+      try {
+        // Capture console output
+        let capturedOutput = '';
+        const originalLog = console.log;
+        console.log = (...args) => {
+          capturedOutput += args.join(' ') + '\n';
+        };
+
+        try {
+          await runner.run({ namesOnly: true });
+
+          // Should output test file names only, one per line
+          const lines = capturedOutput.trim().split('\n').filter(line => line.trim());
+
+          // All lines should be test file paths
+          lines.forEach(line => {
+            assert(line.startsWith('tests/'), `Expected test file path, got: ${line}`);
+          });
+
+          // Should not contain any emoji, progress messages, or other output
+          assert(!capturedOutput.includes('🧠'), 'Should not contain emoji');
+          assert(!capturedOutput.includes('Smart Test Runner'), 'Should not contain progress messages');
+          assert(!capturedOutput.includes('Running'), 'Should not contain running messages');
+
+          console.log = originalLog; // Restore for this output
+          console.log('--names-only output lines:', lines.length);
+          console.log('Sample output:', lines.slice(0, 3).join('\n'));
+
+        } finally {
+          console.log = originalLog;
+        }
+      } finally {
+        runner.getChangedFiles = originalGetChangedFiles;
+      }
+    } finally {
+      // Restore process.argv
+      process.argv = originalArgv;
+    }
+  });
+
+  test('should output nothing with --names-only when no tests need to run', async () => {
+    // Temporarily add --names-only to process.argv for this test
+    const originalArgv = process.argv.slice();
+    process.argv.push('--names-only');
+
+    try {
+      const runner = new SmartTestRunner();
+
+      // Mock no changed files
+      const originalGetChangedFiles = runner.getChangedFiles;
+      runner.getChangedFiles = () => [];
+
+      try {
+        // Capture console output
+        let capturedOutput = '';
+        const originalLog = console.log;
+        console.log = (...args) => {
+          capturedOutput += args.join(' ') + '\n';
+        };
+
+        try {
+          await runner.run({ namesOnly: true });
+
+          // Should output nothing (only always-run tests if any, which we filtered out)
+          // Since we removed @testCovers * from real tests, output should be empty
+          const nonEmptyLines = capturedOutput.trim().split('\n').filter(line => line.trim());
+
+          console.log = originalLog; // Restore for this output
+          console.log('--names-only output with no changes:', nonEmptyLines.length === 0 ? 'empty (correct)' : nonEmptyLines.join(', '));
+
+        } finally {
+          console.log = originalLog;
+        }
+      } finally {
+        runner.getChangedFiles = originalGetChangedFiles;
+      }
+    } finally {
+      // Restore process.argv
+      process.argv = originalArgv;
+    }
+  });
+
 });

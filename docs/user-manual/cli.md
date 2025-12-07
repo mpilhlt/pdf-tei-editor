@@ -481,6 +481,54 @@ Starting FastAPI development server...
 
 ## Testing Commands
 
+### test:changed
+
+Runs tests intelligently based on changed files, using dependency analysis to determine which tests are affected.
+
+```bash
+# Run tests for changed files
+npm run test:changed
+
+# Check which tests would run without executing them
+npm run test:changed -- --dry-run
+
+# Output only test file names (one per line, nothing if no tests)
+npm run test:changed -- --names-only
+
+# Run tests for specific files
+npm run test:changed -- app/src/plugins/filedata.js fastapi_app/routers/files.py
+```
+
+**Options**:
+
+- `--all`: Run all tests regardless of changes
+- `--dry-run`: Show which tests would run without executing them
+- `--names-only`: Output only test file names (one per line), nothing if no tests need to run
+- `--tap`: Output results in TAP format
+- `--debug`: Enable debug logging
+- `--browser <browsers>`: Browser(s) to use for E2E tests (comma-separated, default: chromium)
+
+**What it does**:
+
+1. Analyzes test files for `@testCovers` annotations and JavaScript import dependencies
+2. Detects which files have changed (via git) or uses provided file list
+3. Determines which tests are affected by the changes
+4. Runs only the relevant tests (or all tests marked with `@testCovers *`)
+5. Supports JavaScript unit tests, Python unit tests, API integration tests, and E2E tests
+
+**Use cases**:
+
+- Fast test iteration during development (only run affected tests)
+- Pre-commit validation (automatically run by git hooks)
+- CI/CD optimization (skip unnecessary test runs)
+- Quick verification of which tests cover specific code
+
+**Output modes**:
+
+- Default: Runs tests and shows results
+- `--dry-run`: Shows which tests would run with detailed information
+- `--names-only`: Outputs only test file paths (useful for CI/CD scripts)
+
 ### test:container
 
 Tests that the application container builds and starts correctly.
