@@ -168,7 +168,7 @@ class SmartTestRunner {
       e2eTests.push(...e2eFiles.map(makeRelative));
     }
 
-    if (!process.argv.includes('--tap')) {
+    if (!process.argv.includes('--tap') && !process.argv.includes('--names-only')) {
       logger.info(`Discovered ${jsTests.length} JS unit tests, ${pyTests.length} Python unit tests, ${apiTests.length} API tests, ${e2eTests.length} E2E tests`);
     }
     return { js: jsTests, py: pyTests, api: apiTests, e2e: e2eTests };
@@ -263,7 +263,7 @@ class SmartTestRunner {
    * @param {string[]} testFiles
    */
   async analyzeJSDependencies(testFiles) {
-    if (!process.argv.includes('--tap')) logger.info('Analyzing JavaScript dependencies...');
+    if (!process.argv.includes('--tap') && !process.argv.includes('--names-only')) logger.info('Analyzing JavaScript dependencies...');
     /** @type {Record<string, {dependencies: string[], alwaysRun: boolean, envVars: string[]}>} */
     const jsDeps = {};
     /** @type {string[]} */
@@ -326,7 +326,7 @@ class SmartTestRunner {
    * @param {string[]} testFiles
    */
   async analyzePyDependencies(testFiles) {
-    if (!process.argv.includes('--tap')) logger.info('Analyzing Python dependencies...');
+    if (!process.argv.includes('--tap') && !process.argv.includes('--names-only')) logger.info('Analyzing Python dependencies...');
     /** @type {Record<string, {dependencies: string[], alwaysRun: boolean, envVars: string[]}>} */
     const pyDeps = {};
     /** @type {string[]} */
@@ -382,7 +382,7 @@ class SmartTestRunner {
    * @param {string[]} testFiles
    */
   async analyzeE2EDependencies(testFiles) {
-    if (!process.argv.includes('--tap')) console.log('📱 Analyzing E2E test dependencies...');
+    if (!process.argv.includes('--tap') && !process.argv.includes('--names-only')) console.log('📱 Analyzing E2E test dependencies...');
     /** @type {Record<string, {dependencies: string[], alwaysRun: boolean, envVars: string[]}>} */
     const e2eDeps = {};
     /** @type {string[]} */
@@ -422,7 +422,7 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {{tap?: boolean, all?: boolean, changedFiles?: string[] | null}} options
+   * @param {{tap?: boolean, namesOnly?: boolean, all?: boolean, changedFiles?: string[] | null}} options
    */
   async analyzeDependencies(options = {}) {
     if (options.tap) {
@@ -430,7 +430,7 @@ class SmartTestRunner {
         return { dependencies: {}, alwaysRunTests: [] };
     }
 
-    if (!process.argv.includes('--tap')) console.log('🔬 Running dependency analysis...');
+    if (!process.argv.includes('--tap') && !options.namesOnly) console.log('🔬 Running dependency analysis...');
 
     const testFiles = await this.discoverTestFiles();
     const [jsResult, pyResult, apiResult, e2eResult] = await Promise.all([
@@ -581,20 +581,20 @@ class SmartTestRunner {
   }
 
   /**
-   * @param {{all?: boolean, tap?: boolean, changedFiles?: string[] | null}} options
+   * @param {{all?: boolean, tap?: boolean, namesOnly?: boolean, changedFiles?: string[] | null}} options
    */
   async getTestsToRun(options = {}) {
     const testFiles = await this.discoverTestFiles();
 
     if (options.all) {
-      if (!options.tap) console.log('🏃 Running all tests...');
+      if (!options.tap && !options.namesOnly) console.log('🏃 Running all tests...');
       // For --all mode, we still need analysis to get environment variables
       const analysisResult = await this.analyzeDependencies(options);
       return { tests: testFiles, analysisResult };
     }
 
     const changedFiles = this.getChangedFiles(options.changedFiles);
-    if (!options.tap) logger.info('Changed files:', changedFiles.length > 0 ? changedFiles.join(', ') : 'none');
+    if (!options.tap && !options.namesOnly) logger.info('Changed files:', changedFiles.length > 0 ? changedFiles.join(', ') : 'none');
 
     const analysisResult = await this.analyzeDependencies(options);
     debugLog('Analysis result:', JSON.stringify(analysisResult, null, 2));
@@ -646,6 +646,7 @@ class SmartTestRunner {
    * @typedef {Object} RunOptions
    * @property {boolean} [tap] - Output in TAP format
    * @property {boolean} [dryRun] - Show which tests would run without executing
+   * @property {boolean} [namesOnly] - Output only test file names (one per line)
    * @property {boolean} [all] - Run all tests regardless of changes
    * @property {string[] | null} [changedFiles] - Custom list of changed files to analyze
    */
@@ -657,14 +658,30 @@ class SmartTestRunner {
     const startTime = Date.now();
     const isTap = options.tap;
     const dryRun = options.dryRun;
+    const namesOnly = options.namesOnly;
 
     if (isTap) {
         // In TAP mode, we don't show the smart runner's own logs, only the TAP output from the runners
-    } else {
+    } else if (!namesOnly) {
         console.log('🧠 Smart Test Runner - Analyzing dependencies and changes...');
     }
 
     const { tests: testsToRun, analysisResult } = await this.getTestsToRun(options);
+
+    // Handle --names-only mode: output only test file names
+    if (namesOnly) {
+      const allTests = [
+        ...testsToRun.js,
+        ...testsToRun.py,
+        ...(testsToRun.api || []),
+        ...(testsToRun.e2e || [])
+      ];
+      if (allTests.length > 0) {
+        allTests.forEach(test => console.log(test));
+      }
+      // Exit silently with no output if no tests
+      return;
+    }
 
     const jsCommand = testsToRun.js.length > 0 ? `node tests/unit-test-runner.js ${isTap ? '--tap' : ''} ${testsToRun.js.join(' ')}` : null;
     const pyCommand = testsToRun.py.length > 0 ? `uv run python tests/unit-test-runner.py ${isTap ? '--tap' : ''} ${testsToRun.py.join(' ')}` : null;
@@ -881,6 +898,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         .version('1.0.0')
         .option('--all', 'run all tests regardless of changes')
         .option('--dry-run', 'show which tests would run without executing them')
+        .option('--names-only', 'output only test file names (one per line), nothing if no tests')
         .option('--tap', 'output results in TAP format')
         .option('--debug', 'enable debug logging')
         .option('--browser <browsers>', 'browser(s) to use for E2E tests (comma-separated, default: chromium)', 'chromium')
@@ -895,6 +913,7 @@ Examples:
   node tests/smart-test-runner.js --all
   node tests/smart-test-runner.js app/src/ui.js server/api/auth.py
   node tests/smart-test-runner.js app/src/ui.js --dry-run --debug
+  node tests/smart-test-runner.js --names-only  # Output only test file names
   node tests/smart-test-runner.js --tap
 
 How it works:
@@ -919,7 +938,9 @@ How it works:
         all: options.all || false,
         tap: options.tap || false,
         dryRun: options.dryRun || false,
-        changedFiles: files.length > 0 ? files : null
+        namesOnly: options.namesOnly || false,
+        changedFiles: files.length > 0 ? files : null,
+        browser: options.browser
     };
 
     runner.run(runOptions).catch(error => {

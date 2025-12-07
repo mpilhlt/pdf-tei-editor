@@ -47,32 +47,73 @@ jobs:
       - name: Check if tests are needed
         id: check-tests
         run: |
-          # Run smart test runner in dry-run mode to check if any tests would run
+          # Run smart test runner with --names-only to get list of tests
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Checking which tests need to run for changed files..."
-            npm run test:changed -- --dry-run ${{ steps.changed-files.outputs.files }} > /tmp/test-check.log 2>&1 || true
+            TEST_FILES=$(npm run test:changed -- --names-only ${{ steps.changed-files.outputs.files }} 2>/dev/null | grep -v '^>' || true)
           else
             echo "No files changed, checking for always-run tests..."
-            npm run test:changed -- --dry-run > /tmp/test-check.log 2>&1 || true
+            TEST_FILES=$(npm run test:changed -- --names-only 2>/dev/null | grep -v '^>' || true)
           fi
 
-          cat /tmp/test-check.log
-
-          # Check if the output indicates no tests would run
-          if grep -q "No relevant tests would run" /tmp/test-check.log || grep -q "Total: 0 tests would run" /tmp/test-check.log; then
+          # Check if any test files were found
+          if [ -z "$TEST_FILES" ]; then
             echo "needs_tests=false" >> $GITHUB_OUTPUT
+            echo "needs_e2e=false" >> $GITHUB_OUTPUT
             echo "No tests need to run"
           else
             echo "needs_tests=true" >> $GITHUB_OUTPUT
-            echo "Tests need to run"
+            echo "Tests to run:"
+            echo "$TEST_FILES"
+
+            # Check if any E2E tests are in the list
+            if echo "$TEST_FILES" | grep -q "tests/e2e/"; then
+              echo "needs_e2e=true" >> $GITHUB_OUTPUT
+              echo "E2E tests detected - container will be needed"
+            else
+              echo "needs_e2e=false" >> $GITHUB_OUTPUT
+              echo "No E2E tests - will run natively"
+            fi
+          fi
+
+      - name: Set up Python
+        if: steps.check-tests.outputs.needs_tests == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        if: steps.check-tests.outputs.needs_tests == 'true'
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install dependencies
+        if: steps.check-tests.outputs.needs_tests == 'true'
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          npm ci
+          uv sync
+
+      - name: Run tests natively
+        if: steps.check-tests.outputs.needs_tests == 'true' && steps.check-tests.outputs.needs_e2e == 'false'
+        run: |
+          # Ensure uv is in PATH
+          export PATH="$HOME/.cargo/bin:$PATH"
+
+          # Run unit and API tests natively (faster, no container needed)
+          if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
+            echo "Running tests for changed files..."
+            npm run test:changed -- ${{ steps.changed-files.outputs.files }}
+          else
+            echo "No files changed, running always-run tests only..."
+            npm run test:changed
           fi
 
       - name: Set up Docker Buildx
-        if: steps.check-tests.outputs.needs_tests == 'true'
+        if: steps.check-tests.outputs.needs_e2e == 'true'
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image for tests
-        if: steps.check-tests.outputs.needs_tests == 'true'
+      - name: Build Docker image for E2E tests
+        if: steps.check-tests.outputs.needs_e2e == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -84,9 +125,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run tests in container
-        if: steps.check-tests.outputs.needs_tests == 'true'
+        if: steps.check-tests.outputs.needs_e2e == 'true'
         run: |
-          # Run tests inside container - output streams in real-time
+          # Run all tests in container (needed for E2E browser support)
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Running tests for changed files..."
             docker run --rm pdf-tei-editor:ci ${{ steps.changed-files.outputs.files }}
@@ -110,10 +151,18 @@ jobs:
 
             let body = '## Test Results\n\n';
 
+            const needsE2E = '${{ steps.check-tests.outputs.needs_e2e }}';
+
             if (needsTests === 'false') {
               body += '✅ **No tests needed!**\n\n';
+              body += 'Changed files were analyzed and no relevant tests were found. This PR does not affect any tested code.\n';
             } else if (jobStatus === 'success') {
               body += '✅ **All tests passed!**\n\n';
+              if (needsE2E === 'true') {
+                body += 'Tests were run in a containerized environment (E2E tests included). Changed files were analyzed and only relevant tests were executed.\n';
+              } else {
+                body += 'Tests were run natively (unit and API tests only). Changed files were analyzed and only relevant tests were executed.\n';
+              }
             } else {
               body += '❌ **Tests failed**\n\n';
               body += '### Failed Test Suites\n\n';
