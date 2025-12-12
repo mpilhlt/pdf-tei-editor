@@ -4,10 +4,6 @@
  * Unified Backend Test Runner
  *
  * Orchestrates backend integration test execution with pluggable server managers.
- * Supports two execution modes:
- * - Local mode (--local): Fast iteration with local FastAPI server
- * - Container mode (--container): Isolated testing with containerized server
- *
  * Features:
  * - Dynamic fixture selection (--fixture minimal|standard)
  * - Automatic .env file detection from test directories
@@ -54,9 +50,6 @@ const program = createTestRunnerCommand({
     '',
     '# Debug mode (keep server running)',
     'node tests/backend-test-runner.js --no-cleanup --verbose',
-    '',
-    '# Container mode for CI',
-    'node tests/backend-test-runner.js --container',
     '',
     '# Run specific test directory',
     'node tests/backend-test-runner.js --test-dir tests/api/v1',
