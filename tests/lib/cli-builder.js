@@ -31,11 +31,6 @@ export function createTestRunnerCommand(config) {
     .description(description)
     .version('1.0.0');
 
-  // Execution mode
-  program
-    .option('--local', 'use local server (default, fast iteration)')
-    .option('--container', 'use containerized server (CI-ready)');
-
   // Fixture selection
   program
     .option(
@@ -130,15 +125,9 @@ export function processEnvArgs(envArgs) {
  * Resolve execution mode from options
  *
  * @param {Object} options - Parsed CLI options
- * @returns {string} 'local' or 'container'
+ * @returns {string} 'local', since 'container' mode is no longer supported in this context
  */
 export function resolveMode(options) {
-  // --container flag explicitly sets container mode
-  if (options.container) return 'container';
-
-  // CI environment auto-selects container mode
-  if (process.env.CI === 'true') return 'container';
-
   // Default to local
   return 'local';
 }

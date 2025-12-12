@@ -157,13 +157,18 @@ def list_files(
     accessible_collections = get_user_collections(current_user, settings.db_dir)
 
     if accessible_collections is not None:
-        # User has limited collection access - filter documents
+        # User has limited collection access - filter documents and their collection lists
         logger.debug(f"Filtering by collections: {accessible_collections}")
         files_data = []
         for doc_group in documents_map.values():
             doc_collections = doc_group.collections or []
-            # Check if document has any collection the user can access
-            if any(col in accessible_collections for col in doc_collections):
+            # Filter collections to only those the user can access
+            accessible_doc_collections = [col for col in doc_collections if col in accessible_collections]
+
+            # Only include document if user has access to at least one of its collections
+            if accessible_doc_collections:
+                # Update the document's collections list to only show accessible collections
+                doc_group.collections = accessible_doc_collections
                 files_data.append(doc_group)
         logger.debug(f"After collection filtering: {len(files_data)} documents")
     else:
