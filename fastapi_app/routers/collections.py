@@ -64,26 +64,46 @@ def list_all_collections(
     current_user: dict = Depends(require_authenticated)
 ):
     """
-    List all collections.
+    List all collections accessible to the current user.
 
-    Returns all collections without filtering. Requires authentication.
+    Filters collections based on user's group memberships. Admin users and
+    users with wildcard access see all collections.
 
     Returns:
         List of Collection objects
     """
+    from ..lib.user_utils import get_user_collections
+
     settings = get_settings()
 
     try:
         all_collections = get_collections_with_details(settings.db_dir)
 
-        collections = [
-            Collection(
-                id=col.get('id', ''),
-                name=col.get('name', col.get('id', '')),
-                description=col.get('description', '')
-            )
-            for col in all_collections # type: ignore
-        ]
+        # Get user's accessible collections
+        accessible_collection_ids = get_user_collections(current_user, settings.db_dir)
+
+        # Filter collections if user has limited access
+        if accessible_collection_ids is not None:
+            # User has limited access - only return accessible collections
+            collections = [
+                Collection(
+                    id=col.get('id', ''),
+                    name=col.get('name', col.get('id', '')),
+                    description=col.get('description', '')
+                )
+                for col in all_collections # type: ignore
+                if col.get('id') in accessible_collection_ids
+            ]
+        else:
+            # User has access to all collections (admin or wildcard)
+            collections = [
+                Collection(
+                    id=col.get('id', ''),
+                    name=col.get('name', col.get('id', '')),
+                    description=col.get('description', '')
+                )
+                for col in all_collections # type: ignore
+            ]
 
         return collections
     except Exception as e:
