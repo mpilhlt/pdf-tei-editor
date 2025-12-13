@@ -72,7 +72,7 @@ class ToolBar extends BasePanel {
       box-sizing: border-box !important;
       padding-right: 5px !important;
       position: relative !important;
-      z-index: 100 !important;
+      z-index: ${this.id === 'pdf-toolbar' ? '0' : '100'} !important;
     `;
     
     // Apply flex styles directly to elements since CSS ::slotted might not work

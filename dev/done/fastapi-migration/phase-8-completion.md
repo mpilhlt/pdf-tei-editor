@@ -96,7 +96,7 @@ Unified test orchestrator with pluggable server managers:
 
 ```bash
 # Modes
---local              # Use local server (default, fast)
+              # Use local server (default, fast)
 --container          # Use containerized server (CI)
 
 # Test Selection
@@ -142,9 +142,9 @@ Added new npm scripts for backend testing:
 **Local Mode (Fast Iteration)**:
 
 ```json
-"test:backend":        "node tests/backend-test-runner.js --local"
-"test:backend:local":  "node tests/backend-test-runner.js --local"
-"test:backend:fast":   "node tests/backend-test-runner.js --local --keep-db"
+"test:backend":        "node tests/backend-test-runner.js "
+"test:backend:local":  "node tests/backend-test-runner.js "
+"test:backend:fast":   "node tests/backend-test-runner.js  --keep-db"
 ```
 
 **Container Mode (CI-Ready)**:
@@ -157,7 +157,7 @@ Added new npm scripts for backend testing:
 **Playwright E2E (Updated for Future Work)**:
 
 ```json
-"test:e2e:local":     "node tests/e2e-runner.js --playwright --local"
+"test:e2e:local":     "node tests/e2e-runner.js --playwright "
 "test:e2e:container": "node tests/e2e-runner.js --playwright --container"
 "test:e2e:ci":        "node tests/e2e-runner.js --playwright --container"
 ```
@@ -165,7 +165,7 @@ Added new npm scripts for backend testing:
 **Deprecated**:
 
 ```json
-"test:fastapi:e2e": "echo 'Deprecated: Use npm run test:backend' && node tests/backend-test-runner.js --local"
+"test:fastapi:e2e": "echo 'Deprecated: Use npm run test:backend' && node tests/backend-test-runner.js "
 ```
 
 ## Test Results
@@ -194,7 +194,7 @@ With `--keep-db`, subsequent test runs take ~2-3 seconds total.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 1: CLI Commands (package.json)                       │
-│  npm run test:backend [--local|--container]                 │
+│  npm run test:backend [|--container]                 │
 └────────────────┬────────────────────────────────────────────┘
                  │
 ┌────────────────┴────────────────────────────────────────────┐
@@ -332,7 +332,7 @@ Completely refactored e2e-runner to focus exclusively on Playwright browser test
 
 - **Removed backend test functionality** (now handled by backend-test-runner.js)
 - **Code reduction: 1241 → 411 lines (-830 lines, 67% smaller)**
-- **Added dual-mode support**: `--local` and `--container` flags
+- **Added dual-mode support**: `` and `--container` flags
 - **Uses LocalServerManager** for local mode (fast iteration)
 - **Uses ContainerServerManager** for container mode (CI-ready)
 - **Eliminated embedded container management** (~600 lines removed)
@@ -342,7 +342,7 @@ Completely refactored e2e-runner to focus exclusively on Playwright browser test
 
 ```javascript
 PlaywrightRunner
-├── --local mode  → LocalServerManager  → Local FastAPI server
+├──  mode  → LocalServerManager  → Local FastAPI server
 └── --container   → ContainerServerManager → Containerized FastAPI
 ```
 
@@ -358,11 +358,11 @@ PlaywrightRunner
 
 ```json
 // Local mode (default)
-"test:e2e": "node tests/e2e-runner.js --local"
-"test:e2e:local": "node tests/e2e-runner.js --local"
-"test:e2e:local:keep-db": "node tests/e2e-runner.js --local --keep-db"
-"test:e2e:headed": "node tests/e2e-runner.js --local --headed --keep-db"
-"test:e2e:debug": "node tests/e2e-runner.js --local --headed --debugger --keep-db"
+"test:e2e": "node tests/e2e-runner.js "
+"test:e2e:local": "node tests/e2e-runner.js "
+"test:e2e:local:keep-db": "node tests/e2e-runner.js  --keep-db"
+"test:e2e:headed": "node tests/e2e-runner.js  --headed --keep-db"
+"test:e2e:debug": "node tests/e2e-runner.js  --headed --debugger --keep-db"
 
 // Container mode
 "test:e2e:container": "node tests/e2e-runner.js --container"
@@ -373,7 +373,7 @@ PlaywrightRunner
 Similar naming scheme applied to backend tests:
 
 ```json
-"test:backend:local:keep-db": "... --local --keep-db"
+"test:backend:local:keep-db": "...  --keep-db"
 "test:backend:container:cached": "... --container --no-rebuild"
 ```
 
@@ -393,8 +393,8 @@ Updated smart-test-runner to route tests to specialized runners:
 
 **Changes**:
 
-- Playwright tests → `node tests/e2e-runner.js --local`
-- Backend tests → `node tests/backend-test-runner.js --local`
+- Playwright tests → `node tests/e2e-runner.js `
+- Backend tests → `node tests/backend-test-runner.js `
 - Fixed all TypeScript errors with proper JSDoc annotations
 - Ensures single responsibility principle across all runners
 

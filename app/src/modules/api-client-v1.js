@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-05T22:28:50.482Z
+ * Generated from OpenAPI schema at 2025-12-13T13:02:38.070Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -555,8 +555,9 @@ export class ApiClientV1 {
   }
 
   /**
-   * List all collections.
-   * Returns all collections without filtering. Requires authentication.
+   * List all collections accessible to the current user.
+   * Filters collections based on user's group memberships. Admin users and
+   * users with wildcard access see all collections.
    * Returns:
    * List of Collection objects
    *

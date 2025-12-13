@@ -55,8 +55,7 @@ COPY . .
 
 # Run the build and cleanup in one layer
 RUN uv run python bin/compile-sl-icons.py \
-    && uv run python bin/download-pdfjs \
-    && node bin/build.js --steps=templates,bundle \
+    && node bin/build.js --steps=templates,pdfjs,bundle \
     # Remove dev dependencies immediately after build
     && npm prune --omit=dev \
     && npm cache clean --force \
@@ -129,7 +128,6 @@ COPY . .
 
 # Build the application (needed for some tests)
 RUN uv run python bin/compile-sl-icons.py \
-    && uv run python bin/download-pdfjs \
     && node bin/build.js
 
 # Set environment for unbuffered output (critical for streaming)

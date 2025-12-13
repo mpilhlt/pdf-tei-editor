@@ -105,7 +105,7 @@ tests/e2e/fixtures/
 - Use **Commander.js** for structured argument parsing with automatic help generation
 - Extract common CLI setup to `tests/lib/cli-builder.js`
 - Standardize common flags across both runners:
-  - `--local` / `--container` - execution mode
+  - `` / `--container` - execution mode
   - `--fixture <name>` - select fixture preset
   - `--env-file <path>` - explicit env file (optional)
   - `--env <VAR[=VALUE]>` - pass environment variables (multiple allowed)
@@ -173,7 +173,7 @@ tests/e2e/fixtures/
 
      // Execution mode
      program
-       .option('--local', 'Use local server (default, fast iteration)', true)
+       .option('', 'Use local server (default, fast iteration)', true)
        .option('--container', 'Use containerized server (CI-ready)');
 
      // Fixture selection
@@ -799,7 +799,7 @@ tests/e2e/fixtures/
      if (testsToRun.e2e.length > 0) {
        const testFiles = testsToRun.e2e.join('|'); // grep pattern
        const envArgs = Array.from(e2eEnvVars).map(v => `--env "${v}"`).join(' ');
-       e2eCommand = `node tests/e2e-runner.js --local --grep "${testFiles}" ${envArgs}`;
+       e2eCommand = `node tests/e2e-runner.js  --grep "${testFiles}" ${envArgs}`;
      }
    }
    ```
