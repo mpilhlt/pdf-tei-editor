@@ -3,9 +3,21 @@ import os
 import zipfile
 import requests
 import shutil
+import re
 
-version = '5.0.375'
+version = '5.4.449'
 target = 'app/web/pdfjs'
+
+# Check if PDF.js is already installed with the correct version
+pdf_mjs_path = os.path.join(target, 'build', 'pdf.mjs')
+if os.path.exists(pdf_mjs_path):
+    with open(pdf_mjs_path, 'r', encoding='utf-8') as f:
+        # Read first 30 lines to find version comment
+        header = ''.join([f.readline() for _ in range(30)])
+        match = re.search(r'pdfjsVersion\s*=\s*([0-9.]+)', header)
+        if match and match.group(1) == version:
+            print(f"PDF.js version {version} is already installed.")
+            exit(0)
 
 url = f'https://github.com/mozilla/pdf.js/releases/download/v{version}/pdfjs-{version}-dist.zip'
 response = requests.get(url)
@@ -25,3 +37,5 @@ with open('app/web/pdfjs/web/viewer.mjs', 'r+', encoding='utf-8') as f:
 
 # even his doesn't work sometimes, so replace the file, too
 shutil.copyfile("app/web/empty.pdf", "app/web/pdfjs/web/compressed.tracemonkey-pldi-09.pdf")
+
+print(f"PDF.js version {version} has been downloaded.")
