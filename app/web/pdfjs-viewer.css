@@ -1,0 +1,164 @@
+/**
+ * PDF.js Viewer CSS
+ *
+ * Note: PDF.js viewer base styles are loaded dynamically via JavaScript in bootstrap.js
+ * This file only contains custom overrides and layout styles
+ */
+
+/* Custom overrides for PDF viewer integration */
+
+/* Ensure PDF toolbar and header are above the viewer */
+/* z-index set to 0 to allow Shoelace popups to appear above it */
+#pdf-toolbar {
+  position: relative;
+  z-index: 0;
+}
+
+#pdf-headerbar {
+  position: relative;
+  z-index: 0;
+}
+
+/* The wrapper contains the sidebar and viewer side by side */
+.pdf-viewer-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Sidebar container */
+.sidebarContainer {
+  width: 200px;
+  min-width: 200px;
+  background: #f5f5f5;
+  border-right: 1px solid #ccc;
+  overflow-y: auto;
+  transition: margin-left 0.2s ease;
+}
+
+/* Hide sidebar when closed */
+.sidebarContainer[hidden] {
+  margin-left: -200px;
+}
+
+.sidebarContent {
+  padding: 8px;
+}
+
+.thumbnailView {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Individual thumbnail styling */
+.thumbnail {
+  cursor: pointer;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.thumbnail:hover {
+  background-color: #e8e8e8;
+  border-color: #999;
+}
+
+.thumbnail canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #ddd;
+}
+
+.thumbnail-label {
+  text-align: center;
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* The viewer container should grow to fill remaining space */
+#pdf-viewer-container {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+}
+
+/* The pdfViewerContainer needs absolute positioning within its parent */
+.pdfViewerContainer {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
+  /* Ensure proper box-sizing for text layer alignment */
+  box-sizing: border-box;
+}
+
+.pdfViewer {
+  padding: 10px;
+}
+
+/* Override page styles - ensure proper stacking context for text/annotation layers */
+.pdfViewer .page {
+  margin: 10px auto;
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  /* Don't override position, z-index, or dimensions - let PDF.js handle all positioning */
+}
+
+/* Ensure text layer positioning is not affected by our styles */
+.pdfViewer .page .textLayer {
+  /* Manual scaling adjustment to compensate for misalignment */
+  /* Controlled by TEXT_LAYER_SCALE_ADJUSTMENT constant in pdfviewer.js */
+  transform-origin: 0 0;
+  transform: scale(var(--text-layer-scale, 1.0));
+}
+
+.pdfViewer .page .canvasWrapper {
+  /* Let PDF.js handle canvas wrapper positioning - don't override */
+}
+
+/* Cursor tool modes */
+
+/* Hand tool mode: change cursor to grab/grabbing and disable text selection */
+.pdfViewerContainer.hand-tool-mode {
+  cursor: grab;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+.pdfViewerContainer.hand-tool-mode:active {
+  cursor: grabbing;
+}
+
+.pdfViewerContainer.hand-tool-mode .pdfViewer {
+  cursor: grab;
+}
+
+.pdfViewerContainer.hand-tool-mode:active .pdfViewer {
+  cursor: grabbing;
+}
+
+/* Disable text selection in hand tool mode */
+.pdfViewerContainer.hand-tool-mode .textLayer {
+  pointer-events: none;
+}
+
+/* Text selection mode: enable text cursor and selection (default behavior) */
+.pdfViewerContainer.text-select-mode {
+  cursor: default;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
+
+.pdfViewerContainer.text-select-mode .textLayer {
+  pointer-events: auto;
+}

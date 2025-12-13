@@ -53,8 +53,8 @@ All tests use `E2E_BASE_URL` environment variable, making them backend-agnostic.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 1: CLI Commands (package.json)                       │
-│  npm run test:backend [--local|--container]                 │
-│  npm run test:e2e [--local|--container]                     │
+│  npm run test:backend [|--container]                 │
+│  npm run test:e2e [|--container]                     │
 └────────────────┬────────────────────────────────────────────┘
                  │
 ┌────────────────┴────────────────────────────────────────────┐
@@ -188,7 +188,7 @@ Orchestrates backend test execution:
 
 - Test discovery (glob `**/*.test.js` from specified directories)
 - Filtering (--grep, --grep-invert patterns)
-- Server manager selection (--local vs --container)
+- Server manager selection ( vs --container)
 - Test execution coordination (node --test)
 - Result aggregation and reporting
 - Automatic server lifecycle management
@@ -196,7 +196,7 @@ Orchestrates backend test execution:
 **CLI Options**:
 
 ```bash
---local              # Use local server (default)
+              # Use local server (default)
 --container          # Use containerized server
 --grep <pattern>     # Filter tests by pattern
 --grep-invert <pat>  # Exclude tests by pattern
@@ -239,7 +239,7 @@ node tests/backend-test-runner.js --env-file .env.testing --env DEBUG=true
 node tests/backend-test-runner.js --env-file .env --env GEMINI_API_KEY=override
 
 # Override FastAPI server's .env file (local mode only)
-FASTAPI_ENV_FILE=.env.testing node tests/backend-test-runner.js --local
+FASTAPI_ENV_FILE=.env.testing node tests/backend-test-runner.js 
 ```
 
 **Note**: In containerized mode, all environment variables must be explicitly passed via `--env` or `--env-file` since the container doesn't have access to the host's environment or .env files.
@@ -261,18 +261,18 @@ FASTAPI_ENV_FILE=.env.testing node tests/backend-test-runner.js --local
 {
   "scripts": {
     // Backend integration tests - local (fast iteration)
-    "test:backend": "node tests/backend-test-runner.js --local",
-    "test:backend:local": "node tests/backend-test-runner.js --local",
-    "test:backend:fast": "node tests/backend-test-runner.js --local --keep-db",
+    "test:backend": "node tests/backend-test-runner.js ",
+    "test:backend:local": "node tests/backend-test-runner.js ",
+    "test:backend:fast": "node tests/backend-test-runner.js  --keep-db",
 
     // Backend integration tests - containerized (CI-ready)
     "test:backend:container": "node tests/backend-test-runner.js --container",
     "test:backend:ci": "node tests/backend-test-runner.js --container",
 
     // Playwright frontend tests - local (fast iteration)
-    "test:e2e": "node tests/e2e-runner.js --playwright --local",
-    "test:e2e:local": "node tests/e2e-runner.js --playwright --local",
-    "test:e2e:headed": "node tests/e2e-runner.js --playwright --local --headed",
+    "test:e2e": "node tests/e2e-runner.js --playwright ",
+    "test:e2e:local": "node tests/e2e-runner.js --playwright ",
+    "test:e2e:headed": "node tests/e2e-runner.js --playwright  --headed",
 
     // Playwright frontend tests - containerized (CI-ready)
     "test:e2e:container": "node tests/e2e-runner.js --playwright --container",
@@ -297,7 +297,7 @@ FASTAPI_ENV_FILE=.env.testing node tests/backend-test-runner.js --local
 Update to use shared server managers:
 
 - Extract container logic to `ContainerServerManager`
-- Support both `--local` and `--container` modes for Playwright tests
+- Support both `` and `--container` modes for Playwright tests
 - Reuse `LocalServerManager` for local Playwright testing
 - Reuse `ContainerServerManager` for containerized Playwright testing
 - Remove backend test execution (delegated to `backend-test-runner.js`)
@@ -427,13 +427,13 @@ npm run test:backend
 npm run test:backend:fast -- --grep validation
 
 # Debug mode (keep server running)
-node tests/backend-test-runner.js --local --no-cleanup --grep auth
+node tests/backend-test-runner.js  --no-cleanup --grep auth
 
 # Clean slate test
-node tests/backend-test-runner.js --local --clean-db --grep extraction
+node tests/backend-test-runner.js  --clean-db --grep extraction
 
 # Load environment variables from file
-node tests/backend-test-runner.js --local --env-file .env.testing
+node tests/backend-test-runner.js  --env-file .env.testing
 
 # Override FastAPI server's .env (local mode only)
 FASTAPI_ENV_FILE=.env.testing npm run test:backend

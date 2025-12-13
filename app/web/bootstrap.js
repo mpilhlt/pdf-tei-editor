@@ -34,6 +34,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     : 'light.css';
   document.head.appendChild(shoelaceCss);
 
+  // add PDF.js viewer css
+  const pdfjsCss = document.createElement('link');
+  pdfjsCss.rel = 'stylesheet';
+  pdfjsCss.href = loadFromSource
+    ? '/node_modules/pdfjs-dist/web/pdf_viewer.css'
+    : '/pdfjs/web/pdf_viewer.css';
+  document.head.appendChild(pdfjsCss);
+
   // load the main script as an esm module
   const mainScript = document.createElement('script');
   mainScript.type = 'module';

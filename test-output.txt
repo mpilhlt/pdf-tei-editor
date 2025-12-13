@@ -1,6 +1,6 @@
 
 > pdf-tei-editor@0.7.0 test:api
-> node tests/backend-test-runner.js --local --test-dir tests/api/v1
+> node tests/backend-test-runner.js  --test-dir tests/api/v1
 
 [36m[INFO][0m ================ Backend API Test Runner ================
 [36m[INFO][0m Mode: local

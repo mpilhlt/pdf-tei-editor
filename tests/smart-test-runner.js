@@ -760,7 +760,7 @@ class SmartTestRunner {
       const baseExtraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
       e2eCommands = browsers.map(browser => ({
         name: `E2E tests (${browser})`,
-        command: `node tests/e2e-runner.js --local --browser ${browser} ${baseExtraArgs}`.trim(),
+        command: `node tests/e2e-runner.js  --browser ${browser} ${baseExtraArgs}`.trim(),
         tap: false
       }));
     }

@@ -389,8 +389,8 @@ tests/
 
      ```json
      {
-       "test:e2e": "node tests/e2e-runner.js --local --backend fastapi",
-       "test:e2e:flask": "node tests/e2e-runner.js --local --backend flask"
+       "test:e2e": "node tests/e2e-runner.js  --backend fastapi",
+       "test:e2e:flask": "node tests/e2e-runner.js  --backend flask"
      }
      ```
 
@@ -797,7 +797,7 @@ Updated the smart test runner to improve environment variable handling and file 
 ```bash
 # Environment variables passed as --env
 # File paths passed as --env-file
-node tests/e2e-runner.js --local --env "GROBID_SERVER_URL" --env "GEMINI_API_KEY" --env-file ".env.testing"
+node tests/e2e-runner.js  --env "GROBID_SERVER_URL" --env "GEMINI_API_KEY" --env-file ".env.testing"
 ```
 
 **Error Handling**:

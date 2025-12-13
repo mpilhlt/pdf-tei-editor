@@ -1,125 +1,248 @@
 /**
- * A basic PDF.js v5 API
+ * A PDF.js viewer API using PDFViewer component
+ *
+ * Uses the official PDF.js PDFViewer component with built-in UI controls
+ * for page navigation, zoom, and search functionality.
  */
+
+/**
+ * Text layer scale adjustment to compensate for alignment issues.
+ * Adjust this value if the text selection doesn't align with visible text.
+ * Values < 1.0 shrink the text layer, values > 1.0 enlarge it.
+ * @type {number}
+ */
+const TEXT_LAYER_SCALE_ADJUSTMENT = 0.97;
 
 /**
  * PDFJSViewer Class
  *
- * Provides an API for interacting with a PDF.js viewer embedded in an iframe,
- * assuming the viewer and PDF files are hosted on the same origin.
+ * Provides an API for rendering and interacting with PDFs using the PDF.js PDFViewer component,
+ * without an iframe. Includes built-in controls and rendering capabilities.
  */
 export class PDFJSViewer {
 
   /**
-   * An array of {page, positions} objects with the best matches to the last search()
-   * @type {object[]}
+   * An array of {page, positions, matchIndexes} objects with the best matches to the last search()
+   * @type {Array<{page: number, positions: number[], matchIndexes: number[]}>}
    */
   bestMatches = [];
 
   /**
    * The index of the currently highlighted best match
+   * @type {number}
    */
   matchIndex = 0;
 
   /**
    * Constructor for the PDFJSViewer class.
-   * @param {string} containerDivId - The ID of the iframe element containing the PDF.js viewer.
-   * @throws {Error} If the iframe element is not found.
+   * @param {string} containerDivId - The ID of the container element for the PDF viewer.
+   * @throws {Error} If the container element is not found.
    */
   constructor(containerDivId) {
-
     this.containerDiv = document.getElementById(containerDivId);
     if (!this.containerDiv) {
       throw new Error(`Cannot find element with id ${containerDivId}`);
     }
 
-    // create iframe for PDF.js
-    const iframe = document.createElement('iframe');
-    this.containerDiv.appendChild(iframe);
-    this.iframe = iframe;
+    // Find status bars (they're already in the HTML)
+    this.headerBar = this.containerDiv.querySelector('#pdf-headerbar');
+    this.statusBar = this.containerDiv.querySelector('#pdf-statusbar');
+    this.toolbar = this.containerDiv.querySelector('#pdf-toolbar');
 
-    // references to objects in iframe 
-    this.iframeWindow = null;
+    // Create main viewer wrapper (contains sidebar + viewer)
+    this.viewerWrapper = document.createElement('div');
+    this.viewerWrapper.id = 'pdf-viewer-wrapper';
+    this.viewerWrapper.className = 'pdf-viewer-wrapper';
+
+    // Create sidebar structure (hidden by default)
+    this.sidebarContainer = document.createElement('div');
+    this.sidebarContainer.id = 'sidebarContainer';
+    this.sidebarContainer.className = 'sidebarContainer';
+    this.sidebarContainer.setAttribute('hidden', '');
+
+    this.sidebarContent = document.createElement('div');
+    this.sidebarContent.id = 'sidebarContent';
+    this.sidebarContent.className = 'sidebarContent';
+
+    this.thumbnailView = document.createElement('div');
+    this.thumbnailView.id = 'thumbnailView';
+    this.thumbnailView.className = 'thumbnailView';
+
+    this.sidebarContent.appendChild(this.thumbnailView);
+    this.sidebarContainer.appendChild(this.sidebarContent);
+
+    // Create viewer structure (required by PDFViewer component)
+    this.viewerContainer = document.createElement('div');
+    this.viewerContainer.id = 'pdf-viewer-container';
+
+    // Inner container with pdfViewerContainer class (required by PDFViewer)
+    this.pdfViewerContainer = document.createElement('div');
+    this.pdfViewerContainer.className = 'pdfViewerContainer';
+
+    // Viewer element (required by PDFViewer)
+    this.viewer = document.createElement('div');
+    this.viewer.className = 'pdfViewer';
+
+    this.pdfViewerContainer.appendChild(this.viewer);
+    this.viewerContainer.appendChild(this.pdfViewerContainer);
+
+    // Assemble the structure: sidebar + viewer in wrapper
+    this.viewerWrapper.appendChild(this.sidebarContainer);
+    this.viewerWrapper.appendChild(this.viewerContainer);
+
+    // Insert wrapper between toolbar and status bar
+    if (this.toolbar && this.statusBar) {
+      this.containerDiv.insertBefore(this.viewerWrapper, this.statusBar);
+    } else {
+      this.containerDiv.appendChild(this.viewerWrapper);
+    }
+
+    // PDF.js component references
+    /** @type {any} */ // pdfjsLib type
+    this.pdfjsLib = null;
+    /** @type {any} */ // pdfjsViewer namespace
+    this.pdfjsViewer = null;
+    /** @type {any} */ // PDFViewer component instance
     this.pdfViewer = null;
-    this.pdfLinkService = null;
-    this.pdfDoc = null;
+    /** @type {any} */ // EventBus
     this.eventBus = null;
+    /** @type {any} */ // PDFLinkService
+    this.linkService = null;
+    /** @type {any} */ // PDFFindController
+    this.findController = null;
+    /** @type {any} */ // PDFSidebar component instance
+    this.pdfSidebar = null;
+    /** @type {any} */ // PDFThumbnailViewer component instance
+    this.pdfThumbnailViewer = null;
+    /** @type {any} */ // PDFDocumentProxy
+    this.pdfDoc = null;
 
-    // promise which will resolve when PDF.js is ready
+    // Promises for initialization
     this.initializePromise = null;
-    // will be true when PDF.js is ready
     this.isReadyFlag = false;
-    // promise which will resolve when the document is loaded
     this.loadPromise = null;
-    // will be true when the current document is done loading
     this.isLoadedFlag = false;
+
+    // Cursor tool mode: false = text selection (default), true = hand tool
+    this._handToolMode = false;
+
+    // Dragging state for hand tool
+    this._isDragging = false;
+    this._dragStartX = 0;
+    this._dragStartY = 0;
+    this._scrollStartX = 0;
+    this._scrollStartY = 0;
   }
 
   show() {
-    this.iframe.style.display = ''
+    this.containerDiv.style.display = '';
     return this;
   }
 
   hide() {
-    this.iframe.style.display = 'none'
+    this.containerDiv.style.display = 'none';
     return this;
   }
 
   /**
    * Checks if the viewer is ready and initializes it if necessary.
    *
-   * This method ensures that the iframe is loaded and the necessary PDF.js
-   * objects (iframeWindow, pdfViewer, pdfLinkService) are available.  It
-   * handles the asynchronous loading process, so you can await this method
-   * before calling other methods in the class. The PDF.js viewer must be hosted
-   * on the same origin for this to work.
+   * This method ensures that the PDF.js library and viewer components are loaded.
    *
    * @returns {Promise<PDFJSViewer>} - A promise that resolves with the viewer instance when it is ready.
    */
   async isReady() {
     if (this.isReadyFlag) {
-      return this.PDFViewerApplication; // Already ready, resolve immediately
+      return this;
     }
 
     if (!this.initializePromise) {
-      this.initializePromise = new Promise((resolve, reject) => {
-        this.iframe.onload = async () => {
-          console.log("PDF.js viewer loaded in iframe, initializing...");
-          try {
-            this.iframeWindow = this.iframe.contentWindow;
-            this.PDFViewerApplication = this.iframeWindow?.['PDFViewerApplication'];
-            this.pdfViewer = this.PDFViewerApplication.pdfViewer;
-            this.pdfLinkService = this.PDFViewerApplication.pdfLinkService;
-            this.findController = this.PDFViewerApplication.findController;
-            this.eventBus = this.pdfViewer.eventBus;
-            this.eventBus.on("pagesinit", () => {
-              this.pdfViewer.currentScaleValue = 'page-fit';
-            });
-            this.PDFViewerApplication.initializedPromise.then(() => {
-              // enable hand tool
-              this.PDFViewerApplication.pdfCursorTools.switchTool(1);
-            })
-            this.PDFViewerApplication.eventBus.on("metadataloaded", () => {
-              // finish initialization
-              this.isReadyFlag = true;
-              console.log("PDF.js viewer initialized.");
-              resolve(this);
-            })
-          } catch (error) {
-            this.isReadyFlag = false;
-            reject(error);
+      this.initializePromise = new Promise(async (resolve, reject) => {
+        try {
+          console.log("Initializing PDF.js viewer components...");
+
+          // Determine PDF.js path based on environment
+          const isDev = document.querySelector('script[type="importmap"]') !== null;
+          const pdfjsPath = isDev
+            ? '/node_modules/pdfjs-dist/build/pdf.mjs'
+            : '/pdfjs/build/pdf.mjs';
+          const workerPath = isDev
+            ? '/node_modules/pdfjs-dist/build/pdf.worker.mjs'
+            : '/pdfjs/build/pdf.worker.mjs';
+          const viewerPath = isDev
+            ? '/node_modules/pdfjs-dist/web/pdf_viewer.mjs'
+            : '/pdfjs/web/pdf_viewer.mjs';
+
+          // Import PDF.js library first and expose it globally
+          // (PDFViewer component expects globalThis.pdfjsLib to exist)
+          const pdfjsLib = await import(pdfjsPath);
+          this.pdfjsLib = pdfjsLib;
+
+          // Expose pdfjsLib globally BEFORE importing viewer components
+          if (!globalThis.pdfjsLib) {
+            globalThis.pdfjsLib = pdfjsLib;
           }
-        };
 
-        this.iframe.onerror = () => {
+          // Set worker source
+          pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+
+          // Now import viewer components (they require globalThis.pdfjsLib)
+          const pdfjsViewer = await import(viewerPath);
+          this.pdfjsViewer = pdfjsViewer;
+
+          // Create event bus
+          this.eventBus = new pdfjsViewer.EventBus();
+
+          // Create link service
+          this.linkService = new pdfjsViewer.PDFLinkService({
+            eventBus: this.eventBus
+          });
+
+          // Create find controller
+          this.findController = new pdfjsViewer.PDFFindController({
+            eventBus: this.eventBus,
+            linkService: this.linkService
+          });
+
+          // Create PDFViewer instance
+          // Pass the pdfViewerContainer (with absolute positioning) as container
+          this.pdfViewer = new pdfjsViewer.PDFViewer({
+            container: this.pdfViewerContainer,
+            viewer: this.viewer,
+            eventBus: this.eventBus,
+            linkService: this.linkService,
+            findController: this.findController,
+            textLayerMode: 2, // Enable text layer (0=disabled, 1=enabled, 2=enabled+enhanced)
+            annotationMode: 2, // Enable annotations (0=disabled, 1=enabled, 2=enabled+forms)
+            removePageBorders: false
+            // Use default zoom behavior (omit useOnlyCssZoom)
+          });
+
+          this.linkService.setViewer(this.pdfViewer);
+
+          // Note: PDFThumbnailViewer and PDFSidebar are not exported from pdf_viewer.mjs
+          // We'll implement custom thumbnail rendering instead
+
+          // Apply text layer scale adjustment via CSS custom property
+          this.pdfViewerContainer.style.setProperty('--text-layer-scale', TEXT_LAYER_SCALE_ADJUSTMENT);
+
+          // Listen for page changes
+          this.eventBus.on('pagesinit', () => {
+            // Use page-width instead of page-fit for better text layer alignment
+            this.pdfViewer.currentScaleValue = 'page-width';
+          });
+
+          // Initialize cursor mode (text selection by default)
+          this._updateCursorMode();
+
+          this.isReadyFlag = true;
+          console.log(`PDF.js viewer initialized (${isDev ? 'development' : 'production'} mode).`);
+          resolve(this);
+        } catch (error) {
+          console.error("Failed to initialize PDF.js viewer:", error);
           this.isReadyFlag = false;
-          reject(new Error("Error loading PDF.js viewer in iframe."));
-        };
-
-        // remove pdf.js's saved state since it interferes 
-        window.addEventListener('beforeunload', () => localStorage.removeItem('pdfjs.history'))
-        const file =  '/empty.pdf'
-        this.iframe.src = `/pdfjs/web/viewer.html?file=${file}#pagemode=none`
+          reject(error);
+        }
       });
     }
     return this.initializePromise;
@@ -128,12 +251,9 @@ export class PDFJSViewer {
   /**
    * Asynchronously loads a PDF into the viewer.
    *
-   * This method loads the PDF document using the `pdfjsLib.getDocument()` method
-   * and then sets the document on the PDF.js viewer and link service.
-   *
-   * @param {string?} pdfPath - The path to the PDF document. Can be omitted if it has been given to the constructor
-   * @returns {Promise<void>} - A promise that resolves when the PDF is loaded, rejects on errors.
-   * @throws {Error} If there is an error loading the PDF in the iframe.
+   * @param {string} pdfPath - The path to the PDF document.
+   * @returns {Promise<void>} - A promise that resolves when the PDF is loaded.
+   * @throws {Error} If there is an error loading the PDF.
    */
   async load(pdfPath) {
     if (!pdfPath) {
@@ -144,23 +264,29 @@ export class PDFJSViewer {
 
     if (this.loadPromise) {
       console.log("Already loading PDF, waiting for it to finish...");
-      await this.loadPromise; // Already loading, wait until this is done to reload
+      await this.loadPromise;
     }
     this.isLoadedFlag = false;
 
     this.loadPromise = new Promise(async (resolve, reject) => {
       try {
-        // Use PDFViewerApplication.open() to properly load the PDF with all internal references
-        // The open() method expects an object with a url property
-        await this.PDFViewerApplication.open({ url: pdfPath });
+        // Load the PDF document
+        const loadingTask = this.pdfjsLib.getDocument(pdfPath);
+        this.pdfDoc = await loadingTask.promise;
 
-        // Store reference to the loaded document
-        this.pdfDoc = this.PDFViewerApplication.pdfDocument;
+        console.log(`PDF loaded successfully. Pages: ${this.pdfDoc.numPages}`);
 
-        console.log("PDF loaded successfully.");
+        // Set document in viewer
+        this.pdfViewer.setDocument(this.pdfDoc);
+        this.linkService.setDocument(this.pdfDoc);
+
+        // Render custom thumbnails after document is loaded
+        await this._renderThumbnails();
+
         this.isLoadedFlag = true;
         resolve(true);
       } catch (error) {
+        console.error("Failed to load PDF:", error);
         reject(error);
       }
     });
@@ -170,49 +296,212 @@ export class PDFJSViewer {
   /**
    * Switches to a specific page in the PDF.
    *
-   * This method sets the `currentPageNumber` property on the `pdfViewer` object
-   * to navigate to the specified page.
-   *
    * @param {number} pageNumber - The page number to switch to (1-based).
-   * @throws {Error} If the viewer hasn't been intialized.
+   * @throws {Error} If the viewer hasn't been initialized.
    */
   async goToPage(pageNumber) {
     await this.isReady();
+    if (!this.pdfDoc) {
+      throw new Error("No PDF document loaded");
+    }
+
+    if (pageNumber < 1 || pageNumber > this.pdfDoc.numPages) {
+      throw new Error(`Invalid page number: ${pageNumber}`);
+    }
+
     this.pdfViewer.currentPageNumber = pageNumber;
   }
 
   /**
    * Sets the zooming factor of the PDF viewer.
    *
-   * This method sets the `currentScaleValue` property on the `pdfViewer` object
-   * to change the zoom level.
-   *
-   * @param {number} zoomFactor - The desired zoom factor (e.g., 1.0 for 100%, 2.0 for 200%).
-   * @throws {Error} If the viewer hasn't been intialized.
+   * @param {number|string} zoomFactor - The desired zoom factor (e.g., 1.0 for 100%, 2.0 for 200%, or 'page-fit').
+   * @throws {Error} If the viewer hasn't been initialized.
    */
   async setZoom(zoomFactor) {
     await this.isReady();
-    this.pdfViewer.currentScaleValue = zoomFactor;
+
+    if (typeof zoomFactor === 'string') {
+      this.pdfViewer.currentScaleValue = zoomFactor;
+    } else {
+      this.pdfViewer.currentScale = zoomFactor;
+    }
   }
 
   /**
-   * Properly closes the current PDF document 
+   * Toggles the sidebar visibility
+   */
+  toggleSidebar() {
+    if (this.sidebarContainer) {
+      const isHidden = this.sidebarContainer.hasAttribute('hidden');
+      if (isHidden) {
+        this.sidebarContainer.removeAttribute('hidden');
+      } else {
+        this.sidebarContainer.setAttribute('hidden', '');
+      }
+    }
+  }
+
+  /**
+   * Opens the sidebar
+   */
+  openSidebar() {
+    if (this.sidebarContainer) {
+      this.sidebarContainer.removeAttribute('hidden');
+    }
+  }
+
+  /**
+   * Closes the sidebar
+   */
+  closeSidebar() {
+    if (this.sidebarContainer) {
+      this.sidebarContainer.setAttribute('hidden', '');
+    }
+  }
+
+  /**
+   * Toggles the cursor tool mode between hand tool and text selection
+   */
+  toggleCursorTool() {
+    this._handToolMode = !this._handToolMode;
+    this._updateCursorMode();
+  }
+
+  /**
+   * Sets text selection mode
+   */
+  setTextSelectMode() {
+    if (!this._handToolMode) return; // Already in text selection mode
+    this._handToolMode = false;
+    this._updateCursorMode();
+  }
+
+  /**
+   * Sets hand tool mode
+   */
+  setHandToolMode() {
+    if (this._handToolMode) return; // Already in hand tool mode
+    this._handToolMode = true;
+    this._updateCursorMode();
+  }
+
+  /**
+   * Returns true if hand tool mode is active
+   * @returns {boolean}
+   */
+  isHandTool() {
+    return this._handToolMode;
+  }
+
+  /**
+   * Updates the cursor mode CSS class on the viewer container
+   * @private
+   */
+  _updateCursorMode() {
+    if (this.pdfViewerContainer) {
+      if (this._handToolMode) {
+        this.pdfViewerContainer.classList.add('hand-tool-mode');
+        this.pdfViewerContainer.classList.remove('text-select-mode');
+        this._addDragListeners();
+      } else {
+        this.pdfViewerContainer.classList.add('text-select-mode');
+        this.pdfViewerContainer.classList.remove('hand-tool-mode');
+        this._removeDragListeners();
+      }
+    }
+  }
+
+  /**
+   * Adds mouse event listeners for hand tool dragging
+   * @private
+   */
+  _addDragListeners() {
+    if (!this.pdfViewerContainer) return;
+
+    this._onMouseDown = this._onMouseDown.bind(this);
+    this._onMouseMove = this._onMouseMove.bind(this);
+    this._onMouseUp = this._onMouseUp.bind(this);
+
+    this.pdfViewerContainer.addEventListener('mousedown', this._onMouseDown);
+    document.addEventListener('mousemove', this._onMouseMove);
+    document.addEventListener('mouseup', this._onMouseUp);
+  }
+
+  /**
+   * Removes mouse event listeners for hand tool dragging
+   * @private
+   */
+  _removeDragListeners() {
+    if (!this.pdfViewerContainer) return;
+
+    this.pdfViewerContainer.removeEventListener('mousedown', this._onMouseDown);
+    document.removeEventListener('mousemove', this._onMouseMove);
+    document.removeEventListener('mouseup', this._onMouseUp);
+  }
+
+  /**
+   * Handle mouse down for drag start
+   * @param {MouseEvent} e
+   * @private
+   */
+  _onMouseDown(e) {
+    if (!this._handToolMode) return;
+
+    this._isDragging = true;
+    this._dragStartX = e.clientX;
+    this._dragStartY = e.clientY;
+    this._scrollStartX = this.pdfViewerContainer.scrollLeft;
+    this._scrollStartY = this.pdfViewerContainer.scrollTop;
+
+    e.preventDefault();
+  }
+
+  /**
+   * Handle mouse move for dragging
+   * @param {MouseEvent} e
+   * @private
+   */
+  _onMouseMove(e) {
+    if (!this._isDragging || !this._handToolMode) return;
+
+    const deltaX = e.clientX - this._dragStartX;
+    const deltaY = e.clientY - this._dragStartY;
+
+    this.pdfViewerContainer.scrollLeft = this._scrollStartX - deltaX;
+    this.pdfViewerContainer.scrollTop = this._scrollStartY - deltaY;
+
+    e.preventDefault();
+  }
+
+  /**
+   * Handle mouse up for drag end
+   * @param {MouseEvent} e
+   * @private
+   */
+  _onMouseUp(e) {
+    if (!this._handToolMode) return;
+
+    this._isDragging = false;
+    e.preventDefault();
+  }
+
+  /**
+   * Properly closes the current PDF document
    * @returns {Promise<void>}
    */
   async close() {
     await this.isReady();
-    if (this.PDFViewerApplication) {
-      try {
-        // Load empty PDF to clear the viewer cleanly
-        await this.load('/empty.pdf');
-      } catch (error) {
-        // If empty.pdf doesn't work, try alternative approach
-        this.pdfViewer.setDocument(null);
-        this.pdfLinkService.setDocument(null, null);
-        this.isLoadedFlag = false;
-        this.pdfDoc = null;
-        this.loadPromise = null;
-      }
+    if (this.pdfDoc) {
+      await this.pdfDoc.destroy();
+      this.pdfDoc = null;
+      this.pdfViewer.setDocument(null);
+      this.linkService.setDocument(null);
+      this.isLoadedFlag = false;
+      this.loadPromise = null;
+
+      // Clear thumbnails
+      this.thumbnailView.innerHTML = '';
     }
   }
 
@@ -221,16 +510,7 @@ export class PDFJSViewer {
    * @returns {Promise<void>}
    */
   async reset() {
-    await this.isReady();
-    if (this.PDFViewerApplication) {
-      // Reset viewer state
-      this.pdfViewer.setDocument(null);
-      this.pdfLinkService.setDocument(null, null);
-      this.PDFViewerApplication._setTitleUsingUrl('');
-      this.isLoadedFlag = false;
-      this.pdfDoc = null;
-      this.loadPromise = null;
-    }
+    await this.close();
   }
 
   /**
@@ -238,48 +518,28 @@ export class PDFJSViewer {
    * @returns {Promise<void>}
    */
   async clear() {
-    await this.isReady();
-    if (this.PDFViewerApplication) {
-      // Clear all viewer state
-      this.pdfViewer.setDocument(null);
-      this.pdfLinkService.setDocument(null, null);
-      
-      // Clear any search results, TODO wrong API
-      //if (this.findController) {
-      //  this.findController.reset(); 
-      //}
-      
-      // Clear best matches
-      this.bestMatches = [];
-      this.matchIndex = 0;
-      
-      this.isLoadedFlag = false;
-      this.pdfDoc = null;
-      this.loadPromise = null;
-    }
+    await this.close();
+    this.bestMatches = [];
+    this.matchIndex = 0;
   }
 
-
   /**
-   * Searches for a string within the PDF document using the PDF.js Viewer's findController.
+   * Searches for a string within the PDF document.
    *
    * @param {Array<string>|string} query - The search terms, either as a string or an array of strings.
-   * If an array is provided, the search will be performed for each term in the array.
-   * @param {object?} options - An object with keys phraseSearch (true), caseSensitive (false), entireWord (true), 
-   * highlightAll (false), findPrevious (false),
-   * @returns {Promise<Array<{pageIndex: number, matchIndex: number}>>} - A promise that resolves with an array of objects,
-   * each containing the page index (0-based) and match index (0-based) of the found string.
-   * Returns an empty array if no matches are found.
-   * @throws {Error} If there is an error during the search.
+   * @param {object} [options={}] - Search options
+   * @param {boolean} [options.phraseSearch=false] - Whether to search for exact phrases
+   * @param {boolean} [options.caseSensitive=false] - Whether the search is case sensitive
+   * @param {boolean} [options.entireWord=true] - Whether to match entire words only
+   * @param {boolean} [options.highlightAll=true] - Whether to highlight all matches
+   * @returns {Promise<Array<{pageIndex: number, matchIndex: number}>>} - Array of match locations
    */
   async search(query, options = {}) {
-
     if (!query || query.length === 0) {
       console.warn("No search terms provided.");
       return [];
     }
 
-    // wait for document to be loaded
     if (!this.isLoadedFlag) {
       await this.isReady();
       if (!this.loadPromise) {
@@ -290,144 +550,170 @@ export class PDFJSViewer {
     }
 
     if (!Array.isArray(query)) {
-      query = [query]
+      query = [query];
     }
 
     if (query.length > 20) {
       console.warn("Query too big, reducing to 20 entries");
-      query = query.slice(0, 20)
+      query = query.slice(0, 20);
     }
 
     console.log("Searching for", query.map(q => `'${q}'`).join(", "), "...");
 
     const defaultOptions = {
-      query,
       phraseSearch: false,
       caseSensitive: false,
       entireWord: true,
-      highlightAll: true,
-      findPrevious: false,
+      highlightAll: true
     };
 
-    // override defaults with options
-    options = Object.assign(defaultOptions, options)
+    options = Object.assign(defaultOptions, options);
 
-    return new Promise((resolve, reject) => {
-      this.pdfViewer.eventBus.dispatch("find", options);
-      this.pdfViewer.eventBus.on("updatefindcontrolstate", (event) => {
-        // timeout to let the highlighter do its thing
-        setTimeout(() => {
-          const bestMatches = this.#getBestMatches(query)
-          console.log(`Found ${bestMatches.length} best matches.`)
-          this.bestMatches = bestMatches;
-          if (bestMatches.length) {
-            if (bestMatches.length > 1){
-              // if we have several best matches, show them in the console so that the sorting algorithm can be improved
-              console.log({bestMatches})
-            }
-            this.scrollToBestMatch().catch(reject)
-          }
-          resolve([]);
-        }, 100)
-      },
-        { once: true } // Remove the event listener after the first event
-      );
-    });
-  }
+    // Extract text from all pages and search
+    const pageMatches = await this._searchAllPages(query, options);
 
-  async _waitForPageViewRendered(pageIndex) {
-    return new Promise(async (resolve, reject) => {
-      const pageView = await this.pdfViewer.getPageView(pageIndex);
-      if (pageView.renderingState === 3) { // RenderingStates.FINISHED
-        return resolve(pageView);
-      }
-      pageView.eventBus.on("pagerendered", () => resolve(pageView), { once: true })
-    })
+    // Calculate best matches using density clustering
+    const bestMatches = this._getBestMatches(query, pageMatches);
+    console.log(`Found ${bestMatches.length} best matches.`);
+
+    this.bestMatches = bestMatches;
+
+    if (bestMatches.length > 0) {
+      await this.scrollToBestMatch(0);
+    }
+
+    return [];
   }
 
   /**
-   * Scrolls to the best match wit the given index. 
-   * @param {number} index The index of the best match found, defaults to 0
+   * Searches all pages for the given query terms
+   * @param {string[]} query - Array of search terms
+   * @param {object} options - Search options
+   * @returns {Promise<number[][]>} - Array of arrays, where each inner array contains match positions for a page
+   * @private
+   */
+  async _searchAllPages(query, options) {
+    const pageMatches = [];
+
+    for (let pageNum = 1; pageNum <= this.pdfDoc.numPages; pageNum++) {
+      const textContent = await this._getPageText(pageNum);
+      const matches = this._findMatchesInText(textContent, query, options);
+      pageMatches.push(matches);
+    }
+
+    return pageMatches;
+  }
+
+  /**
+   * Gets text content for a page
+   * @param {number} pageNum - Page number (1-based)
+   * @returns {Promise<string>} - Page text content
+   * @private
+   */
+  async _getPageText(pageNum) {
+    const page = await this.pdfDoc.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const text = textContent.items.map(item => item.str).join(' ');
+    return text;
+  }
+
+  /**
+   * Finds matches in text content
+   * @param {string} text - Text to search in
+   * @param {string[]} query - Search terms
+   * @param {object} options - Search options
+   * @returns {number[]} - Array of match positions (character offsets)
+   * @private
+   */
+  _findMatchesInText(text, query, options) {
+    const matches = [];
+
+    for (const term of query) {
+      let searchText = text;
+      let searchTerm = term;
+
+      if (!options.caseSensitive) {
+        searchText = text.toLowerCase();
+        searchTerm = term.toLowerCase();
+      }
+
+      let index = 0;
+      while ((index = searchText.indexOf(searchTerm, index)) !== -1) {
+        // Check for whole word match if required
+        if (options.entireWord) {
+          const before = index > 0 ? searchText[index - 1] : ' ';
+          const after = index + searchTerm.length < searchText.length
+            ? searchText[index + searchTerm.length]
+            : ' ';
+
+          if (/\w/.test(before) || /\w/.test(after)) {
+            index++;
+            continue;
+          }
+        }
+
+        matches.push(index);
+        index += searchTerm.length;
+      }
+    }
+
+    return matches.sort((a, b) => a - b);
+  }
+
+  /**
+   * Scrolls to the best match with the given index.
+   * @param {number} index - The index of the best match found, defaults to 0
+   * @returns {Promise<boolean>}
    */
   async scrollToBestMatch(index = 0) {
     if (this.bestMatches.length === 0) {
       throw new Error("No best matches - do a search first");
     }
 
-    if (index < 0 || index > this.bestMatches.length) {
+    if (index < 0 || index >= this.bestMatches.length) {
       throw new Error(`Index out of bounds: ${index} of ${this.bestMatches.length}`);
     }
 
-    // The following relies on undocumented behavior. There seem to exist no API for switching between 
-    // the matches, and most of the internal stuff is hidden via private methods and properties so we 
-    // have to tweak what is available. 
-
-    // In the bestMatches lookup table, we have object containing the page and an array
-    // of indexes into the array contained in findController.pageMatches[pageIndex], which refer 
-    // to the position of the match in the page text.
-
-    const match = this.bestMatches[index]
+    const match = this.bestMatches[index];
     const pageNumber = match.page;
-    const pageIndex = pageNumber - 1
-    const matchIndex = match.matchIndexes[0]
 
-    // load the page
-    this.pdfViewer.scrollPageIntoView({ pageNumber })
+    // Navigate to the page with the match
+    await this.goToPage(pageNumber);
 
-    // we need the page to be rendered, so continue after a timeout
-    return new Promise((resolve,reject) => {
-      setTimeout(() => {
-        try {
-
-          // There seems to be no way of getting from the text position to the DOM element which provides 
-          // the highlighting of the match. This is provided by `pageView.textlayer.highlighter`, which has a property 
-          // `matches` containing an array of objects of this form:
-          //  [{ begin: { divIdx: 2, offset: 0 }, end: { divIdx: 2, offset: 6 }, ...] . If we know the match index,
-          // we can look up the corresponding Div element in the highlighter's textDivs property. 
-  
-          const highlighter = this.pdfViewer.getPageView(pageIndex).textLayer.highlighter
-          let { matches, textDivs } = highlighter
-          const { divIdx, offset } = matches[matchIndex].begin
-          const element = textDivs[divIdx]
-  
-          // Scroll the match into view by hacking `scrollMatchIntoView()`
-          this.findController._scrollMatches = true;
-          this.findController._selected.matchIdx = matchIndex;
-          this.findController._selected.pageIdx = pageIndex;
-          this.findController.scrollMatchIntoView({ element, pageIndex, matchIndex });
-        } catch (error) {
-          reject("Error computing the best match:" + String(error))
-        }
-        resolve(true)
-      }, 100)
-    })
+    this.matchIndex = index;
+    return true;
   }
 
   /**
-   * Selects the best matches from the results of the previous search by comparing
-   * the length of the most densely clustered search terms.  
-   * @param {Array} searchTerms The query search terms
-   * @returns {Array} An array of {pageIndex, matchIndexes, positions} objects
+   * Selects the best matches from search results by comparing
+   * the density of clustered search terms.
+   * @param {string[]} searchTerms - The query search terms
+   * @param {number[][]} pageMatches - Array of match positions per page
+   * @returns {Array<{page: number, positions: number[], matchIndexes: number[]}>} - Array of best match objects
+   * @private
    */
-  #getBestMatches(searchTerms) {
-    // the number of matches on a page that need to be reached to be a candidate for a "best match"
-    // calculated at 80% (since there might be hyphenated words that cannot be found) with a minimum of 3 matched terms
-    const minNumMatches = Math.max(Math.round(searchTerms.length * .8), 3)
+  _getBestMatches(searchTerms, pageMatches) {
+    const minNumMatches = Math.max(Math.round(searchTerms.length * 0.8), 3);
 
-    // filter the page matches by this value
-    const { pageMatches } = this.pdfViewer.findController
-    const candidates = pageMatches.map((positions, idx) => ({ page: idx + 1, positions }))
-    const bestMatches = candidates.filter(match => match.positions.length >= minNumMatches)
+    const candidates = pageMatches.map((positions, idx) => ({
+      page: idx + 1,
+      positions
+    }));
+
+    const bestMatches = candidates.filter(match => match.positions.length >= minNumMatches);
 
     if (bestMatches.length === 0) {
-      // we did not find a best match, this should not occur, do log some diagnostics
-      console.warn("No best match found.")
-      console.log({ pageMatches, minNumMatches, candidates })
+      console.warn("No best match found.");
+      console.log({ pageMatches, minNumMatches, candidates });
+      return [];
     }
 
-    // returns the cluster of values which are most densely spread, i.e. which have the
-    // smallest distance of lowest and highest value in a given window
-    // written by Codestral 22B
+    /**
+     * Returns the cluster of values which are most densely spread
+     * @param {number[]} arr - Array of numbers
+     * @param {number} windowSize - Size of the sliding window
+     * @returns {number[]} - The densest cluster
+     */
     function findDensestCluster(arr, windowSize) {
       let minDiff = Infinity;
       let minCluster = [];
@@ -442,21 +728,78 @@ export class PDFJSViewer {
       return minCluster;
     }
 
-    // sort the pages according to cluster size, i.e. the page where the highest number
-    // of search terms appear the most densely clustered - this should be our citation
     bestMatches.sort((a, b) => {
       return (
         findDensestCluster(b.positions, minNumMatches).length -
         findDensestCluster(a.positions, minNumMatches).length
-      )
-    })
+      );
+    });
 
-    // return the page matches in this order, but only retain the densest cluster
     return bestMatches.map(match => {
       const cluster = findDensestCluster(match.positions, minNumMatches);
-      match.matchIndexes = cluster.map(position => match.positions.indexOf(position))
-      match.positions = cluster
-      return match
-    }).filter(match => match.positions.length > 0)
+      match.matchIndexes = cluster.map(position => match.positions.indexOf(position));
+      match.positions = cluster;
+      return match;
+    }).filter(match => match.positions.length > 0);
+  }
+
+  /**
+   * Renders thumbnails for all pages in the sidebar
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _renderThumbnails() {
+    if (!this.pdfDoc || !this.thumbnailView) {
+      return;
+    }
+
+    // Clear existing thumbnails
+    this.thumbnailView.innerHTML = '';
+
+    const numPages = this.pdfDoc.numPages;
+    const thumbnailWidth = 160; // Fixed thumbnail width
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await this.pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.0 });
+
+      // Calculate scale to fit thumbnail width
+      const scale = thumbnailWidth / viewport.width;
+      const thumbnailViewport = page.getViewport({ scale });
+
+      // Create thumbnail container
+      const thumbnailContainer = document.createElement('div');
+      thumbnailContainer.className = 'thumbnail';
+      thumbnailContainer.dataset.pageNumber = pageNum;
+
+      // Create canvas for thumbnail
+      const canvas = document.createElement('canvas');
+      canvas.width = thumbnailViewport.width;
+      canvas.height = thumbnailViewport.height;
+
+      const context = canvas.getContext('2d');
+      const renderContext = {
+        canvasContext: context,
+        viewport: thumbnailViewport
+      };
+
+      // Render page to canvas
+      await page.render(renderContext).promise;
+
+      // Add page number label
+      const label = document.createElement('div');
+      label.className = 'thumbnail-label';
+      label.textContent = `Page ${pageNum}`;
+
+      thumbnailContainer.appendChild(canvas);
+      thumbnailContainer.appendChild(label);
+
+      // Click handler to navigate to page
+      thumbnailContainer.addEventListener('click', () => {
+        this.goToPage(pageNum);
+      });
+
+      this.thumbnailView.appendChild(thumbnailContainer);
+    }
   }
 }

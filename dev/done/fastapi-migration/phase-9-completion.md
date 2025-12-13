@@ -826,7 +826,7 @@ Extracted common functionality to `tests/lib/`:
 **Common Flags (All Test Runners):**
 
 ```
---local / --container      # Execution mode
+ / --container      # Execution mode
 --fixture <name>           # Fixture preset
 --env-file <path>          # Explicit env file
 --env <VAR[=VALUE]>        # Environment variables
@@ -969,7 +969,7 @@ node tests/smart-test-runner.js
 # Auto-detects changed files via git
 # Generates commands:
 #   node tests/backend-test-runner.js [--env VAR=VALUE] <test-files>
-#   node tests/e2e-runner.js --local [--env VAR=VALUE] --grep "<pattern>"
+#   node tests/e2e-runner.js  [--env VAR=VALUE] --grep "<pattern>"
 ```
 
 **With Options:**

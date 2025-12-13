@@ -203,7 +203,7 @@ test('dummy test', () => {});
         // Verify the E2E command contains file path as --env-file
         assert(capturedOutput.includes('--env-file ".env.test-temp"'), 'Should include .env.test-temp as --env-file in E2E command');
 
-        assert(capturedOutput.includes('node tests/e2e-runner.js --local'), 'Should use e2e-runner');
+        assert(capturedOutput.includes('node tests/e2e-runner.js '), 'Should use e2e-runner');
 
         console.log('Environment variable command generation test passed');
         console.log('Generated command correctly categorizes env vars and env files');

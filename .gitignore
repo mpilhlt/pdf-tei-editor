@@ -17,7 +17,9 @@ off/
 
 # installation artifacts
 node_modules
-pdfjs
+
+# Build artifacts
+app/web/pdfjs
 
 # Debug logs
 log/

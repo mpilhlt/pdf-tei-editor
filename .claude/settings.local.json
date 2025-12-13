@@ -50,7 +50,8 @@
       "Bash(xargs cat:*)",
       "Bash(npm run build:*)",
       "Bash(uv sync:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []
