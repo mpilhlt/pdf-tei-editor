@@ -27,7 +27,21 @@ class SampleAnalyzerPlugin(Plugin):
             "description": "Analyzes text and returns basic statistics",
             "version": "1.0.0",
             "category": "analyzer",
-            "required_roles": ["admin"],  # Requires user role (all authenticated users)
+            "required_roles": ["admin"],  # Requires admin role
+            "endpoints": [
+                {
+                    "name": "execute",
+                    "label": "Analyze Current XML",
+                    "description": "Analyze the currently open XML document",
+                    "state_params": ["xml", "variant"],
+                },
+                {
+                    "name": "info",
+                    "label": "Plugin Info",
+                    "description": "Get plugin information",
+                    "state_params": [],
+                },
+            ],
         }
 
     def get_endpoints(self) -> dict[str, Callable]:
@@ -51,12 +65,43 @@ class SampleAnalyzerPlugin(Plugin):
 
         Args:
             context: Plugin context
-            params: Parameters including 'text' to analyze
+            params: Parameters including optional 'xml', 'variant', or 'text' to analyze
 
         Returns:
             Analysis results with character count, word count, line count
         """
+        # Extract state parameters if provided
+        xml_id = params.get("xml")
+        variant = params.get("variant")
+
+        # Get text either from params or from file content
         text = params.get("text", "")
+
+        if not text and xml_id:
+            # If xml id provided but no text, fetch file content
+            from fastapi_app.lib.dependencies import get_db, get_file_storage
+
+            try:
+                db = get_db()
+                file_storage = get_file_storage()
+
+                # Get file metadata
+                from fastapi_app.lib.file_repository import FileRepository
+                file_repo = FileRepository(db)
+                file_metadata = file_repo.get_file_by_id_or_stable_id(xml_id)
+
+                if file_metadata and file_metadata.file_type == "tei":
+                    # Read file content
+                    content_bytes = file_storage.read_file(file_metadata.id, "tei")
+                    if content_bytes:
+                        text = content_bytes.decode("utf-8")
+                    else:
+                        raise ValueError(f"File content not found for {xml_id}")
+                else:
+                    raise ValueError(f"XML file not found: {xml_id}")
+            except Exception as e:
+                logger.error(f"Failed to load XML file {xml_id}: {e}")
+                raise
 
         if not isinstance(text, str):
             raise ValueError("Parameter 'text' must be a string")
@@ -70,7 +115,7 @@ class SampleAnalyzerPlugin(Plugin):
         words = text.lower().split()
         unique_words = len(set(words))
 
-        return {
+        result = {
             "analysis": {
                 "character_count": char_count,
                 "word_count": word_count,
@@ -82,6 +127,12 @@ class SampleAnalyzerPlugin(Plugin):
             },
             "text_preview": text[:100] + ("..." if len(text) > 100 else ""),
         }
+
+        # Include document context if provided
+        if xml_id:
+            result["document"] = {"xml": xml_id, "variant": variant}
+
+        return result
 
     async def info(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:
         """

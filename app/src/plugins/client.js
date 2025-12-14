@@ -730,6 +730,15 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
 }
 
 /**
+ * Backend plugin endpoint definition
+ * @typedef {Object} BackendPluginEndpoint
+ * @property {string} name - Endpoint method name
+ * @property {string} label - Display label for menu item
+ * @property {string} [description] - Optional description shown as tooltip
+ * @property {string[]} state_params - Required frontend state fields to pass as parameters
+ */
+
+/**
  * Get list of available backend plugins
  * @typedef {Object} BackendPlugin
  * @property {string} id - Plugin identifier
@@ -737,6 +746,7 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
  * @property {string} description - Plugin description
  * @property {string} category - Plugin category
  * @property {string} version - Plugin version
+ * @property {BackendPluginEndpoint[]} [endpoints] - Optional menu endpoint definitions
  *
  * @param {string|null} [category] - Optional category filter
  * @returns {Promise<BackendPlugin[]>} - List of available plugins

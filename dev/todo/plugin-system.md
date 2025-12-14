@@ -3,6 +3,7 @@
 ## Overview
 
 Implement a bare-bones, extensible backend plugin system that:
+
 - Auto-discovers plugins at runtime from filesystem
 - Supports plugin categories and role-based access
 - Allows plugins to define custom routes
@@ -14,6 +15,7 @@ Implement a bare-bones, extensible backend plugin system that:
 ### Plugin Discovery
 
 **Plugin Location:**
+
 - Primary: `fastapi_app/plugins/<plugin-id>/`
 - Additional paths via environment variable: `FASTAPI_PLUGIN_PATHS` (colon-separated)
 - Each plugin directory contains:
@@ -22,6 +24,7 @@ Implement a bare-bones, extensible backend plugin system that:
   - Any other plugin-specific files
 
 **Plugin Structure:**
+
 ```python
 # fastapi_app/plugins/sample-analyzer/plugin.py
 from fastapi_app.lib.plugin_base import Plugin
@@ -49,6 +52,7 @@ class SampleAnalyzerPlugin(Plugin):
 ```
 
 **Route Registration (Optional):**
+
 ```python
 # fastapi_app/plugins/sample-analyzer/routes.py
 from fastapi import APIRouter
@@ -63,12 +67,14 @@ async def custom_endpoint(data: dict):
 ### Backend Components
 
 **1. Plugin Base Class**
+
 - File: `fastapi_app/lib/plugin_base.py`
 - Abstract base class defining plugin interface
 - Properties: `metadata`, `get_endpoints()`
 - Optional lifecycle hooks: `initialize()`, `cleanup()`
 
 **2. Plugin Registry**
+
 - File: `fastapi_app/lib/plugin_registry.py`
 - Discovers plugins from configured directories
 - Loads plugin modules dynamically
@@ -77,6 +83,7 @@ async def custom_endpoint(data: dict):
 - Caches loaded plugins
 
 **3. Plugin Manager**
+
 - File: `fastapi_app/lib/plugin_manager.py`
 - Singleton managing plugin lifecycle
 - Registers custom routes from plugins
@@ -84,6 +91,7 @@ async def custom_endpoint(data: dict):
 - Environment variable parsing for plugin paths
 
 **4. API Endpoints**
+
 - File: `fastapi_app/routes/plugins.py`
 - `GET /api/plugins` - List available plugins (filtered by current user's roles)
   - Query param: `category` (optional filter)
@@ -95,6 +103,7 @@ async def custom_endpoint(data: dict):
 ### Frontend Components
 
 **1. Backend Plugins Frontend Plugin**
+
 - File: `app/src/plugins/backend-plugins.js`
 - Extends `Plugin` base class
 - Discovers available backend plugins on startup
@@ -102,6 +111,7 @@ async def custom_endpoint(data: dict):
 - Manages plugin execution UI
 
 **2. UI Integration**
+
 - Toolbar: Split button with dropdown (similar to delete button pattern)
 - Button shown only if user has access to at least one plugin
 - Dropdown sections organized by category
@@ -109,6 +119,7 @@ async def custom_endpoint(data: dict):
 - Show results in modal/notification
 
 **3. API Client**
+
 - Update `app/src/modules/api-client.js` or use existing patterns
 - Methods:
   - `getPlugins(category?)` - Fetch available plugins
@@ -219,26 +230,31 @@ async def custom_endpoint(data: dict):
 ## Key Design Decisions
 
 ### Plugin Discovery
+
 - **Filesystem-based**: Simpler than database/config, easier for development
 - **Runtime discovery**: Allows hot-reload in development, no rebuild needed
 - **Environment variable**: Supports external plugins without modifying codebase
 
 ### Role-Based Access
+
 - **Plugin-level**: Each plugin declares `required_roles` in metadata
 - **Backend filtering**: Only return plugins user can access
 - **Frontend hides button**: If no plugins available, don't clutter UI
 
 ### Route Registration
+
 - **Optional routes.py**: Plugins can define custom routes beyond generic execute endpoint
 - **Route override capability**: Plugins can override existing routes (use with caution)
 - **Prefix convention**: Recommend `/api/plugins/{plugin-id}/` prefix
 
 ### Frontend Integration
+
 - **Single toolbar button**: One entry point for all backend plugins
 - **Category organization**: Dropdown sections prevent clutter as plugins grow
 - **Conditional visibility**: Button only shown when plugins are available
 
 ### Extensibility Points
+
 - Plugin base class can be extended with more lifecycle hooks
 - Additional metadata fields can be added without breaking existing plugins
 - Frontend can implement different UIs for different plugin categories
@@ -287,6 +303,7 @@ docs/development/
 ## API Schemas
 
 ### GET /api/plugins Response
+
 ```json
 {
   "plugins": [
@@ -302,6 +319,7 @@ docs/development/
 ```
 
 ### POST /api/plugins/{plugin_id}/execute Request/Response
+
 ```json
 // Request
 {
@@ -324,6 +342,7 @@ docs/development/
 ## Testing Strategy
 
 ### Unit Tests (Python)
+
 - Plugin discovery from multiple paths
 - Role filtering logic
 - Plugin validation
@@ -331,6 +350,7 @@ docs/development/
 - Error handling
 
 ### API Integration Tests (JavaScript)
+
 - Plugin listing with authentication
 - Role-based access control
 - Plugin execution
@@ -338,6 +358,7 @@ docs/development/
 - Parameter validation
 
 ### E2E Tests
+
 - Full workflow: login → discover plugins → execute → view results
 - Different user roles
 - Multiple plugin categories
@@ -368,6 +389,7 @@ docs/development/
 6. **Typedef Required:** Always add UI typedefs for plugin elements even when Shadow DOM prevents navigation - enables autocomplete and documents structure
 
 **Files Created:**
+
 - Backend: [fastapi_app/lib/plugin_base.py](../../fastapi_app/lib/plugin_base.py), [plugin_registry.py](../../fastapi_app/lib/plugin_registry.py), [plugin_manager.py](../../fastapi_app/lib/plugin_manager.py)
 - Routes: [fastapi_app/routes/plugins.py](../../fastapi_app/routes/plugins.py)
 - Sample: [fastapi_app/plugins/sample-analyzer/](../../fastapi_app/plugins/sample-analyzer/)
@@ -378,6 +400,174 @@ docs/development/
 **Testing:** Backend unit tests passing. Manual E2E testing successful. API integration tests needed.
 
 See [docs/code-assistant/backend-plugins.md](../../docs/code-assistant/backend-plugins.md) for usage guide.
+
+## Enhancement: Multi-Endpoint Menu Support - COMPLETED
+
+### Summary
+
+Implemented multi-endpoint menu support allowing plugins to define multiple menu entries with automatic state parameter extraction.
+
+### Completed Implementation
+
+1. **Multiple menu entries per plugin** - Each endpoint can be exposed as a separate menu item
+2. **State-based parameter injection** - Endpoints declare required state fields, automatically extracted from frontend state
+3. **Automatic parameter passing** - Frontend passes state values to backend without manual extraction
+
+### Requirements
+
+Previously, plugins created a single menu entry that called the default `execute` endpoint. Enhancement allows:
+
+### Technical Design
+
+#### Backend Changes
+
+**Plugin Metadata Extension:**
+
+```python
+class MyPlugin(Plugin):
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "id": "my-plugin",
+            "name": "My Plugin",
+            "description": "Plugin description",
+            "category": "analyzer",
+            "version": "1.0.0",
+            "required_roles": ["user"],
+            # New: Endpoint definitions for menu
+            "endpoints": [
+                {
+                    "name": "analyze_current",
+                    "label": "Analyze Current Document",
+                    "description": "Analyze the currently open document",
+                    "state_params": ["docId", "variantId"]  # Required state fields
+                },
+                {
+                    "name": "analyze_all",
+                    "label": "Analyze All Documents",
+                    "description": "Run analysis on all documents",
+                    "state_params": []  # No state needed
+                }
+            ]
+        }
+```
+
+**Backward Compatibility:**
+
+- If `endpoints` not defined in metadata, default behavior (single menu entry calling `execute`)
+- If `endpoints` is empty array, plugin appears in list but adds no menu items
+
+#### Frontend Changes
+
+**Plugin List Response:**
+
+```javascript
+// GET /api/v1/plugins returns:
+{
+  "plugins": [
+    {
+      "id": "my-plugin",
+      "name": "My Plugin",
+      "description": "Plugin description",
+      "category": "analyzer",
+      "version": "1.0.0",
+      "endpoints": [
+        {
+          "name": "analyze_current",
+          "label": "Analyze Current Document",
+          "description": "Analyze the currently open document",
+          "state_params": ["docId", "variantId"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Menu Population Logic:**
+
+```javascript
+// In backend-plugins.js populateMenu()
+pluginsByCategory[category].forEach(plugin => {
+  // Check if plugin defines endpoints
+  const endpoints = plugin.endpoints || [
+    { name: 'execute', label: plugin.name, state_params: [] }
+  ];
+
+  endpoints.forEach(endpoint => {
+    const menuItem = document.createElement('sl-menu-item');
+    menuItem.setAttribute('data-plugin-id', plugin.id);
+    menuItem.setAttribute('data-endpoint-name', endpoint.name);
+    menuItem.setAttribute('data-state-params', JSON.stringify(endpoint.state_params));
+    menuItem.textContent = endpoint.label;
+
+    if (endpoint.description) {
+      menuItem.title = endpoint.description;
+    }
+
+    pluginsMenu.appendChild(menuItem);
+  });
+});
+```
+
+**Execution Logic:**
+
+```javascript
+async handlePluginSelection(event) {
+  const menuItem = event.detail.item;
+  const pluginId = menuItem.getAttribute('data-plugin-id');
+  const endpointName = menuItem.getAttribute('data-endpoint-name');
+  const stateParams = JSON.parse(menuItem.getAttribute('data-state-params') || '[]');
+
+  // Extract required state values
+  const params = {};
+  stateParams.forEach(param => {
+    if (this.state[param] !== undefined) {
+      params[param] = this.state[param];
+    } else {
+      console.warn(`Required state parameter '${param}' not available`);
+    }
+  });
+
+  // Execute plugin endpoint
+  await api.executeBackendPlugin(pluginId, endpointName, params);
+}
+```
+
+### Implementation Steps - COMPLETED
+
+1. ✅ Update `plugin_base.py` to document `endpoints` metadata field ([fastapi_app/lib/plugin_base.py:64-73](../../fastapi_app/lib/plugin_base.py#L64-L73))
+2. ✅ Modify `backend-plugins.js` menu population logic ([app/src/plugins/backend-plugins.js:144-162](../../app/src/plugins/backend-plugins.js#L144-L162))
+3. ✅ Update `handlePluginSelection` to extract state parameters ([app/src/plugins/backend-plugins.js:213-242](../../app/src/plugins/backend-plugins.js#L213-L242))
+4. ✅ Update `executePlugin` method signature ([app/src/plugins/backend-plugins.js:250](../../app/src/plugins/backend-plugins.js#L250))
+5. ✅ Update `plugin_registry.py` to include endpoints in metadata ([fastapi_app/lib/plugin_registry.py:190-192](../../fastapi_app/lib/plugin_registry.py#L190-L192))
+6. ✅ Update sample plugin to demonstrate multi-endpoint pattern ([fastapi_app/plugins/sample-analyzer/plugin.py:31-44](../../fastapi_app/plugins/sample-analyzer/plugin.py#L31-L44))
+7. ✅ Add tests for endpoint parameter extraction ([tests/unit/fastapi/test_plugin_system.py:335-420](../../tests/unit/fastapi/test_plugin_system.py#L335-L420))
+8. ✅ Update backend plugin documentation ([docs/code-assistant/backend-plugins.md:99-181](../../docs/code-assistant/backend-plugins.md#L99-L181))
+9. ✅ Update BackendPlugin typedef ([app/src/plugins/client.js:732-749](../../app/src/plugins/client.js#L732-L749))
+
+### Key Implementation Details
+
+**Backend:**
+
+- Plugin metadata now supports optional `endpoints` array with endpoint definitions
+- Each endpoint specifies `name`, `label`, `description`, and `state_params`
+- Plugin registry includes endpoints field when returning plugin metadata
+- Sample plugin demonstrates XML file loading using state parameters
+
+**Frontend:**
+
+- Menu population logic creates separate menu items for each endpoint
+- Uses `dataset` API to store endpoint name and state params on menu items
+- `handlePluginSelection` extracts required state values and passes to plugin
+- Backward compatible: plugins without `endpoints` field work as before
+
+**Testing:**
+
+- Added `MultiEndpointMockPlugin` test fixture
+- Tests verify endpoint metadata structure and preservation
+- Tests verify state parameter extraction and execution
+- Tests confirm backward compatibility
 
 ## Future Enhancements (Out of Scope)
 

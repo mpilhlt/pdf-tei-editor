@@ -64,6 +64,47 @@ class AnotherMockPlugin(Plugin):
         return {"result": "success"}
 
 
+class MultiEndpointMockPlugin(Plugin):
+    """Mock plugin with multiple endpoints for testing."""
+
+    @property
+    def metadata(self):
+        return {
+            "id": "multi-endpoint",
+            "name": "Multi Endpoint Plugin",
+            "description": "A plugin with multiple menu endpoints",
+            "version": "1.0.0",
+            "category": "test",
+            "required_roles": ["user"],
+            "endpoints": [
+                {
+                    "name": "analyze",
+                    "label": "Analyze Document",
+                    "description": "Analyze current document",
+                    "state_params": ["xml", "variant"],
+                },
+                {
+                    "name": "info",
+                    "label": "Get Info",
+                    "description": "Get plugin info",
+                    "state_params": [],
+                },
+            ],
+        }
+
+    def get_endpoints(self):
+        return {
+            "analyze": self.analyze,
+            "info": self.info,
+        }
+
+    async def analyze(self, context, params):
+        return {"analyzed": True, "params": params}
+
+    async def info(self, context, params):
+        return {"info": "Multi-endpoint plugin"}
+
+
 class TestPluginBase(unittest.TestCase):
     """Test Plugin base class."""
 
@@ -289,6 +330,93 @@ class TestPluginManager(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertIn("Endpoint not found", str(cm.exception))
+
+
+class TestMultiEndpointPlugins(unittest.TestCase):
+    """Test multi-endpoint plugin functionality."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.registry = PluginRegistry()
+
+    def test_plugin_with_endpoints_metadata(self):
+        """Test that plugin endpoints metadata is preserved."""
+        plugin = MultiEndpointMockPlugin()
+        self.registry._register_plugin(plugin)
+
+        plugins = self.registry.get_plugins()
+        self.assertEqual(len(plugins), 1)
+
+        plugin_metadata = plugins[0]
+        self.assertIn("endpoints", plugin_metadata)
+        self.assertEqual(len(plugin_metadata["endpoints"]), 2)
+
+    def test_endpoint_metadata_structure(self):
+        """Test that endpoint metadata has correct structure."""
+        plugin = MultiEndpointMockPlugin()
+        self.registry._register_plugin(plugin)
+
+        plugins = self.registry.get_plugins()
+        endpoint = plugins[0]["endpoints"][0]
+
+        self.assertIn("name", endpoint)
+        self.assertIn("label", endpoint)
+        self.assertIn("description", endpoint)
+        self.assertIn("state_params", endpoint)
+
+    def test_state_params_in_endpoint(self):
+        """Test that state_params are correctly included in endpoint metadata."""
+        plugin = MultiEndpointMockPlugin()
+        self.registry._register_plugin(plugin)
+
+        plugins = self.registry.get_plugins()
+        analyze_endpoint = plugins[0]["endpoints"][0]
+        info_endpoint = plugins[0]["endpoints"][1]
+
+        self.assertEqual(analyze_endpoint["state_params"], ["xml", "variant"])
+        self.assertEqual(info_endpoint["state_params"], [])
+
+    def test_backward_compatibility_no_endpoints(self):
+        """Test that plugins without endpoints metadata still work."""
+        plugin = MockPlugin()  # No endpoints in metadata
+        self.registry._register_plugin(plugin)
+
+        plugins = self.registry.get_plugins()
+        self.assertEqual(len(plugins), 1)
+
+        # Should not have endpoints field, or it should be None
+        plugin_metadata = plugins[0]
+        self.assertNotIn("endpoints", plugin_metadata)
+
+
+class TestMultiEndpointExecution(unittest.IsolatedAsyncioTestCase):
+    """Test executing multi-endpoint plugins."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        PluginManager._instance = None
+        self.manager = PluginManager.get_instance()
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        PluginManager._instance = None
+
+    async def test_execute_multi_endpoint_plugin(self):
+        """Test executing different endpoints of a multi-endpoint plugin."""
+        plugin = MultiEndpointMockPlugin()
+        self.manager.registry._register_plugin(plugin)
+
+        # Execute analyze endpoint
+        result = await self.manager.execute_plugin(
+            "multi-endpoint", "analyze", {"xml": "test.xml", "variant": "v1"}
+        )
+        self.assertTrue(result["analyzed"])
+        self.assertEqual(result["params"]["xml"], "test.xml")
+        self.assertEqual(result["params"]["variant"], "v1")
+
+        # Execute info endpoint
+        result = await self.manager.execute_plugin("multi-endpoint", "info", {})
+        self.assertEqual(result["info"], "Multi-endpoint plugin")
 
 
 if __name__ == "__main__":

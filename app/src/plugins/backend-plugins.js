@@ -141,17 +141,25 @@ export class BackendPluginsPlugin extends Plugin {
 
       // Add plugins in this category
       pluginsByCategory[category].forEach(plugin => {
-        const menuItem = document.createElement('sl-menu-item');
-        menuItem.setAttribute('data-plugin-id', plugin.id);
-        menuItem.setAttribute('data-plugin-category', plugin.category);
-        menuItem.textContent = plugin.name;
+        // Check if plugin defines endpoints
+        const endpoints = plugin.endpoints || [
+          { name: 'execute', label: plugin.name, state_params: [] }
+        ];
 
-        // Add description as tooltip if available
-        if (plugin.description) {
-          menuItem.title = plugin.description;
-        }
+        endpoints.forEach(endpoint => {
+          const menuItem = document.createElement('sl-menu-item');
+          menuItem.dataset.pluginId = plugin.id;
+          menuItem.dataset.endpointName = endpoint.name;
+          menuItem.dataset.stateParams = JSON.stringify(endpoint.state_params);
+          menuItem.textContent = endpoint.label;
 
-        pluginsMenu.appendChild(menuItem);
+          // Add description as tooltip if available
+          if (endpoint.description) {
+            menuItem.title = endpoint.description;
+          }
+
+          pluginsMenu.appendChild(menuItem);
+        });
       });
 
       // Add divider between categories (except after last one)
@@ -204,9 +212,11 @@ export class BackendPluginsPlugin extends Plugin {
    */
   async handlePluginSelection(event) {
     const menuItem = event.detail.item;
-    const pluginId = menuItem.getAttribute('data-plugin-id');
+    const pluginId = menuItem.dataset.pluginId;
+    const endpointName = menuItem.dataset.endpointName;
+    const stateParams = JSON.parse(menuItem.dataset.stateParams || '[]');
 
-    if (!pluginId) {
+    if (!pluginId || !endpointName) {
       return;
     }
 
@@ -217,24 +227,33 @@ export class BackendPluginsPlugin extends Plugin {
       return;
     }
 
-    // Execute the plugin
-    await this.executePlugin(plugin);
+    // Extract required state values
+    const params = {};
+    stateParams.forEach(param => {
+      if (this.state[param] !== undefined) {
+        params[param] = this.state[param];
+      } else {
+        console.warn(`Required state parameter '${param}' not available`);
+      }
+    });
+
+    // Execute the plugin with the specified endpoint
+    await this.executePlugin(plugin, endpointName, params);
   }
 
   /**
    * Execute a backend plugin
    * @param {BackendPlugin} plugin
+   * @param {string} endpointName - Endpoint to execute
+   * @param {Record<string, any>} params - Parameters to pass to the endpoint
    */
-  async executePlugin(plugin) {
+  async executePlugin(plugin, endpointName, params) {
     try {
       // Show loading notification
       notify(`Executing ${plugin.name}...`, 'primary', 'hourglass');
 
-      // For now, execute the default 'execute' endpoint with empty params
-      // In the future, this could show a dialog to collect parameters
-      const result = await api.executeBackendPlugin(plugin.id, 'execute', {
-        text: 'This is a test text for the sample analyzer plugin.'
-      });
+      // Execute the specified endpoint with provided params
+      const result = await api.executeBackendPlugin(plugin.id, endpointName, params);
 
       // Show result notification
       notify(`${plugin.name} completed successfully`, 'success', 'check-circle');

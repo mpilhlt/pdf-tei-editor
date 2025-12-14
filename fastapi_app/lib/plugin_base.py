@@ -61,6 +61,17 @@ class Plugin(ABC):
             - version (str): Plugin version (semver recommended)
             - required_roles (list[str]): Roles required to access plugin (empty = all users)
 
+        Optional fields:
+            - endpoints (list[dict]): Menu endpoint definitions for multi-endpoint plugins
+              Each endpoint definition contains:
+                - name (str): Endpoint method name (must match key in get_endpoints())
+                - label (str): Display label for menu item
+                - description (str): Optional description shown as tooltip
+                - state_params (list[str]): Required frontend state fields to pass as parameters
+
+              If not specified, defaults to single menu item calling 'execute' endpoint.
+              If empty list, plugin appears in list but adds no menu items.
+
         Returns:
             dict: Plugin metadata
         """

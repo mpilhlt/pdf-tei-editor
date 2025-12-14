@@ -96,6 +96,92 @@ const result = await api.executeBackendPlugin(
 );
 ```
 
+### Multi-Endpoint Menu Support
+
+Plugins can define multiple menu entries, each calling a different endpoint with different parameters from the application state:
+
+```python
+@property
+def metadata(self) -> dict[str, Any]:
+    return {
+        "id": "my-analyzer",
+        "name": "Document Analyzer",
+        "description": "Analyzes documents",
+        "version": "1.0.0",
+        "category": "analyzer",
+        "required_roles": ["user"],
+        "endpoints": [
+            {
+                "name": "analyze",
+                "label": "Analyze Current XML",
+                "description": "Analyze currently open XML document",
+                "state_params": ["xml", "variant"]
+            },
+            {
+                "name": "analyze_all",
+                "label": "Analyze All Documents",
+                "description": "Run analysis on all documents",
+                "state_params": []
+            },
+            {
+                "name": "info",
+                "label": "Plugin Info",
+                "description": "Get plugin information",
+                "state_params": []
+            }
+        ]
+    }
+```
+
+**Endpoint Definition Fields:**
+
+- `name` (required): Endpoint method name (must match key in `get_endpoints()`)
+- `label` (required): Display label for menu item
+- `description` (optional): Tooltip text
+- `state_params` (required): List of state fields to pass as parameters (see [app/src/state.js](../../app/src/state.js))
+
+**Available State Parameters:**
+
+- `pdf` - PDF document ID
+- `xml` - XML document ID
+- `diff` - Diff XML document ID
+- `xpath` - Current XPath selection
+- `variant` - Variant filter
+- `collection` - Current collection ID
+- Other fields from `ApplicationState` typedef
+
+**Backward Compatibility:**
+
+- If `endpoints` not defined: Single menu item calls `execute` endpoint
+- If `endpoints` is empty array: Plugin appears in list but adds no menu items
+
+**Example with State Parameters:**
+
+```python
+async def analyze(self, context, params: dict) -> dict:
+    """Analyze XML document from state parameters"""
+    xml_id = params.get("xml")  # Passed from frontend state
+    variant = params.get("variant")  # Passed from frontend state
+
+    if xml_id:
+        # Load and analyze the XML file
+        from fastapi_app.lib.dependencies import get_db, get_file_storage
+        from fastapi_app.lib.file_repository import FileRepository
+
+        db = get_db()
+        file_repo = FileRepository(db)
+        file_storage = get_file_storage()
+
+        file_metadata = file_repo.get_file_by_id_or_stable_id(xml_id)
+        if file_metadata and file_metadata.file_type == "tei":
+            content_bytes = file_storage.read_file(file_metadata.id, "tei")
+            text = content_bytes.decode("utf-8")
+            # Perform analysis on text
+            return {"analysis": "result"}
+
+    return {"error": "No XML document open"}
+```
+
 ## API Endpoints
 
 - `GET /api/v1/plugins` - List plugins (filtered by user roles)

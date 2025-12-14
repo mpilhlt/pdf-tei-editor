@@ -179,13 +179,19 @@ class PluginRegistry:
                 # If plugin has required_roles=[] or ["*"], it's accessible to everyone
 
             # Include in results (exclude internal fields if needed)
-            filtered.append({
+            result = {
                 "id": metadata["id"],
                 "name": metadata["name"],
                 "description": metadata["description"],
                 "category": metadata["category"],
                 "version": metadata["version"],
-            })
+            }
+
+            # Include optional endpoints metadata if present
+            if "endpoints" in metadata:
+                result["endpoints"] = metadata["endpoints"]
+
+            filtered.append(result)
 
         return filtered
 
