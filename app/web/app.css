@@ -269,3 +269,13 @@ sl-tree-item {
 sl-tree-item sl-icon[slot="prefix"] {
   margin-right: 0.5rem;
 }
+
+/* Backend plugins menu styling */
+sl-menu[name="pluginsMenu"] small {
+  display: block;
+  padding: 0.5rem 1rem 0.25rem;
+  color: var(--sl-color-neutral-500);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}

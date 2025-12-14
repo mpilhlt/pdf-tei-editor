@@ -26,12 +26,13 @@ import ui from '../ui.js'
  * This documents the structure created by various plugins that add controls to the toolbar.
  * @typedef {object} toolbarPart
  * @property {SlSelect} variant - The selectbox for the variant filter (added by file-selection plugin)
- * @property {SlSelect} pdf - The selectbox for the pdf document (added by file-selection plugin)  
+ * @property {SlSelect} pdf - The selectbox for the pdf document (added by file-selection plugin)
  * @property {SlSelect} xml - The selectbox for the xml document (added by file-selection plugin)
  * @property {SlSelect} diff - The selectbox for the xml-diff document (added by file-selection plugin)
  * @property {UIPart<SlButtonGroup, documentActionsPart>} documentActions - Document action buttons (added by services plugin)
  * @property {UIPart<SlButtonGroup, teiServicesPart>} teiActions - TEI service buttons (added by services plugin)
  * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
+ * @property {UIPart<SlButtonGroup, backendPluginsButtonPart>} backendPluginsGroup - Backend plugins dropdown (added by backend-plugins plugin)
  * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
  * @property {UIPart<SlButton, fileDrawerTriggerPart>} fileDrawerTrigger - File drawer trigger button (added by file-selection-drawer plugin)
  */

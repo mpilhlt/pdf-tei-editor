@@ -12,6 +12,7 @@
 
 // class-based plugins
 import AuthenticationPlugin from './plugins/authentication.js'
+import BackendPluginsPlugin from './plugins/backend-plugins.js'
 import FiledataPlugin from './plugins/filedata.js'
 import LoggerPlugin from './plugins/logger.js'
 import { logLevel} from './plugins/logger.js'
@@ -45,28 +46,29 @@ import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
 const plugins = [
   // class-based
   AuthenticationPlugin,
+  BackendPluginsPlugin,
   FiledataPlugin,
   LoggerPlugin,
 
-  // modules with config object 
-  urlHashStatePlugin, 
-  clientPlugin, 
-  configPlugin, 
-  dialogPlugin, 
-  toolbarPlugin, 
-  pdfViewerPlugin, 
-  xmlEditorPlugin, 
+  // modules with config object
+  urlHashStatePlugin,
+  clientPlugin,
+  configPlugin,
+  dialogPlugin,
+  toolbarPlugin,
+  pdfViewerPlugin,
+  xmlEditorPlugin,
   fileselectionPlugin,
-  fileSelectionDrawerPlugin, 
+  fileSelectionDrawerPlugin,
   servicesPlugin,
-  syncPlugin, 
-  extractionPlugin, 
-  floatingPanelPlugin, 
+  syncPlugin,
+  extractionPlugin,
+  floatingPanelPlugin,
   promptEditorPlugin,
-  teiWizardPlugin, 
-  validationPlugin, 
-  infoPlugin, 
-  moveFilesPlugin, 
+  teiWizardPlugin,
+  validationPlugin,
+  infoPlugin,
+  moveFilesPlugin,
   ssePlugin,
   accessControlPlugin,
   heartbeatPlugin,

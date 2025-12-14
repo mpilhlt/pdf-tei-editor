@@ -18,7 +18,7 @@ describe('File Copy API E2E Tests', { concurrency: 1 }, () => {
   const testState = {
     // Use existing PDF from fixtures
     testDocId: '10.5771__2699-1284-2024-3-149',
-    destinationCollection: 'copied-collection',
+    destinationCollection: 'default',
     pdfHash: null,
     teiHash: null
   };

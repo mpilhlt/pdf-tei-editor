@@ -100,6 +100,18 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing locks database: {e}")
         raise
 
+    # Initialize plugin system
+    from .lib.plugin_manager import PluginManager
+    try:
+        plugin_manager = PluginManager.get_instance()
+        plugin_manager.discover_plugins()
+        plugin_manager.register_plugin_routes(app)
+        await plugin_manager.initialize_plugins(app)
+        logger.info("Plugin system initialized")
+    except Exception as e:
+        logger.error(f"Error initializing plugin system: {e}")
+        # Non-fatal - continue without plugins
+
     # Log startup complete
     logger.info("=" * 80)
     logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
@@ -110,6 +122,13 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down PDF-TEI Editor API")
+
+    # Cleanup plugins
+    try:
+        plugin_manager = PluginManager.get_instance()
+        await plugin_manager.shutdown_plugins()
+    except Exception as e:
+        logger.error(f"Error shutting down plugins: {e}")
 
 
 # Create FastAPI application
@@ -131,6 +150,7 @@ app.add_middleware(
 
 # Import API routers
 from .api import auth, config
+from .routes import plugins
 from .routers import (
     files_list,
     files_serve,
@@ -180,6 +200,7 @@ api_v1.include_router(files_import.router)  # Import endpoint
 api_v1.include_router(sync.router)  # Phase 6: Sync endpoints
 api_v1.include_router(sse.router)  # Phase 6: SSE stream
 api_v1.include_router(schema.router)  # Schema serving (before files_serve)
+api_v1.include_router(plugins.router)  # Plugin system endpoints
 api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
 
 # Health check endpoint (unversioned)
