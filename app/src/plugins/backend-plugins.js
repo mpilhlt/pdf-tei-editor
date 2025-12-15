@@ -29,6 +29,10 @@ import ui from '../ui.js';
 await registerTemplate('backend-plugins-button', 'backend-plugins-button.html');
 
 export class BackendPluginsPlugin extends Plugin {
+  /**
+   * Constructor
+   * @param {PluginContext} context 
+   */
   constructor(context) {
     super(context, {
       name: 'backend-plugins',
@@ -42,6 +46,10 @@ export class BackendPluginsPlugin extends Plugin {
     this.initialized = false;
   }
 
+  /**
+   * Installs the plugin
+   * @param {ApplicationState} initialState 
+   */
   async install(initialState) {
     await super.install(initialState);
 
@@ -62,6 +70,10 @@ export class BackendPluginsPlugin extends Plugin {
     }
   }
 
+  /**
+   * Reacts to state updates
+   * @param {Array<String>} changedKeys 
+   */
   async onStateUpdate(changedKeys) {
     // Show/hide plugin button based on login state
     if (changedKeys.includes('sessionId')) {
@@ -276,12 +288,53 @@ export class BackendPluginsPlugin extends Plugin {
    * @param {any} result
    */
   displayResult(plugin, result) {
-    // For now, just show an alert with JSON result
-    // TODO: Create a proper result display modal/panel
-    const resultText = JSON.stringify(result, null, 2);
+    // Check if result contains HTML content
+    if (result && result.html) {
+      // Display HTML in dialog with larger width for tables
+      ui.dialog.setAttribute("label", plugin.name);
+      ui.dialog.style.setProperty("--width", "80vw");
+      ui.dialog.icon.innerHTML = '';
+      ui.dialog.message.innerHTML = `<div style="overflow-x: auto; max-height: 70vh;">${result.html}</div>`;
 
-    // Use browser alert for now (replace with proper modal later)
-    alert(`${plugin.name} Result:\n\n${resultText}`);
+      // Add Export button if result includes pdf and variant (for CSV export)
+      if (result.pdf) {
+        const existingExportBtn = ui.dialog.querySelector('[data-export-button]');
+        if (existingExportBtn) {
+          existingExportBtn.remove();
+        }
+
+        const exportBtn = document.createElement('sl-button');
+        exportBtn.setAttribute('slot', 'footer');
+        exportBtn.setAttribute('variant', 'default');
+        exportBtn.setAttribute('data-export-button', '');
+        exportBtn.textContent = 'Export';
+
+        exportBtn.addEventListener('click', () => {
+          const variant = result.variant || 'all';
+          const url = `/api/v1/plugins/${plugin.id}/export?pdf=${encodeURIComponent(result.pdf)}&variant=${encodeURIComponent(variant)}`;
+          window.open(url, '_blank');
+        });
+
+        ui.dialog.insertBefore(exportBtn, ui.dialog.closeBtn);
+      }
+
+      ui.dialog.show();
+    } else if (result && result.error) {
+      // Show error in dialog
+      ui.dialog.setAttribute("label", "Plugin Error");
+      ui.dialog.style.setProperty("--width", "50vw");
+      ui.dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
+      ui.dialog.message.innerHTML = `<p>${result.error}</p>`;
+      ui.dialog.show();
+    } else {
+      // Show JSON result in dialog
+      const resultText = JSON.stringify(result, null, 2);
+      ui.dialog.setAttribute("label", plugin.name + " Result");
+      ui.dialog.style.setProperty("--width", "50vw");
+      ui.dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
+      ui.dialog.message.innerHTML = `<pre style="overflow: auto; max-height: 60vh;">${resultText}</pre>`;
+      ui.dialog.show();
+    }
   }
 }
 

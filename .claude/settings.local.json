@@ -51,7 +51,13 @@
       "Bash(npm run build:*)",
       "Bash(uv sync:*)",
       "Bash(echo:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(timeout /t 3)",
+      "Bash(timeout /t 5)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(uv run uvicorn --help:*)",
+      "Bash(tasklist:*)"
     ],
     "deny": [],
     "ask": []

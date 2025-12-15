@@ -114,6 +114,14 @@ The application state object is defined in `app/src/state.js` and contains:
 - **If a read/write operation is missing**, add it to the appropriate repository/module rather than using ad-hoc SQL
 - This prevents breaking changes when the database schema evolves
 
+### TEI Document Processing
+
+- **ALWAYS use utility functions** from `fastapi_app/lib/tei_utils.py` when working with TEI XML documents
+- **Use `extract_tei_metadata()`** to extract metadata (title, authors, DOI, variant, etc.) from TEI documents instead of manual XPath queries
+- **Use lxml** (not xml.etree) for TEI processing - it's what `tei_utils.py` uses and ensures consistency
+- **Add new utility functions** to `tei_utils.py` when you need TEI processing functionality that doesn't exist yet
+- This ensures consistent TEI handling across the codebase and prevents duplication
+
 ### Key Directories
 
 Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.
@@ -158,6 +166,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **Suggest Prompt Updates**: if something in the documentation does not align with the consistent code patterns, suggest to update the documentation
 - **NEVER start, restart, or suggest restarting the dev server** - It auto-restarts on changes, tests should use the test runners
 - **ALWAYS add comprehensive JSDoc headers** - Use specific types instead of generic "object"
+- **NEVER make up non-existing APIs** - Before using any method on a class or module instance, ALWAYS verify that the method exists with the exact signature you're using. Read the class definition or module exports first. If a needed API doesn't exist, implement it rather than assuming it exists
 - **Check testing guide before writing/debugging tests** - ALWAYS consult [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing new tests or debugging test failures. It contains critical patterns, helper functions, and known issues (like Shoelace component testing)
 - **Check backend plugin guide when creating backend plugins** - ALWAYS consult [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) before creating or modifying backend plugins. It contains the plugin architecture, patterns, and Shadow DOM handling requirements
 - **Suppress expected error output in tests** - When tests validate error handling that logs errors or warnings, ALWAYS use `assertLogs` context manager to suppress console output. This keeps test output clean and verifies the error is logged. Example: `with self.assertLogs('module.name', level='ERROR') as cm:` wrapping the code that produces expected errors. Never let expected errors pollute test output.

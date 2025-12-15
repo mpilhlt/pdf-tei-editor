@@ -108,35 +108,40 @@ class PluginManager:
         # Search plugin directories for this plugin's routes.py
         plugin_dirs = self._get_plugin_dirs()
 
+        # Try both hyphenated and underscored directory names
+        # (plugin_id uses hyphens, directory names use underscores)
+        dir_names = [plugin_id, plugin_id.replace("-", "_")]
+
         for base_dir in plugin_dirs:
-            plugin_dir = base_dir / plugin_id
-            routes_file = plugin_dir / "routes.py"
+            for dir_name in dir_names:
+                plugin_dir = base_dir / dir_name
+                routes_file = plugin_dir / "routes.py"
 
-            if routes_file.exists():
-                try:
-                    # Load the routes module
-                    import importlib.util
+                if routes_file.exists():
+                    try:
+                        # Load the routes module
+                        import importlib.util
 
-                    module_name = f"plugin_{plugin_id}_routes"
-                    spec = importlib.util.spec_from_file_location(
-                        module_name, routes_file
-                    )
-                    if spec is None or spec.loader is None:
-                        continue
+                        module_name = f"plugin_{plugin_id}_routes"
+                        spec = importlib.util.spec_from_file_location(
+                            module_name, routes_file
+                        )
+                        if spec is None or spec.loader is None:
+                            continue
 
-                    module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
 
-                    # Look for 'router' in the module
-                    if hasattr(module, "router"):
-                        app.include_router(module.router)
-                        logger.info(f"Registered custom routes for plugin: {plugin_id}")
-                        return
+                        # Look for 'router' in the module
+                        if hasattr(module, "router"):
+                            app.include_router(module.router)
+                            logger.info(f"Registered custom routes for plugin: {plugin_id}")
+                            return
 
-                except Exception as e:
-                    logger.error(
-                        f"Error loading routes.py for plugin {plugin_id}: {e}"
-                    )
+                    except Exception as e:
+                        logger.error(
+                            f"Error loading routes.py for plugin {plugin_id}: {e}"
+                        )
 
     def _get_plugin_dirs(self) -> list[Path]:
         """

@@ -100,6 +100,19 @@ class FileRepository:
         except ValueError:
             return None
 
+    def get_doc_id_by_file_id(self, file_id: str) -> Optional[str]:
+        """
+        Get doc_id from a file's stable_id or full content hash.
+
+        Args:
+            file_id: Stable ID (6-12 chars) or full SHA-256 hash (64 chars)
+
+        Returns:
+            Document ID if file found, None otherwise
+        """
+        file = self.get_file_by_id_or_stable_id(file_id)
+        return file.doc_id if file else None
+
     def _row_to_model(self, row: sqlite3.Row) -> FileMetadata:
         """
         Convert database row to FileMetadata model.
