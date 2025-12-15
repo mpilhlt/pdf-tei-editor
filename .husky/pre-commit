@@ -1,1 +1,1 @@
-python3 .husky/pre-commit.py
+uv run python .husky/pre-commit.py
