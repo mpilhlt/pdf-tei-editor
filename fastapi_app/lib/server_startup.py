@@ -50,14 +50,29 @@ def get_pid_on_port(port: int = 8000) -> Optional[int]:
         PID if found, None otherwise
     """
     try:
-        result = subprocess.run(
-            ['lsof', '-ti', f':{port}'],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if result.stdout.strip():
-            return int(result.stdout.strip().split('\n')[0])
+        if sys.platform == 'win32':
+            # Windows: use netstat
+            result = subprocess.run(
+                ['netstat', '-ano'],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            for line in result.stdout.split('\n'):
+                if f':{port}' in line and 'LISTENING' in line:
+                    parts = line.split()
+                    if parts:
+                        return int(parts[-1])
+        else:
+            # Unix/Linux/macOS: use lsof
+            result = subprocess.run(
+                ['lsof', '-ti', f':{port}'],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if result.stdout.strip():
+                return int(result.stdout.strip().split('\n')[0])
     except (subprocess.SubprocessError, ValueError):
         pass
     return None
@@ -77,7 +92,12 @@ def kill_server_on_port(port: int = 8000) -> bool:
     if pid:
         try:
             print(f"Killing server process on port {port} (PID: {pid})...")
-            subprocess.run(['kill', str(pid)], check=True)
+            if sys.platform == 'win32':
+                # Windows: use taskkill
+                subprocess.run(['taskkill', '/F', '/PID', str(pid)], check=True)
+            else:
+                # Unix/Linux/macOS: use kill
+                subprocess.run(['kill', str(pid)], check=True)
             # Wait a moment for the process to terminate
             import time
             time.sleep(1)
@@ -139,7 +159,7 @@ def print_server_running_message(host: str, port: int, pid: Optional[int] = None
     print()
 
 
-def print_server_starting_message(host: str, port: int, log_file: Path, mode: str = "development") -> None:
+def print_server_starting_message(host: str, port: int, log_file: Path, mode: str = "development", auto_reload: bool = True) -> None:
     """
     Print message when starting the server.
 
@@ -148,13 +168,17 @@ def print_server_starting_message(host: str, port: int, log_file: Path, mode: st
         port: Server port
         log_file: Path to log file
         mode: Server mode ("development" or "production")
+        auto_reload: Whether auto-reload is enabled
     """
     print()
     print("=" * 86)
     print(f"Starting FastAPI {mode} server.")
     print(f"Server output being logged to: {log_file}")
     if mode == "development":
-        print(f"The server will automatically reload when files change.")
+        if auto_reload:
+            print(f"The server will automatically reload when files change.")
+        else:
+            print(f"Auto-reload is disabled. Use 'bin/start-dev --restart' to restart after changes.")
         print(f"Open http://{host}:{port}?dev to access app in development mode.")
     else:
         print(f"Open http://{host}:{port} to access the application.")
