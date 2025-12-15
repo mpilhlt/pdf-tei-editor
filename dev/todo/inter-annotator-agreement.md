@@ -4,55 +4,135 @@
 
 Backend plugin that computes inter-annotator agreement between all versions of a TEI annotation variant for a PDF document. Returns HTML table with pairwise comparison statistics.
 
+## Example Plugin Reference
+
+See [fastapi_app/plugins/annotation_versions_analyzer/plugin.py](../../fastapi_app/plugins/annotation_versions_analyzer/plugin.py) for a complete example of:
+
+- Plugin metadata structure and endpoint registration
+- Using FileRepository to query TEI files by doc_id and variant
+- Using file_storage to read file content
+- Parsing TEI XML with lxml and extracting metadata using `extract_tei_metadata()`
+- Generating styled HTML tables for results
+- Proper error handling and logging
+
+See [fastapi_app/plugins/annotation_versions_analyzer/routes.py](../../fastapi_app/plugins/annotation_versions_analyzer/routes.py) for an example of:
+
+- Adding custom routes to a plugin (CSV export endpoint)
+- Reusing plugin methods from route handlers to avoid code duplication
+- Returning file downloads via StreamingResponse
+
+**IMPORTANT**: The plugin endpoint and any custom routes (like CSV export) should share the same data extraction logic. Extract common functionality into reusable methods that both the plugin endpoint and custom routes can call. This prevents code duplication and ensures consistency.
+
 ## Technical Requirements
 
 ### Input Parameters
 
 Plugin receives from frontend state:
+
 - `pdf` (state field) - Document ID of the PDF file
 - `variant` (state field) - Currently selected variant filter
 
 ### Output
 
 HTML table showing:
+
 - Pairwise comparisons between all TEI versions
-- Document label from `/teiHeader/editionStmt/title`
-- Annotator ID from `/teiHeader/revisionDesc/change` (last change element)
+- Document label
+- Annotator ID (last change element)
 - Agreement metrics for each pair
 
-### Algorithm: Sequence-Based Token Agreement
+### Algorithm: Flattened Element Sequence Agreement
 
-**Label Sequence Extraction:**
+**Element Sequence Extraction:**
 
-1. Parse TEI XML and extract all `<label>` elements in document order
-2. Get text content of each label, normalize whitespace:
-   - Strip leading/trailing whitespace
-   - Collapse internal whitespace to single spaces
-   - Case-sensitive comparison (preserve original case)
-3. Create sequence of label texts: `["label1", "label2", "label3", ...]`
+1. Parse TEI XML and locate the `<text>` element
+2. Traverse all descendant elements within `<text>` in document order (depth-first)
+3. For each element, create a token with:
+   - Element tag name (without namespace prefix)
+   - Element's `.text` (direct text content before any children)
+   - Element's `.tail` (text content after the element's closing tag, before next sibling)
+   - Relevant attributes (e.g., `@place`, `@type`)
+4. Create flattened sequence of element tokens
+
+**Text Normalization:**
+
+- Normalize both `.text` and `.tail` separately
+- Strip leading/trailing whitespace from each
+- Collapse internal whitespace to single spaces
+- Treat empty strings as None
+- Case-sensitive comparison
+
+**Handling Nested Elements (lxml model):**
+
+In lxml's tree model:
+
+- `.text` = text immediately inside element, before first child
+- `.tail` = text immediately after element's closing tag
+
+Example XML:
+
+```xml
+<note place="headnote"><page>1</page>Text of headnote<lb /></note>
+```
+
+Produces flattened sequence:
+
+```python
+[
+  ("note", text=None, tail=None, {"place": "headnote"}),    # No text before <page>, no tail after </note>
+  ("page", text="1", tail="Text of headnote", {}),          # Text "1" inside, "Text of headnote" after </page>
+  ("lb", text=None, tail=None, {})                          # Self-closing, no text/tail
+]
+```
+
+**Token Matching:**
+
+Two element tokens match if ALL of the following are identical:
+
+- Tag name
+- Normalized `.text` value
+- Normalized `.tail` value
+- Relevant attribute values
 
 **Pairwise Agreement Calculation:**
 
 For each pair of versions (A, B):
 
-1. Extract label sequences: `seq_A` and `seq_B`
-2. Align sequences using Longest Common Subsequence (LCS)
+1. Extract flattened sequences: `seq_A` and `seq_B`
+2. Compare position-by-position
 3. Calculate metrics:
-   - **Matches**: Number of labels in same position with identical text
+   - **Matches**: Count of matching tokens at same positions
    - **Total**: Maximum length of the two sequences
    - **Agreement**: `matches / total * 100` (percentage)
-   - **Cohen's Kappa** (optional): Accounts for chance agreement
 
 **Example:**
 
-```
-Version A: ["Person", "Location", "Date"]
-Version B: ["Person", "Place", "Date"]
+Version A:
 
-Alignment:
-  A: Person | Location | Date
-  B: Person | Place    | Date
-     MATCH    DIFF      MATCH
+```python
+[
+  ("note", None, None, {"place": "headnote"}),
+  ("page", "1", "Text of headnote", {}),
+  ("lb", None, None, {})
+]
+```
+
+Version B:
+
+```python
+[
+  ("note", None, None, {"place": "footnote"}),  # Different @place
+  ("page", "1", "Text of headnote", {}),
+  ("lb", None, None, {})
+]
+```
+
+Comparison:
+
+```text
+Position 0: Different @place attribute           → DIFF
+Position 1: All fields match                     → MATCH
+Position 2: All fields match                     → MATCH
 
 Matches: 2
 Total: 3
@@ -62,8 +142,10 @@ Agreement: 66.67%
 **Edge Cases:**
 
 - Different sequence lengths: Use max length as denominator
-- Empty sequences: Agreement = 0% or N/A
+- Empty `<text>` elements: Agreement = 0% or N/A
 - Single version: No comparisons possible
+- Different nesting depths: Handled by depth-first traversal
+- Whitespace-only text/tail: Normalized to None
 
 ## Implementation Design
 
@@ -75,7 +157,10 @@ Agreement: 66.67%
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.file_repository import FileRepository
 from typing import Any
-import xml.etree.ElementTree as ET
+from lxml import etree
+import logging
+
+logger = logging.getLogger(__name__)
 
 class IAAAnalyzerPlugin(Plugin):
     @property
@@ -126,15 +211,15 @@ class IAAAnalyzerPlugin(Plugin):
         if len(tei_files) < 2:
             return {"html": "<p>Need at least 2 TEI versions to compare.</p>"}
 
-        # Extract metadata and label sequences
+        # Extract metadata and element sequences
         versions = []
         for tei_file in tei_files:
             metadata = self._extract_metadata(tei_file)
-            labels = self._extract_label_sequence(tei_file)
+            elements = self._extract_element_sequence(tei_file)
             versions.append({
                 "file": tei_file,
                 "metadata": metadata,
-                "labels": labels
+                "elements": elements
             })
 
         # Compute pairwise agreements
@@ -157,22 +242,26 @@ class IAAAnalyzerPlugin(Plugin):
 
     def _extract_metadata(self, tei_file):
         """Extract document label and annotator from TEI header."""
-        # Parse TEI XML from storage
-        tree = ET.parse(tei_file.storage_path)
-        root = tree.getroot()
+        from fastapi_app.lib.dependencies import get_file_storage
+        from fastapi_app.lib.tei_utils import extract_tei_metadata
 
-        # Extract title (with TEI namespace handling)
-        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
-        title_elem = root.find('.//tei:editionStmt/tei:title', ns)
-        title = title_elem.text if title_elem is not None else "Unknown"
+        file_storage = get_file_storage()
+        content_bytes = file_storage.read_file(tei_file.id, "tei")
+        xml_content = content_bytes.decode("utf-8")
+        root = etree.fromstring(xml_content.encode("utf-8"))
+
+        # Use existing utility to extract metadata
+        tei_metadata = extract_tei_metadata(root)
+
+        # Get title - prefer edition_title, fallback to title
+        title = tei_metadata.get("edition_title") or tei_metadata.get("title", "Untitled")
 
         # Extract last annotator from revisionDesc
-        changes = root.findall('.//tei:revisionDesc/tei:change', ns)
+        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+        last_change_elem = root.find('.//tei:revisionDesc/tei:change[last()]', ns)
         annotator = "Unknown"
-        if changes:
-            last_change = changes[-1]
-            # Try @who attribute, fallback to text content
-            annotator = last_change.get('who', last_change.text or "Unknown")
+        if last_change_elem is not None:
+            annotator = last_change_elem.get('who', annotator)
 
         return {
             "title": title.strip(),
@@ -180,23 +269,55 @@ class IAAAnalyzerPlugin(Plugin):
             "stable_id": tei_file.stable_id
         }
 
-    def _extract_label_sequence(self, tei_file):
-        """Extract normalized sequence of label texts."""
-        tree = ET.parse(tei_file.storage_path)
-        root = tree.getroot()
+    def _extract_element_sequence(self, tei_file):
+        """Extract flattened sequence of element tokens from <text> element."""
+        from fastapi_app.lib.dependencies import get_file_storage
+
+        file_storage = get_file_storage()
+        content_bytes = file_storage.read_file(tei_file.id, "tei")
+        xml_content = content_bytes.decode("utf-8")
+        root = etree.fromstring(xml_content.encode("utf-8"))
 
         ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
-        labels = root.findall('.//tei:label', ns)
+        text_elem = root.find('.//tei:text', ns)
+
+        if text_elem is None:
+            return []
 
         sequence = []
-        for label in labels:
-            text = label.text or ""
-            # Normalize whitespace
-            normalized = " ".join(text.split())
-            if normalized:
-                sequence.append(normalized)
+        # Traverse all descendants in document order
+        for elem in text_elem.iter():
+            if elem == text_elem:
+                continue  # Skip the <text> element itself
+
+            # Extract tag name without namespace
+            tag = etree.QName(elem).localname
+
+            # Normalize text and tail
+            text = self._normalize_text(elem.text)
+            tail = self._normalize_text(elem.tail)
+
+            # Extract relevant attributes (customize as needed)
+            attrs = {}
+            for attr_name in ['place', 'type', 'who', 'when']:
+                if attr_name in elem.attrib:
+                    attrs[attr_name] = elem.attrib[attr_name]
+
+            sequence.append({
+                "tag": tag,
+                "text": text,
+                "tail": tail,
+                "attrs": attrs
+            })
 
         return sequence
+
+    def _normalize_text(self, text):
+        """Normalize text content: strip, collapse whitespace, return None if empty."""
+        if not text:
+            return None
+        normalized = " ".join(text.split())
+        return normalized if normalized else None
 
     def _compute_pairwise_agreements(self, versions):
         """Compute agreement for all version pairs."""
@@ -207,8 +328,8 @@ class IAAAnalyzerPlugin(Plugin):
                 v1 = versions[i]
                 v2 = versions[j]
 
-                matches = self._count_matches(v1['labels'], v2['labels'])
-                total = max(len(v1['labels']), len(v2['labels']))
+                matches = self._count_matches(v1['elements'], v2['elements'])
+                total = max(len(v1['elements']), len(v2['elements']))
                 agreement = (matches / total * 100) if total > 0 else 0
 
                 comparisons.append({
@@ -222,12 +343,19 @@ class IAAAnalyzerPlugin(Plugin):
         return comparisons
 
     def _count_matches(self, seq1, seq2):
-        """Count matching labels at same positions."""
+        """Count matching element tokens at same positions."""
         matches = 0
         min_len = min(len(seq1), len(seq2))
 
         for i in range(min_len):
-            if seq1[i] == seq2[i]:
+            elem1 = seq1[i]
+            elem2 = seq2[i]
+
+            # Elements match if tag, text, tail, and relevant attributes all match
+            if (elem1['tag'] == elem2['tag'] and
+                elem1['text'] == elem2['text'] and
+                elem1['tail'] == elem2['tail'] and
+                elem1['attrs'] == elem2['attrs']):
                 matches += 1
 
         return matches
@@ -288,6 +416,7 @@ Plugin discovery and execution handled automatically by existing `backend-plugin
 1. Menu item labeled "Compute Inter-Annotator Agreement" appears under "Analyzer" category
 2. On click, frontend extracts `state.pdf` and `state.variant`
 3. Calls `POST /api/v1/plugins/iaa-analyzer/execute` with:
+
    ```json
    {
      "endpoint": "compute_agreement",
@@ -297,6 +426,7 @@ Plugin discovery and execution handled automatically by existing `backend-plugin
      }
    }
    ```
+
 4. Result HTML displayed in modal/alert
 
 ### Result Display Enhancement (Optional)
@@ -350,11 +480,16 @@ Create dedicated panel in UI for plugin results (out of scope for initial implem
 ### Phase 2: Testing
 
 8. Create test fixtures:
-   - Sample TEI files with known label sequences
+   - Sample TEI files with known element structures in `<text>` sections
+   - Files with nested elements to test flattening
+   - Files with elements containing text, tail, and attributes
    - Multiple variants for testing variant filtering
 9. Write unit tests (`tests/unit/fastapi/test_iaa_analyzer.py`):
-   - Test label extraction with various whitespace patterns
+   - Test element extraction from `<text>` with nested structures
+   - Test text/tail normalization (whitespace handling)
+   - Test attribute extraction and comparison
    - Test agreement calculation with different sequence lengths
+   - Test matching logic (tag + text + tail + attrs)
    - Test variant filtering
    - Test HTML output generation
 10. Manual testing:
@@ -423,15 +558,17 @@ Can be added as additional column in results table.
 ## Key Files
 
 - Plugin implementation: [fastapi_app/plugins/iaa-analyzer/plugin.py](../../fastapi_app/plugins/iaa-analyzer/plugin.py)
-- Plugin registration: [fastapi_app/plugins/iaa-analyzer/__init__.py](../../fastapi_app/plugins/iaa-analyzer/__init__.py)
+- Plugin registration: [fastapi_app/plugins/iaa-analyzer/**init**.py](../../fastapi_app/plugins/iaa-analyzer/__init__.py)
 - File repository: [fastapi_app/lib/file_repository.py](../../fastapi_app/lib/file_repository.py)
 - Frontend integration: [app/src/plugins/backend-plugins.js](../../app/src/plugins/backend-plugins.js)
 - Tests: [tests/unit/fastapi/test_iaa_analyzer.py](../../tests/unit/fastapi/test_iaa_analyzer.py)
 
 ## Dependencies
 
-- Python standard library: `xml.etree.ElementTree` for TEI parsing
-- Existing file repository for database access
+- `lxml` library for TEI XML parsing (already used by `tei_utils.py`)
+- `fastapi_app.lib.file_repository.FileRepository` for database access
+- `fastapi_app.lib.tei_utils.extract_tei_metadata` for TEI metadata extraction
+- `fastapi_app.lib.dependencies` for file storage access
 - Existing plugin infrastructure for registration
 - Frontend plugin system for execution
 
@@ -442,9 +579,10 @@ Can be added as additional column in results table.
 - Plugin computes agreement for all TEI versions matching criteria
 - HTML table displays pairwise comparisons with correct metrics
 - Table includes document labels and annotator IDs from TEI headers
-- Agreement percentages calculated correctly
-- Edge cases handled (0-1 versions, empty sequences)
-- Unit tests verify label extraction and agreement calculation
+- Agreement percentages calculated correctly based on element position matching
+- Element matching considers tag name, text, tail, and attributes
+- Edge cases handled (0-1 versions, empty `<text>` elements, nested structures)
+- Unit tests verify element extraction and agreement calculation
 - Result displayed in user-friendly format (dialog or alert)
 
 ## Future Enhancements
