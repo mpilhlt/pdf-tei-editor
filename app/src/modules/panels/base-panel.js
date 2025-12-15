@@ -245,7 +245,7 @@ class BasePanel extends HTMLElement {
    * Internal method to add a widget to the panel
    * @param {HTMLElement} widget - The widget element
    * @param {number} priority - Higher priority widgets stay visible longer
-   * @param {InsertPosition|null} where - Position for insertAdjacentElement
+   * @param {InsertPosition|number|null} where - Position for insertAdjacentElement, or numeric index (0-based, negative counts from end)
    * @param {HTMLElement|null} referenceElement - Reference element for positioning
    * @returns {string} The widget ID
    */
@@ -255,8 +255,18 @@ class BasePanel extends HTMLElement {
     widget.dataset.priority = String(priority);
 
     this.widgets.set(widgetId, { element: widget, priority });
-    
-    if (where && referenceElement) {
+
+    if (typeof where === 'number') {
+      // Handle numeric index positioning
+      const children = Array.from(this.children);
+      const index = where < 0 ? Math.max(0, children.length + where) : Math.min(where, children.length);
+
+      if (index >= children.length) {
+        this.appendChild(widget);
+      } else {
+        this.insertBefore(widget, children[index]);
+      }
+    } else if (where && referenceElement) {
       referenceElement.insertAdjacentElement(where, widget);
     } else if (where) {
       this.insertAdjacentElement(where, widget);
@@ -295,7 +305,7 @@ class BasePanel extends HTMLElement {
    * Add a widget to the panel
    * @param {HTMLElement} widget - The widget element
    * @param {number} priority - Higher priority widgets stay visible longer (default: 0)
-   * @param {InsertPosition} [where] - Position for insertAdjacentElement ('beforebegin', 'afterbegin', 'beforeend', 'afterend'). Defaults to "beforeEnd"
+   * @param {InsertPosition|number} [where] - Position for insertAdjacentElement ('beforebegin', 'afterbegin', 'beforeend', 'afterend') or numeric index (0-based, negative counts from end). Defaults to "beforeend"
    */
   add(widget, priority = 0, where = "beforeend") {
     return this._addWidget(widget, priority, where);

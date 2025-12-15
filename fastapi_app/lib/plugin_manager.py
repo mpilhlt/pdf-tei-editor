@@ -82,18 +82,10 @@ class PluginManager:
         """
         self._app = app
 
-        # Get plugin directories to check for routes.py
-        for plugin_id, plugin in self.registry.get_all_plugins().items():
+        # Iterate through all registered plugins and try to register their routes
+        for plugin_id in self.registry.get_all_plugins().keys():
             try:
-                # Find the plugin's module file to determine its directory
-                plugin_module = plugin.__class__.__module__
-                if not plugin_module.startswith("plugin_"):
-                    continue
-
-                # Try to find routes.py in the same directory as plugin.py
-                # This is a bit hacky - we'll look for routes.py based on discovered paths
                 self._try_register_plugin_routes(app, plugin_id)
-
             except Exception as e:
                 logger.error(f"Error registering routes for plugin {plugin_id}: {e}")
 
@@ -127,6 +119,7 @@ class PluginManager:
                             module_name, routes_file
                         )
                         if spec is None or spec.loader is None:
+                            logger.warning(f"Could not create spec for {routes_file}")
                             continue
 
                         module = importlib.util.module_from_spec(spec)
@@ -137,10 +130,13 @@ class PluginManager:
                             app.include_router(module.router)
                             logger.info(f"Registered custom routes for plugin: {plugin_id}")
                             return
+                        else:
+                            logger.warning(f"No 'router' found in {routes_file}")
 
                     except Exception as e:
                         logger.error(
-                            f"Error loading routes.py for plugin {plugin_id}: {e}"
+                            f"Error loading routes.py for plugin {plugin_id}: {e}",
+                            exc_info=True
                         )
 
     def _get_plugin_dirs(self) -> list[Path]:

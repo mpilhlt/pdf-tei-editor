@@ -247,19 +247,63 @@ Request body:
 
 ## Custom Routes (Optional)
 
-Add `routes.py` for custom FastAPI routes:
+Add `routes.py` for custom FastAPI routes. Plugin routes use the unversioned `/api/plugins` prefix:
 
 ```python
 from fastapi import APIRouter
 
-router = APIRouter()
+# Router prefix uses unversioned /api/plugins
+router = APIRouter(prefix="/api/plugins/my-plugin", tags=["my-plugin"])
 
 @router.get("/custom")
 async def custom_route():
     return {"custom": "data"}
 ```
 
-Routes are auto-registered under `/api/v1/plugins/{plugin_id}/`.
+This creates the endpoint at `/api/plugins/my-plugin/custom`.
+
+**Path Requirements:**
+
+- Router prefix should be `/api/plugins/{plugin-id}` (unversioned)
+- The router is registered directly on the app (not under the versioned api_v1 router)
+- Plugin routes are unversioned and independent of the main API versioning
+- Plugin routes are excluded from the generated API client (`api-client-v1.js`)
+
+**Frontend Access:**
+
+Plugin routes should be called using the `callPluginApi` method from `BackendPluginsPlugin`, not the main `callApi` function:
+
+```javascript
+// In a plugin or component that has access to BackendPluginsPlugin
+const backendPluginsPlugin = /* get BackendPluginsPlugin instance */;
+
+// GET request with query params
+const response = await backendPluginsPlugin.callPluginApi(
+  '/api/plugins/my-plugin/custom',
+  'GET',
+  { param1: 'value1', param2: 'value2' }
+);
+
+// POST request with JSON body
+const response = await backendPluginsPlugin.callPluginApi(
+  '/api/plugins/my-plugin/action',
+  'POST',
+  { data: 'value' }
+);
+
+// Handle different response types
+const jsonData = await response.json();  // For JSON responses
+const blob = await response.blob();      // For file downloads
+const text = await response.text();      // For text responses
+```
+
+The `callPluginApi` method:
+
+- Automatically adds authentication headers (`X-Session-ID`)
+- Handles query parameters for GET requests
+- Handles JSON body for POST/PUT/etc requests
+- Returns the raw `Response` object for flexible response handling
+- Throws errors for non-OK responses
 
 ## Key Files
 

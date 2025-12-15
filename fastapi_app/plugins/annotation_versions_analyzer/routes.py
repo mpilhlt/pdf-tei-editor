@@ -13,7 +13,7 @@ from fastapi_app.lib.file_repository import FileRepository
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/plugins/annotation-versions-analyzer", tags=["plugins"])
+router = APIRouter(prefix="/api/plugins/annotation-versions-analyzer", tags=["plugins"])
 
 
 @router.get("/export")

@@ -238,7 +238,7 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
             # Try parsing with time
             if "T" in date_str:
                 dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                return dt.strftime("%B %d, %Y at %I:%M %p")
+                return dt.strftime("%B %d, %Y at %H:%M")
             else:
                 # Parse date only
                 dt = datetime.strptime(date_str, "%Y-%m-%d")

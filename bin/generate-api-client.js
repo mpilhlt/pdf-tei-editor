@@ -255,9 +255,9 @@ function generateClientCode(schema, timestamp) {
   const methods = [];
   const typeDefs = extractTypeDefs(schema);
 
-  // Only process /api/v1/ endpoints
+  // Only process /api/v1/ endpoints (exclude /api/plugins which are unversioned plugin routes)
   const v1Paths = Object.entries(schema.paths || {})
-    .filter(([path]) => path.startsWith('/api/v1/'));
+    .filter(([path]) => path.startsWith('/api/v1/') && !path.startsWith('/api/plugins/'));
 
   // First pass: identify paths with multiple HTTP methods
   const pathMethodCounts = new Map();

@@ -49,7 +49,7 @@ import './modules/panels/index.js';
  * @import {toolbarPart} from './plugins/toolbar.js'
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
  * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
- * @import {backendPluginsButtonPart} from './plugins/backend-plugins.js'
+ * @import {backendPluginsButtonPart, backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
  */
 
 /**
@@ -77,6 +77,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  * @property {UIPart<SlDialog, newVersionDialogPart>} newVersionDialog
  * @property {UIPart<SlDialog, newRevisionChangeDialogPart>} newRevisionChangeDialog
+ * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
  */
 
 /**
