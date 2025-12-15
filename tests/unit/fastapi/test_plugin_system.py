@@ -4,10 +4,12 @@ Unit tests for the backend plugin system.
 Tests plugin discovery, registration, validation, and execution.
 """
 
+import os
 import unittest
 import tempfile
 import shutil
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.plugin_registry import PluginRegistry
@@ -105,6 +107,35 @@ class MultiEndpointMockPlugin(Plugin):
         return {"info": "Multi-endpoint plugin"}
 
 
+class ConditionallyAvailablePlugin(Plugin):
+    """Mock plugin with conditional availability for testing."""
+
+    @property
+    def metadata(self):
+        return {
+            "id": "conditional-plugin",
+            "name": "Conditional Plugin",
+            "description": "A plugin with conditional availability",
+            "version": "1.0.0",
+            "category": "test",
+            "required_roles": [],
+        }
+
+    def get_endpoints(self):
+        return {
+            "execute": self.execute,
+        }
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """Only available in development or testing mode."""
+        app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
+        return app_mode in ("development", "testing")
+
+    async def execute(self, context, params):
+        return {"available": True}
+
+
 class TestPluginBase(unittest.TestCase):
     """Test Plugin base class."""
 
@@ -120,6 +151,24 @@ class TestPluginBase(unittest.TestCase):
         plugin = MockPlugin()
         self.assertIsNotNone(plugin.metadata)
         self.assertIsNotNone(plugin.get_endpoints())
+
+    def test_plugin_is_available_default(self):
+        """Test that plugins are available by default."""
+        self.assertTrue(MockPlugin.is_available())
+
+    def test_plugin_conditional_availability(self):
+        """Test plugin conditional availability based on environment."""
+        # Should be available in development mode (default)
+        with patch.dict(os.environ, {"FASTAPI_APPLICATION_MODE": "development"}):
+            self.assertTrue(ConditionallyAvailablePlugin.is_available())
+
+        # Should be available in testing mode
+        with patch.dict(os.environ, {"FASTAPI_APPLICATION_MODE": "testing"}):
+            self.assertTrue(ConditionallyAvailablePlugin.is_available())
+
+        # Should not be available in production mode
+        with patch.dict(os.environ, {"FASTAPI_APPLICATION_MODE": "production"}):
+            self.assertFalse(ConditionallyAvailablePlugin.is_available())
 
 
 class TestPluginRegistry(unittest.TestCase):
@@ -267,6 +316,58 @@ class TestPlugin(Plugin):
         # Should have discovered one plugin
         self.assertEqual(len(self.registry._plugins), 1)
         self.assertIn("test-plugin", self.registry._plugins)
+
+    def test_discover_unavailable_plugin(self):
+        """Test that unavailable plugins are not registered."""
+        # Create plugin directory and file
+        plugin_dir = self.temp_dir / "unavailable-plugin"
+        plugin_dir.mkdir()
+
+        plugin_file = plugin_dir / "plugin.py"
+        plugin_code = '''
+import os
+from fastapi_app.lib.plugin_base import Plugin
+
+class UnavailablePlugin(Plugin):
+    @property
+    def metadata(self):
+        return {
+            "id": "unavailable-plugin",
+            "name": "Unavailable Plugin",
+            "description": "Test unavailable plugin",
+            "version": "1.0.0",
+            "category": "test",
+            "required_roles": []
+        }
+
+    def get_endpoints(self):
+        return {"execute": lambda ctx, params: {"ok": True}}
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return os.environ.get("FASTAPI_APPLICATION_MODE") == "testing"
+'''
+        plugin_file.write_text(plugin_code)
+
+        # Set mode to production (plugin should be unavailable)
+        with patch.dict(os.environ, {"FASTAPI_APPLICATION_MODE": "production"}):
+            with self.assertLogs(level="INFO") as logs:
+                self.registry.discover_plugins([self.temp_dir])
+
+            # Plugin should not be registered
+            self.assertEqual(len(self.registry._plugins), 0)
+            self.assertNotIn("unavailable-plugin", self.registry._plugins)
+
+        # Reset registry
+        self.registry = PluginRegistry()
+
+        # Set mode to testing (plugin should be available)
+        with patch.dict(os.environ, {"FASTAPI_APPLICATION_MODE": "testing"}):
+            self.registry.discover_plugins([self.temp_dir])
+
+            # Plugin should be registered
+            self.assertEqual(len(self.registry._plugins), 1)
+            self.assertIn("unavailable-plugin", self.registry._plugins)
 
 
 class TestPluginManager(unittest.IsolatedAsyncioTestCase):

@@ -97,6 +97,11 @@ class PluginRegistry:
                 logger.warning(f"No Plugin subclass found in {plugin_file}")
                 return None
 
+            # Check availability before instantiating
+            if not plugin_class.is_available():
+                logger.info(f"Plugin in {plugin_file} is not available, skipping")
+                return None
+
             # Instantiate plugin
             return plugin_class()
 

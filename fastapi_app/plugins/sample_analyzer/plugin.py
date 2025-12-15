@@ -6,6 +6,7 @@ a simple text analysis endpoint.
 """
 
 import logging
+import os
 from typing import Any, Callable
 
 from fastapi_app.lib.plugin_base import Plugin, PluginContext
@@ -50,6 +51,12 @@ class SampleAnalyzerPlugin(Plugin):
             "execute": self.execute,
             "info": self.info,
         }
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """Sample analyzer available only in development and testing modes."""
+        app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
+        return app_mode in ("development", "testing")
 
     async def initialize(self, context: PluginContext) -> None:
         """Initialize plugin (optional lifecycle hook)."""

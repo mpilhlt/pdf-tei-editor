@@ -5,7 +5,7 @@ Technical guide for creating backend plugins in the PDF-TEI Editor.
 ## Architecture
 
 Backend plugins are Python modules discovered at runtime from:
-- `fastapi_app/plugins/<plugin-id>/`
+- `fastapi_app/plugins/<plugin_id>/`
 - Paths in `FASTAPI_PLUGIN_PATHS` environment variable (colon-separated)
 
 Each plugin:
@@ -18,8 +18,10 @@ Each plugin:
 
 ### Directory Structure
 
+**Use underscores in directory names** (not hyphens) to avoid Python import issues:
+
 ```
-fastapi_app/plugins/my-plugin/
+fastapi_app/plugins/my_plugin/
 ├── __init__.py
 ├── plugin.py          # Main plugin class
 └── routes.py          # Optional custom routes
@@ -69,6 +71,54 @@ In `__init__.py`:
 from .plugin import MyPlugin
 
 plugin = MyPlugin()
+```
+
+## Conditional Availability
+
+Plugins can define runtime availability conditions using the `is_available()` class method. This allows plugins to be conditionally loaded based on:
+
+- Environment variables (e.g., application mode)
+- External dependencies
+- Configuration settings
+- System capabilities
+
+```python
+import os
+from fastapi_app.lib.plugin_base import Plugin
+
+class MyPlugin(Plugin):
+    # ... metadata and endpoints ...
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """Only available in development and testing modes."""
+        app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
+        return app_mode in ("development", "testing")
+```
+
+**When to Use:**
+
+- Development/testing-only plugins (like sample_analyzer)
+- Plugins requiring optional external services
+- Feature-flagged functionality
+- Environment-specific tools
+
+**Behavior:**
+
+- Unavailable plugins are skipped during discovery (not registered)
+- Default implementation returns `True` (always available)
+- Checked once at startup during plugin discovery
+
+**Example - Mock Extractor Pattern:**
+
+Similar to [mock_extractor.py](../../fastapi_app/extractors/mock_extractor.py):
+
+```python
+@classmethod
+def is_available(cls) -> bool:
+    """Available only in testing mode."""
+    app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
+    return app_mode == "testing"
 ```
 
 ## Role-Based Access
@@ -221,6 +271,7 @@ Routes are auto-registered under `/api/v1/plugins/{plugin_id}/`.
 
 ## Notes
 
+- **Directory naming**: Use underscores (e.g., `my_plugin`) not hyphens (e.g., `my-plugin`) in directory names to avoid Python import issues
 - Shadow DOM: Frontend uses `querySelector` to access Shoelace menu elements
 - Plugin discovery happens at startup
 - Plugins can be reloaded without restart in dev mode

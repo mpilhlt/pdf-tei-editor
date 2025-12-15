@@ -93,6 +93,22 @@ class Plugin(ABC):
         """
         pass
 
+    @classmethod
+    def is_available(cls) -> bool:
+        """
+        Check if the plugin is available for use.
+
+        This allows plugins to depend on runtime conditions such as:
+        - Environment variables (e.g., application mode)
+        - External dependencies
+        - Configuration settings
+        - System capabilities
+
+        Returns:
+            bool: True if plugin is available, False otherwise
+        """
+        return True
+
     async def initialize(self, context: PluginContext) -> None:
         """
         Optional initialization hook called when plugin is loaded.
