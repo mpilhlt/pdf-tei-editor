@@ -363,6 +363,33 @@ class TestFileRepository(unittest.TestCase):
         versions = self.repo.get_all_versions(doc_id)
         self.assertEqual(len(versions), 2)
 
+    def test_get_doc_id_by_file_id(self):
+        """Test get_doc_id_by_file_id method."""
+        doc_id = '10.1234/test'
+        full_hash = 'a' * 64  # 64-character SHA-256 hash
+
+        # Insert a file with stable_id
+        self.repo.insert_file(FileCreate(
+            id=full_hash,
+            filename='test.pdf',
+            doc_id=doc_id,
+            file_type='pdf',
+            file_size=1000,
+            stable_id='abc123'
+        ))
+
+        # Test with stable_id
+        result_doc_id = self.repo.get_doc_id_by_file_id('abc123')
+        self.assertEqual(result_doc_id, doc_id)
+
+        # Test with full hash
+        result_doc_id = self.repo.get_doc_id_by_file_id(full_hash)
+        self.assertEqual(result_doc_id, doc_id)
+
+        # Test with non-existent ID
+        result_doc_id = self.repo.get_doc_id_by_file_id('nonexistent')
+        self.assertIsNone(result_doc_id)
+
     def test_metadata_inheritance(self):
         """Test metadata inheritance via JOIN."""
         doc_id = '10.1234/test'

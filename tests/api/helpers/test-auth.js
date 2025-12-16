@@ -168,6 +168,84 @@ async function createTestSession(username, password, baseUrl = null) {
   return await login(username, password, baseUrl);
 }
 
+/**
+ * Create a test user with specified roles
+ * @param {string} username - Username
+ * @param {string} password - Plain text password
+ * @param {string[]} roles - User roles
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<void>}
+ */
+async function createTestUser(username, password, roles = ['user'], baseUrl = null) {
+  const apiBase = baseUrl ? `${baseUrl}/api/v1` : API_BASE;
+
+  // Login as admin to create users
+  const adminSession = await createAdminSession(baseUrl);
+
+  // Create the user - Note: passwd_hash is misleading, the API expects plain password
+  // which will be hashed by the create_user function
+  const response = await fetch(`${apiBase}/users`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Session-ID': adminSession.sessionId
+    },
+    body: JSON.stringify({
+      username,
+      passwd_hash: password,  // API will hash this
+      roles,
+      fullname: `Test User ${username}`,
+      email: `${username}@test.local`
+    })
+  });
+
+  // Logout admin
+  await logout(adminSession.sessionId, baseUrl);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(`Failed to create user ${username}: ${error.detail || error.error}`);
+  }
+}
+
+/**
+ * Delete a test user
+ * @param {string} username - Username to delete
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<void>}
+ */
+async function deleteTestUser(username, baseUrl = null) {
+  const apiBase = baseUrl ? `${baseUrl}/api/v1` : API_BASE;
+
+  // Login as admin to delete users
+  const adminSession = await createAdminSession(baseUrl);
+
+  // Delete the user
+  const response = await fetch(`${apiBase}/users/${username}`, {
+    method: 'DELETE',
+    headers: { 'X-Session-ID': adminSession.sessionId }
+  });
+
+  // Logout admin
+  await logout(adminSession.sessionId, baseUrl);
+
+  if (!response.ok) {
+    console.warn(`Failed to delete user ${username}: ${response.status}`);
+  }
+}
+
+/**
+ * Login as a specific user and return session ID
+ * @param {string} username - Username
+ * @param {string} password - Plain text password
+ * @param {string} [baseUrl] - Optional base URL override
+ * @returns {Promise<string>} Session ID
+ */
+async function loginAsUser(username, password, baseUrl = null) {
+  const session = await login(username, password, baseUrl);
+  return session.sessionId;
+}
+
 export {
   hashPassword,
   login,
@@ -177,5 +255,8 @@ export {
   authenticatedApiCall,
   createAdminSession,
   createTestSession,
+  createTestUser,
+  deleteTestUser,
+  loginAsUser,
   API_BASE
 };

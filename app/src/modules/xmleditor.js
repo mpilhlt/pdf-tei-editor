@@ -480,7 +480,7 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * Removes the merge view from the editor and restores the original content.
-   * @returns {Promise<void>} A promise that resolves when the merge view is hidden
+   * @returns {Promise<void>} A promise that resolves when the merge view is hidden or right away if it not enabled
    */
   async hideMergeView() {
     if (this.#mergeViewExt) {

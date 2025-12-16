@@ -51,7 +51,14 @@
       "Bash(npm run build:*)",
       "Bash(uv sync:*)",
       "Bash(echo:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(timeout /t 3)",
+      "Bash(timeout /t 5)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(uv run uvicorn --help:*)",
+      "Bash(tasklist:*)",
+      "Bash(timeout 5 bash -c 'tail -f /dev/null & TAIL_PID=$!; curl -s \"\"http://localhost:8000/api/plugins/annotation-versions-analyzer/export?pdf=test&variant=test\"\" >/dev/null 2>&1; sleep 1; kill $TAIL_PID 2>/dev/null')"
     ],
     "deny": [],
     "ask": []

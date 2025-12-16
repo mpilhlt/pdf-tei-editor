@@ -100,6 +100,16 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing locks database: {e}")
         raise
 
+    # Initialize plugins (discovery and route registration happen at module level)
+    from .lib.plugin_manager import PluginManager
+    try:
+        plugin_manager = PluginManager.get_instance()
+        await plugin_manager.initialize_plugins(app)
+        logger.info("Plugin system initialized")
+    except Exception as e:
+        logger.error(f"Error initializing plugin system: {e}")
+        # Non-fatal - continue without plugins
+
     # Log startup complete
     logger.info("=" * 80)
     logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
@@ -110,6 +120,13 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down PDF-TEI Editor API")
+
+    # Cleanup plugins
+    try:
+        plugin_manager = PluginManager.get_instance()
+        await plugin_manager.shutdown_plugins()
+    except Exception as e:
+        logger.error(f"Error shutting down plugins: {e}")
 
 
 # Create FastAPI application
@@ -131,6 +148,7 @@ app.add_middleware(
 
 # Import API routers
 from .api import auth, config
+from .routes import plugins
 from .routers import (
     files_list,
     files_serve,
@@ -180,6 +198,7 @@ api_v1.include_router(files_import.router)  # Import endpoint
 api_v1.include_router(sync.router)  # Phase 6: Sync endpoints
 api_v1.include_router(sse.router)  # Phase 6: SSE stream
 api_v1.include_router(schema.router)  # Schema serving (before files_serve)
+api_v1.include_router(plugins.router)  # Plugin system endpoints
 api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
 
 # Health check endpoint (unversioned)
@@ -191,9 +210,18 @@ async def health_check():
 # Mount versioned router
 app.include_router(api_v1)
 
+# Discover and register plugin routes at module level
+# Note: Routes MUST be registered at module level, not in lifespan, as FastAPI builds
+# its routing table before lifespan runs. Plugin initialization happens in lifespan.
+from .lib.plugin_manager import PluginManager
+plugin_manager = PluginManager.get_instance()
+plugin_manager.discover_plugins()
+plugin_manager.register_plugin_routes(app)
+logger.info("Plugin routes registered")
+
 # Backwards compatibility: Mount files_serve at /api/files for legacy frontend code
-# This allows /api/files/{hash} to work alongside /api/v1/files/{hash}
-# TODO: Remove this once all frontend code is updated to use /api/v1/files
+# This is mounted AFTER plugin routes to ensure /api/plugins/* routes take precedence
+# over the catch-all /{document_id} route
 api_compat = APIRouter(prefix="/api")
 api_compat.include_router(files_serve.router)
 app.include_router(api_compat)

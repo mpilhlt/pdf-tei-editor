@@ -27,6 +27,7 @@ const newState = await app.updateState({ user: newUser });
 ```
 
 **Benefits:**
+
 - **Predictability** - State changes are explicit and trackable
 - **Debugging** - Complete history of states available
 - **Time travel** - Can inspect previous states
@@ -68,6 +69,10 @@ const { newState, changedKeys } = stateManager.applyStateChanges(
 Plugins receive the changed keys for efficient reactive updates:
 
 ```javascript
+/**
+ * @param {(keyof ApplicationState)[]} changedKeys
+ * @param {ApplicationState} state
+ */
 async onStateUpdate(changedKeys) {
   if (changedKeys.includes('user')) {
     this.updateUserUI();
@@ -154,6 +159,7 @@ The `Application` class ([app/src/app.js](../../app/src/app.js)) coordinates sta
 
 ```javascript
 export class Application {
+
   async updateState(changes) {
     // 1. Apply changes immutably
     const { newState, changedKeys } = this.stateManager.applyStateChanges(
@@ -244,6 +250,10 @@ class MyPlugin extends Plugin {
     });
   }
 
+  /**
+   * @param {(keyof ApplicationState)[]} changedKeys
+   * @param {ApplicationState} state
+   */
   async onStateUpdate(changedKeys) {
     // React to changes
     if (changedKeys.includes('pdf')) {
@@ -445,11 +455,13 @@ if (savedState) {
 ```
 
 **Use Cases:**
+
 - Preserve session across page reloads
 - Maintain state during development
 - Restore user context after authentication
 
 **Limitations:**
+
 - Only JSON-serializable data persists
 - sessionStorage limited to ~5-10MB
 - Cleared when tab closes
@@ -471,6 +483,7 @@ stateHistory.set(newState, currentState);
 ```
 
 **Benefits:**
+
 - No memory leaks from history chain
 - Previous states collected when no longer referenced
 - No manual cleanup needed
@@ -499,6 +512,9 @@ WeakMap entry automatically cleared
 ### Basic Change Detection
 
 ```javascript
+/**
+ * @param {(keyof ApplicationState)[]} changedKeys
+ */
 async onStateUpdate(changedKeys) {
   if (changedKeys.includes('user')) {
     this.handleUserChange();
@@ -509,11 +525,16 @@ async onStateUpdate(changedKeys) {
 ### Multiple Properties
 
 ```javascript
-async onStateUpdate(changedKeys) {
+/**
+ * @param {(keyof ApplicationState)[]} changedKeys
+ * @param {ApplicationState} state
+ */
+async onStateUpdate(changedKeys, state) {
   const userChanged = changedKeys.includes('user');
   const collectionChanged = changedKeys.includes('collection');
 
   if (userChanged || collectionChanged) {
+    console.log(`User ${state.user} has switched to collection ${state.collection}`)
     await this.reloadFileList();
   }
 }
@@ -571,6 +592,9 @@ console.log('User changed:',
 ### Logging State Changes
 
 ```javascript
+/**
+ * @param {(keyof ApplicationState)[]} changedKeys
+ */
 async onStateUpdate(changedKeys) {
   console.log('State changed:', changedKeys);
   console.log('New values:', changedKeys.map(key => ({
@@ -607,6 +631,9 @@ async onStateUpdate(changedKeys) {
 }
 
 // GOOD - Selective updates
+/**
+ * @param {(keyof ApplicationState)[]} changedKeys
+ */
 async onStateUpdate(changedKeys) {
   if (changedKeys.includes('pdf')) {
     this.updatePDFViewer();
@@ -640,6 +667,9 @@ await this.dispatchStateChange({
 Use change detection to skip work:
 
 ```javascript
+/**
+ * @param {(keyof ApplicationState)[]} changedKeys
+ */
 async onStateUpdate(changedKeys) {
   // Don't reload if user didn't change
   if (!changedKeys.includes('user')) {

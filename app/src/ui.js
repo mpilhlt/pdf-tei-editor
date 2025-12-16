@@ -35,13 +35,13 @@ import './modules/panels/index.js';
 
 /**
  * Import type definitions from plugins
- * 
+ *
  * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
  * @import {promptEditorPart} from './plugins/prompt-editor.js'
  * @import {floatingPanelPart} from './plugins/floating-panel.js'
  * @import {newVersionDialogPart, newRevisionChangeDialogPart } from './plugins/services.js'
- * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js' 
+ * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
  * @import {infoDrawerPart} from './plugins/info.js'
  * @import {loginDialog} from './plugins/authentication.js'
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
@@ -49,6 +49,7 @@ import './modules/panels/index.js';
  * @import {toolbarPart} from './plugins/toolbar.js'
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
  * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
+ * @import {backendPluginsButtonPart, backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
  */
 
 /**
@@ -76,6 +77,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, teiWizardDialogPart>} teiWizardDialog - TEI Wizard dialog (added by tei-wizard plugin)
  * @property {UIPart<SlDialog, newVersionDialogPart>} newVersionDialog
  * @property {UIPart<SlDialog, newRevisionChangeDialogPart>} newRevisionChangeDialog
+ * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
  */
 
 /**

@@ -54,7 +54,7 @@ const plugin = {
   name: "services",
   deps: ['file-selection'],
   install,
-  state: { update },
+  onStateUpdate,
   validation: { inProgress },
   shutdown
 }
@@ -192,10 +192,11 @@ async function install(state) {
 }
 
 /**
- * Invoked on application state change
+ * @param {(keyof ApplicationState)[]} changedKeys
  * @param {ApplicationState} state
  */
-async function update(state) {
+async function onStateUpdate(changedKeys, state) {
+
   // Store current state for use in event handlers
   currentState = state;
 
@@ -456,17 +457,21 @@ async function validateXml() {
 
 /**
  * Creates a diff between the current and the given document and shows a merge view
- * @param {ApplicationState} state
  * @param {string} diff The path to the xml document with which to compare the current xml doc
  */
-async function showMergeView(state, diff) {
+async function showMergeView(diff) {
+  if (!diff || typeof diff != "string") {
+    throw new TypeError("Invalid diff value");
+  }
   logger.info("Loading diff XML: " + diff)
   ui.spinner.show('Computing file differences, please wait...')
   try {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`
     await xmlEditor.showMergeView(diffUrl)
-    await app.updateState({ diff: diff })
+    if (currentState.diff !== diff) {
+      await app.updateState({ diff: diff })
+    }
     // turn validation off as it creates too much visual noise
     validation.configure({ mode: "off" })
   } finally {
@@ -481,8 +486,10 @@ async function removeMergeView() {
   xmlEditor.hideMergeView()
   // re-enable validation
   validation.configure({ mode: "auto" })
-  UrlHash.remove("diff")
-  await app.updateState({ diff: null })
+  if (currentState.diff) {
+    UrlHash.remove("diff")
+    await app.updateState({ diff: null })
+  }
 }
 
 /**

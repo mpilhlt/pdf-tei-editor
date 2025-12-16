@@ -46,11 +46,20 @@ if __name__ == '__main__':
 
     # Set up logging
     log_file = setup_log_directory(project_root)
-    print_server_starting_message(host, port, log_file, mode="development")
+
+    # On Windows, uvicorn's auto-reload doesn't work properly - it shuts down but doesn't restart
+    # See: https://github.com/fastapi/fastapi/discussions/13817
+    # Disable auto-reload by default on Windows unless explicitly enabled
+    if sys.platform == 'win32':
+        disable_reload_default = os.environ.get('ENABLE_RELOAD', '').lower() not in ('1', 'true', 'yes')
+    else:
+        disable_reload_default = os.environ.get('DISABLE_RELOAD', '').lower() in ('1', 'true', 'yes')
+
+    disable_reload = disable_reload_default
+
+    print_server_starting_message(host, port, log_file, mode="development", auto_reload=not disable_reload)
 
     # Build uvicorn command
-    disable_reload = os.environ.get('DISABLE_RELOAD', '').lower() in ('1', 'true', 'yes')
-
     cmd = [
         'uv', 'run', 'uvicorn',
         'run_fastapi:app',
@@ -65,7 +74,7 @@ if __name__ == '__main__':
         cmd.insert(3, '--reload')
 
     try:
-        # Run uvicorn and tee output to log file
+        # Run uvicorn and stream output to log file
         with open(log_file, 'w', buffering=1) as log_f:
             process = subprocess.Popen(
                 cmd,
@@ -86,7 +95,7 @@ if __name__ == '__main__':
 
     except KeyboardInterrupt:
         print("\nShutting down FastAPI server...")
-        if process:
+        if 'process' in locals() and hasattr(process, 'terminate'):
             process.terminate()
             process.wait()
     except Exception as e:

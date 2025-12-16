@@ -44,12 +44,18 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 
 def _user_has_role(user: dict, role: str) -> bool:
-    """Check if user has a specific role."""
+    """Check if user has a specific role.
+
+    Handles wildcard role ('*') which grants all permissions.
+    """
     if not user or 'roles' not in user:
         logger.debug(f"_user_has_role: user={user}, role={role} -> False (no user or roles)")
         return False
-    result = role in user.get('roles', [])
-    logger.debug(f"_user_has_role: user={user.get('username')}, roles={user.get('roles')}, checking role={role} -> {result}")
+
+    user_roles = user.get('roles', [])
+    # Check for wildcard role or specific role
+    result = '*' in user_roles or role in user_roles
+    logger.debug(f"_user_has_role: user={user.get('username')}, roles={user_roles}, checking role={role} -> {result}")
     return result
 
 

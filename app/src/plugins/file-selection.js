@@ -659,7 +659,7 @@ async function onChangeDiffSelection() {
   const diff = String(ui.toolbar.diff.value)
   if (diff && typeof diff == "string" && diff !== ui.toolbar.xml.value) {
     try {
-      await services.showMergeView(state, diff)
+      await services.showMergeView(diff)
     } catch (error) {
       console.error(error)
     }

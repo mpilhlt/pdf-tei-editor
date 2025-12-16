@@ -139,7 +139,9 @@ const api = {
   getAllLockedFileIds,
   login,
   logout,
-  status
+  status,
+  getBackendPlugins,
+  executeBackendPlugin
 }
 
 
@@ -721,8 +723,54 @@ export async function uploadFile(uploadUrl = upload_route, options = {}) {
     });
 
     // Programmatically trigger the file chooser dialog.  Crucially, this must be initiated from a user action,
-    // such as a button click, to work correctly in most browsers. Directly calling input.click() on page 
+    // such as a button click, to work correctly in most browsers. Directly calling input.click() on page
     // load will generally be blocked.
     input.click();
   });
+}
+
+/**
+ * Backend plugin endpoint definition
+ * @typedef {Object} BackendPluginEndpoint
+ * @property {string} name - Endpoint method name
+ * @property {string} label - Display label for menu item
+ * @property {string} [description] - Optional description shown as tooltip
+ * @property {string[]} state_params - Required frontend state fields to pass as parameters
+ */
+
+/**
+ * Get list of available backend plugins
+ * @typedef {Object} BackendPlugin
+ * @property {string} id - Plugin identifier
+ * @property {string} name - Plugin display name
+ * @property {string} description - Plugin description
+ * @property {string} category - Plugin category
+ * @property {string} version - Plugin version
+ * @property {BackendPluginEndpoint[]} [endpoints] - Optional menu endpoint definitions
+ *
+ * @param {string|null} [category] - Optional category filter
+ * @returns {Promise<BackendPlugin[]>} - List of available plugins
+ */
+async function getBackendPlugins(category = null) {
+  const params = category ? { category } : {};
+  const response = await callApi('/plugins', 'GET', params);
+  return response.plugins;
+}
+
+/**
+ * Execute a backend plugin endpoint
+ * @param {string} pluginId - Plugin identifier
+ * @param {string} endpoint - Endpoint name to execute
+ * @param {object} params - Parameters to pass to endpoint
+ * @returns {Promise<any>} - Plugin execution result
+ */
+async function executeBackendPlugin(pluginId, endpoint, params) {
+  const response = await callApi(`/plugins/${pluginId}/execute`, 'POST', {
+    endpoint,
+    params
+  });
+  if (response.success) {
+    return response.result;
+  }
+  throw new ApiError(`Plugin execution failed: ${response.error || 'Unknown error'}`);
 }
