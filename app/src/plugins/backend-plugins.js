@@ -18,6 +18,57 @@ import ui from '../ui.js';
  */
 
 /**
+ * Plugin Sandbox
+ *
+ * Provides controlled interface for plugin-generated HTML to interact with the application.
+ * Available as `window.pluginSandbox` when plugin HTML content is displayed.
+ */
+class PluginSandbox {
+  /**
+   * @param {PluginContext} context - Plugin context
+   * @param {HTMLElement} dialog - Result dialog element
+   */
+  constructor(context, dialog) {
+    this.context = context;
+    this.dialog = dialog;
+  }
+
+  /**
+   * Update application state
+   * @param {Partial<ApplicationState>} updates - State fields to update
+   */
+  async updateState(updates) {
+    await this.context.updateState(updates);
+  }
+
+  /**
+   * Close the result dialog
+   */
+  closeDialog() {
+    this.dialog.hide();
+  }
+
+  /**
+   * Open a document by updating xml state and closing dialog
+   * @param {string} stableId - Document stable ID
+   */
+  async openDocument(stableId) {
+    await this.updateState({ xml: stableId, diff: null });
+    this.closeDialog();
+  }
+
+  /**
+   * Open diff view between two documents
+   * @param {string} stableId1 - First document stable ID
+   * @param {string} stableId2 - Second document stable ID
+   */
+  async openDiff(stableId1, stableId2) {
+    await this.updateState({ xml: stableId1, diff: stableId2 });
+    this.closeDialog();
+  }
+}
+
+/**
  * Backend plugins button group UI structure
  * @typedef {object} backendPluginsButtonPart
  * @property {SlDropdown} pluginsDropdown - The dropdown containing the plugins menu
@@ -351,6 +402,9 @@ export class BackendPluginsPlugin extends Plugin {
       dialog.style.setProperty("--width", "80vw");
       dialog.icon.innerHTML = '';
       dialog.content.innerHTML = result.html;
+
+      // Expose plugin sandbox for interactive HTML content
+      window.pluginSandbox = new PluginSandbox(this.context, dialog);
 
       // Show/configure Export button if result includes pdf (for CSV export)
       if (result.pdf) {

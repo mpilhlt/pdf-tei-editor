@@ -26,6 +26,7 @@ The `PluginManager` ([app/src/modules/plugin-manager.js](../../app/src/modules/p
 #### Key Features
 
 **Dependency Resolution:**
+
 ```javascript
 const manager = new PluginManager();
 
@@ -49,11 +50,13 @@ await manager.invoke('install');
 The manager supports flexible invocation patterns through flags and options:
 
 - **No-Call Flag** (`!` prefix): Retrieve values without calling functions
+
   ```javascript
   const configs = await manager.invoke('!config.timeout');  // [undefined, 5000]
   ```
 
 - **Throw Flag** (`!` suffix): Fail fast on errors
+
   ```javascript
   await manager.invoke('install!');  // Throws on first error
   ```
@@ -113,7 +116,11 @@ Plugin classes get automatic state management through the base class:
 
 ```javascript
 class MyPlugin extends Plugin {
-  async onStateUpdate(changedKeys) {
+  /**
+   * @param {(keyof ApplicationState)[]} changedKeys
+   * @param {ApplicationState} state
+   */
+  async onStateUpdate(changedKeys, state) {
     // React to state changes
     if (changedKeys.includes('user')) {
       this.updateUI();
@@ -195,13 +202,21 @@ class MyPlugin extends Plugin {
     });
   }
 
+  /**
+   * @param {ApplicationState} state
+   */
   async install(state) {
     await super.install(state);
     // Setup UI
   }
 
-  async onStateUpdate(changedKeys) {
+  /**
+   * @param {(keyof ApplicationState)[]} changedKeys
+   * @param {ApplicationState} state
+   */
+  async onStateUpdate(changedKeys, state) {
     if (changedKeys.includes('user')) {
+      console.log(`User ${state.user} has logged in.`)
       this.updateUI();
     }
   }
@@ -224,6 +239,7 @@ export default MyPlugin;
 ```
 
 **Benefits:**
+
 - Automatic state management via `this.state`
 - Built-in lifecycle methods
 - Singleton pattern enforcement
@@ -238,6 +254,10 @@ import { updateState } from '../app.js';
 
 let currentState;
 
+/**
+ * @param {String[]} changedKeys
+ * @param {ApplicationState} state
+ */
 async function onStateUpdate(changedKeys, state) {
   currentState = state;
   if (changedKeys.includes('user')) {
@@ -262,6 +282,7 @@ export const api = {
 ```
 
 **Characteristics:**
+
 - Manual state management required
 - Must track state in closures
 - Simpler structure for basic plugins
@@ -457,6 +478,7 @@ class MyPlugin extends Plugin {
 ```
 
 **Key Points:**
+
 - `registerTemplate()` is async, called during install
 - `createSingleFromTemplate()` is synchronous, fast
 - Templates support parameter substitution via `${param}` syntax
@@ -499,6 +521,7 @@ The plugin system implements several memory management strategies:
 To migrate a legacy plugin object to a Plugin class:
 
 1. **Create class extending Plugin**
+
    ```javascript
    class MyPlugin extends Plugin {
      constructor(context) {
@@ -508,6 +531,7 @@ To migrate a legacy plugin object to a Plugin class:
    ```
 
 2. **Move endpoint functions to methods**
+
    ```javascript
    async install(state) {
      await super.install(state);
@@ -516,18 +540,21 @@ To migrate a legacy plugin object to a Plugin class:
    ```
 
 3. **Replace manual state tracking**
+
    ```javascript
    // Before: let currentState;
    // After: this.state (automatic)
    ```
 
 4. **Update state changes**
+
    ```javascript
    // Before: await updateState({ ... });
    // After: await this.dispatchStateChange({ ... });
    ```
 
 5. **Implement getEndpoints() for custom endpoints**
+
    ```javascript
    getEndpoints() {
      return {
@@ -538,6 +565,7 @@ To migrate a legacy plugin object to a Plugin class:
    ```
 
 6. **Export class and update registration**
+
    ```javascript
    // plugins/my-plugin.js
    export default MyPlugin;

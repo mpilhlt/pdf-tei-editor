@@ -385,14 +385,19 @@ class IAAAnalyzerPlugin(Plugin):
             else:
                 color = "#f8d7da"  # Red
 
+            # Create clickable links for document titles and diff
+            v1_title_link = f'<a href="#" onclick="window.pluginSandbox.openDocument(\'{v1["stable_id"]}\'); return false;" style="color: #0066cc; text-decoration: underline;">{self._escape_html(v1["title"])}</a>'
+            v2_title_link = f'<a href="#" onclick="window.pluginSandbox.openDocument(\'{v2["stable_id"]}\'); return false;" style="color: #0066cc; text-decoration: underline;">{self._escape_html(v2["title"])}</a>'
+            diff_link = f'<a href="#" onclick="window.pluginSandbox.openDiff(\'{v1["stable_id"]}\', \'{v2["stable_id"]}\'); return false;" style="color: #0066cc; text-decoration: underline;">{comp["matches"]}/{comp["total"]}</a>'
+
             row_cells = [
-                f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{self._escape_html(v1["title"])}<br><small>{v1["stable_id"]}</small></td>',
+                f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{v1_title_link}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{self._escape_html(v1["annotator"])}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em;">{comp["v1_count"]}</td>',
-                f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{self._escape_html(v2["title"])}<br><small>{v2["stable_id"]}</small></td>',
+                f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{v2_title_link}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{self._escape_html(v2["annotator"])}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em;">{comp["v2_count"]}</td>',
-                f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em;">{comp["matches"]}/{comp["total"]}</td>',
+                f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em;">{diff_link}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em; background-color: {color};">{agreement_pct}%</td>',
             ]
 

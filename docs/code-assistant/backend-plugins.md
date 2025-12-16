@@ -313,6 +313,103 @@ The `callPluginApi` method:
 - [fastapi_app/routes/plugins.py](../../fastapi_app/routes/plugins.py) - API routes
 - [app/src/plugins/backend-plugins.js](../../app/src/plugins/backend-plugins.js) - Frontend integration
 
+## Interactive HTML Content
+
+Plugins can generate HTML content that includes interactive elements (links, buttons) to update application state or perform actions. This is done through the **Plugin Sandbox** interface.
+
+### Plugin Sandbox API
+
+When a plugin returns HTML content via the `html` field, the frontend automatically exposes a `window.pluginSandbox` object with methods to interact with the application:
+
+```javascript
+// Available methods on window.pluginSandbox:
+
+// Update application state (any fields from ApplicationState) - async
+await pluginSandbox.updateState({ xml: 'doc-id', variant: 'model-x' });
+
+// Close the result dialog
+pluginSandbox.closeDialog();
+
+// Convenience: Open a document (updates xml state, clears diff, closes dialog) - async
+await pluginSandbox.openDocument('stable-id');
+
+// Convenience: Open diff view (updates xml and diff states, closes dialog) - async
+await pluginSandbox.openDiff('stable-id-1', 'stable-id-2');
+```
+
+### Example: Clickable Links in HTML
+
+```python
+async def execute(self, context, params: dict) -> dict:
+    """Generate interactive HTML with clickable links"""
+    doc_id = "abc123"
+
+    # Create clickable link that opens document
+    html = f'''
+    <p>View document:
+      <a href="#"
+         onclick="window.pluginSandbox.openDocument('{doc_id}'); return false;"
+         style="color: #0066cc; text-decoration: underline;">
+        {doc_id}
+      </a>
+    </p>
+    '''
+
+    return {"html": html}
+```
+
+### Example: Comparison Table with Diff Links
+
+```python
+def _generate_comparison_table(self, comparisons):
+    """Generate HTML table with interactive diff links"""
+    rows = []
+
+    for comp in comparisons:
+        doc1_id = comp["doc1_stable_id"]
+        doc2_id = comp["doc2_stable_id"]
+
+        # Link to view first document
+        doc1_link = f'''<a href="#"
+            onclick="window.pluginSandbox.openDocument('{doc1_id}'); return false;"
+            style="color: #0066cc; text-decoration: underline;">
+            {doc1_id}
+        </a>'''
+
+        # Link to view diff between documents
+        diff_link = f'''<a href="#"
+            onclick="window.pluginSandbox.openDiff('{doc1_id}', '{doc2_id}'); return false;"
+            style="color: #0066cc; text-decoration: underline;">
+            View Diff
+        </a>'''
+
+        rows.append(f'''
+        <tr>
+            <td>{doc1_link}</td>
+            <td>{comp["score"]}</td>
+            <td>{diff_link}</td>
+        </tr>
+        ''')
+
+    return f'<table>{"".join(rows)}</table>'
+```
+
+### Available State Fields
+
+The sandbox can update any field from `ApplicationState` (see [app/src/state.js](../../app/src/state.js)):
+
+- `xml` - Open XML document ID
+- `diff` - Diff XML document ID (triggers diff view when set with `xml`)
+- `pdf` - Open PDF document ID
+- `xpath` - Current XPath selection
+- `variant` - Variant filter
+- `collection` - Current collection ID
+- Other fields as needed
+
+### Implementation Example
+
+The [iaa_analyzer plugin](../../fastapi_app/plugins/iaa_analyzer/plugin.py) demonstrates this pattern with clickable stable IDs and match counts that open documents or diff views.
+
 ## Notes
 
 - **Directory naming**: Use underscores (e.g., `my_plugin`) not hyphens (e.g., `my-plugin`) in directory names to avoid Python import issues
@@ -320,3 +417,5 @@ The `callPluginApi` method:
 - Plugin discovery happens at startup
 - Plugins can be reloaded without restart in dev mode
 - Use `PluginManager.get_instance()` to access plugin manager
+- **Plugin Sandbox**: Always available as `window.pluginSandbox` when plugin HTML is displayed
+- **HTML escaping**: Always escape user-provided content in HTML to prevent XSS attacks

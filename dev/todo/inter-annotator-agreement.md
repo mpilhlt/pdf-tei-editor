@@ -1,5 +1,9 @@
 # Inter-Annotator Agreement Plugin Implementation Plan
 
+## Implementation Status
+
+✅ **COMPLETED** - Plugin is fully implemented and tested.
+
 ## Overview
 
 Backend plugin that computes inter-annotator agreement between all versions of a TEI annotation variant for a PDF document. Returns HTML table with pairwise comparison statistics.
@@ -589,8 +593,99 @@ Can be added as additional column in results table.
 
 - LCS-based alignment for handling insertions/deletions
 - Cohen's Kappa for chance-corrected agreement
-- CSV export of results
 - Visualization (heatmap, confusion matrix)
 - Support for different label types (by attribute)
 - Weighted agreement (by label importance)
 - Inter-rater reliability beyond pairwise (Fleiss' Kappa)
+
+## Implementation Summary
+
+The Inter-Annotator Agreement plugin has been fully implemented with the following features:
+
+### Core Implementation
+
+**Plugin Structure:**
+
+- [fastapi_app/plugins/iaa_analyzer/plugin.py](../../fastapi_app/plugins/iaa_analyzer/plugin.py) (440 lines)
+- [fastapi_app/plugins/iaa_analyzer/routes.py](../../fastapi_app/plugins/iaa_analyzer/routes.py) (160 lines)
+- [fastapi_app/plugins/iaa_analyzer/\_\_init\_\_.py](../../fastapi_app/plugins/iaa_analyzer/__init__.py)
+
+**Algorithm:**
+
+- Extracts flattened element sequences from TEI `<text>` elements using depth-first traversal
+- Each element token includes: tag, text content, tail text, and relevant attributes (place, type, who, when, corresp, n)
+- Compares sequences position-by-position, matching when all four fields are identical
+- Normalizes whitespace in text/tail content
+- Handles nested structures by flattening via `elem.iter()`
+- Skips non-element nodes (comments, processing instructions)
+
+**Features:**
+
+- Pairwise comparison of all TEI annotation versions
+- Variant filtering support
+- Color-coded agreement percentages (green ≥80%, yellow ≥60%, red <60%)
+- CSV export endpoint at `/api/plugins/iaa-analyzer/export`
+- Interactive HTML links using Plugin Sandbox (see below)
+- Comprehensive error handling and logging
+
+### Plugin Sandbox Infrastructure
+
+Created generic sandbox interface for all plugins to interact with application state from generated HTML:
+
+**Implementation:**
+
+- [app/src/plugins/backend-plugins.js](../../app/src/plugins/backend-plugins.js) - Added `PluginSandbox` class
+- Available as `window.pluginSandbox` when plugin HTML is displayed
+- Provides methods:
+  - `updateState(updates)` - Update application state fields
+  - `closeDialog()` - Close result dialog
+  - `openDocument(stableId)` - Open document and close dialog
+  - `openDiff(stableId1, stableId2)` - Open diff view and close dialog
+
+**Usage in IAA Plugin:**
+
+- Stable IDs are clickable links that call `pluginSandbox.openDocument()`
+- Match counts are clickable links that call `pluginSandbox.openDiff()`
+- Clicking either link updates state and closes the result dialog
+
+**Documentation:**
+
+- [docs/code-assistant/backend-plugins.md](../../docs/code-assistant/backend-plugins.md) - Added "Interactive HTML Content" section with examples and API reference
+
+### Testing
+
+**Unit Tests:**
+
+- [tests/unit/fastapi/test_iaa_analyzer.py](../../tests/unit/fastapi/test_iaa_analyzer.py) (400 lines, 20 tests)
+- All tests passing
+- Coverage includes:
+  - Element sequence extraction with nested structures
+  - Text/tail normalization and whitespace handling
+  - Attribute extraction and comparison
+  - Matching logic (tag + text + tail + attrs)
+  - Pairwise agreement calculation
+  - HTML table generation with color coding
+  - Edge cases (empty text, missing elements, different lengths)
+
+### Technical Highlights
+
+**Non-Element Node Handling:**
+
+Fixed issue where lxml's `iter()` returns non-element nodes (comments, processing instructions). Added type check:
+
+```python
+if not isinstance(elem.tag, str):
+    continue
+```
+
+**Code Reuse Pattern:**
+
+Routes.py reuses plugin methods to avoid duplication:
+
+```python
+plugin = IAAAnalyzerPlugin()
+metadata = plugin._extract_metadata(xml_content, file_metadata)
+elements = plugin._extract_element_sequence(xml_content)
+```
+
+This pattern ensures consistency between plugin endpoint and custom routes.
