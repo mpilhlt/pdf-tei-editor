@@ -21,55 +21,57 @@ Then visit: **<http://localhost:8000>**
 
 The repository includes streamlined deployment scripts for production and demo scenarios.
 
-### Universal Deployment Script
+### Container Management Script
 
-Use `bin/deploy-container.sh` for all deployment scenarios:
+Use `npm run container:deploy -- [options]` or `bin/container.js deploy [options]` for all container operations including deployment:
 
 ```bash
-# Production deployment with persistent volumes
-sudo bin/deploy-container.sh \
-  --image cboulanger/pdf-tei-editor:latest \
+# Production deployment with persistent data directory
+sudo npm run container:deploy -- \
   --fqdn editor.company.com \
-  --type production \
-  --admin-password secure_password \
-  --data-dir /opt/pdf-data \
-  --config-dir /opt/pdf-config \
-  --db-dir /opt/pdf-db
+  --data-dir /opt/pdf-tei-editor/data \
+  --env GEMINI_API_KEY=your-key \
+  --env LOG_LEVEL=WARNING
 
-# Demo deployment (non-persistent)
-sudo bin/deploy-container.sh \
-  --image cboulanger/pdf-tei-editor:latest \
+# Demo deployment (non-persistent, data resets on restart)
+sudo npm run container:deploy -- \
   --fqdn demo.example.com \
-  --type demo \
-  --admin-password demo123
+  --type demo
 
-# Local testing without SSL
-bin/deploy-container.sh \
-  --image pdf-tei-editor:dev \
+# Local testing without SSL/nginx (no sudo needed)
+npm run container:deploy -- \
   --fqdn localhost \
   --port 8080 \
   --no-ssl \
-  --no-nginx \
-  --admin-password admin
+  --no-nginx
+
+# With custom tag and environment variables
+sudo npm run container:deploy -- \
+  --fqdn editor.company.com \
+  --tag v1.0.0 \
+  --data-dir /opt/pdf-tei-editor/data \
+  --env GEMINI_API_KEY \
+  --env GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
+
+# Automated deployment (skip confirmation, for CI/CD)
+sudo npm run container:deploy -- \
+  --fqdn editor.company.com \
+  --data-dir /opt/pdf-tei-editor/data \
+  --env GEMINI_API_KEY=your-key \
+  --yes
 ```
 
-### Demo Auto-Reset
+**Available environment variables** (see `.env.production` for complete list):
+- `GEMINI_API_KEY` - Google Gemini API key for AI features
+- `GROBID_SERVER_URL` - GROBID server URL for PDF processing
+- `KISSKI_API_KEY` - KISSKI Academic Cloud API key
+- `LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
+- `WEBDAV_ENABLED` - Enable WebDAV filesystem integration
+- `DOCS_FROM_GITHUB` - Load documentation from GitHub
 
-Set up nightly demo resets for a public instance that can serve as a playground:
-
-```bash
-# Setup nightly reset at 2 AM
-bin/setup-cron.sh \
-  --image cboulanger/pdf-tei-editor:latest \
-  --fqdn demo.example.com
-
-# Custom schedule and passwords
-bin/setup-cron.sh \
-  --image pdf-tei-editor:latest \
-  --fqdn demo.example.com \
-  --time "0 3 * * *" \
-  --admin-password mypassword
-```
+**Environment variable syntax:**
+- `--env FOO` - Transfer FOO from host environment to container
+- `--env FOO=bar` - Set FOO to "bar" in container
 
 ## Production Deployment
 
@@ -155,23 +157,35 @@ npm run start:prod
        }
    }
    ```
+This is automatically done buy the `npm run container:deploy` command documented in the next section.
 
 ### Container Production Deployment
 
 For production container deployments with persistent data:
 
 ```bash
-# Deploy with external volumes for data persistence
-sudo bin/deploy-container.sh \
-  --image cboulanger/pdf-tei-editor:latest \
+# Deploy with external data directory for persistence
+# Note: data-dir contains files/ and db/ subdirectories
+sudo npm run container:deploy -- \
   --fqdn editor.company.com \
   --type production \
-  --admin-password "$(openssl rand -base64 12)" \
-  --demo-password "$(openssl rand -base64 12)" \
   --data-dir /opt/pdf-tei-editor/data \
-  --config-dir /opt/pdf-tei-editor/config \
-  --db-dir /opt/pdf-tei-editor/db \
-  --gemini-key "$GEMINI_API_KEY"
+  --env GEMINI_API_KEY \
+  --env GROBID_SERVER_URL \
+  --env LOG_LEVEL=WARNING
+
+# The deploy command will:
+# - Check DNS resolution for the FQDN
+# - Start the container with the specified data directory
+# - Configure nginx as reverse proxy
+# - Set up SSL certificate with Let's Encrypt
+```
+
+**Data directory structure:**
+```
+/opt/pdf-tei-editor/data/
+├── files/          # User-uploaded PDF and TEI files
+└── db/             # SQLite databases (metadata, users, etc.)
 ```
 
 ## Development Workflow
@@ -180,39 +194,43 @@ sudo bin/deploy-container.sh \
 
 ```bash
 # 1. Build image locally for testing
-bin/image-build-and-push.js --build-only v1.0.0
+npm run container:build -- --tag v1.0.0
 
 # 2. Test locally without SSL/nginx
-bin/deploy-container.sh \
-  --image pdf-tei-editor:v1.0.0 \
-  --fqdn localhost \
+npm run container:start -- \
+  --tag v1.0.0 \
   --port 8080 \
-  --no-ssl \
-  --no-nginx \
-  --admin-password admin
+  --env GEMINI_API_KEY
 
-# 3. Push to registry when ready
-bin/image-build-and-push.js v1.0.0
+# 3. Push to registry when ready (requires DOCKER_HUB_USERNAME and DOCKER_HUB_TOKEN in .env)
+npm run container:push -- --tag v1.0.0
 ```
 
 ### Container Updates
 
 ```bash
 # Production: Update while preserving data
-sudo bin/deploy-container.sh \
-  --image cboulanger/pdf-tei-editor:v2.0.0 \
+sudo npm run container:deploy -- \
   --fqdn editor.company.com \
+  --tag v2.0.0 \
   --type production \
-  --admin-password existing_password \
   --data-dir /opt/pdf-tei-editor/data \
-  --config-dir /opt/pdf-tei-editor/config \
-  --db-dir /opt/pdf-tei-editor/db
+  --env GEMINI_API_KEY \
+  --env LOG_LEVEL=WARNING
 
 # Demo: Simple redeployment (data is reset)
-sudo bin/deploy-container.sh \
-  --image cboulanger/pdf-tei-editor:v2.0.0 \
+sudo npm run container:deploy -- \
   --fqdn demo.example.com \
+  --tag v2.0.0 \
   --type demo
+
+# Stop a container
+npm run container:stop -- --name pdf-tei-editor-latest
+
+# Restart with rebuild
+npm run container:restart -- \
+  --name pdf-tei-editor-latest \
+  --rebuild
 ```
 
 ## Security Considerations
@@ -234,20 +252,25 @@ sudo bin/deploy-container.sh \
 ### Deployment Security
 
 ```bash
-# Generate secure passwords
-ADMIN_PASSWORD=$(openssl rand -base64 16)
-DEMO_PASSWORD=$(openssl rand -base64 16)
+# Set environment variables for deployment
+export GEMINI_API_KEY="your-secure-api-key"
+export LOG_LEVEL="WARNING"
 
-# Use secure deployment
-sudo bin/deploy-container.sh \
-  --image cboulanger/pdf-tei-editor:latest \
+# Deploy with environment variables
+sudo npm run container:deploy -- \
   --fqdn secure.company.com \
   --type production \
-  --admin-password "$ADMIN_PASSWORD" \
-  --demo-password "$DEMO_PASSWORD" \
-  --data-dir /secure/pte-data \
-  --config-dir /secure/pte-config \
-  --db-dir /secure/pte-db
+  --data-dir /secure/pdf-tei-editor/data \
+  --env GEMINI_API_KEY \
+  --env LOG_LEVEL
+
+# Or specify values directly (less secure - visible in process list)
+sudo npm run container:deploy -- \
+  --fqdn secure.company.com \
+  --type production \
+  --data-dir /secure/pdf-tei-editor/data \
+  --env GEMINI_API_KEY=your-key \
+  --env LOG_LEVEL=WARNING
 ```
 
 ## Monitoring and Maintenance
@@ -255,48 +278,47 @@ sudo bin/deploy-container.sh \
 ### Container Management
 
 ```bash
-# View logs
-podman logs -f pdf-tei-editor-your-domain-com
+# View logs (container name format: pdf-tei-editor-{fqdn-with-dashes})
+docker logs -f pdf-tei-editor-editor-company-com
+# or
+podman logs -f pdf-tei-editor-editor-company-com
 
 # Monitor container status
+docker ps
+# or
 podman ps
 
-# Update container
-sudo bin/deploy-container.sh \
-  --image cboulanger/pdf-tei-editor:latest \
+# Update container (redeploy with new tag)
+sudo npm run container:deploy -- \
   --fqdn your-domain.com \
+  --tag latest \
   --type production \
-  [... same parameters as initial deployment]
+  --data-dir /opt/pdf-tei-editor/data \
+  --env GEMINI_API_KEY \
+  --env LOG_LEVEL=WARNING
+
+# Stop all containers
+npm run container:stop -- --all
+
+# Stop specific container
+npm run container:stop -- --name pdf-tei-editor-editor-company-com --remove
 ```
 
 ### Backup and Recovery
 
 ```bash
-# Backup persistent data (production deployments)
+# Backup persistent data directory (production deployments)
 tar -czf backup-$(date +%Y%m%d).tar.gz \
-  /opt/pdf-tei-editor/data \
-  /opt/pdf-tei-editor/config \
-  /opt/pdf-tei-editor/db
+  /opt/pdf-tei-editor/data
 
 # Restore data
-tar -xzf backup-20241201.tar.gz -C /
+tar -xzf backup-20241201.tar.gz -C /opt/pdf-tei-editor/
+
+# The data directory contains:
+# - files/: All uploaded PDF and TEI files
+# - db/: SQLite databases (metadata.db, users.json, etc.)
 ```
 
-### Demo Management
-
-```bash
-# View reset logs
-tail -f /var/log/pdf-tei-editor-reset.log
-
-# Manual demo reset
-sudo bin/deploy-container.sh \
-  --image cboulanger/pdf-tei-editor:latest \
-  --fqdn demo.example.com \
-  --type demo
-
-# Remove scheduled reset
-crontab -l | grep -v 'deploy-container.sh.*--fqdn demo.example.com' | crontab -
-```
 
 ## Troubleshooting
 

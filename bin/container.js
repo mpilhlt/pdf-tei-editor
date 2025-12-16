@@ -241,7 +241,7 @@ async function buildImage(tag, noCache) {
 
 /**
  * Handle build command
- * @param {{tag?: string, noCache?: boolean}} options
+ * @param {{tag?: string, noCache?: boolean, yes?: boolean}} options
  */
 async function handleBuild(options) {
   console.log('PDF TEI Editor - Container Build');
@@ -264,10 +264,12 @@ async function handleBuild(options) {
   }
   console.log();
 
-  const confirmed = await askForConfirmation('Continue with build? (y/N): ');
-  if (!confirmed) {
-    console.log('[INFO] Build cancelled by user');
-    process.exit(0);
+  if (!options.yes) {
+    const confirmed = await askForConfirmation('Continue with build? (y/N): ');
+    if (!confirmed) {
+      console.log('[INFO] Build cancelled by user');
+      process.exit(0);
+    }
   }
 
   console.log();
@@ -426,7 +428,7 @@ function cleanup() {
 
 /**
  * Handle push command
- * @param {{tag?: string, noBuild?: boolean, noCache?: boolean}} options
+ * @param {{tag?: string, noBuild?: boolean, noCache?: boolean, yes?: boolean}} options
  */
 async function handlePush(options) {
   console.log('PDF TEI Editor - Container Push');
@@ -463,10 +465,13 @@ async function handlePush(options) {
   console.log();
 
   const action = options.noBuild ? 'push' : 'build and push';
-  const confirmed = await askForConfirmation(`Continue with ${action}? (y/N): `);
-  if (!confirmed) {
-    console.log(`[INFO] ${action.charAt(0).toUpperCase() + action.slice(1)} cancelled by user`);
-    process.exit(0);
+
+  if (!options.yes) {
+    const confirmed = await askForConfirmation(`Continue with ${action}? (y/N): `);
+    if (!confirmed) {
+      console.log(`[INFO] ${action.charAt(0).toUpperCase() + action.slice(1)} cancelled by user`);
+      process.exit(0);
+    }
   }
 
   console.log();
@@ -870,7 +875,9 @@ async function handleRestart(options) {
  */
 function isCommandAvailable(command) {
   try {
-    execSync(`${command} --version`, { stdio: 'ignore' });
+    // nginx uses -v instead of --version
+    const versionFlag = command === 'nginx' ? '-v' : '--version';
+    execSync(`${command} ${versionFlag}`, { stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -1070,7 +1077,8 @@ async function setupSSL(fqdn, email) {
  *   email?: string,
  *   rebuild?: boolean,
  *   noCache?: boolean,
- *   env?: string[]
+ *   env?: string[],
+ *   yes?: boolean
  * }} options
  */
 async function handleDeploy(options) {
@@ -1103,7 +1111,8 @@ async function handleDeploy(options) {
   // Check for root access FIRST if nginx/ssl needed
   if ((useNginx || useSSL) && process.getuid && process.getuid() !== 0) {
     console.log('[ERROR] This command needs to be run with sudo for nginx/SSL configuration');
-    console.log('[INFO] Usage: sudo node bin/container.js deploy --fqdn <FQDN>');
+    console.log('[INFO] Usage: sudo env "PATH=$PATH" node bin/container.js deploy --fqdn <FQDN>');
+    console.log('[INFO] Or configure sudoers to preserve PATH: Defaults env_keep += "PATH"');
     console.log('[INFO] To skip nginx/SSL, use: node bin/container.js deploy --fqdn <FQDN> --no-nginx --no-ssl');
     process.exit(1);
   }
@@ -1155,10 +1164,12 @@ async function handleDeploy(options) {
   console.log('[INFO] Key variables: GEMINI_API_KEY, GROBID_SERVER_URL, KISSKI_API_KEY, LOG_LEVEL');
   console.log();
 
-  const confirmed = await askForConfirmation('Continue with deployment? (y/N): ');
-  if (!confirmed) {
-    console.log('[INFO] Deployment cancelled by user');
-    process.exit(0);
+  if (!options.yes) {
+    const confirmed = await askForConfirmation('Continue with deployment? (y/N): ');
+    if (!confirmed) {
+      console.log('[INFO] Deployment cancelled by user');
+      process.exit(0);
+    }
   }
 
   console.log();
@@ -1324,6 +1335,7 @@ program
   .description('Build container image locally')
   .option('--tag <tag>', 'Version tag (default: auto-generated from git)')
   .option('--no-cache', 'Force rebuild all layers')
+  .option('--yes', 'Skip confirmation prompt')
   .action(handleBuild);
 
 // Push command
@@ -1333,6 +1345,7 @@ program
   .option('--tag <tag>', 'Version tag (default: auto-generated from git)')
   .option('--no-build', 'Skip build step, push existing image only')
   .option('--no-cache', 'Force rebuild all layers')
+  .option('--yes', 'Skip confirmation prompt')
   .action(handlePush);
 
 // Start command
@@ -1385,20 +1398,21 @@ program
   .option('--email <email>', 'Email for SSL certificate (default: admin@<fqdn>)')
   .option('--rebuild', 'Rebuild image before deploying')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
+  .option('--yes', 'Skip confirmation prompt')
   .addHelpText('after', `
 Examples:
   # Production deployment with external data directory
-  sudo node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn editor.company.com \\
     --data-dir /opt/${APP_NAME}/data
 
   # Demo deployment (no external volumes, no persistence)
-  sudo node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn demo.example.com \\
     --type demo
 
   # Deploy without SSL (HTTP only)
-  sudo node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn local.test \\
     --no-ssl
 
@@ -1408,16 +1422,22 @@ Examples:
     --no-nginx --no-ssl
 
   # With environment variables (transfer from host)
-  GEMINI_API_KEY=your-key LOG_LEVEL=WARNING sudo node bin/container.js deploy \\
+  GEMINI_API_KEY=your-key LOG_LEVEL=WARNING sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn app.example.com \\
     --env GEMINI_API_KEY \\
     --env LOG_LEVEL
 
   # With environment variables (specify values directly)
-  sudo node bin/container.js deploy \\
+  sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn app.example.com \\
     --env GEMINI_API_KEY=your-key \\
     --env LOG_LEVEL=WARNING
+
+  # Automated deployment (skip confirmation)
+  sudo env "PATH=$PATH" node bin/container.js deploy \\
+    --fqdn app.example.com \\
+    --data-dir /opt/${APP_NAME}/data \\
+    --yes
 
 Environment Variables:
   See .env.production for all available environment variables.

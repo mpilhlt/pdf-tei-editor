@@ -65,10 +65,12 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 npm run container:build
 npm run container:build -- --tag v1.0.0
 npm run container:build:no-cache -- --tag v1.0.0
+npm run container:build -- --tag v1.0.0 --yes  # Skip confirmation
 
 # Build and push to registry
 npm run container:push
 npm run container:push -- --tag v1.0.0 --no-build
+npm run container:push -- --tag v1.0.0 --yes  # Skip confirmation
 
 # Start container
 npm run container:start
@@ -95,6 +97,7 @@ sudo npm run container:deploy -- --fqdn demo.example.com --type demo
 npm run container:deploy -- --fqdn test.local --no-nginx --no-ssl  # No sudo needed
 GEMINI_API_KEY=key sudo npm run container:deploy -- --fqdn app.example.com --env GEMINI_API_KEY
 sudo npm run container:deploy -- --fqdn app.example.com --env GEMINI_API_KEY=key --env LOG_LEVEL=WARNING
+sudo npm run container:deploy -- --fqdn app.example.com --data-dir /opt/pdf-tei-editor/data --yes  # Skip confirmation
 
 # Run tests in container (CI mode)
 npm run test:container                           # Run with cache
