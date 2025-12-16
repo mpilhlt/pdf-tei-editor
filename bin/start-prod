@@ -49,15 +49,32 @@ if __name__ == '__main__':
     print_server_starting_message(host, port, log_file, mode="production")
 
     # Build uvicorn command for production
-    cmd = [
-        'uv', 'run', 'uvicorn',
-        'run_fastapi:app',
-        '--host', host,
-        '--port', str(port),
-        '--log-level', 'info',
-        '--timeout-graceful-shutdown', '5',
-        '--workers', '4'  # Multiple workers for production
-    ]
+    # On Linux/Mac, use venv python directly for better performance
+    # On Windows, use uv run (required for proper activation)
+    if sys.platform == 'win32':
+        # Windows: use uv run with UV_NO_SYNC to prevent hanging
+        os.environ['UV_NO_SYNC'] = '1'
+        cmd = [
+            'uv', 'run', 'uvicorn',
+            'run_fastapi:app',
+            '--host', host,
+            '--port', str(port),
+            '--log-level', 'info',
+            '--timeout-graceful-shutdown', '5',
+            '--workers', '4'
+        ]
+    else:
+        # Linux/Mac: use venv python directly
+        venv_python = project_root / '.venv' / 'bin' / 'python'
+        cmd = [
+            str(venv_python), '-m', 'uvicorn',
+            'run_fastapi:app',
+            '--host', host,
+            '--port', str(port),
+            '--log-level', 'info',
+            '--timeout-graceful-shutdown', '5',
+            '--workers', '4'
+        ]
 
     try:
         # Run uvicorn and tee output to log file

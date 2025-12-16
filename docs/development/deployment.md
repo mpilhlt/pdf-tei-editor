@@ -26,7 +26,7 @@ The repository includes streamlined deployment scripts for production and demo s
 Use `npm run container:deploy -- [options]` or `bin/container.js deploy [options]` for all container operations including deployment:
 
 ```bash
-# Production deployment with persistent data directory
+# Production deployment behind a nginx reverse proxy with certbot support and persistent data directory
 sudo npm run container:deploy -- \
   --fqdn editor.company.com \
   --data-dir /opt/pdf-tei-editor/data \
@@ -62,6 +62,7 @@ sudo npm run container:deploy -- \
 ```
 
 **Available environment variables** (see `.env.production` for complete list):
+
 - `GEMINI_API_KEY` - Google Gemini API key for AI features
 - `GROBID_SERVER_URL` - GROBID server URL for PDF processing
 - `KISSKI_API_KEY` - KISSKI Academic Cloud API key
@@ -70,6 +71,7 @@ sudo npm run container:deploy -- \
 - `DOCS_FROM_GITHUB` - Load documentation from GitHub
 
 **Environment variable syntax:**
+
 - `--env FOO` - Transfer FOO from host environment to container
 - `--env FOO=bar` - Set FOO to "bar" in container
 
@@ -89,7 +91,6 @@ npm run start:prod
 # Or directly with specific host/port
 ./bin/start-prod 0.0.0.0 3001
 ```
-
 
 ### Production Configuration
 
@@ -157,7 +158,8 @@ npm run start:prod
        }
    }
    ```
-This is automatically done buy the `npm run container:deploy` command documented in the next section.
+
+This is automatically done by the `npm run container:deploy` command documented in the next section.
 
 ### Container Production Deployment
 
@@ -182,7 +184,8 @@ sudo npm run container:deploy -- \
 ```
 
 **Data directory structure:**
-```
+
+```text
 /opt/pdf-tei-editor/data/
 ├── files/          # User-uploaded PDF and TEI files
 └── db/             # SQLite databases (metadata, users, etc.)
@@ -201,6 +204,21 @@ npm run container:start -- \
   --tag v1.0.0 \
   --port 8080 \
   --env GEMINI_API_KEY
+
+# 2a. Test with persistent data directory
+npm run container:start -- \
+  --tag v1.0.0 \
+  --port 8080 \
+  --data-dir /opt/test-data \
+  --restart unless-stopped \
+  --env GEMINI_API_KEY
+
+# 2b. Test with custom volume mounts
+npm run container:start -- \
+  --tag v1.0.0 \
+  --port 8080 \
+  --volume /host/config:/app/data/config \
+  --volume /host/log:/app/log
 
 # 3. Push to registry when ready (requires DOCKER_HUB_USERNAME and DOCKER_HUB_TOKEN in .env)
 npm run container:push -- --tag v1.0.0
@@ -231,6 +249,14 @@ npm run container:stop -- --name pdf-tei-editor-latest
 npm run container:restart -- \
   --name pdf-tei-editor-latest \
   --rebuild
+
+# If deploy fails, retry with start command (suggested in error output)
+npm run container:start -- \
+  --name pdf-tei-editor-editor-company-com \
+  --port 8001 \
+  --restart unless-stopped \
+  --data-dir /opt/pdf-tei-editor/data \
+  --env GEMINI_API_KEY
 ```
 
 ## Security Considerations
@@ -279,6 +305,8 @@ sudo npm run container:deploy -- \
 
 ```bash
 # View logs (container name format: pdf-tei-editor-{fqdn-with-dashes})
+npm run container:logs -- --name pdf-tei-editor-editor-company-com --follow
+# Or use container tools directly
 docker logs -f pdf-tei-editor-editor-company-com
 # or
 podman logs -f pdf-tei-editor-editor-company-com
@@ -318,7 +346,6 @@ tar -xzf backup-20241201.tar.gz -C /opt/pdf-tei-editor/
 # - files/: All uploaded PDF and TEI files
 # - db/: SQLite databases (metadata.db, users.json, etc.)
 ```
-
 
 ## Troubleshooting
 

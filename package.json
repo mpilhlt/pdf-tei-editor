@@ -38,6 +38,7 @@
         "container:start": "node bin/container.js start",
         "container:stop": "node bin/container.js stop",
         "container:restart": "node bin/container.js restart",
+        "container:logs": "node bin/container.js logs",
         "container:build": "node bin/container.js build",
         "container:build:no-cache": "node bin/container.js build --no-cache",
         "container:push": "node bin/container.js push",

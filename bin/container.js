@@ -215,17 +215,11 @@ async function buildImage(tag, noCache) {
 
     buildArgs.push('.');
 
-    if (!containerCmd) {
-      throw new Error('Container command not available');
-    }
     await executeCommand(containerCmd, buildArgs);
     console.log('[SUCCESS] Container image built successfully');
 
     console.log('[INFO] Image details:');
     try {
-      if (!containerCmd) {
-        throw new Error('Container command not available');
-      }
       execSync(`${containerCmd} images "${imageName}" --format "table {{.Repository}}\\t{{.Tag}}\\t{{.Size}}\\t{{.CreatedSince}}"`, { stdio: 'inherit' });
     } catch (err) {
       console.log('[WARNING] Could not display image details');
@@ -247,8 +241,6 @@ async function handleBuild(options) {
   console.log('PDF TEI Editor - Container Build');
   console.log('================================');
   console.log();
-
-  detectContainerTool();
   const tag = getVersionTag(options.tag);
 
   console.log();
@@ -297,10 +289,6 @@ async function registryLogin() {
   console.log(`[INFO] Logging in to Docker Hub as ${credentials.username}...`);
 
   try {
-    if (!containerCmd) {
-      throw new Error('Container command not available');
-    }
-
     const childProcess = spawn(containerCmd, ['login', '--username', credentials.username || '', '--password-stdin', 'docker.io'], {
       stdio: ['pipe', 'inherit', 'inherit']
     });
@@ -341,10 +329,6 @@ async function pushImage(tag) {
   console.log('[INFO] Pushing image to Docker Hub...');
 
   try {
-    if (!containerCmd) {
-      throw new Error('Container command not available');
-    }
-
     console.log(`[INFO] Pushing ${fullTag}...`);
     await executeCommand(containerCmd, ['push', fullTag]);
     console.log(`[SUCCESS] Successfully pushed ${fullTag}`);
@@ -386,10 +370,6 @@ function tagImageForRegistry(tag) {
   const registryImageName = `${credentials.username}/${APP_NAME}:${tag}`;
 
   try {
-    if (!containerCmd) {
-      throw new Error('Container command not available');
-    }
-
     console.log(`[INFO] Tagging local image for registry...`);
     execSync(`${containerCmd} tag ${localImageName} ${registryImageName}`, { stdio: 'inherit' });
 
@@ -435,7 +415,6 @@ async function handlePush(options) {
   console.log('================================');
   console.log();
 
-  detectContainerTool();
   loadEnv();
   validateEnv();
   const tag = getVersionTag(options.tag);
@@ -490,9 +469,6 @@ async function handlePush(options) {
 
     const imageName = `${credentials.username}/${APP_NAME}:${tag}`;
     try {
-      if (!containerCmd) {
-        throw new Error('Container command not available');
-      }
       execSync(`${containerCmd} image inspect ${imageName}`, { stdio: 'ignore' });
       console.log(`[INFO] Image ${imageName} found locally`);
     } catch {
@@ -553,15 +529,95 @@ function processEnvParameters(runArgs, envSpecs) {
 // ============================================================================
 
 /**
+ * Start a container with specified configuration
+ * @param {{
+ *   name: string,
+ *   imageName: string,
+ *   port: number,
+ *   detach?: boolean,
+ *   restart?: string,
+ *   env?: string[],
+ *   volumes?: Array<{host: string, container: string}>,
+ *   additionalEnvVars?: Array<{key: string, value: string}>
+ * }} config
+ * @returns {Promise<string|undefined>} Container ID if detached, undefined otherwise
+ */
+async function startContainer(config) {
+  const {
+    name,
+    imageName,
+    port,
+    detach = true,
+    restart,
+    env = [],
+    volumes = [],
+    additionalEnvVars = []
+  } = config;
+
+  // Build run command
+  const runArgs = [
+    'run',
+    detach ? '-d' : '',
+    '--name', name,
+    '-p', `${port}:8000`,
+    '-e', 'PORT=8000'
+  ].filter(Boolean);
+
+  // Add restart policy if specified
+  if (restart) {
+    runArgs.push('--restart', restart);
+  }
+
+  // Add additional environment variables (e.g., DATA_ROOT)
+  for (const envVar of additionalEnvVars) {
+    runArgs.push('-e', `${envVar.key}=${envVar.value}`);
+  }
+
+  // Process environment variables from --env parameters
+  processEnvParameters(runArgs, env);
+
+  // Add volume mounts
+  for (const volume of volumes) {
+    if (!fs.existsSync(volume.host)) {
+      fs.mkdirSync(volume.host, { recursive: true });
+      console.log(`[INFO] Created directory: ${volume.host}`);
+    }
+    runArgs.push('-v', `${volume.host}:${volume.container}`);
+    console.log(`[INFO] Mounted volume: ${volume.host} -> ${volume.container}`);
+  }
+
+  runArgs.push(imageName);
+
+  const runCmd = `${containerCmd} ${runArgs.join(' ')}`;
+
+  console.log(`\n   Starting container...`);
+  console.log(`   Command: ${runCmd}`);
+
+  try {
+    const output = execSync(runCmd, { encoding: 'utf8', stdio: detach ? 'pipe' : 'inherit' });
+
+    if (detach) {
+      const containerId = output.trim();
+      console.log(`\n   Container started successfully!`);
+      console.log(`   Container ID: ${containerId.substring(0, 12)}`);
+      console.log(`   Name: ${name}`);
+      console.log(`   URL: http://localhost:${port}`);
+      return containerId;
+    }
+  } catch (error) {
+    console.error(`\n   Failed to start container: ${String(error)}`);
+    throw error;
+  }
+}
+
+/**
  * Handle start command
- * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, noCache?: boolean, env?: string[]}} options
+ * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, noCache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
  */
 async function handleStart(options) {
   console.log('PDF TEI Editor - Container Start');
   console.log('=================================');
   console.log();
-
-  detectContainerTool();
 
   const tag = options.tag || 'latest';
   const name = options.name || `${APP_NAME}-${tag}`;
@@ -582,6 +638,9 @@ async function handleStart(options) {
   console.log(`   Name: ${name}`);
   console.log(`   Port: ${port}`);
   console.log(`   Mode: ${detach ? 'detached' : 'foreground'}`);
+  if (options.restart) {
+    console.log(`   Restart policy: ${options.restart}`);
+  }
   console.log(`   Engine: ${containerCmd}`);
 
   // Check if container with this name already exists
@@ -636,40 +695,49 @@ async function handleStart(options) {
     }
   }
 
-  // Build run command
-  const runArgs = [
-    'run',
-    detach ? '-d' : '',
-    '--name', name,
-    '-p', `${port}:8000`,
-  ].filter(Boolean);
+  // Parse volume mappings
+  const volumes = [];
+  const additionalEnvVars = [];
 
-  // Process environment variables
-  processEnvParameters(runArgs, options.env);
+  // Add data-dir as shorthand for /app/data mount
+  if (options.dataDir) {
+    volumes.push({ host: options.dataDir, container: '/app/data' });
+    // Add DATA_ROOT env var when mounting data directory
+    additionalEnvVars.push({ key: 'DATA_ROOT', value: '/app/data' });
+  }
 
-  runArgs.push(imageName);
-
-  const runCmd = `${containerCmd} ${runArgs.join(' ')}`;
-
-  console.log(`\n   Starting container...`);
-  console.log(`   Command: ${runCmd}`);
+  // Add explicit volume mappings
+  if (options.volume) {
+    for (const volumeSpec of options.volume) {
+      const [host, container] = volumeSpec.split(':');
+      if (!host || !container) {
+        console.error(`\n   Invalid volume mapping: ${volumeSpec}`);
+        console.error('   Expected format: host_path:container_path');
+        process.exit(1);
+      }
+      volumes.push({ host, container });
+    }
+  }
 
   try {
-    const output = execSync(runCmd, { encoding: 'utf8', stdio: detach ? 'pipe' : 'inherit' });
+    await startContainer({
+      name,
+      imageName,
+      port,
+      detach,
+      restart: options.restart,
+      env: options.env,
+      volumes,
+      additionalEnvVars
+    });
 
     if (detach) {
-      const containerId = output.trim();
-      console.log(`\n   Container started successfully!`);
-      console.log(`   Container ID: ${containerId.substring(0, 12)}`);
-      console.log(`   Name: ${name}`);
-      console.log(`   URL: http://localhost:${port}`);
       console.log(`\nTo view logs:`);
       console.log(`   ${containerCmd} logs -f ${name}`);
       console.log(`\nTo stop:`);
       console.log(`   node bin/container.js stop --name ${name}`);
     }
   } catch (error) {
-    console.error(`\n   Failed to start container: ${String(error)}`);
     process.exit(1);
   }
 }
@@ -686,8 +754,6 @@ async function handleStop(options) {
   console.log('PDF TEI Editor - Container Stop');
   console.log('================================');
   console.log();
-
-  detectContainerTool();
 
   if (options.all) {
     console.log(`   Stopping all ${APP_NAME} containers...`);
@@ -777,14 +843,12 @@ async function handleStop(options) {
 
 /**
  * Handle restart command
- * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, noCache?: boolean, env?: string[]}} options
+ * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, noCache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
  */
 async function handleRestart(options) {
   console.log('PDF TEI Editor - Container Restart');
   console.log('===================================');
   console.log();
-
-  detectContainerTool();
 
   const name = options.name || `${APP_NAME}-latest`;
 
@@ -859,6 +923,67 @@ async function handleRestart(options) {
       console.log();
       await handleStart(options);
     }
+  } catch (error) {
+    console.error(`\n   Error: ${String(error)}`);
+    process.exit(1);
+  }
+}
+
+// ============================================================================
+// Logs Command
+// ============================================================================
+
+/**
+ * Handle logs command
+ * @param {{name?: string, follow?: boolean, tail?: number}} options
+ */
+async function handleLogs(options) {
+  console.log('PDF TEI Editor - Container Logs');
+  console.log('================================');
+  console.log();
+
+  const name = options.name || `${APP_NAME}-latest`;
+
+  // Check if container exists
+  try {
+    const containerId = execSync(
+      `${containerCmd} ps -a --filter "name=^${name}$" --format "{{.ID}}"`,
+      { encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+
+    if (!containerId) {
+      console.error(`\n   Container '${name}' not found`);
+      console.log('\nRunning containers:');
+      try {
+        execSync(`${containerCmd} ps --filter "name=${APP_NAME}" --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"`, {
+          stdio: 'inherit'
+        });
+      } catch {
+        console.log(`   No ${APP_NAME} containers running`);
+      }
+      process.exit(1);
+    }
+
+    console.log(`   Container: ${name}`);
+    console.log(`   Container ID: ${containerId.substring(0, 12)}`);
+    console.log();
+
+    // Build logs command
+    const logsArgs = ['logs'];
+
+    if (options.follow) {
+      logsArgs.push('-f');
+    }
+
+    if (options.tail !== undefined) {
+      logsArgs.push('--tail', String(options.tail));
+    }
+
+    logsArgs.push(name);
+
+    // Execute logs command
+    execSync(`${containerCmd} ${logsArgs.join(' ')}`, { stdio: 'inherit' });
+
   } catch (error) {
     console.error(`\n   Error: ${String(error)}`);
     process.exit(1);
@@ -1122,8 +1247,6 @@ async function handleDeploy(options) {
     process.exit(1);
   }
 
-  detectContainerTool();
-
   const tag = options.tag || 'latest';
   const port = options.port || 8001;
   const deploymentType = options.type || 'production';
@@ -1139,10 +1262,14 @@ async function handleDeploy(options) {
   // Warn about demo deployment with external directories
   let dataDir = options.dataDir;
 
-  if (deploymentType === 'demo') {
-    if (dataDir) {
+  if (dataDir) {
+    if (deploymentType === 'demo') {
       console.log('[WARNING] Demo deployment: ignoring external data directory (data will not persist)');
       dataDir = undefined;
+    }
+  } else {
+    if (deploymentType === 'production') {
+      throw new Error("A production deployment requires --data-dir")
     }
   }
 
@@ -1188,9 +1315,6 @@ async function handleDeploy(options) {
   // Check for image
   const imageName = `${APP_NAME}:${tag}`;
   try {
-    if (!containerCmd) {
-      throw new Error('Container command not available');
-    }
     execSync(`${containerCmd} image inspect ${imageName}`, { stdio: 'ignore' });
     console.log(`[INFO] Using image: ${imageName}`);
   } catch {
@@ -1200,9 +1324,6 @@ async function handleDeploy(options) {
 
   // Stop existing container
   try {
-    if (!containerCmd) {
-      throw new Error('Container command not available');
-    }
     const existingContainer = execSync(
       `${containerCmd} ps -a --filter "name=^${containerName}$" --format "{{.ID}}"`,
       { encoding: 'utf8', stdio: 'pipe' }
@@ -1217,50 +1338,50 @@ async function handleDeploy(options) {
     // No existing container
   }
 
-  // Build container run command
-  const runArgs = [
-    'run', '-d',
-    '--name', containerName,
-    '--restart', 'unless-stopped',
-    '-p', `${port}:8000`,
-    '-e', 'PORT=8000'
-  ];
+  // Prepare volumes and environment variables
+  const volumes = [];
+  const additionalEnvVars = [];
 
-  // Add DATA_ROOT environment variable if dataDir is specified
-  if (dataDir) {
-    runArgs.push('-e', `DATA_ROOT=/app/data`);
-  }
-
-  // Process --env parameters
-  processEnvParameters(runArgs, options.env);
-
-  // Add volume mount for production
-  if (deploymentType === 'production') {
-    if (dataDir) {
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-      }
-      runArgs.push('-v', `${dataDir}:/app/data`);
-      console.log(`[INFO] Mounted data root: ${dataDir} -> /app/data (contains files/ and db/ subdirectories)`);
-    }
+  if (deploymentType === 'production' && dataDir) {
+    volumes.push({ host: dataDir, container: '/app/data' });
+    additionalEnvVars.push({ key: 'DATA_ROOT', value: '/app/data' });
+    console.log(`[INFO] Data root: ${dataDir} -> /app/data (contains files/ and db/ subdirectories)`);
   } else {
     console.log('[INFO] Demo deployment: using container-internal storage (non-persistent)');
   }
 
-  runArgs.push(imageName);
-
   // Start container
   console.log();
-  console.log('[INFO] Starting container...');
   try {
-    if (!containerCmd) {
-      throw new Error('Container command not available');
-    }
-    await executeCommand(containerCmd, runArgs);
-    console.log('[SUCCESS] Container started successfully');
+    await startContainer({
+      name: containerName,
+      imageName,
+      port,
+      detach: true,
+      restart: 'unless-stopped',
+      env: options.env,
+      volumes,
+      additionalEnvVars
+    });
   } catch (err) {
     console.log('[ERROR] Failed to start container');
     console.log('[ERROR]', err instanceof Error ? err.message : String(err));
+    console.log();
+    console.log(`[INFO] You can retry with:`);
+    console.log(`   node bin/container.js start \\`);
+    console.log(`     --name ${containerName} \\`);
+    console.log(`     --port ${port} \\`);
+    console.log(`     --restart unless-stopped`);
+    if (volumes.length > 0) {
+      volumes.forEach(v => {
+        console.log(`     --volume ${v.host}:${v.container} \\`);
+      });
+    }
+    if (options.env && options.env.length > 0) {
+      options.env.forEach(e => {
+        console.log(`     --env ${e} \\`);
+      });
+    }
     process.exit(1);
   }
 
@@ -1322,6 +1443,9 @@ async function handleDeploy(options) {
 // Main CLI Setup
 // ============================================================================
 
+// Detect container tool before running any commands
+detectContainerTool();
+
 const program = new Command();
 
 program
@@ -1356,6 +1480,9 @@ program
   .option('--name <name>', `Container name (default: ${APP_NAME}-<tag>)`)
   .option('--port <port>', 'Host port to bind (default: 8000)', parseInt)
   .option('--env <var>', 'Environment variable (FOO or FOO=bar, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
+  .option('--volume <mapping>', 'Volume mount (host:container, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
+  .option('--data-dir <dir>', 'Mount external data directory to /app/data')
+  .option('--restart <policy>', 'Restart policy (no, on-failure, always, unless-stopped)')
   .option('--rebuild', 'Rebuild image before starting')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
   .option('--no-detach', 'Run in foreground')
@@ -1378,9 +1505,21 @@ program
   .option('--tag <tag>', 'Image tag (used if container doesn\'t exist)')
   .option('--port <port>', 'Host port (used if container doesn\'t exist)', parseInt)
   .option('--env <var>', 'Environment variable (FOO or FOO=bar, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
+  .option('--volume <mapping>', 'Volume mount (host:container, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
+  .option('--data-dir <dir>', 'Mount external data directory to /app/data')
+  .option('--restart <policy>', 'Restart policy (no, on-failure, always, unless-stopped)')
   .option('--rebuild', 'Rebuild image before restarting')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
   .action(handleRestart);
+
+// Logs command
+program
+  .command('logs')
+  .description('View container logs')
+  .option('--name <name>', `Container name (default: ${APP_NAME}-latest)`)
+  .option('-f, --follow', 'Follow log output')
+  .option('--tail <lines>', 'Number of lines to show from the end of the logs', parseInt)
+  .action(handleLogs);
 
 // Deploy command
 program

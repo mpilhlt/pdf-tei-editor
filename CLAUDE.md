@@ -76,6 +76,8 @@ npm run container:push -- --tag v1.0.0 --yes  # Skip confirmation
 npm run container:start
 npm run container:start -- --tag v1.0.0 --port 8080
 npm run container:start -- --env GEMINI_API_KEY --env LOG_LEVEL=WARNING
+npm run container:start -- --data-dir /opt/data --restart unless-stopped
+npm run container:start -- --volume /host/path:/container/path
 npm run container:start -- --rebuild              # Rebuild before starting
 npm run container:start -- --rebuild --no-cache   # Rebuild without cache
 
@@ -88,7 +90,14 @@ npm run container:stop -- --all
 npm run container:restart
 npm run container:restart -- --name pdf-tei-editor-v1.0.0
 npm run container:restart -- --env GEMINI_API_KEY
+npm run container:restart -- --data-dir /opt/data --restart unless-stopped
 npm run container:restart -- --rebuild             # Rebuild before restarting
+
+# View logs
+npm run container:logs
+npm run container:logs -- --name pdf-tei-editor-v1.0.0
+npm run container:logs -- --follow                 # Follow log output
+npm run container:logs -- --tail 100               # Show last 100 lines
 
 # Deploy container with nginx/SSL (requires sudo)
 sudo npm run container:deploy -- --fqdn editor.example.com
