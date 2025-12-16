@@ -8,7 +8,8 @@
 import { Plugin } from '../modules/plugin-base.js';
 import { api } from './client.js';
 import { notify } from '../modules/sl-utils.js';
-import { registerTemplate, createFromTemplate, createSingleFromTemplate, updateUi, SlDropdown, SlButton, SlMenu } from '../ui.js';
+import { services } from '../plugins.js';
+import { registerTemplate, createSingleFromTemplate, updateUi, SlDropdown, SlButton, SlMenu, SlDialog } from '../ui.js';
 import ui from '../ui.js';
 
 /**
@@ -26,7 +27,7 @@ import ui from '../ui.js';
 class PluginSandbox {
   /**
    * @param {PluginContext} context - Plugin context
-   * @param {HTMLElement} dialog - Result dialog element
+   * @param {SlDialog} dialog - Result dialog element
    */
   constructor(context, dialog) {
     this.context = context;
@@ -53,7 +54,7 @@ class PluginSandbox {
    * @param {string} stableId - Document stable ID
    */
   async openDocument(stableId) {
-    await this.updateState({ xml: stableId, diff: null });
+    await services.load({xml:stableId})
     this.closeDialog();
   }
 
@@ -63,7 +64,8 @@ class PluginSandbox {
    * @param {string} stableId2 - Second document stable ID
    */
   async openDiff(stableId1, stableId2) {
-    await this.updateState({ xml: stableId1, diff: stableId2 });
+    await services.load({xml:stableId1});
+    await services.showMergeView(stableId2);
     this.closeDialog();
   }
 }

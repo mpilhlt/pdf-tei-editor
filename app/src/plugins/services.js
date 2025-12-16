@@ -248,16 +248,6 @@ async function onStateUpdate(changedKeys, state) {
       btn.disabled = true
     }
   }
-
-  // merge view
-  if (changedKeys.includes("diff")) {
-    if (state.diff) {
-      await showMergeView(state.diff)
-    } else {
-      await removeMergeView()
-    }
-  }
-
 }
 
 

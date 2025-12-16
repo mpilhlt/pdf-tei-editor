@@ -86,7 +86,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
 
         # Mock file metadata
         file_metadata = MagicMock()
-        file_metadata.id = "test-file-id"
+        file_metadata.stable_id = "test-stable-id"
         file_metadata.variant = "standard"
         file_metadata.is_gold_standard = False
 
@@ -100,7 +100,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["last_annotator"], "annotator2")
         self.assertIn("2024", result["last_change_date"])
         self.assertEqual(result["last_change_date_raw"], "2024-01-20T10:30:00")
-        self.assertEqual(result["file_id"], "test-file-id")
+        self.assertEqual(result["stable_id"], "test-stable-id")
 
     def test_parse_tei_version_info_gold_standard(self):
         """Test parsing TEI with gold standard flag."""
@@ -127,7 +127,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
 
         # Mock file metadata with is_gold_standard flag
         file_metadata = MagicMock()
-        file_metadata.id = "gold-file-id"
+        file_metadata.stable_id = "gold-stable-id"
         file_metadata.variant = "grobid"  # Gold files can have any variant
         file_metadata.is_gold_standard = True
 
@@ -158,7 +158,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
 </TEI>"""
 
         file_metadata = MagicMock()
-        file_metadata.id = "no-revision-id"
+        file_metadata.stable_id = "no-revision-id"
         file_metadata.variant = "standard"
         file_metadata.is_gold_standard = False
 
@@ -176,7 +176,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
         invalid_xml = "This is not XML"
 
         file_metadata = MagicMock()
-        file_metadata.id = "invalid-id"
+        file_metadata.stable_id = "invalid-id"
 
         with self.assertLogs(level="ERROR"):
             result = self.plugin._parse_tei_version_info(invalid_xml, file_metadata)
@@ -222,7 +222,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
                 "last_annotator": "annotator1",
                 "last_change_date": "January 15, 2024",
                 "last_change_date_raw": "2024-01-15",
-                "file_id": "file-1",
+                "stable_id": "stable-1",
             }
         ]
 
@@ -260,7 +260,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
                 "last_annotator": "gold-annotator",
                 "last_change_date": "March 1, 2024",
                 "last_change_date_raw": "2024-03-01",
-                "file_id": "file-1",
+                "stable_id": "stable-1",
             },
             {
                 "title": "Document B",
@@ -270,7 +270,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
                 "last_annotator": "annotator1",
                 "last_change_date": "January 15, 2024",
                 "last_change_date_raw": "2024-01-15",
-                "file_id": "file-2",
+                "stable_id": "stable-2",
             },
         ]
 
