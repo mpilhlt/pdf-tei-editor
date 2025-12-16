@@ -40,7 +40,8 @@
         "container:restart": "node bin/container.js restart",
         "container:build": "node bin/container.js build",
         "container:build:no-cache": "node bin/container.js build --no-cache",
-        "container:push": "node bin/container.js push"
+        "container:push": "node bin/container.js push",
+        "container:deploy": "node bin/container.js deploy"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",

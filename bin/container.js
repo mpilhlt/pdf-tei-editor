@@ -12,6 +12,12 @@ import fs from 'fs';
 import readline from 'readline';
 import { Command } from 'commander';
 
+// ============================================================================
+// Configuration
+// ============================================================================
+
+const APP_NAME = 'pdf-tei-editor';
+
 /** @type {string|null} */
 let containerCmd = null;
 
@@ -185,7 +191,7 @@ function askForConfirmation(question) {
  * @param {boolean} noCache
  */
 async function buildImage(tag, noCache) {
-  const imageName = 'pdf-tei-editor';
+  const imageName = APP_NAME;
   const fullTag = `${imageName}:${tag}`;
   const latestTag = `${imageName}:latest`;
 
@@ -248,7 +254,7 @@ async function handleBuild(options) {
   console.log();
   console.log('[INFO] Configuration:');
   console.log(`[INFO]   Version Tag: ${tag}`);
-  console.log(`[INFO]   Image Name: pdf-tei-editor:${tag}`);
+  console.log(`[INFO]   Image Name: ${APP_NAME}:${tag}`);
   console.log(`[INFO]   Build Target: production`);
 
   if (options.noCache) {
@@ -274,7 +280,7 @@ async function handleBuild(options) {
   console.log();
   console.log('[SUCCESS] Build completed successfully!');
   console.log('[INFO] Image available locally for testing:');
-  console.log(`[INFO]   ${containerCmd} run -p 8000:8000 pdf-tei-editor:${tag}`);
+  console.log(`[INFO]   ${containerCmd} run -p 8000:8000 ${APP_NAME}:${tag}`);
   console.log(`[INFO] To push to registry, use: node bin/container.js push --tag ${tag}`);
 }
 
@@ -326,7 +332,7 @@ async function registryLogin() {
  * @param {string} tag
  */
 async function pushImage(tag) {
-  const imageName = `${credentials.username}/pdf-tei-editor`;
+  const imageName = `${credentials.username}/${APP_NAME}`;
   const fullTag = `${imageName}:${tag}`;
   const latestTag = `${imageName}:latest`;
 
@@ -359,7 +365,7 @@ async function pushImage(tag) {
     if (tag !== 'latest') {
       console.log(`[INFO]   ${containerCmd} pull ${latestTag}`);
     }
-    console.log(`[INFO]   https://hub.docker.com/r/${credentials.username}/pdf-tei-editor`);
+    console.log(`[INFO]   https://hub.docker.com/r/${credentials.username}/${APP_NAME}`);
 
     return true;
   } catch (err) {
@@ -374,8 +380,8 @@ async function pushImage(tag) {
  * @param {string} tag
  */
 function tagImageForRegistry(tag) {
-  const localImageName = `pdf-tei-editor:${tag}`;
-  const registryImageName = `${credentials.username}/pdf-tei-editor:${tag}`;
+  const localImageName = `${APP_NAME}:${tag}`;
+  const registryImageName = `${credentials.username}/${APP_NAME}:${tag}`;
 
   try {
     if (!containerCmd) {
@@ -386,8 +392,8 @@ function tagImageForRegistry(tag) {
     execSync(`${containerCmd} tag ${localImageName} ${registryImageName}`, { stdio: 'inherit' });
 
     if (tag !== 'latest') {
-      const localLatest = 'pdf-tei-editor:latest';
-      const registryLatest = `${credentials.username}/pdf-tei-editor:latest`;
+      const localLatest = `${APP_NAME}:latest`;
+      const registryLatest = `${credentials.username}/${APP_NAME}:latest`;
       try {
         execSync(`${containerCmd} tag ${localLatest} ${registryLatest}`, { stdio: 'inherit' });
       } catch {
@@ -442,7 +448,7 @@ async function handlePush(options) {
   console.log('[INFO] Configuration:');
   console.log(`[INFO]   Docker Hub User: ${credentials.username}`);
   console.log(`[INFO]   Version Tag: ${tag}`);
-  console.log(`[INFO]   Image Name: ${credentials.username}/pdf-tei-editor:${tag}`);
+  console.log(`[INFO]   Image Name: ${credentials.username}/${APP_NAME}:${tag}`);
 
   if (!options.noBuild) {
     console.log(`[INFO]   Build Target: production`);
@@ -477,7 +483,7 @@ async function handlePush(options) {
   } else {
     console.log('[INFO] Skipping build step (--no-build option)');
 
-    const imageName = `${credentials.username}/pdf-tei-editor:${tag}`;
+    const imageName = `${credentials.username}/${APP_NAME}:${tag}`;
     try {
       if (!containerCmd) {
         throw new Error('Container command not available');
@@ -505,12 +511,45 @@ async function handlePush(options) {
 }
 
 // ============================================================================
+// Environment Variable Processing
+// ============================================================================
+
+/**
+ * Process --env parameters and add them to container run arguments
+ * @param {string[]} runArgs - Container run arguments array
+ * @param {string[] | undefined} envSpecs - Environment variable specifications
+ */
+function processEnvParameters(runArgs, envSpecs) {
+  if (!envSpecs || !Array.isArray(envSpecs)) {
+    return;
+  }
+
+  for (const envSpec of envSpecs) {
+    if (envSpec.includes('=')) {
+      // --env FOO=BAR format - use the specified value
+      runArgs.push('-e', envSpec);
+      const [key] = envSpec.split('=');
+      console.log(`[INFO] Added environment variable: ${key}=<specified value>`);
+    } else {
+      // --env FOO format - transfer from host environment
+      const value = process.env[envSpec];
+      if (value !== undefined) {
+        runArgs.push('-e', `${envSpec}=${value}`);
+        console.log(`[INFO] Added environment variable from host: ${envSpec}`);
+      } else {
+        console.log(`[WARNING] Environment variable ${envSpec} not found in host environment, skipping`);
+      }
+    }
+  }
+}
+
+// ============================================================================
 // Start Command
 // ============================================================================
 
 /**
  * Handle start command
- * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, noCache?: boolean}} options
+ * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, noCache?: boolean, env?: string[]}} options
  */
 async function handleStart(options) {
   console.log('PDF TEI Editor - Container Start');
@@ -520,7 +559,7 @@ async function handleStart(options) {
   detectContainerTool();
 
   const tag = options.tag || 'latest';
-  const name = options.name || `pdf-tei-editor-${tag}`;
+  const name = options.name || `${APP_NAME}-${tag}`;
   const port = options.port || 8000;
 
   // Rebuild image if requested
@@ -561,8 +600,8 @@ async function handleStart(options) {
   console.log(`\n   Checking for image...`);
 
   let imageName = null;
-  const localImageName = `pdf-tei-editor:${tag}`;
-  const registryImageName = `cboulanger/pdf-tei-editor:${tag}`;
+  const localImageName = `${APP_NAME}:${tag}`;
+  const registryImageName = `cboulanger/${APP_NAME}:${tag}`;
 
   // Try local image first
   try {
@@ -598,8 +637,12 @@ async function handleStart(options) {
     detach ? '-d' : '',
     '--name', name,
     '-p', `${port}:8000`,
-    imageName,
   ].filter(Boolean);
+
+  // Process environment variables
+  processEnvParameters(runArgs, options.env);
+
+  runArgs.push(imageName);
 
   const runCmd = `${containerCmd} ${runArgs.join(' ')}`;
 
@@ -621,7 +664,7 @@ async function handleStart(options) {
       console.log(`   node bin/container.js stop --name ${name}`);
     }
   } catch (error) {
-    console.error(`\n   Failed to start container: ${error.message}`);
+    console.error(`\n   Failed to start container: ${String(error)}`);
     process.exit(1);
   }
 }
@@ -642,16 +685,16 @@ async function handleStop(options) {
   detectContainerTool();
 
   if (options.all) {
-    console.log('   Stopping all pdf-tei-editor containers...');
+    console.log(`   Stopping all ${APP_NAME} containers...`);
 
     try {
       const containers = execSync(
-        `${containerCmd} ps -a --filter "name=pdf-tei-editor" --format "{{.ID}} {{.Names}}"`,
+        `${containerCmd} ps -a --filter "name=${APP_NAME}" --format "{{.ID}} {{.Names}}"`,
         { encoding: 'utf8', stdio: 'pipe' }
       ).trim();
 
       if (!containers) {
-        console.log('   No pdf-tei-editor containers found');
+        console.log(`   No ${APP_NAME} containers found`);
         return;
       }
 
@@ -668,17 +711,17 @@ async function handleStop(options) {
             execSync(`${containerCmd} rm ${id}`, { stdio: 'inherit' });
           }
         } catch (error) {
-          console.error(`   Failed to stop ${name}: ${error.message}`);
+          console.error(`   Failed to stop ${name}: ${String(error)}`);
         }
       }
 
       console.log('\n   Done');
     } catch (error) {
-      console.error(`\n   Failed to list containers: ${error.message}`);
+      console.error(`\n   Failed to list containers: ${String(error)}`);
       process.exit(1);
     }
   } else {
-    const name = options.name || 'pdf-tei-editor-latest';
+    const name = options.name || `${APP_NAME}-latest`;
     console.log(`   Stopping container: ${name}`);
 
     try {
@@ -691,11 +734,11 @@ async function handleStop(options) {
         console.error(`\n   Container '${name}' not found`);
         console.log('\nRunning containers:');
         try {
-          execSync(`${containerCmd} ps --filter "name=pdf-tei-editor" --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"`, {
+          execSync(`${containerCmd} ps --filter "name=${APP_NAME}" --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}"`, {
             stdio: 'inherit'
           });
         } catch {
-          console.log('   No pdf-tei-editor containers running');
+          console.log(`   No ${APP_NAME} containers running`);
         }
         process.exit(1);
       }
@@ -713,11 +756,11 @@ async function handleStop(options) {
 
         console.log('\n   Done');
       } catch (error) {
-        console.error(`\n   Failed to stop container: ${error.message}`);
+        console.error(`\n   Failed to stop container: ${String(error)}`);
         process.exit(1);
       }
     } catch (error) {
-      console.error(`\n   Error: ${error.message}`);
+      console.error(`\n   Error: ${String(error)}`);
       process.exit(1);
     }
   }
@@ -729,7 +772,7 @@ async function handleStop(options) {
 
 /**
  * Handle restart command
- * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, noCache?: boolean}} options
+ * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, noCache?: boolean, env?: string[]}} options
  */
 async function handleRestart(options) {
   console.log('PDF TEI Editor - Container Restart');
@@ -738,7 +781,7 @@ async function handleRestart(options) {
 
   detectContainerTool();
 
-  const name = options.name || 'pdf-tei-editor-latest';
+  const name = options.name || `${APP_NAME}-latest`;
 
   // Rebuild image if requested
   if (options.rebuild) {
@@ -770,7 +813,7 @@ async function handleRestart(options) {
           execSync(`${containerCmd} rm ${name}`, { stdio: 'inherit' });
           console.log('   Removed successfully');
         } catch (error) {
-          console.error(`   Failed to remove: ${error.message}`);
+          console.error(`   Failed to remove: ${String(error)}`);
           process.exit(1);
         }
 
@@ -788,7 +831,7 @@ async function handleRestart(options) {
           execSync(`${containerCmd} stop ${name}`, { stdio: 'inherit' });
           console.log('   Stopped successfully');
         } catch (error) {
-          console.error(`   Failed to stop: ${error.message}`);
+          console.error(`   Failed to stop: ${String(error)}`);
           process.exit(1);
         }
 
@@ -801,7 +844,7 @@ async function handleRestart(options) {
           console.log(`\nTo view logs:`);
           console.log(`   ${containerCmd} logs -f ${name}`);
         } catch (error) {
-          console.error(`   Failed to start: ${error.message}`);
+          console.error(`   Failed to start: ${String(error)}`);
           process.exit(1);
         }
       }
@@ -812,8 +855,455 @@ async function handleRestart(options) {
       await handleStart(options);
     }
   } catch (error) {
-    console.error(`\n   Error: ${error.message}`);
+    console.error(`\n   Error: ${String(error)}`);
     process.exit(1);
+  }
+}
+
+// ============================================================================
+// Deploy Command
+// ============================================================================
+
+/**
+ * Check if a command is available
+ * @param {string} command
+ */
+function isCommandAvailable(command) {
+  try {
+    execSync(`${command} --version`, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check required dependencies for deployment features
+ * @param {{nginx: boolean, ssl: boolean}} features
+ */
+function checkDeployDependencies(features) {
+  const missing = [];
+
+  if (features.nginx && !isCommandAvailable('nginx')) {
+    missing.push('nginx (required for reverse proxy setup)');
+  }
+
+  if (features.ssl && !isCommandAvailable('certbot')) {
+    missing.push('certbot (required for SSL certificate setup)');
+  }
+
+  if (missing.length > 0) {
+    console.log('[ERROR] Missing required dependencies:');
+    missing.forEach(dep => console.log(`  - ${dep}`));
+    console.log();
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Setup nginx configuration for the deployment
+ * @param {string} fqdn
+ * @param {number} port
+ */
+async function setupNginx(fqdn, port) {
+  console.log('[INFO] Setting up nginx configuration...');
+
+  const configFile = `/etc/nginx/sites-available/${APP_NAME}-${fqdn}`;
+  const nginxConfig = `# PDF TEI Editor configuration for ${fqdn}
+server {
+    server_name ${fqdn};
+
+    location / {
+        proxy_pass http://127.0.0.1:${port};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_redirect off;
+    }
+
+    # Special handling for Server-Sent Events
+    location /sse/ {
+        proxy_pass http://127.0.0.1:${port};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300;
+        proxy_connect_timeout 75;
+    }
+
+    listen 80;
+}
+`;
+
+  try {
+    fs.writeFileSync(configFile, nginxConfig);
+    console.log(`[INFO] Created nginx config: ${configFile}`);
+
+    // Enable the site
+    const enabledLink = `/etc/nginx/sites-enabled/${APP_NAME}-${fqdn}`;
+    if (fs.existsSync(enabledLink)) {
+      fs.unlinkSync(enabledLink);
+    }
+    fs.symlinkSync(configFile, enabledLink);
+    console.log('[INFO] Enabled site');
+
+    // Test and reload nginx
+    console.log('[INFO] Testing nginx configuration...');
+    execSync('nginx -t', { stdio: 'inherit' });
+
+    console.log('[INFO] Reloading nginx...');
+    try {
+      execSync('systemctl reload nginx', { stdio: 'inherit' });
+    } catch {
+      execSync('systemctl restart nginx', { stdio: 'inherit' });
+    }
+
+    console.log('[SUCCESS] Nginx configured successfully');
+    return true;
+  } catch (err) {
+    console.log('[ERROR] Failed to setup nginx');
+    console.log('[ERROR]', err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
+
+/**
+ * Check if domain resolves via DNS
+ * @param {string} fqdn
+ */
+async function checkDNSResolution(fqdn) {
+  console.log(`[INFO] Checking DNS resolution for ${fqdn}...`);
+
+  try {
+    // Try to resolve the domain using nslookup or dig
+    let output;
+    try {
+      output = execSync(`nslookup ${fqdn}`, { encoding: 'utf8', stdio: 'pipe' });
+    } catch {
+      // Try dig if nslookup fails
+      try {
+        output = execSync(`dig +short ${fqdn}`, { encoding: 'utf8', stdio: 'pipe' });
+      } catch {
+        console.log('[ERROR] Neither nslookup nor dig command found');
+        console.log('[WARNING] Cannot verify DNS resolution - proceeding anyway');
+        return true;
+      }
+    }
+
+    // Check if we got any IP address in the output
+    const hasIP = /\d+\.\d+\.\d+\.\d+/.test(output);
+
+    if (hasIP) {
+      console.log(`[SUCCESS] Domain ${fqdn} resolves successfully`);
+      return true;
+    } else {
+      console.log('[ERROR] Domain does not resolve to any IP address');
+      console.log('[ERROR] DNS lookup output:');
+      console.log(output);
+      console.log();
+      console.log('[ERROR] Please configure your DNS settings first:');
+      console.log(`[ERROR]   1. Add an A record for ${fqdn} pointing to this server's IP address`);
+      console.log('[ERROR]   2. Wait for DNS propagation (can take up to 48 hours)');
+      console.log('[ERROR]   3. Verify with: nslookup ' + fqdn);
+      console.log();
+      console.log('[ERROR] Let\'s Encrypt requires the domain to be publicly resolvable');
+      return false;
+    }
+  } catch (err) {
+    console.log('[ERROR] Failed to check DNS resolution');
+    console.log('[ERROR]', err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
+
+/**
+ * Setup SSL certificate with certbot
+ * @param {string} fqdn
+ * @param {string} email
+ */
+async function setupSSL(fqdn, email) {
+  console.log('[INFO] Setting up SSL certificate with Let\'s Encrypt...');
+
+  // Check if domain resolves before attempting SSL
+  if (!(await checkDNSResolution(fqdn))) {
+    console.log('[ERROR] SSL setup aborted due to DNS resolution failure');
+    return false;
+  }
+
+  try {
+    await executeCommand('certbot', [
+      '--nginx',
+      '-d', fqdn,
+      '--non-interactive',
+      '--agree-tos',
+      '--email', email
+    ]);
+
+    console.log('[SUCCESS] SSL certificate configured successfully');
+    return true;
+  } catch (err) {
+    console.log('[ERROR] Failed to setup SSL certificate');
+    console.log('[ERROR]', err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
+
+/**
+ * Handle deploy command
+ * @param {{
+ *   fqdn: string,
+ *   name?: string,
+ *   tag?: string,
+ *   port?: number,
+ *   type?: string,
+ *   dataDir?: string,
+ *   noNginx?: boolean,
+ *   noSsl?: boolean,
+ *   email?: string,
+ *   rebuild?: boolean,
+ *   noCache?: boolean,
+ *   env?: string[]
+ * }} options
+ */
+async function handleDeploy(options) {
+  console.log('PDF TEI Editor - Container Deploy');
+  console.log('==================================');
+  console.log();
+
+  // Check platform - deploy only works on Linux
+  if (process.platform === 'win32') {
+    console.log('[ERROR] The deploy command is not supported on Windows');
+    console.log('[ERROR] Deploy requires Linux-specific tools: nginx, certbot, systemctl');
+    console.log();
+    console.log('[INFO] For Windows deployment, use the basic start command:');
+    console.log('[INFO]   node bin/container.js start --tag <tag> --port <port>');
+    console.log();
+    console.log('[INFO] Or deploy on a Linux server using this command');
+    process.exit(1);
+  }
+
+  // Validate FQDN
+  if (!options.fqdn) {
+    console.log('[ERROR] FQDN is required for deployment');
+    console.log('[INFO] Usage: node bin/container.js deploy --fqdn <FQDN>');
+    process.exit(1);
+  }
+
+  const useNginx = !options.noNginx;
+  const useSSL = !options.noSsl;
+
+  // Check for root access FIRST if nginx/ssl needed
+  if ((useNginx || useSSL) && process.getuid && process.getuid() !== 0) {
+    console.log('[ERROR] This command needs to be run with sudo for nginx/SSL configuration');
+    console.log('[INFO] Usage: sudo node bin/container.js deploy --fqdn <FQDN>');
+    console.log('[INFO] To skip nginx/SSL, use: node bin/container.js deploy --fqdn <FQDN> --no-nginx --no-ssl');
+    process.exit(1);
+  }
+
+  // Check dependencies
+  if (!checkDeployDependencies({ nginx: useNginx, ssl: useSSL })) {
+    process.exit(1);
+  }
+
+  detectContainerTool();
+
+  const tag = options.tag || 'latest';
+  const port = options.port || 8001;
+  const deploymentType = options.type || 'production';
+  const email = options.email || `admin@${options.fqdn}`;
+  const containerName = `${APP_NAME}-${options.fqdn.replace(/\./g, '-')}`;
+
+  // Validate deployment type
+  if (deploymentType !== 'production' && deploymentType !== 'demo') {
+    console.log('[ERROR] Invalid deployment type. Must be "production" or "demo"');
+    process.exit(1);
+  }
+
+  // Warn about demo deployment with external directories
+  let dataDir = options.dataDir;
+
+  if (deploymentType === 'demo') {
+    if (dataDir) {
+      console.log('[WARNING] Demo deployment: ignoring external data directory (data will not persist)');
+      dataDir = undefined;
+    }
+  }
+
+  console.log('[INFO] Configuration:');
+  console.log(`[INFO]   FQDN: ${options.fqdn}`);
+  console.log(`[INFO]   Container: ${containerName}`);
+  console.log(`[INFO]   Image Tag: ${tag}`);
+  console.log(`[INFO]   Port: ${port}`);
+  console.log(`[INFO]   Type: ${deploymentType}`);
+  console.log(`[INFO]   Nginx: ${useNginx}`);
+  console.log(`[INFO]   SSL: ${useSSL}`);
+
+  if (deploymentType === 'production') {
+    console.log(`[INFO]   Data root: ${dataDir || '(container internal)'}`);
+  }
+
+  console.log();
+  console.log('[INFO] See .env.production for available environment variables');
+  console.log('[INFO] Key variables: GEMINI_API_KEY, GROBID_SERVER_URL, KISSKI_API_KEY, LOG_LEVEL');
+  console.log();
+
+  const confirmed = await askForConfirmation('Continue with deployment? (y/N): ');
+  if (!confirmed) {
+    console.log('[INFO] Deployment cancelled by user');
+    process.exit(0);
+  }
+
+  console.log();
+  console.log('[INFO] Starting deployment process...');
+  console.log();
+
+  // Rebuild if requested
+  if (options.rebuild) {
+    console.log('[INFO] Rebuilding image...');
+    if (!(await buildImage(tag, options.noCache || false))) {
+      process.exit(1);
+    }
+    console.log();
+  }
+
+  // Check for image
+  const imageName = `${APP_NAME}:${tag}`;
+  try {
+    if (!containerCmd) {
+      throw new Error('Container command not available');
+    }
+    execSync(`${containerCmd} image inspect ${imageName}`, { stdio: 'ignore' });
+    console.log(`[INFO] Using image: ${imageName}`);
+  } catch {
+    console.log(`[ERROR] Image ${imageName} not found. Build it first or use --rebuild`);
+    process.exit(1);
+  }
+
+  // Stop existing container
+  try {
+    if (!containerCmd) {
+      throw new Error('Container command not available');
+    }
+    const existingContainer = execSync(
+      `${containerCmd} ps -a --filter "name=^${containerName}$" --format "{{.ID}}"`,
+      { encoding: 'utf8', stdio: 'pipe' }
+    ).trim();
+
+    if (existingContainer) {
+      console.log(`[INFO] Stopping existing container: ${containerName}`);
+      execSync(`${containerCmd} stop ${containerName}`, { stdio: 'inherit' });
+      execSync(`${containerCmd} rm ${containerName}`, { stdio: 'inherit' });
+    }
+  } catch {
+    // No existing container
+  }
+
+  // Build container run command
+  const runArgs = [
+    'run', '-d',
+    '--name', containerName,
+    '--restart', 'unless-stopped',
+    '-p', `${port}:8000`,
+    '-e', 'PORT=8000'
+  ];
+
+  // Add DATA_ROOT environment variable if dataDir is specified
+  if (dataDir) {
+    runArgs.push('-e', `DATA_ROOT=/app/data`);
+  }
+
+  // Process --env parameters
+  processEnvParameters(runArgs, options.env);
+
+  // Add volume mount for production
+  if (deploymentType === 'production') {
+    if (dataDir) {
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      runArgs.push('-v', `${dataDir}:/app/data`);
+      console.log(`[INFO] Mounted data root: ${dataDir} -> /app/data (contains files/ and db/ subdirectories)`);
+    }
+  } else {
+    console.log('[INFO] Demo deployment: using container-internal storage (non-persistent)');
+  }
+
+  runArgs.push(imageName);
+
+  // Start container
+  console.log();
+  console.log('[INFO] Starting container...');
+  try {
+    if (!containerCmd) {
+      throw new Error('Container command not available');
+    }
+    await executeCommand(containerCmd, runArgs);
+    console.log('[SUCCESS] Container started successfully');
+  } catch (err) {
+    console.log('[ERROR] Failed to start container');
+    console.log('[ERROR]', err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+
+  // Wait for container to be ready
+  console.log();
+  console.log('[INFO] Waiting for container to be ready...');
+  let ready = false;
+  for (let attempt = 1; attempt <= 30; attempt++) {
+    try {
+      execSync(`curl -s http://localhost:${port}`, { stdio: 'ignore' });
+      console.log('[SUCCESS] Container is ready');
+      ready = true;
+      break;
+    } catch {
+      if (attempt % 5 === 0) {
+        console.log(`[INFO] Attempt ${attempt}/30 - waiting for container...`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
+  if (!ready) {
+    console.log('[WARNING] Container may not be fully ready yet, but continuing...');
+  }
+
+  // Setup nginx
+  if (useNginx) {
+    console.log();
+    if (!(await setupNginx(options.fqdn, port))) {
+      console.log('[WARNING] Nginx setup failed, but container is running');
+    }
+  }
+
+  // Setup SSL
+  if (useSSL) {
+    console.log();
+    if (!(await setupSSL(options.fqdn, email))) {
+      console.log('[WARNING] SSL setup failed, but container is running');
+    }
+  }
+
+  // Final status
+  console.log();
+  console.log('[SUCCESS] Deployment completed successfully!');
+  console.log();
+
+  const urlScheme = useSSL ? 'https' : 'http';
+  console.log(`[INFO] 📍 Application URL: ${urlScheme}://${options.fqdn}`);
+  console.log(`[INFO] 🐳 Container: ${containerName}`);
+  console.log(`[INFO] 📊 Monitor logs: ${containerCmd} logs -f ${containerName}`);
+  console.log(`[INFO] 🛑 Stop container: ${containerCmd} stop ${containerName}`);
+
+  if (deploymentType === 'demo') {
+    console.log('[INFO] 🔄 Note: Demo deployment - data will not persist across container restarts');
   }
 }
 
@@ -850,8 +1340,9 @@ program
   .command('start')
   .description('Start a container')
   .option('--tag <tag>', 'Image tag to use (default: latest)')
-  .option('--name <name>', 'Container name (default: pdf-tei-editor-<tag>)')
+  .option('--name <name>', `Container name (default: ${APP_NAME}-<tag>)`)
   .option('--port <port>', 'Host port to bind (default: 8000)', parseInt)
+  .option('--env <var>', 'Environment variable (FOO or FOO=bar, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
   .option('--rebuild', 'Rebuild image before starting')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
   .option('--no-detach', 'Run in foreground')
@@ -861,8 +1352,8 @@ program
 program
   .command('stop')
   .description('Stop a running container')
-  .option('--name <name>', 'Container name (default: pdf-tei-editor-latest)')
-  .option('--all', 'Stop all pdf-tei-editor containers')
+  .option('--name <name>', `Container name (default: ${APP_NAME}-latest)`)
+  .option('--all', `Stop all ${APP_NAME} containers`)
   .option('--remove', 'Remove container after stopping')
   .action(handleStop);
 
@@ -870,12 +1361,84 @@ program
 program
   .command('restart')
   .description('Restart a container (stop then start)')
-  .option('--name <name>', 'Container name (default: pdf-tei-editor-latest)')
+  .option('--name <name>', `Container name (default: ${APP_NAME}-latest)`)
   .option('--tag <tag>', 'Image tag (used if container doesn\'t exist)')
   .option('--port <port>', 'Host port (used if container doesn\'t exist)', parseInt)
+  .option('--env <var>', 'Environment variable (FOO or FOO=bar, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
   .option('--rebuild', 'Rebuild image before restarting')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
   .action(handleRestart);
+
+// Deploy command
+program
+  .command('deploy')
+  .description('Deploy container with nginx reverse proxy and SSL (requires sudo)')
+  .requiredOption('--fqdn <fqdn>', 'Fully qualified domain name')
+  .option('--name <name>', 'Container name (default: pdf-tei-editor-latest)')
+  .option('--tag <tag>', 'Image tag to use (default: latest)')
+  .option('--port <port>', 'Host port to bind (default: 8001)', parseInt)
+  .option('--type <type>', 'Deployment type: production|demo (default: production)')
+  .option('--data-dir <dir>', 'External data root directory (contains files/ and db/ subdirectories, production only)')
+  .option('--env <var>', 'Environment variable (FOO or FOO=bar, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
+  .option('--no-nginx', 'Skip nginx configuration')
+  .option('--no-ssl', 'Skip SSL certificate setup')
+  .option('--email <email>', 'Email for SSL certificate (default: admin@<fqdn>)')
+  .option('--rebuild', 'Rebuild image before deploying')
+  .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
+  .addHelpText('after', `
+Examples:
+  # Production deployment with external data directory
+  sudo node bin/container.js deploy \\
+    --fqdn editor.company.com \\
+    --data-dir /opt/${APP_NAME}/data
+
+  # Demo deployment (no external volumes, no persistence)
+  sudo node bin/container.js deploy \\
+    --fqdn demo.example.com \\
+    --type demo
+
+  # Deploy without SSL (HTTP only)
+  sudo node bin/container.js deploy \\
+    --fqdn local.test \\
+    --no-ssl
+
+  # Deploy without nginx/SSL (just container)
+  node bin/container.js deploy \\
+    --fqdn test.local \\
+    --no-nginx --no-ssl
+
+  # With environment variables (transfer from host)
+  GEMINI_API_KEY=your-key LOG_LEVEL=WARNING sudo node bin/container.js deploy \\
+    --fqdn app.example.com \\
+    --env GEMINI_API_KEY \\
+    --env LOG_LEVEL
+
+  # With environment variables (specify values directly)
+  sudo node bin/container.js deploy \\
+    --fqdn app.example.com \\
+    --env GEMINI_API_KEY=your-key \\
+    --env LOG_LEVEL=WARNING
+
+Environment Variables:
+  See .env.production for all available environment variables.
+  Use --env to pass variables to the container:
+    --env FOO         Transfer FOO from host environment
+    --env FOO=bar     Set FOO to "bar" in container
+
+  Key variables include:
+    - GEMINI_API_KEY, GROBID_SERVER_URL, KISSKI_API_KEY (AI/ML features)
+    - LOG_LEVEL, LOG_CATEGORIES (logging)
+    - WEBDAV_ENABLED, WEBDAV_BASE_URL (WebDAV integration)
+    - DOCS_FROM_GITHUB (documentation source)
+
+Notes:
+  - Requires sudo for nginx and SSL setup
+  - Use --no-nginx --no-ssl to run without sudo
+  - Demo deployments ignore external directories
+  - Nginx and certbot must be installed for full deployment
+  - data-dir must contain files/ and db/ subdirectories (created automatically)
+`)
+  .action(handleDeploy);
 
 // Parse arguments
 program.parse();

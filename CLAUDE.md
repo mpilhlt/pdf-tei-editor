@@ -73,6 +73,7 @@ npm run container:push -- --tag v1.0.0 --no-build
 # Start container
 npm run container:start
 npm run container:start -- --tag v1.0.0 --port 8080
+npm run container:start -- --env GEMINI_API_KEY --env LOG_LEVEL=WARNING
 npm run container:start -- --rebuild              # Rebuild before starting
 npm run container:start -- --rebuild --no-cache   # Rebuild without cache
 
@@ -84,7 +85,16 @@ npm run container:stop -- --all
 # Restart container
 npm run container:restart
 npm run container:restart -- --name pdf-tei-editor-v1.0.0
+npm run container:restart -- --env GEMINI_API_KEY
 npm run container:restart -- --rebuild             # Rebuild before restarting
+
+# Deploy container with nginx/SSL (requires sudo)
+sudo npm run container:deploy -- --fqdn editor.example.com
+sudo npm run container:deploy -- --fqdn editor.example.com --data-dir /opt/pdf-tei-editor/data
+sudo npm run container:deploy -- --fqdn demo.example.com --type demo
+npm run container:deploy -- --fqdn test.local --no-nginx --no-ssl  # No sudo needed
+GEMINI_API_KEY=key sudo npm run container:deploy -- --fqdn app.example.com --env GEMINI_API_KEY
+sudo npm run container:deploy -- --fqdn app.example.com --env GEMINI_API_KEY=key --env LOG_LEVEL=WARNING
 
 # Run tests in container (CI mode)
 npm run test:container                           # Run with cache
