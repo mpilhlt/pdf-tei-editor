@@ -199,7 +199,7 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
                 "last_annotator": last_annotator,
                 "last_change_date": last_change_date,
                 "last_change_date_raw": when_attr,  # Store raw ISO date for sorting
-                "file_id": file_metadata.id,
+                "stable_id": file_metadata.stable_id,
             }
 
         except Exception as e:
@@ -293,8 +293,11 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
         for version in versions:
             gold_icon = "✓" if version["is_gold"] else ""
 
+            # Create clickable link for document title
+            title_link = f'<a href="#" onclick="window.pluginSandbox.openDocument(\'{version["stable_id"]}\'); return false;" style="color: #0066cc; text-decoration: underline;">{self._escape_html(version["title"])}</a>'
+
             row_cells = [
-                f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{self._escape_html(version["title"])}</td>',
+                f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{title_link}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em;">{gold_icon}</td>',
             ]
 

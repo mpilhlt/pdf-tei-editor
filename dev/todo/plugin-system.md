@@ -569,6 +569,12 @@ async handlePluginSelection(event) {
 - Tests verify state parameter extraction and execution
 - Tests confirm backward compatibility
 
+## Remaining tasks
+
+- move plugin tests out of test/** into plugin folders
+- smart runner needs to discover plugin tests
+
+
 ## Future Enhancements (Out of Scope)
 
 - Plugin dependency resolution
