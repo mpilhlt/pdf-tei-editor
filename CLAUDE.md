@@ -144,6 +144,73 @@ The application state object is defined in `app/src/state.js` and contains:
 - **Add new utility functions** to `tei_utils.py` when you need TEI processing functionality that doesn't exist yet
 - This ensures consistent TEI handling across the codebase and prevents duplication
 
+### User Authentication and Access Control
+
+**Authentication Pattern for Custom Routes:**
+
+When implementing authenticated routes (e.g., plugin routes), use dependency injection:
+
+```python
+from fastapi import APIRouter, Depends, Header, Query
+from fastapi_app.lib.dependencies import (
+    get_auth_manager,
+    get_db,
+    get_session_manager,
+)
+
+@router.get("/endpoint")
+async def my_endpoint(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+):
+    from fastapi_app.config import get_settings
+
+    # Extract session ID (header takes precedence)
+    session_id_value = x_session_id or session_id
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Validate session
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    # Get user
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+```
+
+**Access Control Pattern for Documents/Files:**
+
+Access control is **collection-based**, not direct user-document relationships. Use utility functions from `fastapi_app/lib/user_utils.py`:
+
+```python
+from fastapi_app.lib.user_utils import user_has_collection_access
+
+# Check if user has access to a document via its collections
+file = file_repo.get_file_by_stable_id(stable_id)
+user_has_access = False
+
+for collection_id in file.doc_collections or []:
+    if user_has_collection_access(user, collection_id, settings.db_dir):
+        user_has_access = True
+        break
+
+if not user_has_access:
+    raise HTTPException(status_code=403, detail="Access denied")
+```
+
+**Key Points:**
+- Users access documents through **collection membership**, not direct user-document links
+- Use `user_has_collection_access(user, collection_id, db_dir)` to check access to a specific collection
+- Use `get_user_collections(user, db_dir)` to get all collections a user can access (returns `None` if user has wildcard access)
+- Admin users and users with wildcard (`*`) in their groups have access to all collections
+- Import settings with `from fastapi_app.config import get_settings` (not `fastapi_app.lib.settings`)
+- See [fastapi_app/routers/files_save.py](fastapi_app/routers/files_save.py) for reference implementation
+
 ### Key Directories
 
 Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.

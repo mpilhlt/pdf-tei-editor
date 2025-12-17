@@ -329,7 +329,7 @@ class TestIAAAnalyzerPlugin(unittest.TestCase):
             }
         ]
 
-        html = self.plugin._generate_html_table(comparisons)
+        html = self.plugin._generate_html_table(comparisons, "test-session-id")
 
         # Check that HTML contains expected content
         self.assertIn("<table", html)
@@ -372,7 +372,7 @@ class TestIAAAnalyzerPlugin(unittest.TestCase):
             },
         ]
 
-        html = self.plugin._generate_html_table(comparisons)
+        html = self.plugin._generate_html_table(comparisons, "test-session-id")
 
         # Check color coding
         self.assertIn("#d4edda", html)  # Green
@@ -381,7 +381,7 @@ class TestIAAAnalyzerPlugin(unittest.TestCase):
 
     def test_generate_html_table_empty(self):
         """Test HTML table generation with empty comparisons."""
-        html = self.plugin._generate_html_table([])
+        html = self.plugin._generate_html_table([], "test-session-id")
         self.assertIn("No comparisons", html)
 
     def test_escape_html(self):

@@ -9,10 +9,10 @@ Provides endpoints for:
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from fastapi_app.lib.dependencies import get_current_user
+from fastapi_app.lib.dependencies import get_current_user, get_session_id_from_request
 from fastapi_app.lib.plugin_manager import PluginManager
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,8 @@ async def list_plugins(
 @router.post("/{plugin_id}/execute", response_model=ExecuteResponse)
 async def execute_plugin(
     plugin_id: str,
-    request: ExecuteRequest,
+    exec_request: ExecuteRequest,
+    request: Request,
     current_user: dict | None = Depends(get_current_user),
 ) -> ExecuteResponse:
     """
@@ -76,7 +77,8 @@ async def execute_plugin(
 
     Args:
         plugin_id: Plugin identifier
-        request: Execution request with endpoint and params
+        exec_request: Execution request with endpoint and params
+        request: FastAPI request object (for session_id extraction)
         current_user: Current authenticated user (optional)
 
     Returns:
@@ -94,11 +96,15 @@ async def execute_plugin(
     if not any(p["id"] == plugin_id for p in accessible_plugins):
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
 
+    # Extract session_id and add to params
+    session_id = get_session_id_from_request(request)
+    params_with_session = {**exec_request.params, "_session_id": session_id}
+
     try:
         result = await manager.execute_plugin(
             plugin_id=plugin_id,
-            endpoint=request.endpoint,
-            params=request.params,
+            endpoint=exec_request.endpoint,
+            params=params_with_session,
             user=current_user,
         )
 
