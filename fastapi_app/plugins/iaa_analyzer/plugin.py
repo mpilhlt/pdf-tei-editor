@@ -425,7 +425,7 @@ class IAAAnalyzerPlugin(Plugin):
 
             # Create link to standalone diff viewer
             diff_url = f'/api/plugins/iaa-analyzer/diff?stable_id1={v1["stable_id"]}&stable_id2={v2["stable_id"]}&session_id={session_id}'
-            view_diff_link = f'<a href="{diff_url}" target="_blank" rel="noopener" style="color: #0066cc; text-decoration: underline;">View Diff</a>'
+            view_diff_link = f'<a href="#" onclick="event.preventDefault(); window.pluginSandbox?.openControlledWindow(\'{diff_url}\'); return false;" style="color: #0066cc; text-decoration: underline;">View Diff</a>'
 
             row_cells = [
                 f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{v1_title_link}</td>',

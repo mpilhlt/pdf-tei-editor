@@ -239,12 +239,16 @@ def _escape_html(text: str) -> str:
     )
 
 
-def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str) -> str:
+def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str, stable_id1: str, stable_id2: str) -> str:
     """Generate standalone HTML page with side-by-side XML diff showing only differences."""
+    from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
 
     # Escape XML for embedding in JavaScript
     xml1_escaped = json.dumps(xml1)
     xml2_escaped = json.dumps(xml2)
+
+    # Get sandbox client script
+    sandbox_script = generate_sandbox_client_script()
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -252,6 +256,9 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str) -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>XML Diff: {_escape_html(title1)} vs {_escape_html(title2)}</title>
+
+    <!-- Sandbox client for parent window communication -->
+    <script>{sandbox_script}</script>
 
     <!-- Load diff library from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"></script>
@@ -342,6 +349,16 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str) -> str:
 
         .diff-line {{
             display: flex;
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }}
+
+        .diff-line:hover {{
+            background-color: rgba(0, 0, 0, 0.05) !important;
+        }}
+
+        .diff-line:active {{
+            background-color: rgba(0, 0, 0, 0.1) !important;
         }}
 
         .line-number {{
@@ -434,6 +451,8 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str) -> str:
         // XML content
         const xml1 = {xml1_escaped};
         const xml2 = {xml2_escaped};
+        const stableId1 = {json.dumps(stable_id1)};
+        const stableId2 = {json.dumps(stable_id2)};
 
         // Apply syntax highlighting to a line of XML
         function highlightXml(line) {{
@@ -460,6 +479,26 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str) -> str:
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }}
+
+        // Add click handler to diff line
+        function addClickHandler(lineDiv, stableId, lineNumber) {{
+            lineDiv.addEventListener('click', async () => {{
+                if (!window.sandbox) {{
+                    alert('Sandbox API not available - open this page via plugin');
+                    return;
+                }}
+
+                try {{
+                    await window.sandbox.openDocumentAtLine(stableId, lineNumber, 0);
+                }} catch (error) {{
+                    console.error('Failed to open document:', error);
+                    alert('Failed to open document: ' + error.message);
+                }}
+            }});
+
+            // Add title attribute for hint
+            lineDiv.title = 'Click to open document at line ' + lineNumber;
         }}
 
         // Compute and render only differences
@@ -559,6 +598,10 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str) -> str:
                     const lineDiv = document.createElement('div');
                     lineDiv.className = 'diff-line diff-' + item.type;
                     lineDiv.innerHTML = `<span class="line-number">${{item.number}}</span><span class="line-content">${{cropLine(item.content, true)}}</span>`;
+
+                    // Add click handler
+                    addClickHandler(lineDiv, stableId1, item.number);
+
                     leftPane.appendChild(lineDiv);
                 }});
                 container.appendChild(leftPane);
@@ -570,6 +613,10 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str) -> str:
                     const lineDiv = document.createElement('div');
                     lineDiv.className = 'diff-line diff-' + item.type;
                     lineDiv.innerHTML = `<span class="line-number">${{item.number}}</span><span class="line-content">${{cropLine(item.content, true)}}</span>`;
+
+                    // Add click handler
+                    addClickHandler(lineDiv, stableId2, item.number);
+
                     rightPane.appendChild(lineDiv);
                 }});
                 container.appendChild(rightPane);
@@ -719,6 +766,6 @@ async def show_diff(
         raise HTTPException(status_code=500, detail="Failed to process XML for diff")
 
     # Render HTML page with embedded XML
-    html = _generate_diff_html(title1, title2, text1_xml, text2_xml)
+    html = _generate_diff_html(title1, title2, text1_xml, text2_xml, stable_id1, stable_id2)
 
     return Response(content=html, media_type="text/html")
