@@ -2,7 +2,6 @@
 Custom routes for Inter-Annotator Agreement Analyzer plugin.
 """
 
-import copy
 import csv
 import json
 import logging
@@ -20,6 +19,12 @@ from fastapi_app.lib.dependencies import (
     get_session_manager,
 )
 from fastapi_app.lib.file_repository import FileRepository
+from fastapi_app.plugins.iaa_analyzer.diff_utils import (
+    escape_html,
+    find_element_line_offset,
+    preprocess_for_diff,
+    serialize_with_linebreaks,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -173,123 +178,6 @@ async def export_csv(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _preprocess_for_diff(
-    elem: etree._Element, ignore_tags: frozenset, ignore_attrs: frozenset
-) -> etree._Element:
-    """
-    Create a copy of element tree with ignored tags removed, ignored attributes stripped,
-    and text content whitespace normalized.
-
-    Args:
-        elem: Root element to preprocess
-        ignore_tags: Set of tag names to remove
-        ignore_attrs: Set of attribute names to remove
-
-    Returns:
-        Preprocessed copy of element tree
-    """
-    # Deep copy to avoid modifying original
-    elem_copy = copy.deepcopy(elem)
-
-    # Remove ignored tags
-    for tag_name in ignore_tags:
-        for ignored_elem in elem_copy.xpath(f'.//*[local-name()="{tag_name}"]'):
-            parent = ignored_elem.getparent()
-            if parent is not None:
-                parent.remove(ignored_elem)
-
-    # Strip ignored attributes and normalize text content
-    for el in elem_copy.iter():
-        if not isinstance(el.tag, str):
-            continue
-
-        # Normalize text content (collapse whitespace)
-        if el.text:
-            normalized = " ".join(el.text.split())
-            el.text = normalized if normalized else None
-
-        # Normalize tail content (text after element)
-        if el.tail:
-            normalized = " ".join(el.tail.split())
-            el.tail = normalized if normalized else None
-
-        # Strip ignored attributes
-        for attr_name in list(el.attrib.keys()):
-            # Handle namespaced attributes
-            if "}" in attr_name:
-                ns_uri, local = attr_name.split("}")
-                # Convert to prefix:local format for common namespaces
-                if "www.w3.org/XML" in ns_uri:
-                    full_name = f"xml:{local}"
-                else:
-                    full_name = local
-            else:
-                full_name = attr_name
-
-            if full_name in ignore_attrs:
-                del el.attrib[attr_name]
-
-    return elem_copy
-
-
-def _compute_line_mapping(original_xml: str, preprocessed_xml: str) -> dict[int, int]:
-    """
-    Compute mapping from preprocessed line numbers to original line numbers.
-
-    This uses a simple heuristic: match lines by their text content after
-    stripping whitespace. This works because preprocessing mainly removes
-    attributes and normalizes whitespace, not content.
-
-    Args:
-        original_xml: Original XML string
-        preprocessed_xml: Preprocessed XML string
-
-    Returns:
-        Dictionary mapping preprocessed line number (1-indexed) to original line number (1-indexed)
-    """
-    original_lines = original_xml.split('\n')
-    preprocessed_lines = preprocessed_xml.split('\n')
-
-    # Normalize lines for comparison (strip whitespace and common formatting)
-    def normalize_for_comparison(line: str) -> str:
-        return ''.join(line.split()).lower()
-
-    original_normalized = [normalize_for_comparison(line) for line in original_lines]
-
-    line_mapping = {}
-    original_idx = 0
-
-    for prep_idx, prep_line in enumerate(preprocessed_lines):
-        prep_normalized = normalize_for_comparison(prep_line)
-
-        # Search forward in original lines for a match
-        while original_idx < len(original_lines):
-            if original_normalized[original_idx] == prep_normalized:
-                line_mapping[prep_idx + 1] = original_idx + 1  # 1-indexed
-                original_idx += 1
-                break
-            original_idx += 1
-        else:
-            # No match found - use best guess (current position)
-            if original_idx < len(original_lines):
-                line_mapping[prep_idx + 1] = original_idx + 1
-
-    return line_mapping
-
-
-def _escape_html(text: str) -> str:
-    """Escape HTML special characters."""
-    if not text:
-        return ""
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&#x27;")
-    )
-
-
 def _generate_diff_html(
     title1: str,
     title2: str,
@@ -341,7 +229,7 @@ def _generate_diff_html(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XML Diff: {_escape_html(title1)} vs {_escape_html(title2)}</title>
+    <title>XML Diff: {escape_html(title1)} vs {escape_html(title2)}</title>
 
     <!-- Sandbox client for parent window communication -->
     <script>{sandbox_script}</script>
@@ -363,8 +251,8 @@ def _generate_diff_html(
     <div class="header">
         <h1>TEI XML Comparison - Differences Only</h1>
         <div class="titles">
-            <span>{_escape_html(title1)}</span>
-            <span>{_escape_html(title2)}</span>
+            <span>{escape_html(title1)}</span>
+            <span>{escape_html(title2)}</span>
         </div>
         <div class="controls">
             <span class="toggle-label">Show all differences</span>
@@ -520,26 +408,10 @@ async def show_diff(
             )
 
         # Find line offset of content element in full document
-        def find_element_line_offset(full_xml: str, elem: etree._Element) -> int:
-            """
-            Find the line number where the element starts in the full document (1-indexed).
-            Uses sourceline if available, otherwise searches for the tag.
-            """
-            if hasattr(elem, 'sourceline') and elem.sourceline:
-                return elem.sourceline
-
-            # Fallback: search for opening tag in full XML
-            tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
-            lines = full_xml.split('\n')
-            for i, line in enumerate(lines):
-                if f'<{tag_name}' in line or f'<tei:{tag_name}' in line:
-                    return i + 1
-            return 1  # Fallback to line 1 if not found
-
         content1_line_offset = find_element_line_offset(xml1, content1_elem)
         content2_line_offset = find_element_line_offset(xml2, content2_elem)
 
-        # Serialize original content (for line numbers and navigation)
+        # Serialize original content (for "all differences" mode)
         content1_xml_original = etree.tostring(
             content1_elem, encoding="unicode", pretty_print=True
         )
@@ -548,24 +420,22 @@ async def show_diff(
         )
 
         # Preprocess: remove ignored elements and attributes
-        content1_preprocessed = _preprocess_for_diff(
-            content1_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES
+        # Inject line markers for semantic mode (to preserve line numbers for click handlers)
+        content1_preprocessed = preprocess_for_diff(
+            content1_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES, inject_line_markers=True
         )
-        content2_preprocessed = _preprocess_for_diff(
-            content2_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES
-        )
-
-        # Serialize preprocessed content (for diff computation)
-        content1_xml_preprocessed = etree.tostring(
-            content1_preprocessed, encoding="unicode", pretty_print=True
-        )
-        content2_xml_preprocessed = etree.tostring(
-            content2_preprocessed, encoding="unicode", pretty_print=True
+        content2_preprocessed = preprocess_for_diff(
+            content2_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES, inject_line_markers=True
         )
 
-        # Compute line mappings from preprocessed to original (within extracted content)
-        line_mapping1 = _compute_line_mapping(content1_xml_original, content1_xml_preprocessed)
-        line_mapping2 = _compute_line_mapping(content2_xml_original, content2_xml_preprocessed)
+        # Serialize preprocessed content (for "semantic differences" mode)
+        # Use custom serialization that adds linebreaks without reordering
+        content1_xml_preprocessed = serialize_with_linebreaks(content1_preprocessed)
+        content2_xml_preprocessed = serialize_with_linebreaks(content2_preprocessed)
+
+        # Line mapping not needed - semantic mode uses data-line attributes
+        line_mapping1 = {}
+        line_mapping2 = {}
     except HTTPException:
         raise
     except Exception as e:

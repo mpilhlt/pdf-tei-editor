@@ -10,10 +10,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-// Import the diff viewer module
+// Import the diff viewer module and Diff library
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { diffLines } from 'diff';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,81 +26,13 @@ const diffViewerCode = readFileSync(diffViewerPath, 'utf-8');
 // Create exports object
 const exports = {};
 
+// Set up global Diff object with real diff library
+global.Diff = { diffLines };
+
 // Execute the code in a context with exports
 eval(diffViewerCode);
 
-const { computeDiffBlocks } = exports;
-
-// Mock the Diff library
-global.Diff = {
-    diffLines: (text1, text2) => {
-        const lines1 = text1.split('\n');
-        const lines2 = text2.split('\n');
-        const result = [];
-
-        let i = 0, j = 0;
-        while (i < lines1.length || j < lines2.length) {
-            if (i < lines1.length && j < lines2.length && lines1[i] === lines2[j]) {
-                // Common line
-                let commonLines = '';
-                while (i < lines1.length && j < lines2.length && lines1[i] === lines2[j]) {
-                    commonLines += lines1[i] + '\n';
-                    i++;
-                    j++;
-                }
-                result.push({ value: commonLines });
-            } else {
-                // Different lines
-                if (i < lines1.length) {
-                    let removedLines = '';
-                    const startI = i;
-                    while (i < lines1.length && (j >= lines2.length || lines1[i] !== lines2[j])) {
-                        removedLines += lines1[i] + '\n';
-                        i++;
-                        // Only advance if we find a match or run out
-                        if (j < lines2.length) {
-                            let found = false;
-                            for (let k = j; k < Math.min(j + 3, lines2.length); k++) {
-                                if (lines1[i - 1] === lines2[k]) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (found) break;
-                        }
-                    }
-                    if (removedLines) {
-                        result.push({ value: removedLines, removed: true });
-                    }
-                }
-
-                if (j < lines2.length) {
-                    let addedLines = '';
-                    while (j < lines2.length && (i >= lines1.length || lines1[i] !== lines2[j])) {
-                        addedLines += lines2[j] + '\n';
-                        j++;
-                        // Only advance if we find a match or run out
-                        if (i < lines1.length) {
-                            let found = false;
-                            for (let k = i; k < Math.min(i + 3, lines1.length); k++) {
-                                if (lines2[j - 1] === lines1[k]) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (found) break;
-                        }
-                    }
-                    if (addedLines) {
-                        result.push({ value: addedLines, added: true });
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-};
+const { computeDiffBlocks, regroupByOriginalLines } = exports;
 
 describe('IAA Diff Viewer', () => {
     describe('All Differences Mode (WORKING)', () => {
@@ -170,8 +103,11 @@ describe('IAA Diff Viewer', () => {
             });
 
             assert.ok(diffBlocks.length > 0);
-            assert.strictEqual(diffBlocks[0].left.length, 2);
-            assert.strictEqual(diffBlocks[0].right.length, 2);
+            // With real diff library, should have equal removed and added lines
+            const totalLeft = diffBlocks.reduce((sum, block) => sum + block.left.length, 0);
+            const totalRight = diffBlocks.reduce((sum, block) => sum + block.right.length, 0);
+            assert.strictEqual(totalLeft, 2, 'Should have 2 removed lines');
+            assert.strictEqual(totalRight, 2, 'Should have 2 added lines');
         });
 
         it('should respect line offsets', () => {
@@ -197,17 +133,7 @@ describe('IAA Diff Viewer', () => {
         });
     });
 
-    describe('Semantic Differences Mode (NOT WORKING)', () => {
-        /**
-         * EXPECTATION: Semantic mode should diff preprocessed XML (with ignored attributes removed)
-         * but display content and line numbers from the original XML.
-         *
-         * CURRENT BEHAVIOR: The line mapping doesn't work correctly, resulting in:
-         * 1. Mismatched content between left and right sides
-         * 2. Wrong line numbers
-         * 3. Empty or missing content
-         */
-
+    describe('Semantic Differences Mode', () => {
         it('should ignore configured attributes when diffing but show original content', () => {
             // Original XML with xml:id attributes
             const xml1Original = '<text>\n<p xml:id="p1">Hello</p>\n</text>';
@@ -233,14 +159,11 @@ describe('IAA Diff Viewer', () => {
                 useSemanticMode: true
             });
 
-            // EXPECTED: No differences because preprocessed XML is identical
+            // No differences because preprocessed XML is identical
             assert.strictEqual(diffBlocks.length, 0);
-
-            // ACTUAL: May show differences or incorrect content
-            // This test documents the expected behavior
         });
 
-        it('should show semantic differences with correct original line numbers', () => {
+        it('should show semantic differences with preprocessed content', () => {
             // Original XML with xml:id that differs
             const xml1Original = '<text>\n<p xml:id="p1">Different</p>\n</text>';
             const xml2Original = '<text>\n<p xml:id="p2">Text</p>\n</text>';
@@ -249,8 +172,8 @@ describe('IAA Diff Viewer', () => {
             const xml1Preprocessed = '<text>\n<p>Different</p>\n</text>';
             const xml2Preprocessed = '<text>\n<p>Text</p>\n</text>';
 
-            const lineMapping1 = { 1: 1, 2: 2, 3: 3 };
-            const lineMapping2 = { 1: 1, 2: 2, 3: 3 };
+            const lineMapping1 = {};
+            const lineMapping2 = {};
 
             const diffBlocks = computeDiffBlocks({
                 xml1Original,
@@ -264,19 +187,16 @@ describe('IAA Diff Viewer', () => {
                 useSemanticMode: true
             });
 
-            // EXPECTED: Should find 1 diff block
+            // Should find 1 diff block
             assert.strictEqual(diffBlocks.length, 1);
 
-            // EXPECTED: Content should be from ORIGINAL XML (with xml:id)
-            assert.strictEqual(diffBlocks[0].left[0].content, '<p xml:id="p1">Different</p>');
-            assert.strictEqual(diffBlocks[0].right[0].content, '<p xml:id="p2">Text</p>');
+            // Content should be from PREPROCESSED XML (without xml:id)
+            assert.strictEqual(diffBlocks[0].left[0].content, '<p>Different</p>');
+            assert.strictEqual(diffBlocks[0].right[0].content, '<p>Text</p>');
 
-            // EXPECTED: Line numbers should match original document
-            assert.strictEqual(diffBlocks[0].left[0].number, 2);
-            assert.strictEqual(diffBlocks[0].right[0].number, 2);
-
-            // ACTUAL: May show wrong content or line numbers
-            // This test documents the expected behavior
+            // Semantic mode doesn't show line numbers (empty string)
+            assert.strictEqual(diffBlocks[0].left[0].number, '');
+            assert.strictEqual(diffBlocks[0].right[0].number, '');
         });
 
         it('should handle line mapping when preprocessed XML has fewer lines', () => {
@@ -304,10 +224,190 @@ describe('IAA Diff Viewer', () => {
                 useSemanticMode: true
             });
 
-            // EXPECTED: No differences (preprocessed XML is identical)
+            // No differences (preprocessed XML is identical)
             assert.strictEqual(diffBlocks.length, 0);
+        });
 
-            // ACTUAL: May incorrectly show differences or wrong line mappings
+        it('should handle realistic TEI with multiple ignored attributes and tags', () => {
+            // Realistic TEI with multiple attributes that might be ignored
+            const xml1Original = `<text>
+<body xml:id="body1">
+<pb n="1" facs="page1.jpg"/>
+<div type="chapter">
+<head rendition="bold">Chapter 1</head>
+<p xml:id="p1">First paragraph with <persName type="person">John</persName>.</p>
+</div>
+</body>
+</text>`;
+
+            const xml2Original = `<text>
+<body xml:id="body2">
+<pb n="1" facs="page1.jpg"/>
+<div type="chapter">
+<head rendition="italic">Chapter 1</head>
+<p xml:id="p2">First paragraph with <persName type="person">John</persName>.</p>
+</div>
+</body>
+</text>`;
+
+            // Preprocessed: xml:id removed, rendition removed, pb removed
+            const xml1Preprocessed = `<text>
+<body>
+<div type="chapter">
+<head>Chapter 1</head>
+<p>First paragraph with <persName type="person">John</persName>.</p>
+</div>
+</body>
+</text>`;
+
+            const xml2Preprocessed = `<text>
+<body>
+<div type="chapter">
+<head>Chapter 1</head>
+<p>First paragraph with <persName type="person">John</persName>.</p>
+</div>
+</body>
+</text>`;
+
+            // Line mapping accounts for removed pb line
+            const lineMapping1 = { 1: 1, 2: 2, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9 };
+            const lineMapping2 = { 1: 1, 2: 2, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9 };
+
+            const diffBlocks = computeDiffBlocks({
+                xml1Original,
+                xml2Original,
+                xml1Preprocessed,
+                xml2Preprocessed,
+                lineMapping1,
+                lineMapping2,
+                lineOffset1: 10,
+                lineOffset2: 10,
+                useSemanticMode: true
+            });
+
+            // No semantic differences (preprocessed XML is identical despite different xml:id and rendition)
+            assert.strictEqual(diffBlocks.length, 0);
+        });
+
+        it('should detect semantic difference in nested elements', () => {
+            const xml1Original = `<text>
+<body xml:id="body1">
+<pb n="1"/>
+<p>Text with <persName type="person">Alice</persName> here.</p>
+</body>
+</text>`;
+
+            const xml2Original = `<text>
+<body xml:id="body2">
+<pb n="1"/>
+<p>Text with <persName type="location">Alice</persName> here.</p>
+</body>
+</text>`;
+
+            // Preprocessed: xml:id removed, pb removed, but type difference remains
+            const xml1Preprocessed = `<text>
+<body>
+<p>Text with <persName type="person">Alice</persName> here.</p>
+</body>
+</text>`;
+
+            const xml2Preprocessed = `<text>
+<body>
+<p>Text with <persName type="location">Alice</persName> here.</p>
+</body>
+</text>`;
+
+            const lineMapping1 = {};
+            const lineMapping2 = {};
+
+            const diffBlocks = computeDiffBlocks({
+                xml1Original,
+                xml2Original,
+                xml1Preprocessed,
+                xml2Preprocessed,
+                lineMapping1,
+                lineMapping2,
+                lineOffset1: 1,
+                lineOffset2: 1,
+                useSemanticMode: true
+            });
+
+            // Should find semantic difference (type attribute changed)
+            assert.strictEqual(diffBlocks.length, 1);
+
+            // Should show preprocessed content (no xml:id, no pb)
+            assert.ok(diffBlocks[0].left[0].content.includes('type="person"'));
+            assert.ok(diffBlocks[0].right[0].content.includes('type="location"'));
+            assert.ok(!diffBlocks[0].left[0].content.includes('xml:id'));
+            assert.ok(!diffBlocks[0].right[0].content.includes('xml:id'));
+        });
+
+        it('should extract line markers and enable click navigation in semantic mode', () => {
+            // Preprocessed XML with data-line attributes injected
+            const xml1Preprocessed = '<text data-line="1">\n<p data-line="2">Different</p>\n</text>';
+            const xml2Preprocessed = '<text data-line="1">\n<p data-line="2">Text</p>\n</text>';
+
+            const diffBlocks = computeDiffBlocks({
+                xml1Original: '',  // Not used in semantic mode
+                xml2Original: '',  // Not used in semantic mode
+                xml1Preprocessed,
+                xml2Preprocessed,
+                lineMapping1: {},
+                lineMapping2: {},
+                lineOffset1: 1,
+                lineOffset2: 1,
+                useSemanticMode: true
+            });
+
+            assert.strictEqual(diffBlocks.length, 1);
+
+            // Content should have data-line markers stripped for display
+            assert.ok(!diffBlocks[0].left[0].content.includes('data-line'));
+            assert.ok(!diffBlocks[0].right[0].content.includes('data-line'));
+
+            // Original line numbers should be extracted
+            assert.strictEqual(diffBlocks[0].left[0].originalLine, 2);
+            assert.strictEqual(diffBlocks[0].right[0].originalLine, 2);
+
+            // Display line numbers should be empty in semantic mode
+            assert.strictEqual(diffBlocks[0].left[0].number, '');
+            assert.strictEqual(diffBlocks[0].right[0].number, '');
+        });
+
+        it('should regroup diff blocks by original line numbers', () => {
+            // Simulate a diff block with mixed line numbers (as would happen with restructured XML)
+            const mixedBlock = {
+                left: [
+                    { number: '', content: '<note place="footnote">Text 1</note>', originalLine: 100, type: 'removed' },
+                    { number: '', content: '<note place="footnote">Text 2</note>', originalLine: 200, type: 'removed' },
+                    { number: '', content: '<note place="footnote">Text 3</note>', originalLine: 100, type: 'removed' },
+                ],
+                right: [
+                    { number: '', content: '<note place="headnote">Text 1</note>', originalLine: 100, type: 'added' },
+                    { number: '', content: '<note place="headnote">Text 2</note>', originalLine: 200, type: 'added' },
+                    { number: '', content: '<note place="headnote">Text 3</note>', originalLine: 100, type: 'added' },
+                ],
+                startLine1: '',
+                startLine2: '',
+                closed: true
+            };
+
+            const regrouped = regroupByOriginalLines([mixedBlock]);
+
+            // Should create 2 blocks: one for line 100, one for line 200
+            assert.strictEqual(regrouped.length, 2);
+
+            // First block should have items from line 100 (2 left, 2 right)
+            assert.strictEqual(regrouped[0].left.length, 2);
+            assert.strictEqual(regrouped[0].right.length, 2);
+            assert.strictEqual(regrouped[0].left[0].originalLine, 100);
+            assert.strictEqual(regrouped[0].right[0].originalLine, 100);
+
+            // Second block should have items from line 200 (1 left, 1 right)
+            assert.strictEqual(regrouped[1].left.length, 1);
+            assert.strictEqual(regrouped[1].right.length, 1);
+            assert.strictEqual(regrouped[1].left[0].originalLine, 200);
+            assert.strictEqual(regrouped[1].right[0].originalLine, 200);
         });
     });
 
@@ -363,8 +463,11 @@ describe('IAA Diff Viewer', () => {
             });
 
             assert.ok(diffBlocks.length > 0);
-            assert.strictEqual(diffBlocks[0].left.length, 0); // No removals
-            assert.ok(diffBlocks[0].right.length > 0); // Has additions
+            // With real diff library, should only have additions
+            const totalLeft = diffBlocks.reduce((sum, block) => sum + block.left.length, 0);
+            const totalRight = diffBlocks.reduce((sum, block) => sum + block.right.length, 0);
+            assert.strictEqual(totalLeft, 0, 'Should have no removals');
+            assert.ok(totalRight > 0, 'Should have additions');
         });
 
         it('should handle documents with only removals', () => {
