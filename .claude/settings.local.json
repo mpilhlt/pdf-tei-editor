@@ -66,7 +66,8 @@
       "Bash(podman logs:*)",
       "Bash(podman exec:*)",
       "Bash(npm run container:build:*)",
-      "Bash(podman run:*)"
+      "Bash(podman run:*)",
+      "Bash(mv:*)"
     ],
     "deny": [],
     "ask": []

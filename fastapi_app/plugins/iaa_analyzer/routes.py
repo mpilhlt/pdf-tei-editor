@@ -7,6 +7,7 @@ import csv
 import json
 import logging
 from io import StringIO
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
@@ -25,6 +26,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/plugins/iaa-analyzer", tags=["plugins"]
 )
+
+# Load diff viewer assets
+_PLUGIN_DIR = Path(__file__).parent
+_DIFF_VIEWER_JS = (_PLUGIN_DIR / "diff-viewer.js").read_text(encoding="utf-8")
+_DIFF_VIEWER_CSS = (_PLUGIN_DIR / "diff-viewer.css").read_text(encoding="utf-8")
 
 
 @router.get("/export")
@@ -226,6 +232,51 @@ def _preprocess_for_diff(
     return elem_copy
 
 
+def _compute_line_mapping(original_xml: str, preprocessed_xml: str) -> dict[int, int]:
+    """
+    Compute mapping from preprocessed line numbers to original line numbers.
+
+    This uses a simple heuristic: match lines by their text content after
+    stripping whitespace. This works because preprocessing mainly removes
+    attributes and normalizes whitespace, not content.
+
+    Args:
+        original_xml: Original XML string
+        preprocessed_xml: Preprocessed XML string
+
+    Returns:
+        Dictionary mapping preprocessed line number (1-indexed) to original line number (1-indexed)
+    """
+    original_lines = original_xml.split('\n')
+    preprocessed_lines = preprocessed_xml.split('\n')
+
+    # Normalize lines for comparison (strip whitespace and common formatting)
+    def normalize_for_comparison(line: str) -> str:
+        return ''.join(line.split()).lower()
+
+    original_normalized = [normalize_for_comparison(line) for line in original_lines]
+
+    line_mapping = {}
+    original_idx = 0
+
+    for prep_idx, prep_line in enumerate(preprocessed_lines):
+        prep_normalized = normalize_for_comparison(prep_line)
+
+        # Search forward in original lines for a match
+        while original_idx < len(original_lines):
+            if original_normalized[original_idx] == prep_normalized:
+                line_mapping[prep_idx + 1] = original_idx + 1  # 1-indexed
+                original_idx += 1
+                break
+            original_idx += 1
+        else:
+            # No match found - use best guess (current position)
+            if original_idx < len(original_lines):
+                line_mapping[prep_idx + 1] = original_idx + 1
+
+    return line_mapping
+
+
 def _escape_html(text: str) -> str:
     """Escape HTML special characters."""
     if not text:
@@ -239,13 +290,48 @@ def _escape_html(text: str) -> str:
     )
 
 
-def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str, stable_id1: str, stable_id2: str) -> str:
-    """Generate standalone HTML page with side-by-side XML diff showing only differences."""
+def _generate_diff_html(
+    title1: str,
+    title2: str,
+    xml1_original: str,
+    xml2_original: str,
+    xml1_preprocessed: str,
+    xml2_preprocessed: str,
+    line_mapping1: dict[int, int],
+    line_mapping2: dict[int, int],
+    line_offset1: int,
+    line_offset2: int,
+    stable_id1: str,
+    stable_id2: str,
+) -> str:
+    """Generate standalone HTML page with side-by-side XML diff showing only differences.
+
+    Args:
+        title1: Title of first document
+        title2: Title of second document
+        xml1_original: Original XML of first document (for display)
+        xml2_original: Original XML of second document (for display)
+        xml1_preprocessed: Preprocessed XML of first document (for diff computation)
+        xml2_preprocessed: Preprocessed XML of second document (for diff computation)
+        line_mapping1: Mapping from preprocessed line numbers to original line numbers (doc 1)
+        line_mapping2: Mapping from preprocessed line numbers to original line numbers (doc 2)
+        line_offset1: Line number offset of content element in full document 1
+        line_offset2: Line number offset of content element in full document 2
+        stable_id1: Stable ID of first document
+        stable_id2: Stable ID of second document
+
+    Returns:
+        HTML string with embedded diff viewer
+    """
     from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
 
     # Escape XML for embedding in JavaScript
-    xml1_escaped = json.dumps(xml1)
-    xml2_escaped = json.dumps(xml2)
+    xml1_original_escaped = json.dumps(xml1_original)
+    xml2_original_escaped = json.dumps(xml2_original)
+    xml1_preprocessed_escaped = json.dumps(xml1_preprocessed)
+    xml2_preprocessed_escaped = json.dumps(xml2_preprocessed)
+    line_mapping1_escaped = json.dumps(line_mapping1)
+    line_mapping2_escaped = json.dumps(line_mapping2)
 
     # Get sandbox client script
     sandbox_script = generate_sandbox_client_script()
@@ -268,171 +354,9 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str, stable_i
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markup.min.js"></script>
 
+    <!-- Diff viewer styles -->
     <style>
-        * {{
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }}
-
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
-            padding: 20px;
-        }}
-
-        .header {{
-            background: white;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-
-        .header h1 {{
-            font-size: 24px;
-            margin-bottom: 10px;
-            color: #333;
-        }}
-
-        .header .titles {{
-            display: flex;
-            justify-content: space-between;
-            color: #666;
-            font-size: 14px;
-        }}
-
-        .header .summary {{
-            margin-top: 10px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            font-size: 13px;
-            color: #495057;
-        }}
-
-        .diff-block {{
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            overflow: hidden;
-        }}
-
-        .diff-block-header {{
-            background: #f8f9fa;
-            padding: 8px 16px;
-            border-bottom: 1px solid #dee2e6;
-            font-size: 12px;
-            color: #6c757d;
-            font-weight: 600;
-        }}
-
-        .diff-container {{
-            display: flex;
-        }}
-
-        .diff-pane {{
-            flex: 1;
-            padding: 16px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            overflow-x: auto;
-        }}
-
-        .diff-pane:first-child {{
-            border-right: 2px solid #dee2e6;
-        }}
-
-        .diff-line {{
-            display: flex;
-            cursor: pointer;
-            transition: background-color 0.15s;
-        }}
-
-        .diff-line:hover {{
-            background-color: rgba(0, 0, 0, 0.05) !important;
-        }}
-
-        .diff-line:active {{
-            background-color: rgba(0, 0, 0, 0.1) !important;
-        }}
-
-        .line-number {{
-            color: #999;
-            text-align: right;
-            padding-right: 12px;
-            min-width: 50px;
-            user-select: none;
-            flex-shrink: 0;
-        }}
-
-        .line-content {{
-            flex: 1;
-        }}
-
-        /* Syntax highlighting overrides for Prism */
-        .line-content code[class*="language-"] {{
-            background: transparent;
-            padding: 0;
-            margin: 0;
-            font-size: inherit;
-            line-height: inherit;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }}
-
-        /* Diff highlighting - must override Prism colors */
-        .diff-added {{
-            background-color: #d4edda !important;
-        }}
-
-        .diff-removed {{
-            background-color: #f8d7da !important;
-        }}
-
-        .diff-modified {{
-            background-color: #fff3cd !important;
-        }}
-
-        /* Ensure Prism tokens are visible on colored backgrounds */
-        .diff-added .token,
-        .diff-removed .token {{
-            background: transparent !important;
-        }}
-
-        /* Inline diff highlighting */
-        .inline-added {{
-            background-color: #acf2bd;
-            padding: 2px 0;
-        }}
-
-        .inline-removed {{
-            background-color: #fdb8c0;
-            padding: 2px 0;
-        }}
-
-        /* Ellipsis marker for cropped content */
-        .ellipsis {{
-            color: #999;
-            font-style: italic;
-            background: #f0f0f0;
-            padding: 0 4px;
-            margin: 0 2px;
-            border-radius: 2px;
-            font-size: 11px;
-            user-select: none;
-        }}
-
-        .empty-message {{
-            text-align: center;
-            padding: 40px;
-            color: #6c757d;
-            font-style: italic;
-        }}
+{_DIFF_VIEWER_CSS}
     </style>
 </head>
 <body>
@@ -442,192 +366,38 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str, stable_i
             <span>{_escape_html(title1)}</span>
             <span>{_escape_html(title2)}</span>
         </div>
+        <div class="controls">
+            <span class="toggle-label">Show all differences</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="semanticToggle">
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Show semantic differences only</span>
+        </div>
         <div class="summary" id="summary"></div>
     </div>
 
     <div id="diffResults"></div>
 
+    <!-- Diff viewer logic -->
     <script>
-        // XML content
-        const xml1 = {xml1_escaped};
-        const xml2 = {xml2_escaped};
-        const stableId1 = {json.dumps(stable_id1)};
-        const stableId2 = {json.dumps(stable_id2)};
+{_DIFF_VIEWER_JS}
+    </script>
 
-        // Apply syntax highlighting to a line of XML
-        function highlightXml(line) {{
-            if (!line) return '';
-            // Use Prism to highlight XML (markup language)
-            return Prism.highlight(line, Prism.languages.markup, 'markup');
-        }}
-
-        // Crop identical content within a line, keeping context around differences
-        function cropLine(line, isChanged) {{
-            if (!isChanged || line.length < 80) {{
-                return highlightXml(line);
-            }}
-
-            // For changed lines, show start and end with ellipsis in middle if very long
-            const start = line.substring(0, 40);
-            const end = line.substring(line.length - 40);
-
-            return highlightXml(start) + '<span class="ellipsis">&lt;⋯&gt;</span>' + highlightXml(end);
-        }}
-
-        // HTML escape (not needed anymore since Prism handles it)
-        function escapeHtml(text) {{
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }}
-
-        // Add click handler to diff line
-        function addClickHandler(lineDiv, stableId, lineNumber) {{
-            lineDiv.addEventListener('click', async () => {{
-                if (!window.sandbox) {{
-                    alert('Sandbox API not available - open this page via plugin');
-                    return;
-                }}
-
-                try {{
-                    await window.sandbox.openDocumentAtLine(stableId, lineNumber, 0);
-                }} catch (error) {{
-                    console.error('Failed to open document:', error);
-                    alert('Failed to open document: ' + error.message);
-                }}
-            }});
-
-            // Add title attribute for hint
-            lineDiv.title = 'Click to open document at line ' + lineNumber;
-        }}
-
-        // Compute and render only differences
-        function computeAndRenderDiffs() {{
-            const lines1 = xml1.split('\\n');
-            const lines2 = xml2.split('\\n');
-
-            // Compute line-level diff
-            const diff = Diff.diffLines(xml1, xml2);
-
-            let diffBlocks = [];
-            let line1 = 1;
-            let line2 = 1;
-            let blockCount = 0;
-
-            diff.forEach(part => {{
-                const lines = part.value.split('\\n').filter((l, i, arr) => {{
-                    // Keep empty lines except the last one (from split)
-                    return i < arr.length - 1 || l !== '';
-                }});
-
-                if (part.added || part.removed) {{
-                    // Found a difference - create diff block
-                    if (!diffBlocks.length || diffBlocks[diffBlocks.length - 1].closed) {{
-                        diffBlocks.push({{
-                            left: [],
-                            right: [],
-                            startLine1: line1,
-                            startLine2: line2,
-                            closed: false
-                        }});
-                        blockCount++;
-                    }}
-
-                    const currentBlock = diffBlocks[diffBlocks.length - 1];
-
-                    if (part.removed) {{
-                        lines.forEach((line, i) => {{
-                            currentBlock.left.push({{
-                                number: line1 + i,
-                                content: line,
-                                type: 'removed'
-                            }});
-                        }});
-                        line1 += lines.length;
-                    }} else if (part.added) {{
-                        lines.forEach((line, i) => {{
-                            currentBlock.right.push({{
-                                number: line2 + i,
-                                content: line,
-                                type: 'added'
-                            }});
-                        }});
-                        line2 += lines.length;
-                    }}
-                }} else {{
-                    // Unchanged section - skip it, but advance line counters
-                    line1 += lines.length;
-                    line2 += lines.length;
-
-                    // Close current diff block if any
-                    if (diffBlocks.length && !diffBlocks[diffBlocks.length - 1].closed) {{
-                        diffBlocks[diffBlocks.length - 1].closed = true;
-                    }}
-                }}
-            }});
-
-            // Render summary
-            const summary = document.getElementById('summary');
-            if (diffBlocks.length === 0) {{
-                summary.textContent = 'No differences found.';
-                document.getElementById('diffResults').innerHTML =
-                    '<div class="empty-message">The documents are identical.</div>';
-                return;
-            }}
-
-            summary.textContent = `Found ${{diffBlocks.length}} difference block(s)`;
-
-            // Render diff blocks
-            const resultsContainer = document.getElementById('diffResults');
-            diffBlocks.forEach((block, idx) => {{
-                const blockDiv = document.createElement('div');
-                blockDiv.className = 'diff-block';
-
-                const header = document.createElement('div');
-                header.className = 'diff-block-header';
-                header.textContent = `Difference #${{idx + 1}} - Lines ${{block.startLine1}} ↔ ${{block.startLine2}}`;
-                blockDiv.appendChild(header);
-
-                const container = document.createElement('div');
-                container.className = 'diff-container';
-
-                // Left pane
-                const leftPane = document.createElement('div');
-                leftPane.className = 'diff-pane';
-                block.left.forEach(item => {{
-                    const lineDiv = document.createElement('div');
-                    lineDiv.className = 'diff-line diff-' + item.type;
-                    lineDiv.innerHTML = `<span class="line-number">${{item.number}}</span><span class="line-content">${{cropLine(item.content, true)}}</span>`;
-
-                    // Add click handler
-                    addClickHandler(lineDiv, stableId1, item.number);
-
-                    leftPane.appendChild(lineDiv);
-                }});
-                container.appendChild(leftPane);
-
-                // Right pane
-                const rightPane = document.createElement('div');
-                rightPane.className = 'diff-pane';
-                block.right.forEach(item => {{
-                    const lineDiv = document.createElement('div');
-                    lineDiv.className = 'diff-line diff-' + item.type;
-                    lineDiv.innerHTML = `<span class="line-number">${{item.number}}</span><span class="line-content">${{cropLine(item.content, true)}}</span>`;
-
-                    // Add click handler
-                    addClickHandler(lineDiv, stableId2, item.number);
-
-                    rightPane.appendChild(lineDiv);
-                }});
-                container.appendChild(rightPane);
-
-                blockDiv.appendChild(container);
-                resultsContainer.appendChild(blockDiv);
-            }});
-        }}
-
-        // Initialize
-        computeAndRenderDiffs();
+    <!-- Initialize diff viewer with data -->
+    <script>
+        initDiffViewer({{
+            xml1Original: {xml1_original_escaped},
+            xml2Original: {xml2_original_escaped},
+            xml1Preprocessed: {xml1_preprocessed_escaped},
+            xml2Preprocessed: {xml2_preprocessed_escaped},
+            lineMapping1: {line_mapping1_escaped},
+            lineMapping2: {line_mapping2_escaped},
+            lineOffset1: {line_offset1},
+            lineOffset2: {line_offset2},
+            stableId1: {json.dumps(stable_id1)},
+            stableId2: {json.dumps(stable_id2)}
+        }});
     </script>
 </body>
 </html>
@@ -638,6 +408,7 @@ def _generate_diff_html(title1: str, title2: str, xml1: str, xml2: str, stable_i
 async def show_diff(
     stable_id1: str = Query(..., description="First document stable ID"),
     stable_id2: str = Query(..., description="Second document stable ID"),
+    content_xpath: str = Query(".//tei:text", description="XPath to content element to compare"),
     session_id: str | None = Query(None, description="Session ID for authentication"),
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
     db=Depends(get_db),
@@ -650,6 +421,7 @@ async def show_diff(
     Args:
         stable_id1: First document stable ID
         stable_id2: Second document stable ID
+        content_xpath: XPath expression to select content element (default: ".//tei:text")
         session_id: Session ID for authentication (query param fallback)
         x_session_id: Session ID from header
         db: Database session
@@ -733,32 +505,67 @@ async def show_diff(
         title1 = "Document 1"
         title2 = "Document 2"
 
-    # Extract <text> element content for comparison
+    # Extract content element for comparison using XPath
     try:
         ns = {"tei": "http://www.tei-c.org/ns/1.0"}
-        text1_elem = root1.find(".//tei:text", ns)
-        text2_elem = root2.find(".//tei:text", ns)
 
-        if text1_elem is None or text2_elem is None:
+        # Use the provided XPath to find content elements
+        content1_elem = root1.find(content_xpath, ns)
+        content2_elem = root2.find(content_xpath, ns)
+
+        if content1_elem is None or content2_elem is None:
             raise HTTPException(
-                status_code=400, detail="Documents missing <text> element"
+                status_code=400,
+                detail=f"One or both documents missing element at XPath: {content_xpath}"
             )
 
-        # Preprocess: remove ignored elements and attributes
-        text1_preprocessed = _preprocess_for_diff(
-            text1_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES
+        # Find line offset of content element in full document
+        def find_element_line_offset(full_xml: str, elem: etree._Element) -> int:
+            """
+            Find the line number where the element starts in the full document (1-indexed).
+            Uses sourceline if available, otherwise searches for the tag.
+            """
+            if hasattr(elem, 'sourceline') and elem.sourceline:
+                return elem.sourceline
+
+            # Fallback: search for opening tag in full XML
+            tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+            lines = full_xml.split('\n')
+            for i, line in enumerate(lines):
+                if f'<{tag_name}' in line or f'<tei:{tag_name}' in line:
+                    return i + 1
+            return 1  # Fallback to line 1 if not found
+
+        content1_line_offset = find_element_line_offset(xml1, content1_elem)
+        content2_line_offset = find_element_line_offset(xml2, content2_elem)
+
+        # Serialize original content (for line numbers and navigation)
+        content1_xml_original = etree.tostring(
+            content1_elem, encoding="unicode", pretty_print=True
         )
-        text2_preprocessed = _preprocess_for_diff(
-            text2_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES
+        content2_xml_original = etree.tostring(
+            content2_elem, encoding="unicode", pretty_print=True
         )
 
-        # Serialize preprocessed content (pretty-printed)
-        text1_xml = etree.tostring(
-            text1_preprocessed, encoding="unicode", pretty_print=True
+        # Preprocess: remove ignored elements and attributes
+        content1_preprocessed = _preprocess_for_diff(
+            content1_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES
         )
-        text2_xml = etree.tostring(
-            text2_preprocessed, encoding="unicode", pretty_print=True
+        content2_preprocessed = _preprocess_for_diff(
+            content2_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES
         )
+
+        # Serialize preprocessed content (for diff computation)
+        content1_xml_preprocessed = etree.tostring(
+            content1_preprocessed, encoding="unicode", pretty_print=True
+        )
+        content2_xml_preprocessed = etree.tostring(
+            content2_preprocessed, encoding="unicode", pretty_print=True
+        )
+
+        # Compute line mappings from preprocessed to original (within extracted content)
+        line_mapping1 = _compute_line_mapping(content1_xml_original, content1_xml_preprocessed)
+        line_mapping2 = _compute_line_mapping(content2_xml_original, content2_xml_preprocessed)
     except HTTPException:
         raise
     except Exception as e:
@@ -766,6 +573,13 @@ async def show_diff(
         raise HTTPException(status_code=500, detail="Failed to process XML for diff")
 
     # Render HTML page with embedded XML
-    html = _generate_diff_html(title1, title2, text1_xml, text2_xml, stable_id1, stable_id2)
+    html = _generate_diff_html(
+        title1, title2,
+        content1_xml_original, content2_xml_original,
+        content1_xml_preprocessed, content2_xml_preprocessed,
+        line_mapping1, line_mapping2,
+        content1_line_offset, content2_line_offset,
+        stable_id1, stable_id2
+    )
 
     return Response(content=html, media_type="text/html")

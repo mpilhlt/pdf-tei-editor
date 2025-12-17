@@ -1,4 +1,8 @@
-"""Unit tests for Inter-Annotator Agreement Analyzer plugin."""
+"""
+Unit tests for Inter-Annotator Agreement Analyzer plugin.
+
+@testCovers fastapi_app/plugins/iaa_analyzer/plugin.py
+"""
 
 import unittest
 from unittest.mock import MagicMock, patch

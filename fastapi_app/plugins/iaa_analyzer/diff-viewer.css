@@ -1,0 +1,225 @@
+/**
+ * TEI XML Diff Viewer Styles
+ */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f5f5f5;
+    padding: 20px;
+}
+
+.header {
+    background: white;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.header h1 {
+    font-size: 24px;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.header .titles {
+    display: flex;
+    justify-content: space-between;
+    color: #666;
+    font-size: 14px;
+}
+
+.header .summary {
+    margin-top: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #495057;
+}
+
+.header .controls {
+    margin-top: 10px;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 24px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+    background-color: #2196F3;
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(26px);
+}
+
+.toggle-label {
+    font-size: 13px;
+    color: #495057;
+}
+
+.diff-block {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.diff-block-header {
+    background: #f8f9fa;
+    padding: 8px 16px;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 12px;
+    color: #6c757d;
+    font-weight: 600;
+}
+
+.diff-container {
+    display: flex;
+}
+
+.diff-pane {
+    flex: 1;
+    padding: 16px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-x: auto;
+}
+
+.diff-pane:first-child {
+    border-right: 2px solid #dee2e6;
+}
+
+.diff-line {
+    display: flex;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.diff-line:hover {
+    background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.diff-line:active {
+    background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.line-number {
+    color: #999;
+    text-align: right;
+    padding-right: 12px;
+    min-width: 50px;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.line-content {
+    flex: 1;
+}
+
+/* Syntax highlighting overrides for Prism */
+.line-content code[class*="language-"] {
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Diff highlighting - neutral colors to avoid value judgments */
+.diff-added {
+    background-color: #d1ecf1 !important;  /* Light blue */
+}
+
+.diff-removed {
+    background-color: #e2e3e5 !important;  /* Light gray */
+}
+
+.diff-modified {
+    background-color: #fff3cd !important;  /* Light yellow */
+}
+
+/* Ensure Prism tokens are visible on colored backgrounds */
+.diff-added .token,
+.diff-removed .token {
+    background: transparent !important;
+}
+
+/* Inline diff highlighting */
+.inline-added {
+    background-color: #9fcddc;  /* Darker blue */
+    padding: 2px 0;
+}
+
+.inline-removed {
+    background-color: #c6c8ca;  /* Darker gray */
+    padding: 2px 0;
+}
+
+/* Ellipsis marker for cropped content */
+.ellipsis {
+    color: #999;
+    font-style: italic;
+    background: #f0f0f0;
+    padding: 0 4px;
+    margin: 0 2px;
+    border-radius: 2px;
+    font-size: 11px;
+    user-select: none;
+}
+
+.empty-message {
+    text-align: center;
+    padding: 40px;
+    color: #6c757d;
+    font-style: italic;
+}
