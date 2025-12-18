@@ -113,15 +113,65 @@ async function validateDocument(documentId, options = {}) {
 
 See [Coding Standards](../code-assistant/coding-standards.md) for complete requirements.
 
+## Branch Workflow
+
+### Development Branches
+
+- **`devel`** - Main development branch. All development work happens here.
+- **`main`** - Stable release branch. Only receives merges from `devel` after releases.
+- **Feature branches** - Created from `devel`, merged back to `devel`.
+
+### Working with Branches
+
+1. **Create feature branch from `devel`**
+
+   ```bash
+   git checkout devel
+   git pull origin devel
+   git checkout -b feature/my-feature
+   ```
+
+2. **Make changes and commit**
+
+   ```bash
+   git add .
+   git commit -m "feat: add new feature"
+   ```
+
+3. **Keep branch updated with `devel`**
+
+   ```bash
+   git checkout devel
+   git pull origin devel
+   git checkout feature/my-feature
+   git merge devel
+   ```
+
+4. **Push and create PR targeting `devel`**
+
+   ```bash
+   git push origin feature/my-feature
+   # Create PR with base branch: devel
+   ```
+
+### Important Rules
+
+- **ALWAYS target `devel` for PRs**, never `main`
+- **NEVER commit directly to `main`**
+- `main` only receives merges from `devel` after releases
+- Feature branches must be up to date with `devel` before merging
+
 ## Pull Requests
 
 ### Creating a PR
 
-1. Ensure commits follow conventional format
-2. Update relevant documentation
-3. Add tests for new features
-4. Run full test suite: `npm run test:all`
-5. Write clear PR description explaining changes
+1. Create feature branch from `devel` (see Branch Workflow above)
+2. Ensure commits follow conventional format
+3. Update relevant documentation
+4. Add tests for new features
+5. Run full test suite: `npm run test:all`
+6. Push branch and create PR **targeting `devel`**
+7. Write clear PR description explaining changes
 
 ### PR Description Template
 

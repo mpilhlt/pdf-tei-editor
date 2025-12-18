@@ -7,8 +7,9 @@ Welcome to the PDF-TEI Editor developer documentation. This directory contains c
 New to the project? Start here:
 
 1. **[Installation](installation.md)** - Set up your development environment
-2. **[Architecture Overview](architecture.md)** - Understand the system design
-3. **[Testing](testing.md)** - Run and write tests
+2. **[Branch Workflow](#branch-workflow)** - Understand the `devel` → `main` workflow
+3. **[Architecture Overview](architecture.md)** - Understand the system design
+4. **[Testing](testing.md)** - Run and write tests
 
 ## Core Documentation
 
@@ -47,6 +48,7 @@ New to the project? Start here:
 | Document | What You'll Learn |
 |----------|-------------------|
 | [Installation](installation.md) | How to set up your development environment |
+| [Branch Workflow](contributing.md#branch-workflow) | How to work with `devel` and feature branches |
 | [Architecture](architecture.md) | How the system is structured and organized |
 | [Configuration](configuration.md) | How to configure the application |
 
@@ -74,15 +76,33 @@ New to the project? Start here:
 | [Validation](validation.md) | How XML validation and autocomplete work |
 | [Deployment](deployment.md) | How to deploy to production |
 
+## Branch Workflow
+
+The project uses a development → stable branch workflow:
+
+- **`devel`** - Main development branch. All development work happens here.
+- **`main`** - Stable release branch. Only updated from `devel` after releases.
+
+### Key Rules
+
+- Create feature branches from `devel`
+- Target `devel` for all pull requests
+- Never commit directly to `main`
+- `main` only receives merges from `devel` after releases
+
+See [Branch Workflow](contributing.md#branch-workflow) for detailed workflow and commands.
+
 ## Common Tasks
 
 ### Adding a New Feature
 
-1. Read [Architecture Overview](architecture.md) to understand the system
-2. For frontend: Review [Plugin Development Guide](../code-assistant/plugin-development.md)
-3. For backend: Review [API Reference](api-reference.md) and [Database](database.md)
-4. Write tests following [Testing Guide](testing.md)
-5. Update documentation
+1. Create feature branch from `devel`: `git checkout -b feature/my-feature`
+2. Read [Architecture Overview](architecture.md) to understand the system
+3. For frontend: Review [Plugin Development Guide](../code-assistant/plugin-development.md)
+4. For backend: Review [API Reference](api-reference.md) and [Database](database.md)
+5. Write tests following [Testing Guide](testing.md)
+6. Update documentation
+7. Create PR targeting `devel`
 
 ### Debugging Issues
 
@@ -197,6 +217,7 @@ See [Code Assistant Documentation](../code-assistant/README.md) for concise tech
 
 See [Contributing Guide](contributing.md) for complete best practices on:
 
+- Branch workflow (`devel` → `main`)
 - Conventional commit message format
 - Code quality requirements
 - Pull request guidelines
