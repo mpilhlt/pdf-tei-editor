@@ -254,13 +254,21 @@ def remove_whitespace(element):
         remove_whitespace(child)
 
 
-def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
+def serialize_tei_with_formatted_header(tei_doc: etree.Element, processing_instructions: list = None) -> str:
     """
     Serialize TEI document with selective formatting:
     - Pretty-print the teiHeader for readability
     - Preserve exact formatting of all other elements (text, facsimile, etc.)
+    - Preserve processing instructions (xml-model, etc.)
+
+    Args:
+        tei_doc: The TEI root element
+        processing_instructions: List of processing instruction strings to prepend (e.g., ["<?xml-model ...?>"])
     """
     import re
+
+    if processing_instructions is None:
+        processing_instructions = []
 
     # Extract and temporarily remove all non-header elements to preserve their formatting
     non_header_elements = []
@@ -300,8 +308,8 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
         if len(tei_doc) > 0 and hasattr(tei_doc[-1], 'tag') and tei_doc[-1].tag is etree.Comment:
             tei_doc.remove(tei_doc[-1])
 
-    # Clean up the pretty-printed header (remove xml declaration and empty lines)
-    header_lines = [line for line in header_xml.split('\n') if line.strip() and not line.startswith('<?xml')]
+    # Clean up the pretty-printed header (remove ONLY xml declaration, keep other processing instructions, remove empty lines)
+    header_lines = [line for line in header_xml.split('\n') if line.strip() and not line.startswith('<?xml version=')]
 
     # Handle TEI closing tag properly
     if non_header_elements:
@@ -330,7 +338,13 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element) -> str:
             # Add the closing TEI tag
             header_lines.append('</TEI>')
 
-    return '\n'.join(header_lines)
+    # Prepend processing instructions at the beginning
+    if processing_instructions:
+        result_lines = processing_instructions + header_lines
+    else:
+        result_lines = header_lines
+
+    return '\n'.join(result_lines)
 
 
 def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:

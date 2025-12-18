@@ -145,7 +145,8 @@ def generate_autocomplete_data(
                 return AutocompleteDataResponse(data=autocomplete_data)
 
         # Download schema if it doesn't exist
-        if not schema_cache_file.is_file() or request.invalidate_cache:
+        # Note: invalidate_cache only affects autocomplete data cache, not the schema itself
+        if not schema_cache_file.is_file():
             from ..lib.schema_validator import download_schema_file
             download_schema_file(schema_location, schema_cache_dir, schema_cache_file)
         else:
