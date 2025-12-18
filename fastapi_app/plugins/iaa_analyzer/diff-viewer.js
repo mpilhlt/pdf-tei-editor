@@ -29,6 +29,20 @@
     }
 
     /**
+     * Strip data-line attributes from entire XML string before diffing
+     *
+     * In semantic mode, data-line attributes are used for navigation but should not
+     * affect diff results. This function removes them so identical content with
+     * different line numbers doesn't create false differences.
+     *
+     * @param {string} xml - XML string with data-line attributes
+     * @returns {string} XML string without data-line attributes
+     */
+    function stripLineMarkersForDiff(xml) {
+        return xml.replace(/\s*data-line="\d+"/g, '');
+    }
+
+    /**
      * Get display line number in full document
      *
      * @param {number} diffLineNum - Line number from diff operation (1-indexed)
@@ -84,13 +98,28 @@
         } = config;
 
         // Choose XML to diff based on mode
-        const xml1ForDiff = useSemanticMode ? xml1Preprocessed : xml1Original;
-        const xml2ForDiff = useSemanticMode ? xml2Preprocessed : xml2Original;
+        let xml1ForDiff = useSemanticMode ? xml1Preprocessed : xml1Original;
+        let xml2ForDiff = useSemanticMode ? xml2Preprocessed : xml2Original;
+
+        // In semantic mode, strip data-line attributes before diffing to avoid false differences
+        // when only line numbers differ. Keep original preprocessed strings for line number extraction.
+        const xml1WithMarkers = xml1Preprocessed;  // Original with data-line for extraction
+        const xml2WithMarkers = xml2Preprocessed;
+
+        if (useSemanticMode) {
+            xml1ForDiff = stripLineMarkersForDiff(xml1ForDiff);
+            xml2ForDiff = stripLineMarkersForDiff(xml2ForDiff);
+        }
+
         const diff = (typeof Diff !== 'undefined') ? Diff.diffLines(xml1ForDiff, xml2ForDiff) : [];
 
         const diffBlocks = [];
-        let line1 = 1;  // Current line in xml1ForDiff
-        let line2 = 1;  // Current line in xml2ForDiff
+        let line1 = 1;  // Current line in xml1ForDiff (stripped version)
+        let line2 = 1;  // Current line in xml2ForDiff (stripped version)
+
+        // Split preprocessed strings with markers for line number extraction
+        const lines1WithMarkers = useSemanticMode ? xml1WithMarkers.split('\n') : [];
+        const lines2WithMarkers = useSemanticMode ? xml2WithMarkers.split('\n') : [];
 
         diff.forEach(part => {
             const lines = splitDiffLines(part.value);
@@ -118,9 +147,19 @@
                         const diffLineNum = line1 + i;
                         const displayLineNum = getDisplayLineNumber(diffLineNum, lineOffset1, useSemanticMode);
 
-                        // In semantic mode, extract line number from data-line attribute
-                        const originalLineNum = useSemanticMode ? extractLineMarker(diffContent) : null;
-                        const displayContent = useSemanticMode ? stripLineMarkers(diffContent) : diffContent;
+                        // In semantic mode, extract line number from original preprocessed string with markers
+                        let originalLineNum = null;
+                        let displayContent = diffContent;
+
+                        if (useSemanticMode) {
+                            // Get corresponding line from original preprocessed string (1-indexed)
+                            const lineWithMarker = lines1WithMarkers[diffLineNum - 1];
+                            if (lineWithMarker) {
+                                originalLineNum = extractLineMarker(lineWithMarker);
+                            }
+                            // Display content is already stripped (from diff)
+                            displayContent = diffContent;
+                        }
 
                         currentBlock.left.push({
                             number: displayLineNum,
@@ -137,9 +176,19 @@
                         const diffLineNum = line2 + i;
                         const displayLineNum = getDisplayLineNumber(diffLineNum, lineOffset2, useSemanticMode);
 
-                        // In semantic mode, extract line number from data-line attribute
-                        const originalLineNum = useSemanticMode ? extractLineMarker(diffContent) : null;
-                        const displayContent = useSemanticMode ? stripLineMarkers(diffContent) : diffContent;
+                        // In semantic mode, extract line number from original preprocessed string with markers
+                        let originalLineNum = null;
+                        let displayContent = diffContent;
+
+                        if (useSemanticMode) {
+                            // Get corresponding line from original preprocessed string (1-indexed)
+                            const lineWithMarker = lines2WithMarkers[diffLineNum - 1];
+                            if (lineWithMarker) {
+                                originalLineNum = extractLineMarker(lineWithMarker);
+                            }
+                            // Display content is already stripped (from diff)
+                            displayContent = diffContent;
+                        }
 
                         currentBlock.right.push({
                             number: displayLineNum,

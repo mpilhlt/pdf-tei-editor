@@ -342,6 +342,52 @@ describe('IAA Diff Viewer', () => {
             assert.ok(!diffBlocks[0].right[0].content.includes('xml:id'));
         });
 
+        it('should not show false differences when only data-line attributes differ', () => {
+            // This is the core bug: identical content with different line numbers
+            // should NOT create diff blocks
+            const xml1Preprocessed = '<text data-line="10">\n<p data-line="11">Same content</p>\n</text>';
+            const xml2Preprocessed = '<text data-line="20">\n<p data-line="21">Same content</p>\n</text>';
+
+            const diffBlocks = computeDiffBlocks({
+                xml1Original: '',  // Not used in semantic mode
+                xml2Original: '',
+                xml1Preprocessed,
+                xml2Preprocessed,
+                lineMapping1: {},
+                lineMapping2: {},
+                lineOffset1: 1,
+                lineOffset2: 1,
+                useSemanticMode: true
+            });
+
+            // Should have NO differences because content is identical
+            // (only data-line values differ)
+            assert.strictEqual(diffBlocks.length, 0, 'Should not show differences for identical content with different line numbers');
+        });
+
+        it('should detect real differences even with line markers', () => {
+            // Real content differences should still be detected
+            const xml1Preprocessed = '<text data-line="10">\n<p data-line="11">Different content</p>\n</text>';
+            const xml2Preprocessed = '<text data-line="20">\n<p data-line="21">Other content</p>\n</text>';
+
+            const diffBlocks = computeDiffBlocks({
+                xml1Original: '',
+                xml2Original: '',
+                xml1Preprocessed,
+                xml2Preprocessed,
+                lineMapping1: {},
+                lineMapping2: {},
+                lineOffset1: 1,
+                lineOffset2: 1,
+                useSemanticMode: true
+            });
+
+            // Should have differences because content differs
+            assert.ok(diffBlocks.length > 0, 'Should detect real content differences');
+            assert.ok(diffBlocks[0].left[0].content.includes('Different content'));
+            assert.ok(diffBlocks[0].right[0].content.includes('Other content'));
+        });
+
         it('should extract line markers and enable click navigation in semantic mode', () => {
             // Preprocessed XML with data-line attributes injected
             const xml1Preprocessed = '<text data-line="1">\n<p data-line="2">Different</p>\n</text>';

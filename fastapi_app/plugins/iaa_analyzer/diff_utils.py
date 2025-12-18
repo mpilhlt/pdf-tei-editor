@@ -3,6 +3,7 @@ Utility functions for XML diff operations.
 """
 
 import copy
+from typing import cast
 from lxml import etree
 
 
@@ -30,7 +31,8 @@ def preprocess_for_diff(
 
     # Remove ignored tags
     for tag_name in ignore_tags:
-        for ignored_elem in elem_copy.xpath(f'.//*[local-name()="{tag_name}"]'):
+        ignored_elems = cast(list[etree._Element], elem_copy.xpath(f'.//*[local-name()="{tag_name}"]'))
+        for ignored_elem in ignored_elems:
             parent = ignored_elem.getparent()
             if parent is not None:
                 parent.remove(ignored_elem)
@@ -55,7 +57,8 @@ def preprocess_for_diff(
             el.tail = normalized if normalized else None
 
         # Strip ignored attributes
-        for attr_name in list(el.attrib.keys()):
+        for attr_name in list(el.attrib.keys()): 
+            attr_name = str(attr_name)
             # Handle namespaced attributes
             if "}" in attr_name:
                 ns_uri, local = attr_name.split("}")
