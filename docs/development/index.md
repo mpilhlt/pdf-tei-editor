@@ -105,6 +105,14 @@ New to the project? Start here:
 3. Check [Database](database.md#metadata-inheritance) for metadata inheritance
 4. See [API Reference](api-reference.md#collections-api) for collection endpoints
 
+### Creating a Release
+
+1. Ensure all changes on `devel` are tested and ready
+2. Run `node bin/release.js patch` (or `minor`/`major`) on `devel` branch
+3. Script creates version tag and triggers GitHub Actions release
+4. Merge `devel` to `main` to sync stable branch
+5. See [Contributing Guide](contributing.md#release-process) for complete workflow
+
 ## Key Concepts
 
 ### Plugin Architecture
@@ -112,7 +120,8 @@ New to the project? Start here:
 The application uses a plugin-based architecture where all functionality is implemented as plugins. See [Plugin System](plugin-system.md) for details.
 
 **Key Points:**
-- Plugins can be classes (modern) or objects (legacy)
+
+- Plugins can be classes or objects
 - Dependency resolution via topological sorting
 - Endpoint system for extensibility
 - Automatic state management for Plugin classes
@@ -122,6 +131,7 @@ The application uses a plugin-based architecture where all functionality is impl
 All state changes create new objects, never mutate existing state. See [State Management](state-management.md) for details.
 
 **Key Points:**
+
 - Use `dispatchStateChange()` or `updateState()` for changes
 - Never update state in observer endpoints like `onStateUpdate`
 - State history maintained via WeakMap
@@ -132,6 +142,7 @@ All state changes create new objects, never mutate existing state. See [State Ma
 Files are organized around documents, with PDF files storing metadata and TEI files inheriting via `doc_id`. See [Database](database.md) for details.
 
 **Key Points:**
+
 - PDF files store `doc_collections` and `doc_metadata`
 - TEI files inherit metadata from PDF via JOIN
 - Content-addressable storage using SHA-256 hashes
@@ -142,6 +153,7 @@ Files are organized around documents, with PDF files storing metadata and TEI fi
 Users access documents through collection membership. See [Access Control](access-control.md) for details.
 
 **Key Points:**
+
 - Users belong to groups
 - Groups have access to collections
 - Documents belong to collections
@@ -180,7 +192,6 @@ See [Code Assistant Documentation](../code-assistant/README.md) for concise tech
 - [Plugin Development](../code-assistant/plugin-development.md) - Plugin creation patterns
 - [Testing Guide](../code-assistant/testing-guide.md) - Test structure and patterns
 - [Development Commands](../code-assistant/development-commands.md) - Command reference
-
 
 ## Contributing
 

@@ -61,6 +61,7 @@ test: add E2E test for document export
 ### Chore Commits
 
 Chore commits are filtered from release notes. Use for:
+
 - Dependency updates
 - Build configuration
 - Development tooling
@@ -190,26 +191,65 @@ See [Testing Guide](testing.md) for comprehensive testing documentation.
 
 ## Release Process
 
+### Recommended Workflow
+
+The recommended approach for creating releases:
+
+1. **Ensure `devel` is ready for release**
+   - All features complete and tested
+   - All tests passing: `npm run test:all`
+
+2. **Run release script on `devel`**
+
+   ```bash
+   git checkout devel
+   node bin/release.js patch  # or minor/major
+   ```
+
+   - Bumps version on `devel`
+   - Creates tag pointing to `devel` commit
+   - Pushes both branch and tag to GitHub
+   - GitHub Actions triggers and creates release
+
+3. **Merge `devel` to `main`**
+
+   ```bash
+   git checkout main
+   git merge devel
+   git push origin main
+   ```
+
+### Why Release from `devel`?
+
+- Development happens on `devel`, so version bump occurs where work is done
+- Tag triggers release workflow immediately
+- Merging to `main` brings the release commit into stable branch
+- Simpler than creating intermediate release branches
+- Keeps `main` clean with only merged, tested code
+
+### Release Script Usage
+
 Releases are automated via [bin/release.js](../../bin/release.js):
 
 ```bash
 # Bump patch version (0.8.0 -> 0.8.1)
-node bin/release.js patch
+node bin/release.js patch # shorthand: npm release:patch
 
 # Bump minor version (0.8.0 -> 0.9.0)
-node bin/release.js minor
+node bin/release.js minor # shorthand: npm release:minor
 
 # Bump major version (0.8.0 -> 1.0.0)
-node bin/release.js major
+node bin/release.js major # shorthand: npm release:major
 
 # Test without pushing
-node bin/release.js patch --dry-run
+node bin/release.js patch --dry-run # shorthand: npm release:patch -- --dry-run
 
 # Skip test execution
 node bin/release.js patch --skip-tests
 ```
 
 The script:
+
 1. Validates working directory is clean
 2. Runs full test suite (unless `--skip-tests`)
 3. Regenerates API client if needed
@@ -218,6 +258,7 @@ The script:
 6. Creates PR if on main branch (requires `gh` CLI)
 
 GitHub Actions automatically:
+
 - Generates changelog from conventional commits
 - Creates GitHub release
 - Builds and pushes Docker image
