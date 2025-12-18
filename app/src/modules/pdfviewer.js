@@ -123,6 +123,10 @@ export class PDFJSViewer {
     this.loadPromise = null;
     this.isLoadedFlag = false;
 
+    // Track active thumbnail render tasks for cancellation
+    /** @type {Array<any>} */ // Array of RenderTask objects
+    this.thumbnailRenderTasks = [];
+
     // Cursor tool mode: false = text selection (default), true = hand tool
     this._handToolMode = false;
 
@@ -492,6 +496,10 @@ export class PDFJSViewer {
    */
   async close() {
     await this.isReady();
+
+    // Cancel any active thumbnail render tasks
+    this._cancelThumbnailRendering();
+
     if (this.pdfDoc) {
       await this.pdfDoc.destroy();
       this.pdfDoc = null;
@@ -744,6 +752,21 @@ export class PDFJSViewer {
   }
 
   /**
+   * Cancels all active thumbnail render tasks
+   * @private
+   */
+  _cancelThumbnailRendering() {
+    for (const renderTask of this.thumbnailRenderTasks) {
+      try {
+        renderTask.cancel();
+      } catch (error) {
+        // Ignore errors from cancelling already-completed tasks
+      }
+    }
+    this.thumbnailRenderTasks = [];
+  }
+
+  /**
    * Renders thumbnails for all pages in the sidebar
    * @returns {Promise<void>}
    * @private
@@ -752,6 +775,9 @@ export class PDFJSViewer {
     if (!this.pdfDoc || !this.thumbnailView) {
       return;
     }
+
+    // Cancel any existing thumbnail rendering
+    this._cancelThumbnailRendering();
 
     // Clear existing thumbnails
     this.thumbnailView.innerHTML = '';
@@ -783,8 +809,28 @@ export class PDFJSViewer {
         viewport: thumbnailViewport
       };
 
-      // Render page to canvas
-      await page.render(renderContext).promise;
+      // Render page to canvas and track the render task
+      const renderTask = page.render(renderContext);
+      this.thumbnailRenderTasks.push(renderTask);
+
+      try {
+        await renderTask.promise;
+      } catch (error) {
+        // Ignore RenderingCancelledException (expected when switching documents)
+        if (error.name !== 'RenderingCancelledException') {
+          console.error(`Failed to render thumbnail for page ${pageNum}:`, error);
+        }
+        // Stop rendering remaining thumbnails if this one was cancelled
+        if (error.name === 'RenderingCancelledException') {
+          break;
+        }
+      }
+
+      // Remove completed task from tracking array
+      const taskIndex = this.thumbnailRenderTasks.indexOf(renderTask);
+      if (taskIndex !== -1) {
+        this.thumbnailRenderTasks.splice(taskIndex, 1);
+      }
 
       // Add page number label
       const label = document.createElement('div');
