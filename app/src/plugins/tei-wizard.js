@@ -27,6 +27,7 @@ import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
 import enhancements from './tei-wizard/enhancements.js';
 import { notify } from '../modules/sl-utils.js'
 import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
+import { config } from '../plugins.js';
 
 
 const plugin = {
@@ -136,11 +137,14 @@ async function runTeiWizard() {
   }
   console.log(`Running ${selectedEnhancements.length} TEI enhancement(s)...`);
 
+  // Get config map for enhancements
+  const configMap = config.toMap();
+
   // Sequentially apply each enhancement
   for (const enhancement of selectedEnhancements) {
     try {
       console.log(`- Applying: ${enhancement.name}`);
-      teiDoc = enhancement.execute(teiDoc);
+      teiDoc = enhancement.execute(teiDoc, currentState, configMap);
     } catch (error) {
       console.error(`Error during enhancement "${enhancement.name}":`, error);
       // Optionally, stop the process or notify the user
