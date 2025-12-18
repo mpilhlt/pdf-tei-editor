@@ -18,7 +18,9 @@ import { logger, client } from '../app.js';
 const api = {
   get,
   set,
-  load: updateConfigData
+  load: updateConfigData,
+  /** @return {Map<string, any>} */
+  toMap: () => new Map(Object.entries(configMap))  
 }
 
 /**

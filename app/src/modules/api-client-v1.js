@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-18T06:49:26.869Z
+ * Generated from OpenAPI schema at 2025-12-18T20:35:44.700Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -10,18 +10,6 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
- */
-
-/**
- * @typedef {Object} AnalyzeRequest
- * @property {string} text
- */
-
-/**
- * @typedef {Object} AnalyzeResponse
- * @property {number} word_count
- * @property {number} char_count
- * @property {string} message
  */
 
 /**
@@ -182,18 +170,6 @@
  */
 
 /**
- * @typedef {Object} ExecuteRequest
- * @property {string} endpoint
- * @property {Object<string, any>} params
- */
-
-/**
- * @typedef {Object} ExecuteResponse
- * @property {boolean} success
- * @property {any} result
- */
-
-/**
  * @typedef {Object} ExtractRequest
  * @property {string} extractor - ID of the extractor to use
  * @property {string} file_id - File identifier (hash, stable ID, or upload filename)
@@ -312,11 +288,6 @@
  * @typedef {Object} MoveFilesResponse
  * @property {string} new_pdf_id
  * @property {string} new_xml_id
- */
-
-/**
- * @typedef {Object} PluginListResponse
- * @property {Array<Object<string, any>>} plugins
  */
 
 /**
@@ -584,9 +555,8 @@ export class ApiClientV1 {
   }
 
   /**
-   * List all collections accessible to the current user.
-   * Filters collections based on user's group memberships. Admin users and
-   * users with wildcard access see all collections.
+   * List all collections.
+   * Returns all collections without filtering. Requires authentication.
    * Returns:
    * List of Collection objects
    *
@@ -1390,44 +1360,6 @@ export class ApiClientV1 {
   async schema(schema_type, variant) {
     const endpoint = `/schema/${schema_type}/${variant}`
     return this.callApi(endpoint);
-  }
-
-  /**
-   * List available plugins filtered by user roles and optional category.
-   * Args:
-   * category: Optional category filter (e.g., "analyzer")
-   * current_user: Current authenticated user (optional)
-   * Returns:
-   * List of plugin metadata dicts
-   *
-   * @param {Object=} params - Query parameters
-   * @param {(string | null)=} params.category
-   * @returns {Promise<PluginListResponse>}
-   */
-  async plugins(params) {
-    const endpoint = `/plugins`
-    return this.callApi(endpoint, 'GET', params);
-  }
-
-  /**
-   * Execute a plugin endpoint.
-   * Args:
-   * plugin_id: Plugin identifier
-   * exec_request: Execution request with endpoint and params
-   * request: FastAPI request object (for session_id extraction)
-   * current_user: Current authenticated user (optional)
-   * Returns:
-   * Execution result
-   * Raises:
-   * HTTPException: If plugin/endpoint not found or execution fails
-   *
-   * @param {string} plugin_id
-   * @param {ExecuteRequest} requestBody
-   * @returns {Promise<ExecuteResponse>}
-   */
-  async pluginsExecute(plugin_id, requestBody) {
-    const endpoint = `/plugins/${plugin_id}/execute`
-    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**

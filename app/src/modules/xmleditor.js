@@ -63,6 +63,8 @@ import { EventEmitter } from './event-emitter.js';
  * @fires XMLEditor#editorXmlWellFormed - Fired when XML becomes valid
  * @fires XMLEditor#editorReadOnly - Fired when read-only state changes
  * @fires XMLEditor#editorBeforeLoad - Fired before loading new document
+ * @fires XMLEditor#editorShowMergeView - Fired when the merge view is shown
+ * @fires XMLEditor#editorHideMergeView - Fired when the merge view is removed
  */
 export class XMLEditor extends EventEmitter {
 
@@ -76,6 +78,8 @@ export class XMLEditor extends EventEmitter {
   static EVENT_EDITOR_READONLY = "editorReadOnly"
   static EVENT_EDITOR_BEFORE_LOAD = "editorBeforeLoad"
   static EVENT_EDITOR_AFTER_LOAD = "editorAfterLoad"
+  static EVENT_EDITOR_SHOW_MERGE_VIEW = "editorShowMergeView"
+  static EVENT_EDITOR_HIDE_MERGE_VIEW = "editorHideMergeView"
 
   // private members
 
@@ -466,8 +470,10 @@ export class XMLEditor extends EventEmitter {
     this.#original = this.getXML() // store the original XML content;
 
     // remove existing merge view
-    await this.hideMergeView()
-
+    if (this.isMergeViewActive()) {
+      await this.hideMergeView()
+    }
+    
     // fetch xml if it is a path 
     const diff = await this.#fetchXml(xmlPathOrString);
 
@@ -487,6 +493,9 @@ export class XMLEditor extends EventEmitter {
       $$('button[name="accept"]').forEach(b => b.innerHTML = 'Keep')
       $$('button[name="reject"]').forEach(b => b.innerHTML = 'Change')
     }, 200)
+
+    // notify listeners
+    this.emit(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW)
   }
 
   /**
@@ -509,20 +518,24 @@ export class XMLEditor extends EventEmitter {
    * @returns {Promise<void>} A promise that resolves when the merge view is hidden or right away if it not enabled
    */
   async hideMergeView() {
-    if (this.#mergeViewExt) {
-      // stop updating the buttons
-      
-      if (this.#updateMergButtonsInterval) {
-        clearInterval(this.#updateMergButtonsInterval)
-        this.#updateMergButtonsInterval = null
-      }
-      // remove the merge view
-      this.#view.dispatch({
-        effects: this.#mergeViewCompartment.reconfigure([])
-      });
-      this.#mergeViewExt = null;
-      this.#original = '';
+    if (!this.#mergeViewExt) {
+      return;
     }
+    // stop updating the buttons
+    
+    if (this.#updateMergButtonsInterval) {
+      clearInterval(this.#updateMergButtonsInterval)
+      this.#updateMergButtonsInterval = null
+    }
+    // remove the merge view
+    this.#view.dispatch({
+      effects: this.#mergeViewCompartment.reconfigure([])
+    });
+    this.#mergeViewExt = null;
+    this.#original = '';
+
+    // notify listeners
+    this.emit(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW)
   }
 
   /**

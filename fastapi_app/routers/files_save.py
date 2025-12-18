@@ -30,7 +30,7 @@ from ..lib.dependencies import (
 )
 from ..lib.file_repository import FileRepository
 from ..lib.file_storage import FileStorage
-from ..lib.locking import acquire_lock, release_lock
+from ..lib.locking import acquire_lock, release_lock, transfer_lock
 from ..lib.logging_utils import get_logger
 from ..lib.user_utils import user_has_collection_access
 from ..config import get_settings
@@ -148,15 +148,33 @@ def _extract_metadata_from_xml(xml_string: str, file_id_hint: Optional[str], log
         )
 
 
+def _extract_processing_instructions(xml_string: str) -> list[str]:
+    """
+    Extract processing instructions (e.g., <?xml-model ...?>) from XML string.
+
+    Returns:
+        List of processing instruction strings
+    """
+    import re
+    # Match processing instructions (excluding xml declaration)
+    pi_pattern = r'<\?(?!xml\s+version)[^\?]+\?>'
+    matches = re.findall(pi_pattern, xml_string)
+    return matches
+
+
 def _update_fileref_in_xml(xml_string: str, file_id: str, logger) -> str:
     """
     Ensure fileref in XML matches the file_id.
     Creates fileref element if missing.
+    Preserves processing instructions from the original XML.
 
     Returns:
         Updated XML string
     """
     try:
+        # Extract processing instructions before parsing
+        processing_instructions = _extract_processing_instructions(xml_string)
+
         xml_root = etree.fromstring(xml_string.encode('utf-8'))
         ns = {"tei": "http://www.tei-c.org/ns/1.0"}
 
@@ -169,7 +187,7 @@ def _update_fileref_in_xml(xml_string: str, file_id: str, logger) -> str:
                 old_fileref = fileref_elem.text
                 fileref_elem.text = file_id
                 logger.debug(f"Updated fileref: {old_fileref} -> {file_id}")
-                return serialize_tei_with_formatted_header(xml_root)
+                return serialize_tei_with_formatted_header(xml_root, processing_instructions)
             return xml_string
 
         # Create fileref element
@@ -192,7 +210,7 @@ def _update_fileref_in_xml(xml_string: str, file_id: str, logger) -> str:
             fileref_elem.text = file_id
 
             logger.debug(f"Added fileref to XML: {file_id}")
-            return serialize_tei_with_formatted_header(xml_root)
+            return serialize_tei_with_formatted_header(xml_root, processing_instructions)
 
         return xml_string
 
@@ -270,7 +288,7 @@ async def save_file(
                     # Use the file's doc_id for this operation
                     doc_id = existing_file.doc_id
                     file_id = existing_file.doc_id
-                    logger_inst.info(f"Updating existing file: {resolved_file_id[:8]}")
+                    logger_inst.info(f"Updating existing file: {existing_file.stable_id}")
             except ValueError:
                 pass  # Not a valid file_id, treat as new file
 
@@ -319,8 +337,6 @@ async def save_file(
 
         if existing_file and not request.new_version:
         # Update existing file
-            logger_inst.info(f"Updating existing file: {existing_file.id[:8]}")
-
         # Validate collection access (may assign "_inbox" if empty)
             doc_collections = _validate_collection_access(user, existing_file.doc_collections or [], settings.db_dir, logger_inst)
 
@@ -359,6 +375,10 @@ async def save_file(
             # Only update if hash actually changed
             if saved_hash != existing_file.id:
                 logger_inst.debug(f"Content changed: {existing_file.id[:8]} -> {saved_hash[:8]}")
+
+                # Transfer lock from old hash to new hash
+                transfer_lock(existing_file.id, saved_hash, session_id, settings.db_dir, logger_inst)
+
                 # Update database (FileRepository handles reference counting automatically)
                 file_repo.update_file(
                     existing_file.id,

@@ -14,6 +14,7 @@ import Plugin from '../modules/plugin-base.js';
 import { logger, client, config } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
 import { FiledataPlugin } from '../plugins.js';
+import { SessionActivityTracker } from '../modules/session-activity-tracker.js';
 
 // 
 // UI Type Definitions
@@ -51,13 +52,15 @@ await registerTemplate('logout-button', 'logout-button.html');
 
 class AuthenticationPlugin extends Plugin {
   /**
-   * @param {PluginContext} context 
+   * @param {PluginContext} context
    */
   constructor(context) {
-    super(context, { 
-      name: 'authentication', 
-      deps: ['client'] 
+    super(context, {
+      name: 'authentication',
+      deps: ['client']
     });
+    /** @type {SessionActivityTracker|null} */
+    this.activityTracker = null;
   }
 
   /**
@@ -94,6 +97,9 @@ class AuthenticationPlugin extends Plugin {
     ui.toolbar.insertAdjacentElement("beforeend", buttonElement);
     updateUi();
     ui.toolbar.logoutButton.addEventListener("click", () => this.logout());
+
+    // Initialize session activity tracker
+    await this._initializeActivityTracker();
   }
 
   /**
@@ -115,6 +121,12 @@ class AuthenticationPlugin extends Plugin {
    * Save session to URL hash on shutdown
    */
   async shutdown() {
+    // Stop activity tracker
+    if (this.activityTracker) {
+      this.activityTracker.stop();
+      this.activityTracker = null;
+    }
+
     // release lock - this really should be in xmleditor plugin but the shutdown endpoint will be called only after this
     if (this.state?.xml) {
       await client.releaseLock(this.state?.xml)
@@ -282,6 +294,32 @@ class AuthenticationPlugin extends Plugin {
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /**
+   * Initialize or reinitialize the session activity tracker
+   * @private
+   */
+  async _initializeActivityTracker() {
+    // Get session timeout from config
+    const sessionTimeout = await config.get('session.timeout');
+
+    // Stop existing tracker if any
+    if (this.activityTracker) {
+      this.activityTracker.stop();
+    }
+
+    // Create new tracker
+    this.activityTracker = new SessionActivityTracker({
+      sessionTimeout,
+      onLogout: async () => {
+        logger.info('Session expired due to inactivity. Logging out automatically.');
+        await this.logout();
+      },
+      logger
+    });
+
+    logger.debug(`Session activity tracker initialized with ${sessionTimeout}s timeout`);
   }
 }
 

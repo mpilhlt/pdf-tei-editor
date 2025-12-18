@@ -184,6 +184,68 @@ def acquire_lock(file_hash: str, session_id: str, db_dir: Path, logger: logging.
             raise
 
 
+def transfer_lock(old_hash: str, new_hash: str, session_id: str, db_dir: Path, logger: logging.Logger) -> bool:
+    """
+    Transfers a lock from one file hash to another for the same session.
+
+    This is used when a file's content changes and gets a new hash.
+    The lock on the old hash is removed and a new lock is created on the new hash.
+
+    Args:
+        old_hash: The original file hash
+        new_hash: The new file hash
+        session_id: The session ID that owns the lock
+        db_dir: Directory containing locks.db
+        logger: Logger instance
+
+    Returns:
+        bool: True if transfer succeeded, False otherwise
+
+    Raises:
+        RuntimeError: If the old lock is not owned by this session or database error
+    """
+    logger.debug(f"[LOCK] Session {session_id[:8]}... transferring lock from {old_hash[:8]}... to {new_hash[:8]}...")
+
+    # Ensure database is initialized
+    init_locks_db(db_dir, logger)
+
+    with get_db_connection(db_dir, logger) as conn:
+        cursor = conn.cursor()
+
+        # Check if old lock exists and who owns it
+        cursor.execute("""
+            SELECT session_id
+            FROM locks
+            WHERE file_hash = ?
+        """, (old_hash,))
+
+        existing = cursor.fetchone()
+
+        if not existing:
+            logger.warning(f"[LOCK] No lock found on old hash {old_hash[:8]}... for transfer")
+            return False
+
+        existing_session = existing['session_id']
+        if existing_session != session_id:
+            logger.error(
+                f"[LOCK] Cannot transfer lock from {old_hash[:8]}... to {new_hash[:8]}.... "
+                f"Old lock owned by {existing_session[:8]}..., not {session_id[:8]}..."
+            )
+            raise RuntimeError(
+                f"Cannot transfer lock: old hash is locked by session {existing_session}"
+            )
+
+        # Delete old lock and create new one in a transaction
+        cursor.execute("DELETE FROM locks WHERE file_hash = ?", (old_hash,))
+        cursor.execute("""
+            INSERT INTO locks (file_hash, session_id, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        """, (new_hash, session_id))
+
+        logger.info(f"[LOCK] Session {session_id[:8]}... transferred lock from {old_hash[:8]}... to {new_hash[:8]}...")
+        return True
+
+
 def release_lock(file_hash: str, session_id: str, db_dir: Path, logger: logging.Logger) -> Dict[str, str]:
     """
     Releases the lock for a given file if it is held by the current session.

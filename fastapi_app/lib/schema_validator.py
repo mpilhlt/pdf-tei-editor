@@ -92,8 +92,8 @@ def main():
             for error in schema.error_log:
                 errors.append({
                     "message": error.message.replace("{http://www.tei-c.org/ns/1.0}", "tei:"),
-                    "line": error.line,
-                    "column": error.column
+                    "line": max(1, error.line),
+                    "column": max(0, error.column)
                 })
 
         print(json.dumps({"success": True, "errors": errors}))
@@ -306,8 +306,8 @@ def validate(xml_string: str, cache_root: Optional[Path] = None) -> List[Dict]:
         for error in e.error_log:  # type: ignore
             errors.append({
                 "message": error.message,
-                "line": error.line,
-                "column": error.column
+                "line": max(1, error.line),  # Ensure line >= 1 (some parsers may return 0)
+                "column": max(0, error.column)  # Ensure column >= 0
             })
         return errors
 

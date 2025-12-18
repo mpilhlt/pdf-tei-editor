@@ -155,5 +155,5 @@ export function prettyPrintXmlDom(xmlDoc, selector = null, spacing = '  ') {
 export default {
   name: "Pretty Print XML",
   description: "Pretty-prints the XML DOM by inserting whitespace text nodes.",
-  execute: prettyPrintXmlDom
+  execute: (teiDoc, currentState, configMap) => prettyPrintXmlDom(teiDoc)
 };

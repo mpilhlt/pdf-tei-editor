@@ -2,11 +2,12 @@
  * The XML Editor plugin
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { UIPart } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
+ * @import { ToolBar } from '../modules/panels/tool-bar.js'
  */
 
 import ui from '../ui.js'
@@ -31,6 +32,15 @@ import { isGoldFile } from '../modules/acl-utils.js'
  */
 
 /**
+ * XML editor toolbar navigation properties
+ * @typedef {object} xmlEditorToolbarPart
+ * @property {HTMLElement} prevDiffBtn - Previous diff button
+ * @property {HTMLElement} nextDiffBtn - Next diff button
+ * @property {HTMLElement} rejectAllBtn - Reject all changes button
+ * @property {HTMLElement} acceptAllBtn - Accept all changes button
+ */
+
+/**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
  * @property {StatusText} readOnlyStatus - The read-only status widget
@@ -42,6 +52,7 @@ import { isGoldFile } from '../modules/acl-utils.js'
  * XML editor navigation properties
  * @typedef {object} xmlEditorPart
  * @property {UIPart<StatusBar, xmlEditorHeaderbarPart>} headerbar - The XML editor headerbar
+ * @property {UIPart<ToolBar, xmlEditorToolbarPart>} toolbar - The XML editor toolbar
  * @property {UIPart<StatusBar, xmlEditorStatusbarPart>} statusbar - The XML editor statusbar
  */
 
@@ -165,6 +176,57 @@ async function install(state) {
 
   // Add teiHeader toggle widget to left side of statusbar
   ui.xmlEditor.statusbar.add(teiHeaderToggleWidget, 'left', 1)
+
+  // Diff navigation buttons for the toolbar
+  // <sl-icon name="chevron-bar-up"></sl-icon>
+  const prevDiffBtn = PanelUtils.createButton({
+    icon: 'chevron-bar-up',
+    tooltip: 'Previous diff',
+    action: 'xml-prev-diff',
+    name: 'prevDiffBtn'
+  })
+  prevDiffBtn.addEventListener('widget-click', () => xmlEditor.goToPreviousDiff())
+
+  // <sl-icon name="chevron-bar-down"></sl-icon>
+  const nextDiffBtn = PanelUtils.createButton({
+    icon: 'chevron-bar-down',
+    tooltip: 'Next diff',
+    action: 'xml-next-diff',
+    name: 'nextDiffBtn'
+  })
+  nextDiffBtn.addEventListener('widget-click', () => xmlEditor.goToNextDiff())
+
+  ui.xmlEditor.toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 104)
+  ui.xmlEditor.toolbar.add(prevDiffBtn, 103)
+  ui.xmlEditor.toolbar.add(nextDiffBtn, 102)
+
+  // <sl-icon name="x-circle"></sl-icon>
+  const rejectAllBtn = PanelUtils.createButton({
+    icon: 'x-circle',
+    tooltip: 'Reject all changes',
+    action: 'xml-reject-all',
+    name: 'rejectAllBtn'
+  })
+  rejectAllBtn.addEventListener('widget-click', () => {
+    xmlEditor.rejectAllDiffs()
+    services.removeMergeView()
+  })
+
+  // <sl-icon name="check-circle"></sl-icon>
+  const acceptAllBtn = PanelUtils.createButton({
+    icon: 'check-circle',
+    tooltip: 'Accept all changes',
+    action: 'xml-accept-all',
+    name: 'acceptAllBtn'
+  })
+  acceptAllBtn.addEventListener('widget-click', () => {
+    xmlEditor.acceptAllDiffs()
+    services.removeMergeView()
+  })
+
+  ui.xmlEditor.toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 101)
+  ui.xmlEditor.toolbar.add(rejectAllBtn, 100)
+  ui.xmlEditor.toolbar.add(acceptAllBtn, 99)
 
   // selection => xpath state
   xmlEditor.on("selectionChanged", data => {
@@ -308,6 +370,21 @@ async function start(state) {
       ui.xmlEditor.statusbar.removeById(validationStatusWidget.id)
     }
   })
+
+  // dis/enable diff buttons
+  const enableDiffButtons = (value) => {
+    ui.xmlEditor.toolbar.prevDiffBtn.disabled = !value;
+    ui.xmlEditor.toolbar.nextDiffBtn.disabled = !value;
+    ui.xmlEditor.toolbar.rejectAllBtn.disabled = !value;
+    ui.xmlEditor.toolbar.acceptAllBtn.disabled = !value;
+  }
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW, () => {
+    enableDiffButtons(true)
+  })
+  xmlEditor.on(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW, () => {
+    enableDiffButtons(false)
+  })
+  enableDiffButtons(false)
 }
 
 /**
