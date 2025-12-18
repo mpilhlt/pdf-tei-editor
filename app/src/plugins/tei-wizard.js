@@ -22,7 +22,7 @@
  * @property {SlButton} cancel - Cancel button
  */
 import ui from '../ui.js';
-import { xmlEditor, logger } from '../app.js';
+import { xmlEditor, logger, app } from '../app.js';
 import { registerTemplate, createSingleFromTemplate, updateUi } from '../ui.js';
 import enhancements from './tei-wizard/enhancements.js';
 import { notify } from '../modules/sl-utils.js'

@@ -279,3 +279,7 @@ sl-menu[name="pluginsMenu"] small {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
+#pdf-toolbar, #xml-toolbar {
+  z-index: 0 !important;
+}
