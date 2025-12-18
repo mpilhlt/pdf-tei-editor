@@ -82,6 +82,30 @@ class Settings(BaseSettings):
 
     @property
     def session_timeout(self) -> int:
+        """
+        Get session timeout in seconds.
+
+        Priority:
+        1. SESSION_TIMEOUT environment variable (if explicitly set)
+        2. session.timeout from config.json
+        3. Default: 3600 seconds (1 hour)
+        """
+        # Check if SESSION_TIMEOUT was explicitly set in environment (not just the default)
+        env_timeout = os.environ.get('SESSION_TIMEOUT')
+        if env_timeout is not None:
+            return int(env_timeout)
+
+        # Try to load from config.json as fallback
+        try:
+            from fastapi_app.lib.config_utils import get_config_value
+            config_timeout = get_config_value('session.timeout', self.db_dir)
+            if config_timeout is not None:
+                return int(config_timeout)
+        except Exception:
+            # Silently fall through to default if config can't be loaded
+            pass
+
+        # Use the pydantic default as final fallback
         return self.SESSION_TIMEOUT
 
     @property
