@@ -3,20 +3,39 @@ Custom routes for Inter-Annotator Agreement Analyzer plugin.
 """
 
 import csv
+import json
 import logging
 from io import StringIO
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import Response, StreamingResponse
+from lxml import etree
 
-from fastapi_app.lib.dependencies import get_db, get_file_storage
+from fastapi_app.lib.dependencies import (
+    get_auth_manager,
+    get_db,
+    get_file_storage,
+    get_session_manager,
+)
 from fastapi_app.lib.file_repository import FileRepository
+from fastapi_app.plugins.iaa_analyzer.diff_utils import (
+    escape_html,
+    find_element_line_offset,
+    preprocess_for_diff,
+    serialize_with_linebreaks,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/plugins/iaa-analyzer", tags=["plugins"]
 )
+
+# Load diff viewer assets
+_PLUGIN_DIR = Path(__file__).parent
+_DIFF_VIEWER_JS = (_PLUGIN_DIR / "diff-viewer.js").read_text(encoding="utf-8")
+_DIFF_VIEWER_CSS = (_PLUGIN_DIR / "diff-viewer.css").read_text(encoding="utf-8")
 
 
 @router.get("/export")
@@ -157,3 +176,280 @@ async def export_csv(
             f"Failed to export inter-annotator agreement for PDF {pdf}: {e}"
         )
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _generate_diff_html(
+    title1: str,
+    title2: str,
+    xml1_original: str,
+    xml2_original: str,
+    xml1_preprocessed: str,
+    xml2_preprocessed: str,
+    line_mapping1: dict[int, int],
+    line_mapping2: dict[int, int],
+    line_offset1: int,
+    line_offset2: int,
+    stable_id1: str,
+    stable_id2: str,
+) -> str:
+    """Generate standalone HTML page with side-by-side XML diff showing only differences.
+
+    Args:
+        title1: Title of first document
+        title2: Title of second document
+        xml1_original: Original XML of first document (for display)
+        xml2_original: Original XML of second document (for display)
+        xml1_preprocessed: Preprocessed XML of first document (for diff computation)
+        xml2_preprocessed: Preprocessed XML of second document (for diff computation)
+        line_mapping1: Mapping from preprocessed line numbers to original line numbers (doc 1)
+        line_mapping2: Mapping from preprocessed line numbers to original line numbers (doc 2)
+        line_offset1: Line number offset of content element in full document 1
+        line_offset2: Line number offset of content element in full document 2
+        stable_id1: Stable ID of first document
+        stable_id2: Stable ID of second document
+
+    Returns:
+        HTML string with embedded diff viewer
+    """
+    from fastapi_app.lib.plugin_tools import generate_sandbox_client_script
+
+    # Escape XML for embedding in JavaScript
+    xml1_original_escaped = json.dumps(xml1_original)
+    xml2_original_escaped = json.dumps(xml2_original)
+    xml1_preprocessed_escaped = json.dumps(xml1_preprocessed)
+    xml2_preprocessed_escaped = json.dumps(xml2_preprocessed)
+    line_mapping1_escaped = json.dumps(line_mapping1)
+    line_mapping2_escaped = json.dumps(line_mapping2)
+
+    # Get sandbox client script
+    sandbox_script = generate_sandbox_client_script()
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XML Diff: {escape_html(title1)} vs {escape_html(title2)}</title>
+
+    <!-- Sandbox client for parent window communication -->
+    <script>{sandbox_script}</script>
+
+    <!-- Load diff library from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"></script>
+
+    <!-- Load Prism.js for syntax highlighting -->
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markup.min.js"></script>
+
+    <!-- Diff viewer styles -->
+    <style>
+{_DIFF_VIEWER_CSS}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>TEI XML Comparison - Differences Only</h1>
+        <div class="titles">
+            <span>{escape_html(title1)}</span>
+            <span>{escape_html(title2)}</span>
+        </div>
+        <div class="controls">
+            <span class="toggle-label">Show all differences</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="semanticToggle">
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Show semantic differences only</span>
+        </div>
+        <div class="summary" id="summary"></div>
+    </div>
+
+    <div id="diffResults"></div>
+
+    <!-- Diff viewer logic -->
+    <script>
+{_DIFF_VIEWER_JS}
+    </script>
+
+    <!-- Initialize diff viewer with data -->
+    <script>
+        initDiffViewer({{
+            xml1Original: {xml1_original_escaped},
+            xml2Original: {xml2_original_escaped},
+            xml1Preprocessed: {xml1_preprocessed_escaped},
+            xml2Preprocessed: {xml2_preprocessed_escaped},
+            lineMapping1: {line_mapping1_escaped},
+            lineMapping2: {line_mapping2_escaped},
+            lineOffset1: {line_offset1},
+            lineOffset2: {line_offset2},
+            stableId1: {json.dumps(stable_id1)},
+            stableId2: {json.dumps(stable_id2)}
+        }});
+    </script>
+</body>
+</html>
+    """
+
+
+@router.get("/diff")
+async def show_diff(
+    stable_id1: str = Query(..., description="First document stable ID"),
+    stable_id2: str = Query(..., description="Second document stable ID"),
+    content_xpath: str = Query(".//tei:text", description="XPath to content element to compare"),
+    session_id: str | None = Query(None, description="Session ID for authentication"),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    db=Depends(get_db),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+):
+    """
+    Render standalone side-by-side XML diff page showing only differences.
+
+    Args:
+        stable_id1: First document stable ID
+        stable_id2: Second document stable ID
+        content_xpath: XPath expression to select content element (default: ".//tei:text")
+        session_id: Session ID for authentication (query param fallback)
+        x_session_id: Session ID from header
+        db: Database session
+        session_manager: Session manager dependency
+        auth_manager: Auth manager dependency
+
+    Returns:
+        HTML page with diff viewer
+    """
+    from fastapi_app.config import get_settings
+    from fastapi_app.lib.tei_utils import extract_tei_metadata
+    from fastapi_app.plugins.iaa_analyzer.plugin import (
+        IGNORE_ATTRIBUTES,
+        IGNORE_TAGS,
+    )
+
+    # Authenticate
+    session_id_value = x_session_id or session_id
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Validate session
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    # Get user
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    # Fetch both documents
+    file_repo = FileRepository(db)
+    file_storage = get_file_storage()
+
+    file1 = file_repo.get_file_by_stable_id(stable_id1)
+    file2 = file_repo.get_file_by_stable_id(stable_id2)
+
+    if not file1 or not file2:
+        raise HTTPException(status_code=404, detail="One or both documents not found")
+
+    # Check user access to documents via collections
+    from fastapi_app.lib.user_utils import user_has_collection_access
+
+    user_has_access_to_file1 = False
+    user_has_access_to_file2 = False
+
+    for collection_id in file1.doc_collections or []:
+        if user_has_collection_access(user, collection_id, settings.db_dir):
+            user_has_access_to_file1 = True
+            break
+
+    for collection_id in file2.doc_collections or []:
+        if user_has_collection_access(user, collection_id, settings.db_dir):
+            user_has_access_to_file2 = True
+            break
+
+    if not user_has_access_to_file1 or not user_has_access_to_file2:
+        raise HTTPException(status_code=403, detail="Access denied to one or both documents")
+
+    # Read XML content
+    try:
+        xml1 = file_storage.read_file(file1.id, "tei").decode("utf-8")
+        xml2 = file_storage.read_file(file2.id, "tei").decode("utf-8")
+    except Exception as e:
+        logger.error(f"Failed to read TEI files: {e}")
+        raise HTTPException(status_code=500, detail="Failed to read TEI files")
+
+    # Extract metadata for headers
+    try:
+        root1 = etree.fromstring(xml1.encode("utf-8"))
+        root2 = etree.fromstring(xml2.encode("utf-8"))
+
+        meta1 = extract_tei_metadata(root1)
+        meta2 = extract_tei_metadata(root2)
+
+        title1 = meta1.get("edition_title") or meta1.get("title", "Document 1")
+        title2 = meta2.get("edition_title") or meta2.get("title", "Document 2")
+    except Exception as e:
+        logger.error(f"Failed to extract metadata: {e}")
+        title1 = "Document 1"
+        title2 = "Document 2"
+
+    # Extract content element for comparison using XPath
+    try:
+        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+
+        # Use the provided XPath to find content elements
+        content1_elem = root1.find(content_xpath, ns)
+        content2_elem = root2.find(content_xpath, ns)
+
+        if content1_elem is None or content2_elem is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"One or both documents missing element at XPath: {content_xpath}"
+            )
+
+        # Find line offset of content element in full document
+        content1_line_offset = find_element_line_offset(xml1, content1_elem)
+        content2_line_offset = find_element_line_offset(xml2, content2_elem)
+
+        # Serialize original content (for "all differences" mode)
+        content1_xml_original = etree.tostring(
+            content1_elem, encoding="unicode", pretty_print=True
+        )
+        content2_xml_original = etree.tostring(
+            content2_elem, encoding="unicode", pretty_print=True
+        )
+
+        # Preprocess: remove ignored elements and attributes
+        # Inject line markers for semantic mode (to preserve line numbers for click handlers)
+        content1_preprocessed = preprocess_for_diff(
+            content1_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES, inject_line_markers=True
+        )
+        content2_preprocessed = preprocess_for_diff(
+            content2_elem, IGNORE_TAGS, IGNORE_ATTRIBUTES, inject_line_markers=True
+        )
+
+        # Serialize preprocessed content (for "semantic differences" mode)
+        # Use custom serialization that adds linebreaks without reordering
+        content1_xml_preprocessed = serialize_with_linebreaks(content1_preprocessed)
+        content2_xml_preprocessed = serialize_with_linebreaks(content2_preprocessed)
+
+        # Line mapping not needed - semantic mode uses data-line attributes
+        line_mapping1 = {}
+        line_mapping2 = {}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to process XML for diff: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process XML for diff")
+
+    # Render HTML page with embedded XML
+    html = _generate_diff_html(
+        title1, title2,
+        content1_xml_original, content2_xml_original,
+        content1_xml_preprocessed, content2_xml_preprocessed,
+        line_mapping1, line_mapping2,
+        content1_line_offset, content2_line_offset,
+        stable_id1, stable_id2
+    )
+
+    return Response(content=html, media_type="text/html")

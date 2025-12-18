@@ -1,8 +1,14 @@
-# Plugin Development Guide
+# Frontend Plugin Development Guide
 
-Guide for creating and working with plugins in the PDF-TEI Editor.
+Guide for creating and working with **frontend plugins** in the PDF-TEI Editor.
 
-For detailed plugin architecture, see [architecture.md](./architecture.md#plugin-system-architecture).
+**Note**: This guide covers **frontend plugins** (JavaScript/TypeScript code running in the browser). For **backend plugins** (Python code running on the server), see [backend-plugins.md](./backend-plugins.md).
+
+**Key Differences**:
+- **Frontend plugins**: JavaScript classes in `app/src/plugins/` that extend the UI and handle client-side logic
+- **Backend plugins**: Python modules in `fastapi_app/plugins/` that provide server-side functionality and API endpoints
+
+For detailed frontend plugin architecture, see [architecture.md](./architecture.md#plugin-system-architecture).
 
 ## Creating New Plugin Classes
 
@@ -173,9 +179,9 @@ get preferences() {
 }
 ```
 
-## Legacy Plugin Objects
+## Plugin Objects
 
-Plugin objects should migrate from `state.update` to `onStateUpdate`:
+Plugin objects use the `onStateUpdate` endpoint:
 
 ```javascript
 import { updateState, hasStateChanged } from '../app.js';
@@ -211,16 +217,19 @@ export default {
 ## Anti-Patterns to Avoid
 
 ❌ **DO NOT** import global state:
+
 ```javascript
 import { state } from '../app.js';  // WRONG
 ```
 
 ❌ **DO NOT** mutate state directly:
+
 ```javascript
 this.state.user = newUser;  // WRONG
 ```
 
 ❌ **DO NOT** update state in `onStateUpdate`:
+
 ```javascript
 async onStateUpdate(changedKeys) {
   await this.dispatchStateChange({ ... });  // WRONG - creates infinite loop
@@ -228,6 +237,7 @@ async onStateUpdate(changedKeys) {
 ```
 
 ✅ **DO** dispatch state changes from event handlers:
+
 ```javascript
 async handleButtonClick() {
   await this.dispatchStateChange({ user: newUser });  // CORRECT
@@ -235,6 +245,7 @@ async handleButtonClick() {
 ```
 
 ✅ **DO** react to state changes in `onStateUpdate`:
+
 ```javascript
 async onStateUpdate(changedKeys) {
   if (changedKeys.includes('user')) {

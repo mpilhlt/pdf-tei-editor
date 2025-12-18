@@ -123,7 +123,7 @@ class SmartTestRunner {
 
   async discoverTestFiles() {
     const testsDir = join(projectRoot, 'tests');
-    if (!existsSync(testsDir)) return { js: [], py: [], api: [], e2e: [] };
+    const pluginsDir = join(projectRoot, 'fastapi_app', 'plugins');
 
     const { glob } = await import('glob');
 
@@ -134,38 +134,61 @@ class SmartTestRunner {
     const makeRelative = (file) => relative(projectRoot, file).replace(/\\/g, '/');
 
     // Discover JS unit tests in tests/unit/ (recursively)
-    const unitDir = join(testsDir, 'unit');
     const jsTests = [];
-    if (existsSync(unitDir)) {
-      const jsPattern = normalizeGlobPattern(join(unitDir, '**/*.test.js'));
-      const jsFiles = await glob(jsPattern);
-      jsTests.push(...jsFiles.map(makeRelative));
+    if (existsSync(testsDir)) {
+      const unitDir = join(testsDir, 'unit');
+      if (existsSync(unitDir)) {
+        const jsPattern = normalizeGlobPattern(join(unitDir, '**/*.test.js'));
+        const jsFiles = await glob(jsPattern);
+        jsTests.push(...jsFiles.map(makeRelative));
+      }
+    }
+
+    // Discover JS unit tests in plugin directories
+    if (existsSync(pluginsDir)) {
+      const pluginJsPattern = normalizeGlobPattern(join(pluginsDir, '**/tests/**/*.test.js'));
+      const pluginJsFiles = await glob(pluginJsPattern);
+      jsTests.push(...pluginJsFiles.map(makeRelative));
     }
 
     // Discover Python unit tests in tests/unit/ (recursively)
     const pyTests = [];
-    if (existsSync(unitDir)) {
-      const pyPattern = normalizeGlobPattern(join(unitDir, '**/test_*.py'));
-      const pyFiles = await glob(pyPattern);
-      pyTests.push(...pyFiles.map(makeRelative));
+    if (existsSync(testsDir)) {
+      const unitDir = join(testsDir, 'unit');
+      if (existsSync(unitDir)) {
+        const pyPattern = normalizeGlobPattern(join(unitDir, '**/test_*.py'));
+        const pyFiles = await glob(pyPattern);
+        pyTests.push(...pyFiles.map(makeRelative));
+      }
+    }
+
+    // Discover Python unit tests in plugin directories
+    if (existsSync(pluginsDir)) {
+      const pluginPyPattern = normalizeGlobPattern(join(pluginsDir, '**/tests/**/test_*.py'));
+      const pluginPyFiles = await glob(pluginPyPattern);
+      pyTests.push(...pluginPyFiles.map(makeRelative));
     }
 
     // Discover API tests in tests/api/ (backend API integration tests)
     const apiTests = [];
-    const apiDir = join(testsDir, 'api');
-    if (existsSync(apiDir)) {
-      const apiPattern = normalizeGlobPattern(join(apiDir, '**/*.test.js'));
-      const apiFiles = await glob(apiPattern);
-      apiTests.push(...apiFiles.map(makeRelative));
+    if (existsSync(testsDir)) {
+      const apiDir = join(testsDir, 'api');
+      if (existsSync(apiDir)) {
+        const apiPattern = normalizeGlobPattern(join(apiDir, '**/*.test.js'));
+        const apiFiles = await glob(apiPattern);
+        apiTests.push(...apiFiles.map(makeRelative));
+      }
     }
 
     // Discover E2E tests in tests/e2e/ (Playwright frontend E2E tests)
     const e2eTests = [];
-    const e2eDir = join(testsDir, 'e2e');
-    if (existsSync(e2eDir)) {
-      const e2ePattern = normalizeGlobPattern(join(e2eDir, '**/*.spec.js'));
-      const e2eFiles = await glob(e2ePattern);
-      e2eTests.push(...e2eFiles.map(makeRelative));
+    if (existsSync(testsDir)) {
+      const e2eDir = join(testsDir, 'e2e');
+      if (existsSync(e2eDir)) {
+        const e2ePattern = normalizeGlobPattern(join(e2eDir, '**/*.spec.js'));
+        const e2eFiles = await glob(e2ePattern);
+        e2eTests.push(...e2eFiles.map(makeRelative));
+      }
     }
 
     if (!process.argv.includes('--tap') && !process.argv.includes('--names-only')) {

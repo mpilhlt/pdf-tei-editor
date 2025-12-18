@@ -1,6 +1,13 @@
-# Backend Plugin System
+# Backend Plugin Development Guide
 
-Technical guide for creating backend plugins in the PDF-TEI Editor.
+Technical guide for creating **backend plugins** in the PDF-TEI Editor.
+
+**Note**: This guide covers **backend plugins** (Python code running on the server). For **frontend plugins** (JavaScript code running in the browser), see [plugin-development.md](./plugin-development.md).
+
+**Key Differences**:
+
+- **Backend plugins**: Python modules in `fastapi_app/plugins/` that provide server-side functionality and API endpoints
+- **Frontend plugins**: JavaScript classes in `app/src/plugins/` that extend the UI and handle client-side logic
 
 ## Architecture
 
@@ -20,11 +27,27 @@ Each plugin:
 
 **Use underscores in directory names** (not hyphens) to avoid Python import issues:
 
-```
+```text
 fastapi_app/plugins/my_plugin/
 ├── __init__.py
 ├── plugin.py          # Main plugin class
-└── routes.py          # Optional custom routes
+├── routes.py          # Optional custom routes
+├── my-script.js       # Optional: frontend JavaScript
+└── tests/             # Plugin tests
+    ├── test_plugin.py # Python unit tests
+    └── script.test.js # JavaScript unit tests (if applicable)
+```
+
+**Test Discovery**: The smart test runner automatically discovers tests in plugin `tests/` directories. Use `@testCovers` annotations to link tests to plugin files for dependency-based test execution.
+
+**Example Test Annotation**:
+
+```python
+"""
+Unit tests for My Plugin.
+
+@testCovers fastapi_app/plugins/my_plugin/plugin.py
+"""
 ```
 
 ### Minimal Plugin
@@ -356,42 +379,6 @@ async def execute(self, context, params: dict) -> dict:
     '''
 
     return {"html": html}
-```
-
-### Example: Comparison Table with Diff Links
-
-```python
-def _generate_comparison_table(self, comparisons):
-    """Generate HTML table with interactive diff links"""
-    rows = []
-
-    for comp in comparisons:
-        doc1_id = comp["doc1_stable_id"]
-        doc2_id = comp["doc2_stable_id"]
-
-        # Link to view first document
-        doc1_link = f'''<a href="#"
-            onclick="window.pluginSandbox.openDocument('{doc1_id}'); return false;"
-            style="color: #0066cc; text-decoration: underline;">
-            {doc1_id}
-        </a>'''
-
-        # Link to view diff between documents
-        diff_link = f'''<a href="#"
-            onclick="window.pluginSandbox.openDiff('{doc1_id}', '{doc2_id}'); return false;"
-            style="color: #0066cc; text-decoration: underline;">
-            View Diff
-        </a>'''
-
-        rows.append(f'''
-        <tr>
-            <td>{doc1_link}</td>
-            <td>{comp["score"]}</td>
-            <td>{diff_link}</td>
-        </tr>
-        ''')
-
-    return f'<table>{"".join(rows)}</table>'
 ```
 
 ### Available State Fields

@@ -15,6 +15,18 @@ from fastapi_app.lib.plugin_base import Plugin, PluginContext
 
 logger = logging.getLogger(__name__)
 
+# Tags to ignore in element sequence comparison
+IGNORE_TAGS = frozenset([
+    # Add tags that should be skipped in comparison, e.g., 'pb', 'milestone'
+])
+
+# Attributes to ignore in element comparison
+IGNORE_ATTRIBUTES = frozenset([
+    'xml:id',  # Internal IDs vary between versions
+    'xml:base',
+    # Add other attributes that should be ignored
+])
+
 
 class IAAAnalyzerPlugin(Plugin):
     """
@@ -138,8 +150,10 @@ class IAAAnalyzerPlugin(Plugin):
             # Compute pairwise agreements
             comparisons = self._compute_pairwise_agreements(versions)
 
-            # Generate HTML table
-            html = self._generate_html_table(comparisons)
+            # Generate HTML table with session_id for diff links
+            # Session ID is passed via params from the route handler
+            session_id = params.get("_session_id", "")
+            html = self._generate_html_table(comparisons, session_id)
 
             return {"html": html, "pdf": pdf_id, "variant": variant_filter or "all"}
 
@@ -234,15 +248,32 @@ class IAAAnalyzerPlugin(Plugin):
                 # Extract tag name without namespace
                 tag = etree.QName(elem).localname
 
+                # Skip ignored tags
+                if tag in IGNORE_TAGS:
+                    continue
+
                 # Normalize text and tail
                 text = self._normalize_text(elem.text)
                 tail = self._normalize_text(elem.tail)
 
-                # Extract relevant attributes
+                # Extract ALL attributes except ignored ones
                 attrs = {}
-                for attr_name in ["place", "type", "who", "when", "corresp", "n"]:
-                    if attr_name in elem.attrib:
-                        attrs[attr_name] = elem.attrib[attr_name]
+                for attr_name, attr_value in elem.attrib.items():
+                    # Handle namespaced attributes
+                    if '}' in attr_name:
+                        # Extract local name from {namespace}localname format
+                        ns_uri, local = attr_name.split('}')
+                        # Convert to prefix:local format for common namespaces
+                        if 'www.w3.org/XML' in ns_uri:
+                            full_name = f'xml:{local}'
+                        else:
+                            full_name = local
+                    else:
+                        full_name = attr_name
+
+                    # Skip ignored attributes
+                    if full_name not in IGNORE_ATTRIBUTES:
+                        attrs[full_name] = attr_value
 
                 sequence.append(
                     {"tag": tag, "text": text, "tail": tail, "attrs": attrs}
@@ -337,12 +368,13 @@ class IAAAnalyzerPlugin(Plugin):
 
         return matches
 
-    def _generate_html_table(self, comparisons: list[dict[str, Any]]) -> str:
+    def _generate_html_table(self, comparisons: list[dict[str, Any]], session_id: str) -> str:
         """
         Generate HTML table from comparison results.
 
         Args:
             comparisons: List of comparison dictionaries
+            session_id: Session ID for authentication in diff viewer links
 
         Returns:
             HTML table as string
@@ -360,6 +392,7 @@ class IAAAnalyzerPlugin(Plugin):
             '<th style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em; width: 60px;">Elements</th>',
             '<th style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em; width: 60px;">Matches</th>',
             '<th style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em; width: 80px;">Agreement</th>',
+            '<th style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em; width: 80px;">Details</th>',
         ]
 
         html_parts = [
@@ -390,6 +423,10 @@ class IAAAnalyzerPlugin(Plugin):
             v2_title_link = f'<a href="#" onclick="window.pluginSandbox.openDocument(\'{v2["stable_id"]}\'); return false;" style="color: #0066cc; text-decoration: underline;">{self._escape_html(v2["title"])}</a>'
             diff_link = f'<a href="#" onclick="window.pluginSandbox.openDiff(\'{v1["stable_id"]}\', \'{v2["stable_id"]}\'); return false;" style="color: #0066cc; text-decoration: underline;">{comp["matches"]}/{comp["total"]}</a>'
 
+            # Create link to standalone diff viewer
+            diff_url = f'/api/plugins/iaa-analyzer/diff?stable_id1={v1["stable_id"]}&stable_id2={v2["stable_id"]}&session_id={session_id}'
+            view_diff_link = f'<a href="#" onclick="event.preventDefault(); window.pluginSandbox?.openControlledWindow(\'{diff_url}\'); return false;" style="color: #0066cc; text-decoration: underline;">View Diff</a>'
+
             row_cells = [
                 f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{v1_title_link}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; font-size: 0.9em;">{self._escape_html(v1["annotator"])}</td>',
@@ -399,6 +436,7 @@ class IAAAnalyzerPlugin(Plugin):
                 f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em;">{comp["v2_count"]}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em;">{diff_link}</td>',
                 f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em; background-color: {color};">{agreement_pct}%</td>',
+                f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 0.9em;">{view_diff_link}</td>',
             ]
 
             html_parts.extend(

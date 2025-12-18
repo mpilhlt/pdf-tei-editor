@@ -10,13 +10,13 @@
  */
 
 import ui from '../ui.js'
-import { endpoints as ep, app, validation, logger, testLog } from '../app.js'
+import { endpoints as ep, app, validation, logger, testLog, services } from '../app.js'
 import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
-import { getDocumentTitle, getFileDataById } from '../modules/file-data-utils.js'
+import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
 import { isGoldFile } from '../modules/acl-utils.js'
 
@@ -92,7 +92,7 @@ const plugin = {
   }
 }
 
-export { xmlEditor as api, plugin, XMLEditor, saveIfDirty }
+export { xmlEditor as api, plugin, XMLEditor, saveIfDirty, openDocumentAtLine }
 export default plugin
 
 /**
@@ -448,6 +448,26 @@ async function saveIfDirty() {
     logger.warn(`Save failed: ${String(error)}`)
   }
 
+}
+
+/**
+ * Open document and scroll to line
+ * @param {string} stableId - Document stable ID
+ * @param {number} lineNumber - Line number (1-based)
+ * @param {number} [column=0] - Optional column position (0-based)
+ */
+async function openDocumentAtLine(stableId, lineNumber, column = 0) {
+  
+  await xmlEditor.hideMergeView()
+  
+  // Load document
+  await services.load({xml:stableId})
+
+  // Wait for editor to update (use requestAnimationFrame)
+  await new Promise(resolve => requestAnimationFrame(resolve));
+
+  // Scroll to line
+  xmlEditor.scrollToLine(lineNumber, column);
 }
 
 /**

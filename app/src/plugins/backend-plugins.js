@@ -8,8 +8,8 @@
 import { Plugin } from '../modules/plugin-base.js';
 import { api } from './client.js';
 import { notify } from '../modules/sl-utils.js';
-import { services } from '../plugins.js';
-import { registerTemplate, createSingleFromTemplate, updateUi, SlDropdown, SlButton, SlMenu, SlDialog } from '../ui.js';
+import { PluginSandbox } from '../modules/backend-plugin-sandbox.js';
+import { registerTemplate, createSingleFromTemplate, updateUi, SlDropdown, SlButton, SlMenu } from '../ui.js';
 import ui from '../ui.js';
 
 /**
@@ -17,58 +17,6 @@ import ui from '../ui.js';
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { BackendPlugin } from './client.js'
  */
-
-/**
- * Plugin Sandbox
- *
- * Provides controlled interface for plugin-generated HTML to interact with the application.
- * Available as `window.pluginSandbox` when plugin HTML content is displayed.
- */
-class PluginSandbox {
-  /**
-   * @param {PluginContext} context - Plugin context
-   * @param {SlDialog} dialog - Result dialog element
-   */
-  constructor(context, dialog) {
-    this.context = context;
-    this.dialog = dialog;
-  }
-
-  /**
-   * Update application state
-   * @param {Partial<ApplicationState>} updates - State fields to update
-   */
-  async updateState(updates) {
-    await this.context.updateState(updates);
-  }
-
-  /**
-   * Close the result dialog
-   */
-  closeDialog() {
-    this.dialog.hide();
-  }
-
-  /**
-   * Open a document by updating xml state and closing dialog
-   * @param {string} stableId - Document stable ID
-   */
-  async openDocument(stableId) {
-    await services.load({xml:stableId})
-    this.closeDialog();
-  }
-
-  /**
-   * Open diff view between two documents
-   * @param {string} stableId1 - First document stable ID
-   * @param {string} stableId2 - Second document stable ID
-   */
-  async openDiff(stableId1, stableId2) {
-    await services.load({xml:stableId1});
-    await services.showMergeView(stableId2);
-    this.closeDialog();
-  }
-}
 
 /**
  * Backend plugins button group UI structure

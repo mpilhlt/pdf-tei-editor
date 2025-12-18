@@ -1,9 +1,20 @@
-"""Unit tests for Inter-Annotator Agreement Analyzer plugin."""
+"""
+Unit tests for Inter-Annotator Agreement Analyzer plugin.
+
+@testCovers fastapi_app/plugins/iaa_analyzer/plugin.py
+@testCovers fastapi_app/plugins/iaa_analyzer/diff_utils.py
+"""
 
 import unittest
 from unittest.mock import MagicMock, patch
+from lxml import etree
 
 from fastapi_app.plugins.iaa_analyzer.plugin import IAAAnalyzerPlugin
+from fastapi_app.plugins.iaa_analyzer.diff_utils import (
+    preprocess_for_diff,
+    find_element_line_offset,
+    escape_html,
+)
 
 
 class TestIAAAnalyzerPlugin(unittest.TestCase):
@@ -329,7 +340,7 @@ class TestIAAAnalyzerPlugin(unittest.TestCase):
             }
         ]
 
-        html = self.plugin._generate_html_table(comparisons)
+        html = self.plugin._generate_html_table(comparisons, "test-session-id")
 
         # Check that HTML contains expected content
         self.assertIn("<table", html)
@@ -372,7 +383,7 @@ class TestIAAAnalyzerPlugin(unittest.TestCase):
             },
         ]
 
-        html = self.plugin._generate_html_table(comparisons)
+        html = self.plugin._generate_html_table(comparisons, "test-session-id")
 
         # Check color coding
         self.assertIn("#d4edda", html)  # Green
@@ -381,7 +392,7 @@ class TestIAAAnalyzerPlugin(unittest.TestCase):
 
     def test_generate_html_table_empty(self):
         """Test HTML table generation with empty comparisons."""
-        html = self.plugin._generate_html_table([])
+        html = self.plugin._generate_html_table([], "test-session-id")
         self.assertIn("No comparisons", html)
 
     def test_escape_html(self):
@@ -394,6 +405,92 @@ class TestIAAAnalyzerPlugin(unittest.TestCase):
         self.assertEqual(self.plugin._escape_html('Say "hello"'), "Say &quot;hello&quot;")
         self.assertEqual(self.plugin._escape_html(""), "")
         self.assertEqual(self.plugin._escape_html(None), "")
+
+
+class TestDiffUtils(unittest.TestCase):
+    """Test cases for diff_utils module."""
+
+    def test_preprocess_for_diff_removes_ignored_tags(self):
+        """Test that ignored tags are removed during preprocessing."""
+        xml = """<text>
+<body>
+<pb n="1"/>
+<p>Paragraph text</p>
+</body>
+</text>"""
+        root = etree.fromstring(xml.encode("utf-8"))
+
+        # Remove pb tags
+        result = preprocess_for_diff(root, frozenset(["pb"]), frozenset())
+        result_str = etree.tostring(result, encoding="unicode")
+
+        self.assertNotIn("<pb", result_str)
+        self.assertIn("<p>", result_str)
+
+    def test_preprocess_for_diff_strips_ignored_attributes(self):
+        """Test that ignored attributes are stripped during preprocessing."""
+        xml = '<text><p xml:id="p1" type="normal">Text</p></text>'
+        root = etree.fromstring(xml.encode("utf-8"))
+
+        # Strip xml:id but keep type
+        result = preprocess_for_diff(root, frozenset(), frozenset(["xml:id"]))
+        result_str = etree.tostring(result, encoding="unicode")
+
+        self.assertNotIn("xml:id", result_str)
+        self.assertIn('type="normal"', result_str)
+
+    def test_preprocess_for_diff_normalizes_whitespace(self):
+        """Test that text whitespace is normalized."""
+        xml = "<text><p>  Multiple   spaces\n\nand newlines  </p></text>"
+        root = etree.fromstring(xml.encode("utf-8"))
+
+        result = preprocess_for_diff(root, frozenset(), frozenset())
+        result_str = etree.tostring(result, encoding="unicode")
+
+        # Should normalize to single spaces
+        self.assertIn("Multiple spaces and newlines", result_str)
+
+    def test_preprocess_for_diff_injects_line_markers(self):
+        """Test that line markers are injected when requested."""
+        xml = """<text>
+<body>
+<p>Test</p>
+</body>
+</text>"""
+        root = etree.fromstring(xml.encode("utf-8"))
+
+        # Inject line markers
+        result = preprocess_for_diff(
+            root, frozenset(), frozenset(), inject_line_markers=True
+        )
+        result_str = etree.tostring(result, encoding="unicode")
+
+        # Should have data-line attributes
+        self.assertIn('data-line="1"', result_str)  # text element
+        self.assertIn('data-line="2"', result_str)  # body element
+        self.assertIn('data-line="3"', result_str)  # p element
+
+    def test_find_element_line_offset(self):
+        """Test finding element line offset in XML."""
+        xml = """<text>
+<body>
+<p>Test</p>
+</body>
+</text>"""
+        root = etree.fromstring(xml.encode("utf-8"))
+        body = root.find("body")
+
+        # Should find body on line 2
+        line_offset = find_element_line_offset(xml, body)
+        self.assertEqual(line_offset, 2)
+
+    def test_escape_html(self):
+        """Test HTML escaping."""
+        self.assertEqual(escape_html("<script>"), "&lt;script&gt;")
+        self.assertEqual(escape_html("A & B"), "A &amp; B")
+        self.assertEqual(escape_html('"quotes"'), "&quot;quotes&quot;")
+        self.assertEqual(escape_html(""), "")
+        self.assertEqual(escape_html(None), "")
 
 
 if __name__ == "__main__":

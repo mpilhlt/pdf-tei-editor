@@ -58,7 +58,16 @@
       "Bash(findstr:*)",
       "Bash(uv run uvicorn --help:*)",
       "Bash(tasklist:*)",
-      "Bash(timeout 5 bash -c 'tail -f /dev/null & TAIL_PID=$!; curl -s \"\"http://localhost:8000/api/plugins/annotation-versions-analyzer/export?pdf=test&variant=test\"\" >/dev/null 2>&1; sleep 1; kill $TAIL_PID 2>/dev/null')"
+      "Bash(timeout 5 bash -c 'tail -f /dev/null & TAIL_PID=$!; curl -s \"\"http://localhost:8000/api/plugins/annotation-versions-analyzer/export?pdf=test&variant=test\"\" >/dev/null 2>&1; sleep 1; kill $TAIL_PID 2>/dev/null')",
+      "Bash(podman stop:*)",
+      "Bash(podman rm:*)",
+      "Bash(npm run container:logs:*)",
+      "Bash(npm run container:start:*)",
+      "Bash(podman logs:*)",
+      "Bash(podman exec:*)",
+      "Bash(npm run container:build:*)",
+      "Bash(podman run:*)",
+      "Bash(mv:*)"
     ],
     "deny": [],
     "ask": []

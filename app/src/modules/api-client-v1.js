@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-16T07:34:02.367Z
+ * Generated from OpenAPI schema at 2025-12-18T06:49:26.869Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1413,7 +1413,8 @@ export class ApiClientV1 {
    * Execute a plugin endpoint.
    * Args:
    * plugin_id: Plugin identifier
-   * request: Execution request with endpoint and params
+   * exec_request: Execution request with endpoint and params
+   * request: FastAPI request object (for session_id extraction)
    * current_user: Current authenticated user (optional)
    * Returns:
    * Execution result

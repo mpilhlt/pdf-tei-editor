@@ -65,14 +65,19 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 npm run container:build
 npm run container:build -- --tag v1.0.0
 npm run container:build:no-cache -- --tag v1.0.0
+npm run container:build -- --tag v1.0.0 --yes  # Skip confirmation
 
 # Build and push to registry
 npm run container:push
 npm run container:push -- --tag v1.0.0 --no-build
+npm run container:push -- --tag v1.0.0 --yes  # Skip confirmation
 
 # Start container
 npm run container:start
 npm run container:start -- --tag v1.0.0 --port 8080
+npm run container:start -- --env GEMINI_API_KEY --env LOG_LEVEL=WARNING
+npm run container:start -- --data-dir /opt/data --restart unless-stopped
+npm run container:start -- --volume /host/path:/container/path
 npm run container:start -- --rebuild              # Rebuild before starting
 npm run container:start -- --rebuild --no-cache   # Rebuild without cache
 
@@ -84,7 +89,24 @@ npm run container:stop -- --all
 # Restart container
 npm run container:restart
 npm run container:restart -- --name pdf-tei-editor-v1.0.0
+npm run container:restart -- --env GEMINI_API_KEY
+npm run container:restart -- --data-dir /opt/data --restart unless-stopped
 npm run container:restart -- --rebuild             # Rebuild before restarting
+
+# View logs
+npm run container:logs
+npm run container:logs -- --name pdf-tei-editor-v1.0.0
+npm run container:logs -- --follow                 # Follow log output
+npm run container:logs -- --tail 100               # Show last 100 lines
+
+# Deploy container with nginx/SSL (requires sudo)
+sudo npm run container:deploy -- --fqdn editor.example.com
+sudo npm run container:deploy -- --fqdn editor.example.com --data-dir /opt/pdf-tei-editor/data
+sudo npm run container:deploy -- --fqdn demo.example.com --type demo
+npm run container:deploy -- --fqdn test.local --no-nginx --no-ssl  # No sudo needed
+GEMINI_API_KEY=key sudo npm run container:deploy -- --fqdn app.example.com --env GEMINI_API_KEY
+sudo npm run container:deploy -- --fqdn app.example.com --env GEMINI_API_KEY=key --env LOG_LEVEL=WARNING
+sudo npm run container:deploy -- --fqdn app.example.com --data-dir /opt/pdf-tei-editor/data --yes  # Skip confirmation
 
 # Run tests in container (CI mode)
 npm run test:container                           # Run with cache
@@ -121,6 +143,73 @@ The application state object is defined in `app/src/state.js` and contains:
 - **Use lxml** (not xml.etree) for TEI processing - it's what `tei_utils.py` uses and ensures consistency
 - **Add new utility functions** to `tei_utils.py` when you need TEI processing functionality that doesn't exist yet
 - This ensures consistent TEI handling across the codebase and prevents duplication
+
+### User Authentication and Access Control
+
+**Authentication Pattern for Custom Routes:**
+
+When implementing authenticated routes (e.g., plugin routes), use dependency injection:
+
+```python
+from fastapi import APIRouter, Depends, Header, Query
+from fastapi_app.lib.dependencies import (
+    get_auth_manager,
+    get_db,
+    get_session_manager,
+)
+
+@router.get("/endpoint")
+async def my_endpoint(
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+):
+    from fastapi_app.config import get_settings
+
+    # Extract session ID (header takes precedence)
+    session_id_value = x_session_id or session_id
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Validate session
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    # Get user
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+```
+
+**Access Control Pattern for Documents/Files:**
+
+Access control is **collection-based**, not direct user-document relationships. Use utility functions from `fastapi_app/lib/user_utils.py`:
+
+```python
+from fastapi_app.lib.user_utils import user_has_collection_access
+
+# Check if user has access to a document via its collections
+file = file_repo.get_file_by_stable_id(stable_id)
+user_has_access = False
+
+for collection_id in file.doc_collections or []:
+    if user_has_collection_access(user, collection_id, settings.db_dir):
+        user_has_access = True
+        break
+
+if not user_has_access:
+    raise HTTPException(status_code=403, detail="Access denied")
+```
+
+**Key Points:**
+- Users access documents through **collection membership**, not direct user-document links
+- Use `user_has_collection_access(user, collection_id, db_dir)` to check access to a specific collection
+- Use `get_user_collections(user, db_dir)` to get all collections a user can access (returns `None` if user has wildcard access)
+- Admin users and users with wildcard (`*`) in their groups have access to all collections
+- Import settings with `from fastapi_app.config import get_settings` (not `fastapi_app.lib.settings`)
+- See [fastapi_app/routers/files_save.py](fastapi_app/routers/files_save.py) for reference implementation
 
 ### Key Directories
 

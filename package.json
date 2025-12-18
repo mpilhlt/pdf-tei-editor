@@ -1,6 +1,6 @@
 {
     "name": "pdf-tei-editor",
-    "version": "0.11.0",
+    "version": "0.12.0",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
@@ -38,9 +38,11 @@
         "container:start": "node bin/container.js start",
         "container:stop": "node bin/container.js stop",
         "container:restart": "node bin/container.js restart",
+        "container:logs": "node bin/container.js logs",
         "container:build": "node bin/container.js build",
         "container:build:no-cache": "node bin/container.js build --no-cache",
-        "container:push": "node bin/container.js push"
+        "container:push": "node bin/container.js push",
+        "container:deploy": "node bin/container.js deploy"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",
@@ -71,6 +73,7 @@
         "@types/uuid": "^10.0.0",
         "adm-zip": "^0.5.16",
         "comment-parser": "^1.4.1",
+        "diff": "^8.0.2",
         "eventsource-client": "^1.2.0",
         "husky": "^9.1.7",
         "jsdom": "^26.1.0",

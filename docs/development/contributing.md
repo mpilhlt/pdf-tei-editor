@@ -61,6 +61,7 @@ test: add E2E test for document export
 ### Chore Commits
 
 Chore commits are filtered from release notes. Use for:
+
 - Dependency updates
 - Build configuration
 - Development tooling
@@ -112,15 +113,65 @@ async function validateDocument(documentId, options = {}) {
 
 See [Coding Standards](../code-assistant/coding-standards.md) for complete requirements.
 
+## Branch Workflow
+
+### Development Branches
+
+- **`devel`** - Main development branch. All development work happens here.
+- **`main`** - Stable release branch. Only receives merges from `devel` after releases.
+- **Feature branches** - Created from `devel`, merged back to `devel`.
+
+### Working with Branches
+
+1. **Create feature branch from `devel`**
+
+   ```bash
+   git checkout devel
+   git pull origin devel
+   git checkout -b feature/my-feature
+   ```
+
+2. **Make changes and commit**
+
+   ```bash
+   git add .
+   git commit -m "feat: add new feature"
+   ```
+
+3. **Keep branch updated with `devel`**
+
+   ```bash
+   git checkout devel
+   git pull origin devel
+   git checkout feature/my-feature
+   git merge devel
+   ```
+
+4. **Push and create PR targeting `devel`**
+
+   ```bash
+   git push origin feature/my-feature
+   # Create PR with base branch: devel
+   ```
+
+### Important Rules
+
+- **ALWAYS target `devel` for PRs**, never `main`
+- **NEVER commit directly to `main`**
+- `main` only receives merges from `devel` after releases
+- Feature branches must be up to date with `devel` before merging
+
 ## Pull Requests
 
 ### Creating a PR
 
-1. Ensure commits follow conventional format
-2. Update relevant documentation
-3. Add tests for new features
-4. Run full test suite: `npm run test:all`
-5. Write clear PR description explaining changes
+1. Create feature branch from `devel` (see Branch Workflow above)
+2. Ensure commits follow conventional format
+3. Update relevant documentation
+4. Add tests for new features
+5. Run full test suite: `npm run test:all`
+6. Push branch and create PR **targeting `devel`**
+7. Write clear PR description explaining changes
 
 ### PR Description Template
 
@@ -190,26 +241,65 @@ See [Testing Guide](testing.md) for comprehensive testing documentation.
 
 ## Release Process
 
+### Recommended Workflow
+
+The recommended approach for creating releases:
+
+1. **Ensure `devel` is ready for release**
+   - All features complete and tested
+   - All tests passing: `npm run test:all`
+
+2. **Run release script on `devel`**
+
+   ```bash
+   git checkout devel
+   node bin/release.js patch  # or minor/major
+   ```
+
+   - Bumps version on `devel`
+   - Creates tag pointing to `devel` commit
+   - Pushes both branch and tag to GitHub
+   - GitHub Actions triggers and creates release
+
+3. **Merge `devel` to `main`**
+
+   ```bash
+   git checkout main
+   git merge devel
+   git push origin main
+   ```
+
+### Why Release from `devel`?
+
+- Development happens on `devel`, so version bump occurs where work is done
+- Tag triggers release workflow immediately
+- Merging to `main` brings the release commit into stable branch
+- Simpler than creating intermediate release branches
+- Keeps `main` clean with only merged, tested code
+
+### Release Script Usage
+
 Releases are automated via [bin/release.js](../../bin/release.js):
 
 ```bash
 # Bump patch version (0.8.0 -> 0.8.1)
-node bin/release.js patch
+node bin/release.js patch # shorthand: npm release:patch
 
 # Bump minor version (0.8.0 -> 0.9.0)
-node bin/release.js minor
+node bin/release.js minor # shorthand: npm release:minor
 
 # Bump major version (0.8.0 -> 1.0.0)
-node bin/release.js major
+node bin/release.js major # shorthand: npm release:major
 
 # Test without pushing
-node bin/release.js patch --dry-run
+node bin/release.js patch --dry-run # shorthand: npm release:patch -- --dry-run
 
 # Skip test execution
 node bin/release.js patch --skip-tests
 ```
 
 The script:
+
 1. Validates working directory is clean
 2. Runs full test suite (unless `--skip-tests`)
 3. Regenerates API client if needed
@@ -218,6 +308,7 @@ The script:
 6. Creates PR if on main branch (requires `gh` CLI)
 
 GitHub Actions automatically:
+
 - Generates changelog from conventional commits
 - Creates GitHub release
 - Builds and pushes Docker image

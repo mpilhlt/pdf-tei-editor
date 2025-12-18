@@ -3,8 +3,8 @@
 /**
  * Release script for creating patch, minor, and major version releases.
  *
- * Handles version bumping, tagging, and pushing to GitHub, accounting for
- * write-protected main branch by creating release via PR workflow.
+ * Must be run from the devel branch. After release, merge devel to main.
+ * See docs/development/contributing.md#release-process for workflow details.
  *
  * Usage:
  *   node bin/release.js patch                  # Bump patch version (0.7.0 -> 0.7.1)
@@ -94,6 +94,21 @@ function release(releaseType) {
   const currentBranch = getCurrentBranch();
   console.log(`📍 Current branch: ${currentBranch}`);
 
+  // Enforce release from devel, not main
+  if (currentBranch === 'main') {
+    console.error('❌ Cannot create releases from main branch.');
+    console.error('');
+    console.error('Recommended workflow:');
+    console.error('  1. git checkout devel');
+    console.error('  2. node bin/release.js patch  # or minor/major');
+    console.error('  3. git checkout main');
+    console.error('  4. git merge devel');
+    console.error('  5. git push origin main');
+    console.error('');
+    console.error('See docs/development/contributing.md#release-process for details.');
+    process.exit(1);
+  }
+
   // Check for uncommitted changes
   if (!isWorkingDirectoryClean()) {
     console.error('❌ Working directory is not clean. Please commit or stash changes first.');
@@ -108,17 +123,9 @@ function release(releaseType) {
   console.log('\n📥 Fetching latest changes from remote...');
   exec('git fetch origin');
 
-  // If on main, create a release branch
-  let releaseBranch;
-  if (currentBranch === 'main') {
-    console.log('\n🔀 On main branch, creating release branch...');
-    releaseBranch = `release/${releaseType}-${Date.now()}`;
-    exec(`git checkout -b ${releaseBranch}`, false, true);
-    console.log(`✅ Created and switched to branch: ${releaseBranch}`);
-  } else {
-    releaseBranch = currentBranch;
-    console.log(`\n✅ Using current branch: ${releaseBranch}`);
-  }
+  // Use current branch for release
+  const releaseBranch = currentBranch;
+  console.log(`\n✅ Using current branch: ${releaseBranch}`);
 
   // Run tests
   if (SKIP_TESTS) {
@@ -192,36 +199,14 @@ function release(releaseType) {
   console.log('\n📤 Pushing changes to remote...');
   exec(`git push --follow-tags origin ${releaseBranch}`, false, true);
 
-  // If we created a release branch, prompt for PR creation
-  if (currentBranch === 'main') {
-    console.log('\n📋 Release branch pushed successfully!');
-    console.log('\n📝 Next steps:');
-    console.log(`   1. Create a PR from ${releaseBranch} to main`);
-    console.log('   2. Review and merge the PR');
-    console.log(`   3. The tag v${newVersion} has already been pushed`);
-    console.log('   4. GitHub Actions will build and publish the release');
-
-    // Try to create PR using gh CLI if available
-    if (!DRY_RUN) {
-      try {
-        const ghInstalled = exec('which gh', true);
-        if (ghInstalled) {
-          console.log('\n🔧 Creating PR using GitHub CLI...');
-          exec(`gh pr create --title "Release v${newVersion}" --body "Release version ${newVersion}" --base main --head ${releaseBranch}`, false, true);
-          console.log('✅ PR created successfully!');
-        }
-      } catch {
-        console.log('\n💡 Tip: Install GitHub CLI (gh) to automatically create PRs');
-        console.log('   brew install gh');
-      }
-    } else {
-      console.log('\n[DRY RUN] Would create PR using GitHub CLI if available');
-    }
-  } else {
-    console.log('\n✅ Release pushed successfully!');
-    console.log(`   Tag v${newVersion} has been created and pushed`);
-    console.log('   GitHub Actions will build and publish the release');
-  }
+  // Show next steps
+  console.log('\n✅ Release pushed successfully!');
+  console.log(`   Tag v${newVersion} has been created and pushed`);
+  console.log('   GitHub Actions will build and publish the release');
+  console.log('\n📝 Next step: Merge to main');
+  console.log('   git checkout main');
+  console.log('   git merge devel');
+  console.log('   git push origin main');
 
   if (DRY_RUN) {
     console.log('\n🧪 DRY RUN COMPLETE - No changes were pushed\n');

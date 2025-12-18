@@ -421,12 +421,38 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Checks if the editor has unsaved changes, i.e. the content of the 
+   * Checks if the editor has unsaved changes, i.e. the content of the
    * editor is different from the original XML document.
    * @returns {boolean}
    */
   isDirty() {
     return this.#editorIsDirty;
+  }
+
+  /**
+   * Scroll to a specific line in the editor
+   * @param {number} lineNumber - Line number (1-based)
+   * @param {number} [column=0] - Optional column position (0-based)
+   */
+  scrollToLine(lineNumber, column = 0) {
+    if (!this.#view) {
+      throw new Error('Editor not initialized');
+    }
+
+    // Convert 1-based line to CodeMirror position
+    const doc = this.#view.state.doc;
+    const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)));
+    const pos = line.from + Math.min(column, line.length);
+
+    // Dispatch effects to position cursor and scroll
+    this.#view.dispatch({
+      selection: { anchor: pos, head: pos },
+      scrollIntoView: true,
+      effects: EditorView.scrollIntoView(pos, { y: 'center' })
+    });
+
+    // Focus editor
+    this.#view.focus();
   }
 
   /**
