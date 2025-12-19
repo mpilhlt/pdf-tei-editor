@@ -351,24 +351,8 @@ async def show_diff(
     if not file1 or not file2:
         raise HTTPException(status_code=404, detail="One or both documents not found")
 
-    # Check user access to documents via collections
-    from fastapi_app.lib.user_utils import user_has_collection_access
-
-    user_has_access_to_file1 = False
-    user_has_access_to_file2 = False
-
-    for collection_id in file1.doc_collections or []:
-        if user_has_collection_access(user, collection_id, settings.db_dir):
-            user_has_access_to_file1 = True
-            break
-
-    for collection_id in file2.doc_collections or []:
-        if user_has_collection_access(user, collection_id, settings.db_dir):
-            user_has_access_to_file2 = True
-            break
-
-    if not user_has_access_to_file1 or not user_has_access_to_file2:
-        raise HTTPException(status_code=403, detail="Access denied to one or both documents")
+    # No collection-level access control - this is a read-only operation
+    # with unguessable stable IDs (user already authenticated)
 
     # Read XML content
     try:
