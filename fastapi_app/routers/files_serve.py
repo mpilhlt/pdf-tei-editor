@@ -60,7 +60,15 @@ def serve_file_by_id(
     if document_id == "empty.pdf":
         empty_pdf_path = Path("app/web/empty.pdf")
         if empty_pdf_path.exists():
-            return FileResponse(empty_pdf_path, media_type="application/pdf")
+            return FileResponse(
+                empty_pdf_path,
+                media_type="application/pdf",
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
         raise HTTPException(status_code=404, detail="empty.pdf not found")
 
     logger.debug(f"Serving file: {document_id}")
@@ -109,4 +117,14 @@ def serve_file_by_id(
 
     logger.info(f"Serving file {document_id[:8]}... ({file_metadata.file_type})")
 
-    return FileResponse(file_path, media_type=mime_type)
+    # Set cache control headers to prevent browser caching of mutable content
+    # This ensures users always get the latest version after saving changes
+    return FileResponse(
+        file_path,
+        media_type=mime_type,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
