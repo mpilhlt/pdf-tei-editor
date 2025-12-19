@@ -56,7 +56,7 @@ def heartbeat(
 
     # Refresh lock using acquire_lock (it handles refresh for same session)
     settings = get_settings()
-    if acquire_lock(file_metadata.id, session_id, settings.db_dir, logger):
+    if acquire_lock(file_metadata.stable_id, session_id, settings.db_dir, logger):
         return HeartbeatResponse(status="lock_refreshed")
 
     # Failed to refresh

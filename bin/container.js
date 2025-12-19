@@ -1047,14 +1047,31 @@ async function setupNginx(fqdn, port) {
 server {
     server_name ${fqdn};
 
-    location / {
+    # API endpoints - must not be cached by nginx (fixes #114)
+    # This location must come BEFORE the general location / block
+    location /api/ {
         proxy_pass http://127.0.0.1:${port};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
-        proxy_redirect off;
+
+        # Disable nginx caching - respect backend Cache-Control headers
+        proxy_cache off;
+        proxy_buffering off;
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
+
+        # Ensure Cache-Control headers from backend are passed through
+        proxy_pass_header Cache-Control;
+        proxy_pass_header Pragma;
+        proxy_pass_header Expires;
+
+        # Reinforce cache headers at proxy level
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
     }
 
     # Special handling for Server-Sent Events
@@ -1070,6 +1087,25 @@ server {
         proxy_read_timeout 300;
         proxy_connect_timeout 75;
     }
+
+    # General proxy for all other requests
+    location / {
+        proxy_pass http://127.0.0.1:${port};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_redirect off;
+    }
+
+    # Allow uploads up to 100MB (adjust as needed)
+    client_max_body_size 100M;
+
+    # Increase timeouts for large uploads and long operations
+    proxy_read_timeout 300s;
+    proxy_connect_timeout 300s;
+    proxy_send_timeout 300s;
 
     listen 80;
 }

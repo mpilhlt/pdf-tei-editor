@@ -53,7 +53,10 @@ const program = createTestRunnerCommand({
   examples: [
     '# Fast local iteration',
     'node tests/e2e-runner.js',
+    '',
+    '# Run specific tests (grep matches test names, not file paths)',
     'node tests/e2e-runner.js --keep-db --grep "upload"',
+    'node tests/e2e-runner.js --grep "should create new version"',
     '',
     '# Debug with browser visible',
     'node tests/e2e-runner.js --headed --debugger',

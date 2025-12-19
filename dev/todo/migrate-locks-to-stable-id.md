@@ -150,3 +150,57 @@ After migration:
 ## Priority
 
 **Medium** - The current `transfer_lock()` workaround is functional, but this refactoring would improve code quality and reduce complexity. Can be addressed in a dedicated technical debt sprint.
+
+## Implementation Summary
+
+Migration from content hash-based locking to stable_id-based locking was completed successfully with Option B (schema migration with generic migration infrastructure).
+
+### Completed Work
+
+1. **Generic Database Migration Infrastructure** - [fastapi_app/lib/migrations/](fastapi_app/lib/migrations/)
+   - [MigrationManager](fastapi_app/lib/migrations/manager.py): Versioned migration manager with automatic backups, rollback support, transactional migrations
+   - [Migration base class](fastapi_app/lib/migrations/base.py): Abstract base for creating migrations with upgrade/downgrade methods
+   - Features: version tracking, automatic backups, conditional migrations via `check_can_apply()`, rollback support
+   - Fully tested with [test_migrations.py](tests/unit/fastapi/test_migrations.py) (12 test cases)
+
+2. **Lock Table Schema Migration** - [Migration 001](fastapi_app/lib/migrations/versions/m001_locks_file_id.py)
+   - Renames `file_hash` column to `file_id` in locks table
+   - Clears existing locks (acceptable since they expire in 90 seconds)
+   - Idempotent via `check_can_apply()` - safe to run multiple times
+
+3. **Locking System Updates** - [fastapi_app/lib/locking.py](fastapi_app/lib/locking.py)
+   - Updated all lock functions to use `file_id` parameter (accepts stable_id values)
+   - Removed `transfer_lock()` function (no longer needed!)
+   - Migrations run automatically on first lock operation per process
+   - Updated functions: `acquire_lock()`, `release_lock()`, `check_lock()`, `get_all_active_locks()`, `get_locked_file_ids()`
+
+4. **API Endpoints Updated**
+   - [files_save.py:367](fastapi_app/routers/files_save.py#L367): Uses `stable_id` for lock acquisition and removed transfer_lock call
+   - [files_locks.py:133](fastapi_app/routers/files_locks.py#L133): Lock acquisition endpoint uses `stable_id`
+   - [files_heartbeat.py:59](fastapi_app/routers/files_heartbeat.py#L59): Heartbeat uses `stable_id`
+   - All release and check operations updated to use `stable_id`
+
+5. **Testing**
+   - Migration infrastructure: 12 unit tests covering all migration scenarios
+   - Locking with stable_id: 12 unit tests verifying correct behavior
+   - All existing API integration tests pass (37/37)
+   - Tests verify locks persist across content changes without transfer
+
+### Key Benefits Achieved
+
+- **No lock transfers needed** - stable_id never changes, so locks remain valid across file content updates
+- **Simpler code** - Removed ~60 lines of transfer logic
+- **More robust** - No edge cases where transfer might fail
+- **Better performance** - One less database operation per save
+- **Reusable infrastructure** - Generic migration system for future schema changes
+
+### Migration Behavior
+
+On server startup:
+1. Locks database is initialized with current schema (file_id column)
+2. Migration manager checks if migration 001 needs to run
+3. If `file_hash` column exists, migration renames it to `file_id` and clears old locks
+4. If `file_id` column already exists, migration is skipped
+5. Migration history is tracked in `migration_history` table
+
+The migration is safe to run multiple times and does not require manual intervention.

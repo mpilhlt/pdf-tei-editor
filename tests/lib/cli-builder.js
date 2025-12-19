@@ -54,8 +54,8 @@ export function createTestRunnerCommand(config) {
 
   // Test filtering
   program
-    .option('-g, --grep <pattern>', 'only run tests matching pattern')
-    .option('--grep-invert <pattern>', 'exclude tests matching pattern');
+    .option('-g, --grep <pattern>', 'only run tests matching pattern (matches file paths)')
+    .option('--grep-invert <pattern>', 'exclude tests matching pattern (matches file paths)');
 
   // Test directory
   program
