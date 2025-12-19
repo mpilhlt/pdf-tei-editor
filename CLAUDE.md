@@ -136,6 +136,13 @@ The application state object is defined in `app/src/state.js` and contains:
 - **If a read/write operation is missing**, add it to the appropriate repository/module rather than using ad-hoc SQL
 - This prevents breaking changes when the database schema evolves
 
+### Database Migrations
+
+- **ALWAYS use the migration infrastructure** when database schema changes are needed - see [docs/development/migrations.md](docs/development/migrations.md)
+- **NEVER modify the database schema directly** - create a versioned migration instead
+- Migrations provide automatic backups, rollback support, and version tracking
+- See `fastapi_app/lib/migrations/versions/m001_locks_file_id.py` for a complete example
+
 ### TEI Document Processing
 
 - **ALWAYS use utility functions** from `fastapi_app/lib/tei_utils.py` when working with TEI XML documents
