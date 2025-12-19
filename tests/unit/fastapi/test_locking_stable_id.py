@@ -3,6 +3,9 @@ Unit tests for locking system using stable_id.
 
 Tests that locks use stable_id instead of content hash,
 eliminating the need for lock transfers.
+
+@testCovers fastapi_app/lib/locking.py
+@testCovers fastapi_app/lib/migrations/versions/m001_locks_file_id.py
 """
 
 import unittest

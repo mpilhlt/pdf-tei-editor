@@ -80,8 +80,16 @@ def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
             """)
             conn.commit()
 
-    # Run migrations FIRST (only once per process)
-    if not _migrations_run:
+    # Run migrations FIRST
+    # Check if migrations are needed by looking at the schema
+    needs_migration = False
+    with sqlite3.connect(str(db_path)) as conn:
+        cursor = conn.execute("PRAGMA table_info(locks)")
+        columns = {row[1] for row in cursor.fetchall()}
+        # If file_hash exists but file_id doesn't, we need migration
+        needs_migration = 'file_hash' in columns and 'file_id' not in columns
+
+    if needs_migration or not _migrations_run:
         from fastapi_app.lib.migrations import MigrationManager
         from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
 
@@ -99,23 +107,29 @@ def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
             logger.error(f"Failed to run migrations: {e}")
             raise
 
-    # Now create/update schema with current structure
-    with get_db_connection(db_dir, logger) as conn:
-        # Table should already exist (either from above or migration)
-        # Just ensure indexes exist with current schema
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_file_id
-            ON locks(file_id)
-        """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_session
-            ON locks(session_id)
-        """)
-        conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_updated
-            ON locks(updated_at)
-        """)
-        logger.debug(f"Locks database initialized at {db_path}")
+    # Now create/update indexes with current structure
+    # Use direct sqlite3 connection to avoid recursion issues
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            # Table should already exist (either from above or migration)
+            # Just ensure indexes exist with current schema
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_file_id
+                ON locks(file_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session
+                ON locks(session_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_updated
+                ON locks(updated_at)
+            """)
+            conn.commit()
+            logger.debug(f"Locks database initialized at {db_path}")
+    except sqlite3.Error as e:
+        logger.error(f"Failed to create indexes: {e}")
+        raise RuntimeError(f"Database error: {e}")
 
 
 def acquire_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logger) -> bool:

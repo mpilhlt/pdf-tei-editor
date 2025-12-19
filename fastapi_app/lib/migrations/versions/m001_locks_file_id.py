@@ -81,9 +81,9 @@ class Migration001LocksFileId(Migration):
         """)
 
         # Create indexes on new table
-        conn.execute("CREATE INDEX idx_file_id ON locks_new(file_id)")
-        conn.execute("CREATE INDEX idx_session ON locks_new(session_id)")
-        conn.execute("CREATE INDEX idx_updated ON locks_new(updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_file_id ON locks_new(file_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_session ON locks_new(session_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_updated ON locks_new(updated_at)")
 
         self.logger.info("Clearing old locks (they use content hashes, not stable_ids)")
 
@@ -112,8 +112,8 @@ class Migration001LocksFileId(Migration):
         """)
 
         # Create old indexes
-        conn.execute("CREATE INDEX idx_session ON locks_new(session_id)")
-        conn.execute("CREATE INDEX idx_updated ON locks_new(updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_session ON locks_new(session_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_updated ON locks_new(updated_at)")
 
         self.logger.info("Clearing locks during downgrade")
 
