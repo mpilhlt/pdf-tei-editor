@@ -21,6 +21,7 @@
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",
         "dev:reset": "uv run python bin/reset-application.py",
+        "dev:clear-caches": "uv run python bin/manage.py clear-caches",
         "test:all": "node tests/smart-test-runner.js --all",
         "test:changed": "node tests/smart-test-runner.js",
         "test:tap": "node tests/smart-test-runner.js --all --tap",
