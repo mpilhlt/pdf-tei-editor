@@ -25,10 +25,11 @@ npm run test:unit:fastapi     # Python units
 
 # API integration tests (local server, fast)
 npm run test:api
-npm run test:api -- --grep "save"
+npm run test:api -- --grep "files_save"     # grep matches FILE PATH
 
 # E2E tests (Playwright)
 npm run test:e2e
+npm run test:e2e -- --grep "should upload"  # grep matches TEST NAME
 npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
 
@@ -234,6 +235,29 @@ Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) 
   - `data/db/metadata.db` - Main file metadata database (SQLite) - ALWAYS use this for file queries, NOT files.db
 - `fastapi_app` - the python backend based on FastAPI
 - `tests` - JavaScript and Python unit tests and E2E tests (Read [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) when creating or debugging tests)
+
+### Test Filtering: --grep Behavior
+
+**CRITICAL for debugging tests efficiently:**
+
+The `--grep` parameter works **differently** for API vs E2E tests:
+
+- **API tests** (`npm run test:api -- --grep "xxx"`): Matches **file paths**
+  - Example: `--grep "files_save"` runs `tests/api/v1/files_save.test.js`
+  - Example: `--grep "caching"` runs `tests/api/v1/files_serve_caching.test.js`
+  - Use file name patterns when debugging API tests
+
+- **E2E tests** (`npm run test:e2e -- --grep "xxx"`): Matches **test names** (test descriptions)
+  - Example: `--grep "should upload"` runs all tests with "upload" in the test name
+  - Example: `--grep "new version"` runs tests like `test('should create new version', ...)`
+  - Use test description patterns when debugging E2E tests
+
+**Quick rule:**
+
+- `*.test.js` (API) → grep by **file path**
+- `*.spec.js` (E2E) → grep by **test name**
+
+This difference exists because the backend test runner filters files before passing to Node.js, while Playwright receives the grep pattern directly.
 
 ## Detailed Documentation
 

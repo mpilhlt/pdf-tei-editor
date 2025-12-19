@@ -30,13 +30,15 @@ npm run test:unit:fastapi     # Python units
 
 # API tests (local FastAPI server, no containers)
 npm run test:api              # All API tests
-npm run test:api -- --grep "save"  # Specific tests
+npm run test:api -- --grep "save"    # Filter by file path pattern
+npm run test:api -- --grep "files_serve_caching"  # Run specific test file
 
 # E2E tests (Playwright)
 npm run test:e2e              # All E2E tests with local server
 npm run test:e2e:headed       # Show browser
 npm run test:e2e:debug        # Step-through debugging
 npm run test:e2e:debug-failure # Capture debug artifacts on failure (headless)
+npm run test:e2e -- --grep "should upload"  # Filter by test name pattern
 
 # Container tests (runs all tests inside container)
 npm run test:container                                  # Run with cache
@@ -150,6 +152,58 @@ npm run test:container -- --all
 - Real-time streaming via `PYTHONUNBUFFERED=1` and `stdio: 'inherit'`
 - Playwright browsers installed early for optimal layer caching
 - Exit code matches test results (0 = success, non-zero = failure)
+
+## Test Filtering with --grep
+
+**IMPORTANT:** The `--grep` parameter works differently for API vs E2E tests:
+
+### API Tests (backend-test-runner.js)
+
+`--grep` matches **file paths** (test file names):
+
+```bash
+# Matches files containing "save" in the path
+npm run test:api -- --grep "save"
+# → Runs: tests/api/v1/files_save.test.js
+
+# Matches specific test file
+npm run test:api -- --grep "files_serve_caching"
+# → Runs: tests/api/v1/files_serve_caching.test.js
+
+# Matches multiple files with common pattern
+npm run test:api -- --grep "files_"
+# → Runs: all files starting with "files_"
+```
+
+**Why:** The backend test runner filters test files before passing them to Node.js test runner.
+
+### E2E Tests (e2e-runner.js / Playwright)
+
+`--grep` matches **test names** (test titles in your code):
+
+```bash
+# Matches test titles containing "upload"
+npm run test:e2e -- --grep "upload"
+# → Runs: test('should upload file', ...), test('upload validation', ...), etc.
+
+# Matches specific test case
+npm run test:e2e -- --grep "should create new version"
+# → Runs: test('should create new version', ...)
+
+# Case-insensitive regex pattern
+npm run test:e2e -- --grep "save.*revision"
+# → Runs: test('should save current revision', ...), etc.
+```
+
+**Why:** Playwright's `--grep` is passed directly to the test runner and matches `test()` descriptions.
+
+### Rule of Thumb for Code Assistants
+
+- **Debugging API tests**: Use file name patterns → `--grep "files_save"`
+- **Debugging E2E tests**: Use test name patterns → `--grep "should upload"`
+- **When in doubt**: Check test file extension:
+  - `*.test.js` → API test → grep by file path
+  - `*.spec.js` → E2E test → grep by test name
 
 ## Writing Tests
 

@@ -68,7 +68,8 @@
       "Bash(npm run container:build:*)",
       "Bash(podman run:*)",
       "Bash(mv:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npx playwright test:*)"
     ],
     "deny": [],
     "ask": []
