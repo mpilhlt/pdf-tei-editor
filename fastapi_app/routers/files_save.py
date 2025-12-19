@@ -30,7 +30,7 @@ from ..lib.dependencies import (
 )
 from ..lib.file_repository import FileRepository
 from ..lib.file_storage import FileStorage
-from ..lib.locking import acquire_lock, release_lock, transfer_lock
+from ..lib.locking import acquire_lock, release_lock
 from ..lib.logging_utils import get_logger
 from ..lib.user_utils import user_has_collection_access
 from ..config import get_settings
@@ -363,8 +363,8 @@ async def save_file(
                     detail="Only annotators or reviewers can edit version files"
                 )
 
-        # Acquire lock for existing file
-            if not acquire_lock(existing_file.id, session_id, settings.db_dir, logger_inst):
+        # Acquire lock for existing file (using stable_id, not content hash)
+            if not acquire_lock(existing_file.stable_id, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
         # Save to storage (hash might change if content changed)
@@ -376,8 +376,7 @@ async def save_file(
             if saved_hash != existing_file.id:
                 logger_inst.debug(f"Content changed: {existing_file.id[:8]} -> {saved_hash[:8]}")
 
-                # Transfer lock from old hash to new hash
-                transfer_lock(existing_file.id, saved_hash, session_id, settings.db_dir, logger_inst)
+                # No need to transfer lock - stable_id never changes!
 
                 # Update database (FileRepository handles reference counting automatically)
                 file_repo.update_file(
@@ -435,18 +434,14 @@ async def save_file(
                 if existing_hash_file:
                     # File with this content already exists - return it instead of creating duplicate
                     logger_inst.info(f"File with hash {saved_hash[:8]} already exists, returning existing file")
-                    # Acquire lock if we don't have it
-                    if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
+                    # Acquire lock if we don't have it (using stable_id)
+                    if not acquire_lock(existing_hash_file.stable_id, session_id, settings.db_dir, logger_inst):
                         raise HTTPException(status_code=423, detail="Failed to acquire lock")
                     return SaveFileResponse(status="saved", file_id=existing_hash_file.stable_id)
             except ValueError:
                 pass  # Hash doesn't exist, continue with creation
 
-        # Acquire lock
-            if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
-                raise HTTPException(status_code=423, detail="Failed to acquire lock")
-
-        # Insert new version
+        # Create file first to get stable_id, then acquire lock
             created_file = file_repo.insert_file(FileCreate(
                 id=saved_hash,
                 filename=f"{file_id}.{variant}.v{next_version}.tei.xml" if variant else f"{file_id}.v{next_version}.tei.xml",
@@ -461,6 +456,10 @@ async def save_file(
                 file_metadata={},
                 file_size=file_size
             ))
+
+        # Now acquire lock using stable_id
+            if not acquire_lock(created_file.stable_id, session_id, settings.db_dir, logger_inst):
+                raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
             status = "new"
             return SaveFileResponse(status=status, file_id=created_file.stable_id)
@@ -487,11 +486,7 @@ async def save_file(
             saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
             file_size = len(xml_bytes)
 
-        # Acquire lock
-            if not acquire_lock(saved_hash, session_id, settings.db_dir, logger_inst):
-                raise HTTPException(status_code=423, detail="Failed to acquire lock")
-
-        # Insert new gold standard
+        # Insert new gold standard first to get stable_id
             filename = f"{file_id}.{variant}.tei.xml" if variant else f"{file_id}.tei.xml"
             created_file = file_repo.insert_file(FileCreate(
                 id=saved_hash,
@@ -508,6 +503,10 @@ async def save_file(
                 file_metadata={},
                 file_size=file_size
             ))
+
+        # Now acquire lock using stable_id
+            if not acquire_lock(created_file.stable_id, session_id, settings.db_dir, logger_inst):
+                raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
             status = "new_gold"
             return SaveFileResponse(status=status, file_id=created_file.stable_id)

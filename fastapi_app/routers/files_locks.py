@@ -83,7 +83,7 @@ def check_lock_endpoint(
         return CheckLockResponse(is_locked=False, locked_by=None)
 
     settings = get_settings()
-    lock_status = check_lock(file_metadata.id, session_id, settings.db_dir, logger)
+    lock_status = check_lock(file_metadata.stable_id, session_id, settings.db_dir, logger)
 
     return CheckLockResponse(**lock_status)
 
@@ -130,12 +130,12 @@ def acquire_lock_endpoint(
 
     # Acquire lock
     settings = get_settings()
-    if acquire_lock(file_metadata.id, session_id, settings.db_dir, logger):
-        logger.info(f"[LOCK API] Session {session_id_short}... successfully acquired lock for {file_metadata.id[:16]}...")
+    if acquire_lock(file_metadata.stable_id, session_id, settings.db_dir, logger):
+        logger.info(f"[LOCK API] Session {session_id_short}... successfully acquired lock for file {file_metadata.stable_id}...")
         return "OK"
 
     # Could not acquire lock
-    logger.warning(f"[LOCK API] Session {session_id_short}... FAILED to acquire lock (423) for {file_metadata.id[:16]}...")
+    logger.warning(f"[LOCK API] Session {session_id_short}... FAILED to acquire lock (423) for file {file_metadata.stable_id}...")
     raise HTTPException(
         status_code=423,
         detail=f'Could not acquire lock for {request.file_id}'
@@ -172,7 +172,7 @@ def release_lock_endpoint(
         )
 
     settings = get_settings()
-    result = release_lock(file_metadata.id, session_id, settings.db_dir, logger)
+    result = release_lock(file_metadata.stable_id, session_id, settings.db_dir, logger)
 
     if result["status"] == "success":
         return ReleaseLockResponse(
