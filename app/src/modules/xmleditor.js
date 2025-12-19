@@ -1124,7 +1124,14 @@ export class XMLEditor extends EventEmitter {
       // treat argument as path
       const url = xmlUrlOrString
       try {
-        const response = await fetch(url);
+        // Disable browser caching to ensure we always get the latest content (fixes #114)
+        const response = await fetch(url, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
         if (response.status >= 400) {
           throw new Error(`Resource at ${url} does not exist.`);
         }
