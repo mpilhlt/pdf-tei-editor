@@ -3,6 +3,8 @@
 !.env.development
 !.env.production
 !.env.test
+!.env.deploy.demo.localhost
+!.env.deploy.example.org
 
 # Caches and temp files
 .venv
