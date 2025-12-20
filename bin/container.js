@@ -1266,8 +1266,9 @@ async function handleDeploy(options) {
     process.exit(1);
   }
 
-  const useNginx = !options.noNginx;
-  const useSSL = !options.noSsl;
+  // Note: --no-nginx creates options.nginx = false, --no-ssl creates options.ssl = false
+  const useNginx = options.nginx !== false;
+  const useSSL = options.ssl !== false;
 
   // Check for root access FIRST if nginx/ssl needed
   if ((useNginx || useSSL) && process.getuid && process.getuid() !== 0) {

@@ -43,7 +43,8 @@
         "container:build": "node bin/container.js build",
         "container:build:no-cache": "node bin/container.js build --no-cache",
         "container:push": "node bin/container.js push",
-        "container:deploy": "node bin/container.js deploy"
+        "container:deploy": "node bin/container.js deploy",
+        "deploy": "node bin/deploy.js"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",

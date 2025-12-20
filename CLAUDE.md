@@ -113,6 +113,11 @@ sudo npm run container:deploy -- --fqdn app.example.com --data-dir /opt/pdf-tei-
 npm run test:container                           # Run with cache
 npm run test:container -- --no-cache             # Rebuild all layers
 npm run test:container -- path/to/file.js        # Run for specific files
+
+# Deploy from environment file (recommended for production)
+npm run deploy .env.example.org                  # Deploy using env file
+npm run deploy config/production.env             # Custom path
+sudo env "PATH=$PATH" npm run deploy .env.example.org  # With sudo for nginx/SSL
 ```
 
 ### Key Files
