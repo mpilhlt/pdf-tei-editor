@@ -43,6 +43,7 @@ import { StatusBadge } from './widgets/status-badge.js';
 import { StatusDropdown } from './widgets/status-dropdown.js';
 import { StatusSeparator } from './widgets/status-separator.js';
 import { StatusSwitch } from './widgets/status-switch.js';
+import { StatusSpacer } from './widgets/status-spacer.js';
 
 /**
  * Helper function to create and configure a widget
@@ -196,6 +197,16 @@ const PanelUtils = {
    */
   createSwitch(options = {}) {
     return createWidget('status-switch', options);
+  },
+
+  /**
+   * Create a spacer widget to fill available space in toolbar/statusbar
+   * @param {Object} options - Widget options
+   * @param {string} [options.name] - Optional name for UI element lookup
+   * @returns {StatusSpacer}
+   */
+  createSpacer(options = {}) {
+    return createWidget('status-spacer', options);
   }
 };
 
@@ -236,6 +247,7 @@ export {
   StatusDropdown,
   StatusSeparator,
   StatusSwitch,
+  StatusSpacer,
   PanelUtils,
   createStatusBar,
   createToolBar,

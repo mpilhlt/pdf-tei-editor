@@ -20,13 +20,14 @@ import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
-import { isGoldFile } from '../modules/acl-utils.js'
+import { isGoldFile, userHasRole } from '../modules/acl-utils.js'
 import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
 
 // Register templates
 await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
 await registerTemplate('xmleditor-headerbar-right', 'xmleditor-headerbar-right.html')
 await registerTemplate('xmleditor-toolbar', 'xmleditor-toolbar.html')
+await registerTemplate('xmleditor-import-export-buttons', 'xmleditor-import-export-buttons.html')
 await registerTemplate('xmleditor-statusbar', 'xmleditor-statusbar.html')
 await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.html')
 
@@ -48,6 +49,8 @@ await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.h
  * @property {StatusButton} nextDiffBtn - Next diff button
  * @property {StatusButton} rejectAllBtn - Reject all changes button
  * @property {StatusButton} acceptAllBtn - Accept all changes button
+ * @property {StatusButton} uploadBtn - Upload document button
+ * @property {StatusButton} downloadBtn - Download document button
  */
 
 /**
@@ -161,6 +164,15 @@ async function install(state) {
     }
   })
 
+  // Create import/export buttons and add to toolbar (right side)
+  const importExportButtons = createFromTemplate('xmleditor-import-export-buttons')
+  const importExportPriorities = [50, 3, 2] // spacer, upload, download
+  importExportButtons.forEach((widget, index) => {
+    if (widget instanceof HTMLElement) {
+      ui.xmlEditor.toolbar.add(widget, importExportPriorities[index] || 1)
+    }
+  })
+
   // Read-only status widget (added dynamically when needed)
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
@@ -189,6 +201,14 @@ async function install(state) {
   ui.xmlEditor.toolbar.acceptAllBtn.addEventListener('widget-click', () => {
     xmlEditor.acceptAllDiffs()
     services.removeMergeView()
+  })
+
+  // Attach event listeners to import/export buttons
+  ui.xmlEditor.toolbar.uploadBtn.addEventListener('widget-click', () => {
+    if (currentState) services.uploadXml(currentState)
+  })
+  ui.xmlEditor.toolbar.downloadBtn.addEventListener('widget-click', () => {
+    if (currentState) services.downloadXml(currentState)
   })
 
   // selection => xpath state
@@ -400,6 +420,16 @@ async function update(state) {
         ui.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id)
       }
     }
+  }
+
+  // Update import/export button states based on user role and state
+  const isAnnotator = userHasRole(state.user, ['admin', 'reviewer', 'annotator'])
+  if (isAnnotator) {
+    ui.xmlEditor.toolbar.downloadBtn.disabled = !Boolean(state.xml)
+    ui.xmlEditor.toolbar.uploadBtn.disabled = state.editorReadOnly || state.offline
+  } else {
+    ui.xmlEditor.toolbar.downloadBtn.disabled = true
+    ui.xmlEditor.toolbar.uploadBtn.disabled = true
   }
 
   // xpath state => selection

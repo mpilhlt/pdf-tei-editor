@@ -76,8 +76,6 @@ let currentState = null
  * @typedef {object} documentActionsPart
  * @property {SlButton} saveRevision - Save current revision button
  * @property {SlButton} createNewVersion - Create new version button
- * @property {SlButton} upload - Upload file button
- * @property {SlButton} download - Download file button
  * @property {SlButton} deleteBtn - Delete dropdown button
  * @property {SlButton} deleteCurrentVersion - Delete current version button
  * @property {SlButton} deleteAllVersions - Delete all versions button
@@ -174,16 +172,6 @@ async function install(state) {
     if (currentState) createNewVersion(currentState);
   })
 
-  // download
-  da.download.addEventListener("click", () => {
-    if (currentState) downloadXml(currentState);
-  })
-
-  // upload
-  da.upload.addEventListener("click", () => {
-    if (currentState) uploadXml(currentState);
-  })
-
   // === TEI button group ===
 
   const ta = ui.toolbar.teiActions
@@ -234,17 +222,10 @@ async function onStateUpdate(changedKeys, state) {
 
   // Allow new version or revisions only if we have an xml path
   if (isAnnotator) {
-
-    da.saveRevision.disabled =  !Boolean(state.xml) || state.editorReadOnly 
-    da.createNewVersion.disabled = !Boolean(state.xml) 
-    
-    // Allow download only if we have an xml path
-    da.download.disabled = !Boolean(state.xml)
-
-    // no uploads if editor is readonly
-    da.upload.disabled = state.editorReadOnly 
+    da.saveRevision.disabled =  !Boolean(state.xml) || state.editorReadOnly
+    da.createNewVersion.disabled = !Boolean(state.xml)
   } else {
-    for (let btn of [da.saveRevision, da.createNewVersion, da.download, da.upload]) {
+    for (let btn of [da.saveRevision, da.createNewVersion]) {
       btn.disabled = true
     }
   }
