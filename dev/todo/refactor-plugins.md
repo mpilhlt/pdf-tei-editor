@@ -1,5 +1,7 @@
 # Refactor plugin architecture
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/119
+
 Reorganize the existing layout
 
 - app/src/plugins  

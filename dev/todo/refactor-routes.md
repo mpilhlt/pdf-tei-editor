@@ -1,5 +1,7 @@
 # Refactor route paths.
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/132
+
 At the moment, we have three different path with routes:
 
 - `fastapi_app/api`

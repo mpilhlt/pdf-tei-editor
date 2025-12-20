@@ -1,5 +1,7 @@
 # Re-enable Export Collection Filter Test
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/124
+
 ## Issue
 
 Test isolation issue in [tests/api/v1/files_export.test.js:47](tests/api/v1/files_export.test.js#L47)

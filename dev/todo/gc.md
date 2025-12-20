@@ -1,5 +1,7 @@
 # Garbage Collection API
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/135
+
 Depends on `dev/todo/setting-menu.md`
 
 ## Implementation Status

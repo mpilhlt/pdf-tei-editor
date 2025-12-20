@@ -1,5 +1,7 @@
 # Replace `{state: {update}}` endpoints with `{onUpdateState}` in plugins
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/128
+
 @app/src/endpoints.js
 
 All of the non-class-based plugins in `app/src/plugins` still use the legacy endpoint `state.update` and should be migrated to the new reactive `onStateUpdate` endpoint.

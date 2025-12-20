@@ -1,5 +1,7 @@
 # UI to edit file metadata
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/131
+
 ## Current state
 
 - TEI metadata is read from parsing output, is then stored in the database

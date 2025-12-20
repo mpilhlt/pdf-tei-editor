@@ -1,5 +1,7 @@
 # Enhancements for IAA Analyzer plugin
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/127
+
 **Character-level inline diff:**
 
 - Implement enhanced cropping function using `Diff.diffChars()`

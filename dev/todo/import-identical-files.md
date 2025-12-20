@@ -1,5 +1,7 @@
 # Import Identical Files with Different Names
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/123
+
 ## Current Behavior
 
 The import script ([bin/import_files.py](../../bin/import_files.py)) currently checks for duplicates **only by content hash** (SHA-256).
