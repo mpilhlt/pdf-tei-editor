@@ -1,4 +1,6 @@
-# Garbage Collection API - TODO
+# Garbage Collection API
+
+Depends on `dev/todo/setting-menu.md`
 
 ## Implementation Status
 
