@@ -588,22 +588,46 @@ async function startContainer(config) {
 
   runArgs.push(imageName);
 
-  const runCmd = `${containerCmd} ${runArgs.join(' ')}`;
-
   console.log(`\n   Starting container...`);
-  console.log(`   Command: ${runCmd}`);
+  console.log(`   Command: ${containerCmd} ${runArgs.join(' ')}`);
 
   try {
-    const output = execSync(runCmd, { encoding: 'utf8', stdio: detach ? 'pipe' : 'inherit' });
+    // Use spawn instead of execSync to avoid shell interpretation issues
+    const childProcess = spawn(containerCmd, runArgs, {
+      stdio: detach ? 'pipe' : 'inherit'
+    });
 
-    if (detach) {
-      const containerId = output.trim();
-      console.log(`\n   Container started successfully!`);
-      console.log(`   Container ID: ${containerId.substring(0, 12)}`);
-      console.log(`   Name: ${name}`);
-      console.log(`   URL: http://localhost:${port}`);
-      return containerId;
-    }
+    return new Promise((resolve, reject) => {
+      let output = '';
+
+      if (detach && childProcess.stdout) {
+        childProcess.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+      }
+
+      childProcess.on('close', (code) => {
+        if (code === 0) {
+          if (detach) {
+            const containerId = output.trim();
+            console.log(`\n   Container started successfully!`);
+            console.log(`   Container ID: ${containerId.substring(0, 12)}`);
+            console.log(`   Name: ${name}`);
+            console.log(`   URL: http://localhost:${port}`);
+            resolve(containerId);
+          } else {
+            resolve(undefined);
+          }
+        } else {
+          reject(new Error(`Container start failed with exit code ${code}`));
+        }
+      });
+
+      childProcess.on('error', (err) => {
+        console.error(`\n   Failed to start container: ${String(err)}`);
+        reject(err);
+      });
+    });
   } catch (error) {
     console.error(`\n   Failed to start container: ${String(error)}`);
     throw error;
@@ -1369,7 +1393,7 @@ async function handleDeploy(options) {
     if (existingContainer) {
       console.log(`[INFO] Stopping existing container: ${containerName}`);
       execSync(`${containerCmd} stop ${containerName}`, { stdio: 'inherit' });
-      execSync(`${containerCmd} rm ${containerName}`, { stdio: 'inherit' });
+      execSync(`${containerCmd} rm -f ${containerName}`, { stdio: 'inherit' });
     }
   } catch {
     // No existing container
