@@ -306,6 +306,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **Reload file data** - Use `FiledataPlugin.getInstance().reload({ refresh: true })` to reload file data from the server. Import `FiledataPlugin` from `../plugins.js`
 - ** when inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message so that these commands can be found and removed later.
 - If during debugging you learn something that is not contained in the code assistant documentation, add it to the respective file!
+- When asked to create a github issue or other github mainenance issues, use the `gh` tool and ask the user to install it if it is not available
 
 ## Planning documents, todo documents, github issues
 

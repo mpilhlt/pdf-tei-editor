@@ -70,7 +70,8 @@
       "Bash(mv:*)",
       "Bash(find:*)",
       "Bash(npx playwright test:*)",
-      "Bash(gh issue create:*)"
+      "Bash(gh issue create:*)",
+      "Bash(gh api:*)"
     ],
     "deny": [],
     "ask": []
