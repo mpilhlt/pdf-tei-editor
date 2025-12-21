@@ -8,8 +8,8 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
-import ui, { updateUi } from '../ui.js';
-import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
+import ui from '../ui.js';
+import { registerTemplate, createFromTemplate } from '../modules/ui-system.js';
 import Plugin from '../modules/plugin-base.js';
 import { logger, client, config } from '../app.js';
 import { UrlHash } from '../modules/browser-utils.js';
@@ -44,7 +44,6 @@ import { SessionActivityTracker } from '../modules/session-activity-tracker.js';
 
 // Register templates
 await registerTemplate('login-dialog', 'login-dialog.html');
-await registerTemplate('logout-button', 'logout-button.html');
 
 //
 // Authentication Plugin Class
@@ -92,29 +91,15 @@ class AuthenticationPlugin extends Plugin {
   }
 
   async start() {
-    // add the logout button after all other elements have been added to the toolbar
-    const buttonElement = createSingleFromTemplate('logout-button');
-    ui.toolbar.insertAdjacentElement("beforeend", buttonElement);
-    updateUi();
-    ui.toolbar.logoutButton.addEventListener("click", () => this.logout());
-
     // Initialize session activity tracker
     await this._initializeActivityTracker();
   }
 
   /**
    * React to state changes
-   * @param {string[]} changedKeys
    */
-  async onStateUpdate(changedKeys) {
-    if (changedKeys.includes('user')) {
-      const user = this.state?.user;
-      ui.toolbar.logoutButton.disabled = user === null;
-      const tooltip = ui.toolbar.logoutButton.closest('sl-tooltip')
-      if (user && tooltip) {
-        tooltip.content = `Log out ${user.username} (${user.roles.join(", ")})`
-      }
-    }
+  async onStateUpdate() {
+    // No UI updates needed - user menu is handled by user-account plugin
   }
 
   /**

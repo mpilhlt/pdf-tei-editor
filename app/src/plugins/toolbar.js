@@ -6,12 +6,13 @@
  * Currently, the toolbar is just a container div where other plugins add their controls.
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { SlSelect, SlButton, SlButtonGroup, UIPart } from '../ui.js'
  * @import { documentActionsPart, teiServicesPart } from './services.js'
  * @import { extractionActionsPart } from './extraction.js'
  * @import { fileDrawerTriggerPart } from './file-selection-drawer.js'
+ * @import { userMenuGroup } from './user-account.js'
  */
 
 import { logger, hasStateChanged } from '../app.js'
@@ -33,7 +34,7 @@ import ui from '../ui.js'
  * @property {UIPart<SlButtonGroup, teiServicesPart>} teiActions - TEI service buttons (added by services plugin)
  * @property {UIPart<SlButtonGroup, extractionActionsPart>} extractionActions - Extraction action buttons (added by extraction plugin)
  * @property {UIPart<SlButtonGroup, backendPluginsButtonPart>} backendPluginsGroup - Backend plugins dropdown (added by backend-plugins plugin)
- * @property {SlButton} logoutButton - The logout button (added by authentication plugin)
+ * @property {UIPart<SlButtonGroup, userMenuGroup>} userMenuGroup - User menu dropdown (added by user-account plugin)
  * @property {UIPart<SlButton, fileDrawerTriggerPart>} fileDrawerTrigger - File drawer trigger button (added by file-selection-drawer plugin)
  */
 

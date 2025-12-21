@@ -15,7 +15,7 @@ For each file in this folder, create an issue on GitHub using the `gh` tool if o
 
 - Respect stated dependencies, i.e. create issues for parent tasks first and also make the issues dependent on each other.
 
-- Tag the issue as "bug", "enhancement", or "documentation", and "backend", or "frontend", as applicable.
+- Set the "Issue type"  the issue as "bug", "feature", or "task", and tag the issue with the labels "python", "javascript", "documentation", "ci", or "schema", as applicable.
 
 - In the issue, summarize the task and reference the file with its static github URL. Assign it to `@cboulanger`.
 

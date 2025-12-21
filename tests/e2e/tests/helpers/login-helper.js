@@ -55,11 +55,21 @@ export async function performLogout(page) {
     });
 
     if (loggedIn) {
-      // Click logout button
+      // Click user menu button to open dropdown
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.toolbar.logoutButton.click();
+        ui.toolbar.userMenuGroup.userDropdown.userBtn.click();
+      });
+
+      // Wait for menu to open
+      await page.waitForTimeout(500);
+
+      // Click logout menu item
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.userMenuGroup.userDropdown.userMenu.logoutMenuItem.click();
       });
 
       // Wait for logout to complete - login dialog should appear

@@ -1,0 +1,48 @@
+<sl-dialog name="userProfileDialog" label="User Profile" class="user-profile-dialog" style="--width: 500px;">
+  <form name="profileForm">
+    <!-- Full Name -->
+    <sl-input
+      name="fullnameInput"
+      label="Full Name"
+      placeholder="Enter your full name"
+      style="margin-bottom: 1rem;">
+    </sl-input>
+
+    <!-- Email -->
+    <sl-input
+      name="emailInput"
+      label="Email"
+      type="email"
+      placeholder="Enter your email address"
+      style="margin-bottom: 1rem;">
+    </sl-input>
+
+    <!-- Password -->
+    <sl-input
+      name="passwordInput"
+      label="New Password"
+      type="password"
+      placeholder="Leave empty to keep current password"
+      password-toggle
+      style="margin-bottom: 1rem;">
+      <sl-icon name="lock" slot="prefix"></sl-icon>
+    </sl-input>
+
+    <!-- Repeat Password -->
+    <sl-input
+      name="repeatPasswordInput"
+      label="Repeat New Password"
+      type="password"
+      placeholder="Repeat the new password"
+      password-toggle
+      style="margin-bottom: 1rem;">
+      <sl-icon name="lock" slot="prefix"></sl-icon>
+    </sl-input>
+
+    <!-- Error Message -->
+    <div name="errorMessage" style="color: var(--sl-color-danger-600); margin-bottom: 1rem; display: none;"></div>
+  </form>
+
+  <sl-button slot="footer" name="cancelBtn" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="saveBtn" variant="primary">Save</sl-button>
+</sl-dialog>

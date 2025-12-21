@@ -16,6 +16,7 @@ import BackendPluginsPlugin from './plugins/backend-plugins.js'
 import FiledataPlugin from './plugins/filedata.js'
 import LoggerPlugin from './plugins/logger.js'
 import { logLevel} from './plugins/logger.js'
+import UserAccountPlugin from './plugins/user-account.js'
 
 // legacy plugins
 import { plugin as configPlugin, api as config } from './plugins/config.js'
@@ -46,6 +47,7 @@ import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
 const plugins = [
   // class-based
   AuthenticationPlugin,
+  UserAccountPlugin,
   BackendPluginsPlugin,
   FiledataPlugin,
   LoggerPlugin,
@@ -83,6 +85,7 @@ export default plugins
 export {
   // class-based plugins
   AuthenticationPlugin,
+  UserAccountPlugin,
   LoggerPlugin,
 
   // legacy plugin APIs
