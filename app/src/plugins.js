@@ -47,7 +47,6 @@ import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
 const plugins = [
   // class-based
   AuthenticationPlugin,
-  UserAccountPlugin,
   BackendPluginsPlugin,
   FiledataPlugin,
   LoggerPlugin,
@@ -58,6 +57,13 @@ const plugins = [
   configPlugin,
   dialogPlugin,
   toolbarPlugin,
+
+  // Toolbar menu items (order matters - determines menu item order)
+  infoPlugin,          // User Manual (first)
+  rbacManagerPlugin,   // Manage Users & Roles (second, admin only)
+  UserAccountPlugin,   // User Profile + Logout (last)
+
+  // Other plugins
   pdfViewerPlugin,
   xmlEditorPlugin,
   fileselectionPlugin,
@@ -69,12 +75,10 @@ const plugins = [
   promptEditorPlugin,
   teiWizardPlugin,
   validationPlugin,
-  infoPlugin,
   moveFilesPlugin,
   ssePlugin,
   accessControlPlugin,
   heartbeatPlugin,
-  rbacManagerPlugin,
   startPlugin
 ]
 

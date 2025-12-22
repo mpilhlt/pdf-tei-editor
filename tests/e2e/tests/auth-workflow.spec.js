@@ -86,26 +86,26 @@ test.describe('Authentication Workflow', () => {
     );
     expect(loginSuccessLog).toBeDefined();
 
-    // Wait for user menu button to be enabled
+    // Wait for toolbar menu button to be enabled
     await page.waitForTimeout(2000);
 
-    // Verify user menu button is now enabled
-    const userMenuButtonEnabled = await page.evaluate(() => {
+    // Verify toolbar menu button is now enabled
+    const toolbarMenuButtonEnabled = await page.evaluate(() => {
       /** @type {namedElementsTree} */
       const ui = /** @type {any} */(window).ui;
-      return !ui.toolbar.userMenuGroup.userDropdown.userBtn.disabled;
+      return !ui.toolbar.toolbarMenu.menuBtn.disabled;
     });
-    expect(userMenuButtonEnabled).toBe(true);
+    expect(toolbarMenuButtonEnabled).toBe(true);
 
     // Clear console logs for logout test
     consoleLogs.length = 0;
 
     // Perform logout using UI navigation system
-    // First, open the user menu
+    // First, open the toolbar menu
     await page.evaluate(() => {
       /** @type {namedElementsTree} */
       const ui = /** @type {any} */(window).ui;
-      ui.toolbar.userMenuGroup.userDropdown.userBtn.click();
+      ui.toolbar.toolbarMenu.menuBtn.click();
     });
 
     // Wait for menu to open
@@ -115,7 +115,7 @@ test.describe('Authentication Workflow', () => {
     await page.evaluate(() => {
       /** @type {namedElementsTree} */
       const ui = /** @type {any} */(window).ui;
-      ui.toolbar.userMenuGroup.userDropdown.userMenu.logoutMenuItem.click();
+      ui.toolbar.toolbarMenu.menu.logoutMenuItem.click();
     });
 
     // Wait for logout to complete and login dialog to reappear
@@ -136,13 +136,13 @@ test.describe('Authentication Workflow', () => {
     );
     expect(logoutSuccessLog).toBeDefined();
 
-    // Verify user menu button is disabled after logout
-    const userMenuButtonDisabled = await page.evaluate(() => {
+    // Verify toolbar menu button is disabled after logout
+    const toolbarMenuButtonDisabled = await page.evaluate(() => {
       /** @type {namedElementsTree} */
       const ui = /** @type {any} */(window).ui;
-      return ui.toolbar.userMenuGroup.userDropdown.userBtn.disabled;
+      return ui.toolbar.toolbarMenu.menuBtn.disabled;
     });
-    expect(userMenuButtonDisabled).toBe(true);
+    expect(toolbarMenuButtonDisabled).toBe(true);
   });
 
   test('should handle invalid login credentials', async ({ page }) => {

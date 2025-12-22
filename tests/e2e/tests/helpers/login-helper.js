@@ -55,11 +55,11 @@ export async function performLogout(page) {
     });
 
     if (loggedIn) {
-      // Click user menu button to open dropdown
+      // Click toolbar menu button to open dropdown
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.toolbar.userMenuGroup.userDropdown.userBtn.click();
+        ui.toolbar.toolbarMenu.menuBtn.click();
       });
 
       // Wait for menu to open
@@ -69,7 +69,7 @@ export async function performLogout(page) {
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
-        ui.toolbar.userMenuGroup.userDropdown.userMenu.logoutMenuItem.click();
+        ui.toolbar.toolbarMenu.menu.logoutMenuItem.click();
       });
 
       // Wait for logout to complete - login dialog should appear

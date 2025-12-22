@@ -8,8 +8,8 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  */
 
-import ui, { updateUi } from '../ui.js';
-import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
+import ui from '../ui.js';
+import { registerTemplate, createFromTemplate } from '../modules/ui-system.js';
 import Plugin from '../modules/plugin-base.js';
 import { logger, client } from '../app.js';
 import { notify } from '../modules/sl-utils.js';
@@ -18,15 +18,6 @@ import { AuthenticationPlugin } from '../plugins.js';
 //
 // UI Type Definitions
 //
-
-/**
- * @typedef {object} userMenuGroup
- * @property {object} userDropdown
- * @property {SlButton} userDropdown.userBtn
- * @property {object} userDropdown.userMenu
- * @property {SlMenuItem} userDropdown.userMenu.profileMenuItem
- * @property {SlMenuItem} userDropdown.userMenu.logoutMenuItem
- */
 
 /**
  * @typedef {object} userProfileDialog
@@ -41,8 +32,8 @@ import { AuthenticationPlugin } from '../plugins.js';
  */
 
 // Register templates
-await registerTemplate('user-menu-button', 'user-menu-button.html');
 await registerTemplate('user-profile-dialog', 'user-profile-dialog.html');
+await registerTemplate('user-menu-items', 'user-menu-items.html');
 
 //
 // User Account Plugin Class
@@ -55,7 +46,7 @@ class UserAccountPlugin extends Plugin {
   constructor(context) {
     super(context, {
       name: 'user-account',
-      deps: ['client', 'authentication']
+      deps: ['client', 'authentication', 'toolbar']
     });
   }
 
@@ -79,22 +70,25 @@ class UserAccountPlugin extends Plugin {
 
     // Setup form event handlers
     this._setupFormHandlers();
-  }
 
-  async start() {
-    // Add the user menu button after all other elements have been added to the toolbar
-    const buttonElement = createSingleFromTemplate('user-menu-button');
-    ui.toolbar.insertAdjacentElement("beforeend", buttonElement);
-    updateUi();
+    // Add menu items to the toolbar menu (which was created by toolbar plugin)
+    createFromTemplate('user-menu-items', ui.toolbar.toolbarMenu.menu);
+
+    logger.debug('User account menu items added to toolbar menu');
 
     // Setup menu item handlers
-    ui.toolbar.userMenuGroup.userDropdown.userMenu.profileMenuItem.addEventListener('click', () => {
+    ui.toolbar.toolbarMenu.menu.profileMenuItem.addEventListener('click', () => {
       this.showProfileDialog();
     });
 
-    ui.toolbar.userMenuGroup.userDropdown.userMenu.logoutMenuItem.addEventListener('click', () => {
+    ui.toolbar.toolbarMenu.menu.logoutMenuItem.addEventListener('click', () => {
       this.logout();
     });
+  }
+
+  async start() {
+    // No longer needed - menu items are added during install phase
+    logger.debug(`Starting plugin "${this.name}"`);
   }
 
   /**
@@ -104,12 +98,7 @@ class UserAccountPlugin extends Plugin {
   async onStateUpdate(changedKeys) {
     if (changedKeys.includes('user')) {
       const user = this.state?.user;
-      ui.toolbar.userMenuGroup.userDropdown.userBtn.disabled = user === null;
-
-      const tooltip = ui.toolbar.userMenuGroup.userDropdown.userBtn.closest('sl-tooltip');
-      if (user && tooltip) {
-        tooltip.content = `${user.username} (${user.roles.join(", ")})`;
-      }
+      ui.toolbar.toolbarMenu.menuBtn.disabled = user === null;
     }
   }
 

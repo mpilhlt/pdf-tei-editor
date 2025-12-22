@@ -50,7 +50,7 @@ import './modules/panels/index.js';
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
  * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
  * @import {backendPluginsButtonPart, backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
- * @import {userMenuGroup, userProfileDialog} from './plugins/user-account.js'
+ * @import {userProfileDialog} from './plugins/user-account.js'
  */
 
 /**
