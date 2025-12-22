@@ -84,9 +84,10 @@ Created generic toolbar menu managed by toolbar plugin:
 The toolbar menu contains (in order):
 
 1. User Manual (info plugin)
-2. Manage Users & Roles (rbac-manager plugin, admin only)
-3. User Profile (user-account plugin)
-4. Logout (user-account plugin)
+2. Garbage Collection (filedata plugin, admin only)
+3. Manage Users & Roles (rbac-manager plugin, admin only)
+4. User Profile (user-account plugin)
+5. Logout (user-account plugin)
 
 ### Status
 

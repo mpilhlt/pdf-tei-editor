@@ -174,6 +174,50 @@ def garbage_collect_files(
         f"{files_deleted} physical files deleted, {storage_freed} bytes freed"
     )
 
+    # Clean up orphaned files (files in storage with no database entry)
+    logger.info("Scanning for orphaned files...")
+    orphaned_files = storage.find_orphaned_files(repo)
+
+    orphaned_count = 0
+    orphaned_size = 0
+
+    for file_hash, file_type, file_path, file_size in orphaned_files:
+        try:
+            # Delete the orphaned file
+            file_path.unlink()
+            orphaned_count += 1
+            orphaned_size += file_size
+            files_deleted += 1
+            storage_freed += file_size
+
+            # Clean up reference entry if it exists
+            repo.ref_manager.remove_reference_entry(file_hash)
+
+            logger.info(
+                f"Deleted orphaned file: {file_hash[:8]}... ({file_type}, {file_size} bytes)"
+            )
+
+            # Clean up empty shard directory
+            shard_dir = file_path.parent
+            try:
+                if shard_dir.exists() and not any(shard_dir.iterdir()):
+                    shard_dir.rmdir()
+                    logger.debug(f"Removed empty shard directory: {shard_dir.name}")
+            except (OSError, FileNotFoundError):
+                pass
+
+        except Exception as e:
+            logger.error(f"Failed to delete orphaned file {file_hash[:8]}...: {e}")
+            continue
+
+    if orphaned_count > 0:
+        logger.info(
+            f"Orphan cleanup completed: {orphaned_count} orphaned files deleted, "
+            f"{orphaned_size} bytes freed"
+        )
+    else:
+        logger.info("No orphaned files found")
+
     return GarbageCollectResponse(
         purged_count=purged_count,
         files_deleted=files_deleted,

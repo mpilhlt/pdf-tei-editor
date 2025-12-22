@@ -12,7 +12,8 @@ import { logger } from '../app.js'
 const api = {
   info,
   error,
-  success
+  success,
+  confirm
 }
 
 // Plugin object
@@ -35,6 +36,8 @@ export default plugin
  * @property {HTMLSpanElement} message
  * @property {HTMLDivElement} icon
  * @property {SlButton} closeBtn
+ * @property {SlButton} cancelBtn
+ * @property {SlButton} confirmBtn
  */
 
 //
@@ -79,11 +82,68 @@ function error(message) {
 
 /**
  * Shows a success dialog
- * @param {string} message 
+ * @param {string} message
  */
 function success(message) {
   ui.dialog.setAttribute("label", "Success");
   ui.dialog.icon.innerHTML = `<sl-icon name="check-circle" style="color: var(--sl-color-success-500);"></sl-icon>`;
   ui.dialog.message.innerHTML = message
   ui.dialog.show()
+}
+
+/**
+ * Shows a confirmation dialog and returns a promise that resolves to true/false
+ * @param {string} message - The confirmation message
+ * @param {string} [title="Confirm"] - The dialog title
+ * @returns {Promise<boolean>} Promise that resolves to true if confirmed, false if cancelled
+ */
+function confirm(message, title = "Confirm") {
+  return new Promise((resolve) => {
+    // Set up the dialog
+    ui.dialog.setAttribute("label", title);
+    ui.dialog.icon.innerHTML = `<sl-icon name="question-circle" style="color: var(--sl-color-warning-500);"></sl-icon>`;
+    ui.dialog.message.innerHTML = message;
+
+    // Hide close button, show cancel/confirm buttons
+    ui.dialog.closeBtn.style.display = 'none';
+    ui.dialog.cancelBtn.style.display = '';
+    ui.dialog.confirmBtn.style.display = '';
+
+    // Set up one-time event handlers
+    const handleConfirm = () => {
+      cleanup();
+      ui.dialog.hide();
+      resolve(true);
+    };
+
+    const handleCancel = () => {
+      cleanup();
+      ui.dialog.hide();
+      resolve(false);
+    };
+
+    const handleHide = () => {
+      // If dialog is closed without clicking a button, treat as cancel
+      cleanup();
+      resolve(false);
+    };
+
+    const cleanup = () => {
+      ui.dialog.confirmBtn.removeEventListener('click', handleConfirm);
+      ui.dialog.cancelBtn.removeEventListener('click', handleCancel);
+      ui.dialog.removeEventListener('sl-hide', handleHide);
+      // Restore normal dialog state
+      ui.dialog.closeBtn.style.display = '';
+      ui.dialog.cancelBtn.style.display = 'none';
+      ui.dialog.confirmBtn.style.display = 'none';
+    };
+
+    // Attach event listeners
+    ui.dialog.confirmBtn.addEventListener('click', handleConfirm);
+    ui.dialog.cancelBtn.addEventListener('click', handleCancel);
+    ui.dialog.addEventListener('sl-hide', handleHide, { once: true });
+
+    // Show the dialog
+    ui.dialog.show();
+  });
 }

@@ -30,9 +30,10 @@ await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html');
  * @typedef {object} toolbarMenuPart
  * @property {SlButton} menuBtn - The menu trigger button
  * @property {object} menu - The menu container
- * @property {import('../ui.js').SlMenuItem} [menu.profileMenuItem] - User profile menu item (added by user-account plugin)
- * @property {import('../ui.js').SlMenuItem} [menu.rbacManagerMenuItem] - RBAC manager menu item (added by rbac-manager plugin)
  * @property {import('../ui.js').SlMenuItem} [menu.infoMenuItem] - Info/manual menu item (added by info plugin)
+ * @property {import('../ui.js').SlMenuItem} [menu.gcMenuItem] - Garbage collection menu item (added by filedata plugin, admin only)
+ * @property {import('../ui.js').SlMenuItem} [menu.rbacManagerMenuItem] - RBAC manager menu item (added by rbac-manager plugin, admin only)
+ * @property {import('../ui.js').SlMenuItem} [menu.profileMenuItem] - User profile menu item (added by user-account plugin)
  * @property {import('../ui.js').SlMenuItem} [menu.logoutMenuItem] - Logout menu item (added by user-account plugin)
  */
 

@@ -48,7 +48,6 @@ const plugins = [
   // class-based
   AuthenticationPlugin,
   BackendPluginsPlugin,
-  FiledataPlugin,
   LoggerPlugin,
 
   // modules with config object
@@ -60,7 +59,8 @@ const plugins = [
 
   // Toolbar menu items (order matters - determines menu item order)
   infoPlugin,          // User Manual (first)
-  rbacManagerPlugin,   // Manage Users & Roles (second, admin only)
+  FiledataPlugin,      // Garbage Collection (second, admin only)
+  rbacManagerPlugin,   // Manage Users & Roles (third, admin only)
   UserAccountPlugin,   // User Profile + Logout (last)
 
   // Other plugins
