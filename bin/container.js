@@ -235,7 +235,7 @@ async function buildImage(tag, noCache) {
 
 /**
  * Handle build command
- * @param {{tag?: string, noCache?: boolean, yes?: boolean}} options
+ * @param {{tag?: string, cache?: boolean, yes?: boolean}} options
  */
 async function handleBuild(options) {
   console.log('PDF TEI Editor - Container Build');
@@ -249,7 +249,7 @@ async function handleBuild(options) {
   console.log(`[INFO]   Image Name: ${APP_NAME}:${tag}`);
   console.log(`[INFO]   Build Target: production`);
 
-  if (options.noCache) {
+  if (options.cache === false) {
     console.log(`[INFO]   Cache: Disabled (--no-cache - will rebuild all layers)`);
   } else {
     console.log(`[INFO]   Cache: Enabled (use --no-cache to force rebuild)`);
@@ -267,7 +267,7 @@ async function handleBuild(options) {
   console.log();
   console.log('[INFO] Starting build process...');
 
-  if (!(await buildImage(tag, options.noCache || false))) {
+  if (!(await buildImage(tag, options.cache === false))) {
     process.exit(1);
   }
 
@@ -408,7 +408,7 @@ function cleanup() {
 
 /**
  * Handle push command
- * @param {{tag?: string, noBuild?: boolean, noCache?: boolean, yes?: boolean}} options
+ * @param {{tag?: string, build?: boolean, cache?: boolean, yes?: boolean}} options
  */
 async function handlePush(options) {
   console.log('PDF TEI Editor - Container Push');
@@ -431,9 +431,9 @@ async function handlePush(options) {
   console.log(`[INFO]   Version Tag: ${tag}`);
   console.log(`[INFO]   Image Name: ${credentials.username}/${APP_NAME}:${tag}`);
 
-  if (!options.noBuild) {
+  if (options.build !== false) {
     console.log(`[INFO]   Build Target: production`);
-    if (options.noCache) {
+    if (options.cache === false) {
       console.log(`[INFO]   Cache: Disabled (--no-cache - will rebuild all layers)`);
     } else {
       console.log(`[INFO]   Cache: Enabled (use --no-cache to force rebuild)`);
@@ -443,7 +443,7 @@ async function handlePush(options) {
   }
   console.log();
 
-  const action = options.noBuild ? 'push' : 'build and push';
+  const action = options.build === false ? 'push' : 'build and push';
 
   if (!options.yes) {
     const confirmed = await askForConfirmation(`Continue with ${action}? (y/N): `);
@@ -456,8 +456,8 @@ async function handlePush(options) {
   console.log();
   console.log(`[INFO] Starting ${action} process...`);
 
-  if (!options.noBuild) {
-    if (!(await buildImage(tag, options.noCache || false))) {
+  if (options.build !== false) {
+    if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);
     }
     console.log();
@@ -636,7 +636,7 @@ async function startContainer(config) {
 
 /**
  * Handle start command
- * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, noCache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
+ * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, cache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
  */
 async function handleStart(options) {
   console.log('PDF TEI Editor - Container Start');
@@ -651,7 +651,7 @@ async function handleStart(options) {
   if (options.rebuild) {
     console.log('[INFO] Rebuilding image before starting container...');
     console.log();
-    if (!(await buildImage(tag, options.noCache || false))) {
+    if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);
     }
     console.log();
@@ -867,7 +867,7 @@ async function handleStop(options) {
 
 /**
  * Handle restart command
- * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, noCache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
+ * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, cache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
  */
 async function handleRestart(options) {
   console.log('PDF TEI Editor - Container Restart');
@@ -881,7 +881,7 @@ async function handleRestart(options) {
     const tag = options.tag || 'latest';
     console.log('[INFO] Rebuilding image before restarting container...');
     console.log();
-    if (!(await buildImage(tag, options.noCache || false))) {
+    if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);
     }
     console.log();
@@ -1257,11 +1257,11 @@ async function setupSSL(fqdn, email) {
  *   port?: number,
  *   type?: string,
  *   dataDir?: string,
- *   noNginx?: boolean,
- *   noSsl?: boolean,
+ *   nginx?: boolean,
+ *   ssl?: boolean,
  *   email?: string,
  *   rebuild?: boolean,
- *   noCache?: boolean,
+ *   cache?: boolean,
  *   env?: string[],
  *   yes?: boolean
  * }} options
@@ -1367,7 +1367,7 @@ async function handleDeploy(options) {
   // Rebuild if requested
   if (options.rebuild) {
     console.log('[INFO] Rebuilding image...');
-    if (!(await buildImage(tag, options.noCache || false))) {
+    if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);
     }
     console.log();
