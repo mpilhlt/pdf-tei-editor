@@ -63,7 +63,6 @@ RUN uv run python bin/compile-sl-icons.py \
     # Remove all build-time files and directories
     && rm -rf .git \
     && rm -rf tests \
-    && rm -rf docs \
     && rm -rf app/src \
     && rm -rf node_modules/.cache \
     && rm -rf /root/.cache \
@@ -85,6 +84,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/app/web /app/app/web
 COPY --from=builder /app/fastapi_app /app/fastapi_app
 COPY --from=builder /app/config /app/config
+COPY --from=builder /app/docs /app/docs
 # Note: data/db/ is created at runtime from config/ by db_init.py
 
 # Set production mode in the container
