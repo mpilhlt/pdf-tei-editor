@@ -33,7 +33,7 @@ const api = {
  */
 const plugin = {
   name: "info",
-  deps: ['authentication'],
+  deps: ['authentication', 'toolbar'],
   install
 }
 
@@ -59,7 +59,7 @@ export default plugin
 // Register templates
 await registerTemplate('info-dialog', 'info-drawer.html');
 await registerTemplate('about-button', 'about-button.html');
-await registerTemplate('info-toolbar-button', 'info-toolbar-button.html');
+await registerTemplate('info-menu-item', 'info-menu-item.html');
 
 //
 // Implementation
@@ -162,8 +162,10 @@ async function install(state) {
   
   // Create UI elements
   createFromTemplate('info-dialog', document.body);
-  const button = createSingleFromTemplate('info-toolbar-button');
-  
+  createFromTemplate('info-menu-item', ui.toolbar.toolbarMenu.menu);
+
+  logger.debug('Info menu item added to toolbar menu');
+
   // Set up info dialog event listeners
   ui.infoDrawer.closeBtn.addEventListener('click', () => ui.infoDrawer.hide());
   ui.infoDrawer.backBtn.addEventListener('click', goBack);
@@ -196,10 +198,8 @@ async function install(state) {
     logger.debug('Failed to load version:', error)
   })
 
-  // add a button to the command bar to show dialog
-  ui.toolbar.add(button, 1) // Low priority for info button
-  updateUi()
-  button.addEventListener("click", () => api.open())
+  // Add menu item event listener
+  ui.toolbar.toolbarMenu.menu.infoMenuItem.addEventListener("click", () => api.open())
   
   // configure markdown parser
   const options = {

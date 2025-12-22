@@ -62,6 +62,13 @@ class UpdateUserRequest(BaseModel):
     groups: Optional[List[str]] = Field(None, description="List of groups")
 
 
+class UpdateProfileRequest(BaseModel):
+    """Request model for updating own user profile."""
+    fullname: Optional[str] = Field(None, description="User's full name")
+    email: Optional[str] = Field(None, description="User's email address")
+    passwd_hash: Optional[str] = Field(None, description="New password (will be hashed)")
+
+
 def require_authenticated(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
     """Dependency that requires authentication."""
     if not current_user:
@@ -272,6 +279,62 @@ def update_user_endpoint(
     except Exception as e:
         logger.error(f"Error updating user: {e}")
         raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
+
+
+@router.put("/me/profile", response_model=User)
+def update_own_profile(
+    body: UpdateProfileRequest,
+    current_user: dict = Depends(require_authenticated)
+):
+    """
+    Update own user profile.
+
+    Allows authenticated users to update their own fullname, email, and password.
+    Cannot modify roles or groups.
+
+    Returns:
+        Updated user information (password excluded)
+    """
+    settings = get_settings()
+    username = current_user.get('username')
+
+    if not username:
+        raise HTTPException(status_code=400, detail="Username not found in session")
+
+    try:
+        users_data = load_entity_data(settings.db_dir, 'users')
+        user = find_user(username, users_data)
+
+        if not user:
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+
+        # Update fields if provided
+        if body.fullname is not None:
+            user['fullname'] = body.fullname
+        if body.email is not None:
+            user['email'] = body.email
+        if body.passwd_hash is not None:
+            user['passwd_hash'] = hash_password(body.passwd_hash)
+
+        # Save to file
+        save_entity_data(settings.db_dir, 'users', users_data)
+
+        logger.info(f"User '{username}' updated their own profile")
+
+        return User(
+            username=user['username'],
+            fullname=user['fullname'],
+            email=user['email'],
+            roles=user['roles'],
+            groups=user['groups'],
+            session_id=user.get('session_id')
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating profile: {e}")
+        raise HTTPException(status_code=500, detail=f"Error updating profile: {str(e)}")
 
 
 @router.delete("/{username}")

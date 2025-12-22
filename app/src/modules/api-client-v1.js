@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-19T20:22:11.737Z
+ * Generated from OpenAPI schema at 2025-12-21T18:48:31.315Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -406,6 +406,13 @@
  */
 
 /**
+ * @typedef {Object} UpdateProfileRequest
+ * @property {string=} fullname - User's full name
+ * @property {string=} email - User's email address
+ * @property {string=} passwd_hash - New password (will be hashed)
+ */
+
+/**
  * @typedef {Object} UpdateRoleRequest
  * @property {string=} roleName - Role display name
  * @property {string=} description - Role description
@@ -743,6 +750,21 @@ export class ApiClientV1 {
   async deleteUsers(username) {
     const endpoint = `/users/${username}`
     return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Update own user profile.
+   * Allows authenticated users to update their own fullname, email, and password.
+   * Cannot modify roles or groups.
+   * Returns:
+   * Updated user information (password excluded)
+   *
+   * @param {UpdateProfileRequest} requestBody
+   * @returns {Promise<User>}
+   */
+  async usersMeProfile(requestBody) {
+    const endpoint = `/users/me/profile`
+    return this.callApi(endpoint, 'PUT', requestBody);
   }
 
   /**
