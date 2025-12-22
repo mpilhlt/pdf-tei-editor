@@ -5,7 +5,7 @@
  * improved error reporting that includes network request details.
  */
 
-import { test, expect } from '../fixtures/debug-on-failure.js';
+import { test } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, performLogout } from './helpers/login-helper.js';
 
