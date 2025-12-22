@@ -73,7 +73,8 @@
       "Bash(gh issue create:*)",
       "Bash(gh api:*)",
       "Bash(gh label list:*)",
-      "Bash(timeout 10 tail:*)"
+      "Bash(timeout 10 tail:*)",
+      "Bash(gh issue comment:*)"
     ],
     "deny": [],
     "ask": []
