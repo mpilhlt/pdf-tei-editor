@@ -33,6 +33,7 @@ await registerTemplate('toolbar-menu-button', 'toolbar-menu-button.html');
  * @property {import('../ui.js').SlMenuItem} [menu.infoMenuItem] - Info/manual menu item (added by info plugin)
  * @property {import('../ui.js').SlMenuItem} [menu.gcMenuItem] - Garbage collection menu item (added by filedata plugin, admin only)
  * @property {import('../ui.js').SlMenuItem} [menu.rbacManagerMenuItem] - RBAC manager menu item (added by rbac-manager plugin, admin only)
+ * @property {import('../ui.js').SlMenuItem} [menu.configEditorMenuItem] - Config editor menu item (added by config-editor plugin, admin only)
  * @property {import('../ui.js').SlMenuItem} [menu.profileMenuItem] - User profile menu item (added by user-account plugin)
  * @property {import('../ui.js').SlMenuItem} [menu.logoutMenuItem] - Logout menu item (added by user-account plugin)
  */

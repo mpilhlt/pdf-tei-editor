@@ -42,6 +42,7 @@ import { plugin as syncPlugin, api as sync } from './plugins/sync.js'
 import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
 import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
 import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
+import { plugin as configEditorPlugin } from './plugins/config-editor.js'
 
 /** @type {Array<Plugin|PluginConfig>} */
 const plugins = [
@@ -61,6 +62,7 @@ const plugins = [
   infoPlugin,          // User Manual (first)
   FiledataPlugin,      // Garbage Collection (second, admin only)
   rbacManagerPlugin,   // Manage Users & Roles (third, admin only)
+  configEditorPlugin,  // Configuration Editor (fourth, admin only)
   UserAccountPlugin,   // User Profile + Logout (last)
 
   // Other plugins

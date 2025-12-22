@@ -9,8 +9,8 @@
 
 // Check for Safari and block it temporarily
 if (navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')) {
-  alert('Safari is currently not supported due to compatibility issues. Please use Chrome, Firefox, or Edge.');
-  throw new Error('Safari browser not supported');
+  //alert('Safari is currently not supported due to compatibility issues. Please use Chrome, Firefox, or Edge.');
+  //throw new Error('Safari browser not supported');
 }
 
 /** @import { ApplicationState } from './state.js' */
