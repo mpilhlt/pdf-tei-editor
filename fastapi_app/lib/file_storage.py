@@ -309,3 +309,64 @@ class FileStorage:
         # Recompute hash and compare
         computed_hash = generate_file_hash(content)
         return computed_hash == file_hash
+
+    def find_orphaned_files(self, file_repository) -> list:
+        """
+        Find files in storage that have no corresponding database entry.
+
+        An orphaned file is one that exists in storage but has no entry in the
+        files database. This can happen due to:
+        - Failed database operations during file deletion
+        - System crashes
+        - Manual database modifications
+
+        Args:
+            file_repository: FileRepository instance to check database
+
+        Returns:
+            List of tuples: (file_hash, file_type, file_path, file_size)
+        """
+        orphaned = []
+
+        # Scan all shard directories
+        for shard_dir in self.data_root.iterdir():
+            if not shard_dir.is_dir() or len(shard_dir.name) != 2:
+                continue
+
+            # Check each file in the shard
+            for file_path in shard_dir.iterdir():
+                if not file_path.is_file() or file_path.suffix == '.tmp':
+                    continue
+
+                # Extract hash from filename
+                file_name = file_path.stem
+                # Handle .tei.xml files
+                if file_path.name.endswith('.tei.xml'):
+                    file_hash = file_name[:-4]  # Remove .tei
+                    file_type = 'tei'
+                elif file_path.suffix == '.pdf':
+                    file_hash = file_name
+                    file_type = 'pdf'
+                elif file_path.suffix == '.rng':
+                    file_hash = file_name
+                    file_type = 'rng'
+                else:
+                    # Unknown file type, skip
+                    if self.logger:
+                        self.logger.debug(f"Skipping unknown file type: {file_path}")
+                    continue
+
+                # Check if there's a database entry for this file
+                file_metadata = file_repository.get_file_by_id(file_hash, include_deleted=True)
+
+                if file_metadata is None:
+                    # No database entry - this is an orphan
+                    file_size = file_path.stat().st_size
+                    orphaned.append((file_hash, file_type, file_path, file_size))
+
+                    if self.logger:
+                        self.logger.debug(
+                            f"Found orphaned file: {file_hash[:8]}... ({file_type}, {file_size} bytes)"
+                        )
+
+        return orphaned

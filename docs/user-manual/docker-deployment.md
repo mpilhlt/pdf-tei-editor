@@ -1,103 +1,314 @@
 # Docker Deployment Guide
 
-This guide covers deploying PDF TEI Editor using Docker containers for production and testing.
+This guide covers deploying PDF TEI Editor using Docker containers with the simplified deployment script.
 
 ## Quick Start
 
-For a quick test, see the [Testdrive Guide](testdrive-docker.md).
+The easiest way to deploy PDF TEI Editor is using deployment configuration files:
 
-## Docker Hub
+```bash
+# Local demo (no persistence, localhost only)
+npm run deploy .env.deploy.demo.localhost
 
-Official images: **<https://hub.docker.com/r/cboulanger/pdf-tei-editor>**
+# Production deployment with SSL and persistent data
+sudo npm run deploy .env.deploy.example.org
+```
 
-## Configuration
+## Deployment Configuration Files
 
-### Environment Variables
+Deployment is configured using `.env` files that contain both deployment options (`DEPLOY_*`) and container environment variables.
 
-Configure the container using environment variables:
+### Demo Deployment (Local Testing)
 
-#### Authentication
+Example: `.env.deploy.demo.localhost`
+
+```bash
+# Deployment Configuration
+DEPLOY_FQDN=localhost          # Localhost = no nginx/SSL
+DEPLOY_TYPE=demo               # Non-persistent storage
+DEPLOY_PORT=8080               # Local port
+DEPLOY_TAG=latest              # Image version
+DEPLOY_YES=true                # Skip confirmation
+DEPLOY_REBUILD=true            # Build image if needed
+
+# Container Environment
+LOG_LEVEL=INFO
+# GEMINI_API_KEY=your-key-here
+```
+
+Run with:
+
+```bash
+npm run deploy .env.deploy.demo.localhost
+```
+
+Access at: **<http://localhost:8080>**
+
+- Login: `admin` / `admin` or `demo` / `demo` (default passwords)
+- Data: Non-persistent (resets on container restart)
+- No SSL/nginx required
+
+### Production Deployment
+
+Example: `.env.deploy.example.org`
+
+```bash
+# Deployment Configuration
+DEPLOY_FQDN=editor.company.com          # Your domain
+DEPLOY_TYPE=production                  # Persistent storage
+DEPLOY_DATA_DIR=/opt/pdf-tei-editor/data  # Data directory
+DEPLOY_PORT=8001                        # Internal port
+DEPLOY_TAG=latest                       # Image version
+DEPLOY_EMAIL=admin@company.com          # For SSL cert
+
+# User Account Setup (REQUIRED FOR PRODUCTION)
+APP_ADMIN_PASSWORD=secure-admin-password
+APP_DEMO_PASSWORD=secure-demo-password
+
+# Container Environment
+LOG_LEVEL=WARNING
+GEMINI_API_KEY=your-gemini-api-key
+GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
+```
+
+Run with:
+
+```bash
+sudo npm run deploy .env.deploy.example.org
+```
+
+**What happens:**
+
+1. Checks DNS resolution for the domain
+2. Builds image if needed (with `--rebuild` option)
+3. Starts container with persistent data directory
+4. Configures nginx reverse proxy
+5. Sets up SSL certificate with Let's Encrypt (requires sudo)
+
+Access at: **<https://editor.company.com>**
+
+## Configuration Variables
+
+### Deployment Options (DEPLOY_*)
+
+These variables control how the container is deployed:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DEPLOY_FQDN` | Fully qualified domain name | `editor.company.com` or `localhost` |
+| `DEPLOY_TYPE` | Deployment type | `production` or `demo` |
+| `DEPLOY_DATA_DIR` | Persistent data directory (production only) | `/opt/pdf-tei-editor/data` |
+| `DEPLOY_PORT` | Host port binding | `8001` (default for deploy) |
+| `DEPLOY_TAG` | Container image tag | `latest`, `v1.0.0` |
+| `DEPLOY_EMAIL` | Email for SSL certificate | `admin@company.com` |
+| `DEPLOY_YES` | Skip confirmation prompt | `true` or `false` |
+| `DEPLOY_REBUILD` | Rebuild image before deploy | `true` or `false` |
+| `DEPLOY_NO_CACHE` | Force rebuild all layers | `true` or `false` |
+
+**Special values:**
+
+- `DEPLOY_FQDN=localhost` or `127.0.0.1` → Automatically skips nginx/SSL (no sudo needed)
+- No `DEPLOY_FQDN` → Automatically adds `--no-nginx --no-ssl`
+
+### Container Environment Variables
+
+These variables are passed to the running container:
+
+#### Authentication (Production Required)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `APP_ADMIN_PASSWORD` | Password for admin user | `admin` (demo mode) |
-| `APP_DEMO_PASSWORD` | Password for demo user | `demo` (demo mode) |
-| `APP_LOGIN_MESSAGE` | Custom HTML message on login dialog | Security warning if defaults used |
+| `APP_ADMIN_PASSWORD` | Admin user password | `admin` (demo only) |
+| `APP_DEMO_PASSWORD` | Demo user password | `demo` (demo only) |
+| `APP_LOGIN_MESSAGE` | Custom HTML login message | Security warning |
 
-#### AI Services (Optional)
+**Default accounts:**
+
+- Admin: `admin` / `APP_ADMIN_PASSWORD` (full access)
+- Demo: `demo` / `APP_DEMO_PASSWORD` (user, annotator, reviewer)
+
+#### AI/ML Services (Optional)
+
+| Variable | Description |
+|----------|-------------|
+| `GEMINI_API_KEY` | Google Gemini API key for AI extraction |
+| `GROBID_SERVER_URL` | GROBID server for bibliographic parsing |
+| `KISSKI_API_KEY` | KISSKI Academic Cloud API key |
+
+#### Application Settings
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GEMINI_API_KEY` | Google Gemini API key for AI extraction | Disabled |
-| `GROBID_SERVER_URL` | Grobid server URL for bibliographic parsing | `http://localhost:8070` |
+| `LOG_LEVEL` | Logging level | `INFO` |
+| `LOG_CATEGORIES` | Log categories | `app,api,plugins` |
+| `DOCS_FROM_GITHUB` | Load docs from GitHub | `false` |
+| `WEBDAV_ENABLED` | Enable WebDAV integration | `false` |
+| `WEBDAV_BASE_URL` | WebDAV server URL | - |
 
-#### Data Import
+See `.env.production` for complete list.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `IMPORT_DATA_PATH` | Path to import PDF/XML files from on startup | `docker/demo-data` |
+## Data Persistence
 
-#### Server
+### Demo Deployments
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Internal server port | `8000` |
+- Use container-internal storage
+- Data is **lost** when container is removed
+- Ideal for testing and demonstrations
 
-## Basic Usage
+### Production Deployments
 
-### With Custom Passwords
+Data persists in the mounted `DEPLOY_DATA_DIR` directory:
+
+```text
+/opt/pdf-tei-editor/data/
+├── files/          # PDF and XML files (content-addressable)
+├── db/             # SQLite databases and JSON configs
+│   ├── metadata.db
+│   ├── users.json
+│   └── roles.json
+└── versions/       # File version history
+```
+
+**Backup:**
+
+```bash
+# Stop container
+npm run container:stop -- --name pdf-tei-editor-editor-company-com
+
+# Backup data
+tar -czf backup-$(date +%Y%m%d).tar.gz /opt/pdf-tei-editor/data
+
+# Restart container
+npm run deploy .env.deploy.example.org
+```
+
+## Security
+
+### Production Checklist
+
+- ✅ Set `APP_ADMIN_PASSWORD` and `APP_DEMO_PASSWORD`
+- ✅ Use HTTPS with valid SSL certificate
+- ✅ Set `LOG_LEVEL=WARNING` or `ERROR`
+- ✅ Secure the data directory with proper file permissions
+- ✅ Keep API keys in environment variables, not config files
+- ✅ Use firewall rules to limit access
+
+### Password Generation
+
+```bash
+# Generate secure passwords
+ADMIN_PASSWORD=$(openssl rand -base64 16)
+DEMO_PASSWORD=$(openssl rand -base64 16)
+
+# Add to deployment config
+echo "APP_ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env.deploy.mysite
+echo "APP_DEMO_PASSWORD=$DEMO_PASSWORD" >> .env.deploy.mysite
+```
+
+## Common Scenarios
+
+### Local Testing
+
+```bash
+# Quick demo on localhost
+npm run deploy .env.deploy.demo.localhost
+```
+
+### Production Server
+
+```bash
+# Create production config
+cp .env.deploy.example.org .env.deploy.mycompany
+
+# Edit configuration
+nano .env.deploy.mycompany
+
+# Deploy with SSL
+sudo npm run deploy .env.deploy.mycompany
+```
+
+### Updates and Maintenance
+
+```bash
+# Update to new version
+# Edit .env file: DEPLOY_TAG=v2.0.0
+sudo npm run deploy .env.deploy.mycompany
+
+# View logs
+npm run container:logs -- --name pdf-tei-editor-editor-company-com --follow
+
+# Stop container
+npm run container:stop -- --name pdf-tei-editor-editor-company-com
+```
+
+## Troubleshooting
+
+### Container Won't Start
+
+```bash
+# Check logs
+npm run container:logs -- --name pdf-tei-editor-localhost
+
+# Verify image exists
+docker images | grep pdf-tei-editor
+# or
+podman images | grep pdf-tei-editor
+```
+
+### Port Already in Use
+
+```bash
+# Check what's using the port
+lsof -i :8080
+
+# Or use different port in config
+# Edit .env file: DEPLOY_PORT=8081
+```
+
+### SSL Certificate Issues
+
+```bash
+# Check DNS resolution
+nslookup editor.company.com
+
+# Test nginx configuration
+sudo nginx -t
+
+# Renew certificate manually
+sudo certbot renew
+```
+
+### Permission Issues
+
+```bash
+# Fix data directory ownership
+sudo chown -R $(id -u):$(id -g) /opt/pdf-tei-editor/data
+
+# Fix permissions
+chmod -R 755 /opt/pdf-tei-editor/data
+```
+
+## Advanced: Direct Docker Commands
+
+For users who prefer Docker/Podman directly without the deployment script:
+
+### Basic Run
 
 ```bash
 docker run -p 8000:8000 \
   -e APP_ADMIN_PASSWORD=secure_password \
-  -e APP_DEMO_PASSWORD=demo_password \
   cboulanger/pdf-tei-editor:latest
 ```
 
-### With AI Services
+### With Persistent Data
 
 ```bash
 docker run -p 8000:8000 \
+  -v /opt/pdf-tei-editor/data:/app/data \
   -e APP_ADMIN_PASSWORD=secure_password \
-  -e GEMINI_API_KEY=your_api_key \
-  -e GROBID_SERVER_URL=https://cloud.science-miner.com/grobid \
+  -e GEMINI_API_KEY=your_key \
   cboulanger/pdf-tei-editor:latest
 ```
-
-### With Custom Login Message
-
-```bash
-docker run -p 8000:8000 \
-  -e APP_ADMIN_PASSWORD=secure_password \
-  -e APP_LOGIN_MESSAGE="<h3>Company PDF Editor</h3><p>Contact IT for credentials</p>" \
-  cboulanger/pdf-tei-editor:latest
-```
-
-## Production Deployment
-
-### Persistent Data
-
-Mount volumes to preserve data across container restarts:
-
-```bash
-docker run -p 8000:8000 \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/config:/app/config \
-  -e APP_ADMIN_PASSWORD=secure_password \
-  cboulanger/pdf-tei-editor:latest
-```
-
-#### Data Directories
-
-The application uses a consolidated data directory structure:
-
-- `/app/data/` - Main data directory containing:
-  - `/app/data/files/` - Content-addressable file storage (PDFs, XMLs)
-  - `/app/data/db/` - Application databases (metadata.db, users.json, roles.json)
-  - `/app/data/versions/` - File version history
-- `/app/config/` - Application configuration files
-
-**Recommended:** Mount only `/app/data` and `/app/config` for simplified backup and management.
 
 ### Docker Compose
 
@@ -114,209 +325,13 @@ services:
       - APP_ADMIN_PASSWORD=secure_admin_password
       - APP_DEMO_PASSWORD=demo_password
       - GEMINI_API_KEY=your_gemini_api_key
-      - GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
     volumes:
       - pdf_data:/app/data
-      - pdf_config:/app/config
 
 volumes:
   pdf_data:
-  pdf_config:
 ```
 
-Run with:
+Run with: `docker-compose up -d`
 
-```bash
-docker-compose up -d
-```
-
-### Reverse Proxy (nginx)
-
-Example nginx configuration for production:
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name editor.example.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
-```
-
-## Importing Custom Data
-
-### At Container Startup
-
-Mount a directory with your PDF and XML files and set `IMPORT_DATA_PATH`:
-
-```bash
-docker run -p 8000:8000 \
-  -v $(pwd)/my-documents:/app/my-data:ro \
-  -e IMPORT_DATA_PATH=my-data \
-  -e APP_ADMIN_PASSWORD=secure_password \
-  cboulanger/pdf-tei-editor:latest
-```
-
-The container will import all PDF and XML files from the mounted directory on startup.
-
-### Directory Structure
-
-The import script automatically assigns collections based on top-level subdirectories:
-
-```
-my-documents/
-├── collection1/
-│   ├── document1.pdf
-│   └── document1.xml
-├── collection2/
-│   ├── pdf/
-│   │   └── document2.pdf
-│   └── tei/
-│   │   └── document2.xml
-└── document3.pdf          # Files in root have no collection
-```
-
-- Files in `collection1/` → imported to "collection1" collection
-- Files in `collection2/pdf/` → imported to "collection2" collection (skips "pdf" directory)
-- Files in `collection2/tei/` → imported to "collection2" collection (skips "tei" directory)
-- Files in root → no collection assigned
-
-**Note:** Organizational directories (`pdf`, `tei`, `versions`, `version`) are automatically skipped when determining the collection name.
-
-## User Accounts
-
-After starting the container:
-
-### Admin User
-
-- **Username**: `admin`
-- **Password**: Value of `APP_ADMIN_PASSWORD` (or `admin` if not set)
-- **Permissions**: Full access to all features
-
-### Demo User
-
-- **Username**: `demo`
-- **Password**: Value of `APP_DEMO_PASSWORD` (or `demo` if not set)
-- **Permissions**: Standard user access (annotator, reviewer)
-
-### Additional Users
-
-Create additional users by accessing the container:
-
-```bash
-# Using docker exec
-docker exec -it <container_id> /bin/bash
-.venv/bin/python bin/manage.py user add username \
-  --password password \
-  --fullname "Full Name" \
-  --roles "user,annotator" \
-  --email user@example.com
-```
-
-## Security
-
-### Default Accounts
-
-When no passwords are configured, the container creates default demo accounts (`admin/admin` and `demo/demo`) with a security warning. **Always set custom passwords for production.**
-
-### Secure Password Generation
-
-```bash
-# Generate secure passwords
-ADMIN_PASSWORD=$(openssl rand -base64 16)
-DEMO_PASSWORD=$(openssl rand -base64 16)
-
-# Use in deployment
-docker run -p 8000:8000 \
-  -e APP_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
-  -e APP_DEMO_PASSWORD="$DEMO_PASSWORD" \
-  cboulanger/pdf-tei-editor:latest
-```
-
-### HTTPS
-
-Always use HTTPS in production via a reverse proxy (nginx, Apache, Caddy, etc.).
-
-## Monitoring
-
-### View Logs
-
-```bash
-docker logs -f <container_id>
-```
-
-### Container Status
-
-```bash
-docker ps
-```
-
-## Backup and Recovery
-
-### Backup Data
-
-```bash
-# Stop container
-docker stop <container_id>
-
-# Backup data directory (contains files, db, and versions)
-tar -czf backup-$(date +%Y%m%d).tar.gz \
-  ./data \
-  ./config
-
-# Restart container
-docker start <container_id>
-```
-
-### Restore Data
-
-```bash
-# Stop container
-docker stop <container_id>
-
-# Restore files
-tar -xzf backup-20241201.tar.gz
-
-# Start container
-docker start <container_id>
-```
-
-## Troubleshooting
-
-### Port Already in Use
-
-```bash
-# Check what's using port 8000
-lsof -i :8000
-
-# Or use a different port
-docker run -p 8080:8000 cboulanger/pdf-tei-editor:latest
-```
-
-### Container Won't Start
-
-```bash
-# Check logs
-docker logs <container_id>
-
-# Check if image exists
-docker images | grep pdf-tei-editor
-```
-
-### Permission Issues
-
-Ensure mounted volumes have correct permissions:
-
-```bash
-# Fix ownership
-sudo chown -R $(id -u):$(id -g) ./data ./config
-```
+**For more details on the deployment script implementation:** See the [Developer Deployment Guide](../development/deployment.md)

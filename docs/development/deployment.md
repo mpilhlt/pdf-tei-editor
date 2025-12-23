@@ -1,455 +1,433 @@
-# Deployment Guide
+# Deployment Guide (Developer Documentation)
 
-This guide covers all deployment options for the PDF TEI Editor, from Docker containers to production servers.
+This guide covers deployment implementation details for developers working on the PDF TEI Editor deployment infrastructure.
 
-## Quick Start with Docker
+**For common deployment scenarios:** See the [User Manual: Docker Deployment Guide](../user-manual/docker-deployment.md)
 
-**The fastest way to try PDF TEI Editor:**
+## Quick Reference
+
+The deployment system consists of three layers:
+
+1. **User-facing wrapper** (`bin/deploy.js`) - Environment file-based deployment
+2. **Container management** (`bin/container.js deploy`) - Low-level container operations
+3. **Container runtime** - Docker/Podman commands
+
+## Deployment Wrapper Script
+
+### Overview
+
+`bin/deploy.js` provides a simplified deployment interface using `.env` files:
 
 ```bash
-# Run with Docker (includes all dependencies)
-docker run -p 8000:8000 -e APP_ADMIN_PASSWORD=admin123 cboulanger/pdf-tei-editor:latest
+npm run deploy .env.deploy.example.org
+# Executes: node bin/deploy.js .env.deploy.example.org
 ```
 
-Then visit: **<http://localhost:8000>**
+### Implementation
 
-- Login: `admin` / `admin123`
+The script:
 
-**For detailed Docker setup and configuration options:** [**→ Docker Testdrive Guide**](testdrive-docker.md)
+1. Parses environment file using `dotenv`
+2. Splits variables into deployment options (`DEPLOY_*`) and container environment variables
+3. Converts `DEPLOY_*` variables to command-line options:
+   - `DEPLOY_FQDN=example.org` → `--fqdn example.org`
+   - `DEPLOY_DATA_DIR=/path` → `--data-dir /path`
+   - `DEPLOY_REBUILD=true` → `--rebuild`
+   - `DEPLOY_REBUILD=(''|0|false|off)` → (omitted)
+4. Detects localhost deployments (`localhost` or `127.0.0.1`) and adds `--no-nginx --no-ssl`
+5. Passes all non-`DEPLOY_*` variables to container via `--env VAR_NAME`
+6. Executes `bin/container.js deploy` with constructed arguments
 
-## Container Deployment with Scripts
+**Source:** [bin/deploy.js](../../bin/deploy.js)
 
-The repository includes streamlined deployment scripts for production and demo scenarios.
-
-### Container Management Script
-
-Use `npm run container:deploy -- [options]` or `bin/container.js deploy [options]` for all container operations including deployment:
+### Example Environment File
 
 ```bash
-# Production deployment behind a nginx reverse proxy with certbot support and persistent data directory
-sudo npm run container:deploy -- \
+# Deployment options
+DEPLOY_FQDN=editor.company.com
+DEPLOY_TYPE=production
+DEPLOY_DATA_DIR=/opt/pdf-tei-editor/data
+DEPLOY_TAG=latest
+
+# Container environment (passed via --env)
+APP_ADMIN_PASSWORD=secure-password
+GEMINI_API_KEY=your-key
+LOG_LEVEL=WARNING
+```
+
+Translates to:
+
+```bash
+node bin/container.js deploy \
   --fqdn editor.company.com \
+  --type production \
   --data-dir /opt/pdf-tei-editor/data \
-  --env GEMINI_API_KEY=your-key \
-  --env LOG_LEVEL=WARNING
-
-# Demo deployment (non-persistent, data resets on restart)
-sudo npm run container:deploy -- \
-  --fqdn demo.example.com \
-  --type demo
-
-# Local testing without SSL/nginx (no sudo needed)
-npm run container:deploy -- \
-  --fqdn localhost \
-  --port 8080 \
-  --no-ssl \
-  --no-nginx
-
-# With custom tag and environment variables
-sudo npm run container:deploy -- \
-  --fqdn editor.company.com \
-  --tag v1.0.0 \
-  --data-dir /opt/pdf-tei-editor/data \
+  --tag latest \
+  --env APP_ADMIN_PASSWORD \
   --env GEMINI_API_KEY \
-  --env GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
-
-# Automated deployment (skip confirmation, for CI/CD)
-sudo npm run container:deploy -- \
-  --fqdn editor.company.com \
-  --data-dir /opt/pdf-tei-editor/data \
-  --env GEMINI_API_KEY=your-key \
-  --yes
+  --env LOG_LEVEL
 ```
 
-**Available environment variables** (see `.env.production` for complete list):
+## Container Management Script
 
-- `GEMINI_API_KEY` - Google Gemini API key for AI features
-- `GROBID_SERVER_URL` - GROBID server URL for PDF processing
-- `KISSKI_API_KEY` - KISSKI Academic Cloud API key
-- `LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
-- `WEBDAV_ENABLED` - Enable WebDAV filesystem integration
-- `DOCS_FROM_GITHUB` - Load documentation from GitHub
+### Deploy Command
 
-**Environment variable syntax:**
-
-- `--env FOO` - Transfer FOO from host environment to container
-- `--env FOO=bar` - Set FOO to "bar" in container
-
-## Production Deployment
-
-### Local Production Server
-
-For non-containerized production deployments:
+`bin/container.js deploy` handles the complete deployment workflow:
 
 ```bash
-# Configure environment for production
-cp .env.production .env
-
-# Start production server
-npm run start:prod
-
-# Or directly with specific host/port
-./bin/start-prod 0.0.0.0 3001
-```
-
-### Production Configuration
-
-1. **Set production mode** in `config/config.json`:
-
-   ```json
-   {
-     "application": {
-       "mode": "production"
-     }
-   }
-   ```
-
-2. **Enable GitHub documentation** (optional but recommended):
-
-   By default, the application serves documentation from local files bundled with the code. For production deployments, you can enable loading documentation directly from GitHub, which allows users to see updated documentation without rebuilding or redeploying the application.
-
-   Set the environment variable in `.env`:
-
-   ```bash
-   DOCS_FROM_GITHUB=true
-   ```
-
-   This fetches documentation from the GitHub repository tag matching your application version (e.g., `v0.1.0`). The application automatically falls back to local documentation if GitHub is unreachable.
-
-   **Benefits:**
-   - Documentation updates are immediately available without redeployment
-   - Useful for long-running production instances
-   - Reduces time between documentation improvements and user visibility
-
-3. **Configure environment variables** in `.env` (copy from `.env.production`):
-
-   ```bash
-   GEMINI_API_KEY=your_gemini_api_key_here
-   GROBID_SERVER_URL=https://cloud.science-miner.com/grobid
-
-   # Optional: Docker Hub credentials for image pushing
-   DOCKER_HUB_USERNAME=your_username
-   DOCKER_HUB_TOKEN=your_access_token
-
-   # Optional: Custom login message with HTML support
-   APP_LOGIN_MESSAGE="<strong>Welcome!</strong> This is a demo instance."
-
-   # Optional: Admin and demo user passwords
-   APP_ADMIN_PASSWORD=secure_admin_password
-   APP_DEMO_PASSWORD=demo_user_password
-   ```
-
-4. **Set up reverse proxy** (nginx):
-
-```nginx
-
-server {
-    server_name pdf-tei-editor.example.com;
-
-    # API endpoints - must not be cached by nginx (fixes #114)
-    # This location must come BEFORE the general location / block
-    location /api/ {
-        proxy_pass http://127.0.0.1:8010;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-
-        # Disable nginx caching - respect backend Cache-Control headers
-        proxy_cache off;
-        proxy_buffering off;
-        proxy_no_cache 1;
-        proxy_cache_bypass 1;
-
-        # Ensure Cache-Control headers from backend are passed through
-        proxy_pass_header Cache-Control;
-        proxy_pass_header Pragma;
-        proxy_pass_header Expires;
-
-        # Reinforce cache headers at proxy level
-        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
-        add_header Pragma "no-cache" always;
-        add_header Expires "0" always;
-    }
-
-    # Special handling for Server-Sent Events
-    location /sse/ {
-        proxy_pass http://127.0.0.1:8010;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 300;
-        proxy_connect_timeout 75;
-    }
-
-    # General proxy for all other requests
-    location / {
-        proxy_pass http://127.0.0.1:8010;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_redirect off;
-    }
-
-    # Allow uploads up to 100MB (adjust as needed)
-    client_max_body_size 100M;
-
-    # increase timeouts for large uploads
-    proxy_read_timeout 300s;
-    proxy_connect_timeout 300s;
-    proxy_send_timeout 300s;
-
-    listen 443 ssl; # managed by Certbot
-    ssl_certificate /etc/letsencrypt/live/pdf-tei-editor.example.com/fullchain.pem; # managed by Certbot
-    ssl_certificate_key /etc/letsencrypt/live/pdf-tei-editor.example.com/privkey.pem; # managed by Certbot
-    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
-
-}
-
-server {
-    if ($host = pdf-tei-editor.example.com) {
-        return 301 https://$host$request_uri;
-    } # managed by Certbot
-
-    server_name pdf-tei-editor.example.com;
-
-    listen 80;
-    return 404; # managed by Certbot
-
-}
-```
-
-This is automatically done by the `npm run container:deploy` command documented in the next section.
-
-See See [documentation for ngix cache control for details](./nginx-cache-control.md)
-
-### Container Production Deployment
-
-For production container deployments with persistent data:
-
-```bash
-# Deploy with external data directory for persistence
-# Note: data-dir contains files/ and db/ subdirectories
-sudo npm run container:deploy -- \
+node bin/container.js deploy \
   --fqdn editor.company.com \
   --type production \
   --data-dir /opt/pdf-tei-editor/data \
   --env GEMINI_API_KEY \
-  --env GROBID_SERVER_URL \
   --env LOG_LEVEL=WARNING
-
-# The deploy command will:
-# - Check DNS resolution for the FQDN
-# - Start the container with the specified data directory
-# - Configure nginx as reverse proxy
-# - Set up SSL certificate with Let's Encrypt
 ```
 
-**Data directory structure:**
+### Implementation Details
 
-```text
-/opt/pdf-tei-editor/data/
-├── files/          # User-uploaded PDF and TEI files
-└── db/             # SQLite databases (metadata, users, etc.)
+The deploy command ([bin/container.js](../../bin/container.js:1245-1476)):
+
+1. **Platform check** - Ensures Linux for nginx/SSL features
+2. **FQDN validation** - Requires `--fqdn` parameter
+3. **Permission check** - Requires sudo if nginx or SSL enabled
+4. **Dependency check** - Verifies nginx/certbot availability
+5. **Image verification** - Checks if image exists (or rebuilds with `--rebuild`)
+6. **Container cleanup** - Stops and removes existing container
+7. **Container start** - Calls `startContainer()` with configuration
+8. **Nginx setup** - Configures reverse proxy (if not `--no-nginx`)
+9. **SSL setup** - Requests Let's Encrypt certificate (if not `--no-ssl`)
+10. **DNS verification** - Validates domain resolution before SSL
+
+### Key Functions
+
+**`startContainer(config)`** ([bin/container.js](../../bin/container.js:545-611))
+
+Creates and starts a container with specified configuration:
+
+```javascript
+await startContainer({
+  name: 'pdf-tei-editor-editor-company-com',
+  imageName: 'pdf-tei-editor:latest',
+  port: 8001,
+  detach: true,
+  restart: 'unless-stopped',
+  env: ['GEMINI_API_KEY', 'LOG_LEVEL'],
+  volumes: [{ host: '/opt/pdf-tei-editor/data', container: '/app/data' }],
+  additionalEnvVars: [{ key: 'DATA_ROOT', value: '/app/data' }]
+});
+```
+
+Emitted command:
+
+```bash
+podman run -d \
+  --name pdf-tei-editor-editor-company-com \
+  -p 8001:8000 \
+  -e PORT=8000 \
+  -e DATA_ROOT=/app/data \
+  -e GEMINI_API_KEY \
+  -e LOG_LEVEL \
+  --restart unless-stopped \
+  -v /opt/pdf-tei-editor/data:/app/data \
+  pdf-tei-editor:latest
+```
+
+**`setupNginx(fqdn, port)`** ([bin/container.js](../../bin/container.js:1042-1144))
+
+Generates nginx configuration with:
+
+- Reverse proxy to container port
+- API endpoint no-cache headers (fixes #114)
+- SSE support with extended timeouts
+- File upload size limits (100MB)
+- Proxy headers preservation
+
+Writes to `/etc/nginx/sites-available/pdf-tei-editor-{fqdn}` and symlinks to `sites-enabled`.
+
+**`setupSSL(fqdn, email)`** ([bin/container.js](../../bin/container.js:1200-1225))
+
+Requests SSL certificate:
+
+```bash
+certbot --nginx \
+  -d editor.company.com \
+  --non-interactive \
+  --agree-tos \
+  --email admin@company.com
+```
+
+Includes DNS resolution check before attempting certificate request.
+
+### Deploy Command Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `--fqdn <fqdn>` | Required | Fully qualified domain name |
+| `--name <name>` | Optional | Container name (default: `pdf-tei-editor-{fqdn}`) |
+| `--tag <tag>` | Optional | Image tag (default: `latest`) |
+| `--port <port>` | Optional | Host port (default: `8001`) |
+| `--type <type>` | Optional | `production` or `demo` (default: `production`) |
+| `--data-dir <dir>` | Optional | Persistent data directory (production only) |
+| `--env <var>` | Multiple | Environment variables (`FOO` or `FOO=bar`) |
+| `--no-nginx` | Flag | Skip nginx configuration |
+| `--no-ssl` | Flag | Skip SSL certificate setup |
+| `--email <email>` | Optional | Email for SSL certificate (default: `admin@<fqdn>`) |
+| `--rebuild` | Flag | Rebuild image before deploying |
+| `--no-cache` | Flag | Force rebuild all layers (use with `--rebuild`) |
+| `--yes` | Flag | Skip confirmation prompt |
+
+## Low-Level Container Commands
+
+For reference, the actual Docker/Podman commands emitted by the deployment system:
+
+### Build Image
+
+```bash
+# Executed by: npm run container:build -- --tag v1.0.0
+podman build \
+  --target production \
+  -t pdf-tei-editor:v1.0.0 \
+  -t pdf-tei-editor:latest \
+  .
+```
+
+### Start Container (Basic)
+
+```bash
+# Executed by: npm run container:start -- --port 8080
+podman run -d \
+  --name pdf-tei-editor-latest \
+  -p 8080:8000 \
+  -e PORT=8000 \
+  --restart unless-stopped \
+  pdf-tei-editor:latest
+```
+
+### Start Container (Production)
+
+```bash
+# Executed by: npm run container:start -- --data-dir /opt/data --env GEMINI_API_KEY
+podman run -d \
+  --name pdf-tei-editor-latest \
+  -p 8000:8000 \
+  -e PORT=8000 \
+  -e DATA_ROOT=/app/data \
+  -e GEMINI_API_KEY=${GEMINI_API_KEY} \
+  -v /opt/data:/app/data \
+  --restart unless-stopped \
+  pdf-tei-editor:latest
+```
+
+### Deploy Container (Full Stack)
+
+```bash
+# Executed by: sudo npm run deploy .env.deploy.example.org
+
+# 1. Build image (if --rebuild)
+podman build --target production -t pdf-tei-editor:latest .
+
+# 2. Stop existing container
+podman stop pdf-tei-editor-editor-company-com
+podman rm pdf-tei-editor-editor-company-com
+
+# 3. Start new container
+podman run -d \
+  --name pdf-tei-editor-editor-company-com \
+  -p 8001:8000 \
+  -e PORT=8000 \
+  -e DATA_ROOT=/app/data \
+  -e APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD} \
+  -e GEMINI_API_KEY=${GEMINI_API_KEY} \
+  -e LOG_LEVEL=${LOG_LEVEL} \
+  --restart unless-stopped \
+  -v /opt/pdf-tei-editor/data:/app/data \
+  pdf-tei-editor:latest
+
+# 4. Configure nginx (writes /etc/nginx/sites-available/pdf-tei-editor-editor-company-com)
+nginx -t
+systemctl reload nginx
+
+# 5. Setup SSL
+certbot --nginx \
+  -d editor.company.com \
+  --non-interactive \
+  --agree-tos \
+  --email admin@company.com
+```
+
+### Manage Containers
+
+```bash
+# List containers
+podman ps -a --filter "name=pdf-tei-editor"
+
+# View logs
+podman logs -f pdf-tei-editor-editor-company-com
+
+# Stop container
+podman stop pdf-tei-editor-editor-company-com
+
+# Remove container
+podman rm pdf-tei-editor-editor-company-com
+
+# Inspect container
+podman inspect pdf-tei-editor-editor-company-com
 ```
 
 ## Development Workflow
 
-### Build and Test Locally
+### Local Testing
 
 ```bash
-# 1. Build image locally for testing
-npm run container:build -- --tag v1.0.0
+# 1. Build and test locally
+npm run container:build -- --tag dev-test
 
-# 2. Test locally without SSL/nginx
+# 2. Test without deployment infrastructure
 npm run container:start -- \
-  --tag v1.0.0 \
+  --tag dev-test \
   --port 8080 \
-  --env GEMINI_API_KEY
+  --no-detach  # Run in foreground for debugging
 
-# 2a. Test with persistent data directory
-npm run container:start -- \
-  --tag v1.0.0 \
-  --port 8080 \
-  --data-dir /opt/test-data \
-  --restart unless-stopped \
-  --env GEMINI_API_KEY
-
-# 2b. Test with custom volume mounts
-npm run container:start -- \
-  --tag v1.0.0 \
-  --port 8080 \
-  --volume /host/config:/app/data/config \
-  --volume /host/log:/app/log
-
-# 3. Push to registry when ready (requires DOCKER_HUB_USERNAME and DOCKER_HUB_TOKEN in .env)
-npm run container:push -- --tag v1.0.0
+# 3. Test with deployment wrapper
+npm run deploy .env.deploy.demo.localhost
 ```
 
-### Container Updates
+### Production Release
 
 ```bash
-# Production: Update while preserving data
-sudo npm run container:deploy -- \
-  --fqdn editor.company.com \
-  --tag v2.0.0 \
-  --type production \
-  --data-dir /opt/pdf-tei-editor/data \
-  --env GEMINI_API_KEY \
-  --env LOG_LEVEL=WARNING
+# 1. Build production image
+npm run container:build -- --tag v1.2.0
 
-# Demo: Simple redeployment (data is reset)
-sudo npm run container:deploy -- \
-  --fqdn demo.example.com \
-  --tag v2.0.0 \
-  --type demo
+# 2. Tag for registry
+podman tag pdf-tei-editor:v1.2.0 cboulanger/pdf-tei-editor:v1.2.0
+podman tag pdf-tei-editor:v1.2.0 cboulanger/pdf-tei-editor:latest
 
-# Stop a container
-npm run container:stop -- --name pdf-tei-editor-latest
+# 3. Push to Docker Hub
+npm run container:push -- --tag v1.2.0
 
-# Restart with rebuild
-npm run container:restart -- \
-  --name pdf-tei-editor-latest \
-  --rebuild
-
-# If deploy fails, retry with start command (suggested in error output)
-npm run container:start -- \
-  --name pdf-tei-editor-editor-company-com \
-  --port 8001 \
-  --restart unless-stopped \
-  --data-dir /opt/pdf-tei-editor/data \
-  --env GEMINI_API_KEY
+# 4. Deploy to production
+# Edit .env.deploy.production: DEPLOY_TAG=v1.2.0
+sudo npm run deploy .env.deploy.production
 ```
 
-## Security Considerations
+## Implementation Notes
 
-### Application Security
+### Environment Variable Processing
 
-- **Production mode**: Set `"application.mode": "production"` in `config/config.json` to disable access to development files (`/src/` and `/node_modules/`)
-- **File upload validation**: Uses libmagic package to prevent malicious file content
-- **HTTPS middleware**: Proper handling of X-Forwarded-Proto headers from reverse proxies
-- **User authentication**: Secure password hashing with configurable user roles
+**In `bin/deploy.js`:**
 
-### Container Security
+The `processEnvParameters()` function handles two formats:
 
-- **Non-root user**: Container runs as unprivileged user
-- **Minimal image**: Multi-stage build removes development dependencies
-- **Environment isolation**: Uses environment variables for sensitive configuration
-- **Network security**: Only exposes required ports
+- `--env FOO` → Transfers `FOO` from host environment to container
+- `--env FOO=bar` → Sets `FOO=bar` in container
 
-### Deployment Security
+**In `bin/container.js`:**
 
-```bash
-# Set environment variables for deployment
-export GEMINI_API_KEY="your-secure-api-key"
-export LOG_LEVEL="WARNING"
+The `startContainer()` function processes three environment variable sources:
 
-# Deploy with environment variables
-sudo npm run container:deploy -- \
-  --fqdn secure.company.com \
-  --type production \
-  --data-dir /secure/pdf-tei-editor/data \
-  --env GEMINI_API_KEY \
-  --env LOG_LEVEL
+1. Built-in: `PORT=8000` (always set)
+2. Additional: `DATA_ROOT=/app/data` (when data directory mounted)
+3. User-specified: From `--env` parameters
 
-# Or specify values directly (less secure - visible in process list)
-sudo npm run container:deploy -- \
-  --fqdn secure.company.com \
-  --type production \
-  --data-dir /secure/pdf-tei-editor/data \
-  --env GEMINI_API_KEY=your-key \
-  --env LOG_LEVEL=WARNING
+### Container Naming
+
+Container names follow the pattern: `pdf-tei-editor-{sanitized-fqdn}`
+
+Examples:
+
+- `editor.company.com` → `pdf-tei-editor-editor-company-com`
+- `localhost` → `pdf-tei-editor-localhost`
+- `demo.example.org` → `pdf-tei-editor-demo-example-org`
+
+### Data Directory Structure
+
+When `--data-dir` is specified, the directory is mounted as `/app/data` and contains:
+
+```text
+/app/data/
+├── files/          # Content-addressable file storage (SHA-256 hashes)
+│   ├── ab/
+│   │   └── cd12...  # PDF/XML files
+│   └── ...
+├── db/             # Application databases
+│   ├── metadata.db # Main SQLite database
+│   ├── users.json
+│   ├── roles.json
+│   └── config.json
+└── versions/       # File version history
 ```
 
-## Monitoring and Maintenance
+The environment variable `DATA_ROOT=/app/data` is automatically set when a data directory is mounted.
 
-### Container Management
+### Nginx Configuration
 
-```bash
-# View logs (container name format: pdf-tei-editor-{fqdn-with-dashes})
-npm run container:logs -- --name pdf-tei-editor-editor-company-com --follow
-# Or use container tools directly
-docker logs -f pdf-tei-editor-editor-company-com
-# or
-podman logs -f pdf-tei-editor-editor-company-com
+The generated nginx config includes:
 
-# Monitor container status
-docker ps
-# or
-podman ps
+1. **API endpoint handling** - Disables caching for `/api/` paths
+2. **SSE support** - Extended timeouts for `/sse/` paths
+3. **General proxy** - Standard reverse proxy for all other paths
+4. **Security headers** - X-Forwarded-* headers for backend
+5. **Upload limits** - 100MB max body size
+6. **Timeouts** - 300s read/connect/send timeouts
 
-# Update container (redeploy with new tag)
-sudo npm run container:deploy -- \
-  --fqdn your-domain.com \
-  --tag latest \
-  --type production \
-  --data-dir /opt/pdf-tei-editor/data \
-  --env GEMINI_API_KEY \
-  --env LOG_LEVEL=WARNING
+See [nginx-cache-control.md](./nginx-cache-control.md) for caching implementation details.
 
-# Stop all containers
-npm run container:stop -- --all
+### SSL Certificate Management
 
-# Stop specific container
-npm run container:stop -- --name pdf-tei-editor-editor-company-com --remove
-```
+Let's Encrypt certificates:
 
-### Backup and Recovery
-
-```bash
-# Backup persistent data directory (production deployments)
-tar -czf backup-$(date +%Y%m%d).tar.gz \
-  /opt/pdf-tei-editor/data
-
-# Restore data
-tar -xzf backup-20241201.tar.gz -C /opt/pdf-tei-editor/
-
-# The data directory contains:
-# - files/: All uploaded PDF and TEI files
-# - db/: SQLite databases (metadata.db, users.json, etc.)
-```
+- Automatically renewed by certbot
+- Stored in `/etc/letsencrypt/live/{fqdn}/`
+- Nginx automatically reloads on renewal
+- DNS must resolve before certificate request
 
 ## Troubleshooting
 
-### Common Issues
-
-**Container won't start:**
+### Build Failures
 
 ```bash
-# Check if port is available
-lsof -i :8000
+# Check Dockerfile syntax
+docker build --target production -t test .
 
-# Check container logs
-podman logs container-name
+# Build with no cache
+npm run container:build -- --no-cache
 
-# Verify image exists
-podman images
+# Check for missing dependencies
+npm run container:build -- --tag test 2>&1 | grep -i error
 ```
 
-**SSL certificate issues:**
+### Deployment Failures
 
 ```bash
-# Test nginx configuration
-nginx -t
+# Check nginx configuration
+sudo nginx -t
 
-# Renew certificates manually
-certbot renew
+# Verify DNS resolution
+nslookup editor.company.com
 
-# Check certificate status
-certbot certificates
+# Check certbot logs
+sudo cat /var/log/letsencrypt/letsencrypt.log
+
+# Test container startup manually
+podman run --rm -it -p 8080:8000 pdf-tei-editor:latest
 ```
 
-**Permission issues:**
+### Permission Issues
 
 ```bash
-# Fix ownership of persistent directories
-sudo chown -R $(id -u):$(id -g) /opt/pdf-tei-editor/
+# Fix data directory ownership
+sudo chown -R $(id -u):$(id -g) /opt/pdf-tei-editor/data
+
+# Check SELinux contexts (if applicable)
+ls -lZ /opt/pdf-tei-editor/data
+
+# Add SELinux context
+sudo chcon -R -t container_file_t /opt/pdf-tei-editor/data
 ```
+
+## Related Documentation
+
+- **User Manual:** [Docker Deployment Guide](../user-manual/docker-deployment.md) - Common deployment scenarios
+- **Developer:** [Testing Guide](./testing.md) - Container testing
+- **Developer:** [CI/CD Pipeline](../code-assistant/ci.md) - Automated builds
+- **Reference:** [Nginx Cache Control](./nginx-cache-control.md) - API caching implementation

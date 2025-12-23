@@ -51,6 +51,6 @@ db/
 
 # Docker build context optimization
 README.md
-docs/
+docs/code-assistant/
 .github/
 LICENSE

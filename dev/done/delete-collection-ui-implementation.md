@@ -1,5 +1,7 @@
 # Delete Collection UI Implementation
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/139
+
 ## Overview
 
 Add UI for deleting collections with proper file handling and role-based access control.

@@ -38,6 +38,7 @@ from lib.collection_utils import (  # type: ignore
 from lib.config_utils import (  # type: ignore
     get_config_value, set_config_value, delete_config_value
 )
+from lib.cache_utils import clear_schema_cache  # type: ignore
 
 def list_available_roles(db_dir):
     """Lists all available roles with their descriptions."""
@@ -481,6 +482,11 @@ def delete_config(args):
     if not deleted_from and not not_found_in:
         print(f"Error: Could not access config files")
 
+def clear_caches(args):
+    """Clears application caches."""
+    success, message = clear_schema_cache()
+    print(message)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="A command-line tool to manage the PDF-TEI-Editor application.",
@@ -642,6 +648,10 @@ if __name__ == '__main__':
     parser_config_delete.add_argument('key', help='The configuration key to delete.')
     parser_config_delete.add_argument('--default', action='store_true', help='Delete from both db/config.json and config/config.json.')
     parser_config_delete.set_defaults(func=delete_config)
+
+    # --- Cache management ---
+    cache_parser = subparsers.add_parser('clear-caches', help='Clear application caches', description=clear_caches.__doc__)
+    cache_parser.set_defaults(func=clear_caches)
 
     # --- Help command ---
     all_subparsers = {'user': user_parser, 'group': group_parser, 'collection': collection_parser, 'config': config_parser}

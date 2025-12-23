@@ -235,7 +235,7 @@ async function buildImage(tag, noCache) {
 
 /**
  * Handle build command
- * @param {{tag?: string, noCache?: boolean, yes?: boolean}} options
+ * @param {{tag?: string, cache?: boolean, yes?: boolean}} options
  */
 async function handleBuild(options) {
   console.log('PDF TEI Editor - Container Build');
@@ -249,7 +249,7 @@ async function handleBuild(options) {
   console.log(`[INFO]   Image Name: ${APP_NAME}:${tag}`);
   console.log(`[INFO]   Build Target: production`);
 
-  if (options.noCache) {
+  if (options.cache === false) {
     console.log(`[INFO]   Cache: Disabled (--no-cache - will rebuild all layers)`);
   } else {
     console.log(`[INFO]   Cache: Enabled (use --no-cache to force rebuild)`);
@@ -267,7 +267,7 @@ async function handleBuild(options) {
   console.log();
   console.log('[INFO] Starting build process...');
 
-  if (!(await buildImage(tag, options.noCache || false))) {
+  if (!(await buildImage(tag, options.cache === false))) {
     process.exit(1);
   }
 
@@ -408,7 +408,7 @@ function cleanup() {
 
 /**
  * Handle push command
- * @param {{tag?: string, noBuild?: boolean, noCache?: boolean, yes?: boolean}} options
+ * @param {{tag?: string, build?: boolean, cache?: boolean, yes?: boolean}} options
  */
 async function handlePush(options) {
   console.log('PDF TEI Editor - Container Push');
@@ -431,9 +431,9 @@ async function handlePush(options) {
   console.log(`[INFO]   Version Tag: ${tag}`);
   console.log(`[INFO]   Image Name: ${credentials.username}/${APP_NAME}:${tag}`);
 
-  if (!options.noBuild) {
+  if (options.build !== false) {
     console.log(`[INFO]   Build Target: production`);
-    if (options.noCache) {
+    if (options.cache === false) {
       console.log(`[INFO]   Cache: Disabled (--no-cache - will rebuild all layers)`);
     } else {
       console.log(`[INFO]   Cache: Enabled (use --no-cache to force rebuild)`);
@@ -443,7 +443,7 @@ async function handlePush(options) {
   }
   console.log();
 
-  const action = options.noBuild ? 'push' : 'build and push';
+  const action = options.build === false ? 'push' : 'build and push';
 
   if (!options.yes) {
     const confirmed = await askForConfirmation(`Continue with ${action}? (y/N): `);
@@ -456,8 +456,8 @@ async function handlePush(options) {
   console.log();
   console.log(`[INFO] Starting ${action} process...`);
 
-  if (!options.noBuild) {
-    if (!(await buildImage(tag, options.noCache || false))) {
+  if (options.build !== false) {
+    if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);
     }
     console.log();
@@ -588,22 +588,46 @@ async function startContainer(config) {
 
   runArgs.push(imageName);
 
-  const runCmd = `${containerCmd} ${runArgs.join(' ')}`;
-
   console.log(`\n   Starting container...`);
-  console.log(`   Command: ${runCmd}`);
+  console.log(`   Command: ${containerCmd} ${runArgs.join(' ')}`);
 
   try {
-    const output = execSync(runCmd, { encoding: 'utf8', stdio: detach ? 'pipe' : 'inherit' });
+    // Use spawn instead of execSync to avoid shell interpretation issues
+    const childProcess = spawn(containerCmd, runArgs, {
+      stdio: detach ? 'pipe' : 'inherit'
+    });
 
-    if (detach) {
-      const containerId = output.trim();
-      console.log(`\n   Container started successfully!`);
-      console.log(`   Container ID: ${containerId.substring(0, 12)}`);
-      console.log(`   Name: ${name}`);
-      console.log(`   URL: http://localhost:${port}`);
-      return containerId;
-    }
+    return new Promise((resolve, reject) => {
+      let output = '';
+
+      if (detach && childProcess.stdout) {
+        childProcess.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+      }
+
+      childProcess.on('close', (code) => {
+        if (code === 0) {
+          if (detach) {
+            const containerId = output.trim();
+            console.log(`\n   Container started successfully!`);
+            console.log(`   Container ID: ${containerId.substring(0, 12)}`);
+            console.log(`   Name: ${name}`);
+            console.log(`   URL: http://localhost:${port}`);
+            resolve(containerId);
+          } else {
+            resolve(undefined);
+          }
+        } else {
+          reject(new Error(`Container start failed with exit code ${code}`));
+        }
+      });
+
+      childProcess.on('error', (err) => {
+        console.error(`\n   Failed to start container: ${String(err)}`);
+        reject(err);
+      });
+    });
   } catch (error) {
     console.error(`\n   Failed to start container: ${String(error)}`);
     throw error;
@@ -612,7 +636,7 @@ async function startContainer(config) {
 
 /**
  * Handle start command
- * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, noCache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
+ * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, cache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
  */
 async function handleStart(options) {
   console.log('PDF TEI Editor - Container Start');
@@ -627,7 +651,7 @@ async function handleStart(options) {
   if (options.rebuild) {
     console.log('[INFO] Rebuilding image before starting container...');
     console.log();
-    if (!(await buildImage(tag, options.noCache || false))) {
+    if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);
     }
     console.log();
@@ -843,7 +867,7 @@ async function handleStop(options) {
 
 /**
  * Handle restart command
- * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, noCache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
+ * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, cache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
  */
 async function handleRestart(options) {
   console.log('PDF TEI Editor - Container Restart');
@@ -857,7 +881,7 @@ async function handleRestart(options) {
     const tag = options.tag || 'latest';
     console.log('[INFO] Rebuilding image before restarting container...');
     console.log();
-    if (!(await buildImage(tag, options.noCache || false))) {
+    if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);
     }
     console.log();
@@ -1233,11 +1257,11 @@ async function setupSSL(fqdn, email) {
  *   port?: number,
  *   type?: string,
  *   dataDir?: string,
- *   noNginx?: boolean,
- *   noSsl?: boolean,
+ *   nginx?: boolean,
+ *   ssl?: boolean,
  *   email?: string,
  *   rebuild?: boolean,
- *   noCache?: boolean,
+ *   cache?: boolean,
  *   env?: string[],
  *   yes?: boolean
  * }} options
@@ -1266,8 +1290,9 @@ async function handleDeploy(options) {
     process.exit(1);
   }
 
-  const useNginx = !options.noNginx;
-  const useSSL = !options.noSsl;
+  // Note: --no-nginx creates options.nginx = false, --no-ssl creates options.ssl = false
+  const useNginx = options.nginx !== false;
+  const useSSL = options.ssl !== false;
 
   // Check for root access FIRST if nginx/ssl needed
   if ((useNginx || useSSL) && process.getuid && process.getuid() !== 0) {
@@ -1342,7 +1367,7 @@ async function handleDeploy(options) {
   // Rebuild if requested
   if (options.rebuild) {
     console.log('[INFO] Rebuilding image...');
-    if (!(await buildImage(tag, options.noCache || false))) {
+    if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);
     }
     console.log();
@@ -1368,7 +1393,7 @@ async function handleDeploy(options) {
     if (existingContainer) {
       console.log(`[INFO] Stopping existing container: ${containerName}`);
       execSync(`${containerCmd} stop ${containerName}`, { stdio: 'inherit' });
-      execSync(`${containerCmd} rm ${containerName}`, { stdio: 'inherit' });
+      execSync(`${containerCmd} rm -f ${containerName}`, { stdio: 'inherit' });
     }
   } catch {
     // No existing container

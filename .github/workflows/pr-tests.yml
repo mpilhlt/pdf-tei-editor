@@ -1,13 +1,17 @@
-name: PR Tests
+name: Tests
 
 on:
   pull_request:
     branches:
       - main
       - devel
+  push:
+    tags:
+      - 'v*'
+  workflow_call:
 
 concurrency:
-  group: pr-tests-${{ github.event.pull_request.number }}
+  group: tests-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -47,6 +51,14 @@ jobs:
       - name: Check if tests are needed
         id: check-tests
         run: |
+          # For tag pushes, always run all tests (including E2E)
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "needs_tests=true" >> $GITHUB_OUTPUT
+            echo "needs_e2e=true" >> $GITHUB_OUTPUT
+            echo "Tag push - running all tests including E2E"
+            exit 0
+          fi
+
           # Run smart test runner with --names-only to get list of tests
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Checking which tests need to run for changed files..."
@@ -100,6 +112,7 @@ jobs:
           export PATH="$HOME/.cargo/bin:$PATH"
 
           # Run unit and API tests natively (faster, no container needed)
+          # Note: Tag pushes will always use container mode (needs_e2e=true)
           if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Running tests for changed files..."
             npm run test:changed -- ${{ steps.changed-files.outputs.files }}
@@ -121,14 +134,20 @@ jobs:
           push: false
           load: true
           tags: pdf-tei-editor:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=buildkit-ci
+            type=gha,scope=buildkit-ci-${{ github.base_ref || github.ref_name }}
+          cache-to: type=gha,mode=max,scope=buildkit-ci
 
       - name: Run tests in container
         if: steps.check-tests.outputs.needs_e2e == 'true'
         run: |
           # Run all tests in container (needed for E2E browser support)
-          if [ -n "${{ steps.changed-files.outputs.files }}" ]; then
+          # For tag pushes, always run all tests with no file filter
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "Tag push - running all tests..."
+            docker run --rm pdf-tei-editor:ci
+          elif [ -n "${{ steps.changed-files.outputs.files }}" ]; then
             echo "Running tests for changed files..."
             docker run --rm pdf-tei-editor:ci ${{ steps.changed-files.outputs.files }}
           else
@@ -138,7 +157,7 @@ jobs:
 
 
       - name: Comment PR with test results
-        if: always()
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |

@@ -18,18 +18,24 @@ import { logger, client, dialog, xmlEditor } from '../app.js'
 import { createIdLookupIndex } from '../modules/file-data-utils.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import ui from '../ui.js'
+import { registerTemplate, createFromTemplate } from '../ui.js'
+import { userIsAdmin } from '../modules/acl-utils.js'
+import { notify } from '../modules/sl-utils.js'
+
+// Register templates
+await registerTemplate('gc-menu-item', 'gc-menu-item.html')
 
 /**
  * File data management plugin
  */
 class FiledataPlugin extends Plugin {
   /**
-   * @param {PluginContext} context 
-   */  
+   * @param {PluginContext} context
+   */
   constructor(context) {
     super(context, {
       name: 'filedata',
-      deps: ['logger', 'client', 'dialog', 'xmleditor']
+      deps: ['logger', 'client', 'dialog', 'xmleditor', 'toolbar']
     });
 
     /** @type {StatusText | null} */
@@ -57,6 +63,76 @@ class FiledataPlugin extends Plugin {
       variant: 'primary',
       name: 'savingStatus'
     });
+
+    // Add garbage collection menu item to toolbar menu
+    createFromTemplate('gc-menu-item', ui.toolbar.toolbarMenu.menu);
+
+    logger.debug('Garbage collection menu item added to toolbar menu');
+
+    // Setup menu item handler
+    ui.toolbar.toolbarMenu.menu.gcMenuItem.addEventListener('click', () => {
+      this.showGarbageCollectionDialog();
+    });
+
+    // Initially hide menu item until we check admin status
+    ui.toolbar.toolbarMenu.menu.gcMenuItem.style.display = 'none';
+  }
+
+  /**
+   * Shows a confirmation dialog and triggers garbage collection
+   * @private
+   */
+  async showGarbageCollectionDialog() {
+    const result = await dialog.confirm(
+      'This will permanently delete all files marked for deletion. Continue?',
+      'Confirm Garbage Collection'
+    );
+
+    if (!result) {
+      return;
+    }
+
+    try {
+      // Use current time to collect all deleted files
+      // The backend enforces 24-hour minimum for non-admin users
+      const deletedBefore = new Date().toISOString();
+
+      logger.info('Running garbage collection...');
+      const response = await client.apiClient.filesGarbageCollect({
+        deleted_before: deletedBefore
+      });
+
+      const { purged_count, files_deleted, storage_freed } = response;
+      const storageMB = (storage_freed / (1024 * 1024)).toFixed(2);
+
+      notify(
+        `Garbage collection complete: ${purged_count} records purged, ${files_deleted} files deleted, ${storageMB} MB freed`,
+        'success',
+        'check-circle'
+      );
+
+      logger.info(`GC complete: ${purged_count} records, ${files_deleted} files, ${storageMB} MB freed`);
+
+      // Reload file data to update the UI
+      await this.reload({ refresh: true });
+    } catch (error) {
+      logger.error('Garbage collection failed: ' + String(error));
+      notify('Garbage collection failed: ' + String(error), 'danger', 'exclamation-octagon');
+    }
+  }
+
+  /**
+   * React to state changes
+   * @param {string[]} changedKeys
+   */
+  async onStateUpdate(changedKeys) {
+    if (changedKeys.includes('user')) {
+      // Only admins can access garbage collection - hide menu item for non-admins
+      const isAdmin = userIsAdmin(this.state.user);
+      if (ui.toolbar?.toolbarMenu?.menu?.gcMenuItem) {
+        ui.toolbar.toolbarMenu.menu.gcMenuItem.style.display = isAdmin ? '' : 'none';
+      }
+    }
   }
 
   /**

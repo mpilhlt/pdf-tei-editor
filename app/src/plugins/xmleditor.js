@@ -5,21 +5,31 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
+ * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { UIPart } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { ToolBar } from '../modules/panels/tool-bar.js'
  */
 
-import ui from '../ui.js'
-import { endpoints as ep, app, validation, logger, testLog, services } from '../app.js'
-import { PanelUtils, StatusSeparator } from '../modules/panels/index.js'
+import ui, {updateUi} from '../ui.js'
+import { endpoints as app, validation, logger, testLog, services } from '../app.js'
+import { PanelUtils } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { detectXmlIndentation } from '../modules/codemirror_utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
-import { isGoldFile } from '../modules/acl-utils.js'
+import { isGoldFile, userHasRole } from '../modules/acl-utils.js'
+import { registerTemplate, createFromTemplate } from '../modules/ui-system.js'
+
+// Register templates
+await registerTemplate('xmleditor-headerbar', 'xmleditor-headerbar.html')
+await registerTemplate('xmleditor-headerbar-right', 'xmleditor-headerbar-right.html')
+await registerTemplate('xmleditor-toolbar', 'xmleditor-toolbar.html')
+await registerTemplate('xmleditor-import-export-buttons', 'xmleditor-import-export-buttons.html')
+await registerTemplate('xmleditor-statusbar', 'xmleditor-statusbar.html')
+await registerTemplate('xmleditor-statusbar-right', 'xmleditor-statusbar-right.html')
 
 //
 // UI
@@ -29,23 +39,26 @@ import { isGoldFile } from '../modules/acl-utils.js'
  * XML editor headerbar navigation properties
  * @typedef {object} xmlEditorHeaderbarPart
  * @property {StatusText} titleWidget - The document title widget
+ * @property {StatusText} lastUpdatedWidget - The last updated widget
  */
 
 /**
  * XML editor toolbar navigation properties
  * @typedef {object} xmlEditorToolbarPart
- * @property {HTMLElement} prevDiffBtn - Previous diff button
- * @property {HTMLElement} nextDiffBtn - Next diff button
- * @property {HTMLElement} rejectAllBtn - Reject all changes button
- * @property {HTMLElement} acceptAllBtn - Accept all changes button
+ * @property {StatusButton} prevDiffBtn - Previous diff button
+ * @property {StatusButton} nextDiffBtn - Next diff button
+ * @property {StatusButton} rejectAllBtn - Reject all changes button
+ * @property {StatusButton} acceptAllBtn - Accept all changes button
+ * @property {StatusButton} uploadBtn - Upload document button
+ * @property {StatusButton} downloadBtn - Download document button
  */
 
 /**
  * XML editor statusbar navigation properties
  * @typedef {object} xmlEditorStatusbarPart
- * @property {StatusText} readOnlyStatus - The read-only status widget
- * @property {StatusText} cursorPosition - The cursor position widget
- * @property {StatusText} indentationStatus - The indentation status widget
+ * @property {StatusText} teiHeaderToggleWidget - TEI header visibility toggle widget
+ * @property {StatusText} indentationStatusWidget - The indentation status widget
+ * @property {StatusText} cursorPositionWidget - The cursor position widget
  */
 
 /**
@@ -85,9 +98,6 @@ let indentationStatusWidget;
 /** @type {StatusText} */
 let teiHeaderToggleWidget;
 
-/** @type {StatusSeparator} */
-let statusSeparator;
-
 // State to track teiHeader visibility (starts folded)
 let teiHeaderVisible = false
 
@@ -113,120 +123,93 @@ export default plugin
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // Widgets for the headerbar
-  titleWidget = PanelUtils.createText({
-    text: '',
-    // <sl-icon name="file-earmark-text"></sl-icon>
-    icon: 'file-earmark-text',
-    variant: 'neutral',
-    name: 'titleWidget'
+  // Create headerbar widgets from templates and add to headerbar
+  const headerbarLeftWidgets = createFromTemplate('xmleditor-headerbar')
+  headerbarLeftWidgets.forEach(widget => {
+    if (widget instanceof HTMLElement) {
+      ui.xmlEditor.headerbar.add(widget, 'left', 1)
+    }
   })
-  titleWidget.classList.add('title-widget')
 
-  lastUpdatedWidget = PanelUtils.createText({
-    text: '',
-    variant: 'neutral',
-    name: 'lastUpdatedWidget'
+  const headerbarRightWidgets = createFromTemplate('xmleditor-headerbar-right')
+  headerbarRightWidgets.forEach(widget => {
+    if (widget instanceof HTMLElement) {
+      ui.xmlEditor.headerbar.add(widget, 'right', 1)
+    }
   })
-  lastUpdatedWidget.classList.add('title-widget')
 
-  ui.xmlEditor.headerbar.add(titleWidget, 'left', 1)
-  ui.xmlEditor.headerbar.add(lastUpdatedWidget, 'right', 1)
+  // Create statusbar widgets from templates and add to statusbar
+  const statusbarLeftWidgets = createFromTemplate('xmleditor-statusbar')
+  statusbarLeftWidgets.forEach(widget => {
+    if (widget instanceof HTMLElement) {
+      ui.xmlEditor.statusbar.add(widget, 'left', 1)
+    }
+  })
 
-  // Widgets for the statusbar
+  const statusbarRightWidgets = createFromTemplate('xmleditor-statusbar-right')
+  statusbarRightWidgets.forEach((widget, index) => {
+    if (widget instanceof HTMLElement) {
+      // Add widgets to right side (higher priority = more to the right)
+      // indentationStatusWidget (priority 1), separator (priority 2), cursorPositionWidget (priority 3)
+      ui.xmlEditor.statusbar.add(widget, 'right', index + 1)
+    }
+  })
+
+  // Create toolbar widgets from templates and add to toolbar
+  const toolbarWidgets = createFromTemplate('xmleditor-toolbar')
+  const toolbarPriorities = [104, 103, 102, 101, 100, 99] // separator, prevDiff, nextDiff, separator, reject, accept
+  toolbarWidgets.forEach((widget, index) => {
+    if (widget instanceof HTMLElement) {
+      ui.xmlEditor.toolbar.add(widget, toolbarPriorities[index] || 1)
+    }
+  })
+
+  // Create import/export buttons and add to toolbar (right side)
+  const importExportButtons = createFromTemplate('xmleditor-import-export-buttons')
+  const importExportPriorities = [50, 3, 2] // spacer, upload, download
+  importExportButtons.forEach((widget, index) => {
+    if (widget instanceof HTMLElement) {
+      ui.xmlEditor.toolbar.add(widget, importExportPriorities[index] || 1)
+    }
+  })
+
+  // Read-only status widget (added dynamically when needed)
   readOnlyStatusWidget = PanelUtils.createText({
     text: 'Read-only',
-    // <sl-icon name="lock-fill"></sl-icon>
     icon: 'lock-fill',
     variant: 'warning',
     name: 'readOnlyStatus'
   })
 
-  cursorPositionWidget = PanelUtils.createText({
-    text: 'Ln 1, Col 1',
-    variant: 'neutral',
-    name: 'cursorPosition'
-  })
+  // Update UI to register named widgets
+  updateUi()
 
-  indentationStatusWidget = PanelUtils.createText({
-    text: 'Indent: 2 spaces',
-    variant: 'neutral',
-    name: 'indentationStatus'
-  })
+  // Store references to widgets for later use
+  titleWidget = ui.xmlEditor.headerbar.titleWidget
+  lastUpdatedWidget = ui.xmlEditor.headerbar.lastUpdatedWidget
+  teiHeaderToggleWidget = ui.xmlEditor.statusbar.teiHeaderToggleWidget
+  indentationStatusWidget = ui.xmlEditor.statusbar.indentationStatusWidget
+  cursorPositionWidget = ui.xmlEditor.statusbar.cursorPositionWidget
 
-  // <sl-icon name="person-gear"></sl-icon>
-  // <sl-icon name="person-fill-gear"></sl-icon>
-  teiHeaderToggleWidget = PanelUtils.createText({
-    text: '',
-    icon: 'person-gear',
-    variant: 'neutral',
-    name: 'teiHeaderToggle',
-  })
-  teiHeaderToggleWidget.style.display = 'none'
-
-  // Create separator between indentation and cursor position
-  statusSeparator = PanelUtils.createSeparator({
-    variant: 'dotted'
-  })
-
-  // Add widgets to right side of statusbar (higher priority = more to the right)
-  ui.xmlEditor.statusbar.add(indentationStatusWidget, 'right', 1)  // leftmost - indent to left of position  
-  ui.xmlEditor.statusbar.add(statusSeparator, 'right', 2)          // separator in middle
-  ui.xmlEditor.statusbar.add(cursorPositionWidget, 'right', 3)     // rightmost - position always on far right
-
-  // Add teiHeader toggle widget to left side of statusbar
-  ui.xmlEditor.statusbar.add(teiHeaderToggleWidget, 'left', 1)
-
-  // Diff navigation buttons for the toolbar
-  // <sl-icon name="chevron-bar-up"></sl-icon>
-  const prevDiffBtn = PanelUtils.createButton({
-    icon: 'chevron-bar-up',
-    tooltip: 'Previous diff',
-    action: 'xml-prev-diff',
-    name: 'prevDiffBtn'
-  })
-  prevDiffBtn.addEventListener('widget-click', () => xmlEditor.goToPreviousDiff())
-
-  // <sl-icon name="chevron-bar-down"></sl-icon>
-  const nextDiffBtn = PanelUtils.createButton({
-    icon: 'chevron-bar-down',
-    tooltip: 'Next diff',
-    action: 'xml-next-diff',
-    name: 'nextDiffBtn'
-  })
-  nextDiffBtn.addEventListener('widget-click', () => xmlEditor.goToNextDiff())
-
-  ui.xmlEditor.toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 104)
-  ui.xmlEditor.toolbar.add(prevDiffBtn, 103)
-  ui.xmlEditor.toolbar.add(nextDiffBtn, 102)
-
-  // <sl-icon name="x-circle"></sl-icon>
-  const rejectAllBtn = PanelUtils.createButton({
-    icon: 'x-circle',
-    tooltip: 'Reject all changes',
-    action: 'xml-reject-all',
-    name: 'rejectAllBtn'
-  })
-  rejectAllBtn.addEventListener('widget-click', () => {
+  // Attach event listeners to toolbar buttons
+  ui.xmlEditor.toolbar.prevDiffBtn.addEventListener('widget-click', () => xmlEditor.goToPreviousDiff())
+  ui.xmlEditor.toolbar.nextDiffBtn.addEventListener('widget-click', () => xmlEditor.goToNextDiff())
+  ui.xmlEditor.toolbar.rejectAllBtn.addEventListener('widget-click', () => {
     xmlEditor.rejectAllDiffs()
     services.removeMergeView()
   })
-
-  // <sl-icon name="check-circle"></sl-icon>
-  const acceptAllBtn = PanelUtils.createButton({
-    icon: 'check-circle',
-    tooltip: 'Accept all changes',
-    action: 'xml-accept-all',
-    name: 'acceptAllBtn'
-  })
-  acceptAllBtn.addEventListener('widget-click', () => {
+  ui.xmlEditor.toolbar.acceptAllBtn.addEventListener('widget-click', () => {
     xmlEditor.acceptAllDiffs()
     services.removeMergeView()
   })
 
-  ui.xmlEditor.toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 101)
-  ui.xmlEditor.toolbar.add(rejectAllBtn, 100)
-  ui.xmlEditor.toolbar.add(acceptAllBtn, 99)
+  // Attach event listeners to import/export buttons
+  ui.xmlEditor.toolbar.uploadBtn.addEventListener('widget-click', () => {
+    if (currentState) services.uploadXml(currentState)
+  })
+  ui.xmlEditor.toolbar.downloadBtn.addEventListener('widget-click', () => {
+    if (currentState) services.downloadXml(currentState)
+  })
 
   // selection => xpath state
   xmlEditor.on("selectionChanged", data => {
@@ -437,6 +420,16 @@ async function update(state) {
         ui.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id)
       }
     }
+  }
+
+  // Update import/export button states based on user role and state
+  const isAnnotator = userHasRole(state.user, ['admin', 'reviewer', 'annotator'])
+  if (isAnnotator) {
+    ui.xmlEditor.toolbar.downloadBtn.disabled = !Boolean(state.xml)
+    ui.xmlEditor.toolbar.uploadBtn.disabled = state.editorReadOnly || state.offline
+  } else {
+    ui.xmlEditor.toolbar.downloadBtn.disabled = true
+    ui.xmlEditor.toolbar.uploadBtn.disabled = true
   }
 
   // xpath state => selection

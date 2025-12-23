@@ -1,6 +1,6 @@
 {
     "name": "pdf-tei-editor",
-    "version": "0.14.0",
+    "version": "0.15.0",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
@@ -21,6 +21,7 @@
         "start:dev": "uv run python bin/start-dev",
         "start:prod": "uv run python bin/start-prod",
         "dev:reset": "uv run python bin/reset-application.py",
+        "dev:clear-caches": "uv run python bin/manage.py clear-caches",
         "test:all": "node tests/smart-test-runner.js --all",
         "test:changed": "node tests/smart-test-runner.js",
         "test:tap": "node tests/smart-test-runner.js --all --tap",
@@ -42,7 +43,8 @@
         "container:build": "node bin/container.js build",
         "container:build:no-cache": "node bin/container.js build --no-cache",
         "container:push": "node bin/container.js push",
-        "container:deploy": "node bin/container.js deploy"
+        "container:deploy": "node bin/container.js deploy",
+        "deploy": "node bin/deploy.js"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",

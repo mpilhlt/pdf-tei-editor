@@ -16,6 +16,7 @@ import BackendPluginsPlugin from './plugins/backend-plugins.js'
 import FiledataPlugin from './plugins/filedata.js'
 import LoggerPlugin from './plugins/logger.js'
 import { logLevel} from './plugins/logger.js'
+import UserAccountPlugin from './plugins/user-account.js'
 
 // legacy plugins
 import { plugin as configPlugin, api as config } from './plugins/config.js'
@@ -41,13 +42,13 @@ import { plugin as syncPlugin, api as sync } from './plugins/sync.js'
 import { plugin as accessControlPlugin, api as accessControl } from './plugins/access-control.js'
 import { plugin as heartbeatPlugin, api as heartbeat } from './plugins/heartbeat.js'
 import { plugin as rbacManagerPlugin } from './plugins/rbac-manager.js'
+import { plugin as configEditorPlugin } from './plugins/config-editor.js'
 
 /** @type {Array<Plugin|PluginConfig>} */
 const plugins = [
   // class-based
   AuthenticationPlugin,
   BackendPluginsPlugin,
-  FiledataPlugin,
   LoggerPlugin,
 
   // modules with config object
@@ -56,6 +57,15 @@ const plugins = [
   configPlugin,
   dialogPlugin,
   toolbarPlugin,
+
+  // Toolbar menu items (order matters - determines menu item order)
+  infoPlugin,          // User Manual (first)
+  FiledataPlugin,      // Garbage Collection (second, admin only)
+  rbacManagerPlugin,   // Manage Users & Roles (third, admin only)
+  configEditorPlugin,  // Configuration Editor (fourth, admin only)
+  UserAccountPlugin,   // User Profile + Logout (last)
+
+  // Other plugins
   pdfViewerPlugin,
   xmlEditorPlugin,
   fileselectionPlugin,
@@ -67,12 +77,10 @@ const plugins = [
   promptEditorPlugin,
   teiWizardPlugin,
   validationPlugin,
-  infoPlugin,
   moveFilesPlugin,
   ssePlugin,
   accessControlPlugin,
   heartbeatPlugin,
-  rbacManagerPlugin,
   startPlugin
 ]
 
@@ -83,6 +91,7 @@ export default plugins
 export {
   // class-based plugins
   AuthenticationPlugin,
+  UserAccountPlugin,
   LoggerPlugin,
 
   // legacy plugin APIs

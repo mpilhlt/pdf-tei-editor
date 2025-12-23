@@ -1,5 +1,7 @@
 # Access Control Implementation Work Summary
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/138
+
 ## Overview
 This document captures the work done on implementing role-based access control for the PDF TEI Editor application during the current development session.
 

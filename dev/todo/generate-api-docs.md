@@ -1,5 +1,7 @@
 # API Documentation Generation Implementation Plan
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/122
+
 ## Goal
 
 Generate both human-readable and machine-readable API documentation to prevent code-assistant API hallucinations by providing:

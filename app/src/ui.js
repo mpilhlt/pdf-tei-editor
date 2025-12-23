@@ -50,6 +50,8 @@ import './modules/panels/index.js';
  * @import {teiWizardDialogPart} from './plugins/tei-wizard.js'
  * @import {fileDrawerPart} from './plugins/file-selection-drawer.js'
  * @import {backendPluginsButtonPart, backendPluginsResultDialogPart} from './plugins/backend-plugins.js'
+ * @import {userProfileDialog} from './plugins/user-account.js'
+ * @import {configEditorDialogPart} from './plugins/config-editor.js'
  */
 
 /**
@@ -78,6 +80,8 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, newVersionDialogPart>} newVersionDialog
  * @property {UIPart<SlDialog, newRevisionChangeDialogPart>} newRevisionChangeDialog
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)
+ * @property {UIPart<SlDialog, userProfileDialog>} userProfileDialog - User profile dialog (added by user-account plugin)
+ * @property {UIPart<SlDialog, configEditorDialogPart>} [configEditorDialog] - Config editor dialog (added by config-editor plugin)
  */
 
 /**

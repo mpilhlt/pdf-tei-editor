@@ -1,5 +1,7 @@
 # RE-enable WebDAV
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/121
+
 the WebDAV synchronization has not been tested with the new FastAPI backend. Unit and API tests pass, but only with mocked depenndencies.
 
 ---

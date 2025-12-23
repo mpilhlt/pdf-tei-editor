@@ -69,7 +69,13 @@
       "Bash(podman run:*)",
       "Bash(mv:*)",
       "Bash(find:*)",
-      "Bash(npx playwright test:*)"
+      "Bash(npx playwright test:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh api:*)",
+      "Bash(gh label list:*)",
+      "Bash(timeout 10 tail:*)",
+      "Bash(gh issue comment:*)",
+      "Bash(podman machine start:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,5 +1,7 @@
 # Remove Legacy /api/files Route
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/125
+
 ## Background
 
 The backwards compatibility router at `/api/files/{document_id}` was added to support legacy frontend code that hasn't been updated to use the versioned `/api/v1/files/{document_id}` endpoint.

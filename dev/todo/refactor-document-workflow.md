@@ -1,5 +1,7 @@
 # Source-to-Target Editor Implementation Plan
 
+**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/137
+
 ## Overview
 
 This plan implements a comprehensive dual-editor system that transforms the application from a PDF-specific TEI editor into a general source-to-target document processing tool. The system supports:

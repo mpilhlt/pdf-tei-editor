@@ -7,21 +7,14 @@
       <sl-button name="createNewVersion" size="small" disabled>
         <sl-icon name="copy"></sl-icon>
       </sl-button>
-    </sl-tooltip>  
+    </sl-tooltip>
 
-    <!-- upload -->
-    <sl-tooltip content="Upload document">
-      <sl-button name="upload" size="small">
-        <sl-icon name="cloud-upload"></sl-icon>
+    <!-- save document revision -->
+    <sl-tooltip content="Save document revision">
+      <sl-button name="saveRevision" size="small" disabled>
+        <sl-icon name="save"></sl-icon>
       </sl-button>
-    </sl-tooltip>    
-
-    <!-- download -->
-    <sl-tooltip content="Download XML document">
-      <sl-button name="download" size="small" disabled>
-        <sl-icon name="cloud-download"></sl-icon>
-      </sl-button>
-    </sl-tooltip>   
+    </sl-tooltip> 
 
     <!-- delete -->
     <sl-button-group>
@@ -35,14 +28,7 @@
           <sl-menu-item name="deleteAll">Delete PDF and XML</sl-menu-item>
         </sl-menu>
       </sl-dropdown>
-    </sl-button-group>
-
-    <!-- save document revision -->
-    <sl-tooltip content="Save document revision">
-      <sl-button name="saveRevision" size="small" disabled>
-        <sl-icon name="save"></sl-icon>
-      </sl-button>
-    </sl-tooltip>    
+    </sl-button-group>    
     
   </sl-button-group>
 
