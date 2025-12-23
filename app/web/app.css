@@ -134,6 +134,16 @@ sl-dialog {
   --footer-spacing: var(--sl-spacing-small);
 }
 
+/* Ensure dialog and drawer text is readable regardless of browser dark mode settings */
+sl-dialog::part(header),
+sl-dialog::part(body),
+sl-dialog::part(footer),
+sl-drawer::part(header),
+sl-drawer::part(body),
+sl-drawer::part(footer) {
+  color: var(--sl-color-neutral-900);
+}
+
 /* Headerbar styling */
 status-bar[name="headerbar"] {
   border-bottom: 1px solid #e0e0e0;
