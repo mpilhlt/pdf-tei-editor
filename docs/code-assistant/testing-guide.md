@@ -384,6 +384,30 @@ const log = await waitForTestMessage(consoleLogs, 'FILE_SAVED');
 expect(log.value.file_id).toBeTruthy();
 ```
 
+**Enhanced Error Reporting:**
+
+`setupTestConsoleCapture()` now includes automatic network request tracking. When a console error occurs, the error message will include:
+
+- The console error message
+- Recent failed network requests (within 5 seconds of the error)
+- Recent network activity (last 2 seconds)
+
+Example enhanced error output:
+
+```text
+Error: Unexpected console error detected: Failed to load resource: the server responded with a status of 404 (Not Found)
+
+Recent failed network requests:
+  GET http://localhost:8010/api/v1/files/nonexistent → 404 Not Found
+
+Recent network activity (last 2 seconds):
+  GET http://localhost:8010/api/v1/files/list → 200
+  POST http://localhost:8010/api/v1/files/save → 200
+  GET http://localhost:8010/api/v1/files/nonexistent → 404
+```
+
+This eliminates the need to access server logs or trace files when debugging network-related errors in CI.
+
 ### Checking State for Shoelace Components
 
 Playwright's accessibility-based matchers don't work properly with Shoelace web components. Always check attributes directly:

@@ -1,0 +1,31 @@
+<sl-dialog name="configEditorDialog" label="Configuration Editor" class="config-editor-dialog" style="--width: 90vw; --height: 85vh;">
+  <!-- Header with Search -->
+  <div style="margin-bottom: 1rem;">
+    <sl-input name="searchInput" placeholder="Search preference name" clearable size="small">
+      <sl-icon slot="prefix" name="search"></sl-icon>
+    </sl-input>
+  </div>
+
+  <!-- Config Table -->
+  <div style="overflow-y: auto; height: calc(85vh - 180px); border: 1px solid var(--sl-color-neutral-300);">
+    <table name="configTable" style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+      <thead style="position: sticky; top: 0; background: var(--sl-color-neutral-100); border-bottom: 2px solid var(--sl-color-neutral-300);">
+        <tr>
+          <th style="padding: 0.5rem; text-align: left; width: 40%; font-weight: 600;">Preference Name</th>
+          <th style="padding: 0.5rem; text-align: left; width: 50%; font-weight: 600;">Value</th>
+          <th style="padding: 0.5rem; text-align: center; width: 10%; font-weight: 600;">Actions</th>
+        </tr>
+      </thead>
+      <tbody name="configTableBody">
+        <!-- Config entries will be dynamically inserted here -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Footer with Actions -->
+  <div slot="footer" style="display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%;">
+    <sl-button name="closeBtn" variant="default">
+      Close
+    </sl-button>
+  </div>
+</sl-dialog>
