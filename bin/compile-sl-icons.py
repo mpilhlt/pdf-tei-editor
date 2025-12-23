@@ -14,12 +14,34 @@ SHOELACE_ICONS_BASE_PATH = os.path.join(
     'icons'
 )
 DESTINATION_ICONS_DIRECTORY = './app/web/assets/icons'
-ICON_PATTERN = re.compile(r'<sl-icon name="([^"]+)"')
+
+# Patterns to match icon usage in different contexts:
+# 1. HTML <sl-icon>: <sl-icon name="icon-name">
+# 2. HTML icon attribute: <any-element icon="icon-name">
+# 3. JS property assignment: something.icon = 'icon-name'
+# 4. JS object literal: icon: 'icon-name'
+ICON_PATTERNS = [
+    re.compile(r'<sl-icon[^>]*name="([^"]+)"'),  # HTML sl-icon tags
+    re.compile(r'\sicon="([^"]+)"'),  # HTML icon attribute
+    re.compile(r'\.icon\s*=\s*[\'"]([^"\']+)[\'"]'),  # JS: .icon = 'name'
+    re.compile(r'icon:\s*[\'"]([^"\']+)[\'"]'),  # JS: icon: 'name'
+]
 SCAN_EXTENSIONS = ['.js', '.html']
 
 # --- Script Logic ---
 
-def find_used_icons(directory, pattern, extensions):
+def find_used_icons(directory, patterns, extensions):
+    """
+    Find all icon names used in source files.
+
+    Args:
+        directory: Directory to scan
+        patterns: List of compiled regex patterns to match icon names
+        extensions: File extensions to scan
+
+    Returns:
+        Set of icon names found
+    """
     found_icons = set()
     print(f"Scanning: {directory}")
 
@@ -34,9 +56,11 @@ def find_used_icons(directory, pattern, extensions):
                 try:
                     with open(filepath, 'r', encoding='utf-8') as f:
                         content = f.read()
-                        matches = pattern.findall(content)
-                        if matches:
-                            found_icons.update(matches)
+                        # Try all patterns
+                        for pattern in patterns:
+                            matches = pattern.findall(content)
+                            if matches:
+                                found_icons.update(matches)
                 except (UnicodeDecodeError, IOError):
                     pass # Skip problematic files silently
 
@@ -44,8 +68,10 @@ def find_used_icons(directory, pattern, extensions):
 
 def copy_icons(icon_names, shoelace_base_path, destination_path):
     if not os.path.isdir(shoelace_base_path):
+        import sys
         print(f"Error: Shoelace icons path not found: {shoelace_base_path}")
-        return
+        print(f"Make sure @shoelace-style/shoelace is installed in node_modules")
+        sys.exit(1)
 
     if not os.path.exists(destination_path):
         os.makedirs(destination_path, exist_ok=True)
@@ -76,9 +102,12 @@ def copy_icons(icon_names, shoelace_base_path, destination_path):
 
 # --- Main ---
 if __name__ == "__main__":
-    used_icons = find_used_icons(SCAN_DIRECTORY, ICON_PATTERN, SCAN_EXTENSIONS)
+    used_icons = find_used_icons(SCAN_DIRECTORY, ICON_PATTERNS, SCAN_EXTENSIONS)
 
     if used_icons:
         copy_icons(used_icons, SHOELACE_ICONS_BASE_PATH, DESTINATION_ICONS_DIRECTORY)
     else:
-        print("No Shoelace icons found.")
+        import sys
+        print(f"Error: No Shoelace icons found in {SCAN_DIRECTORY}")
+        print(f"This usually indicates the source files are missing or the scan pattern is incorrect")
+        sys.exit(1)
