@@ -40,6 +40,7 @@ export function createTestLogger(applicationMode) {
  * @typedef {object} LogEntry
  * @property {string} type
  * @property {string} text
+ * @property {number} [timestamp] - Timestamp when log was captured
  * @property {string} [message]
  * @property {string} [value]
  */
@@ -72,13 +73,73 @@ function stripConsoleFormatting(text) {
 }
 
 /**
- * Sets up enhanced console log capture for E2E tests with TEST message parsing
+ * @typedef {object} NetworkRequest
+ * @property {string} url - Request URL
+ * @property {string} method - HTTP method
+ * @property {number} [status] - Response status code (if available)
+ * @property {string} [statusText] - Response status text (if available)
+ * @property {string} [failure] - Failure message (if request failed)
+ * @property {number} timestamp - Request timestamp
+ */
+
+/**
+ * Sets up network request tracking for E2E tests
  * @param {import('@playwright/test').Page} page - Playwright page object
- * @returns {any[]} Array of captured console logs with parsed TEST messages
+ * @returns {NetworkRequest[]} Array of tracked network requests
+ */
+export function setupNetworkTracking(page) {
+  /** @type {NetworkRequest[]} */
+  const requests = [];
+
+  page.on('request', request => {
+    requests.push({
+      url: request.url(),
+      method: request.method(),
+      timestamp: Date.now()
+    });
+  });
+
+  page.on('response', response => {
+    const request = requests.find(r => r.url === response.url() && !r.status);
+    if (request) {
+      request.status = response.status();
+      request.statusText = response.statusText();
+    }
+  });
+
+  page.on('requestfailed', request => {
+    const trackedRequest = requests.find(r => r.url === request.url() && !r.status);
+    if (trackedRequest) {
+      trackedRequest.failure = request.failure()?.errorText || 'Unknown error';
+    }
+  });
+
+  return requests;
+}
+
+/**
+ * Finds recent failed network requests
+ * @param {NetworkRequest[]} requests - Array of tracked requests
+ * @param {number} [since] - Timestamp to filter requests after (default: last 5 seconds)
+ * @returns {NetworkRequest[]} Array of failed requests
+ */
+export function findRecentFailedRequests(requests, since = Date.now() - 5000) {
+  return requests.filter(r =>
+    r.timestamp >= since &&
+    (r.status >= 400 || r.failure)
+  );
+}
+
+/**
+ * Sets up enhanced console log capture for E2E tests with TEST message parsing
+ * and network request tracking
+ * @param {import('@playwright/test').Page} page - Playwright page object
+ * @returns {{logs: any[], requests: NetworkRequest[]}} Captured console logs and network requests
  */
 export function setupTestConsoleCapture(page) {
   /** @type {LogEntry[]} */
   const consoleLogs = [];
+  const networkRequests = setupNetworkTracking(page);
 
   page.on('console', msg => {
     // Capture log, info, warn, and error messages
@@ -95,7 +156,8 @@ export function setupTestConsoleCapture(page) {
       /** @type {LogEntry} */
       const logEntry = {
         type: msg.type(),
-        text: text
+        text: text,
+        timestamp: Date.now()
       };
 
       // Parse TEST messages using regex: "TEST: MESSAGE_NAME JSON_DATA"
@@ -121,7 +183,11 @@ export function setupTestConsoleCapture(page) {
     }
   });
 
-  return consoleLogs;
+  // Return both logs and requests for backward compatibility
+  // Support both array access (old) and object access (new)
+  const result = consoleLogs;
+  result.requests = networkRequests;
+  return result;
 }
 
 /**
@@ -160,7 +226,7 @@ export function findWarningLogs(consoleLogs, pattern) {
 
 /**
  * Sets up automatic test failure on unexpected console errors
- * @param {LogEntry[]} consoleLogs - Array of captured console logs
+ * @param {LogEntry[]} consoleLogs - Array of captured console logs (with optional .requests property)
  * @param {string[]} allowedErrorPatterns - Array of regex patterns for expected/ignorable errors
  * @returns {() => void} Cleanup function to stop error monitoring
  */
@@ -186,8 +252,47 @@ export function setupErrorFailure(consoleLogs, allowedErrorPatterns = []) {
         checkedErrors.add(errorLog.text);
         clearInterval(checkInterval);
 
+        // Build detailed error message
+        let errorMessage = `Unexpected console error detected: ${errorLog.text}`;
+
+        // If network requests were tracked, find recent failures
+        if (consoleLogs.requests) {
+          const errorTime = errorLog.timestamp || Date.now();
+          const recentFailures = findRecentFailedRequests(consoleLogs.requests, errorTime - 5000);
+
+          if (recentFailures.length > 0) {
+            errorMessage += '\n\nRecent failed network requests:';
+            recentFailures.forEach(req => {
+              errorMessage += `\n  ${req.method} ${req.url}`;
+              if (req.status) {
+                errorMessage += ` → ${req.status} ${req.statusText}`;
+              }
+              if (req.failure) {
+                errorMessage += ` (${req.failure})`;
+              }
+            });
+          }
+
+          // Also show recent successful requests that might be related
+          const recentRequests = consoleLogs.requests.filter(r =>
+            r.timestamp >= errorTime - 2000 && r.timestamp <= errorTime
+          ).slice(-5);
+
+          if (recentRequests.length > 0) {
+            errorMessage += '\n\nRecent network activity (last 2 seconds):';
+            recentRequests.forEach(req => {
+              errorMessage += `\n  ${req.method} ${req.url}`;
+              if (req.status) {
+                errorMessage += ` → ${req.status}`;
+              }
+            });
+          }
+        }
+
+        errorMessage += `\n\nAllowed patterns: ${JSON.stringify(allowedErrorPatterns, null, 2)}`;
+
         // Force test failure with detailed error info
-        throw new Error(`Unexpected console error detected: ${errorLog.text}\n\nAllowed patterns: ${JSON.stringify(allowedErrorPatterns, null, 2)}`);
+        throw new Error(errorMessage);
       } else {
         // Mark allowed errors as checked too
         checkedErrors.add(errorLog.text);
