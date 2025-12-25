@@ -134,8 +134,10 @@ jobs:
           push: false
           load: true
           tags: pdf-tei-editor:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=buildkit-ci
+            type=gha,scope=buildkit-ci-${{ github.base_ref || github.ref_name }}
+          cache-to: type=gha,mode=max,scope=buildkit-ci
 
       - name: Run tests in container
         if: steps.check-tests.outputs.needs_e2e == 'true'
