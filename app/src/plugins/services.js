@@ -1,5 +1,5 @@
 /**
- * This component provides the core services that can be called programmatically or via user commands
+ * This component provides inter-plugin orchestration methods
  */
 
 /**
@@ -11,16 +11,14 @@
 import { app, endpoints as ep } from '../app.js'
 import ui from '../ui.js'
 import {
-  client, logger, dialog, config,
-  fileselection, xmlEditor, pdfViewer,
-  services, validation, authentication,
-  sync, accessControl
+  client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl
 } from '../app.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror_utils.js'
 import { ApiError } from '../modules/utils.js'
+import { encodeXmlEntities } from '../modules/tei-utils.js'
 
 /**
  * plugin API
@@ -95,7 +93,7 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function onStateUpdate(changedKeys, state) {
-
+  currentState = state;
 }
 
 
@@ -317,7 +315,7 @@ async function showMergeView(diff) {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`
     await xmlEditor.showMergeView(diffUrl)
-    if (currentState.diff !== diff) {
+    if (!currentState || currentState.diff !== diff) {
       await app.updateState({ diff: diff })
     }
     // turn validation off as it creates too much visual noise
@@ -334,14 +332,128 @@ async function removeMergeView() {
   xmlEditor.hideMergeView()
   // re-enable validation
   validation.configure({ mode: "auto" })
-  if (currentState.diff) {
+  if (currentState && currentState.diff) {
     UrlHash.remove("diff")
     await app.updateState({ diff: null })
   }
 }
 
 /**
- * Deletes the current version of the document
- * This will remove the XML file from the server and reload the gold version
+ * Downloads the current XML file
  * @param {ApplicationState} state
  */
+async function downloadXml(state) {
+  if (!state.xml) {
+    throw new TypeError("State does not contain an xml path")
+  }
+  let xml = xmlEditor.getXML()
+  if (await config.get('xml.encode-entities.server')) {
+    const encodeQuotes = await config.get('xml.encode-quotes', false)
+    xml = encodeXmlEntities(xml, { encodeQuotes })
+  }
+  const blob = new Blob([xml], { type: 'application/xml' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+
+  const fileData = getFileDataById(state.xml);
+  let filename = fileData?.file?.fileref || state.xml;
+
+  // Add variant name to filename if variant exists
+  // The item could be a version or gold file which has variant
+  const variant = fileData?.item?.variant;
+  if (variant) {
+    // Extract the variant name from variant (e.g., "grobid.training.segmentation" -> "training.segmentation")
+    const variantName = variant.replace(/^grobid\./, '');
+    filename = `${filename}.${variantName}`;
+  }
+
+  a.download = `${filename}.tei.xml`;
+
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * Uploads an XML file, creating a new version for the currently selected document
+ * @param {ApplicationState} state
+ */
+async function uploadXml(state) {
+  const uploadResult = await client.uploadFile(undefined, { accept: '.xml' })
+  const tempFilename = /** @type {any} */ (uploadResult).filename
+  // @ts-ignore
+  const { path } = await client.createVersionFromUpload(tempFilename, state.xml)
+  await fileselection.reload()
+  const { services } = await import('../app.js')
+  await services.load({ xml: path })
+  notify("Document was uploaded. You are now editing the new version.")
+}
+
+/**
+ * Called when the "Validate" button is executed
+ */
+async function onClickValidateButton() {
+  ui.toolbar.teiActions.validate.disabled = true
+  const diagnostics = await validateXml()
+  notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`)
+}
+
+/**
+ * Given a Node in the XML, search and highlight its text content in the PDF Viewer
+ * @param {Element} node
+ */
+async function searchNodeContentsInPdf(node) {
+
+  let searchTerms = getNodeText(node)
+    // split all node text along whitespace and hypen/dash characters
+    .reduce((/**@type {string[]}*/acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
+    // Search terms must be more than three characters or consist of digits. This is to remove
+    // the most common "stop words" which would litter the search results with false positives.
+    // This incorrectly removes hyphenated word parts but the alternative would be to  have to
+    // deal with language-specific stop words
+    .filter(term => term.match(/\d+/) ? true : term.length > 3);
+
+  // make the list of search terms unique
+  searchTerms = Array.from(new Set(searchTerms))
+
+  // add footnote
+  if (node.hasAttribute("source")) {
+    const source = node.getAttribute("source")
+    // get footnote number
+    if (source?.slice(0, 2) === "fn") {
+      // remove the doi prefix
+      searchTerms.unshift(source.slice(2) + " ")
+    }
+  }
+
+  // start search
+  await pdfViewer.search(searchTerms);
+}
+
+/**
+ * Returns a list of non-empty text content from all text nodes contained in the given node
+ * @param {Element} node
+ * @returns {Array<string>}
+ */
+function getNodeText(node) {
+  // @ts-ignore
+  return getTextNodes(node).map(node => node.textContent?.trim()).filter(Boolean)
+}
+
+/**
+ * Recursively extracts all text nodes contained in the given node into a flat list
+ * @param {Node} node
+ * @return {Array<Node>}
+ */
+function getTextNodes(node) {
+  /** @type {Node[]} */
+  let textNodes = [];
+  if (node.nodeType === Node.TEXT_NODE) {
+    textNodes.push(node);
+  } else {
+    for (let i = 0; i < node.childNodes.length; i++) {
+      textNodes = textNodes.concat(getTextNodes(node.childNodes[i]));
+    }
+  }
+  return textNodes;
+}

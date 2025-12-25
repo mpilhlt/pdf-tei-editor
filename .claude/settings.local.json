@@ -75,7 +75,8 @@
       "Bash(gh label list:*)",
       "Bash(timeout 10 tail:*)",
       "Bash(gh issue comment:*)",
-      "Bash(podman machine start:*)"
+      "Bash(podman machine start:*)",
+      "Bash(timeout 180 npm run test:e2e -- --grep \"document-action\")"
     ],
     "deny": [],
     "ask": []

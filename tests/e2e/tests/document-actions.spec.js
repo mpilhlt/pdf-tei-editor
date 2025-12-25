@@ -2,6 +2,7 @@
  * Document actions end-to-end tests
  *
  * @testCovers app/src/plugins/xmleditor.js
+ * @testCovers app/src/plugins/document-actions.js
  * @testCovers app/src/plugins/services.js
  * @testCovers server/api/files.py
  *
