@@ -1079,3 +1079,61 @@ class FileRepository:
 
             if self.logger:
                 self.logger.debug(f"Permanently deleted file record: {file_id}")
+
+    def update_file_metadata(
+        self,
+        stable_id: str,
+        fileref: str | None = None,
+        title: str | None = None,
+        doi: str | None = None,
+        variant: str | None = None
+    ) -> None:
+        """
+        Update file metadata fields (fileref, title, DOI, variant).
+
+        Args:
+            stable_id: The stable_id of the file to update
+            fileref: Optional new fileref value
+            title: Optional new title value
+            doi: Optional new DOI value
+            variant: Optional new variant value
+
+        Raises:
+            ValueError: If file not found
+            sqlite3.Error: If database operation fails
+        """
+        # Build update clauses for provided fields
+        updates = {}
+        if fileref is not None:
+            updates['fileref'] = fileref
+        if title is not None:
+            updates['title'] = title
+        if doi is not None:
+            updates['doi'] = doi
+        if variant is not None:
+            updates['variant'] = variant
+
+        if not updates:
+            return
+
+        set_clause = ', '.join([f"{col} = ?" for col in updates.keys()])
+        values = list(updates.values())
+        values.append(stable_id)
+
+        query = f"""
+            UPDATE files
+            SET {set_clause},
+                local_modified_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE stable_id = ? AND deleted = 0
+        """
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, values)
+
+            if cursor.rowcount == 0:
+                raise ValueError(f"File not found: {stable_id}")
+
+            if self.logger:
+                self.logger.debug(f"Updated metadata for file {stable_id}: {updates}")

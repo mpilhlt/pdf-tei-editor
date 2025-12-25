@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-21T18:48:31.315Z
+ * Generated from OpenAPI schema at 2025-12-25T08:02:14.676Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -396,6 +396,14 @@
  * @property {number=} errors
  * @property {number=} new_version
  * @property {number=} duration_ms
+ */
+
+/**
+ * @typedef {Object} UpdateFileMetadataRequest
+ * @property {string=} fileref
+ * @property {string=} title
+ * @property {string=} doi
+ * @property {string=} variant
  */
 
 /**
@@ -1264,6 +1272,27 @@ export class ApiClientV1 {
   async export(params) {
     const endpoint = `/export`
     return this.callApi(endpoint, 'GET', params);
+  }
+
+  /**
+   * Update file metadata in the database.
+   * Args:
+   * stable_id: The stable_id of the file to update
+   * metadata: Updated metadata fields
+   * user: Authenticated user
+   * file_repo: File repository instance
+   * Returns:
+   * Success message
+   * Raises:
+   * HTTPException: If file not found or user doesn't have access
+   *
+   * @param {string} stable_id
+   * @param {UpdateFileMetadataRequest} requestBody
+   * @returns {Promise<any>}
+   */
+  async filesMetadata(stable_id, requestBody) {
+    const endpoint = `/files/${stable_id}/metadata`
+    return this.callApi(endpoint, 'PATCH', requestBody);
   }
 
   /**
