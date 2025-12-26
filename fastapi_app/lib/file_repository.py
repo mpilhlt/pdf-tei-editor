@@ -1086,10 +1086,11 @@ class FileRepository:
         fileref: str | None = None,
         title: str | None = None,
         doi: str | None = None,
-        variant: str | None = None
+        variant: str | None = None,
+        label: str | None = None
     ) -> None:
         """
-        Update file metadata fields (fileref, title, DOI, variant).
+        Update file metadata fields (fileref, title, DOI, variant, label).
 
         Args:
             stable_id: The stable_id of the file to update
@@ -1097,6 +1098,7 @@ class FileRepository:
             title: Optional new title value
             doi: Optional new DOI value
             variant: Optional new variant value
+            label: Optional new label value
 
         Raises:
             ValueError: If file not found
@@ -1112,6 +1114,8 @@ class FileRepository:
             updates['doi'] = doi
         if variant is not None:
             updates['variant'] = variant
+        if label is not None:
+            updates['label'] = label
 
         if not updates:
             return

@@ -1,9 +1,8 @@
 <sl-dialog name="editMetadataDialog" label="Edit File Metadata">
   <div class="dialog-column">
-    <sl-input name="fileref" label="Filename" size="small" help-text="The file reference/filename"></sl-input>
-    <sl-input name="title" label="Document Title" size="small" help-text="The document title from TEI header"></sl-input>
-    <sl-input name="doi" label="DOI" size="small" help-text="Digital Object Identifier (optional)"></sl-input>
-    <sl-input name="variant" label="Variant" size="small" help-text="Variant identifier (e.g., grobid.training.segmentation)"></sl-input>
+    <sl-input name="docTitle" label="Document Title" size="small" help-text="From TEI header titleStmt/title" readonly></sl-input>
+    <sl-input name="label" label="Extraction Label" size="small" help-text="From TEI header editionStmt/edition/title"></sl-input>
+    <sl-input name="source" label="Source" size="small" help-text="From TEI header sourceDesc/bibl"></sl-input>
   </div>
   <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
   <sl-button slot="footer" name="submit" variant="primary">Save Changes</sl-button>

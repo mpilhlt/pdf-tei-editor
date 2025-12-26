@@ -27,6 +27,7 @@ class UpdateFileMetadataRequest(BaseModel):
     title: str | None = None
     doi: str | None = None
     variant: str | None = None
+    label: str | None = None
 
 
 @router.patch("/{stable_id}/metadata")
@@ -50,7 +51,7 @@ async def update_file_metadata(
     Raises:
         HTTPException: If file not found or user doesn't have access
     """
-    logger_inst = get_logger(__name__, user.get('username', 'anonymous'))
+    logger_inst = get_logger(__name__)
     settings = get_settings()
 
     # Get file
@@ -81,6 +82,8 @@ async def update_file_metadata(
         updates['doi'] = metadata.doi
     if metadata.variant is not None:
         updates['variant'] = metadata.variant
+    if metadata.label is not None:
+        updates['label'] = metadata.label
 
     if not updates:
         raise HTTPException(status_code=400, detail="No metadata fields provided")

@@ -94,10 +94,9 @@ let currentState = null
 /**
  * Dialog for editing file metadata
  * @typedef {object} editMetadataDialogPart
- * @property {SlInput} fileref - File reference (filename) input
- * @property {SlInput} title - Document title input
- * @property {SlInput} doi - DOI input
- * @property {SlInput} variant - Variant input
+ * @property {SlInput} docTitle - Document title input (readonly)
+ * @property {SlInput} label - Extraction label input
+ * @property {SlInput} source - Source input
  * @property {SlButton} submit - Submit button
  * @property {SlButton} cancel - Cancel button
  */
@@ -414,23 +413,6 @@ async function deleteAll(state) {
 }
 
 /**
- * Given a user object, get an id (typically by using the initials)
- * @param {any} userData
- */
-function getIdFromUser(userData) {
-  let names = userData.fullname
-  if (names && names.trim() !== "") {
-    names = userData.fullname.split(" ")
-  } else {
-    return userData.username
-  }
-  if (names.length > 1) {
-    return names.map(/** @param {any} n */ n => n[0]).join("").toLocaleLowerCase()
-  }
-  return names[0].slice(0, 3)
-}
-
-/**
  * Called when the "saveRevision" button is executed
  * @param {ApplicationState} state
  */
@@ -650,7 +632,7 @@ async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
 }
 
 /**
- * Edit file metadata (fileref, title, DOI, variant)
+ * Edit file metadata (label from edition title, source from bibl)
  * @param {ApplicationState} state
  */
 async function editFileMetadata(state) {
@@ -662,18 +644,22 @@ async function editFileMetadata(state) {
   // @ts-ignore
   const metadataDlg = ui.editMetadataDialog;
 
-  // Load current metadata
-  const fileData = getFileDataById(state.xml);
-  if (!fileData) {
-    dialog.error("Could not load file metadata")
+  // Get current XML document to read TEI header
+  const xmlDoc = xmlEditor.getXmlTree()
+  if (!xmlDoc) {
+    dialog.error("No XML document loaded")
     return
   }
 
-  // Pre-fill form with current values
-  metadataDlg.fileref.value = fileData.file?.fileref || ""
-  metadataDlg.title.value = fileData.file?.title || ""
-  metadataDlg.doi.value = fileData.file?.doi || ""
-  metadataDlg.variant.value = fileData.item?.variant || ""
+  // Extract current values from TEI header
+  const titleEl = xmlDoc.querySelector('teiHeader fileDesc titleStmt title')
+  const editionTitleEl = xmlDoc.querySelector('teiHeader fileDesc editionStmt edition title')
+  const biblEl = xmlDoc.querySelector('teiHeader fileDesc sourceDesc bibl')
+
+  // Pre-fill form with current values from TEI header
+  metadataDlg.docTitle.value = titleEl?.textContent || ""
+  metadataDlg.label.value = editionTitleEl?.textContent || ""
+  metadataDlg.source.value = biblEl?.textContent || ""
 
   try {
     metadataDlg.show()
@@ -690,43 +676,63 @@ async function editFileMetadata(state) {
   }
 
   // Gather updated values
-  const updatedMetadata = {
-    fileref: metadataDlg.fileref.value.trim(),
-    title: metadataDlg.title.value.trim(),
-    doi: metadataDlg.doi.value.trim(),
-    variant: metadataDlg.variant.value.trim()
-  }
+  const updatedLabel = metadataDlg.label.value.trim()
+  const updatedSource = metadataDlg.source.value.trim()
 
   ui.toolbar.documentActions.editMetadata.disabled = true
   try {
-    // Update TEI header with new metadata
-    const xmlDoc = xmlEditor.getXmlTree()
-    if (!xmlDoc) {
-      throw new Error("No XML document loaded")
-    }
-
-    // Update title in TEI header
-    if (updatedMetadata.title !== fileData.file?.title) {
-      const titleEl = xmlDoc.querySelector('teiHeader titleStmt title')
-      if (titleEl) {
-        titleEl.textContent = updatedMetadata.title
-      }
-    }
-
-    // Update DOI in TEI header
-    if (updatedMetadata.doi !== fileData.file?.doi) {
-      let idnoEl = xmlDoc.querySelector('teiHeader publicationStmt idno[type="DOI"]')
-      if (!idnoEl && updatedMetadata.doi) {
-        // Create idno element if it doesn't exist
-        const publicationStmt = xmlDoc.querySelector('teiHeader publicationStmt')
-        if (publicationStmt) {
-          idnoEl = xmlDoc.createElement('idno')
-          idnoEl.setAttribute('type', 'DOI')
-          publicationStmt.appendChild(idnoEl)
+    // Update label in TEI header (editionStmt/edition/title)
+    if (updatedLabel !== (editionTitleEl?.textContent || "")) {
+      if (editionTitleEl) {
+        editionTitleEl.textContent = updatedLabel
+      } else {
+        // Create the structure if it doesn't exist
+        let editionStmt = xmlDoc.querySelector('teiHeader fileDesc editionStmt')
+        if (!editionStmt) {
+          const fileDesc = xmlDoc.querySelector('teiHeader fileDesc')
+          if (fileDesc) {
+            editionStmt = xmlDoc.createElement('editionStmt')
+            // Insert after titleStmt
+            const titleStmt = xmlDoc.querySelector('teiHeader fileDesc titleStmt')
+            if (titleStmt && titleStmt.nextSibling) {
+              fileDesc.insertBefore(editionStmt, titleStmt.nextSibling)
+            } else {
+              fileDesc.appendChild(editionStmt)
+            }
+          }
+        }
+        if (editionStmt) {
+          let edition = editionStmt.querySelector('edition')
+          if (!edition) {
+            edition = xmlDoc.createElement('edition')
+            editionStmt.appendChild(edition)
+          }
+          const newTitle = xmlDoc.createElement('title')
+          newTitle.textContent = updatedLabel
+          edition.appendChild(newTitle)
         }
       }
-      if (idnoEl) {
-        idnoEl.textContent = updatedMetadata.doi
+    }
+
+    // Update source in TEI header (sourceDesc/bibl)
+    if (updatedSource !== (biblEl?.textContent || "")) {
+      if (biblEl) {
+        biblEl.textContent = updatedSource
+      } else {
+        // Create the structure if it doesn't exist
+        let sourceDesc = xmlDoc.querySelector('teiHeader fileDesc sourceDesc')
+        if (!sourceDesc) {
+          const fileDesc = xmlDoc.querySelector('teiHeader fileDesc')
+          if (fileDesc) {
+            sourceDesc = xmlDoc.createElement('sourceDesc')
+            fileDesc.appendChild(sourceDesc)
+          }
+        }
+        if (sourceDesc) {
+          const newBibl = xmlDoc.createElement('bibl')
+          newBibl.textContent = updatedSource
+          sourceDesc.appendChild(newBibl)
+        }
       }
     }
 
@@ -740,8 +746,9 @@ async function editFileMetadata(state) {
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
 
-    // Update database metadata via API
-    await client.filesMetadata(state.xml, updatedMetadata)
+    // Update database label via API (label is stored in FileItemModel)
+    // Only send label - source and title are only in TEI header
+    await client.filesMetadata(state.xml, { label: updatedLabel })
 
     // Reload file data to reflect changes
     await fileselection.reload({refresh: true})

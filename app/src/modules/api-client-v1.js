@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-25T08:02:14.676Z
+ * Generated from OpenAPI schema at 2025-12-26T14:05:53.807Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -10,18 +10,6 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
- */
-
-/**
- * @typedef {Object} AnalyzeRequest
- * @property {string} text
- */
-
-/**
- * @typedef {Object} AnalyzeResponse
- * @property {number} word_count
- * @property {number} char_count
- * @property {string} message
  */
 
 /**
@@ -404,6 +392,7 @@
  * @property {string=} title
  * @property {string=} doi
  * @property {string=} variant
+ * @property {string=} label
  */
 
 /**
