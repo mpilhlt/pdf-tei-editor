@@ -5,7 +5,7 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginConfig } from '../modules/plugin-manager.js'
- * @import { SlButton, SlInput, SlDialog } from '../ui.js'
+ * @import { SlButton, SlInput, SlDialog, SlCheckbox } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  */
 
@@ -87,6 +87,7 @@ let currentState = null
  * @property {SlInput} persId - Person ID input
  * @property {SlInput} persName - Person name input
  * @property {SlInput} changeDesc - Change description input
+ * @property {SlCheckbox} saveAsGold - Save as gold version checkbox
  * @property {SlButton} submit - Submit button
  * @property {SlButton} cancel - Cancel button
  */
@@ -421,6 +422,7 @@ async function saveRevision(state) {
   // @ts-ignore
   const revDlg = ui.newRevisionChangeDialog;
   revDlg.changeDesc.value = "Corrections"
+
   try {
     const user = authentication.getUser()
     if (user) {
@@ -428,6 +430,11 @@ async function saveRevision(state) {
       revDlg.persId.disabled = revDlg.persName.disabled = true
       revDlg.persId.value = userData.username
       revDlg.persName.value = userData.fullname
+
+      // Show/hide gold version checkbox based on user role
+      const isReviewer = userHasRole(userData, ["admin", "reviewer"])
+      revDlg.saveAsGold.style.display = isReviewer ? 'block' : 'none'
+      revDlg.saveAsGold.checked = false
     }
     revDlg.show()
     await new Promise((resolve, reject) => {
@@ -457,6 +464,9 @@ async function saveRevision(state) {
     persId: revDlg.persId.value,
     desc: revDlg.changeDesc.value
   }
+
+  const saveAsGold = revDlg.saveAsGold.checked
+
   ui.toolbar.documentActions.saveRevision.disabled = true
   try {
     await addTeiHeaderInfo(respStmt, undefined, revisionChange)
@@ -476,6 +486,22 @@ async function saveRevision(state) {
       changeDescription: revDlg.changeDesc.value,
       xmlContainsRevision: xmlEditor.getXML().includes(revDlg.changeDesc.value)
     });
+
+    // Set as gold standard if checkbox was checked
+    if (saveAsGold) {
+      try {
+        await client.apiClient.filesGoldStandard(state.xml)
+        testLog('GOLD_STANDARD_SET', { fileId: state.xml })
+        // Reload file data to update UI with new gold status
+        await fileselection.reload({ refresh: true })
+        notify("Revision saved and marked as Gold version")
+      } catch (goldError) {
+        console.error("Failed to set gold standard:", goldError)
+        notify("Revision saved, but failed to set as Gold version", "warning")
+      }
+    } else {
+      notify("Revision saved successfully")
+    }
 
     sync.syncFiles(state)
       .then(summary => summary && console.debug(summary))
@@ -742,15 +768,12 @@ async function editFileMetadata(state) {
     // Mark editor as clean to prevent autosave from triggering
     xmlEditor.markAsClean()
 
-    // Save the updated XML
+    // Save the updated XML - the backend will automatically extract and save the label
+    // from editionStmt/edition/title when processing the save
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
 
-    // Update database label via API (label is stored in FileItemModel)
-    // Only send label - source and title are only in TEI header
-    await client.filesMetadata(state.xml, { label: updatedLabel })
-
-    // Reload file data to reflect changes
+    // Reload file data to reflect changes (label will be updated automatically by backend)
     await fileselection.reload({refresh: true})
 
     notify("File metadata updated successfully")

@@ -1141,3 +1141,74 @@ class FileRepository:
 
             if self.logger:
                 self.logger.debug(f"Updated metadata for file {stable_id}: {updates}")
+
+    def set_gold_standard(
+        self,
+        stable_id: str,
+        variant: str | None = None
+    ) -> None:
+        """
+        Set a file as the gold standard for its document and variant.
+
+        Unsets is_gold_standard for all other files with the same doc_id and variant,
+        then sets is_gold_standard = 1 for the specified file.
+
+        Args:
+            stable_id: The stable_id of the file to make gold standard
+            variant: Optional variant to match (None matches files without variant)
+
+        Raises:
+            ValueError: If file not found
+            sqlite3.Error: If database operation fails
+        """
+        # Get the file to find its doc_id
+        file = self.get_file_by_stable_id(stable_id)
+        if not file:
+            raise ValueError(f"File not found: {stable_id}")
+
+        doc_id = file.doc_id
+        if not doc_id:
+            raise ValueError(f"File has no doc_id: {stable_id}")
+
+        with self.db.transaction() as conn:
+            cursor = conn.cursor()
+
+            # Unset gold standard for all files with same doc_id and variant
+            if variant is None:
+                cursor.execute("""
+                    UPDATE files
+                    SET is_gold_standard = 0,
+                        local_modified_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE doc_id = ?
+                      AND (variant IS NULL OR variant = '')
+                      AND is_gold_standard = 1
+                      AND deleted = 0
+                """, (doc_id,))
+            else:
+                cursor.execute("""
+                    UPDATE files
+                    SET is_gold_standard = 0,
+                        local_modified_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE doc_id = ?
+                      AND variant = ?
+                      AND is_gold_standard = 1
+                      AND deleted = 0
+                """, (doc_id, variant))
+
+            # Set the specified file as gold standard
+            cursor.execute("""
+                UPDATE files
+                SET is_gold_standard = 1,
+                    local_modified_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE stable_id = ?
+                  AND deleted = 0
+            """, (stable_id,))
+
+            if cursor.rowcount == 0:
+                raise ValueError(f"File not found or deleted: {stable_id}")
+
+            if self.logger:
+                self.logger.info(f"Set gold standard: {stable_id} (doc_id={doc_id}, variant={variant})")

@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-26T14:05:53.807Z
+ * Generated from OpenAPI schema at 2025-12-29T10:31:40.257Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1282,6 +1282,27 @@ export class ApiClientV1 {
   async filesMetadata(stable_id, requestBody) {
     const endpoint = `/files/${stable_id}/metadata`
     return this.callApi(endpoint, 'PATCH', requestBody);
+  }
+
+  /**
+   * Set a file as the gold standard for its document and variant.
+   * Only users with reviewer or admin role can set gold standard.
+   * Unsets gold standard for all other files with the same doc_id and variant.
+   * Args:
+   * stable_id: The stable_id of the file to make gold standard
+   * user: Authenticated user
+   * file_repo: File repository instance
+   * Returns:
+   * Success message
+   * Raises:
+   * HTTPException: If file not found, user doesn't have access, or user lacks reviewer role
+   *
+   * @param {string} stable_id
+   * @returns {Promise<any>}
+   */
+  async filesGoldStandard(stable_id) {
+    const endpoint = `/files/${stable_id}/gold-standard`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**

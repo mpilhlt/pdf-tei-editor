@@ -9,6 +9,8 @@
  * - Update multiple metadata fields
  * - Access control enforcement
  * - Error handling (file not found, no fields provided)
+ * - Set gold standard status
+ * - Gold standard role-based access control
  */
 
 import { test, describe } from 'node:test';
@@ -75,6 +77,7 @@ describe('Files Metadata API E2E Tests', () => {
   const testState = {
     docId: `test-metadata-${testRunId}`,
     fileStableId: null,
+    versionStableId: null, // For testing gold standard promotion
   };
 
   // Setup: Login session
@@ -240,5 +243,124 @@ describe('Files Metadata API E2E Tests', () => {
     );
     assert.strictEqual(data2.message, 'File metadata updated successfully');
     logger.success('Variant cleared successfully (Note: variant updates work but not visible for gold/source files)');
+  });
+
+  // Gold Standard Tests
+
+  // Test 7: Create a version to test gold standard promotion
+  test('Setup: create version for gold standard test', async () => {
+    // Modify the XML content to create a different version
+    const xmlContent = createTeiXml(testState.docId, 'Version for Gold Test').replace(
+      '<p>Test content</p>',
+      '<p>Test content - modified for version test</p>'
+    );
+
+    const data = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/save',
+      'POST',
+      {
+        file_id: testState.fileStableId,
+        xml_string: xmlContent,
+        new_version: true
+      },
+      BASE_URL
+    );
+
+    // When creating a new version from an existing file, the status can be 'new_version' or 'new'
+    // depending on whether content changed
+    assert.ok(['new_version', 'new'].includes(data.status), `Status should be new_version or new, got: ${data.status}`);
+    testState.versionStableId = data.file_id;
+    assert.ok(testState.versionStableId, 'Should have version stable_id');
+    assert.notStrictEqual(testState.versionStableId, testState.fileStableId, 'Version should have different ID');
+    logger.success(`Created test version: ${testState.versionStableId}`);
+  });
+
+  // Test 8: Verify both files exist before gold standard test
+  test('Verify both files exist', async () => {
+    const listData = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/list',
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    const goldFile = findFileById(listData, testState.fileStableId);
+    const versionFile = findFileById(listData, testState.versionStableId);
+
+    assert.ok(goldFile, 'Original gold file should exist');
+    assert.ok(versionFile, 'New version should exist');
+    logger.success('Both files exist');
+  });
+
+  // Test 9: Set version as gold standard
+  test('POST /api/v1/files/{stable_id}/gold-standard should promote version to gold', async () => {
+    const data = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      `/files/${testState.versionStableId}/gold-standard`,
+      'POST',
+      null,
+      BASE_URL
+    );
+
+    assert.strictEqual(data.message, 'File set as gold standard successfully');
+    logger.success('Gold standard set via API');
+
+    // Verify both files still exist after promotion
+    const listData = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/list',
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    const newGoldFile = findFileById(listData, testState.versionStableId);
+    const oldGoldFile = findFileById(listData, testState.fileStableId);
+
+    assert.ok(newGoldFile, 'Promoted file should exist');
+    assert.ok(oldGoldFile, 'Original file should still exist');
+    logger.success('Gold standard promoted successfully');
+  });
+
+  // Test 10: Error - non-reviewer cannot set gold standard
+  test('POST /api/v1/files/{stable_id}/gold-standard should deny access to non-reviewers', async () => {
+    // Login as annotator
+    const annotatorSession = await login('annotator', 'annotator', BASE_URL);
+    assert.ok(annotatorSession?.sessionId, 'Should have annotator session');
+
+    try {
+      await authenticatedApiCall(
+        annotatorSession.sessionId,
+        `/files/${testState.fileStableId}/gold-standard`,
+        'POST',
+        null,
+        BASE_URL
+      );
+      assert.fail('Should have thrown 403 error');
+    } catch (error) {
+      assert.match(error.message, /403/i, 'Should throw 403 error');
+      assert.match(error.message, /Only reviewers and admins can set gold standard/i, 'Should have appropriate error message');
+      logger.success('Role-based access control enforced');
+    }
+  });
+
+  // Test 11: Error - non-existent file
+  test('POST /api/v1/files/{stable_id}/gold-standard should return 404 for non-existent file', async () => {
+    try {
+      await authenticatedApiCall(
+        reviewerSession.sessionId,
+        '/files/nonexistent456/gold-standard',
+        'POST',
+        null,
+        BASE_URL
+      );
+      assert.fail('Should have thrown 404 error');
+    } catch (error) {
+      assert.match(error.message, /404/i, 'Should throw 404 error');
+      assert.match(error.message, /File not found/i, 'Should have appropriate error message');
+      logger.success('404 error handled correctly');
+    }
   });
 });
