@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-16T08:00:10.244Z
+ * Generated from OpenAPI schema at 2025-12-26T14:16:27.599Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -10,18 +10,6 @@
 /**
  * @typedef {Object} AcquireLockRequest
  * @property {string} file_id
- */
-
-/**
- * @typedef {Object} AnalyzeRequest
- * @property {string} text
- */
-
-/**
- * @typedef {Object} AnalyzeResponse
- * @property {number} word_count
- * @property {number} char_count
- * @property {string} message
  */
 
 /**
@@ -399,10 +387,26 @@
  */
 
 /**
+ * @typedef {Object} UpdateFileMetadataRequest
+ * @property {string=} fileref
+ * @property {string=} title
+ * @property {string=} doi
+ * @property {string=} variant
+ * @property {string=} label
+ */
+
+/**
  * @typedef {Object} UpdateGroupRequest
  * @property {string=} name - Group display name
  * @property {string=} description - Group description
  * @property {Array<string>=} collections - List of collection IDs
+ */
+
+/**
+ * @typedef {Object} UpdateProfileRequest
+ * @property {string=} fullname - User's full name
+ * @property {string=} email - User's email address
+ * @property {string=} passwd_hash - New password (will be hashed)
  */
 
 /**
@@ -743,6 +747,21 @@ export class ApiClientV1 {
   async deleteUsers(username) {
     const endpoint = `/users/${username}`
     return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Update own user profile.
+   * Allows authenticated users to update their own fullname, email, and password.
+   * Cannot modify roles or groups.
+   * Returns:
+   * Updated user information (password excluded)
+   *
+   * @param {UpdateProfileRequest} requestBody
+   * @returns {Promise<User>}
+   */
+  async usersMeProfile(requestBody) {
+    const endpoint = `/users/me/profile`
+    return this.callApi(endpoint, 'PUT', requestBody);
   }
 
   /**
@@ -1245,6 +1264,27 @@ export class ApiClientV1 {
   }
 
   /**
+   * Update file metadata in the database.
+   * Args:
+   * stable_id: The stable_id of the file to update
+   * metadata: Updated metadata fields
+   * user: Authenticated user
+   * file_repo: File repository instance
+   * Returns:
+   * Success message
+   * Raises:
+   * HTTPException: If file not found or user doesn't have access
+   *
+   * @param {string} stable_id
+   * @param {UpdateFileMetadataRequest} requestBody
+   * @returns {Promise<any>}
+   */
+  async filesMetadata(stable_id, requestBody) {
+    const endpoint = `/files/${stable_id}/metadata`
+    return this.callApi(endpoint, 'PATCH', requestBody);
+  }
+
+  /**
    * Check if synchronization is needed (O(1) operation).
    * Performs quick checks:
    * - Count of unsynced files in local database
@@ -1413,7 +1453,8 @@ export class ApiClientV1 {
    * Execute a plugin endpoint.
    * Args:
    * plugin_id: Plugin identifier
-   * request: Execution request with endpoint and params
+   * exec_request: Execution request with endpoint and params
+   * request: FastAPI request object (for session_id extraction)
    * current_user: Current authenticated user (optional)
    * Returns:
    * Execution result

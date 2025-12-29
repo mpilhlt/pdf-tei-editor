@@ -30,6 +30,7 @@ import { plugin as clientPlugin, api as client } from './plugins/client.js'
 import { plugin as fileselectionPlugin, api as fileselection } from './plugins/file-selection.js'
 import { plugin as fileSelectionDrawerPlugin, api as fileSelectionDrawer } from './plugins/file-selection-drawer.js'
 import { plugin as extractionPlugin, api as extraction } from './plugins/extraction.js'
+import { plugin as documentActionsPlugin, api as documentActions } from './plugins/document-actions.js'
 import { plugin as servicesPlugin, api as services } from './plugins/services.js'
 import { plugin as floatingPanelPlugin, api as floatingPanel } from './plugins/floating-panel.js'
 import { plugin as promptEditorPlugin, api as promptEditor } from './plugins/prompt-editor.js'
@@ -70,6 +71,7 @@ const plugins = [
   xmlEditorPlugin,
   fileselectionPlugin,
   fileSelectionDrawerPlugin,
+  documentActionsPlugin,
   servicesPlugin,
   syncPlugin,
   extractionPlugin,
@@ -103,10 +105,11 @@ export {
   pdfViewer, 
   xmlEditor, 
   validation,
-  client, 
-  fileselection, 
-  fileSelectionDrawer, 
+  client,
+  fileselection,
+  fileSelectionDrawer,
   extraction,
+  documentActions,
   services,
   floatingPanel, 
   promptEditor,

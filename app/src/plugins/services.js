@@ -1,32 +1,24 @@
 /**
- * This component provides the core services that can be called programmatically or via user commands
+ * This component provides inter-plugin orchestration methods
  */
 
-/** 
- * @import { ApplicationState } from '../state.js' 
+/**
+ * @import { ApplicationState } from '../state.js'
  * @import { PluginConfig } from '../modules/plugin-manager.js'
- * @import { SlButton, SlInput } from '../ui.js'
- * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
+ * @import { SlButton } from '../ui.js'
  */
 
 import { app, endpoints as ep } from '../app.js'
-import ui, { updateUi } from '../ui.js'
+import ui from '../ui.js'
 import {
-  client, logger, dialog, config,
-  fileselection, xmlEditor, pdfViewer,
-  services, validation, authentication,
-  sync, accessControl, testLog
+  client, logger, dialog, config, fileselection, xmlEditor, pdfViewer, validation, accessControl
 } from '../app.js'
-import FiledataPlugin from './filedata.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
-import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../ui.js'
 import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
-import * as tei_utils from '../modules/tei-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror_utils.js'
-import { prettyPrintXmlDom } from './tei-wizard/enhancements/pretty-print-xml.js'
 import { ApiError } from '../modules/utils.js'
-import { userHasRole, isGoldFile } from '../modules/acl-utils.js'
+import { encodeXmlEntities } from '../modules/tei-utils.js'
 
 /**
  * plugin API
@@ -36,10 +28,6 @@ const api = {
   validateXml,
   showMergeView,
   removeMergeView,
-  deleteCurrentVersion,
-  deleteAllVersions,
-  deleteAll,
-  addTeiHeaderInfo,
   downloadXml,
   uploadXml,
   inProgress,
@@ -52,7 +40,7 @@ const api = {
  */
 const plugin = {
   name: "services",
-  deps: ['file-selection'],
+  deps: ['file-selection', 'document-actions'],
   install,
   onStateUpdate,
   validation: { inProgress },
@@ -72,48 +60,11 @@ let currentState = null
 //
 
 /**
- * Document actions button group navigation properties
- * @typedef {object} documentActionsPart
- * @property {SlButton} saveRevision - Save current revision button
- * @property {SlButton} createNewVersion - Create new version button
- * @property {SlButton} deleteBtn - Delete dropdown button
- * @property {SlButton} deleteCurrentVersion - Delete current version button
- * @property {SlButton} deleteAllVersions - Delete all versions button
- * @property {SlButton} deleteAll - Delete all files button
- */
-
-/**
  * TEI services button group navigation properties
  * @typedef {object} teiServicesPart
  * @property {SlButton} validate - Validate XML button
  * @property {SlButton} teiWizard - TEI Wizard button (added by tei-wizard plugin)
  */
-
-/**
- * Dialog for creating a new version
- * @typedef {object} newVersionDialogPart
- * @property {SlInput} versionName 
- * @property {SlInput} persName 
- * @property {SlInput} persId 
- * @property {SlInput} editionNote
- * @property {SlButton} submit
- * @property {SlButton} cancel 
- */
-
-/**
- * Dialog for documenting a revision navigation properties
- * @typedef {object} newRevisionChangeDialogPart
- * @property {SlInput} persId - Person ID input
- * @property {SlInput} persName - Person name input
- * @property {SlInput} changeDesc - Change description input
- * @property {SlButton} submit - Submit button
- * @property {SlButton} cancel - Cancel button
- */
-
-// Register templates
-await registerTemplate('document-action-buttons', 'document-action-buttons.html');
-await registerTemplate('new-version-dialog', 'new-version-dialog.html');
-await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
 
 
 //
@@ -127,56 +78,14 @@ await registerTemplate('save-revision-dialog', 'save-revision-dialog.html');
 async function install(state) {
   logger.debug(`Installing plugin "${plugin.name}"`)
 
-  // Create UI elements
-  const documentActionButtons = createFromTemplate('document-action-buttons');
-  createSingleFromTemplate('new-version-dialog', document.body);
-  createSingleFromTemplate('save-revision-dialog', document.body);
-
-  // Add document action buttons to toolbar with medium priority
-  documentActionButtons.forEach(buttonGroup => {
-    // Ensure we're working with HTMLElement
-    if (buttonGroup instanceof HTMLElement) {
-      // Document actions have medium priority (lower than file selection)
-      ui.toolbar.add(buttonGroup, 8);
-    }
-  });
-  updateUi() // Update UI so navigation objects are available
-  
-  // Saving status widget creation moved to filedata plugin
-
-
-  // === Document button group ===
-
-  const da = ui.toolbar.documentActions
-
-  // save a revision
-  da.saveRevision.addEventListener('click', () => {
-    if (currentState) saveRevision(currentState);
-  });
-  // enable save button on dirty editor
-  xmlEditor.on("editorReady",() => {da.saveRevision.disabled = false});
-
-  // delete
-  da.deleteCurrentVersion.addEventListener("click", () => {
-    if (currentState) deleteCurrentVersion(currentState);
-  })
-  da.deleteAllVersions.addEventListener('click', () => {
-    if (currentState) deleteAllVersions(currentState);
-  })
-  da.deleteAll.addEventListener('click', () => {
-    if (currentState) deleteAll(currentState);
-  })
-
-  // new version
-  da.createNewVersion.addEventListener("click", () => {
-    if (currentState) createNewVersion(currentState);
-  })
-
   // === TEI button group ===
 
   const ta = ui.toolbar.teiActions
   // validate xml button
   ta.validate.addEventListener('click', onClickValidateButton);
+
+  // enable save button on dirty editor
+  xmlEditor.on("editorReady",() => {ui.toolbar.documentActions.saveRevision.disabled = false});
 }
 
 /**
@@ -184,51 +93,7 @@ async function install(state) {
  * @param {ApplicationState} state
  */
 async function onStateUpdate(changedKeys, state) {
-
-  // Store current state for use in event handlers
   currentState = state;
-
-  // disable deletion if there are no versions or gold is selected
-  const da = ui.toolbar.documentActions
-
-  da.childNodes.forEach(el => {
-    if (el instanceof HTMLElement && 'disabled' in el) {
-      // @ts-ignore
-      el.disabled = state.offline
-    }
-  })
-  if (state.offline) {
-    return
-  }
-
-  const isReviewer = userHasRole(currentState.user, ["admin", "reviewer"])
-  const isAnnotator = userHasRole(currentState.user, ["admin", "reviewer", "annotator"])
-
-  // disable/enable delete buttons
-  if (isAnnotator || isReviewer) {
-    da.deleteAll.disabled = !Boolean(state.pdf && state.xml) || !isReviewer // Disable if no pdf and no xml)
-    da.deleteAllVersions.disabled = !isReviewer || ui.toolbar.xml.querySelectorAll("sl-option").length  < 2 // disable if only one document left (gold version)
-    da.deleteCurrentVersion.disabled = !state.xml || state.editorReadOnly || (isGoldFile(currentState.xml) && !isReviewer)
-  } else {
-    for (let btn of [da.deleteAll, da.deleteAllVersions, da.deleteCurrentVersion]) {
-      btn.disabled = true
-    }
-  }
-  
-  da.deleteBtn.disabled = 
-    da.deleteCurrentVersion.disabled && 
-    da.deleteAllVersions.disabled && 
-    da.deleteAll.disabled
-
-  // Allow new version or revisions only if we have an xml path
-  if (isAnnotator) {
-    da.saveRevision.disabled =  !Boolean(state.xml) || state.editorReadOnly
-    da.createNewVersion.disabled = !Boolean(state.xml)
-  } else {
-    for (let btn of [da.saveRevision, da.createNewVersion]) {
-      btn.disabled = true
-    }
-  }
 }
 
 
@@ -450,7 +315,7 @@ async function showMergeView(diff) {
     // Convert document identifier to static file URL
     const diffUrl = `/api/files/${diff}`
     await xmlEditor.showMergeView(diffUrl)
-    if (currentState.diff !== diff) {
+    if (!currentState || currentState.diff !== diff) {
       await app.updateState({ diff: diff })
     }
     // turn validation off as it creates too much visual noise
@@ -467,202 +332,11 @@ async function removeMergeView() {
   xmlEditor.hideMergeView()
   // re-enable validation
   validation.configure({ mode: "auto" })
-  if (currentState.diff) {
+  if (currentState && currentState.diff) {
     UrlHash.remove("diff")
     await app.updateState({ diff: null })
   }
 }
-
-/**
- * Deletes the current version of the document
- * This will remove the XML file from the server and reload the gold version
- * @param {ApplicationState} state
- */
-async function deleteCurrentVersion(state) {
-  // Handle both PDF-XML files and XML-only files
-  let xmlValue = ui.toolbar.xml.value;
-  let selectedOption = ui.toolbar.xml.selectedOptions[0];
-
-  // For XML-only files, the XML might be selected in the PDF dropdown instead
-  if (!xmlValue && state.xml && !state.pdf) {
-    xmlValue = state.xml;
-    // Find the option in the PDF dropdown that corresponds to this XML file
-    selectedOption = ui.toolbar.pdf.selectedOptions[0];
-  }
-
-  if (!xmlValue) {
-    dialog.error("No file selected for deletion")
-    return
-  }
-
-  // Use helper function to check if this is a gold file
-  // XML-only files (where state.pdf is null) can always be deleted
-  if (state.pdf && typeof xmlValue === 'string') {
-
-    // Only check for gold status if this is a PDF-XML file
-    const fileData = getFileDataById(xmlValue);
-    if (fileData && fileData.type === 'gold' && !userHasRole(state.user, ['admin', 'reviewer'])) {
-      dialog.error("You cannot delete the gold version")
-    }
-  }
-
-  const filePathsToDelete = [xmlValue]
-  if (filePathsToDelete.length > 0) {
-    const versionName = selectedOption ? selectedOption.textContent : 'current version';
-    const msg = `Are you sure you want to delete the current version "${versionName}"?`
-    if (!confirm(msg)) return; // todo use dialog
-    services.removeMergeView()
-    // delete the file
-    await client.deleteFiles(/** @type {string[]} */ (filePathsToDelete))
-    try {
-      // Clear current XML state after successful deletion
-      await app.updateState({ xml: null })
-      // update the file data
-      await fileselection.reload()
-      // load the gold version
-      // @ts-ignore
-      const xml = ui.toolbar.xml.firstChild?.value
-      await load({ xml })
-      notify(`Version "${versionName}" has been deleted.`)
-      sync.syncFiles(state)
-        .then(summary => summary && console.debug(summary))
-        .catch(e => console.error(e))
-    } catch (error) {
-      console.error(error)
-      const errorMessage = String(error);
-      dialog.error(errorMessage)
-    }
-  }
-}
-
-/**
- * Deletes all versions of the document, leaving only the gold standard version
- * Only deletes versions that match the current variant filter
- */
-async function deleteAllVersions() {
-  if (!currentState?.fileData) {
-    throw new Error("No file data");
-  }
-  // Get the current source to find all its versions
-  const currentSource = ui.toolbar.pdf.value;
-  const selectedFile = currentState.fileData.find(file => file.source?.id === currentSource);
-
-  if (!selectedFile || !selectedFile.artifacts) {
-    return; // No artifacts to delete
-  }
-
-  // Filter artifacts to get only versions (non-gold) based on current variant selection
-  let artifactsToDelete = selectedFile.artifacts.filter(/** @param {any} a */ a => !a.is_gold_standard);
-  const { variant } = currentState;
-
-  if (variant === "none") {
-    // Delete only versions without variant
-    artifactsToDelete = artifactsToDelete.filter(/** @param {any} artifact */ artifact => !artifact.variant);
-  } else if (variant && variant !== "") {
-    // Delete only versions with the selected variant
-    artifactsToDelete = artifactsToDelete.filter(/** @param {any} artifact */ artifact => artifact.variant === variant);
-  }
-  // If variant is "" (All), delete all versions
-
-  const filePathsToDelete = artifactsToDelete.map(/** @param {any} artifact */ artifact => artifact.id);
-  
-  if (filePathsToDelete.length > 0) {
-    const variantText = variant === "none" ? "without variant" : 
-                      variant && variant !== "" ? `with variant "${variant}"` : "";
-    const msg = `Are you sure you want to delete ${filePathsToDelete.length} version(s) ${variantText}? This cannot be undone.`
-    if (!confirm(msg)) return; // todo use dialog
-  } else {
-    // No versions match the current variant filter
-    const variantText = variant === "none" ? "without variant" : `with variant "${variant}"`;
-    notify(`No versions ${variantText} found to delete.`);
-    return;
-  }
-  services.removeMergeView()
-  // delete
-  await client.deleteFiles(filePathsToDelete)
-  try {
-    // Clear current XML state after successful deletion
-    await app.updateState({ xml: null })
-    // update the file data
-    await fileselection.reload()
-    
-    // Find and load the appropriate gold version for the current variant
-    let goldToLoad = null;
-    if (selectedFile.artifacts) {
-      const goldArtifacts = selectedFile.artifacts.filter(/** @param {any} a */ a => a.is_gold_standard);
-      if (variant === "none") {
-        // Load gold version without variant
-        goldToLoad = goldArtifacts.find(/** @param {any} gold */ gold => !gold.variant);
-      } else if (variant && variant !== "") {
-        // Load gold version with matching variant
-        goldToLoad = goldArtifacts.find(/** @param {any} gold */ gold => gold.variant === variant);
-      } else {
-        // Load first available gold version
-        goldToLoad = goldArtifacts[0];
-      }
-    }
-
-    if (goldToLoad) {
-      await load({ xml: goldToLoad.id });
-    }
-    
-    const variantText = variant === "none" ? "without variant" :
-                      variant && variant !== "" ? `with variant "${variant}"` : "";
-    notify(`All versions ${variantText} have been deleted`)
-    sync.syncFiles(currentState)
-      .then(summary => summary && console.debug(summary))
-      .catch(e => console.error(e))
-  } catch (error) {
-    console.error(error)
-    const errorMessage = String(error);
-    dialog.error(errorMessage)
-  } 
-}
-
-/**
- * Deletes all versions of the document and the PDF file
- * @param {ApplicationState} state
- */
-async function deleteAll(state) {
-
-  if (ui.toolbar.pdf.childElementCount < 2) {
-    throw new Error("Cannot delete all files, at least one PDF must be present")
-  }
-
-  // @ts-ignore
-  const filePathsToDelete = Array.from(new Set([ui.toolbar.pdf.value]
-    // @ts-ignore
-    .concat(Array.from(ui.toolbar.xml.childNodes).map(option => option.value))
-    // @ts-ignore
-    .concat(Array.from(ui.toolbar.diff.childNodes).map(option => option.value))))
-    .filter(Boolean)
-
-  if (filePathsToDelete.length > 0) {
-    const msg = `Are you sure you want to delete ${filePathsToDelete.length} files? This cannot be undone.`
-    if (!confirm(msg)) return; // todo use dialog
-  }
-
-  services.removeMergeView()
-  logger.debug("Deleting files:" + filePathsToDelete.join(", "))
-  
-  try {
-    await client.deleteFiles(/** @type {string[]} */ (filePathsToDelete))
-    notify(`${filePathsToDelete.length} files have been deleted.`)
-    sync.syncFiles(state)
-      .then(summary => summary && console.debug(summary))
-      .catch(e => console.error(e))
-  } catch (error) {
-    const errorMessage = String(error);
-    console.error(errorMessage)
-    notify(errorMessage, "warning")
-  } finally {
-    // update the file data
-    await fileselection.reload({refresh:true})
-    // remove xml and pdf
-    await app.updateState({xml: null, pdf: null})
-  }
-}
-
 
 /**
  * Downloads the current XML file
@@ -675,7 +349,7 @@ async function downloadXml(state) {
   let xml = xmlEditor.getXML()
   if (await config.get('xml.encode-entities.server')) {
     const encodeQuotes = await config.get('xml.encode-quotes', false)
-    xml = tei_utils.encodeXmlEntities(xml, { encodeQuotes })
+    xml = encodeXmlEntities(xml, { encodeQuotes })
   }
   const blob = new Blob([xml], { type: 'application/xml' })
   const url = URL.createObjectURL(blob)
@@ -683,7 +357,6 @@ async function downloadXml(state) {
   a.href = url
 
   const fileData = getFileDataById(state.xml);
-  console.warn(fileData)
   let filename = fileData?.file?.fileref || state.xml;
 
   // Add variant name to filename if variant exists
@@ -701,10 +374,9 @@ async function downloadXml(state) {
   URL.revokeObjectURL(url)
 }
 
-
 /**
  * Uploads an XML file, creating a new version for the currently selected document
- * @param {ApplicationState} state 
+ * @param {ApplicationState} state
  */
 async function uploadXml(state) {
   const uploadResult = await client.uploadFile(undefined, { accept: '.xml' })
@@ -712,46 +384,10 @@ async function uploadXml(state) {
   // @ts-ignore
   const { path } = await client.createVersionFromUpload(tempFilename, state.xml)
   await fileselection.reload()
-  await load({ xml: path })
+  const { services } = await import('../app.js')
+  await services.load({ xml: path })
   notify("Document was uploaded. You are now editing the new version.")
 }
-
-
-/**
- * Given a Node in the XML, search and highlight its text content in the PDF Viewer
- * @param {Element} node 
- */
-async function searchNodeContentsInPdf(node) {
-
-  let searchTerms = getNodeText(node)
-    // split all node text along whitespace and hypen/dash characters
-    .reduce((/**@type {string[]}*/acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
-    // Search terms must be more than three characters or consist of digits. This is to remove 
-    // the most common "stop words" which would litter the search results with false positives.
-    // This incorrectly removes hyphenated word parts but the alternative would be to  have to 
-    // deal with language-specific stop words
-    .filter(term => term.match(/\d+/) ? true : term.length > 3);
-
-  // make the list of search terms unique
-  searchTerms = Array.from(new Set(searchTerms))
-
-  // add footnote
-  if (node.hasAttribute("source")) {
-    const source = node.getAttribute("source")
-    // get footnote number 
-    if (source?.slice(0, 2) === "fn") {
-      // remove the doi prefix
-      searchTerms.unshift(source.slice(2) + " ")
-    }
-  }
-
-  // start search
-  await pdfViewer.search(searchTerms);
-}
-
-//
-// event listeners
-//
 
 /**
  * Called when the "Validate" button is executed
@@ -762,200 +398,36 @@ async function onClickValidateButton() {
   notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`)
 }
 
-
 /**
- * Given a user object, get an id (typically by using the initials)
- * @param {any} userData
+ * Given a Node in the XML, search and highlight its text content in the PDF Viewer
+ * @param {Element} node
  */
-function getIdFromUser(userData) {
-  let names = userData.fullname
-  if (names && names.trim() !== "") {
-    names = userData.fullname.split(" ")
-  } else {
-    return userData.username
-  }
-  if (names.length > 1) {
-    return names.map(/** @param {any} n */ n => n[0]).join("").toLocaleLowerCase()
-  }
-  return names[0].slice(0, 3)
-}
+async function searchNodeContentsInPdf(node) {
 
-/**
- * Called when the "saveRevision" button is executed
- * @param {ApplicationState} state
- */
-async function saveRevision(state) {
+  let searchTerms = getNodeText(node)
+    // split all node text along whitespace and hypen/dash characters
+    .reduce((/**@type {string[]}*/acc, term) => acc.concat(term.split(/[\s\p{Pd}]/gu)), [])
+    // Search terms must be more than three characters or consist of digits. This is to remove
+    // the most common "stop words" which would litter the search results with false positives.
+    // This incorrectly removes hyphenated word parts but the alternative would be to  have to
+    // deal with language-specific stop words
+    .filter(term => term.match(/\d+/) ? true : term.length > 3);
 
-  // @ts-ignore
-  const revDlg = ui.newRevisionChangeDialog;
-  revDlg.changeDesc.value = "Corrections"
-  try {
-    const user = authentication.getUser()
-    if (user) {
-      const userData = /** @type {any} */ (user);
-      revDlg.persId.disabled = revDlg.persName.disabled = true
-      revDlg.persId.value = userData.username
-      revDlg.persName.value = userData.fullname
+  // make the list of search terms unique
+  searchTerms = Array.from(new Set(searchTerms))
+
+  // add footnote
+  if (node.hasAttribute("source")) {
+    const source = node.getAttribute("source")
+    // get footnote number
+    if (source?.slice(0, 2) === "fn") {
+      // remove the doi prefix
+      searchTerms.unshift(source.slice(2) + " ")
     }
-    revDlg.show()
-    await new Promise((resolve, reject) => {
-      revDlg.submit.addEventListener('click', resolve, { once: true })
-      revDlg.cancel.addEventListener('click', reject, { once: true })
-      revDlg.addEventListener('sl-hide', reject, { once: true })
-    })
-  } catch (e) {
-    console.warn("User cancelled")
-    return
-  } finally {
-    revDlg.hide()
   }
 
-  revDlg.hide()
-
-  /** @type {RespStmt} */
-  const respStmt = {
-    persId: revDlg.persId.value,
-    persName: revDlg.persName.value,
-    resp: "Annotator"
-  }
-
-  /** @type {RevisionChange} */
-  const revisionChange = {
-    status: "draft",
-    persId: revDlg.persId.value,
-    desc: revDlg.changeDesc.value
-  }
-  ui.toolbar.documentActions.saveRevision.disabled = true
-  try {
-    await addTeiHeaderInfo(respStmt, undefined, revisionChange)
-    if (!state.xml) throw new Error('No XML file loaded')
-
-    // Mark editor as clean to prevent autosave from triggering
-    // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)
-    xmlEditor.markAsClean()
-
-    const filedata = FiledataPlugin.getInstance()
-    await filedata.saveXml(state.xml)
-
-    testLog('REVISION_SAVED', { changeDescription: revDlg.changeDesc.value });
-
-    // Verify revision was added to XML content (self-contained for bundle removal)
-    testLog('REVISION_IN_XML_VERIFIED', {
-      changeDescription: revDlg.changeDesc.value,
-      xmlContainsRevision: xmlEditor.getXML().includes(revDlg.changeDesc.value)
-    });
-
-    sync.syncFiles(state)
-      .then(summary => summary && console.debug(summary))
-      .catch(e => console.error(e))
-
-    // dirty state
-    xmlEditor.markAsClean()
-  } catch (error) {
-    console.error(error)
-    dialog.error(String(error))
-  } finally {
-    ui.toolbar.documentActions.saveRevision.disabled = false
-  }
-}
-
-/**
- * Called when the "Create new version" button is executed
- * @param {ApplicationState} state
- */
-async function createNewVersion(state) {
-
-  // @ts-ignore
-  const newVersiondialog = ui.newVersionDialog;
-  try {
-    const userData = authentication.getUser()
-    if (userData) {
-      newVersiondialog.persId.value =  userData.username
-      newVersiondialog.persName.value = userData.fullname
-    }    
-    newVersiondialog.show()
-    await new Promise((resolve, reject) => {
-      newVersiondialog.submit.addEventListener('click', resolve, { once: true })
-      newVersiondialog.cancel.addEventListener('click', reject, { once: true })
-      newVersiondialog.addEventListener('sl-hide', reject, { once: true })
-    })
-  } catch (e) {
-    console.warn("User cancelled")
-    return
-  } finally {
-    newVersiondialog.hide()
-  }
-
-  /** @type {RespStmt} */
-  const respStmt = {
-    persId: newVersiondialog.persId.value,
-    persName: newVersiondialog.persName.value,
-    resp: "Annotator"
-  }
-
-  /** @type {Edition} */
-  const editionStmt = {
-    title: newVersiondialog.versionName.value,
-    note: newVersiondialog.editionNote.value
-  }
-
-  ui.toolbar.documentActions.saveRevision.disabled = true
-  try {
-    if (!state.xml) throw new Error('No XML file loaded');
-
-    // Keep reference to current file (used to determine doc_id for the new version)
-    const currentFileId = state.xml
-
-    // Modify the header FIRST, before saving as new version
-    // This ensures the new version has unique content (won't conflict with existing content hash)
-    await addTeiHeaderInfo(respStmt, editionStmt)
-
-    // Mark editor as clean to prevent autosave from triggering
-    // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)
-    // We want to explicitly control the save with new_version=true below
-    xmlEditor.markAsClean()
-
-    // Save as new version with the modified content
-    // The backend will:
-    // 1. Resolve doc_id from currentFileId (the source file)
-    // 2. Create a new version file with incremented version number
-    // 3. Return the new file's stable_id
-    const filedata = FiledataPlugin.getInstance()
-    let { file_id: newFileId } = await filedata.saveXml(currentFileId, /* save as new version */ true)
-
-    testLog('NEW_VERSION_CREATED', { oldFileId: currentFileId, newFileId });
-
-    // Mark as clean since we just saved
-    xmlEditor.markAsClean()
-
-    // Reload the file data first to include the new version
-    await fileselection.reload({refresh:true})
-
-    // Then update state to reflect the new file_id
-    // (editor already has the correct content from addTeiHeaderInfo)
-    // This will trigger file-selection update with the refreshed fileData
-    await app.updateState({ xml: newFileId })
-
-    notify("Document was duplicated. You are now editing the copy.")
-    
-    // sync the new file to the WebDav server
-    if (state.webdavEnabled) {
-      sync.syncFiles(state)
-      .then(/** @param {any} summary */ summary => {
-        if (summary) {
-          logger.debug(summary);
-        }
-      })
-      .catch(e => console.error(e))
-    }
-  } catch (e) {
-    console.error(e)
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    dialog.error(errorMessage)
-  } finally {
-    ui.toolbar.documentActions.saveRevision.disabled = false
-    newVersiondialog.hide()
-  }
+  // start search
+  await pdfViewer.search(searchTerms);
 }
 
 /**
@@ -985,46 +457,3 @@ function getTextNodes(node) {
   }
   return textNodes;
 }
-
-
-/**
- * Add information on responsibitiy, edition or revisions to the document
- * @param {RespStmt} [respStmt] - Optional responsible statement details.
- * @param {Edition} [edition] - Optional edition statement details.
- * @param {RevisionChange} [revisionChange] - Optional revision statement details.
- * @throws {Error} If any of the operations to add teiHeader info fail
- */
-async function addTeiHeaderInfo(respStmt, edition, revisionChange) {
-
-  const xmlDoc = xmlEditor.getXmlTree()
-  if (!xmlDoc) {
-    throw new Error("No XML document loaded")
-  }
-
-  // update document: <respStmt>
-  if (respStmt) {
-    if (!respStmt || tei_utils.getRespStmtById(xmlDoc, respStmt.persId)) {
-      console.warn("No persId or respStmt already exists for this persId")
-    } else {
-      tei_utils.addRespStmt(xmlDoc, respStmt)
-    }
-  }
-
-  // update document: <edition>
-  if (edition && currentState?.fileData) {
-    const versionName = edition.title
-    const editionTitleElements = xmlDoc.querySelectorAll('edition > title')
-    const nameExistsInDoc = Array.from(editionTitleElements).some(elem => elem.textContent === versionName)
-    const nameExistsInVersions = currentState.fileData.some(file => file.label === versionName)
-    if (nameExistsInDoc || nameExistsInVersions) {
-      throw new Error(`The version name "${versionName}" is already being used, pick another one.`)
-    }
-    tei_utils.addEdition(xmlDoc, edition)
-  }
-  if (revisionChange) {
-    tei_utils.addRevisionChange(xmlDoc, revisionChange)
-  }
-  prettyPrintXmlDom(xmlDoc, 'teiHeader')
-  await xmlEditor.updateEditorFromXmlTree()
-}
-
