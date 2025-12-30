@@ -2,6 +2,7 @@
  * Document actions end-to-end tests
  *
  * @testCovers app/src/plugins/xmleditor.js
+ * @testCovers app/src/plugins/document-actions.js
  * @testCovers app/src/plugins/services.js
  * @testCovers server/api/files.py
  *
@@ -228,6 +229,185 @@ test.describe('Document Actions', () => {
       expect(xmlVerificationLog.value).toHaveProperty('xmlContainsRevision', true);
 
       debugLog('Revision save test completed successfully');
+    } finally {
+      // Release all locks before logout
+      await releaseAllLocks(page);
+      await performLogout(page);
+      // Clean up error monitoring
+      stopErrorMonitoring();
+      await page.close();
+    }
+  });
+
+  test('should save revision as gold version (reviewer only)', async ({ page }) => {
+    // Set up enhanced console log capture for TEST messages
+    const consoleLogs = setupTestConsoleCapture(page);
+
+    // Set up automatic error failure detection
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      // Navigate and login as reviewer (required for gold version actions)
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+
+      // Select the first available PDF and XML documents
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+
+      // Wait a moment for state to update
+      await page.waitForTimeout(1000);
+
+      // Get initial file ID for later verification
+      const initialXmlId = await page.evaluate(() => {
+        /** @type {any} */
+        const app = /** @type {any} */(window).app;
+        const state = app.getCurrentState();
+        return state.xml;
+      });
+      debugLog('Initial XML ID:', initialXmlId);
+
+      // Click save revision button
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.saveRevision.click();
+      });
+
+      // Wait for revision dialog to open
+      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+
+      // Verify the "Save as Gold Version" checkbox is visible for reviewers
+      const checkboxState = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return {
+          exists: Boolean(ui.newRevisionChangeDialog.saveAsGold),
+          visible: ui.newRevisionChangeDialog.saveAsGold.style.display !== 'none',
+          checked: ui.newRevisionChangeDialog.saveAsGold.checked
+        };
+      });
+      debugLog('Checkbox state:', checkboxState);
+      expect(checkboxState.exists).toBe(true);
+      expect(checkboxState.visible).toBe(true);
+      expect(checkboxState.checked).toBe(false);
+
+      // Fill out the revision form and check the gold checkbox
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newRevisionChangeDialog.changeDesc.value = 'E2E test gold revision';
+        ui.newRevisionChangeDialog.persId.value = 'testuser';
+        ui.newRevisionChangeDialog.persName.value = 'Test User';
+        ui.newRevisionChangeDialog.saveAsGold.checked = true;
+      });
+
+      // Submit the revision dialog
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newRevisionChangeDialog.submit.click();
+      });
+
+      // Wait for revision to be saved
+      const revisionLog = await waitForTestMessage(consoleLogs, 'REVISION_SAVED', 20000);
+      expect(revisionLog.value).toHaveProperty('changeDescription', 'E2E test gold revision');
+
+      // Wait for gold standard to be set
+      const goldLog = await waitForTestMessage(consoleLogs, 'GOLD_STANDARD_SET', 10000);
+      expect(goldLog.value).toHaveProperty('fileId');
+      expect(goldLog.value.fileId).toBe(initialXmlId);
+
+      // Verify the file is now marked as gold in the UI
+      // Wait a moment for file data to reload
+      await page.waitForTimeout(2000);
+
+      const finalGoldStatus = await page.evaluate(() => {
+        /** @type {any} */
+        const app = /** @type {any} */(window).app;
+        const state = app.getCurrentState();
+        const xmlId = state.xml;
+
+        // Access fileData and check is_gold_standard property directly
+        const fileData = state.fileData;
+
+        // Find the artifact with matching ID
+        for (const doc of fileData) {
+          if (doc.artifacts) {
+            const artifact = doc.artifacts.find(a => a.id === xmlId);
+            if (artifact) {
+              return {
+                xmlId: xmlId,
+                isGold: artifact.is_gold_standard === true
+              };
+            }
+          }
+        }
+
+        return { xmlId: xmlId, isGold: false };
+      });
+      debugLog('Final gold status:', finalGoldStatus);
+      expect(finalGoldStatus.isGold).toBe(true);
+
+      debugLog('Save revision as gold test completed successfully');
+    } finally {
+      // Release all locks before logout
+      await releaseAllLocks(page);
+      await performLogout(page);
+      // Clean up error monitoring
+      stopErrorMonitoring();
+      await page.close();
+    }
+  });
+
+  test('should hide gold checkbox for non-reviewers', async ({ page }) => {
+    // Set up enhanced console log capture for TEST messages
+    const consoleLogs = setupTestConsoleCapture(page);
+
+    // Set up automatic error failure detection
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      // Navigate and login as annotator (not a reviewer)
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+
+      // Select the first available PDF and XML documents
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+
+      // Wait a moment for state to update
+      await page.waitForTimeout(1000);
+
+      // Click save revision button
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.saveRevision.click();
+      });
+
+      // Wait for revision dialog to open
+      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+
+      // Verify the "Save as Gold Version" checkbox is hidden for non-reviewers
+      const checkboxState = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return {
+          exists: Boolean(ui.newRevisionChangeDialog.saveAsGold),
+          visible: ui.newRevisionChangeDialog.saveAsGold.style.display !== 'none'
+        };
+      });
+      debugLog('Checkbox state for annotator:', checkboxState);
+      expect(checkboxState.exists).toBe(true);
+      expect(checkboxState.visible).toBe(false);
+
+      // Close the dialog
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newRevisionChangeDialog.cancel.click();
+      });
+
+      debugLog('Gold checkbox visibility test completed successfully');
     } finally {
       // Release all locks before logout
       await releaseAllLocks(page);

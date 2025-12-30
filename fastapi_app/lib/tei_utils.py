@@ -480,3 +480,36 @@ def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
     metadata['doc_metadata'] = doc_metadata
 
     return metadata
+
+
+def get_annotator_name(tei_root: etree.Element, who_id: str) -> str:
+    """
+    Look up annotator full name from @who ID reference.
+
+    Args:
+        tei_root: TEI root element
+        who_id: Annotator ID from @who attribute (with or without "#" prefix)
+
+    Returns:
+        Full name from persName[@xml:id] or the ID if not found
+    """
+    # Strip leading "#" if present
+    clean_id = who_id.lstrip("#") if who_id else ""
+    if not clean_id:
+        return "Unknown"
+
+    ns = {
+        "tei": "http://www.tei-c.org/ns/1.0",
+        "xml": "http://www.w3.org/XML/1998/namespace"
+    }
+
+    # Try to find persName with matching xml:id in respStmt
+    persName_elem = tei_root.find(
+        f".//tei:titleStmt/tei:respStmt/tei:persName[@xml:id='{clean_id}']", ns
+    )
+
+    if persName_elem is not None and persName_elem.text:
+        return persName_elem.text.strip()
+
+    # Fallback to the ID if name not found
+    return clean_id

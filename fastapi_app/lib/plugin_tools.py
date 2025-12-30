@@ -130,9 +130,11 @@ def generate_sandbox_client_script() -> str:
 (function() {{
   'use strict';
 
-  // Check if we're in a child window
-  if (!window.opener) {{
-    console.warn('SandboxClient: No opener window found');
+  // Determine parent window (iframe uses parent, popup uses opener)
+  const parentWindow = window.parent !== window ? window.parent : window.opener;
+
+  if (!parentWindow) {{
+    console.warn('SandboxClient: No parent window found');
     return;
   }}
 
@@ -171,8 +173,8 @@ def generate_sandbox_client_script() -> str:
 
       pendingRequests.set(reqId, {{ resolve, reject }});
 
-      // Send command to parent
-      window.opener.postMessage({{
+      // Send command to parent (iframe or opener)
+      parentWindow.postMessage({{
         type: 'SANDBOX_COMMAND',
         method,
         args,
@@ -253,3 +255,135 @@ def escape_html(text: str) -> str:
         .replace('"', "&quot;")
         .replace("'", "&#x27;")
     )
+
+
+def generate_datatable_page(
+    title: str,
+    headers: list[str],
+    rows: list[list[str]],
+    table_id: str = "dataTable",
+    page_length: int = 25,
+    default_sort_col: int = 0,
+    default_sort_dir: str = "desc",
+    enable_sandbox_client: bool = True,
+    custom_css: str = "",
+    custom_js: str = ""
+) -> str:
+    """
+    Generate a complete HTML page with a DataTables-powered table.
+
+    Args:
+        title: Page title
+        headers: List of column headers
+        rows: List of rows, each row is a list of cell values (can include HTML)
+        table_id: HTML ID for the table element
+        page_length: Number of rows per page
+        default_sort_col: Column index to sort by default
+        default_sort_dir: Sort direction ("asc" or "desc")
+        enable_sandbox_client: Include sandbox client script for inter-window communication
+        custom_css: Additional CSS to include in <style> tag
+        custom_js: Additional JavaScript to run after DataTable initialization
+
+    Returns:
+        Complete HTML document as string
+    """
+    # Generate table rows HTML
+    rows_html = []
+    for row in rows:
+        cells = "".join(f"<td>{cell}</td>" for cell in row)
+        rows_html.append(f"<tr>{cells}</tr>")
+
+    # Build DataTable initialization options
+    datatable_options = {
+        "order": [[default_sort_col, default_sort_dir]],
+        "pageLength": page_length,
+        "language": {
+            "search": "Search:",
+            "lengthMenu": "Show _MENU_ entries",
+            "info": "Showing _START_ to _END_ of _TOTAL_ entries"
+        }
+    }
+
+    import json
+    datatable_options_json = json.dumps(datatable_options)
+
+    # Generate sandbox client script if requested
+    sandbox_script = ""
+    if enable_sandbox_client:
+        sandbox_script = f"<script>{generate_sandbox_client_script()}</script>"
+
+    # Build complete HTML
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{escape_html(title)}</title>
+
+    {sandbox_script}
+
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            background-color: #fff;
+        }}
+        h1 {{
+            margin-bottom: 20px;
+            color: #333;
+        }}
+        #{table_id} {{
+            font-size: 0.9em;
+            width: 100%;
+        }}
+        #{table_id} thead th {{
+            background-color: #f5f5f5;
+            font-weight: 600;
+        }}
+        #{table_id} tbody tr:nth-child(even) {{
+            background-color: #f9f9f9;
+        }}
+        #{table_id} tbody tr:hover {{
+            background-color: #f0f0f0;
+        }}
+        .dataTables_wrapper .dataTables_paginate .paginate_button {{
+            padding: 0.3em 0.8em;
+        }}
+        {custom_css}
+    </style>
+</head>
+<body>
+    <h1>{escape_html(title)}</h1>
+
+    <table id="{table_id}" class="display stripe hover">
+        <thead>
+            <tr>
+                {''.join(f'<th>{escape_html(h)}</th>' for h in headers)}
+            </tr>
+        </thead>
+        <tbody>
+            {''.join(rows_html)}
+        </tbody>
+    </table>
+
+    <!-- jQuery (required for DataTables) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+
+    <script>
+        $(document).ready(function() {{
+            var table = $('#{table_id}').DataTable({datatable_options_json});
+            console.log('DataTable initialized');
+
+            {custom_js}
+        }});
+    </script>
+</body>
+</html>"""
+
+    return html

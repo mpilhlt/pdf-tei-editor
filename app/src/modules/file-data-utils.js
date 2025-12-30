@@ -49,7 +49,7 @@
  * @typedef {object} DocumentItem
  * @property {string} doc_id - Document identifier
  * @property {string[]} collections - All collections for this document
- * @property {object} doc_metadata - Document metadata from TEI header
+ * @property {DocumentMetadata } doc_metadata - Document metadata from TEI header
  * @property {FileItem} source - Source file (PDF or primary XML)
  * @property {Artifact[]} artifacts - All artifact files (TEI, etc.)
  */

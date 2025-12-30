@@ -76,6 +76,7 @@ class PluginManager:
     def register_plugin_routes(self, app: FastAPI) -> None:
         """
         Register custom routes from plugins that have a routes.py file.
+        Also mounts static file directories for plugins with an 'html' subdirectory.
 
         Args:
             app: FastAPI application instance
@@ -86,6 +87,7 @@ class PluginManager:
         for plugin_id in self.registry.get_all_plugins().keys():
             try:
                 self._try_register_plugin_routes(app, plugin_id)
+                self._try_mount_plugin_static_files(app, plugin_id)
             except Exception as e:
                 logger.error(f"Error registering routes for plugin {plugin_id}: {e}")
 
@@ -138,6 +140,38 @@ class PluginManager:
                             f"Error loading routes.py for plugin {plugin_id}: {e}",
                             exc_info=True
                         )
+
+    def _try_mount_plugin_static_files(self, app: FastAPI, plugin_id: str) -> None:
+        """
+        Try to mount static files from plugin's html directory.
+
+        Args:
+            app: FastAPI application instance
+            plugin_id: Plugin identifier
+        """
+        from fastapi.staticfiles import StaticFiles
+
+        plugin_dirs = self._get_plugin_dirs()
+        dir_names = [plugin_id, plugin_id.replace("-", "_")]
+
+        for base_dir in plugin_dirs:
+            for dir_name in dir_names:
+                plugin_dir = base_dir / dir_name
+                html_dir = plugin_dir / "html"
+
+                if html_dir.exists() and html_dir.is_dir():
+                    try:
+                        # Mount at /api/plugins/{plugin_id}/static/
+                        mount_path = f"/api/plugins/{plugin_id}/static"
+                        app.mount(
+                            mount_path,
+                            StaticFiles(directory=str(html_dir)),
+                            name=f"plugin_{plugin_id}_static"
+                        )
+                        logger.info(f"Mounted static files for plugin {plugin_id} at {mount_path}")
+                        return
+                    except Exception as e:
+                        logger.error(f"Error mounting static files for plugin {plugin_id}: {e}")
 
     def _get_plugin_dirs(self) -> list[Path]:
         """

@@ -56,7 +56,7 @@ class SampleAnalyzerPlugin(Plugin):
     def is_available(cls) -> bool:
         """Sample analyzer available only in development and testing modes."""
         app_mode = os.environ.get("FASTAPI_APPLICATION_MODE", "development")
-        return app_mode in ("development", "testing")
+        return app_mode in ("testing")
 
     async def initialize(self, context: PluginContext) -> None:
         """Initialize plugin (optional lifecycle hook)."""
