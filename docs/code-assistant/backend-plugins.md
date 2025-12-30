@@ -336,16 +336,135 @@ The `callPluginApi` method:
 - [fastapi_app/routes/plugins.py](../../fastapi_app/routes/plugins.py) - API routes
 - [app/src/plugins/backend-plugins.js](../../app/src/plugins/backend-plugins.js) - Frontend integration
 
+## Plugin Response Formats
+
+Backend plugins can return results in two formats depending on the complexity of the output:
+
+### 1. Inline HTML (for simple content)
+
+Use the `html` field for short, simple text results that fit comfortably in the dialog:
+
+```python
+async def execute(self, context, params: dict) -> dict:
+    """Return simple HTML content."""
+    return {
+        "html": "<p>Analysis complete. Found 42 matches.</p>"
+    }
+```
+
+**When to use:**
+- Short text results (a few paragraphs)
+- Simple lists or small tables
+- Quick status messages or summaries
+- Content that doesn't need extensive formatting
+
+### 2. Standalone Pages (for complex content)
+
+Use the `outputUrl` field for complex, tabular data, or content requiring JavaScript libraries:
+
+```python
+async def execute(self, context, params: dict) -> dict:
+    """Return URL to standalone page."""
+    collection_id = params.get("collection")
+    variant = params.get("variant")
+
+    # Build URL to custom route that returns complete HTML page
+    view_url = f"/api/plugins/my-plugin/view?collection={collection_id}&variant={variant}"
+    export_url = f"/api/plugins/my-plugin/export?collection={collection_id}&variant={variant}"
+
+    return {
+        "outputUrl": view_url,      # Displayed in iframe
+        "exportUrl": export_url,    # Optional: enable export button
+        "collection": collection_id # Optional: pass data to frontend
+    }
+```
+
+**When to use:**
+- Large tables with sorting/filtering (e.g., DataTables)
+- Content requiring external JavaScript libraries
+- Complex visualizations or charts
+- Multi-section reports
+- Any content needing custom CSS or extensive styling
+
+**Benefits:**
+- Proper script execution (iframe loads scripts naturally)
+- Better performance (libraries load once)
+- "Open in new window" button for full-screen viewing
+- Cleaner separation (route generates HTML, plugin coordinates)
+
+**Implementation pattern:**
+
+1. **Create a custom route** in `routes.py` that generates the full HTML page:
+
+```python
+from fastapi import APIRouter
+from fastapi.responses import HTMLResponse
+from fastapi_app.lib.plugin_tools import generate_datatable_page, escape_html
+
+router = APIRouter(prefix="/api/plugins/my-plugin", tags=["my-plugin"])
+
+@router.get("/view", response_class=HTMLResponse)
+async def view_results(
+    collection: str = Query(...),
+    variant: str | None = Query(None),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+):
+    """Generate standalone HTML page with results."""
+    # Authenticate user (see User Authentication section)
+    # ...
+
+    # Prepare table data
+    headers = ["Column 1", "Column 2", "Column 3"]
+    rows = [
+        [escape_html("Data 1"), escape_html("Data 2"), "Data 3"],
+        # ... more rows
+    ]
+
+    # Generate HTML page with DataTables
+    html = generate_datatable_page(
+        title="My Plugin Results",
+        headers=headers,
+        rows=rows,
+        table_id="resultsTable",
+        page_length=25,
+        default_sort_col=0,
+        default_sort_dir="desc",
+        enable_sandbox_client=True  # For inter-window communication
+    )
+
+    return HTMLResponse(content=html)
+```
+
+2. **Return the URL** from your plugin endpoint:
+
+```python
+async def execute(self, context, params: dict) -> dict:
+    collection_id = params.get("collection")
+    view_url = f"/api/plugins/my-plugin/view?collection={collection_id}"
+
+    return {
+        "outputUrl": view_url,
+        "collection": collection_id
+    }
+```
+
+**See also:** [edit_history plugin](../../fastapi_app/plugins/edit_history) for complete example.
+
 ## Interactive HTML Content
 
-Plugins can generate HTML content that includes interactive elements (links, buttons) to update application state or perform actions. This is done through the **Plugin Sandbox** interface.
+Both response formats support interactive elements through the **Plugin Sandbox** interface.
 
 ### Plugin Sandbox API
 
-When a plugin returns HTML content via the `html` field, the frontend automatically exposes a `window.pluginSandbox` object with methods to interact with the application:
+When plugin content is displayed (either via `html` or `outputUrl`), a `window.pluginSandbox` object (or `window.sandbox` in standalone pages) exposes methods to interact with the application:
 
 ```javascript
-// Available methods on window.pluginSandbox:
+// Available methods:
+// - In inline HTML: window.pluginSandbox
+// - In standalone pages (outputUrl): window.sandbox
 
 // Update application state (any fields from ApplicationState) - async
 await pluginSandbox.updateState({ xml: 'doc-id', variant: 'model-x' });
@@ -360,11 +479,13 @@ await pluginSandbox.openDocument('stable-id');
 await pluginSandbox.openDiff('stable-id-1', 'stable-id-2');
 ```
 
-### Example: Clickable Links in HTML
+### Example: Clickable Links
+
+**In inline HTML:**
 
 ```python
 async def execute(self, context, params: dict) -> dict:
-    """Generate interactive HTML with clickable links"""
+    """Generate interactive HTML with clickable links."""
     doc_id = "abc123"
 
     # Create clickable link that opens document
@@ -381,6 +502,27 @@ async def execute(self, context, params: dict) -> dict:
     return {"html": html}
 ```
 
+**In standalone pages (outputUrl):**
+
+When using `generate_datatable_page()` with `enable_sandbox_client=True`, use `sandbox` (not `pluginSandbox`):
+
+```python
+# In your custom route
+from fastapi_app.lib.plugin_tools import escape_html
+
+doc_link = f'''<a href="#"
+   onclick="sandbox.openDocument('{entry["stable_id"]}'); return false;"
+   style="color: #0066cc; text-decoration: underline;">
+   {escape_html(entry["doc_label"])}
+</a>'''
+
+rows.append([
+    escape_html(entry["date"]),
+    doc_link,  # Clickable link
+    escape_html(entry["description"])
+])
+```
+
 ### Available State Fields
 
 The sandbox can update any field from `ApplicationState` (see [app/src/state.js](../../app/src/state.js)):
@@ -393,9 +535,46 @@ The sandbox can update any field from `ApplicationState` (see [app/src/state.js]
 - `collection` - Current collection ID
 - Other fields as needed
 
-### Implementation Example
+### Implementation Examples
 
-The [iaa_analyzer plugin](../../fastapi_app/plugins/iaa_analyzer/plugin.py) demonstrates this pattern with clickable stable IDs and match counts that open documents or diff views.
+- **Inline HTML**: The [iaa_analyzer plugin](../../fastapi_app/plugins/iaa_analyzer/plugin.py) demonstrates inline HTML with clickable stable IDs and match counts that open documents or diff views
+- **Standalone pages**: The [edit_history plugin](../../fastapi_app/plugins/edit_history) demonstrates the `outputUrl` pattern with a complete DataTables implementation
+
+### Utility Functions
+
+The `fastapi_app.lib.plugin_tools` module provides utilities for generating plugin content:
+
+**`generate_datatable_page()`** - Generate complete HTML page with sortable DataTables table:
+
+```python
+from fastapi_app.lib.plugin_tools import generate_datatable_page, escape_html
+
+html = generate_datatable_page(
+    title="Results",                    # Page title
+    headers=["Col1", "Col2"],          # Column headers
+    rows=[                              # Table rows (can contain HTML)
+        [escape_html("A"), "B"],
+        [escape_html("C"), "D"]
+    ],
+    table_id="myTable",                # HTML table ID
+    page_length=25,                    # Rows per page
+    default_sort_col=0,                # Sort column index
+    default_sort_dir="desc",           # "asc" or "desc"
+    enable_sandbox_client=True,        # Include sandbox for links
+    custom_css="",                     # Additional CSS
+    custom_js=""                       # Additional JavaScript
+)
+```
+
+**`escape_html()`** - Escape HTML to prevent XSS:
+
+```python
+from fastapi_app.lib.plugin_tools import escape_html
+
+safe_text = escape_html(user_input)  # Escapes <, >, &, ", '
+```
+
+**`generate_sandbox_client_script()`** - Generate sandbox client for custom HTML pages (advanced use).
 
 ## Notes
 

@@ -56,6 +56,91 @@ npm run test:container -- --browser chromium,firefox,webkit  # Test multiple bro
 - **Purpose**: Test isolated functions/classes
 - **Run**: `npm run test:unit`
 
+#### Python Unit Tests with FastAPI Routes
+
+Python unit tests for backend plugins and custom routes use a combination of dependency injection overrides and mocking.
+
+##### Pattern: Testing FastAPI Routes with Mixed Dependencies
+
+Routes often mix FastAPI dependency injection with direct function calls. Test both using:
+
+1. **Dependency Overrides** (in setUp) - for consistent mocks across all tests
+2. **@patch decorators** - for functions called inside routes
+
+**Example:**
+
+```python
+import unittest
+from unittest.mock import MagicMock, patch
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+class TestMyRoute(unittest.IsolatedAsyncioTestCase):
+    """Test my custom route."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        from myapp.routes import router
+        from myapp.dependencies import get_auth_manager, get_session_manager
+
+        self.app = FastAPI()
+        self.app.include_router(router)
+
+        # Create mocks for injected dependencies
+        self.mock_session_manager = MagicMock()
+        self.mock_auth_manager = MagicMock()
+
+        # Override dependencies - these work for all tests
+        self.app.dependency_overrides[get_session_manager] = lambda: self.mock_session_manager
+        self.app.dependency_overrides[get_auth_manager] = lambda: self.mock_auth_manager
+
+        self.client = TestClient(self.app)
+
+    @patch("myapp.config.get_settings")  # Patch functions called inside route
+    @patch("myapp.routes.get_db")        # Not dependency-injected, called directly
+    def test_my_endpoint(self, mock_get_db, mock_settings):
+        """Test endpoint with authentication."""
+        # Mock settings (called inside route via import)
+        mock_settings_obj = MagicMock()
+        mock_settings_obj.session_timeout = 3600
+        mock_settings.return_value = mock_settings_obj
+
+        # Configure dependency override mocks (set in setUp)
+        self.mock_session_manager.is_session_valid.return_value = True
+        mock_user = MagicMock()
+        self.mock_auth_manager.get_user_by_session_id.return_value = mock_user
+
+        # Mock direct function calls
+        mock_get_db.return_value = MagicMock()
+
+        # Make request
+        response = self.client.get(
+            "/api/my-endpoint",
+            params={"session_id": "valid-session"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+```
+
+**Key Points:**
+
+- **Dependency overrides** (`self.app.dependency_overrides`) handle FastAPI `Depends()` parameters
+- **@patch decorators** handle functions imported and called inside routes (`get_settings()`, `get_db()`)
+- **Mock at import location**: Patch where the function is used, not where it's defined
+  - Route imports `from fastapi_app.config import get_settings` → patch `"myapp.routes.get_settings"`
+  - Route imports function from another module → patch at that import path
+- **Order matters**: `@patch` decorators apply bottom-to-top, parameters passed in reverse order
+
+**Common Mistakes:**
+
+- Trying to patch dependency-injected functions with `@patch` instead of using `dependency_overrides`
+- Patching at definition location instead of import location
+- Forgetting to mock functions called inside routes that aren't dependency-injected
+
+**See Also:**
+
+- [fastapi_app/plugins/edit_history/tests/test_edit_history_export.py](../../fastapi_app/plugins/edit_history/tests/test_edit_history_export.py) - Complete example with authentication, authorization, and data mocking
+
 ### API Integration Tests
 
 - **Location**: `tests/api/v1/`

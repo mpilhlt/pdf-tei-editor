@@ -24,15 +24,15 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
         return {
             "id": "annotation-versions-analyzer",
             "name": "Annotation Versions Analyzer",
-            "description": "Analyzes annotation versions of PDF documents including gold files",
+            "description": "Shows annotation versions of PDF documents",
             "version": "1.0.0",
             "category": "analyzer",
             "required_roles": ["user"],
             "endpoints": [
                 {
                     "name": "analyze",
-                    "label": "Analyze Annotation Versions",
-                    "description": "Analyze annotation versions of the current PDF document",
+                    "label": "Show Annotation Versions",
+                    "description": "Shows annotation versions of the current PDF document",
                     "state_params": ["pdf", "variant"],
                 },
             ],
@@ -151,7 +151,7 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
         """
         try:
             from lxml import etree
-            from fastapi_app.lib.tei_utils import extract_tei_metadata
+            from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
 
             # Parse XML with lxml (same as tei_utils uses)
             root = etree.fromstring(xml_content.encode("utf-8"))
@@ -174,6 +174,7 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
 
             last_change_desc = ""
             last_annotator = ""
+            last_annotator_id = ""
             last_change_date = ""
             when_attr = ""
 
@@ -183,8 +184,10 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
                 if desc_elem is not None and desc_elem.text:
                     last_change_desc = desc_elem.text.strip()
 
-                # Get annotator from @who attribute
-                last_annotator = last_change_elem.get("who", "")
+                # Get annotator from @who attribute and look up full name
+                who_id = last_change_elem.get("who", "")
+                last_annotator_id = who_id.lstrip("#")
+                last_annotator = get_annotator_name(root, who_id)
 
                 # Get and format date from @when attribute
                 when_attr = last_change_elem.get("when", "")
@@ -197,6 +200,7 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
                 "variant": getattr(file_metadata, "variant", ""),
                 "last_change_desc": last_change_desc,
                 "last_annotator": last_annotator,
+                "last_annotator_id": last_annotator_id,
                 "last_change_date": last_change_date,
                 "last_change_date_raw": when_attr,  # Store raw ISO date for sorting
                 "stable_id": file_metadata.stable_id,

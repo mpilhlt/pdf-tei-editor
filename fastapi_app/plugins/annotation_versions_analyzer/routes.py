@@ -93,7 +93,7 @@ async def export_csv(
         header = ["Title", "Gold"]
         if show_variant_column:
             header.append("Variant")
-        header.extend(["Last Change", "Annotator", "Date"])
+        header.extend(["Last Change", "Annotator ID", "Annotator Name", "Date"])
         writer.writerow(header)
 
         # Write data rows
@@ -106,6 +106,7 @@ async def export_csv(
                 row.append(version.get("variant", ""))
             row.extend([
                 version["last_change_desc"],
+                version.get("last_annotator_id", ""),
                 version["last_annotator"],
                 version["last_change_date"],
             ])

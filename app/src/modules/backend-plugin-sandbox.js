@@ -28,6 +28,53 @@ export class PluginSandbox {
   constructor(context, dialog) {
     this.context = context;
     this.dialog = dialog;
+
+    // Set up message listener for iframe/popup window commands
+    this.messageHandler = this._createMessageHandler();
+    window.addEventListener('message', this.messageHandler);
+  }
+
+  /**
+   * Create message handler for iframe and popup window communication
+   * @private
+   */
+  _createMessageHandler() {
+    return async (event) => {
+      // Security: verify origin if needed
+      if (!event.data || event.data.type !== 'SANDBOX_COMMAND') {
+        return;
+      }
+
+      const { method, args, requestId } = event.data;
+
+      try {
+        // Call sandbox method dynamically
+        if (typeof this[method] !== 'function') {
+          throw new Error(`Unknown or non-callable sandbox method: ${method}`);
+        }
+
+        // Prevent calling private methods (starting with _)
+        if (method.startsWith('_')) {
+          throw new Error(`Cannot call private method: ${method}`);
+        }
+
+        const result = await this[method](...args);
+
+        // Send response back to iframe or popup
+        event.source.postMessage({
+          type: 'SANDBOX_RESPONSE',
+          requestId,
+          result
+        }, '*');
+      } catch (error) {
+        // Send error response
+        event.source.postMessage({
+          type: 'SANDBOX_RESPONSE',
+          requestId,
+          error: error.message
+        }, '*');
+      }
+    };
   }
 
   /**

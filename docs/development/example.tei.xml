@@ -17,10 +17,6 @@
         </persName>
       </author>
       <respStmt>
-        <persName xml:id="cb">Christian Boulanger</persName>
-        <resp>Annotator</resp>
-      </respStmt>
-      <respStmt>
         <persName xml:id="cboulanger">Christian Boulanger</persName>
         <resp>Annotator</resp>
       </respStmt>
@@ -63,7 +59,7 @@
     <change when="2025-07-11">
       <desc>Extracted 2025-07-11 14:39:36</desc>
     </change>
-    <change when="2025-07-22" who="#cb">
+    <change when="2025-07-22" who="#cboulanger">
         Corrections
       </change>
     <change when="2025-08-25T08:50:02.437Z" status="draft" who="#cboulanger">

@@ -31,6 +31,7 @@ import ui from '../ui.js';
  * @typedef {object} backendPluginsResultDialogPart
  * @property {HTMLDivElement} icon - Icon container
  * @property {HTMLDivElement} content - Content container
+ * @property {SlButton} openWindowBtn - Open in new window button
  * @property {SlButton} exportBtn - Export button
  * @property {SlButton} closeBtn - Close button
  */
@@ -47,7 +48,7 @@ export class BackendPluginsPlugin extends Plugin {
   constructor(context) {
     super(context, {
       name: 'backend-plugins',
-      deps: ['client']
+      deps: ['client','extraction']
     });
 
     /** @type {BackendPlugin[]} */
@@ -55,6 +56,9 @@ export class BackendPluginsPlugin extends Plugin {
 
     /** @type {boolean} */
     this.initialized = false;
+
+    /** @type {PluginSandbox|null} */
+    this.pluginSandbox = null;
   }
 
   /**
@@ -70,6 +74,10 @@ export class BackendPluginsPlugin extends Plugin {
 
     updateUi();
 
+    // Create plugin sandbox once
+    this.pluginSandbox = new PluginSandbox(this.context, ui.pluginResultDialog);
+    window.pluginSandbox = this.pluginSandbox;
+
     // Setup close button handler
     ui.pluginResultDialog.closeBtn.addEventListener('click', () => ui.pluginResultDialog.hide());
   }
@@ -79,7 +87,7 @@ export class BackendPluginsPlugin extends Plugin {
     // Add button to toolbar before the logout button
     const buttonElement = createSingleFromTemplate('backend-plugins-button');
     ui.toolbar.add(buttonElement, 0, -2)
-     updateUi();
+    updateUi();
 
     // Discover available plugins
     await this.discoverPlugins();
@@ -338,12 +346,132 @@ export class BackendPluginsPlugin extends Plugin {
   }
 
   /**
+   * Display plugin result in an iframe
+   * @param {BackendPlugin} plugin
+   * @param {any} result - Must include outputUrl property
+   */
+  displayResultInIframe(plugin, result) {
+    const dialog = ui.pluginResultDialog;
+
+    // Configure dialog
+    dialog.setAttribute("label", plugin.name);
+    dialog.style.setProperty("--width", "90vw");
+    dialog.icon.innerHTML = '';
+
+    // Create iframe with authentication
+    const iframe = document.createElement('iframe');
+    const outputUrl = new URL(result.outputUrl, window.location.origin);
+
+    // Add session ID if not already in URL
+    if (!outputUrl.searchParams.has('session_id') && this.state.sessionId) {
+      outputUrl.searchParams.set('session_id', this.state.sessionId);
+    }
+
+    const fullUrl = outputUrl.toString();
+    iframe.src = fullUrl;
+    iframe.style.width = '100%';
+    iframe.style.height = '60vh';
+    iframe.style.border = 'none';
+
+    dialog.content.innerHTML = '';
+    dialog.content.appendChild(iframe);
+
+    // Configure "Open in new window" button
+    dialog.openWindowBtn.style.display = 'inline-flex';
+    const newOpenWindowBtn = dialog.openWindowBtn.cloneNode(true);
+    dialog.openWindowBtn.replaceWith(newOpenWindowBtn);
+    updateUi();
+
+    ui.pluginResultDialog.openWindowBtn.addEventListener('click', () => {
+      window.open(fullUrl, '_blank', 'width=1200,height=800');
+    });
+
+    this.configureExportButton(dialog, plugin, result);
+    dialog.show();
+  }
+
+  /**
+   * Configure export button for plugin result
+   * @param {SlDialog} dialog
+   * @param {BackendPlugin} plugin
+   * @param {any} result
+   */
+  configureExportButton(dialog, plugin, result) {
+    if (result.exportUrl || result.pdf) {
+      dialog.exportBtn.style.display = 'inline-flex';
+
+      const newExportBtn = dialog.exportBtn.cloneNode(true);
+      dialog.exportBtn.replaceWith(newExportBtn);
+      updateUi();
+
+      ui.pluginResultDialog.exportBtn.addEventListener('click', async () => {
+        try {
+          let exportUrl;
+
+          if (result.exportUrl) {
+            exportUrl = result.exportUrl;
+          } else if (result.pdf) {
+            const variant = result.variant || 'all';
+            const endpoint = `/api/plugins/${plugin.id}/export`;
+            const params = { pdf: result.pdf, variant: variant };
+            const url = new URL(endpoint, window.location.origin);
+            Object.entries(params).forEach(([key, value]) => {
+              if (value !== null && value !== undefined) {
+                url.searchParams.append(key, String(value));
+              }
+            });
+            exportUrl = url.toString();
+          }
+
+          const response = await fetch(exportUrl, {
+            headers: { 'X-Session-ID': this.state.sessionId || '' }
+          });
+
+          if (!response.ok) {
+            throw new Error(`Export failed: ${response.statusText}`);
+          }
+
+          const blob = await response.blob();
+          const contentDisposition = response.headers.get('Content-Disposition');
+          let filename = `${plugin.id}_export.csv`;
+          if (contentDisposition) {
+            const match = contentDisposition.match(/filename="?(.+?)"?$/);
+            if (match) filename = match[1];
+          }
+
+          const downloadUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(downloadUrl);
+
+          notify('Export successful', 'success', 'check-circle');
+        } catch (error) {
+          console.error('Export failed:', error);
+          notify(`Export failed: ${error.message}`, 'danger', 'exclamation-octagon');
+        }
+      });
+    } else {
+      dialog.exportBtn.style.display = 'none';
+    }
+  }
+
+  /**
    * Display plugin execution result
    * @param {BackendPlugin} plugin
    * @param {any} result
    */
   displayResult(plugin, result) {
     const dialog = ui.pluginResultDialog;
+
+    // Check if result contains outputUrl for iframe rendering
+    if (result && result.outputUrl) {
+      this.displayResultInIframe(plugin, result);
+      return;
+    }
 
     // Check if result contains HTML content
     if (result && result.html) {
@@ -353,50 +481,22 @@ export class BackendPluginsPlugin extends Plugin {
       dialog.icon.innerHTML = '';
       dialog.content.innerHTML = result.html;
 
-      // Expose plugin sandbox for interactive HTML content
-      window.pluginSandbox = new PluginSandbox(this.context, dialog);
-
-      // Show/configure Export button if result includes pdf (for CSV export)
-      if (result.pdf) {
-        dialog.exportBtn.style.display = 'inline-flex';
-
-        // Remove existing event listeners by cloning the button
-        const newExportBtn = dialog.exportBtn.cloneNode(true);
-        dialog.exportBtn.replaceWith(newExportBtn);
-        updateUi();
-
-        ui.pluginResultDialog.exportBtn.addEventListener('click', async () => {
-          try {
-            const variant = result.variant || 'all';
-            const endpoint = `/api/plugins/${plugin.id}/export`;
-            const params = {
-              pdf: result.pdf,
-              variant: variant
-            };
-
-            // Use callPluginApi to get the CSV response
-            const response = await this.callPluginApi(endpoint, 'GET', params);
-            const blob = await response.blob();
-
-            // Trigger download
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = `${plugin.id}_${result.pdf.substring(0, 8)}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(downloadUrl);
-
-            notify('Export successful', 'success', 'check-circle');
-          } catch (error) {
-            console.error('Export failed:', error);
-            notify(`Export failed: ${error.message}`, 'danger', 'exclamation-octagon');
-          }
+      // Execute any scripts that were in the HTML (innerHTML doesn't execute them)
+      const scripts = dialog.content.querySelectorAll('script');
+      scripts.forEach(oldScript => {
+        const newScript = document.createElement('script');
+        // Copy attributes
+        Array.from(oldScript.attributes).forEach(attr => {
+          newScript.setAttribute(attr.name, attr.value);
         });
-      } else {
-        dialog.exportBtn.style.display = 'none';
-      }
+        // Copy script content
+        newScript.textContent = oldScript.textContent;
+        // Replace old script with new one to trigger execution
+        oldScript.parentNode.replaceChild(newScript, oldScript);
+      });
+
+      dialog.openWindowBtn.style.display = 'none';
+      this.configureExportButton(dialog, plugin, result);
 
       dialog.show();
     } else if (result && result.error) {
@@ -405,6 +505,7 @@ export class BackendPluginsPlugin extends Plugin {
       dialog.style.setProperty("--width", "50vw");
       dialog.icon.innerHTML = `<sl-icon name="exclamation-triangle" style="color: var(--sl-color-danger-500);"></sl-icon>`;
       dialog.content.innerHTML = `<p>${result.error}</p>`;
+      dialog.openWindowBtn.style.display = 'none';
       dialog.exportBtn.style.display = 'none';
       dialog.show();
     } else {
@@ -414,6 +515,7 @@ export class BackendPluginsPlugin extends Plugin {
       dialog.style.setProperty("--width", "50vw");
       dialog.icon.innerHTML = `<sl-icon name="info-circle" style="color: var(--sl-color-primary-500);"></sl-icon>`;
       dialog.content.innerHTML = `<pre style="overflow: auto; max-height: 60vh;">${resultText}</pre>`;
+      dialog.openWindowBtn.style.display = 'none';
       dialog.exportBtn.style.display = 'none';
       dialog.show();
     }

@@ -155,7 +155,16 @@ class IAAAnalyzerPlugin(Plugin):
             session_id = params.get("_session_id", "")
             html = self._generate_html_table(comparisons, session_id)
 
-            return {"html": html, "pdf": pdf_id, "variant": variant_filter or "all"}
+            # Build export URL
+            variant_param = f"&variant={variant_filter}" if variant_filter else ""
+            export_url = f"/api/plugins/iaa-analyzer/export?pdf={pdf_id}{variant_param}&session_id={session_id}"
+
+            return {
+                "html": html,
+                "exportUrl": export_url,
+                "pdf": pdf_id,  # Deprecated: kept for backward compatibility
+                "variant": variant_filter or "all",
+            }
 
         except Exception as e:
             logger.error(
@@ -177,10 +186,10 @@ class IAAAnalyzerPlugin(Plugin):
             file_metadata: File metadata object
 
         Returns:
-            Dictionary with title, annotator, and stable_id
+            Dictionary with title, annotator, annotator_id, and stable_id
         """
         try:
-            from fastapi_app.lib.tei_utils import extract_tei_metadata
+            from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
 
             root = etree.fromstring(xml_content.encode("utf-8"))
 
@@ -198,12 +207,16 @@ class IAAAnalyzerPlugin(Plugin):
                 ".//tei:revisionDesc/tei:change[last()]", ns
             )
             annotator = "Unknown"
+            annotator_id = ""
             if last_change_elem is not None:
-                annotator = last_change_elem.get("who", annotator)
+                who_attr = last_change_elem.get("who", "")
+                annotator_id = who_attr.lstrip("#")
+                annotator = get_annotator_name(root, who_attr)
 
             return {
                 "title": title.strip() if title else "Untitled",
                 "annotator": annotator.strip() if annotator else "Unknown",
+                "annotator_id": annotator_id,
                 "stable_id": file_metadata.stable_id,
             }
 
@@ -212,6 +225,7 @@ class IAAAnalyzerPlugin(Plugin):
             return {
                 "title": "Error",
                 "annotator": "Unknown",
+                "annotator_id": "",
                 "stable_id": file_metadata.stable_id,
             }
 
