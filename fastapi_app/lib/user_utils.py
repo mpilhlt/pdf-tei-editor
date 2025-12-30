@@ -337,9 +337,9 @@ def get_user_collections(user: Optional[Dict[str, Any]], db_dir: Path) -> Option
         # Anonymous users have no collection access
         return []
 
-    # Check for wildcard roles - admin role grants access to everything
+    # Check for wildcard roles
     user_roles = user.get('roles', [])
-    if '*' in user_roles or 'admin' in user_roles:
+    if '*' in user_roles:
         return None  # None means access to all collections
 
     # Check for wildcard groups

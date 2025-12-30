@@ -66,8 +66,8 @@ class TestCollectionAccessControl(unittest.TestCase):
         has_access = user_has_collection_access(user, 'any-collection', self.db_dir)
         self.assertTrue(has_access)
 
-    def test_user_with_admin_role_has_all_collections(self):
-        """Test that users with admin role have access to all collections."""
+    def test_user_with_admin_role_without_groups_has_no_collections(self):
+        """Test that admin role alone does not grant collection access."""
         user = {
             'username': 'admin',
             'roles': ['admin', 'user'],
@@ -75,10 +75,10 @@ class TestCollectionAccessControl(unittest.TestCase):
         }
 
         collections = get_user_collections(user, self.db_dir)
-        self.assertIsNone(collections)  # None means all collections
+        self.assertEqual(collections, [])  # No groups = no collections
 
         has_access = user_has_collection_access(user, 'col1', self.db_dir)
-        self.assertTrue(has_access)
+        self.assertFalse(has_access)
 
     def test_user_with_wildcard_groups_has_all_collections(self):
         """Test that users with wildcard groups have access to all collections."""

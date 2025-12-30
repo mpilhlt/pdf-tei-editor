@@ -173,10 +173,10 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
         self.assertEqual(len(data['files']), 1)
         self.assertEqual(data['files'][0]['doc_id'], 'doc3')
 
-    def test_files_list_admin_sees_all_collections(self):
-        """Test that admin users see all collections."""
+    def test_files_list_admin_with_wildcard_group_sees_all_collections(self):
+        """Test that users with wildcard group access see all collections."""
         self._add_test_file('doc1', ['col1', 'col2', 'col3'])
-        admin = self._create_mock_user('admin', ['admin', 'user'], [])
+        admin = self._create_mock_user('admin', ['admin', 'user'], ['*'])
 
         response = self._call_with_user(admin, '/api/v1/files/list')
 
@@ -198,9 +198,9 @@ class TestCollectionFilteringEndpoints(unittest.TestCase):
         self.assertEqual(collection_ids, {'col1', 'col2'})
         self.assertNotIn('col3', collection_ids)
 
-    def test_collections_list_admin_sees_all(self):
-        """Test that admin users see all collections."""
-        admin = self._create_mock_user('admin', ['admin', 'user'], [])
+    def test_collections_list_wildcard_group_sees_all(self):
+        """Test that users with wildcard group access see all collections."""
+        admin = self._create_mock_user('admin', ['admin', 'user'], ['*'])
 
         response = self._call_with_user(admin, '/api/v1/collections')
 

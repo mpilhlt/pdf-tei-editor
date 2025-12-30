@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: tests-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   test:
@@ -28,6 +28,7 @@ jobs:
 
       - name: Get changed files
         id: changed-files
+        if: github.event_name == 'pull_request'
         run: |
           # Get files changed in this PR compared to base branch
           BASE_SHA=${{ github.event.pull_request.base.sha }}
