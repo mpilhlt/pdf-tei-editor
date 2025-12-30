@@ -56,11 +56,6 @@ class AccessControlChecker:
             logger.debug(f"ACCESS CONTROL: anonymous user, result={result}")
             return result
 
-        # Admin users have full access to everything
-        if 'admin' in user.get('roles', []):
-            logger.debug("ACCESS CONTROL: admin user, allowing access")
-            return True
-
         username = user.get('username')
         logger.debug(f"ACCESS CONTROL: user={username}, roles={user.get('roles', [])}")
 
@@ -95,7 +90,7 @@ class AccessControlChecker:
     def can_modify_permissions(permissions: DocumentPermissions, user: Optional[Dict]) -> bool:
         """
         Check if user can modify document permissions.
-        Only document owners and admins can modify permissions.
+        Only document owners can modify permissions.
 
         Args:
             permissions: Current document permissions
@@ -106,10 +101,6 @@ class AccessControlChecker:
         """
         if not user:
             return False
-
-        # Admin users can always modify permissions
-        if 'admin' in user.get('roles', []):
-            return True
 
         # Document owners can modify permissions
         username = user.get('username')
@@ -178,10 +169,6 @@ def filter_files_by_access(files: List[Any], user: Optional[Dict]) -> List[Any]:
     Returns:
         Filtered list containing only accessible files
     """
-    # Admin users see everything
-    if user and 'admin' in user.get('roles', []):
-        return files
-
     return [f for f in files if check_file_access(f, user, 'read')]
 
 
@@ -200,10 +187,6 @@ class DocumentAccessFilter:
         Returns:
             Filtered list containing only accessible documents
         """
-        # Admin users see everything
-        if user and 'admin' in user.get('roles', []):
-            return documents
-
         filtered_documents = []
 
         for doc in documents:
