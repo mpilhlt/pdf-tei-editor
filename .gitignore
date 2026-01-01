@@ -45,5 +45,10 @@ fastapi_app/db/*.db-*
 # unknown
 nul
 
+# Generated documentation
+/docs/api/frontend/
+/docs/api/backend/
+/docs/api/backend-api.json
+
 # IDE
 .idea

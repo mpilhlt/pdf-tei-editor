@@ -1,0 +1,150 @@
+"""
+Unit tests for Annotation Progress plugin.
+
+@testCovers fastapi_app/plugins/annotation_progress/plugin.py
+"""
+
+import asyncio
+import unittest
+from unittest.mock import MagicMock
+
+from fastapi_app.plugins.annotation_progress.plugin import AnnotationProgressPlugin
+
+
+class TestAnnotationProgressPlugin(unittest.TestCase):
+    """Test cases for AnnotationProgressPlugin."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.plugin = AnnotationProgressPlugin()
+
+    def test_metadata(self):
+        """Test plugin metadata structure."""
+        metadata = self.plugin.metadata
+
+        self.assertEqual(metadata["id"], "annotation-progress")
+        self.assertEqual(metadata["name"], "Annotation Progress")
+        self.assertEqual(metadata["category"], "collection")
+        self.assertEqual(metadata["required_roles"], ["user"])
+        self.assertEqual(len(metadata["endpoints"]), 1)
+
+        endpoint = metadata["endpoints"][0]
+        self.assertEqual(endpoint["name"], "show_progress")
+        self.assertEqual(endpoint["label"], "Show Annotation Progress")
+        self.assertIn("collection", endpoint["state_params"])
+        self.assertIn("variant", endpoint["state_params"])
+
+    def test_get_endpoints(self):
+        """Test endpoint registration."""
+        endpoints = self.plugin.get_endpoints()
+
+        self.assertIn("show_progress", endpoints)
+        self.assertTrue(callable(endpoints["show_progress"]))
+
+    def test_show_progress_no_collection(self):
+        """Test show_progress with no collection parameter."""
+        context = MagicMock()
+        params = {}
+
+        result = asyncio.run(self.plugin.show_progress(context, params))
+
+        self.assertIn("error", result)
+        self.assertIn("html", result)
+        self.assertIn("Please select a collection first", result["html"])
+
+    def test_show_progress_with_collection(self):
+        """Test show_progress with collection parameter."""
+        context = MagicMock()
+        params = {"collection": "test-collection", "variant": "test-variant"}
+
+        result = asyncio.run(self.plugin.show_progress(context, params))
+
+        self.assertIn("outputUrl", result)
+        self.assertIn("test-collection", result["outputUrl"])
+        self.assertIn("test-variant", result["outputUrl"])
+        self.assertEqual(result["collection"], "test-collection")
+        self.assertEqual(result["variant"], "test-variant")
+
+    def test_extract_annotation_info(self):
+        """Test annotation info extraction from TEI XML."""
+        xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Test Document</title>
+      </titleStmt>
+      <editionStmt>
+        <edition>
+          <title>Test Annotation</title>
+        </edition>
+      </editionStmt>
+      <publicationStmt>
+        <publisher>Test</publisher>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Test</bibl>
+      </sourceDesc>
+    </fileDesc>
+    <revisionDesc>
+      <change when="2024-01-01T10:00:00" status="created">First version</change>
+      <change when="2024-01-02T10:00:00" status="updated">Second version</change>
+      <change when="2024-01-03T10:00:00" status="updated">Third version</change>
+    </revisionDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <p>Test content</p>
+    </body>
+  </text>
+</TEI>"""
+
+        file_metadata = MagicMock()
+        file_metadata.stable_id = "test-stable-id"
+
+        result = self.plugin._extract_annotation_info(xml_content, file_metadata)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["annotation_label"], "Test Annotation")
+        self.assertEqual(result["revision_count"], 3)
+        self.assertEqual(result["stable_id"], "test-stable-id")
+
+    def test_extract_annotation_info_no_edition_title(self):
+        """Test annotation info extraction with no edition title."""
+        xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Test Document Title</title>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Test</publisher>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>Test</bibl>
+      </sourceDesc>
+    </fileDesc>
+    <revisionDesc>
+      <change when="2024-01-01T10:00:00" status="created">First version</change>
+    </revisionDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <p>Test content</p>
+    </body>
+  </text>
+</TEI>"""
+
+        file_metadata = MagicMock()
+        file_metadata.stable_id = "test-stable-id"
+
+        result = self.plugin._extract_annotation_info(xml_content, file_metadata)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["annotation_label"], "Test Document Title")
+        self.assertEqual(result["revision_count"], 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

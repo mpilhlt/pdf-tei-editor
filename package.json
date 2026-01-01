@@ -1,6 +1,6 @@
 {
     "name": "pdf-tei-editor",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "type": "module",
     "scripts": {
         "ci": "uv sync && npm install",
@@ -44,7 +44,13 @@
         "container:build:no-cache": "node bin/container.js build --no-cache",
         "container:push": "node bin/container.js push",
         "container:deploy": "node bin/container.js deploy",
-        "deploy": "node bin/deploy.js"
+        "deploy": "node bin/deploy.js",
+        "docs:generate": "npm run docs:frontend && npm run docs:backend && npm run docs:backend:json",
+        "docs:frontend": "jsdoc -c jsdoc.json",
+        "docs:backend": "uv run pdoc fastapi_app/lib fastapi_app/plugins fastapi_app/api fastapi_app/routers -o docs/api/backend --docformat google",
+        "docs:backend:json": "uv run python bin/generate-python-api-json.py",
+        "docs:serve": "python -m http.server -d docs/api 8080",
+        "docs:clean": "rm -rf docs/api/frontend docs/api/backend docs/api/*.json"
     },
     "dependencies": {
         "@codemirror/autocomplete": "^6.18.6",
@@ -74,10 +80,13 @@
         "@types/node": "^24.9.1",
         "@types/uuid": "^10.0.0",
         "adm-zip": "^0.5.16",
+        "better-docs": "^2.7.3",
         "comment-parser": "^1.4.1",
         "diff": "^8.0.2",
         "eventsource-client": "^1.2.0",
         "husky": "^9.1.7",
+        "jsdoc": "^4.0.5",
+        "jsdoc-to-markdown": "^9.1.3",
         "jsdom": "^26.1.0",
         "madge": "^8.0.0",
         "rollup": "^4.40.2"

@@ -97,8 +97,9 @@ class Settings(BaseSettings):
 
         # Try to load from config.json as fallback
         try:
-            from fastapi_app.lib.config_utils import get_config_value
-            config_timeout = get_config_value('session.timeout', self.db_dir)
+            from fastapi_app.lib.config_utils import Config
+            config = Config(self.db_dir)
+            config_timeout = config.get('session.timeout')
             if config_timeout is not None:
                 return int(config_timeout)
         except Exception:

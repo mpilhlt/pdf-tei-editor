@@ -48,27 +48,27 @@ async def lifespan(app: FastAPI):
 
     # Now load config and sync settings between environment and config
     # Priority: Environment variables > config.json
-    from .lib.config_utils import load_full_config, set_config_value
-    config = load_full_config(settings.db_dir)
+    from .lib import config
+    config_data = config.load()
 
     if "FASTAPI_APPLICATION_MODE" in os.environ:
         # Environment variable takes precedence
         app_mode = os.environ["FASTAPI_APPLICATION_MODE"]
-        set_config_value("application.mode", app_mode, settings.db_dir)
+        config.set("application.mode", app_mode)
         logger.info(f"Application mode from environment: {app_mode}")
     else:
         # Get from config and set environment variable
-        app_mode = config.get("application", {}).get("mode", settings.application_mode)
+        app_mode = config_data.get("application", {}).get("mode", settings.application_mode)
         os.environ["FASTAPI_APPLICATION_MODE"] = app_mode
         logger.info(f"Application mode from config: {app_mode}")
 
     # Sync docs.from-github setting from environment
     if "DOCS_FROM_GITHUB" in os.environ:
         docs_from_github = os.environ["DOCS_FROM_GITHUB"].lower() in ("true", "1", "yes")
-        set_config_value("docs.from-github", docs_from_github, settings.db_dir)
+        config.set("docs.from-github", docs_from_github)
         logger.info(f"Documentation source from environment: {'GitHub' if docs_from_github else 'local'}")
     else:
-        docs_from_github = config.get("docs.from-github", False)
+        docs_from_github = config_data.get("docs.from-github", False)
         logger.info(f"Documentation source from config: {'GitHub' if docs_from_github else 'local'}")
 
     # Ensure directories exist
@@ -236,9 +236,9 @@ web_root = project_root / 'app' / 'web'
 # Development mode routes (conditionally mounted)
 # In development, serve source files, node_modules, and tests
 settings = get_settings()
-from .lib.config_utils import load_full_config
-config = load_full_config(settings.db_dir)
-is_dev_mode = config.get("application", {}).get("mode", "development") == "development"
+from .lib import config
+config_data = config.load()
+is_dev_mode = config_data.get("application", {}).get("mode", "development") == "development"
 
 if is_dev_mode:
     # Mount node_modules for importmap

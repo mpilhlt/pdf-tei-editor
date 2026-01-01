@@ -15,7 +15,7 @@ from ..config import get_settings
 from ..lib.auth import AuthManager
 from ..lib.sessions import SessionManager
 from ..lib.server_utils import get_session_id_from_request
-from ..lib.config_utils import load_full_config, get_config_value, set_config_value
+from ..lib import config
 from ..lib.logging_utils import get_logger
 
 
@@ -100,8 +100,7 @@ async def list_config() -> dict:
 
     Returns complete configuration object.
     """
-    settings = get_settings()
-    config_data = load_full_config(settings.db_dir)
+    config_data = config.load()
     return config_data
 
 
@@ -115,8 +114,7 @@ async def get_config(key: str) -> Any:
     if not key:
         raise HTTPException(status_code=400, detail="Invalid or empty key")
 
-    settings = get_settings()
-    config_data = load_full_config(settings.db_dir)
+    config_data = config.load()
 
     if key not in config_data:
         raise HTTPException(status_code=404, detail=f"Key '{key}' not found")
@@ -137,8 +135,7 @@ async def set_config(
     if not request_data.key:
         raise HTTPException(status_code=400, detail="Missing 'key' in request")
 
-    settings = get_settings()
-    success, message = set_config_value(request_data.key, request_data.value, settings.db_dir)
+    success, message = config.set(request_data.key, request_data.value)
 
     if not success:
         raise HTTPException(status_code=400, detail=message)

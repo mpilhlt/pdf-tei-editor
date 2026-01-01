@@ -138,3 +138,8 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-build:
+    needs: release
+    uses: ./.github/workflows/docker-image.yml
+    secrets: inherit

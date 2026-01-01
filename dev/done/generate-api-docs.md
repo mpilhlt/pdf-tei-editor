@@ -1,22 +1,25 @@
 # API Documentation Generation Implementation Plan
 
-**GitHub Issue:** https://github.com/mpilhlt/pdf-tei-editor/issues/122
+**GitHub Issue:** <https://github.com/mpilhlt/pdf-tei-editor/issues/122>
 
 ## Goal
 
 Generate both human-readable and machine-readable API documentation to prevent code-assistant API hallucinations by providing:
+
 1. Human-readable HTML docs for developers
 2. Machine-readable JSON/schema for AI code assistants
 
 ## Current State
 
 ### Existing Documentation
+
 - **FastAPI endpoints**: Auto-generated OpenAPI schema at `/docs` (Swagger UI)
 - **Frontend modules**: Extensive JSDoc comments but no generated docs
 - **Python classes**: Google-style docstrings but no generated docs
 - **Type definitions**: Auto-generated TypeScript definitions in `app/src/modules/api-client-v1.js`
 
 ### Code Quality
+
 - Frontend: Comprehensive JSDoc with specific types (not generic "object")
 - Backend: Consistent Google-style docstrings with type hints
 - OpenAPI client: Already auto-generated from FastAPI schema
@@ -24,12 +27,14 @@ Generate both human-readable and machine-readable API documentation to prevent c
 ## Tooling Selection
 
 ### Frontend: JSDoc with better-docs
+
 - **Tool**: `jsdoc` + `better-docs` theme
 - **Rationale**: Already using JSDoc extensively, minimal setup
 - **Output**: HTML docs + JSON intermediate format
 - **Machine-readable**: Can export TypeScript `.d.ts` files or use `jsdoc-to-markdown` for programmatic access
 
 ### Backend: pdoc
+
 - **Tool**: `pdoc` (modern Python documentation generator)
 - **Rationale**: Lightweight, works with existing docstrings, generates clean HTML + can output JSON
 - **Output**: HTML with source links
@@ -40,12 +45,15 @@ Generate both human-readable and machine-readable API documentation to prevent c
 ### 1. Install Dependencies
 
 #### Frontend
+
 ```bash
 npm install --save-dev jsdoc better-docs jsdoc-to-markdown
 ```
 
 #### Backend
+
 Add to `pyproject.toml` under `[dependency-groups] dev`:
+
 ```toml
 "pdoc>=15.0.0",
 ```
@@ -55,6 +63,7 @@ Run: `uv sync`
 ### 2. Configure JSDoc
 
 Create `jsdoc.json` in project root:
+
 ```json
 {
   "source": {
@@ -88,6 +97,7 @@ Create `jsdoc.json` in project root:
 ### 3. Create Frontend API README
 
 Create `docs/api/frontend-readme.md`:
+
 ```markdown
 # Frontend Modules API
 
@@ -111,6 +121,7 @@ See individual module documentation for detailed API reference.
 ### 4. Add npm Scripts
 
 Add to `package.json` scripts:
+
 ```json
 "docs:generate": "npm run docs:frontend && npm run docs:backend && npm run docs:json",
 "docs:frontend": "jsdoc -c jsdoc.json",
@@ -125,6 +136,7 @@ Add to `package.json` scripts:
 ### 5. Create Python API JSON Generator
 
 Create `bin/generate-python-api-json.py`:
+
 ```python
 #!/usr/bin/env python3
 """
@@ -231,6 +243,7 @@ if __name__ == "__main__":
 ### 6. Update .gitignore
 
 Add to `.gitignore`:
+
 ```
 # Generated documentation
 /docs/api/frontend/
@@ -243,6 +256,7 @@ Add to `.gitignore`:
 Update release script to regenerate docs before version bumps.
 
 In `bin/release.js`, add before version bump:
+
 ```javascript
 // Regenerate API docs
 execSync('npm run docs:generate', { stdio: 'inherit' });
@@ -266,6 +280,7 @@ Before using any method on a class or module:
 ## Testing
 
 ### Manual Testing
+
 ```bash
 # Generate all docs
 npm run docs:generate
@@ -280,6 +295,7 @@ cat docs/api/backend-api.json | jq '.modules | keys'
 ```
 
 ### Validation Checklist
+
 - [ ] Frontend HTML docs render correctly
 - [ ] Backend HTML docs include all lib modules
 - [ ] Backend HTML docs include plugin modules
@@ -291,11 +307,13 @@ cat docs/api/backend-api.json | jq '.modules | keys'
 ## Files to Create/Modify
 
 ### New Files
+
 - `jsdoc.json` - JSDoc configuration
 - `docs/api/frontend-readme.md` - Frontend docs landing page
 - `bin/generate-python-api-json.py` - Python API JSON generator
 
 ### Modified Files
+
 - `package.json` - Add doc generation scripts
 - `pyproject.toml` - Add pdoc dependency
 - `.gitignore` - Exclude generated docs
@@ -310,3 +328,44 @@ cat docs/api/backend-api.json | jq '.modules | keys'
 4. **Cross-references**: Link frontend API client types to backend endpoints
 5. **Search**: Add search functionality to HTML docs
 6. **Coverage**: Add documentation coverage metrics
+
+## Implementation Summary
+
+Successfully implemented API documentation generation with the following components:
+
+### New Files
+
+- [jsdoc.json](../../jsdoc.json) - JSDoc configuration for frontend module documentation
+- [docs/api/frontend-readme.md](../../docs/api/frontend-readme.md) - Frontend API documentation landing page
+- [bin/generate-python-api-json.py](../../bin/generate-python-api-json.py) - Python script to generate machine-readable JSON from Python modules
+
+### Changed Files
+
+- [package.json](../../package.json:48-53) - Added documentation generation scripts
+- [pyproject.toml](../../pyproject.toml:32) - Added pdoc>=15.0.0 dependency
+- [.gitignore](../../.gitignore:48-51) - Added generated documentation directories
+- [CLAUDE.md](../../CLAUDE.md:146-174) - Added API verification section with documentation commands
+
+### Output
+
+- **Frontend HTML**: `docs/api/frontend/` - JSDoc-generated HTML documentation for all frontend modules (67 files)
+- **Backend HTML**: `docs/api/backend/` - pdoc-generated HTML documentation for Python modules
+- **Backend JSON**: `docs/api/backend-api.json` - Machine-readable JSON (980KB) containing Python class/function signatures and docstrings
+
+### Commands
+
+```bash
+npm run docs:generate        # Generate all documentation
+npm run docs:frontend        # Generate frontend HTML only
+npm run docs:backend         # Generate backend HTML only
+npm run docs:backend:json    # Generate backend JSON only
+npm run docs:serve           # Serve docs at http://localhost:8080
+npm run docs:clean           # Remove generated docs
+```
+
+### Implementation Notes
+
+- JSDoc parser shows warnings for TypeScript-style type annotations (keyof, intersection types, function types) but successfully generates HTML documentation
+- Frontend JSON generation was removed from the plan as jsdoc2md produces markdown, not JSON - HTML docs serve the primary purpose
+- Backend JSON generation successfully extracts API information from 50+ Python modules
+- pdoc shows minor warnings for Pydantic type annotations but generates complete documentation

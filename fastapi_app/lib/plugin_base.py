@@ -57,7 +57,7 @@ class Plugin(ABC):
             - id (str): Unique plugin identifier (alphanumeric + hyphens)
             - name (str): Human-readable plugin name
             - description (str): Brief description of plugin functionality
-            - category (str): Plugin category (e.g., "analyzer", "exporter")
+            - category (str): Plugin category (e.g., "document", "exporter")
             - version (str): Plugin version (semver recommended)
             - required_roles (list[str]): Roles required to access plugin (empty = all users)
 

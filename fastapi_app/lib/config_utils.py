@@ -2,7 +2,26 @@
 Configuration management utilities for PDF-TEI-Editor.
 
 This module provides framework-agnostic configuration utilities with dependency injection.
-No Flask or FastAPI dependencies - all parameters are explicitly passed.
+
+High-level API (recommended - uses settings injection):
+    from fastapi_app.lib import config
+
+    value = config.get('key', default='fallback')
+    config.set('key', value)
+    config.delete('key')
+    all_config = config.load()
+
+Alternative - create Config instance with custom db_dir:
+    from fastapi_app.lib.config_utils import Config
+
+    custom_config = Config(custom_db_dir)
+    value = custom_config.get('key')
+
+Low-level API (for advanced use):
+    from fastapi_app.lib.config_utils import get_config_value
+
+    get_config_value(key, db_dir, default)
+    set_config_value(key, value, db_dir)
 """
 
 import json
@@ -40,6 +59,82 @@ def _unlock_file(file_handle):
             pass
     else:
         fcntl.flock(file_handle, fcntl.LOCK_UN)
+
+
+class Config:
+    """
+    High-level configuration API that abstracts away storage details.
+
+    Similar to the frontend config.js API, this class provides a clean interface
+    for configuration management without requiring callers to know about db_dir
+    or implementation details.
+
+    Usage:
+        config = Config(db_dir)
+        value = config.get('session.timeout', default=3600)
+        config.set('session.timeout', 7200)
+        config.delete('old.key')
+        all_config = config.load()
+
+    Args:
+        db_dir: Path to the database directory containing config.json
+    """
+
+    def __init__(self, db_dir: Path):
+        """
+        Initialize Config with database directory.
+
+        Args:
+            db_dir: Path to the database directory containing config.json
+        """
+        self.db_dir = db_dir
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Get a configuration value.
+
+        Args:
+            key: The configuration key (supports dot notation)
+            default: Default value if key not found
+
+        Returns:
+            The configuration value or default
+        """
+        return get_config_value(key, self.db_dir, default)
+
+    def set(self, key: str, value: Any) -> tuple[bool, str]:
+        """
+        Set a configuration value.
+
+        Args:
+            key: The configuration key
+            value: The value to set
+
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        return set_config_value(key, value, self.db_dir)
+
+    def delete(self, key: str) -> tuple[bool, str]:
+        """
+        Delete a configuration key.
+
+        Args:
+            key: The configuration key to delete
+
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        return delete_config_value(key, self.db_dir)
+
+    def load(self) -> dict:
+        """
+        Load the complete configuration.
+
+        Returns:
+            Configuration dictionary
+        """
+        return load_full_config(self.db_dir)
 
 
 def load_full_config(db_dir: Path) -> dict:
@@ -261,3 +356,36 @@ def _validate_config_value(config_data: dict, key: str, value: Any) -> bool:
             return False
 
     return True
+
+
+def _get_default_config() -> Config:
+    """
+    Get a Config instance using settings from fastapi_app.config.
+
+    This provides a preconfigured instance that doesn't require
+    passing db_dir explicitly.
+
+    Returns:
+        Config instance configured with settings.db_dir
+    """
+    from fastapi_app.config import get_settings
+    settings = get_settings()
+    return Config(settings.db_dir)
+
+
+# Module-level config instance for convenience
+# Usage: from fastapi_app.lib import config
+_config_instance = None
+
+
+def get_config() -> Config:
+    """
+    Get the module-level config instance (lazy initialization).
+
+    Returns:
+        Config instance configured with settings.db_dir
+    """
+    global _config_instance
+    if _config_instance is None:
+        _config_instance = _get_default_config()
+    return _config_instance

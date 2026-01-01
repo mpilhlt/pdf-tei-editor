@@ -41,7 +41,7 @@ class IAAAnalyzerPlugin(Plugin):
             "name": "Inter-Annotator Agreement",
             "description": "Compute agreement between annotation versions by comparing element positions in <text>",
             "version": "1.0.0",
-            "category": "analyzer",
+            "category": "document",
             "required_roles": ["user"],
             "endpoints": [
                 {

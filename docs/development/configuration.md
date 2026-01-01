@@ -69,53 +69,86 @@ The PDF-TEI-Editor uses JSON configuration files to manage application settings.
 
 ### Backend Processing
 
-Configuration values are processed through two main components:
+Configuration values are processed through a high-level API that abstracts storage details.
 
 #### `fastapi_app/lib/config_utils.py`
 
-Core utilities for configuration management:
+Provides a `Config` class and module-level configuration instance:
 
-- **`load_full_config(db_dir)`**: Loads the complete configuration from `data/db/config.json`. Creates an empty config file if it doesn't exist.
+**High-Level API (recommended)**:
 
-- **`get_config_value(key, db_dir, default=None)`**: Retrieves a configuration value by key. Returns the default value if the key doesn't exist.
+```python
+from fastapi_app.lib import config
 
-- **`set_config_value(key, value, db_dir)`**: Sets a configuration value with thread-safe file locking. Performs validation and auto-typing:
-  - Validates `*.values` keys are arrays
-  - Validates `*.type` keys are valid JSON types (string, number, boolean, array, object, null)
-  - Checks value constraints: if `<key>.values` exists, validates value is in allowed values
-  - Checks type constraints: if `<key>.type` exists, validates value matches required type
-  - Auto-creates `<key>.type` constraint for new keys based on the value's JSON type
-  - Uses cross-platform file locking (fcntl on Unix, msvcrt on Windows)
+# Get configuration values
+value = config.get('session.timeout', default=3600)
 
-- **`delete_config_value(key, db_dir)`**: Deletes a configuration key with thread-safe file locking.
+# Set configuration values (with validation)
+success, message = config.set('session.timeout', 7200)
+
+# Delete configuration keys
+success, message = config.delete('old.key')
+
+# Load complete configuration
+config_data = config.load()
+```
+
+The module-level `config` instance is preconfigured with settings.db_dir, so you don't need to pass directory paths.
+
+**Alternative - Custom Config Instance**:
+
+For testing or custom db_dir:
+
+```python
+from fastapi_app.lib.config_utils import Config
+from pathlib import Path
+
+custom_config = Config(Path('/custom/db/dir'))
+value = custom_config.get('key')
+```
+
+**Configuration Features**:
+
+- **Type validation**: If `<key>.type` exists, validates value matches required JSON type
+- **Values constraints**: If `<key>.values` exists, validates value is in allowed values
+- **Auto-typing**: New keys automatically get a `.type` constraint based on value's JSON type
+- **Thread-safe**: Uses cross-platform file locking (fcntl on Unix, msvcrt on Windows)
+- **Dot notation**: Supports keys like `session.timeout` and `session.cookie.name`
 
 #### Using Configuration in Backend Routes
 
-Configuration is accessed via the Settings object from `fastapi_app.config`:
+Configuration is accessed via the module-level `config` instance:
 
 ```python
 from fastapi import APIRouter
-from fastapi_app.config import get_settings
+from fastapi_app.lib import config
 
 router = APIRouter()
 
 @router.get("/my-endpoint")
 async def my_endpoint():
-    settings = get_settings()
-
-    # Access environment variables via properties
-    host = settings.HOST
-    port = settings.PORT
-    data_root = settings.data_root  # Path property
-    db_dir = settings.db_dir        # Path property
-    webdav_enabled = settings.webdav_enabled
-    session_timeout = settings.session_timeout  # Falls back to config.json
+    # Get configuration values directly
+    timeout = config.get('session.timeout', default=3600)
+    mode = config.get('application.mode', default='production')
 
     return {
-        "host": host,
-        "port": port,
-        "timeout": session_timeout
+        "timeout": timeout,
+        "mode": mode
     }
+```
+
+**For Settings Properties**:
+
+Access environment variables and static settings via the Settings object:
+
+```python
+from fastapi_app.config import get_settings
+
+settings = get_settings()
+host = settings.HOST
+port = settings.PORT
+data_root = settings.data_root  # Path property
+db_dir = settings.db_dir        # Path property
 ```
 
 **Settings Properties**:
@@ -125,29 +158,16 @@ async def my_endpoint():
 - Dynamic properties: `session_timeout` (checks environment, then config.json, then default)
 - The Settings class is cached via `@lru_cache`, so `get_settings()` returns the same instance
 
-**Accessing Custom Config Values**:
-
-For config values not in Settings class properties, use `config_utils` directly:
+**Setting Config Values**:
 
 ```python
-from fastapi_app.config import get_settings
-from fastapi_app.lib.config_utils import get_config_value, set_config_value
-
-@router.get("/custom-config")
-async def get_custom():
-    settings = get_settings()
-
-    # Read custom config value
-    custom_value = get_config_value('my.custom.key', settings.db_dir, default='fallback')
-
-    return {"value": custom_value}
+from fastapi_app.lib import config
+from fastapi import HTTPException
 
 @router.post("/custom-config")
 async def set_custom(key: str, value: str):
-    settings = get_settings()
-
     # Write custom config value (validates constraints)
-    success, message = set_config_value(key, value, settings.db_dir)
+    success, message = config.set(key, value)
 
     if not success:
         raise HTTPException(status_code=400, detail=message)
@@ -208,19 +228,20 @@ The config plugin provides client-side access to configuration:
 1. **Initial Load**:
    - Frontend calls `config.get()` for the first time
    - Plugin fetches complete config via `GET /api/v1/config/list`
-   - Backend calls `load_full_config()` to read `data/db/config.json`
+   - Backend calls `config.load()` to read `data/db/config.json`
    - Data is cached in `configMap` object
 
 2. **Reading Values**:
    - Frontend calls `config.get(key)` using cached data
    - Or `config.get(key, default, true)` to force server refresh
+   - Backend uses `config.get(key, default)` for server-side reads
 
 3. **Writing Values**:
    - Frontend calls `config.set(key, value)`
    - Validates key exists in cached config (throws error if not)
    - Sends `POST /api/v1/config/set` with JSON body
    - Backend validates authentication and session
-   - Backend calls `set_config_value()` which:
+   - Backend calls `config.set(key, value)` which:
      - Acquires file lock on `config.json`
      - Loads current config
      - Validates value constraints and type
@@ -229,5 +250,5 @@ The config plugin provides client-side access to configuration:
 
 4. **CLI Usage**:
    - CLI calls Python functions from `bin/manage.py`
-   - Uses same `config_utils.py` functions as API
+   - Uses low-level `config_utils.py` functions directly
    - No authentication required for CLI access
