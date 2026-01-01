@@ -1,945 +1,354 @@
-# FastAPI REST API Reference
+# API Documentation Reference
 
-This document provides a comprehensive reference for all FastAPI REST endpoints in the PDF-TEI Editor.
+This document provides an overview of all available API documentation.
 
-## Base URL
+## Documentation Types
 
-- **Development**: `http://localhost:8000/api/v1`
-- **Production**: Configured via deployment settings
+The project maintains multiple types of API documentation:
 
-## Authentication
+1. **FastAPI REST Endpoints** - HTTP API for client-server communication
+2. **Frontend JavaScript Modules** - Client-side application code
+3. **Backend Python Modules** - Server-side business logic and utilities
+4. **Auto-generated OpenAPI Client** - Type-safe JavaScript client for REST endpoints
 
-Most endpoints require authentication via session cookie:
+## 1. FastAPI REST API
 
-```http
-POST /api/auth/login
-Content-Type: application/json
+### Live Documentation
 
-{
-  "username": "user",
-  "passwd_hash": "sha256_hash"
-}
-```
-
-Response includes `Set-Cookie` header with session ID. Include this cookie in subsequent requests.
-
-## Common Response Patterns
-
-### Success Response
-
-```json
-{
-  "status": "success",
-  "data": { ... }
-}
-```
-
-### Error Response
-
-```json
-{
-  "detail": "Error message"
-}
-```
-
-### HTTP Status Codes
-
-- `200` - Success
-- `201` - Created
-- `204` - No Content (successful deletion)
-- `400` - Bad Request (validation error)
-- `401` - Unauthorized (authentication required)
-- `403` - Forbidden (insufficient permissions)
-- `404` - Not Found
-- `500` - Internal Server Error
-
-## Collections API
-
-Base path: `/api/v1/collections`
-
-### List Collections
-
-```http
-GET /api/v1/collections
-```
-
-**Description**: List all collections accessible to the current user.
-
-**Authorization**: Optional (anonymous users get empty list)
-
-**Response**: `200 OK`
-
-```json
-[
-  {
-    "id": "manuscripts",
-    "name": "Medieval Manuscripts",
-    "description": "Collection of medieval manuscript transcriptions"
-  }
-]
-```
-
-**Access Control**:
-
-- Admins/wildcard roles: all collections
-- Regular users: only collections their groups have access to
-- Anonymous: empty list
-
-### Get Collection
-
-```http
-GET /api/v1/collections/{collection_id}
-```
-
-**Response**: `200 OK`
-
-```json
-{
-  "id": "manuscripts",
-  "name": "Medieval Manuscripts",
-  "description": "Collection of medieval manuscript transcriptions"
-}
-```
-
-### Create Collection
-
-```http
-POST /api/v1/collections
-Content-Type: application/json
-
-{
-  "id": "new-collection",
-  "name": "New Collection",
-  "description": "Optional description"
-}
-```
-
-**Authorization**: Requires `admin` or `reviewer` role
-
-**Response**: `201 Created`
-
-### Update Collection
-
-```http
-PUT /api/v1/collections/{collection_id}
-Content-Type: application/json
-
-{
-  "name": "Updated Name",
-  "description": "Updated description"
-}
-```
-
-**Authorization**: Requires `admin` or `reviewer` role
-
-**Response**: `200 OK`
-
-### Delete Collection
-
-```http
-DELETE /api/v1/collections/{collection_id}
-```
-
-**Authorization**: Requires `admin` role
-
-**Response**: `204 No Content`
-
-## Files API
-
-Base path: `/api/v1/files`
-
-### List Files
-
-```http
-GET /api/v1/files/list
-```
-
-**Description**: Get list of all files accessible to the current user.
-
-**Authorization**: Required (except if `FASTAPI_ALLOW_ANONYMOUS_ACCESS=true`)
-
-**Query Parameters**:
-
-- `collection` (optional): Filter by collection ID
-- `variant` (optional): Filter by variant ID
-
-**Response**: `200 OK`
-
-```json
-{
-  "files": [
-    {
-      "id": "abc123...",
-      "stable_id": "abc123",
-      "doc_id": "document-1",
-      "file_type": "pdf",
-      "doc_collections": ["manuscripts"],
-      "doc_metadata": {
-        "title": "Medieval Text",
-        "author": "Unknown"
-      },
-      "storage_path": "files/ab/c1/abc123...",
-      "created_at": "2025-11-28T10:00:00",
-      "updated_at": "2025-11-28T10:00:00"
-    }
-  ]
-}
-```
-
-**Access Control**:
-
-- Filters by user's accessible collections
-- Excludes soft-deleted files
-- Applies document-level ACL
-
-### Serve File
-
-```http
-GET /api/v1/files/{document_id}
-```
-
-**Description**: Serve file content (PDF or XML).
-
-**Authorization**: Required
-
-**Query Parameters**:
-
-- `variant` (optional): Variant ID for TEI files
-- `type` (optional): `"pdf"` or `"xml"`
-
-**Response**: `200 OK`
-
-- Content-Type: `application/pdf` or `application/xml`
-- File content in body
-
-### Save File
-
-```http
-POST /api/v1/files/save
-Content-Type: multipart/form-data
-
-doc_id: document-1
-content: <TEI>...</TEI>
-variant: translation-fr
-is_gold_standard: false
-```
-
-**Description**: Save TEI XML content (creates new version or updates gold standard).
-
-**Authorization**: Required
-
-- **Gold standard**: Requires `reviewer` role
-- **Version files**: Requires `annotator` or `reviewer` role
-
-**Request**:
-
-- `doc_id`: Document identifier
-- `content`: TEI XML content
-- `variant` (optional): Variant identifier
-- `is_gold_standard` (optional): Boolean, default false
-
-**Response**: `200 OK`
-
-```json
-{
-  "hash": "def456...",
-  "stable_id": "def456",
-  "created": true,
-  "message": "File saved successfully"
-}
-```
-
-**Validation**:
-
-- User must have collection access
-- Content must be valid XML
-- Appropriate role required
-
-### Upload PDF
-
-```http
-POST /api/v1/files/upload
-Content-Type: multipart/form-data
-
-file: <binary PDF data>
-collection: manuscripts
-metadata: {"title": "New Document"}
-```
-
-**Description**: Upload new PDF file.
-
-**Authorization**: Requires `annotator` or `reviewer` role
-
-**Response**: `200 OK`
-
-```json
-{
-  "doc_id": "new-doc-1",
-  "hash": "abc789...",
-  "stable_id": "abc789",
-  "collections": ["manuscripts"]
-}
-```
-
-### Create Version from Upload
-
-```http
-POST /api/v1/files/create_version_from_upload
-Content-Type: multipart/form-data
-
-doc_id: document-1
-file: <binary TEI XML data>
-variant: translation-fr
-```
-
-**Description**: Create new TEI version from uploaded file.
-
-**Authorization**: Requires `annotator` or `reviewer` role
-
-**Response**: `200 OK`
+When the development server is running, interactive API documentation is available at:
 
-### Copy Files
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-```http
-POST /api/v1/files/copy
-Content-Type: application/json
+These provide:
 
-{
-  "pdf": "document-1",
-  "xml": "abc123",
-  "destination_collection": "archive"
-}
-```
-
-**Description**: Copy document to another collection (adds collection to doc_collections).
-
-**Authorization**: Required
-
-**Response**: `200 OK`
-
-```json
-{
-  "message": "Files copied successfully"
-}
-```
-
-### Move Files
-
-```http
-POST /api/v1/files/move
-Content-Type: application/json
-
-{
-  "pdf": "document-1",
-  "xml": "abc123",
-  "destination_collection": "archive"
-}
-```
-
-**Description**: Move document to another collection (replaces doc_collections).
-
-**Authorization**: Required
-
-**Response**: `200 OK`
-
-```json
-{
-  "message": "Files moved successfully"
-}
-```
-
-### Delete Files
-
-```http
-POST /api/v1/files/delete
-Content-Type: application/json
-
-{
-  "pdf": "document-1",
-  "xml": "abc123"
-}
-```
-
-**Description**: Delete PDF and associated TEI files (soft delete).
-
-**Authorization**: Required
-
-**Response**: `200 OK`
-
-```json
-{
-  "message": "Files deleted successfully",
-  "deleted_count": 3
-}
-```
-
-### Garbage Collect
+- Interactive endpoint testing
+- Request/response schemas
+- Authentication requirements
+- Parameter validation rules
 
-```http
-POST /api/v1/files/garbage_collect
-```
+### OpenAPI Schema
 
-**Description**: Remove unreferenced files from filesystem.
+The complete OpenAPI 3.0 schema is available at:
 
-**Authorization**: Requires `admin` role
+- **JSON**: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
 
-**Response**: `200 OK`
+This schema is used to auto-generate the frontend API client.
 
-```json
-{
-  "message": "Garbage collection completed",
-  "files_removed": 5,
-  "space_freed": "1.2 MB"
-}
-```
+### REST Endpoint Categories
 
-## File Locks API
+**Authentication**
 
-Base path: `/api/v1/files`
+- `/api/v1/auth/login` - User login
+- `/api/v1/auth/logout` - User logout
+- `/api/v1/auth/session` - Session validation
 
-### Get Locks
+**Collections**
 
-```http
-GET /api/v1/files/locks?doc_id=document-1
-```
+- `/api/v1/collections` - List, create, update, delete collections
+- `/api/v1/collections/{id}` - Get, update, delete specific collection
 
-**Description**: Get current locks for a document.
-
-**Response**: `200 OK`
-
-```json
-{
-  "locks": [
-    {
-      "doc_id": "document-1",
-      "file_type": "xml",
-      "locked_by": "user1",
-      "locked_at": "2025-11-28T10:00:00",
-      "expires_at": "2025-11-28T10:05:00"
-    }
-  ]
-}
-```
+**Files**
 
-### Check Lock
+- `/api/v1/files/list` - List accessible files
+- `/api/v1/files/{doc_id}` - Serve file content (PDF/XML)
+- `/api/v1/files/save` - Save TEI XML content
+- `/api/v1/files/upload` - Upload new PDF
+- `/api/v1/files/copy` - Copy files between collections
+- `/api/v1/files/move` - Move files between collections
+- `/api/v1/files/delete` - Soft-delete files
 
-```http
-POST /api/v1/files/check_lock
-Content-Type: application/json
+**File Locks**
 
-{
-  "doc_id": "document-1",
-  "file_type": "xml"
-}
-```
+- `/api/v1/files/locks` - Get current locks
+- `/api/v1/files/check_lock` - Check lock status
+- `/api/v1/files/acquire_lock` - Acquire editing lock
+- `/api/v1/files/release_lock` - Release editing lock
+- `/api/v1/files/heartbeat` - Extend lock expiration
 
-**Response**: `200 OK`
-
-```json
-{
-  "locked": true,
-  "locked_by": "user1",
-  "can_override": false
-}
-```
+**Extraction**
 
-### Acquire Lock
+- `/api/v1/extraction/list` - List available extractors
+- `/api/v1/extraction` - Extract TEI from PDF
 
-```http
-POST /api/v1/files/acquire_lock
-Content-Type: application/json
+**Validation**
 
-{
-  "doc_id": "document-1",
-  "file_type": "xml",
-  "duration": 300
-}
-```
+- `/api/v1/validation` - Validate TEI XML
+- `/api/v1/validation/autocomplete-data` - Get autocomplete suggestions
 
-**Response**: `200 OK`
+**Schema**
 
-```json
-{
-  "success": true,
-  "expires_at": "2025-11-28T10:05:00"
-}
-```
+- `/api/v1/schema/{type}/{variant}` - Get XSD/RelaxNG schemas
 
-### Release Lock
+**Sync**
 
-```http
-POST /api/v1/files/release_lock
-Content-Type: application/json
+- `/api/v1/sync/status` - Get WebDAV sync status
+- `/api/v1/sync` - Trigger sync operation
+- `/api/v1/sync/conflicts` - List sync conflicts
+- `/api/v1/sync/resolve-conflict` - Resolve conflict
 
-{
-  "doc_id": "document-1",
-  "file_type": "xml"
-}
-```
+**SSE (Server-Sent Events)**
 
-**Response**: `200 OK`
+- `/api/v1/sse/subscribe` - Subscribe to real-time events
+- `/api/v1/sse/test/echo` - Test event broadcast
 
-```json
-{
-  "success": true
-}
-```
+**Users & RBAC**
 
-## Heartbeat API
+- `/api/v1/users` - User management
+- `/api/v1/groups` - Group management
+- `/api/v1/roles` - Role management
 
-```http
-POST /api/v1/files/heartbeat
-Content-Type: application/json
+## 2. Frontend JavaScript API
 
-{
-  "doc_id": "document-1",
-  "file_type": "xml"
-}
-```
+### Generated HTML Documentation
 
-**Description**: Extend lock expiration time (keep-alive for editing sessions).
+Frontend module documentation is auto-generated from JSDoc comments using the `jsdoc` tool with the `better-docs` theme.
 
-**Response**: `200 OK`
+**Generate frontend docs:**
 
-```json
-{
-  "success": true,
-  "expires_at": "2025-11-28T10:10:00"
-}
+```bash
+npm run docs:frontend
 ```
-
-## Extraction API
 
-Base path: `/api/v1/extraction`
-
-### List Extractors
-
-```http
-GET /api/v1/extraction/list
-```
+**View frontend docs:**
 
-**Description**: Get list of available extraction services.
-
-**Response**: `200 OK`
-
-```json
-[
-  {
-    "id": "grobid",
-    "name": "GROBID",
-    "description": "Machine learning-based PDF extraction",
-    "available": true
-  }
-]
+```bash
+npm run docs:serve
+# Open http://localhost:8080/frontend
 ```
 
-### Extract Text
+**Location:** `docs/api/frontend/` (git-ignored)
 
-```http
-POST /api/v1/extraction
-Content-Type: multipart/form-data
+### Module Categories
 
-pdf_hash: abc123...
-extractor: grobid
-```
+**Plugin System**
 
-**Description**: Extract TEI XML from PDF using specified extractor.
+- `plugin-base.js` - Base plugin class with lifecycle hooks
+- `plugin-manager.js` - Plugin registration and lifecycle management
+- `plugin-context.js` - Plugin API context for state/events
 
-**Authorization**: Required
+**State Management**
 
-**Response**: `200 OK`
-
-```json
-{
-  "xml_hash": "def456...",
-  "xml_content": "<TEI>...</TEI>",
-  "extractor": "grobid"
-}
-```
+- `state-manager.js` - Application state with change detection
+- `application.js` - Main application controller
 
-## Validation API
+**UI System**
 
-Base path: `/api/v1/validation`
+- `ui-system.js` - UI element registration and navigation
+- `panels/*.js` - Panel management
 
-### Validate XML
+**RBAC**
 
-```http
-POST /api/v1/validation
-Content-Type: application/json
+- `rbac/entity-manager.js` - Role-based access control entities
+- `acl-utils.js` - Access control utilities
 
-{
-  "content": "<TEI>...</TEI>",
-  "type": "xml"
-}
-```
+**Editors**
 
-**Description**: Validate TEI XML against schema.
+- `xmleditor.js` - CodeMirror-based XML editor
+- `navigatable-xmleditor.js` - XML editor with navigation
+- `pdfviewer.js` - PDF.js viewer integration
 
-**Response**: `200 OK`
+**Utilities**
 
-```json
-{
-  "valid": true,
-  "errors": [],
-  "warnings": []
-}
-```
+- `utils.js` - General utilities
+- `sl-utils.js` - Shoelace component helpers
+- `browser-utils.js` - Browser compatibility utilities
 
-Or if invalid:
-
-```json
-{
-  "valid": false,
-  "errors": [
-    {
-      "line": 10,
-      "column": 5,
-      "message": "Element 'invalid' not allowed here"
-    }
-  ]
-}
-```
+**API Client**
 
-### Get Autocomplete Data
+- `api-client-v1.js` - Auto-generated FastAPI client (DO NOT EDIT)
 
-```http
-POST /api/v1/validation/autocomplete-data
-Content-Type: application/json
+## 3. Backend Python API
 
-{
-  "content": "<TEI>...</TEI>",
-  "position": { "line": 10, "column": 5 }
-}
-```
+### Generated HTML Documentation
 
-**Description**: Get autocomplete suggestions for current cursor position.
+Backend module documentation is auto-generated from Google-style docstrings using `pdoc`.
 
-**Response**: `200 OK`
+**Generate backend docs:**
 
-```json
-{
-  "suggestions": [
-    { "label": "teiHeader", "type": "element" },
-    { "label": "text", "type": "element" }
-  ]
-}
+```bash
+npm run docs:backend
 ```
-
-## Schema API
 
-Base path: `/api/v1/schema`
+**View backend docs:**
 
-### Get Schema
-
-```http
-GET /api/v1/schema/{schema_type}/{variant}
+```bash
+npm run docs:serve
+# Open http://localhost:8080/backend
 ```
-
-**Description**: Get XSD or RelaxNG schema for validation.
-
-**Parameters**:
 
-- `schema_type`: `"xsd"` or `"rng"`
-- `variant`: Schema variant name
+**Location:** `docs/api/backend/` (git-ignored)
 
-**Response**: `200 OK`
-
-- Content-Type: `application/xml`
-- Schema content in body
-
-## Sync API
-
-Base path: `/api/v1/sync`
-
-### Get Sync Status
-
-```http
-GET /api/v1/sync/status
-```
+### Generated JSON Documentation
 
-**Description**: Get WebDAV sync status.
+Machine-readable JSON documentation for AI code assistants.
 
-**Response**: `200 OK`
+**Generate backend JSON:**
 
-```json
-{
-  "enabled": true,
-  "last_sync": "2025-11-28T09:00:00",
-  "pending_changes": 3,
-  "conflicts": 0
-}
+```bash
+npm run docs:backend:json
 ```
 
-### Sync Files
+**Location:** `docs/api/backend-api.json` (git-ignored, ~980KB)
 
-```http
-POST /api/v1/sync
-Content-Type: application/json
+**Usage:** This JSON file contains complete class/function signatures with type annotations and docstrings. Use it to verify API existence and signatures before writing code that calls backend methods.
 
-{
-  "direction": "both"
-}
-```
+### Module Categories
 
-**Description**: Trigger WebDAV synchronization.
+**Core Libraries (`fastapi_app/lib/`)**
 
-**Parameters**:
+- `access_control.py` - Document permission checking
+- `auth.py` - User authentication
+- `database.py` - SQLite database operations
+- `file_repository.py` - File metadata CRUD
+- `file_storage.py` - Physical file storage
+- `locking.py` - File editing locks
+- `sessions.py` - Session management
+- `tei_utils.py` - TEI XML processing utilities
+- `user_utils.py` - User/group/collection utilities
+- `xml_utils.py` - XML validation and processing
+- `migrations/` - Database migration infrastructure
 
-- `direction`: `"upload"`, `"download"`, or `"both"`
+**Plugin System (`fastapi_app/plugins/`)**
 
-**Response**: `200 OK`
+- `edit_history/` - Edit history tracking
+- `iaa_analyzer/` - Inter-annotator agreement analysis
+- `sample_analyzer/` - Sample data analysis
+- `annotation_versions_analyzer/` - Version comparison
 
-```json
-{
-  "uploaded": 5,
-  "downloaded": 3,
-  "conflicts": 1,
-  "duration_ms": 1234
-}
-```
+**API Routes (`fastapi_app/routers/`)**
 
-### List Conflicts
+- `auth.py` - Authentication endpoints
+- `collections.py` - Collection management
+- `files_*.py` - File operations (list, serve, save, upload, locks)
+- `extraction.py` - TEI extraction
+- `validation.py` - XML validation
+- `sync.py` - WebDAV sync
+- `sse.py` - Server-sent events
+- `users.py`, `groups.py`, `roles.py` - RBAC management
 
-```http
-GET /api/v1/sync/conflicts
-```
+## 4. Auto-generated API Client
 
-**Description**: Get list of sync conflicts.
-
-**Response**: `200 OK`
-
-```json
-{
-  "conflicts": [
-    {
-      "doc_id": "document-1",
-      "local_hash": "abc123...",
-      "remote_hash": "def456...",
-      "local_modified": "2025-11-28T10:00:00",
-      "remote_modified": "2025-11-28T10:05:00"
-    }
-  ]
-}
-```
+### Generation
 
-### Resolve Conflict
+The frontend API client is auto-generated from the FastAPI OpenAPI schema:
 
-```http
-POST /api/v1/sync/resolve-conflict
-Content-Type: application/json
+**Regenerate client:**
 
-{
-  "doc_id": "document-1",
-  "resolution": "local"
-}
+```bash
+npm run generate-client
 ```
-
-**Description**: Resolve sync conflict.
-
-**Parameters**:
 
-- `resolution`: `"local"` (keep local) or `"remote"` (keep remote)
+**Check if outdated:**
 
-**Response**: `200 OK`
-
-## SSE (Server-Sent Events) API
-
-Base path: `/api/v1/sse`
-
-### Subscribe to Events
-
-```http
-GET /api/v1/sse/subscribe
+```bash
+npm run generate-client:check
 ```
-
-**Description**: Subscribe to server-sent events stream.
-
-**Response**: `200 OK`
 
-- Content-Type: `text/event-stream`
-- Continuous stream of events
+**Location:** `app/src/modules/api-client-v1.js` (DO NOT EDIT MANUALLY)
 
-**Event Types**:
+### Usage
 
-- `file_updated`: File was modified
-- `file_deleted`: File was deleted
-- `sync_started`: Sync operation began
-- `sync_completed`: Sync operation finished
-- `lock_acquired`: Lock was acquired
-- `lock_released`: Lock was released
+```javascript
+import { ApiClientV1 } from './modules/api-client-v1.js';
 
-**Event Format**:
+const client = new ApiClientV1({ baseUrl: '/api/v1', sessionId });
 
+// Type-safe method calls
+const files = await client.files.list({ collection: 'manuscripts' });
+const content = await client.files.serve({ doc_id: 'doc-123', type: 'xml' });
+await client.files.save({ doc_id: 'doc-123', content: '<TEI>...</TEI>' });
 ```
-event: file_updated
-data: {"doc_id": "document-1", "hash": "abc123..."}
-
-event: sync_completed
-data: {"uploaded": 5, "downloaded": 3}
-```
-
-### Test Echo
-
-```http
-POST /api/v1/sse/test/echo
-Content-Type: application/json
-
-{
-  "message": "test"
-}
-```
-
-**Description**: Send test event to all connected SSE clients.
 
-## Users API
+All methods are strongly typed based on the OpenAPI schema.
 
-Base path: `/api/v1/users`
+## Documentation Commands
 
-### List Users
+### Generate All Documentation
 
-```http
-GET /api/v1/users
+```bash
+npm run docs:generate
 ```
-
-**Authorization**: Requires `admin` role
-
-**Response**: `200 OK`
-
-```json
-[
-  {
-    "username": "user1",
-    "fullname": "User One",
-    "email": "user1@example.com",
-    "roles": ["user", "annotator"],
-    "groups": ["editors"]
-  }
-]
-```
-
-### Get User
-
-```http
-GET /api/v1/users/{username}
-```
-
-**Authorization**: Requires `admin` role or own user
 
-**Response**: `200 OK`
+Generates:
 
-### Create User
+- Frontend HTML docs
+- Backend HTML docs
+- Backend JSON docs
 
-```http
-POST /api/v1/users
-Content-Type: application/json
+### Generate Specific Documentation
 
-{
-  "username": "newuser",
-  "fullname": "New User",
-  "email": "newuser@example.com",
-  "passwd_hash": "sha256_hash",
-  "roles": ["user"],
-  "groups": ["readers"]
-}
+```bash
+npm run docs:frontend        # Frontend HTML only
+npm run docs:backend         # Backend HTML only
+npm run docs:backend:json    # Backend JSON only
 ```
 
-**Authorization**: Requires `admin` role
+### Serve Documentation Locally
 
-**Response**: `201 Created`
-
-### Update User
-
-```http
-PUT /api/v1/users/{username}
-Content-Type: application/json
-
-{
-  "fullname": "Updated Name",
-  "roles": ["user", "annotator"]
-}
+```bash
+npm run docs:serve
 ```
 
-**Authorization**: Requires `admin` role
+Starts HTTP server at [http://localhost:8080](http://localhost:8080) serving:
 
-**Response**: `200 OK`
+- `frontend/` - Frontend module docs
+- `backend/` - Backend module docs
+- `backend-api.json` - Machine-readable backend API
 
-### Delete User
+### Clean Generated Documentation
 
-```http
-DELETE /api/v1/users/{username}
+```bash
+npm run docs:clean
 ```
-
-**Authorization**: Requires `admin` role
-
-**Response**: `204 No Content`
-
-## Groups API
 
-Base path: `/api/v1/groups`
+Removes all generated documentation files.
 
-### List Groups
+## Best Practices
 
-```http
-GET /api/v1/groups
-```
+### For Developers
 
-**Authorization**: Requires `admin` role
-
-**Response**: `200 OK`
-
-```json
-[
-  {
-    "id": "editors",
-    "name": "Editors Group",
-    "description": "Manuscript editors",
-    "collections": ["manuscripts", "letters"]
-  }
-]
-```
+**Before adding new code:**
 
-### Get Group
+1. Check generated documentation to verify APIs don't already exist
+2. Use backend JSON (`docs/api/backend-api.json`) to verify method signatures
+3. Consult frontend HTML docs to understand existing patterns
+4. Review FastAPI docs at `/docs` for endpoint requirements
 
-```http
-GET /api/v1/groups/{group_id}
-```
+**After adding new code:**
 
-### Create Group
-
-```http
-POST /api/v1/groups
-Content-Type: application/json
-
-{
-  "id": "new-group",
-  "name": "New Group",
-  "description": "Description",
-  "collections": ["manuscripts"]
-}
-```
+1. Add comprehensive JSDoc comments (frontend)
+2. Add Google-style docstrings (backend)
+3. Regenerate documentation: `npm run docs:generate`
+4. Verify documentation renders correctly: `npm run docs:serve`
 
-### Update Group
+**When creating new endpoints:**
 
-```http
-PUT /api/v1/groups/{group_id}
-```
+1. Add endpoint to appropriate router in `fastapi_app/routers/`
+2. Regenerate API client: `npm run generate-client`
+3. Check client was updated correctly
+4. Update integration tests
 
-### Delete Group
+### For AI Code Assistants
 
-```http
-DELETE /api/v1/groups/{group_id}
-```
+**Before suggesting new APIs:**
 
-## Roles API
+1. Read class definition or module exports
+2. Check `docs/api/backend-api.json` for Python signatures
+3. Check frontend HTML docs for JavaScript exports
+4. Verify in FastAPI docs at `/docs`
 
-Base path: `/api/v1/roles`
+**Never:**
 
-Similar CRUD operations as Groups API.
+- Assume a method exists without verification
+- Use generic "object" types when specific types exist in docs
+- Skip documentation generation after adding new code
 
 ## Related Documentation
 
-- [Architecture Overview](architecture.md) - Complete system architecture
-- [Database](database.md) - Database schema and file metadata
+- [Architecture Overview](architecture.md) - System design and components
+- [Database Schema](database.md) - Database structure and migrations
 - [Access Control](access-control.md) - RBAC and permissions
-- [Collections](collections.md) - Collection management
-- [Testing](testing.md) - API testing guide
+- [Plugin System](plugin-system.md) - Creating plugins
+- [Testing Guide](testing.md) - API testing patterns
+- [Contributing](contributing.md) - Development workflow

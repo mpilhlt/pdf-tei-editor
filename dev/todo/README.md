@@ -22,3 +22,7 @@ For each file in this folder, create an issue on GitHub using the `gh` tool if o
 - While working on the task, add summaries of what you have implemented to the file. If the tasks is complex and involves multiple sessions and commits, reference the issue in the commit message.
 
 - After you are done with each task, move it to `../done` and in the commit message, statically reference the file at its new location and mark the issue as fixed.
+
+- DO NOT manually close the issue - it should be closed when the commmit is pushed.
+
+
