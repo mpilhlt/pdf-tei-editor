@@ -49,7 +49,7 @@ async def list_plugins(
     List available plugins filtered by user roles and optional category.
 
     Args:
-        category: Optional category filter (e.g., "analyzer")
+        category: Optional category filter (e.g., "document")
         current_user: Current authenticated user (optional)
 
     Returns:

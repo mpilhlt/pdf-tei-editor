@@ -29,7 +29,7 @@ class TestAnnotationVersionsAnalyzerPlugin(unittest.IsolatedAsyncioTestCase):
         metadata = self.plugin.metadata
         self.assertEqual(metadata["id"], "annotation-versions-analyzer")
         self.assertEqual(metadata["name"], "Annotation Versions Analyzer")
-        self.assertEqual(metadata["category"], "analyzer")
+        self.assertEqual(metadata["category"], "document")
         self.assertEqual(metadata["required_roles"], ["user"])
         self.assertIn("endpoints", metadata)
         self.assertEqual(len(metadata["endpoints"]), 1)

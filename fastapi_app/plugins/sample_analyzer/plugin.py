@@ -27,7 +27,7 @@ class SampleAnalyzerPlugin(Plugin):
             "name": "Sample Text Analyzer",
             "description": "Analyzes text and returns basic statistics",
             "version": "1.0.0",
-            "category": "analyzer",
+            "category": "test",
             "required_roles": ["user"],  # Requires user role
             "endpoints": [
                 {

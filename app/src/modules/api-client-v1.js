@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2025-12-29T10:31:40.257Z
+ * Generated from OpenAPI schema at 2026-01-01T22:14:36.804Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1456,7 +1456,7 @@ export class ApiClientV1 {
   /**
    * List available plugins filtered by user roles and optional category.
    * Args:
-   * category: Optional category filter (e.g., "analyzer")
+   * category: Optional category filter (e.g., "document")
    * current_user: Current authenticated user (optional)
    * Returns:
    * List of plugin metadata dicts
