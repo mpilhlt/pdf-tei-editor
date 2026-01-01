@@ -5,8 +5,6 @@ This plugin creates a report about recent activity in the current collection
 by analyzing revision information from TEI artifacts.
 """
 
-import csv
-import io
 import logging
 from datetime import datetime
 from typing import Any, Callable
@@ -31,7 +29,7 @@ class EditHistoryPlugin(Plugin):
             "name": "Edit History",
             "description": "View recent activity in the current collection",
             "version": "1.0.0",
-            "category": "analyzer",
+            "category": "collection",
             "required_roles": ["user"],
             "endpoints": [
                 {

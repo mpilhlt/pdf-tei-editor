@@ -26,7 +26,7 @@ class AnnotationVersionsAnalyzerPlugin(Plugin):
             "name": "Annotation Versions Analyzer",
             "description": "Shows annotation versions of PDF documents",
             "version": "1.0.0",
-            "category": "analyzer",
+            "category": "document",
             "required_roles": ["user"],
             "endpoints": [
                 {
