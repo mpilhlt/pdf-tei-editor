@@ -54,7 +54,7 @@ test('GET /api/v1/plugins - list plugins with user role', async (t) => {
   const samplePlugin = data.plugins.find(p => p.id === 'sample-analyzer');
   assert.ok(samplePlugin, 'Should find sample-analyzer plugin');
   assert.strictEqual(samplePlugin.name, 'Sample Text Analyzer');
-  assert.strictEqual(samplePlugin.category, 'analyzer');
+  assert.strictEqual(samplePlugin.category, 'test');
 });
 
 test('GET /api/v1/plugins - filter by category', async (t) => {
@@ -82,9 +82,9 @@ test('GET /api/v1/plugins - filter by category', async (t) => {
   const data = await response.json();
   assert.ok(Array.isArray(data.plugins));
 
-  // All returned plugins should be in 'analyzer' category
+  // All returned plugins should be in 'test' category
   data.plugins.forEach(plugin => {
-    assert.strictEqual(plugin.category, 'analyzer');
+    assert.strictEqual(plugin.category, 'test');
   });
 });
 

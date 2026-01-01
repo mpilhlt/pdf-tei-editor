@@ -30,7 +30,7 @@ class TestIAAAnalyzerPlugin(unittest.TestCase):
 
         self.assertEqual(metadata["id"], "iaa-analyzer")
         self.assertEqual(metadata["name"], "Inter-Annotator Agreement")
-        self.assertEqual(metadata["category"], "analyzer")
+        self.assertEqual(metadata["category"], "document")
         self.assertEqual(metadata["version"], "1.0.0")
         self.assertIn("user", metadata["required_roles"])
         self.assertEqual(len(metadata["endpoints"]), 1)
