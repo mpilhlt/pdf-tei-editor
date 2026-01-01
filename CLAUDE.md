@@ -143,6 +143,36 @@ The application state object is defined in `app/src/state.js` and contains:
 - The generator script is at `bin/generate-api-client.js`
 - The client provides typed methods for all `/api/v1/` endpoints
 
+### API Verification
+
+Before using any method on a class or module:
+
+1. Check the class definition or module exports first
+2. Consult generated API docs in `docs/api/` for signatures
+3. Machine-readable JSON available at `docs/api/backend-api.json` for Python class/function APIs
+
+Generate API documentation:
+
+```bash
+# Generate all documentation (HTML + JSON)
+npm run docs:generate
+
+# Generate frontend HTML docs only
+npm run docs:frontend
+
+# Generate backend HTML docs only
+npm run docs:backend
+
+# Generate backend JSON only
+npm run docs:backend:json
+
+# Serve HTML docs locally at http://localhost:8080
+npm run docs:serve
+
+# Clean generated docs
+npm run docs:clean
+```
+
 ### Database Access
 
 - **ALWAYS use API methods** from `fastapi_app/lib/file_repository.py`, `fastapi_app/lib/database.py`, and related modules to read and mutate database items
@@ -301,6 +331,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **NEVER start, restart, or suggest restarting the dev server** - It auto-restarts on changes, tests should use the test runners
 - **ALWAYS add comprehensive JSDoc headers** - Use specific types instead of generic "object"
 - **JSDoc type imports** - ALWAYS use separate `@import` blocks for type imports (e.g., `@import { SlMenuItem } from '../ui.js'`), NEVER use inline imports in type annotations (e.g., `@property {import('../ui.js').SlMenuItem}`). This ensures consistency, readability, and proper IDE support
+- **Check generated documentation before adding new code** - Before implementing new functionality, ALWAYS check available documentation to prevent reinventing existing APIs: (1) For backend Python: check `docs/api/backend-api.json` for class/function signatures, or read the source module directly; (2) For frontend JavaScript: read the module exports directly; (3) For REST endpoints: check FastAPI docs at `/docs` or the OpenAPI schema. See [docs/development/api-reference.md](docs/development/api-reference.md) for complete documentation overview. If functionality already exists, use it instead of creating duplicates
 - **NEVER make up non-existing APIs** - Before using any method on a class or module instance, ALWAYS verify that the method exists with the exact signature you're using. Read the class definition or module exports first. If a needed API doesn't exist, implement it rather than assuming it exists
 - **File identifiers on the client** - ALWAYS use `stable_id` (nanoid) when referencing files in client-side code (frontend plugins, HTML output, JavaScript). NEVER use `file_id` (content hash) on the client. The `stable_id` is the permanent identifier for files, while `file_id` is only used internally for storage and deduplication
 - **Check testing guide before writing/debugging tests** - ALWAYS consult [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing new tests or debugging test failures. It contains critical patterns, helper functions, and known issues (like Shoelace component testing). For Python unit tests of FastAPI routes, see the section on dependency overrides vs @patch decorators

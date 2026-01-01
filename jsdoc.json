@@ -1,0 +1,27 @@
+{
+  "source": {
+    "include": ["app/src/modules"],
+    "includePattern": ".+\\.js$",
+    "excludePattern": "(node_modules|dist|build)"
+  },
+  "opts": {
+    "destination": "docs/api/frontend",
+    "recurse": true,
+    "template": "node_modules/better-docs",
+    "encoding": "utf8",
+    "readme": "docs/api/frontend-readme.md"
+  },
+  "plugins": ["plugins/markdown"],
+  "templates": {
+    "better-docs": {
+      "name": "PDF-TEI Editor Frontend API",
+      "title": "Frontend Modules Documentation",
+      "navigation": [
+        {
+          "label": "Modules",
+          "href": "modules.html"
+        }
+      ]
+    }
+  }
+}
