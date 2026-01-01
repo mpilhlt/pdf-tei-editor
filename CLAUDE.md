@@ -1,126 +1,45 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-Keep in mind this is the FastAPI migration branch, so things could be different than what is written here - see the migration step completion documents in `fastapi_app/prompts`.
+This file provides guidance to code assistants when working with code in this repository.
 
 ## General tone
 
 - ALWAYS be concise. Only include information that is relevant to the implementation. Omit any kind of motivational or congratulatory language. Do NOT use vocabulary such as "excellent", "brilliant", "great", etc.
 - If you think there might be a problem with the user's idea, push back. Don't assume the user's ideas are necessarily correct. Ask if you should go with their idea, but also suggest alternatives.
 
-## Quick Reference
+## Detailed Documentation
 
-### Testing Commands
+For comprehensive guides, see the documentation in the `docs/code-assistant/` directory:
 
-See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for complete testing documentation.
+- **[Architecture Overview](docs/code-assistant/architecture.md)** - Backend, frontend, plugin system, UI components, templates
+- **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
+- **[API Reference](docs/development/api-reference.md) - Existing API documentation for JavaScript, Python and HTTP backend API, including on machine-readable API schemas
+- **[Development Commands](docs/code-assistant/development-commands.md)** - Setup, testing, build system, user management
+- **[Plugin Development](docs/code-assistant/plugin-development.md)** - Creating frontend plugins, state management, common patterns
+- **[CI/CD Pipeline](docs/code-assistant/ci.md)** - GitHub Actions workflows, test execution, release process
+- **[Backend Plugins](docs/code-assistant/backend-plugins.md)** - Creating backend plugins, role-based access, custom routes
+- **[Testing Guide](docs/code-assistant/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
+- **[CLI](docs/user-manual/cli.md) - Command Line Interface reference
+- **[API Client](docs/code-assistant/api-client.md)** - FastAPI client usage, type safety, patterns
 
-```bash
-# Run tests for changed files (most common)
-npm run test:changed
+### Key Directories
 
-# Unit tests
-npm run test:unit:js          # JavaScript units
-npm run test:unit:fastapi     # Python units
+Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.
 
-# API integration tests (local server, fast)
-npm run test:api
-npm run test:api -- --grep "files_save"     # grep matches FILE PATH
+- `app` - frontend code
+  - `app/src` - the source files which are bundles for production, but get served in development mode.
+  - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
+  - `app/src/plugins` - Plugin objects and classes (Read [docs/code-assistant/plugin-development.md](docs/code-assistant/plugin-development.md) when creating new plugins)
+  - `app/src/templates` - html templates used by the plugins to create UI parts
+- `bin` - executable files used on the command line
+- `config` - the default content of files in `data/db`
+- `data` - file data
+- `data/db` - application data stored in subject-specific json files and SQLite databases
+  - `data/db/metadata.db` - Main file metadata database (SQLite) - ALWAYS use this for file queries, NOT files.db
+- `fastapi_app` - the python backend based on FastAPI
+- `tests` - JavaScript and Python unit tests and E2E tests (Read [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) when creating or debugging tests)
 
-# E2E tests (Playwright)
-npm run test:e2e
-npm run test:e2e -- --grep "should upload"  # grep matches TEST NAME
-npm run test:e2e:headed       # Show browser
-npm run test:e2e:debug        # Step-through debugging
-
-# Container tests (runs all tests inside container)
-npm run test:container                           # Run with cache
-npm run test:container -- --no-cache             # Rebuild all layers
-npm run test:container -- path/to/changed/file.js  # Specific files
-npm run test:container -- --browser firefox      # Use specific browser for E2E
-npm run test:container -- --browser chromium,firefox,webkit  # Test multiple browsers
-```
-
-### Development Commands
-
-```bash
-# Start dev server
-npm run start:dev
-npm run start:dev -- --restart    # Kill running server and restart
-
-# Reset application (move data/log to trash)
-npm run dev:reset                 # Reset only
-npm run dev:reset -- --restart    # Reset and restart server
-
-# Build for production
-npm run build
-
-# Bypass authentication for development/testing
-FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
-```
-
-### Container Commands
-
-```bash
-# Build container image locally (Docker/Podman auto-detected)
-npm run container:build
-npm run container:build -- --tag v1.0.0
-npm run container:build:no-cache -- --tag v1.0.0
-npm run container:build -- --tag v1.0.0 --yes  # Skip confirmation
-
-# Build and push to registry
-npm run container:push
-npm run container:push -- --tag v1.0.0 --no-build
-npm run container:push -- --tag v1.0.0 --yes  # Skip confirmation
-
-# Start container
-npm run container:start
-npm run container:start -- --tag v1.0.0 --port 8080
-npm run container:start -- --env GEMINI_API_KEY --env LOG_LEVEL=WARNING
-npm run container:start -- --data-dir /opt/data --restart unless-stopped
-npm run container:start -- --volume /host/path:/container/path
-npm run container:start -- --rebuild              # Rebuild before starting
-npm run container:start -- --rebuild --no-cache   # Rebuild without cache
-
-# Stop container
-npm run container:stop
-npm run container:stop -- --name pdf-tei-editor-v1.0.0 --remove
-npm run container:stop -- --all
-
-# Restart container
-npm run container:restart
-npm run container:restart -- --name pdf-tei-editor-v1.0.0
-npm run container:restart -- --env GEMINI_API_KEY
-npm run container:restart -- --data-dir /opt/data --restart unless-stopped
-npm run container:restart -- --rebuild             # Rebuild before restarting
-
-# View logs
-npm run container:logs
-npm run container:logs -- --name pdf-tei-editor-v1.0.0
-npm run container:logs -- --follow                 # Follow log output
-npm run container:logs -- --tail 100               # Show last 100 lines
-
-# Deploy container with nginx/SSL (requires sudo)
-sudo npm run container:deploy -- --fqdn editor.example.com
-sudo npm run container:deploy -- --fqdn editor.example.com --data-dir /opt/pdf-tei-editor/data
-sudo npm run container:deploy -- --fqdn demo.example.com --type demo
-npm run container:deploy -- --fqdn test.local --no-nginx --no-ssl  # No sudo needed
-GEMINI_API_KEY=key sudo npm run container:deploy -- --fqdn app.example.com --env GEMINI_API_KEY
-sudo npm run container:deploy -- --fqdn app.example.com --env GEMINI_API_KEY=key --env LOG_LEVEL=WARNING
-sudo npm run container:deploy -- --fqdn app.example.com --data-dir /opt/pdf-tei-editor/data --yes  # Skip confirmation
-
-# Run tests in container (CI mode)
-npm run test:container                           # Run with cache
-npm run test:container -- --no-cache             # Rebuild all layers
-npm run test:container -- path/to/file.js        # Run for specific files
-
-# Deploy from environment file (recommended for production)
-npm run deploy .env.example.org                  # Deploy using env file
-npm run deploy config/production.env             # Custom path
-sudo env "PATH=$PATH" npm run deploy .env.example.org  # With sudo for nginx/SSL
-```
-
-### Key Files
+### Key Files (Frontend)
 
 - Entry point: `app/src/app.js`
 - UI elements definitions via `@typedef`: `app/src/ui.js` - crucial when accessing particular elements in the UI without navigating the DOM
@@ -128,20 +47,7 @@ sudo env "PATH=$PATH" npm run deploy .env.example.org  # With sudo for nginx/SSL
 - Plugins: `app/src/plugins.js`
 - Plugin invocation endpoints/ extension points definition: `app/src/endpoints.js`
 - Application state object definition: `app/src/state.js`
-
-### Application State
-
-The application state object is defined in `app/src/state.js` and contains:
-
-- `sessionId`: Session ID for API authentication (available after login, passed as `X-Session-ID` header value or query parameter for authentication with the endpoints)
-
-### API Client Generation
-
-- `app/src/modules/api-client-v1.js` is **auto-generated** from the FastAPI OpenAPI schema
-- **DO NOT edit this file manually** - changes will be overwritten
-- After adding/modifying API endpoints in `fastapi_app/routers/*.py`, regenerate the client with `npm run generate-client`
-- The generator script is at `bin/generate-api-client.js`
-- The client provides typed methods for all `/api/v1/` endpoints
+- `app/src/modules/api-client-v1.js` is **auto-generated** from the FastAPI OpenAPI schema. The client provides typed methods for all `/api/v1/` endpoints
 
 ### API Verification
 
@@ -150,28 +56,6 @@ Before using any method on a class or module:
 1. Check the class definition or module exports first
 2. Consult generated API docs in `docs/api/` for signatures
 3. Machine-readable JSON available at `docs/api/backend-api.json` for Python class/function APIs
-
-Generate API documentation:
-
-```bash
-# Generate all documentation (HTML + JSON)
-npm run docs:generate
-
-# Generate frontend HTML docs only
-npm run docs:frontend
-
-# Generate backend HTML docs only
-npm run docs:backend
-
-# Generate backend JSON only
-npm run docs:backend:json
-
-# Serve HTML docs locally at http://localhost:8080
-npm run docs:serve
-
-# Clean generated docs
-npm run docs:clean
-```
 
 ### Database Access
 
@@ -255,29 +139,13 @@ if not user_has_access:
 ```
 
 **Key Points:**
+
 - Users access documents through **collection membership**, not direct user-document links
 - Use `user_has_collection_access(user, collection_id, db_dir)` to check access to a specific collection
 - Use `get_user_collections(user, db_dir)` to get all collections a user can access (returns `None` if user has wildcard access)
 - Admin users and users with wildcard (`*`) in their groups have access to all collections
 - Import settings with `from fastapi_app.config import get_settings` (not `fastapi_app.lib.settings`)
 - See [fastapi_app/routers/files_save.py](fastapi_app/routers/files_save.py) for reference implementation
-
-### Key Directories
-
-Read [docs/code-assistant/architecture.md](docs/code-assistant/architecture.md) when you need to understand the system design.
-
-- `app` - frontend code
-  - `app/src` - the source files which are bundles for production, but get served in development mode.
-  - `app/src/modules` - library files which should never directly depend on plugin files - use dependency injection if necessary
-  - `app/src/plugins` - Plugin objects and classes (Read [docs/code-assistant/plugin-development.md](docs/code-assistant/plugin-development.md) when creating new plugins)
-  - `app/src/templates` - html templates used by the plugins to create UI parts
-- `bin` - executable files used on the command line
-- `config` - the default content of files in `data/db`
-- `data` - file data
-- `data/db` - application data stored in subject-specific json files and SQLite databases
-  - `data/db/metadata.db` - Main file metadata database (SQLite) - ALWAYS use this for file queries, NOT files.db
-- `fastapi_app` - the python backend based on FastAPI
-- `tests` - JavaScript and Python unit tests and E2E tests (Read [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) when creating or debugging tests)
 
 ### Test Filtering: --grep Behavior
 
@@ -301,19 +169,6 @@ The `--grep` parameter works **differently** for API vs E2E tests:
 - `*.spec.js` (E2E) → grep by **test name**
 
 This difference exists because the backend test runner filters files before passing to Node.js, while Playwright receives the grep pattern directly.
-
-## Detailed Documentation
-
-For comprehensive guides, see the documentation in the `docs/code-assistant/` directory:
-
-- **[Architecture Overview](docs/code-assistant/architecture.md)** - Backend, frontend, plugin system, UI components, templates
-- **[Coding Standards](docs/code-assistant/coding-standards.md)** - JSDoc requirements, best practices, conventions
-- **[Development Commands](docs/code-assistant/development-commands.md)** - Setup, testing, build system, user management
-- **[Plugin Development](docs/code-assistant/plugin-development.md)** - Creating frontend plugins, state management, common patterns
-- **[CI/CD Pipeline](docs/code-assistant/ci.md)** - GitHub Actions workflows, test execution, release process
-- **[Backend Plugins](docs/code-assistant/backend-plugins.md)** - Creating backend plugins, role-based access, custom routes
-- **[Testing Guide](docs/code-assistant/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
-- **[API Client](docs/code-assistant/api-client.md)** - FastAPI client usage, type safety, patterns
 
 ## Important Reminders
 
