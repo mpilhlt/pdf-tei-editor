@@ -13,155 +13,110 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from fastapi_app.lib.config_utils import (
-    load_full_config,
-    get_config_value,
-    set_config_value,
-    delete_config_value,
-    _get_json_type,
-    _validate_config_value
-)
+from fastapi_app.lib.config_utils import Config
 
 
 class TestConfigUtils(unittest.TestCase):
-    """Test configuration utilities."""
+    """Test configuration utilities using high-level Config API."""
 
     def setUp(self):
-        """Create temporary directory for each test."""
+        """Create temporary directory and Config instance for each test."""
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_dir = Path(self.temp_dir.name)
+        self.config = Config(self.db_dir)
 
     def tearDown(self):
         """Clean up temporary directory."""
         self.temp_dir.cleanup()
 
-    def test_load_full_config_creates_empty(self):
-        """Test that load_full_config creates empty config if not exists."""
-        config = load_full_config(self.db_dir)
-        self.assertEqual(config, {})
+    def test_load_creates_empty(self):
+        """Test that load creates empty config if not exists."""
+        config_data = self.config.load()
+        self.assertEqual(config_data, {})
         self.assertTrue((self.db_dir / 'config.json').exists())
 
-    def test_get_config_value_default(self):
+    def test_get_default(self):
         """Test getting config value with default."""
-        value = get_config_value('nonexistent', self.db_dir, default='default_value')
+        value = self.config.get('nonexistent', default='default_value')
         self.assertEqual(value, 'default_value')
 
-    def test_set_and_get_config_value(self):
+    def test_set_and_get(self):
         """Test setting and getting a config value."""
-        success, msg = set_config_value('test.key', 'test_value', self.db_dir)
+        success, msg = self.config.set('test.key', 'test_value')
         self.assertTrue(success)
         self.assertIn('test.key', msg)
 
-        value = get_config_value('test.key', self.db_dir)
+        value = self.config.get('test.key')
         self.assertEqual(value, 'test_value')
 
-    def test_set_config_value_creates_type(self):
+    def test_set_creates_type(self):
         """Test that setting a value auto-creates type metadata."""
-        set_config_value('number.value', 42, self.db_dir)
+        self.config.set('number.value', 42)
 
-        config = load_full_config(self.db_dir)
-        self.assertEqual(config['number.value'], 42)
-        self.assertEqual(config['number.value.type'], 'number')
+        config_data = self.config.load()
+        self.assertEqual(config_data['number.value'], 42)
+        self.assertEqual(config_data['number.value.type'], 'number')
 
-    def test_set_config_value_validates_type(self):
+    def test_set_validates_type(self):
         """Test type validation when type constraint exists."""
         # Set type constraint
-        set_config_value('typed.value.type', 'string', self.db_dir)
+        self.config.set('typed.value.type', 'string')
 
         # Valid: string value
-        success, msg = set_config_value('typed.value', 'hello', self.db_dir)
+        success, msg = self.config.set('typed.value', 'hello')
         self.assertTrue(success)
 
         # Invalid: number value with string type constraint
-        success, msg = set_config_value('typed.value', 123, self.db_dir)
+        success, msg = self.config.set('typed.value', 123)
         self.assertFalse(success)
         self.assertIn('validation', msg.lower())
 
-    def test_set_config_value_validates_values_constraint(self):
+    def test_set_validates_values_constraint(self):
         """Test values constraint validation."""
         # Set allowed values
-        set_config_value('mode.values', ['dev', 'prod', 'test'], self.db_dir)
+        self.config.set('mode.values', ['dev', 'prod', 'test'])
 
         # Valid value
-        success, msg = set_config_value('mode', 'dev', self.db_dir)
+        success, msg = self.config.set('mode', 'dev')
         self.assertTrue(success)
 
         # Invalid value
-        success, msg = set_config_value('mode', 'staging', self.db_dir)
+        success, msg = self.config.set('mode', 'staging')
         self.assertFalse(success)
         self.assertIn('validation', msg.lower())
 
-    def test_delete_config_value(self):
+    def test_delete(self):
         """Test deleting a config value."""
-        set_config_value('delete.me', 'value', self.db_dir)
+        self.config.set('delete.me', 'value')
 
-        success, msg = delete_config_value('delete.me', self.db_dir)
+        success, msg = self.config.delete('delete.me')
         self.assertTrue(success)
         self.assertIn('delete.me', msg)
 
-        value = get_config_value('delete.me', self.db_dir)
+        value = self.config.get('delete.me')
         self.assertIsNone(value)
 
     def test_delete_nonexistent_key(self):
         """Test deleting a key that doesn't exist."""
-        success, msg = delete_config_value('nonexistent', self.db_dir)
+        success, msg = self.config.delete('nonexistent')
         self.assertFalse(success)
         self.assertIn('not found', msg.lower())
 
-    def test_get_json_type(self):
-        """Test JSON type detection."""
-        self.assertEqual(_get_json_type(True), 'boolean')
-        self.assertEqual(_get_json_type(42), 'number')
-        self.assertEqual(_get_json_type(3.14), 'number')
-        self.assertEqual(_get_json_type('string'), 'string')
-        self.assertEqual(_get_json_type([1, 2, 3]), 'array')
-        self.assertEqual(_get_json_type({'key': 'value'}), 'object')
-        self.assertEqual(_get_json_type(None), 'null')
-
-    def test_validate_config_value_type(self):
-        """Test config value type validation."""
-        config_data = {
-            'key.type': 'string'
-        }
-
-        self.assertTrue(_validate_config_value(config_data, 'key', 'hello'))
-        self.assertFalse(_validate_config_value(config_data, 'key', 123))
-
-    def test_validate_config_value_values(self):
-        """Test config value values constraint validation."""
-        config_data = {
-            'key.values': ['a', 'b', 'c']
-        }
-
-        self.assertTrue(_validate_config_value(config_data, 'key', 'a'))
-        self.assertFalse(_validate_config_value(config_data, 'key', 'd'))
-
-    def test_validate_config_value_both_constraints(self):
-        """Test validation with both type and values constraints."""
-        config_data = {
-            'key.type': 'string',
-            'key.values': ['dev', 'prod']
-        }
-
-        self.assertTrue(_validate_config_value(config_data, 'key', 'dev'))
-        self.assertFalse(_validate_config_value(config_data, 'key', 'test'))  # not in values
-        self.assertFalse(_validate_config_value(config_data, 'key', 123))  # wrong type
-
     def test_values_key_validation(self):
         """Test that .values keys must be arrays."""
-        success, msg = set_config_value('key.values', ['a', 'b'], self.db_dir)
+        success, msg = self.config.set('key.values', ['a', 'b'])
         self.assertTrue(success)
 
-        success, msg = set_config_value('key.values', 'not-an-array', self.db_dir)
+        success, msg = self.config.set('key.values', 'not-an-array')
         self.assertFalse(success)
         self.assertIn('array', msg.lower())
 
     def test_type_key_validation(self):
         """Test that .type keys must be valid JSON types."""
-        success, msg = set_config_value('key.type', 'string', self.db_dir)
+        success, msg = self.config.set('key.type', 'string')
         self.assertTrue(success)
 
-        success, msg = set_config_value('key.type', 'invalid_type', self.db_dir)
+        success, msg = self.config.set('key.type', 'invalid_type')
         self.assertFalse(success)
         self.assertIn('must be one of', msg.lower())
 
@@ -174,7 +129,8 @@ class TestConfigUtils(unittest.TestCase):
         results = []
 
         def write_value(key, value):
-            success, msg = set_config_value(key, value, self.db_dir)
+            config = Config(self.db_dir)
+            success, msg = config.set(key, value)
             results.append((key, success))
 
         # Start multiple threads writing different keys
@@ -197,13 +153,13 @@ class TestConfigUtils(unittest.TestCase):
         max_retries = 5
         retry_delay = 0.1
         for attempt in range(max_retries):
-            config = load_full_config(self.db_dir)
-            missing_keys = [f'key{i}' for i in range(10) if f'key{i}' not in config]
+            config_data = self.config.load()
+            missing_keys = [f'key{i}' for i in range(10) if f'key{i}' not in config_data]
 
             if not missing_keys:
                 # All keys present, verify values
                 for i in range(10):
-                    self.assertEqual(config[f'key{i}'], f'value{i}')
+                    self.assertEqual(config_data[f'key{i}'], f'value{i}')
                 break
             elif attempt < max_retries - 1:
                 # Keys still missing, wait and retry
@@ -212,15 +168,15 @@ class TestConfigUtils(unittest.TestCase):
             else:
                 # Final attempt failed
                 self.fail(f"Keys {missing_keys} not found after {max_retries} retries. "
-                         f"Config keys: {list(config.keys())}")
+                         f"Config keys: {list(config_data.keys())}")
 
     def test_dot_notation_keys(self):
         """Test that dot notation keys work correctly."""
-        set_config_value('session.timeout', 3600, self.db_dir)
-        set_config_value('session.cookie.name', 'sessionId', self.db_dir)
+        self.config.set('session.timeout', 3600)
+        self.config.set('session.cookie.name', 'sessionId')
 
-        self.assertEqual(get_config_value('session.timeout', self.db_dir), 3600)
-        self.assertEqual(get_config_value('session.cookie.name', self.db_dir), 'sessionId')
+        self.assertEqual(self.config.get('session.timeout'), 3600)
+        self.assertEqual(self.config.get('session.cookie.name'), 'sessionId')
 
 
 if __name__ == '__main__':

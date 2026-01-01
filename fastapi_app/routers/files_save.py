@@ -313,13 +313,13 @@ async def save_file(
         xml_string = _update_fileref_in_xml(xml_string, file_id, logger_inst)
 
         # Encode XML entities if configured
-        from ..lib.config_utils import load_full_config
+        from ..lib import config
         from ..lib.xml_utils import EncodeOptions
-        config = load_full_config(settings.db_dir)
-        if config.get("xml.encode-entities.server", False):
+        config_data = config.load()
+        if config_data.get("xml.encode-entities.server", False):
             logger_inst.debug("Encoding XML entities")
             encode_options: EncodeOptions = {
-                'encode_quotes': config.get("xml.encode-quotes", False)
+                'encode_quotes': config_data.get("xml.encode-quotes", False)
             }
             xml_string = encode_xml_entities(xml_string, encode_options)
 
