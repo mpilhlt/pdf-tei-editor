@@ -111,7 +111,7 @@ async def view_progress(
                 continue
 
         # Prepare table data
-        headers = ["Document ID", "Annotations"]
+        headers = ["Document ID", "Annotations", "Last Change", "Last Annotator"]
         rows = []
 
         # Sort by doc_id and include all documents even if they have no annotations
@@ -120,6 +120,10 @@ async def view_progress(
 
             # Create annotation links with revision counts
             annotation_links = []
+            newest_change_desc = ""
+            newest_annotator = ""
+            newest_timestamp = None
+
             for ann in annotations:
                 label = ann["annotation_label"]
                 count = ann["revision_count"]
@@ -128,11 +132,22 @@ async def view_progress(
                 link = f'<a href="#" onclick="sandbox.openDocument(\'{stable_id}\'); return false;" style="color: #0066cc; text-decoration: underline;">{escape_html(label)} ({count})</a>'
                 annotation_links.append(link)
 
+                # Track the newest change across all annotations for this document
+                ann_timestamp = ann.get("last_change_timestamp")
+                if ann_timestamp and (newest_timestamp is None or ann_timestamp > newest_timestamp):
+                    newest_timestamp = ann_timestamp
+                    newest_change_desc = ann.get("last_change_desc", "")
+                    newest_annotator = ann.get("last_annotator", "")
+
             annotations_cell = ", ".join(annotation_links) if annotation_links else "No annotations"
+            last_change_cell = escape_html(newest_change_desc) if newest_change_desc else ""
+            last_annotator_cell = escape_html(newest_annotator) if newest_annotator else ""
 
             rows.append([
                 escape_html(doc_id),
-                annotations_cell
+                annotations_cell,
+                last_change_cell,
+                last_annotator_cell
             ])
 
         # Generate HTML page
@@ -168,10 +183,10 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
         file_metadata: File metadata object
 
     Returns:
-        Dictionary with annotation label and revision count
+        Dictionary with annotation label, revision count, last change info
     """
     try:
-        from fastapi_app.lib.tei_utils import extract_tei_metadata
+        from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
 
         root = etree.fromstring(xml_content.encode("utf-8"))
         ns = {
@@ -189,10 +204,43 @@ def _extract_annotation_info(xml_content: str, file_metadata) -> dict | None:
         change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)
         revision_count = len(change_elements)
 
+        # Get the last change element
+        last_change = root.find(".//tei:revisionDesc/tei:change[last()]", ns)
+
+        last_change_desc = ""
+        last_annotator = ""
+        last_change_timestamp = None
+
+        if last_change is not None:
+            # Get description from text content or desc subelement
+            desc_elem = last_change.find("tei:desc", ns)
+            if desc_elem is not None and desc_elem.text:
+                last_change_desc = desc_elem.text.strip()
+            elif last_change.text:
+                last_change_desc = last_change.text.strip()
+
+            # Get annotator name
+            who_id = last_change.get("who", "")
+            last_annotator = get_annotator_name(root, who_id)
+
+            # Get timestamp for comparison
+            when = last_change.get("when", "")
+            if when:
+                try:
+                    from datetime import datetime
+                    last_change_timestamp = datetime.fromisoformat(when.replace("Z", "+00:00"))
+                    if last_change_timestamp.tzinfo is not None:
+                        last_change_timestamp = last_change_timestamp.replace(tzinfo=None)
+                except (ValueError, AttributeError):
+                    pass
+
         return {
             "annotation_label": annotation_label,
             "revision_count": revision_count,
             "stable_id": file_metadata.stable_id,
+            "last_change_desc": last_change_desc,
+            "last_annotator": last_annotator,
+            "last_change_timestamp": last_change_timestamp,
         }
 
     except Exception as e:

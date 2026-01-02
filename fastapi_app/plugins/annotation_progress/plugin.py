@@ -89,10 +89,10 @@ class AnnotationProgressPlugin(Plugin):
             file_metadata: File metadata object
 
         Returns:
-            Dictionary with annotation label and revision count, or None if parsing fails
+            Dictionary with annotation label, revision count, last change info, or None if parsing fails
         """
         try:
-            from fastapi_app.lib.tei_utils import extract_tei_metadata
+            from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
 
             root = etree.fromstring(xml_content.encode("utf-8"))
             ns = {
@@ -110,10 +110,43 @@ class AnnotationProgressPlugin(Plugin):
             change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)
             revision_count = len(change_elements)
 
+            # Get the last change element
+            last_change = root.find(".//tei:revisionDesc/tei:change[last()]", ns)
+
+            last_change_desc = ""
+            last_annotator = ""
+            last_change_timestamp = None
+
+            if last_change is not None:
+                # Get description from text content or desc subelement
+                desc_elem = last_change.find("tei:desc", ns)
+                if desc_elem is not None and desc_elem.text:
+                    last_change_desc = desc_elem.text.strip()
+                elif last_change.text:
+                    last_change_desc = last_change.text.strip()
+
+                # Get annotator name
+                who_id = last_change.get("who", "")
+                last_annotator = get_annotator_name(root, who_id)
+
+                # Get timestamp for comparison
+                when = last_change.get("when", "")
+                if when:
+                    try:
+                        from datetime import datetime
+                        last_change_timestamp = datetime.fromisoformat(when.replace("Z", "+00:00"))
+                        if last_change_timestamp.tzinfo is not None:
+                            last_change_timestamp = last_change_timestamp.replace(tzinfo=None)
+                    except (ValueError, AttributeError):
+                        pass
+
             return {
                 "annotation_label": annotation_label,
                 "revision_count": revision_count,
                 "stable_id": file_metadata.stable_id,
+                "last_change_desc": last_change_desc,
+                "last_annotator": last_annotator,
+                "last_change_timestamp": last_change_timestamp,
             }
 
         except Exception as e:
