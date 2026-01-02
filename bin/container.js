@@ -689,7 +689,8 @@ async function handleStart(options) {
 
   let imageName = null;
   const localImageName = `${APP_NAME}:${tag}`;
-  const registryImageName = `cboulanger/${APP_NAME}:${tag}`;
+  // Use fully qualified registry name for podman compatibility
+  const registryImageName = `docker.io/cboulanger/${APP_NAME}:${tag}`;
 
   // Try local image first
   try {
@@ -1377,7 +1378,8 @@ async function handleDeploy(options) {
   // Pull from registry if requested
   if (options.pull) {
     console.log('[INFO] Pulling latest image from registry...');
-    const registryImageName = `cboulanger/${APP_NAME}:${tag}`;
+    // Use fully qualified registry name for podman compatibility
+    const registryImageName = `docker.io/cboulanger/${APP_NAME}:${tag}`;
     const localImageName = `${APP_NAME}:${tag}`;
 
     try {
