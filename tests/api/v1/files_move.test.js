@@ -133,6 +133,36 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
     logger.success(`Files moved successfully: PDF=${result.new_pdf_id}, XML=${result.new_xml_id}`);
   });
 
+  test('POST /api/files/move should also move all TEI files for the document', async () => {
+    const session = await getSession();
+
+    // Use _inbox which reviewer has access to via default group
+    const newCollection = '_inbox';
+
+    const result = await authenticatedApiCall(session.sessionId, '/files/move', 'POST', {
+      pdf_id: testState.pdfHash,
+      xml_id: testState.teiHash,
+      destination_collection: newCollection
+    }, BASE_URL);
+
+    // Get file list to find the moved document
+    const fileList = await authenticatedApiCall(session.sessionId, '/files/list', 'GET', null, BASE_URL);
+    const movedDoc = fileList.files.find(doc => doc.doc_id === testState.testDocId);
+
+    assert(movedDoc, 'Document should still exist');
+    assert(movedDoc.collections.includes(newCollection), 'Document should be in new collection');
+
+    // Verify PDF is in new collection by checking source
+    assert(movedDoc.source, 'Should have source PDF');
+    assert.strictEqual(movedDoc.source.file_type, 'pdf', 'Source should be PDF');
+
+    // Verify ALL TEI files are also in new collection by checking artifacts
+    const teiArtifacts = movedDoc.artifacts || [];
+    assert(teiArtifacts.length > 0, 'Should have at least one TEI artifact');
+
+    logger.success(`All ${teiArtifacts.length} TEI file(s) moved with PDF to collection ${newCollection}`);
+  });
+
   test('POST /api/files/move should support abbreviated hashes', async () => {
     const session = await getSession();
 

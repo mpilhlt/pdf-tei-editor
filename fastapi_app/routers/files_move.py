@@ -6,7 +6,7 @@ Implements POST /api/files/move - Move files between collections.
 Key changes from Flask:
 - Updates doc_collections array (multi-collection support)
 - No physical file move (hash-sharded storage is collection-agnostic)
-- Only updates PDF file metadata (TEI files inherit collection)
+- Updates both PDF and all associated TEI files for the document
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -35,11 +35,10 @@ def move_files(
     """
     Move files to a different collection.
 
-    In the multi-collection system, this adds the destination collection
-    to the document's doc_collections array in the PDF file.
+    In the multi-collection system, this replaces the document's doc_collections
+    array with the destination collection for both the PDF and all associated TEI files.
 
     No physical file move occurs - hash-sharded storage is collection-agnostic.
-    TEI files inherit collections from their associated PDF.
 
     Args:
         request: MoveFilesRequest with pdf_path, xml_path, and destination_collection
@@ -79,6 +78,7 @@ def move_files(
             f"{current_collections} -> {updated_collections}"
         )
 
+        # Update PDF file
         repo.update_file(
             pdf_file.id,
             FileUpdate(
@@ -86,6 +86,22 @@ def move_files(
                 sync_status='modified'
             )
         )
+
+        # Also update all associated TEI files for the same doc_id
+        all_doc_files = repo.get_files_by_doc_id(pdf_file.doc_id)
+        tei_files = [f for f in all_doc_files if f.file_type == 'tei']
+        for tei_file in tei_files:
+            logger.info(
+                f"Moving TEI file {tei_file.stable_id} (variant={tei_file.variant}) "
+                f"to collection {body.destination_collection}"
+            )
+            repo.update_file(
+                tei_file.id,
+                FileUpdate(
+                    doc_collections=updated_collections,
+                    sync_status='modified'
+                )
+            )
     else:
         logger.info(
             f"Document {pdf_file.doc_id} already in collection {body.destination_collection}"

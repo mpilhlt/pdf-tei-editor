@@ -290,6 +290,7 @@ class TestMigrations(unittest.TestCase):
             TestMigration003Conditional(self.logger)
         ])
 
+        # Migration 3 will be skipped (logged at DEBUG level)
         applied = manager.run_migrations(skip_backup=True)
         # Should only apply migration 1
         self.assertEqual(applied, 1)
@@ -382,9 +383,10 @@ class TestMigrations(unittest.TestCase):
         manager = MigrationManager(self.db_path, self.logger)
         manager.register_migration(FailingMigration(self.logger))
 
-        # Should raise error
-        with self.assertRaises(RuntimeError):
-            manager.run_migrations(skip_backup=True)
+        # Should raise error, suppress expected error logging
+        with self.assertLogs('test_migrations', level='ERROR') as cm:
+            with self.assertRaises(RuntimeError):
+                manager.run_migrations(skip_backup=True)
 
         # Check table was NOT created (transaction rolled back)
         with sqlite3.connect(str(self.db_path)) as conn:
