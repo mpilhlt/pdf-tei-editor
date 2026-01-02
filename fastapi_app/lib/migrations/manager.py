@@ -201,7 +201,7 @@ class MigrationManager:
                 with sqlite3.connect(str(self.db_path)) as conn:
                     # Ensure migration can be applied
                     if not migration.check_can_apply(conn):
-                        self.logger.warning(
+                        self.logger.debug(
                             f"Migration {migration.version} cannot be applied (check_can_apply returned False)"
                         )
                         continue

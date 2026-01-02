@@ -5,6 +5,7 @@ Unit tests for migration 002: Sync TEI collections.
 """
 
 import json
+import logging
 import sqlite3
 import tempfile
 import unittest
@@ -23,6 +24,9 @@ class TestMigration002SyncTeiCollections(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.db_path = Path(self.temp_dir) / "test.db"
+        # Create logger configured to suppress expected warnings
+        self.logger = logging.getLogger("test_migration_002")
+        self.logger.setLevel(logging.ERROR)  # Suppress INFO and WARNING
 
     def tearDown(self):
         """Clean up test fixtures."""
@@ -106,8 +110,8 @@ class TestMigration002SyncTeiCollections(unittest.TestCase):
             self._insert_test_files(conn)
 
         # Run migration
-        manager = MigrationManager(self.db_path)
-        manager.register_migration(Migration002SyncTeiCollections())
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration002SyncTeiCollections(self.logger))
         applied = manager.run_migrations(skip_backup=True)
 
         self.assertEqual(applied, 1)
@@ -147,8 +151,8 @@ class TestMigration002SyncTeiCollections(unittest.TestCase):
             self._create_files_table(conn)
             self._insert_test_files(conn)
 
-        manager = MigrationManager(self.db_path)
-        manager.register_migration(Migration002SyncTeiCollections())
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration002SyncTeiCollections(self.logger))
 
         # Run migration twice
         applied1 = manager.run_migrations(skip_backup=True)
@@ -173,8 +177,8 @@ class TestMigration002SyncTeiCollections(unittest.TestCase):
             """)
             conn.commit()
 
-        manager = MigrationManager(self.db_path)
-        manager.register_migration(Migration002SyncTeiCollections())
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration002SyncTeiCollections(self.logger))
 
         applied = manager.run_migrations(skip_backup=True)
 
@@ -197,8 +201,8 @@ class TestMigration002SyncTeiCollections(unittest.TestCase):
             """)
             conn.commit()
 
-        manager = MigrationManager(self.db_path)
-        manager.register_migration(Migration002SyncTeiCollections())
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration002SyncTeiCollections(self.logger))
 
         applied = manager.run_migrations(skip_backup=True)
 
@@ -228,8 +232,8 @@ class TestMigration002SyncTeiCollections(unittest.TestCase):
             """)
             conn.commit()
 
-        manager = MigrationManager(self.db_path)
-        manager.register_migration(Migration002SyncTeiCollections())
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(Migration002SyncTeiCollections(self.logger))
         manager.run_migrations(skip_backup=True)
 
         # Verify sync_status was updated
@@ -242,7 +246,7 @@ class TestMigration002SyncTeiCollections(unittest.TestCase):
 
     def test_downgrade_raises_not_implemented(self):
         """Test downgrade raises NotImplementedError."""
-        migration = Migration002SyncTeiCollections()
+        migration = Migration002SyncTeiCollections(self.logger)
 
         with sqlite3.connect(str(self.db_path)) as conn:
             with self.assertRaises(NotImplementedError) as context:

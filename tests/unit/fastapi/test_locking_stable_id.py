@@ -37,7 +37,14 @@ class TestLockingStableId(unittest.TestCase):
         self.logger.setLevel(logging.DEBUG)
 
         # Initialize locks database
-        init_locks_db(self.db_dir, self.logger)
+        # Suppress migration warnings during initialization
+        migration_logger = logging.getLogger("test_locking")
+        original_level = migration_logger.level
+        migration_logger.setLevel(logging.ERROR)
+        try:
+            init_locks_db(self.db_dir, self.logger)
+        finally:
+            migration_logger.setLevel(original_level)
 
     def tearDown(self):
         """Clean up temporary database."""
@@ -185,8 +192,9 @@ class TestLockingStableId(unittest.TestCase):
             )
             conn.commit()
 
-        # Session B should be able to take over
-        result = acquire_lock(stable_id, session_b, self.db_dir, self.logger)
+        # Session B should be able to take over, suppress expected warning
+        with self.assertLogs('test_locking', level='WARNING') as cm:
+            result = acquire_lock(stable_id, session_b, self.db_dir, self.logger)
         self.assertTrue(result)
 
         # Verify lock is now owned by session B
@@ -203,8 +211,9 @@ class TestLockingStableId(unittest.TestCase):
         result_a = acquire_lock(stable_id, session_a, self.db_dir, self.logger)
         self.assertTrue(result_a)
 
-        # Session B tries to acquire same lock (should fail)
-        result_b = acquire_lock(stable_id, session_b, self.db_dir, self.logger)
+        # Session B tries to acquire same lock (should fail), suppress expected warning
+        with self.assertLogs('test_locking', level='WARNING') as cm:
+            result_b = acquire_lock(stable_id, session_b, self.db_dir, self.logger)
         self.assertFalse(result_b)
 
         # Release from A
@@ -264,9 +273,10 @@ class TestLockingStableId(unittest.TestCase):
         # Session A acquires lock
         acquire_lock(stable_id, session_a, self.db_dir, self.logger)
 
-        # Session B tries to release (should fail)
-        with self.assertRaises(RuntimeError) as context:
-            release_lock(stable_id, session_b, self.db_dir, self.logger)
+        # Session B tries to release (should fail), suppress expected warning
+        with self.assertLogs('test_locking', level='WARNING') as cm:
+            with self.assertRaises(RuntimeError) as context:
+                release_lock(stable_id, session_b, self.db_dir, self.logger)
 
         self.assertIn("attempted to release a lock owned by", str(context.exception))
 
