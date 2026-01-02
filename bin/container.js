@@ -1345,6 +1345,17 @@ async function handleDeploy(options) {
   console.log(`[INFO]   Nginx: ${useNginx}`);
   console.log(`[INFO]   SSL: ${useSSL}`);
 
+  // Show image source
+  if (options.pull && options.rebuild) {
+    console.log(`[INFO]   Image Source: Pull from registry (--rebuild ignored)`);
+  } else if (options.pull) {
+    console.log(`[INFO]   Image Source: Pull from registry`);
+  } else if (options.rebuild) {
+    console.log(`[INFO]   Image Source: Rebuild locally`);
+  } else {
+    console.log(`[INFO]   Image Source: Use existing local image`);
+  }
+
   if (deploymentType === 'production') {
     console.log(`[INFO]   Data root: ${dataDir || '(container internal)'}`);
   }
@@ -1366,8 +1377,16 @@ async function handleDeploy(options) {
   console.log('[INFO] Starting deployment process...');
   console.log();
 
-  // Rebuild if requested
-  if (options.rebuild) {
+  // Validate mutually exclusive options
+  if (options.rebuild && options.pull) {
+    console.log('[WARNING] Both --rebuild and --pull specified');
+    console.log('[WARNING] --rebuild will be ignored, using --pull instead');
+    console.log('[INFO] Use --rebuild for local development, --pull for production');
+    console.log();
+  }
+
+  // Rebuild if requested (unless pull is also requested)
+  if (options.rebuild && !options.pull) {
     console.log('[INFO] Rebuilding image...');
     if (!(await buildImage(tag, options.cache === false))) {
       process.exit(1);

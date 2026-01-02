@@ -45,6 +45,7 @@ jobs:
           registry: docker.io
           pushImage: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.version.outputs.is_tag == 'true' && format('{0},latest', steps.version.outputs.tag) || 'latest' }}
+          target: production
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
