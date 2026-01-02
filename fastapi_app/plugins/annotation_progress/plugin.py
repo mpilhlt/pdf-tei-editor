@@ -68,12 +68,14 @@ class AnnotationProgressPlugin(Plugin):
 
         variant_filter = params.get("variant")
 
-        # Build URL
+        # Build URLs
         variant_param = f"&variant={variant_filter}" if variant_filter else ""
         view_url = f"/api/plugins/annotation-progress/view?collection={collection_id}{variant_param}"
+        export_url = f"/api/plugins/annotation-progress/export?collection={collection_id}{variant_param}"
 
         return {
             "outputUrl": view_url,
+            "exportUrl": export_url,
             "collection": collection_id,
             "variant": variant_filter or "all",
         }

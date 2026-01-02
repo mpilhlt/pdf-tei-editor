@@ -2,11 +2,13 @@
 Custom routes for Annotation Progress plugin.
 """
 
+import csv
+import io
 import logging
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from lxml import etree
 
 from fastapi_app.lib.dependencies import (
@@ -171,6 +173,138 @@ async def view_progress(
 
     except Exception as e:
         logger.error(f"Failed to generate annotation progress view: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/export")
+async def export_csv(
+    collection: str = Query(..., description="Collection ID"),
+    variant: str | None = Query(None, description="Variant filter"),
+    session_id: str | None = Query(None),
+    x_session_id: str | None = Header(None, alias="X-Session-ID"),
+    session_manager=Depends(get_session_manager),
+    auth_manager=Depends(get_auth_manager),
+):
+    """
+    Export annotation progress as CSV.
+
+    Args:
+        collection: Collection ID to export
+        variant: Optional variant filter
+        session_id: Session ID from query parameter
+        x_session_id: Session ID from header
+        session_manager: Session manager dependency
+        auth_manager: Auth manager dependency
+
+    Returns:
+        CSV file as streaming response
+    """
+    from fastapi_app.config import get_settings
+    from fastapi_app.lib.file_repository import FileRepository
+    from fastapi_app.lib.user_utils import user_has_collection_access
+
+    # Extract session ID (header takes precedence)
+    session_id_value = x_session_id or session_id
+    if not session_id_value:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Validate session
+    settings = get_settings()
+    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    # Get user
+    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    # Check collection access
+    if not user_has_collection_access(user, collection, settings.db_dir):
+        raise HTTPException(status_code=403, detail="Access denied to collection")
+
+    try:
+        db = get_db()
+        file_repo = FileRepository(db)
+        file_storage = get_file_storage()
+
+        # Get all files in the collection
+        all_files = file_repo.get_files_by_collection(collection)
+
+        # Get all unique doc_ids from the collection (from PDF and TEI files)
+        all_doc_ids = set()
+        for f in all_files:
+            if f.doc_id:
+                all_doc_ids.add(f.doc_id)
+
+        # Filter to TEI files only
+        tei_files = [f for f in all_files if f.file_type == "tei"]
+
+        # Filter by variant if specified
+        if variant and variant not in ("all", ""):
+            tei_files = [
+                f for f in tei_files if getattr(f, "variant", None) == variant
+            ]
+
+        # Group annotations by doc_id
+        doc_annotations = defaultdict(list)
+        for file_metadata in tei_files:
+            try:
+                content_bytes = file_storage.read_file(file_metadata.id, "tei")
+                if not content_bytes:
+                    continue
+
+                xml_content = content_bytes.decode("utf-8")
+                annotation_info = _extract_annotation_info(xml_content, file_metadata)
+
+                if annotation_info:
+                    doc_id = file_metadata.doc_id or "Unknown"
+                    doc_annotations[doc_id].append(annotation_info)
+
+            except Exception as e:
+                logger.error(f"Failed to parse TEI file {file_metadata.id}: {e}")
+                continue
+
+        # Generate CSV
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Write header
+        writer.writerow(
+            ["Document ID", "Annotation Label", "Revision Count", "Last Change", "Last Annotator"]
+        )
+
+        # Write data - sort by doc_id and include all documents even if they have no annotations
+        for doc_id in sorted(all_doc_ids):
+            annotations = doc_annotations[doc_id]
+
+            if not annotations:
+                # Document with no annotations
+                writer.writerow([doc_id, "", "", "", ""])
+            else:
+                # Sort annotations by label for consistent output
+                annotations.sort(key=lambda x: x["annotation_label"])
+
+                for ann in annotations:
+                    writer.writerow([
+                        doc_id,
+                        ann["annotation_label"],
+                        ann["revision_count"],
+                        ann.get("last_change_desc", ""),
+                        ann.get("last_annotator", ""),
+                    ])
+
+        # Create streaming response
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8")),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="annotation-progress-{collection}.csv"'
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to export annotation progress: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
