@@ -12,14 +12,38 @@ jobs:
   test:
     uses: ./.github/workflows/pr-tests.yml
 
-  release:
+  merge-to-main:
     needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
+          ref: devel
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge devel into main
+        run: |
+          git fetch origin main
+          git checkout main
+          git merge --no-ff devel -m "chore: merge devel into main for release ${{ github.ref_name }}"
+          git push origin main
+
+  release:
+    needs: merge-to-main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
           fetch-depth: 0  # Fetch all history for changelog generation
+          ref: main
 
       - name: Get previous tag
         id: previoustag
