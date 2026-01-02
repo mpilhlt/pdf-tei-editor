@@ -1262,6 +1262,7 @@ async function setupSSL(fqdn, email) {
  *   email?: string,
  *   rebuild?: boolean,
  *   cache?: boolean,
+ *   pull?: boolean,
  *   env?: string[],
  *   yes?: boolean
  * }} options
@@ -1373,13 +1374,42 @@ async function handleDeploy(options) {
     console.log();
   }
 
+  // Pull from registry if requested
+  if (options.pull) {
+    console.log('[INFO] Pulling latest image from registry...');
+    const registryImageName = `cboulanger/${APP_NAME}:${tag}`;
+    const localImageName = `${APP_NAME}:${tag}`;
+
+    try {
+      // Remove existing local image if it exists
+      try {
+        execSync(`${containerCmd} rmi -f ${localImageName}`, { stdio: 'ignore' });
+        console.log(`[INFO] Removed local image: ${localImageName}`);
+      } catch {
+        // Image doesn't exist locally, that's fine
+      }
+
+      // Pull from registry
+      execSync(`${containerCmd} pull ${registryImageName}`, { stdio: 'inherit' });
+
+      // Tag as local image
+      execSync(`${containerCmd} tag ${registryImageName} ${localImageName}`, { stdio: 'inherit' });
+      console.log(`[SUCCESS] Pulled and tagged: ${localImageName}`);
+    } catch (err) {
+      console.log('[ERROR] Failed to pull image from registry');
+      console.log('[ERROR]', err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+    console.log();
+  }
+
   // Check for image
   const imageName = `${APP_NAME}:${tag}`;
   try {
     execSync(`${containerCmd} image inspect ${imageName}`, { stdio: 'ignore' });
     console.log(`[INFO] Using image: ${imageName}`);
   } catch {
-    console.log(`[ERROR] Image ${imageName} not found. Build it first or use --rebuild`);
+    console.log(`[ERROR] Image ${imageName} not found. Build it first or use --rebuild or --pull`);
     process.exit(1);
   }
 
@@ -1597,6 +1627,7 @@ program
   .option('--no-ssl', 'Skip SSL certificate setup')
   .option('--email <email>', 'Email for SSL certificate (default: admin@<fqdn>)')
   .option('--rebuild', 'Rebuild image before deploying')
+  .option('--pull', 'Pull latest image from registry before deploying')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
   .option('--yes', 'Skip confirmation prompt')
   .addHelpText('after', `
@@ -1604,12 +1635,14 @@ Examples:
   # Production deployment with external data directory
   sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn editor.company.com \\
-    --data-dir /opt/${APP_NAME}/data
+    --data-dir /opt/${APP_NAME}/data \\
+    --pull
 
   # Demo deployment (no external volumes, no persistence)
   sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn demo.example.com \\
-    --type demo
+    --type demo \\
+    --pull
 
   # Deploy without SSL (HTTP only)
   sudo env "PATH=$PATH" node bin/container.js deploy \\

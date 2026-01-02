@@ -21,6 +21,7 @@
  *   - DEPLOY_DATA_DIR=/path → --data-dir /path
  *   - DEPLOY_SSL=(1|true|on) → --ssl
  *   - DEPLOY_SSL=(''|0|false|off) → (omitted)
+ *   - DEPLOY_PULL=(1|true|on) → --pull
  * - If no DEPLOY_FQDN is present, adds --no-nginx --no-ssl
  */
 
