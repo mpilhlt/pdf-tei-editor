@@ -171,6 +171,9 @@ def create_collection_rest(
     Raises:
         HTTPException: 400 if validation fails or collection exists
     """
+    from fastapi_app.lib.group_utils import find_group, add_collection_to_group
+    from fastapi_app.lib.data_utils import load_entity_data
+
     settings = get_settings()
 
     # Validate collection ID format
@@ -191,6 +194,23 @@ def create_collection_rest(
 
         if success:
             logger.info(f"Collection '{collection.id}' created by user '{current_user.get('username')}'")
+
+            # Add collection to admin group if it doesn't have wildcard access
+            groups_data = load_entity_data(settings.db_dir, 'groups')
+            admin_group = find_group('admin', groups_data)
+
+            if admin_group:
+                admin_collections = admin_group.get('collections', [])
+                if '*' not in admin_collections:
+                    # Admin group doesn't have wildcard access, add the new collection
+                    add_success, add_message = add_collection_to_group(
+                        settings.db_dir, 'admin', collection.id
+                    )
+                    if add_success:
+                        logger.info(f"Collection '{collection.id}' automatically added to admin group")
+                    else:
+                        logger.warning(f"Failed to add collection '{collection.id}' to admin group: {add_message}")
+
             return collection
         else:
             raise HTTPException(status_code=400, detail=message)

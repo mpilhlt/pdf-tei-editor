@@ -401,6 +401,97 @@ test('role - Cannot delete built-in roles', async () => {
 });
 
 /**
+ * Test suite: Collection creation auto-adds to admin group
+ */
+test('New collection should be added to admin group if no wildcard access', async () => {
+  const sessionId = await loginAsAdmin();
+
+  // Get current admin group
+  const adminGroup = await getEntity('group', sessionId, 'admin');
+  const originalCollections = [...adminGroup.collections];
+
+  try {
+    // Temporarily remove wildcard from admin group if it exists
+    const hasWildcard = originalCollections.includes('*');
+    if (hasWildcard) {
+      await updateEntity('group', sessionId, 'admin', {
+        collections: originalCollections.filter(c => c !== '*')
+      });
+    }
+
+    // Create a new collection
+    const testCollectionId = 'test-auto-add-collection';
+    const newCollection = await createEntity('collection', sessionId, {
+      id: testCollectionId,
+      name: 'Test Auto-Add Collection',
+      description: 'Tests automatic admin group assignment'
+    });
+
+    assert.strictEqual(newCollection.id, testCollectionId, 'Collection should be created');
+
+    // Verify it was added to admin group
+    const updatedAdminGroup = await getEntity('group', sessionId, 'admin');
+    assert.ok(
+      updatedAdminGroup.collections.includes(testCollectionId),
+      'New collection should be automatically added to admin group'
+    );
+
+    // Cleanup: delete the test collection
+    await deleteEntity('collection', sessionId, testCollectionId);
+
+  } finally {
+    // Restore original admin group collections
+    await updateEntity('group', sessionId, 'admin', {
+      collections: originalCollections
+    });
+  }
+});
+
+test('New collection should NOT be added to admin group if wildcard access exists', async () => {
+  const sessionId = await loginAsAdmin();
+
+  // Get current admin group
+  const adminGroup = await getEntity('group', sessionId, 'admin');
+  const originalCollections = [...adminGroup.collections];
+
+  try {
+    // Ensure wildcard is in admin group
+    if (!originalCollections.includes('*')) {
+      await updateEntity('group', sessionId, 'admin', {
+        collections: [...originalCollections, '*']
+      });
+    }
+
+    // Create a new collection
+    const testCollectionId = 'test-no-auto-add-collection';
+    const newCollection = await createEntity('collection', sessionId, {
+      id: testCollectionId,
+      name: 'Test No Auto-Add Collection',
+      description: 'Tests that wildcard prevents auto-assignment'
+    });
+
+    assert.strictEqual(newCollection.id, testCollectionId, 'Collection should be created');
+
+    // Verify it was NOT explicitly added to admin group (only wildcard should be there)
+    const updatedAdminGroup = await getEntity('group', sessionId, 'admin');
+    const nonWildcardCollections = updatedAdminGroup.collections.filter(c => c !== '*');
+    assert.ok(
+      !nonWildcardCollections.includes(testCollectionId) || originalCollections.includes(testCollectionId),
+      'New collection should not be explicitly added when admin group has wildcard'
+    );
+
+    // Cleanup: delete the test collection
+    await deleteEntity('collection', sessionId, testCollectionId);
+
+  } finally {
+    // Restore original admin group collections
+    await updateEntity('group', sessionId, 'admin', {
+      collections: originalCollections
+    });
+  }
+});
+
+/**
  * Test suite: Permission checks
  */
 test('All RBAC endpoints require admin role', async () => {

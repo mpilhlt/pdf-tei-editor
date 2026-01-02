@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-01T22:14:36.804Z
+ * Generated from OpenAPI schema at 2026-01-02T12:39:54.171Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1095,10 +1095,9 @@ export class ApiClientV1 {
 
   /**
    * Move files to a different collection.
-   * In the multi-collection system, this adds the destination collection
-   * to the document's doc_collections array in the PDF file.
+   * In the multi-collection system, this replaces the document's doc_collections
+   * array with the destination collection for both the PDF and all associated TEI files.
    * No physical file move occurs - hash-sharded storage is collection-agnostic.
-   * TEI files inherit collections from their associated PDF.
    * Args:
    * request: MoveFilesRequest with pdf_path, xml_path, and destination_collection
    * repo: File repository (injected)
