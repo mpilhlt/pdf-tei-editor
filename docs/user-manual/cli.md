@@ -328,6 +328,49 @@ npm run manage config delete <key> [options]
 
 - `--default`: Delete from both db/config.json and config/config.json
 
+## Database Management
+
+### Run Migrations
+
+Applies pending database migrations to update the schema or fix data integrity issues.
+
+```bash
+python bin/run-migration.py [options]
+```
+
+**Options**:
+
+- `--db-path <path>`: Path to database file (default: data/db/metadata.db)
+- `--dry-run`: Check which migrations would run without applying them
+- `--skip-backup`: Skip database backup before migration (not recommended)
+
+**Example**:
+
+```bash
+# Check pending migrations
+python bin/run-migration.py --dry-run
+
+# Run migrations (creates backup automatically)
+python bin/run-migration.py
+
+# Run on specific database
+python bin/run-migration.py --db-path data/db/custom.db
+```
+
+**Notes**:
+
+- Migrations run automatically when the application starts
+- Use this script to manually apply migrations or check migration status
+- A backup is created before each migration run (unless --skip-backup is used)
+- Backups are saved as `{db_name}_backup_{timestamp}.db`
+
+**Common migrations**:
+
+- Migration 001: Update locks table for stable_id support
+- Migration 002: Sync TEI file collections with their PDF files
+
+See [docs/development/migrations.md](../development/migrations.md) for more information about the migration system.
+
 ## Help Command
 
 ### help
