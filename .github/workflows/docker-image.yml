@@ -20,20 +20,35 @@ jobs:
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Extract version from tag
         id: version
         run: |
-          # Get tag pointing at HEAD
+          # First check if HEAD itself has a tag
           TAG=$(git tag --points-at HEAD | grep '^v' | head -n 1)
+
+          # If not, check if this is a merge commit and find the most recent tag in the merge
+          if [ -z "$TAG" ]; then
+            SECOND_PARENT=$(git rev-parse HEAD^2 2>/dev/null || echo "")
+            if [ -n "$SECOND_PARENT" ]; then
+              TAG=$(git tag --merged HEAD --sort=-version:refname | grep '^v' | head -n 1)
+              if [ -n "$TAG" ]; then
+                echo "Found tag from merged branch: $TAG"
+              fi
+            fi
+          fi
+
           if [ -n "$TAG" ]; then
             echo "tag=${TAG#v}" >> $GITHUB_OUTPUT
             echo "is_tag=true" >> $GITHUB_OUTPUT
-            echo "Found tag: $TAG"
+            echo "Docker image tag: ${TAG#v}"
           else
             echo "tag=latest" >> $GITHUB_OUTPUT
             echo "is_tag=false" >> $GITHUB_OUTPUT
-            echo "No version tag found"
+            echo "No version tag found, using 'latest'"
           fi
 
       - name: Build and push
