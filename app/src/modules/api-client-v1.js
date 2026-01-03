@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-02T12:39:54.171Z
+ * Generated from OpenAPI schema at 2026-01-03T12:29:32.893Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -220,6 +220,29 @@
 /**
  * @typedef {Object} FileListResponseModel
  * @property {Array<DocumentGroupModel>} files
+ */
+
+/**
+ * @typedef {Object} FileMetadata
+ * @property {string} id
+ * @property {string} stable_id
+ * @property {string} filename
+ * @property {string} doc_id
+ * @property {string} file_type
+ * @property {number} file_size
+ * @property {string=} label
+ * @property {string=} variant
+ * @property {number=} version
+ * @property {boolean=} is_gold_standard
+ * @property {Array<string>=} doc_collections
+ * @property {Object<string, any>=} doc_metadata
+ * @property {Object<string, any>=} file_metadata
+ * @property {string=} sync_status
+ * @property {string=} local_modified_at
+ * @property {string=} sync_hash
+ * @property {boolean=} deleted
+ * @property {string=} created_at
+ * @property {string=} updated_at
  */
 
 /**
@@ -1263,6 +1286,26 @@ export class ApiClientV1 {
   }
 
   /**
+   * Get file metadata by stable_id.
+   * Admin-only endpoint for retrieving complete file metadata.
+   * Args:
+   * stable_id: The stable_id of the file
+   * user: Authenticated admin user
+   * file_repo: File repository instance
+   * Returns:
+   * Complete file metadata
+   * Raises:
+   * HTTPException: If file not found
+   *
+   * @param {string} stable_id
+   * @returns {Promise<FileMetadata>}
+   */
+  async filesGetMetadata(stable_id) {
+    const endpoint = `/files/${stable_id}/metadata`
+    return this.callApi(endpoint);
+  }
+
+  /**
    * Update file metadata in the database.
    * Args:
    * stable_id: The stable_id of the file to update
@@ -1278,7 +1321,7 @@ export class ApiClientV1 {
    * @param {UpdateFileMetadataRequest} requestBody
    * @returns {Promise<any>}
    */
-  async filesMetadata(stable_id, requestBody) {
+  async filesPatchMetadata(stable_id, requestBody) {
     const endpoint = `/files/${stable_id}/metadata`
     return this.callApi(endpoint, 'PATCH', requestBody);
   }

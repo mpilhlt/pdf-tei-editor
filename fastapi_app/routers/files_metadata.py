@@ -1,7 +1,7 @@
 """
-File metadata update API endpoint.
+File metadata API endpoints.
 
-Allows updating file metadata (fileref, title, DOI, variant) in the database.
+Provides endpoints for retrieving and updating file metadata.
 """
 
 import logging
@@ -11,10 +11,12 @@ from pydantic import BaseModel
 from ..lib.dependencies import (
     get_file_repository,
     require_authenticated_user,
+    require_admin_user,
 )
 from ..lib.file_repository import FileRepository
 from ..lib.logging_utils import get_logger
 from ..lib.user_utils import user_has_collection_access
+from ..lib.models import FileMetadata
 from ..config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,38 @@ class UpdateFileMetadataRequest(BaseModel):
     doi: str | None = None
     variant: str | None = None
     label: str | None = None
+
+
+@router.get("/{stable_id}/metadata", response_model=FileMetadata)
+async def get_file_metadata(
+    stable_id: str,
+    user: dict = Depends(require_admin_user),
+    file_repo: FileRepository = Depends(get_file_repository)
+) -> FileMetadata:
+    """Get file metadata by stable_id.
+
+    Admin-only endpoint for retrieving complete file metadata.
+
+    Args:
+        stable_id: The stable_id of the file
+        user: Authenticated admin user
+        file_repo: File repository instance
+
+    Returns:
+        Complete file metadata
+
+    Raises:
+        HTTPException: If file not found
+    """
+    logger_inst = get_logger(__name__)
+
+    # Get file
+    file = file_repo.get_file_by_stable_id(stable_id)
+    if not file:
+        raise HTTPException(status_code=404, detail=f"File not found: {stable_id}")
+
+    logger_inst.debug(f"Retrieved metadata for file {stable_id}")
+    return file
 
 
 @router.patch("/{stable_id}/metadata")
