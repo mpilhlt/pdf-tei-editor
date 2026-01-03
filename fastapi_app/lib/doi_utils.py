@@ -8,7 +8,6 @@ Provides:
 """
 
 import re
-import warnings
 import requests
 from typing import Dict, Any, Optional
 import logging
@@ -350,63 +349,3 @@ def decode_filename(filename: str) -> str:
     return ''.join(decoded)
 
 
-def decode_filename_legacy(filename: str) -> str:
-    """
-    Decode filename using legacy encoding from server/lib/doi_utils.py.
-
-    **DEPRECATED**: This function is provided for backward compatibility only.
-    New code should use decode_filename() which handles both formats.
-    The legacy format will be removed in a future version.
-
-    Legacy encoding map:
-    - $1$ → /
-    - $2$ → :
-    - $3$ → ?
-    - $4$ → *
-    - $5$ → |
-    - $6$ → <
-    - $7$ → >
-    - $8$ → "
-    - $9$ → \\
-
-    Args:
-        filename: Legacy encoded filename
-
-    Returns:
-        Decoded document ID
-
-    Raises:
-        ValueError: If filename is empty
-
-    Examples:
-        >>> decode_filename_legacy("10.1111$1$1467-6478.00040")
-        "10.1111/1467-6478.00040"
-    """
-    warnings.warn(
-        "decode_filename_legacy() is deprecated and will be removed in a future version. "
-        "Use decode_filename() instead.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-
-    if not filename:
-        raise ValueError("filename cannot be empty")
-
-    # Legacy encoding map from server/lib/doi_utils.py
-    legacy_map = {
-        "$1$": "/",
-        "$2$": ":",
-        "$3$": "?",
-        "$4$": "*",
-        "$5$": "|",
-        "$6$": "<",
-        "$7$": ">",
-        "$8$": '"',
-        "$9$": "\\"
-    }
-
-    result = filename
-    for encoded, char in legacy_map.items():
-        result = result.replace(encoded, char)
-
-    return result

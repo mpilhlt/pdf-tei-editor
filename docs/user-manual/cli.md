@@ -617,6 +617,104 @@ npm run test:container
 
 **Note**: This command rebuilds the container each time. For faster iterations during development, use `npm run container:start` to keep a container running.
 
+## Batch Processing Commands
+
+### batch-extract
+
+Batch extracts metadata from PDF files in a directory using the HTTP API.
+
+```bash
+npm run batch-extract -- <directory> [options]
+```
+
+**Required Arguments**:
+
+- `<directory>`: Directory containing PDF files to process
+
+**Required Options**:
+
+- `--extractor <id>`: Extractor ID to use for metadata extraction
+
+**Optional Options**:
+
+- `--collection <id>`: Collection ID to assign uploaded files to (default: directory basename)
+- `--env <path>`: Path to .env file (default: ./.env)
+- `--user <username>`: Username for authentication (default: from .env API_USER)
+- `--password <password>`: Password for authentication (default: from .env API_PASSWORD)
+- `--base-url <url>`: API base URL (default: from .env API_BASE_URL or http://localhost:8000)
+- `--option <key=value>`: Extractor option (can be specified multiple times)
+- `--recursive`: Recursively search subdirectories for PDFs
+
+**Environment Variables** (in .env file):
+
+```bash
+API_USER=admin
+API_PASSWORD=admin
+API_BASE_URL=http://localhost:8000
+```
+
+**Examples**:
+
+```bash
+# Basic batch extract (uses directory basename as collection)
+npm run batch-extract -- /path/to/manuscripts --extractor mock-extractor
+
+# With explicit collection name
+npm run batch-extract -- /path/to/pdfs --collection my_collection --extractor mock-extractor
+
+# Recursive search with CLI credentials override
+npm run batch-extract -- /path/to/pdfs \
+  --collection my_collection \
+  --extractor grobid-training \
+  --user admin \
+  --password secret \
+  --recursive
+
+# With custom extractor options
+npm run batch-extract -- /path/to/pdfs \
+  --collection my_collection \
+  --extractor llamore-gemini \
+  --option variant_id=v1 \
+  --option doi=10.1234/test
+
+# Using custom .env file
+npm run batch-extract -- /path/to/pdfs \
+  --env /path/to/custom.env \
+  --extractor mock-extractor
+```
+
+**What it does**:
+
+1. Loads API credentials from .env file or CLI arguments
+2. Finds all PDF files in the specified directory (optionally recursive)
+3. Authenticates with the API server
+4. Creates the collection if it doesn't exist
+5. Checks for files already processed in the collection (resume support)
+6. For each PDF file not already in the collection:
+   - Extracts DOI from filename if present (see DOI Filename Encoding below)
+   - Uploads the file to the server
+   - Triggers metadata extraction using the specified extractor
+   - Passes extracted DOI to extractor automatically
+   - Reports success or failure
+7. Displays summary showing total, already processed, new, success, and failed counts
+
+**DOI Filename Encoding**:
+
+If PDF filenames contain DOIs, they will be automatically extracted and passed to the extractor. Encode DOIs in filenames by replacing "/" with "__" (double underscore).
+
+Examples:
+- `10.5771/2699-1284-2024-3-149.pdf` → `10.5771__2699-1284-2024-3-149.pdf`
+- `10.1234/abcd.5678.pdf` → `10.1234__abcd.5678.pdf`
+
+**Use cases**:
+
+- Bulk import of PDF documents into a collection
+- Automated metadata extraction for large document sets
+- Integration with external workflows and scripts
+- Batch processing of scanned documents
+
+**Note**: If the specified collection does not exist, it will be created automatically.
+
 ## Release Commands
 
 ### release:patch / release:minor / release:major

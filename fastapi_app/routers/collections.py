@@ -20,7 +20,8 @@ from ..lib.collection_utils import (
     remove_collection,
     set_collection_property
 )
-from ..lib.dependencies import get_current_user
+from ..lib.dependencies import get_current_user, get_file_repository
+from ..lib.file_repository import FileRepository
 from ..lib.logging_utils import get_logger
 from ..config import get_settings
 
@@ -33,6 +34,19 @@ class Collection(BaseModel):
     id: str = Field(..., description="Unique collection identifier")
     name: str = Field(..., description="Display name for the collection")
     description: Optional[str] = Field(default="", description="Collection description")
+
+
+class CollectionFileItem(BaseModel):
+    """Simplified file item for collection file listing."""
+    filename: str = Field(..., description="Original filename")
+    stable_id: str = Field(..., description="Stable file identifier")
+    file_type: str = Field(..., description="File type (pdf, tei, etc.)")
+
+
+class CollectionFilesResponse(BaseModel):
+    """Response model for collection files listing."""
+    collection_id: str = Field(..., description="Collection identifier")
+    files: List[CollectionFileItem] = Field(..., description="List of files in collection")
 
 
 def require_authenticated(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
@@ -329,6 +343,69 @@ class CollectionDeleteResponse(BaseModel):
     collection_id: str = Field(..., description="ID of the deleted collection")
     files_updated: int = Field(..., description="Number of files updated (collection removed)")
     files_deleted: int = Field(..., description="Number of files marked as deleted")
+
+
+@router.get("/{collection_id}/files", response_model=CollectionFilesResponse)
+def list_collection_files(
+    collection_id: str,
+    current_user: dict = Depends(require_authenticated),
+    repo: FileRepository = Depends(get_file_repository)
+):
+    """
+    List all files in a specific collection.
+
+    Returns a simplified list of files (filename and stable_id only) for resume/skip logic
+    in batch operations. Only returns PDF files as those are the source files that get
+    uploaded and extracted.
+
+    Args:
+        collection_id: Collection identifier
+        current_user: Current user dict (injected)
+        repo: File repository (injected)
+
+    Returns:
+        CollectionFilesResponse with list of files
+
+    Raises:
+        HTTPException: 404 if collection not found
+    """
+    settings = get_settings()
+
+    try:
+        # Check if collection exists
+        all_collections = get_collections_with_details(settings.db_dir)
+        if all_collections is None:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
+        collection = find_collection(collection_id, all_collections)
+        if not collection:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
+        # Get all files in this collection using file_repository
+        files = repo.get_files_by_collection(collection_id, include_deleted=False)
+
+        # Filter to PDF files only (source files) and convert to response model
+        pdf_files = [
+            CollectionFileItem(
+                filename=file.file_metadata.get('original_filename', file.filename),
+                stable_id=file.stable_id,
+                file_type=file.file_type
+            )
+            for file in files
+            if file.file_type == 'pdf'
+        ]
+
+        logger.debug(f"Found {len(pdf_files)} PDF files in collection '{collection_id}'")
+
+        return CollectionFilesResponse(
+            collection_id=collection_id,
+            files=pdf_files
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing collection files: {e}")
+        raise HTTPException(status_code=500, detail=f"Error listing collection files: {str(e)}")
 
 
 @router.delete("/{collection_id}", response_model=CollectionDeleteResponse)

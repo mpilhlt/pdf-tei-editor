@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-03T12:29:32.893Z
+ * Generated from OpenAPI schema at 2026-01-03T15:02:13.194Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -73,6 +73,19 @@
  * @property {string} collection_id - ID of the deleted collection
  * @property {number} files_updated - Number of files updated (collection removed)
  * @property {number} files_deleted - Number of files marked as deleted
+ */
+
+/**
+ * @typedef {Object} CollectionFileItem
+ * @property {string} filename - Original filename
+ * @property {string} stable_id - Stable file identifier
+ * @property {string} file_type - File type (pdf, tei, etc.)
+ */
+
+/**
+ * @typedef {Object} CollectionFilesResponse
+ * @property {string} collection_id - Collection identifier
+ * @property {Array<CollectionFileItem>} files - List of files in collection
  */
 
 /**
@@ -699,6 +712,28 @@ export class ApiClientV1 {
   async deleteCollections(collection_id) {
     const endpoint = `/collections/${collection_id}`
     return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List all files in a specific collection.
+   * Returns a simplified list of files (filename and stable_id only) for resume/skip logic
+   * in batch operations. Only returns PDF files as those are the source files that get
+   * uploaded and extracted.
+   * Args:
+   * collection_id: Collection identifier
+   * current_user: Current user dict (injected)
+   * repo: File repository (injected)
+   * Returns:
+   * CollectionFilesResponse with list of files
+   * Raises:
+   * HTTPException: 404 if collection not found
+   *
+   * @param {string} collection_id
+   * @returns {Promise<CollectionFilesResponse>}
+   */
+  async collectionsFiles(collection_id) {
+    const endpoint = `/collections/${collection_id}/files`
+    return this.callApi(endpoint);
   }
 
   /**
