@@ -39,20 +39,19 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 
 **Trigger:**
 
-- Tag pushes matching `v*` pattern on `devel` branch
+- Push to `main` branch (typically via merged PR)
 
-**Dependencies:**
+**Behavior:**
 
-- Calls Tests workflow first
-- Only proceeds if tests pass
+- Only runs if HEAD commit has a version tag (e.g., `v1.0.0`)
+- Skips if no tag is present (normal commits to main)
 
 **Steps:**
 
-1. Run all tests via Tests workflow
-2. Merge `devel` into `main` (requires `RELEASE_TOKEN`)
-3. Generate changelog from conventional commits
-4. Create GitHub release with changelog
-5. Build and push Docker image
+1. Check if HEAD has a version tag
+2. Generate changelog from conventional commits (between tags)
+3. Create GitHub release with changelog
+4. Trigger Docker build workflow
 
 **Changelog Format:**
 
@@ -60,47 +59,59 @@ The project uses GitHub Actions for continuous integration and deployment. The p
 - Excludes `chore:` commits
 - Includes Docker Hub image information
 
+**Note:** Tests are run via PR workflow before merge, not in the release workflow
+
 ### Docker Image Workflow ([.github/workflows/docker-image.yml](.github/workflows/docker-image.yml))
 
-**Triggers:**
+**Trigger:**
 
-- Tag pushes matching `v*` pattern
 - Called by Release workflow via `workflow_call`
 
-**Dependencies:**
+**Behavior:**
 
-- Only runs when called by Release workflow (after merge to main)
+- Only runs if Release workflow detects a version tag
+- Runs after GitHub release is created
 
 **Build Strategy:**
 
-| Event Type          | Tests Required              | Tags Applied      |
-|---------------------|-----------------------------|-------------------|
-| Tag push (v1.2.3)   | Yes (via Release workflow)  | `1.2.3`, `latest` |
+| Event Type              | Tests Required              | Tags Applied      |
+|-------------------------|-----------------------------|-------------------|
+| Push to main with tag   | Yes (via PR tests)          | `1.2.3`, `latest` |
 
 **Steps:**
 
-1. Extract version from tag or use `latest`
-2. Build Docker image
+1. Extract version from tag at HEAD
+2. Build Docker image with `production` target
 3. Push to Docker Hub (cboulanger/pdf-tei-editor)
 
 ## Execution Flow
 
-### For Tag Pushes (e.g., `git push origin v1.0.0` on devel)
+### For Releases (e.g., tag `v1.0.0` on devel, then merge to main)
 
 ```mermaid
 graph TD
-    A[Tag Push v1.0.0 on devel] --> B[Tests Workflow]
-    B --> C{Tests Pass?}
-    C -->|Yes| D[Merge devel into main]
-    C -->|No| E[Stop - No Release]
-    D --> F[Create GitHub Release]
-    F --> G[Build & Push Docker Image]
+    A[Tag commit on devel: v1.0.0] --> B[Push tag to remote]
+    B --> C[Create PR: devel → main]
+    C --> D[PR Tests Workflow]
+    D --> E{Tests Pass?}
+    E -->|Yes| F[Manually merge PR]
+    E -->|No| G[Stop - Fix Issues]
+    F --> H[Push to main triggers Release Workflow]
+    H --> I{HEAD has tag?}
+    I -->|Yes| J[Create GitHub Release]
+    I -->|No| K[Skip release]
+    J --> L[Build & Push Docker Image]
 ```
 
-1. Tests workflow runs all tests including E2E
-2. Merge `devel` into `main` (using `RELEASE_TOKEN`)
-3. Create GitHub release on `main`
-4. Build and push Docker image with version tag + latest
+**Process:**
+
+1. Run `node bin/release.js patch` (or minor/major) on devel branch
+2. Create PR to merge devel into main
+3. PR tests workflow validates changes
+4. Manually merge PR after tests pass
+5. Push to main triggers release workflow
+6. Release workflow detects tag at HEAD and creates GitHub release
+7. Docker image is built and pushed with version tag + latest
 
 ### For Pull Requests
 
@@ -123,10 +134,16 @@ graph TD
 
 ### For Branch Pushes (e.g., to main)
 
-Direct pushes to `main` (outside of the release workflow) do not trigger any workflows. The `main` branch is only updated via:
+Pushes to `main` trigger the release workflow, which:
+
+1. Checks if HEAD has a version tag
+2. If tagged: Creates release and builds Docker image
+3. If not tagged: Workflow skips without action
+
+The `main` branch should only be updated via:
 
 1. Pull requests (validated by PR tests)
-2. Release workflow merges (after full test suite passes)
+2. Hotfix merges (must pass PR tests first)
 
 ## Test Filtering
 
@@ -158,33 +175,7 @@ The test workflow uses smart filtering to minimize test execution time:
 
 - `DOCKERHUB_USERNAME`: Docker Hub username
 - `DOCKERHUB_TOKEN`: Docker Hub access token
-- `GITHUB_TOKEN`: Automatically provided by GitHub Actions
-- `RELEASE_TOKEN`: Fine-grained Personal Access Token for automated `devel` → `main` merges
-
-#### Configuring RELEASE_TOKEN
-
-The release workflow requires a Personal Access Token to bypass branch protection and merge `devel` into `main`.
-
-**Create the token:**
-
-1. Go to [GitHub Settings → Personal Access Tokens → Fine-grained tokens](https://github.com/settings/personal-access-tokens/new)
-2. Configure:
-   - Token name: `PDF-TEI-Editor Release Workflow`
-   - Expiration: Choose your preferred duration (e.g., 1 year)
-   - Repository access: "Only select repositories" → choose `mpilhlt/pdf-tei-editor`
-   - Repository permissions:
-     - Contents: Read and write
-3. Generate token and copy it
-
-**Add to repository:**
-
-Using `gh` CLI:
-
-```bash
-gh secret set RELEASE_TOKEN -b"<paste-token-here>"
-```
-
-Or via web UI: [Repository Settings → Secrets and variables → Actions](https://github.com/mpilhlt/pdf-tei-editor/settings/secrets/actions/new)
+- `GITHUB_TOKEN`: Automatically provided by GitHub Actions (used for creating releases)
 
 ## Modifying the CI Pipeline
 
@@ -245,27 +236,35 @@ npm run test:changed -- tests/e2e/upload.spec.js
 
 ## Troubleshooting
 
-### Tests not running on tag push
+### Release not created after merging PR
 
-- Check tag format matches `v*` pattern
-- Verify workflow_call is present in pr-tests.yml
-- Check GitHub Actions logs for trigger events
+- Verify tag exists at HEAD on main: `git tag --points-at HEAD`
+- Check that tag format matches `v*` pattern
+- Review release workflow logs for tag detection
+- Ensure push to main triggered the workflow
 
 ### Docker build failing
 
 - Check Docker Hub credentials in repository secrets
 - Verify Dockerfile builds locally: `docker build -t test .`
 - Check disk space (workflow clears space automatically)
+- Ensure release workflow completed successfully
 
-### Release not created
+### Tests not running on PR
 
-- Ensure tests passed successfully
-- Verify tag exists: `git tag -l`
-- Check if GitHub token has sufficient permissions
-- Review release.yml "needs: test" dependency
+- Verify PR targets `main` or `devel` branch
+- Check GitHub Actions logs for trigger events
+- Review smart-test-runner.js file patterns
 
 ### Smart test runner issues
 
 - Test locally: `npm run test:changed -- --names-only <files>`
 - Check file patterns in tests/smart-test-runner.js
 - Verify changed files are correctly detected in workflow logs
+
+### Tag not detected in release workflow
+
+- Ensure tag was pushed: `git push --tags`
+- Verify tag is on the commit that was merged to main
+- Check that tag follows `v*` pattern (e.g., `v1.0.0`)
+- Review "Get tag for current commit" step in workflow logs
