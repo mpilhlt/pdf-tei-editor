@@ -140,6 +140,32 @@ def require_authenticated_user(
     return user
 
 
+def require_admin_user(
+    user: Dict = Depends(require_authenticated_user)
+) -> Dict:
+    """
+    Require authenticated user with admin role.
+    Use for admin-only endpoints.
+
+    Args:
+        user: Authenticated user from require_authenticated_user
+
+    Returns:
+        User dict if admin
+
+    Raises:
+        HTTPException: 403 if user doesn't have admin role
+    """
+    user_roles = user.get('roles', [])
+    # Check for explicit 'admin' role or wildcard '*'
+    if 'admin' not in user_roles and '*' not in user_roles:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
+    return user
+
+
 # Decorator for requiring session (used on router functions)
 
 def require_session(func):

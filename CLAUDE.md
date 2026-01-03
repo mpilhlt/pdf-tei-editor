@@ -207,6 +207,7 @@ This difference exists because the backend test runner filters files before pass
 - ** when inserting temporary debug logging commands, ALWAYS include `DEBUG` in the message so that these commands can be found and removed later.
 - If during debugging you learn something that is not contained in the code assistant documentation, add it to the respective file!
 - When asked to create a github issue or other github mainenance issues, use the `gh` tool and ask the user to install it if it is not available
+- **GitHub issue closure** - When working on a fix for a GitHub issue, do NOT close the issue manually using `gh issue close`. Instead, include the issue reference in the commit message (e.g., "Fixes #123" or "Closes #157") so that GitHub automatically closes it when the commit is pushed to the default branch. Only use `gh issue comment` to add summary comments if needed.
 
 ## Planning documents, todo documents, github issues
 

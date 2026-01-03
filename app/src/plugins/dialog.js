@@ -6,14 +6,18 @@ import { SlButton, SlDialog, registerTemplate, createSingleFromTemplate, updateU
 import ui from '../ui.js'
 import { logger } from '../app.js'
 
-/** @import { ApplicationState } from '../state.js' */
+/**
+ * @import { ApplicationState } from '../state.js'
+ * @import { SlInput } from '../ui.js'
+ */
 
 // Plugin API
 const api = {
   info,
   error,
   success,
-  confirm
+  confirm,
+  prompt
 }
 
 // Plugin object
@@ -35,6 +39,7 @@ export default plugin
  * @typedef {object} dialogPart
  * @property {HTMLSpanElement} message
  * @property {HTMLDivElement} icon
+ * @property {SlInput} promptInput
  * @property {SlButton} closeBtn
  * @property {SlButton} cancelBtn
  * @property {SlButton} confirmBtn
@@ -145,5 +150,96 @@ function confirm(message, title = "Confirm") {
 
     // Show the dialog
     ui.dialog.show();
+  });
+}
+
+/**
+ * Shows a prompt dialog with an input field and returns a promise that resolves to the entered value or null
+ * @param {string} message - The prompt message
+ * @param {string} [title="Input"] - The dialog title
+ * @param {string} [defaultValue=""] - Default value for the input field
+ * @param {string} [placeholder=""] - Placeholder text for the input field
+ * @returns {Promise<string|null>} Promise that resolves to the entered value, or null if cancelled
+ */
+function prompt(message, title = "Input", defaultValue = "", placeholder = "") {
+  return new Promise((resolve) => {
+    // Set up the dialog
+    ui.dialog.setAttribute("label", title);
+    ui.dialog.icon.innerHTML = `<sl-icon name="pencil-square" style="color: var(--sl-color-primary-500);"></sl-icon>`;
+    ui.dialog.message.innerHTML = message;
+
+    // Show and configure the input field
+    ui.dialog.promptInput.style.display = '';
+    ui.dialog.promptInput.value = defaultValue;
+    ui.dialog.promptInput.placeholder = placeholder;
+
+    // Hide close button, show cancel/confirm buttons
+    ui.dialog.closeBtn.style.display = 'none';
+    ui.dialog.cancelBtn.style.display = '';
+    ui.dialog.confirmBtn.style.display = '';
+
+    // Set up one-time event handlers
+    const handleConfirm = () => {
+      const value = ui.dialog.promptInput.value.trim();
+      ui.dialog.hide();
+      // Wait for dialog to actually close before cleaning up and resolving
+      ui.dialog.addEventListener('sl-after-hide', () => {
+        cleanup();
+        resolve(value || null);
+      }, { once: true });
+    };
+
+    const handleCancel = () => {
+      ui.dialog.hide();
+      // Wait for dialog to actually close before cleaning up and resolving
+      ui.dialog.addEventListener('sl-after-hide', () => {
+        cleanup();
+        resolve(null);
+      }, { once: true });
+    };
+
+    const handleHide = () => {
+      // If dialog is closed without clicking a button, treat as cancel
+      // Wait for dialog to actually close before cleaning up and resolving
+      ui.dialog.addEventListener('sl-after-hide', () => {
+        cleanup();
+        resolve(null);
+      }, { once: true });
+    };
+
+    const handleEnter = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleConfirm();
+      }
+    };
+
+    const cleanup = () => {
+      ui.dialog.confirmBtn.removeEventListener('click', handleConfirm);
+      ui.dialog.cancelBtn.removeEventListener('click', handleCancel);
+      ui.dialog.removeEventListener('sl-hide', handleHide);
+      ui.dialog.promptInput.removeEventListener('keydown', handleEnter);
+      // Restore normal dialog state
+      ui.dialog.closeBtn.style.display = '';
+      ui.dialog.cancelBtn.style.display = 'none';
+      ui.dialog.confirmBtn.style.display = 'none';
+      ui.dialog.promptInput.style.display = 'none';
+      ui.dialog.promptInput.value = '';
+    };
+
+    // Attach event listeners
+    ui.dialog.confirmBtn.addEventListener('click', handleConfirm);
+    ui.dialog.cancelBtn.addEventListener('click', handleCancel);
+    ui.dialog.addEventListener('sl-hide', handleHide, { once: true });
+    ui.dialog.promptInput.addEventListener('keydown', handleEnter);
+
+    // Show the dialog
+    ui.dialog.show();
+
+    // Focus the input field after a short delay to ensure the dialog is visible
+    setTimeout(() => {
+      ui.dialog.promptInput.focus();
+    }, 100);
   });
 }

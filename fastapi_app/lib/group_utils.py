@@ -206,6 +206,10 @@ def add_collection_to_group(db_dir: Path, group_id: str, collection_id: str) -> 
     if 'collections' not in group:
         group['collections'] = []
 
+    # If group has wildcard access and we're adding a specific collection, skip it
+    if '*' in group['collections'] and collection_id != '*':
+        return False, f"Group '{group_id}' has wildcard access, no need to add specific collection '{collection_id}'."
+
     if collection_id not in group['collections']:
         group['collections'].append(collection_id)
         save_entity_data(db_dir, 'groups', groups_data)

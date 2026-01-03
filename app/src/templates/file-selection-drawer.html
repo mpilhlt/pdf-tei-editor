@@ -37,25 +37,27 @@
     
   </div>
   
-  <!-- Footer with import, export, delete, and close buttons -->
+  <!-- Footer with import, export, delete, new, and close buttons -->
   <div slot="footer" style="display: flex; justify-content: space-between; padding: 1rem; border-top: 1px solid var(--sl-color-neutral-200);">
     <div style="display: flex; gap: 0.5rem;">
       <sl-tooltip content="Import files from ZIP archive">
         <sl-button name="importButton" variant="default" size="small">
-          <sl-icon name="upload" slot="prefix"></sl-icon>
-          Import
+          <sl-icon name="upload"></sl-icon>
         </sl-button>
       </sl-tooltip>
       <sl-tooltip content="Export selected collections">
         <sl-button name="exportButton" variant="primary" size="small" disabled>
-          <sl-icon name="download" slot="prefix"></sl-icon>
-          Export
+          <sl-icon name="download"></sl-icon>
         </sl-button>
       </sl-tooltip>
       <sl-tooltip content="Delete selected collection">
         <sl-button name="deleteButton" variant="danger" size="small" disabled>
-          <sl-icon name="trash" slot="prefix"></sl-icon>
-          Delete
+          <sl-icon name="trash"></sl-icon>
+        </sl-button>
+      </sl-tooltip>
+      <sl-tooltip content="Create new collection">
+        <sl-button name="newCollectionButton" variant="success" size="small">
+          <sl-icon name="plus"></sl-icon>
         </sl-button>
       </sl-tooltip>
     </div>

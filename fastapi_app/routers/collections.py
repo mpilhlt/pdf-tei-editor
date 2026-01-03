@@ -59,6 +59,23 @@ def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> d
     return current_user
 
 
+def require_reviewer_or_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
+    """Dependency that requires reviewer or admin authentication."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    user_roles = current_user.get('roles', [])
+    has_permission = '*' in user_roles or 'admin' in user_roles or 'reviewer' in user_roles
+
+    if not has_permission:
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient permissions. Reviewer or admin role required."
+        )
+
+    return current_user
+
+
 @router.get("", response_model=List[Collection])
 def list_all_collections(
     current_user: dict = Depends(require_authenticated)
@@ -104,6 +121,9 @@ def list_all_collections(
                 )
                 for col in all_collections # type: ignore
             ]
+
+        # Sort collections alphabetically by name (case-insensitive)
+        collections.sort(key=lambda c: c.name.lower())
 
         return collections
     except Exception as e:
@@ -156,7 +176,7 @@ def get_collection(
 @router.post("", response_model=Collection, status_code=201)
 def create_collection_rest(
     collection: Collection,
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_reviewer_or_admin)
 ):
     """
     Create a new collection.
@@ -193,23 +213,40 @@ def create_collection_rest(
         )
 
         if success:
-            logger.info(f"Collection '{collection.id}' created by user '{current_user.get('username')}'")
+            username = current_user.get('username')
+            logger.info(f"Collection '{collection.id}' created by user '{username}'")
 
-            # Add collection to admin group if it doesn't have wildcard access
+            # Add collection to user's personal group (create group if it doesn't exist)
+            from fastapi_app.lib.group_utils import add_group
+            from fastapi_app.lib.user_utils import add_group_to_user
+
             groups_data = load_entity_data(settings.db_dir, 'groups')
-            admin_group = find_group('admin', groups_data)
+            user_group_id = username  # Personal group has same ID as username
+            user_group = find_group(user_group_id, groups_data)
 
-            if admin_group:
-                admin_collections = admin_group.get('collections', [])
-                if '*' not in admin_collections:
-                    # Admin group doesn't have wildcard access, add the new collection
-                    add_success, add_message = add_collection_to_group(
-                        settings.db_dir, 'admin', collection.id
-                    )
-                    if add_success:
-                        logger.info(f"Collection '{collection.id}' automatically added to admin group")
-                    else:
-                        logger.warning(f"Failed to add collection '{collection.id}' to admin group: {add_message}")
+            # Create personal group if it doesn't exist
+            if not user_group:
+                group_success, group_message = add_group(
+                    settings.db_dir,
+                    user_group_id,
+                    f"{username}'s collections",
+                    f"Personal collections for {username}"
+                )
+                if group_success:
+                    logger.info(f"Created personal group '{user_group_id}' for user '{username}'")
+                    # Add user to their personal group
+                    add_group_to_user(settings.db_dir, username, user_group_id)
+                else:
+                    logger.warning(f"Failed to create personal group for '{username}': {group_message}")
+
+            # Add collection to user's personal group
+            add_success, add_message = add_collection_to_group(
+                settings.db_dir, user_group_id, collection.id
+            )
+            if add_success:
+                logger.info(f"Collection '{collection.id}' added to user group '{user_group_id}'")
+            else:
+                logger.warning(f"Failed to add collection '{collection.id}' to user group: {add_message}")
 
             return collection
         else:
