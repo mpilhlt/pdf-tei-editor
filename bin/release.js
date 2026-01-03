@@ -3,7 +3,7 @@
 /**
  * Release script for creating patch, minor, and major version releases.
  *
- * Must be run from the devel branch. After release, merge devel to main.
+ * Must be run from the devel branch. After tagging, create a PR to merge devel into main.
  * See docs/development/contributing.md#release-process for workflow details.
  *
  * Usage:
@@ -101,9 +101,9 @@ function release(releaseType) {
     console.error('Recommended workflow:');
     console.error('  1. git checkout devel');
     console.error('  2. node bin/release.js patch  # or minor/major');
-    console.error('  3. git checkout main');
-    console.error('  4. git merge devel');
-    console.error('  5. git push origin main');
+    console.error('  3. Create PR to merge devel into main');
+    console.error('  4. Merge PR after tests pass');
+    console.error('  5. Release and Docker build happen automatically');
     console.error('');
     console.error('See docs/development/contributing.md#release-process for details.');
     process.exit(1);
@@ -200,13 +200,15 @@ function release(releaseType) {
   exec(`git push --follow-tags origin ${releaseBranch}`, false, true);
 
   // Show next steps
-  console.log('\n✅ Release pushed successfully!');
+  console.log('\n✅ Release tagged successfully!');
   console.log(`   Tag v${newVersion} has been created and pushed`);
-  console.log('   GitHub Actions will build and publish the release');
-  console.log('\n📝 Next step: Merge to main');
-  console.log('   git checkout main');
-  console.log('   git merge devel');
-  console.log('   git push origin main');
+  console.log('\n📝 Next steps:');
+  console.log('   1. Create PR to merge devel into main');
+  console.log('   2. Wait for PR tests to pass');
+  console.log('   3. Merge the PR');
+  console.log('   4. GitHub Actions will automatically:');
+  console.log('      - Create GitHub release with changelog');
+  console.log('      - Build and push Docker image');
 
   if (DRY_RUN) {
     console.log('\n🧪 DRY RUN COMPLETE - No changes were pushed\n');

@@ -30,11 +30,12 @@
  * @property {HTMLInputElement} importFileInput
  * @property {SlButton} exportButton
  * @property {SlButton} deleteButton
+ * @property {SlButton} newCollectionButton
  * @property {SlButton} closeDrawer
  */
 import ui, { updateUi, SlOption } from '../ui.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
-import { app, logger, updateState, hasStateChanged, services } from '../app.js'
+import { app, logger, updateState, hasStateChanged, services, dialog, client } from '../app.js'
 import {
   extractVariants,
   filterFileDataByVariant,
@@ -206,6 +207,16 @@ async function install(state) {
       await handleImport(currentState);
     }
   });
+
+  // Handle new collection button
+  ui.fileDrawer.newCollectionButton.addEventListener('click', async () => {
+    logger.debug("New collection button clicked");
+    if (currentState) {
+      await handleNewCollection(currentState);
+    } else {
+      logger.warn("New collection button clicked but no current state available");
+    }
+  });
 }
 
 /**
@@ -244,7 +255,7 @@ async function update(state) {
   currentState = state;
 
   // Check if relevant state properties have changed
-  if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData') && state.fileData) {
+  if (hasStateChanged(state, 'xml', 'pdf', 'variant', 'fileData', 'collections') && state.fileData) {
     await populateVariantSelect(state);
 
     // Only populate tree if drawer is visible, otherwise mark for lazy update
@@ -272,7 +283,7 @@ async function update(state) {
 }
 
 /**
- * Updates the visibility of import/export/delete buttons based on user role
+ * Updates the visibility of import/export/delete/new buttons based on user role
  * @param {ApplicationState} state
  */
 function updateButtonVisibility(state) {
@@ -287,15 +298,18 @@ function updateButtonVisibility(state) {
   const importButton = ui.fileDrawer.importButton;
   const exportButton = ui.fileDrawer.exportButton;
   const deleteButton = ui.fileDrawer.deleteButton;
+  const newCollectionButton = ui.fileDrawer.newCollectionButton;
 
   if (hasReviewerRole) {
     importButton.style.display = '';
     exportButton.style.display = '';
     deleteButton.style.display = '';
+    newCollectionButton.style.display = '';
   } else {
     importButton.style.display = 'none';
     exportButton.style.display = 'none';
     deleteButton.style.display = 'none';
+    newCollectionButton.style.display = 'none';
   }
 }
 
@@ -363,10 +377,17 @@ async function populateFileTree(state) {
   // Apply filters
   let filteredData = filterFileDataByVariant(state.fileData, state.variant);
   filteredData = filterFileDataByLabel(filteredData, currentLabelFilter);
-  
+
   // Group by collection
   const groupedFiles = groupFilesByCollection(filteredData);
-  const collections = Object.keys(groupedFiles).sort((a, b) => {
+
+  // Get all collections including empty ones from state.collections
+  const collectionsSet = new Set(Object.keys(groupedFiles));
+  if (state.collections) {
+    state.collections.forEach(col => collectionsSet.add(col.id));
+  }
+
+  const collections = Array.from(collectionsSet).sort((a, b) => {
     if (a === "__unfiled") return -1;
     if (b === "__unfiled") return 1;
     return a.localeCompare(b);
@@ -380,6 +401,7 @@ async function populateFileTree(state) {
   const shouldExpandCollection = (collectionName) => {
     if (!state.pdf && !state.xml) return false;
     const files = groupedFiles[collectionName];
+    if (!files) return false; // Empty collection has no files to expand
     return files.some(file => {
       // Expand if this collection contains the current source
       if (state.pdf && file.source?.id === state.pdf) return true;
@@ -444,8 +466,9 @@ async function populateFileTree(state) {
     collectionItem.innerHTML = '';
     collectionItem.appendChild(checkbox);
     collectionItem.appendChild(label);
-    
-    const files = groupedFiles[collectionName]
+
+    // Get files for this collection (may be empty)
+    const files = (groupedFiles[collectionName] || [])
       .sort((a, b) => {
         const aLabel = a.source?.label || a.doc_metadata?.title || a.doc_id;
         const bLabel = b.source?.label || b.doc_metadata?.title || b.doc_id;
@@ -733,8 +756,8 @@ function updateExportButtonState() {
   const hasSelection = selectedCollections.size > 0;
   exportButton.disabled = !hasSelection;
 
-  // Delete button is only enabled for exactly one selected collection
-  deleteButton.disabled = selectedCollections.size !== 1;
+  // Delete button is enabled when one or more collections are selected
+  deleteButton.disabled = !hasSelection;
 }
 
 /**
@@ -866,39 +889,129 @@ async function handleImport(state) {
 }
 
 /**
+ * Handles new collection button click
+ * @param {ApplicationState} state
+ */
+async function handleNewCollection(state) {
+  logger.debug("handleNewCollection called");
+
+  const newCollectionId = await dialog.prompt(
+    "Enter new collection ID (Only letters, numbers, '-' and '_'):",
+    "New Collection",
+    "",
+    "collection-id"
+  );
+
+  logger.debug(`Collection ID from prompt: ${newCollectionId}`);
+
+  if (!newCollectionId) {
+    logger.debug("Collection creation cancelled - no ID provided");
+    return;
+  }
+
+  // Validate collection ID format
+  if (!/^[a-zA-Z0-9_-]+$/.test(newCollectionId)) {
+    logger.warn(`Invalid collection ID: ${newCollectionId}`);
+    notify("Invalid collection ID. Only letters, numbers, hyphens, and underscores are allowed.", "danger", "exclamation-triangle");
+    return;
+  }
+
+  logger.debug("Collection ID validated, showing name prompt");
+
+  const newCollectionName = await dialog.prompt(
+    "Enter collection display name (optional, leave blank to use ID):",
+    "Collection Name",
+    newCollectionId
+  );
+
+  logger.debug(`Collection name from prompt: ${newCollectionName}`);
+
+  // If user cancelled the name prompt, treat it as cancellation
+  if (newCollectionName === null) {
+    logger.debug("Collection creation cancelled - name prompt cancelled");
+    return;
+  }
+
+  logger.debug("Proceeding with collection creation");
+
+  if (!state.sessionId) {
+    logger.error("Cannot create collection: no session ID available");
+    notify("Cannot create collection: not authenticated", "danger", "exclamation-triangle");
+    return;
+  }
+
+  logger.info(`Creating new collection: ${newCollectionId}`);
+
+  try {
+    // Disable new collection button during operation
+    const newCollectionButton = ui.fileDrawer.newCollectionButton;
+    newCollectionButton.disabled = true;
+    newCollectionButton.loading = true;
+
+    const result = await client.createCollection(
+      newCollectionId,
+      newCollectionName || newCollectionId
+    );
+
+    if (result) {
+      logger.info(`Collection '${newCollectionId}' created successfully`);
+      notify(`Collection '${newCollectionName || newCollectionId}' created successfully`, "success", "check-circle");
+
+      // Reload file data to update collections in state
+      await FiledataPlugin.getInstance().reload({ refresh: true });
+    }
+  } catch (error) {
+    logger.error("Failed to create collection: " + String(error));
+    notify(`Failed to create collection: ${error.message || String(error)}`, "danger", "exclamation-octagon");
+  } finally {
+    // Re-enable new collection button
+    const newCollectionButton = ui.fileDrawer.newCollectionButton;
+    newCollectionButton.disabled = false;
+    newCollectionButton.loading = false;
+  }
+}
+
+/**
  * Handles delete button click with confirmation
  * @param {ApplicationState} state
  */
 async function handleDelete(state) {
-  // Should only be enabled for exactly one collection
-  if (selectedCollections.size !== 1) {
-    logger.warn("Delete button clicked but selection count is not 1");
+  if (selectedCollections.size === 0) {
+    logger.warn("Delete button clicked but no collections selected");
     return;
   }
 
-  const collectionId = Array.from(selectedCollections)[0];
+  const collectionIds = Array.from(selectedCollections);
 
-  // Get collection name for confirmation dialog
-  const collectionName = getCollectionName(collectionId, state.collections);
+  // Build confirmation message
+  let confirmMessage;
+  if (collectionIds.length === 1) {
+    const collectionName = getCollectionName(collectionIds[0], state.collections);
+    confirmMessage =
+      `Do you really want to delete collection '${collectionName}' and its content?\n\n` +
+      `This will remove the collection and mark all files that are only in this collection as deleted.`;
+  } else {
+    const collectionNames = collectionIds.map(id => getCollectionName(id, state.collections)).join(', ');
+    confirmMessage =
+      `Do you really want to delete ${collectionIds.length} collections (${collectionNames}) and their content?\n\n` +
+      `This will remove the collections and mark all files that are only in these collections as deleted.`;
+  }
 
   // Show confirmation dialog
-  const confirmed = confirm(
-    `Do you really want to delete collection '${collectionName}' and its content?\n\n` +
-    `This will remove the collection and mark all files that are only in this collection as deleted.`
-  );
+  const confirmed = confirm(confirmMessage);
 
   if (!confirmed) {
-    logger.debug(`Collection deletion cancelled by user: ${collectionId}`);
+    logger.debug(`Collection deletion cancelled by user: ${collectionIds.join(', ')}`);
     return;
   }
 
   if (!state.sessionId) {
-    logger.error("Cannot delete collection: no session ID available");
-    notify("Cannot delete collection: not authenticated", "danger", "exclamation-triangle");
+    logger.error("Cannot delete collections: no session ID available");
+    notify("Cannot delete collections: not authenticated", "danger", "exclamation-triangle");
     return;
   }
 
-  logger.info(`Deleting collection: ${collectionId}`);
+  logger.info(`Deleting collections: ${collectionIds.join(', ')}`);
 
   try {
     // Disable delete button during operation
@@ -906,33 +1019,66 @@ async function handleDelete(state) {
     deleteButton.disabled = true;
     deleteButton.loading = true;
 
-    // Call DELETE endpoint
-    const url = `/api/v1/collections/${encodeURIComponent(collectionId)}`;
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'X-Session-ID': state.sessionId
+    let totalFilesUpdated = 0;
+    let totalFilesDeleted = 0;
+    const errors = [];
+
+    // Delete collections sequentially
+    for (const collectionId of collectionIds) {
+      try {
+        const url = `/api/v1/collections/${encodeURIComponent(collectionId)}`;
+        const response = await fetch(url, {
+          method: 'DELETE',
+          headers: {
+            'X-Session-ID': state.sessionId
+          }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || `Delete failed: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        totalFilesUpdated += result.files_updated;
+        totalFilesDeleted += result.files_deleted;
+
+        logger.info(
+          `Collection '${collectionId}' deleted: ${result.files_updated} files updated, ` +
+          `${result.files_deleted} files deleted`
+        );
+      } catch (error) {
+        logger.error(`Failed to delete collection '${collectionId}': ${error}`);
+        errors.push({ collectionId, error: error.message });
       }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || `Delete failed: ${response.statusText}`);
     }
 
-    const result = await response.json();
-
-    logger.info(
-      `Collection '${collectionId}' deleted: ${result.files_updated} files updated, ` +
-      `${result.files_deleted} files deleted`
-    );
-
-    // Show success message
-    let message = `Collection '${collectionName}' deleted successfully.`;
-    if (result.files_updated > 0 || result.files_deleted > 0) {
-      message += ` ${result.files_updated} files updated, ${result.files_deleted} files deleted.`;
+    // Show result message
+    if (errors.length === 0) {
+      let message;
+      if (collectionIds.length === 1) {
+        const collectionName = getCollectionName(collectionIds[0], state.collections);
+        message = `Collection '${collectionName}' deleted successfully.`;
+      } else {
+        message = `${collectionIds.length} collections deleted successfully.`;
+      }
+      if (totalFilesUpdated > 0 || totalFilesDeleted > 0) {
+        message += ` ${totalFilesUpdated} files updated, ${totalFilesDeleted} files deleted.`;
+      }
+      notify(message, "success", "check-circle");
+    } else if (errors.length < collectionIds.length) {
+      // Partial success
+      const successCount = collectionIds.length - errors.length;
+      const errorCollections = errors.map(e => getCollectionName(e.collectionId, state.collections)).join(', ');
+      notify(
+        `${successCount} collections deleted, but ${errors.length} failed: ${errorCollections}`,
+        "warning",
+        "exclamation-triangle"
+      );
+    } else {
+      // All failed
+      notify(`Failed to delete all ${collectionIds.length} collections`, "danger", "exclamation-octagon");
     }
-    notify(message, "success", "check-circle");
 
     // Clear selection
     selectedCollections.clear();
@@ -950,7 +1096,7 @@ async function handleDelete(state) {
   } finally {
     // Re-enable delete button
     const deleteButton = ui.fileDrawer.deleteButton;
-    deleteButton.disabled = selectedCollections.size !== 1;
+    deleteButton.disabled = selectedCollections.size === 0;
     deleteButton.loading = false;
   }
 }

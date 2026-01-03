@@ -689,7 +689,8 @@ async function handleStart(options) {
 
   let imageName = null;
   const localImageName = `${APP_NAME}:${tag}`;
-  const registryImageName = `cboulanger/${APP_NAME}:${tag}`;
+  // Use fully qualified registry name for podman compatibility
+  const registryImageName = `docker.io/cboulanger/${APP_NAME}:${tag}`;
 
   // Try local image first
   try {
@@ -1262,6 +1263,7 @@ async function setupSSL(fqdn, email) {
  *   email?: string,
  *   rebuild?: boolean,
  *   cache?: boolean,
+ *   pull?: boolean,
  *   env?: string[],
  *   yes?: boolean
  * }} options
@@ -1343,6 +1345,17 @@ async function handleDeploy(options) {
   console.log(`[INFO]   Nginx: ${useNginx}`);
   console.log(`[INFO]   SSL: ${useSSL}`);
 
+  // Show image source
+  if (options.pull && options.rebuild) {
+    console.log(`[INFO]   Image Source: Pull from registry (--rebuild ignored)`);
+  } else if (options.pull) {
+    console.log(`[INFO]   Image Source: Pull from registry`);
+  } else if (options.rebuild) {
+    console.log(`[INFO]   Image Source: Rebuild locally`);
+  } else {
+    console.log(`[INFO]   Image Source: Use existing local image`);
+  }
+
   if (deploymentType === 'production') {
     console.log(`[INFO]   Data root: ${dataDir || '(container internal)'}`);
   }
@@ -1364,10 +1377,48 @@ async function handleDeploy(options) {
   console.log('[INFO] Starting deployment process...');
   console.log();
 
-  // Rebuild if requested
-  if (options.rebuild) {
+  // Validate mutually exclusive options
+  if (options.rebuild && options.pull) {
+    console.log('[WARNING] Both --rebuild and --pull specified');
+    console.log('[WARNING] --rebuild will be ignored, using --pull instead');
+    console.log('[INFO] Use --rebuild for local development, --pull for production');
+    console.log();
+  }
+
+  // Rebuild if requested (unless pull is also requested)
+  if (options.rebuild && !options.pull) {
     console.log('[INFO] Rebuilding image...');
     if (!(await buildImage(tag, options.cache === false))) {
+      process.exit(1);
+    }
+    console.log();
+  }
+
+  // Pull from registry if requested
+  if (options.pull) {
+    console.log('[INFO] Pulling latest image from registry...');
+    // Use fully qualified registry name for podman compatibility
+    const registryImageName = `docker.io/cboulanger/${APP_NAME}:${tag}`;
+    const localImageName = `${APP_NAME}:${tag}`;
+
+    try {
+      // Remove existing local image if it exists
+      try {
+        execSync(`${containerCmd} rmi -f ${localImageName}`, { stdio: 'ignore' });
+        console.log(`[INFO] Removed local image: ${localImageName}`);
+      } catch {
+        // Image doesn't exist locally, that's fine
+      }
+
+      // Pull from registry
+      execSync(`${containerCmd} pull ${registryImageName}`, { stdio: 'inherit' });
+
+      // Tag as local image
+      execSync(`${containerCmd} tag ${registryImageName} ${localImageName}`, { stdio: 'inherit' });
+      console.log(`[SUCCESS] Pulled and tagged: ${localImageName}`);
+    } catch (err) {
+      console.log('[ERROR] Failed to pull image from registry');
+      console.log('[ERROR]', err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
     console.log();
@@ -1379,7 +1430,7 @@ async function handleDeploy(options) {
     execSync(`${containerCmd} image inspect ${imageName}`, { stdio: 'ignore' });
     console.log(`[INFO] Using image: ${imageName}`);
   } catch {
-    console.log(`[ERROR] Image ${imageName} not found. Build it first or use --rebuild`);
+    console.log(`[ERROR] Image ${imageName} not found. Build it first or use --rebuild or --pull`);
     process.exit(1);
   }
 
@@ -1597,6 +1648,7 @@ program
   .option('--no-ssl', 'Skip SSL certificate setup')
   .option('--email <email>', 'Email for SSL certificate (default: admin@<fqdn>)')
   .option('--rebuild', 'Rebuild image before deploying')
+  .option('--pull', 'Pull latest image from registry before deploying')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
   .option('--yes', 'Skip confirmation prompt')
   .addHelpText('after', `
@@ -1604,12 +1656,14 @@ Examples:
   # Production deployment with external data directory
   sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn editor.company.com \\
-    --data-dir /opt/${APP_NAME}/data
+    --data-dir /opt/${APP_NAME}/data \\
+    --pull
 
   # Demo deployment (no external volumes, no persistence)
   sudo env "PATH=$PATH" node bin/container.js deploy \\
     --fqdn demo.example.com \\
-    --type demo
+    --type demo \\
+    --pull
 
   # Deploy without SSL (HTTP only)
   sudo env "PATH=$PATH" node bin/container.js deploy \\

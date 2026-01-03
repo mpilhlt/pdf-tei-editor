@@ -313,8 +313,9 @@ async def save_file(
         xml_string = _update_fileref_in_xml(xml_string, file_id, logger_inst)
 
         # Encode XML entities if configured
-        from ..lib import config
+        from ..lib.config_utils import get_config
         from ..lib.xml_utils import EncodeOptions
+        config = get_config()
         config_data = config.load()
         if config_data.get("xml.encode-entities.server", False):
             logger_inst.debug("Encoding XML entities")

@@ -20,7 +20,8 @@ from ..lib.collection_utils import (
     remove_collection,
     set_collection_property
 )
-from ..lib.dependencies import get_current_user
+from ..lib.dependencies import get_current_user, get_file_repository
+from ..lib.file_repository import FileRepository
 from ..lib.logging_utils import get_logger
 from ..config import get_settings
 
@@ -33,6 +34,19 @@ class Collection(BaseModel):
     id: str = Field(..., description="Unique collection identifier")
     name: str = Field(..., description="Display name for the collection")
     description: Optional[str] = Field(default="", description="Collection description")
+
+
+class CollectionFileItem(BaseModel):
+    """Simplified file item for collection file listing."""
+    filename: str = Field(..., description="Original filename")
+    stable_id: str = Field(..., description="Stable file identifier")
+    file_type: str = Field(..., description="File type (pdf, tei, etc.)")
+
+
+class CollectionFilesResponse(BaseModel):
+    """Response model for collection files listing."""
+    collection_id: str = Field(..., description="Collection identifier")
+    files: List[CollectionFileItem] = Field(..., description="List of files in collection")
 
 
 def require_authenticated(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
@@ -54,6 +68,23 @@ def require_admin(current_user: Optional[dict] = Depends(get_current_user)) -> d
         raise HTTPException(
             status_code=403,
             detail="Insufficient permissions. Admin role required."
+        )
+
+    return current_user
+
+
+def require_reviewer_or_admin(current_user: Optional[dict] = Depends(get_current_user)) -> dict:
+    """Dependency that requires reviewer or admin authentication."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    user_roles = current_user.get('roles', [])
+    has_permission = '*' in user_roles or 'admin' in user_roles or 'reviewer' in user_roles
+
+    if not has_permission:
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient permissions. Reviewer or admin role required."
         )
 
     return current_user
@@ -104,6 +135,9 @@ def list_all_collections(
                 )
                 for col in all_collections # type: ignore
             ]
+
+        # Sort collections alphabetically by name (case-insensitive)
+        collections.sort(key=lambda c: c.name.lower())
 
         return collections
     except Exception as e:
@@ -156,7 +190,7 @@ def get_collection(
 @router.post("", response_model=Collection, status_code=201)
 def create_collection_rest(
     collection: Collection,
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(require_reviewer_or_admin)
 ):
     """
     Create a new collection.
@@ -193,23 +227,40 @@ def create_collection_rest(
         )
 
         if success:
-            logger.info(f"Collection '{collection.id}' created by user '{current_user.get('username')}'")
+            username = current_user.get('username')
+            logger.info(f"Collection '{collection.id}' created by user '{username}'")
 
-            # Add collection to admin group if it doesn't have wildcard access
+            # Add collection to user's personal group (create group if it doesn't exist)
+            from fastapi_app.lib.group_utils import add_group
+            from fastapi_app.lib.user_utils import add_group_to_user
+
             groups_data = load_entity_data(settings.db_dir, 'groups')
-            admin_group = find_group('admin', groups_data)
+            user_group_id = username  # Personal group has same ID as username
+            user_group = find_group(user_group_id, groups_data)
 
-            if admin_group:
-                admin_collections = admin_group.get('collections', [])
-                if '*' not in admin_collections:
-                    # Admin group doesn't have wildcard access, add the new collection
-                    add_success, add_message = add_collection_to_group(
-                        settings.db_dir, 'admin', collection.id
-                    )
-                    if add_success:
-                        logger.info(f"Collection '{collection.id}' automatically added to admin group")
-                    else:
-                        logger.warning(f"Failed to add collection '{collection.id}' to admin group: {add_message}")
+            # Create personal group if it doesn't exist
+            if not user_group:
+                group_success, group_message = add_group(
+                    settings.db_dir,
+                    user_group_id,
+                    f"{username}'s collections",
+                    f"Personal collections for {username}"
+                )
+                if group_success:
+                    logger.info(f"Created personal group '{user_group_id}' for user '{username}'")
+                    # Add user to their personal group
+                    add_group_to_user(settings.db_dir, username, user_group_id)
+                else:
+                    logger.warning(f"Failed to create personal group for '{username}': {group_message}")
+
+            # Add collection to user's personal group
+            add_success, add_message = add_collection_to_group(
+                settings.db_dir, user_group_id, collection.id
+            )
+            if add_success:
+                logger.info(f"Collection '{collection.id}' added to user group '{user_group_id}'")
+            else:
+                logger.warning(f"Failed to add collection '{collection.id}' to user group: {add_message}")
 
             return collection
         else:
@@ -292,6 +343,69 @@ class CollectionDeleteResponse(BaseModel):
     collection_id: str = Field(..., description="ID of the deleted collection")
     files_updated: int = Field(..., description="Number of files updated (collection removed)")
     files_deleted: int = Field(..., description="Number of files marked as deleted")
+
+
+@router.get("/{collection_id}/files", response_model=CollectionFilesResponse)
+def list_collection_files(
+    collection_id: str,
+    current_user: dict = Depends(require_authenticated),
+    repo: FileRepository = Depends(get_file_repository)
+):
+    """
+    List all files in a specific collection.
+
+    Returns a simplified list of files (filename and stable_id only) for resume/skip logic
+    in batch operations. Only returns PDF files as those are the source files that get
+    uploaded and extracted.
+
+    Args:
+        collection_id: Collection identifier
+        current_user: Current user dict (injected)
+        repo: File repository (injected)
+
+    Returns:
+        CollectionFilesResponse with list of files
+
+    Raises:
+        HTTPException: 404 if collection not found
+    """
+    settings = get_settings()
+
+    try:
+        # Check if collection exists
+        all_collections = get_collections_with_details(settings.db_dir)
+        if all_collections is None:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
+        collection = find_collection(collection_id, all_collections)
+        if not collection:
+            raise HTTPException(status_code=404, detail=f"Collection '{collection_id}' not found")
+
+        # Get all files in this collection using file_repository
+        files = repo.get_files_by_collection(collection_id, include_deleted=False)
+
+        # Filter to PDF files only (source files) and convert to response model
+        pdf_files = [
+            CollectionFileItem(
+                filename=file.file_metadata.get('original_filename', file.filename),
+                stable_id=file.stable_id,
+                file_type=file.file_type
+            )
+            for file in files
+            if file.file_type == 'pdf'
+        ]
+
+        logger.debug(f"Found {len(pdf_files)} PDF files in collection '{collection_id}'")
+
+        return CollectionFilesResponse(
+            collection_id=collection_id,
+            files=pdf_files
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing collection files: {e}")
+        raise HTTPException(status_code=500, detail=f"Error listing collection files: {str(e)}")
 
 
 @router.delete("/{collection_id}", response_model=CollectionDeleteResponse)

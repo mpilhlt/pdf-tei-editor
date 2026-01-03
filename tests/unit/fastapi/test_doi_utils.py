@@ -11,12 +11,10 @@ Tests:
 """
 
 import unittest
-import warnings
 
 from fastapi_app.lib.doi_utils import (
     encode_filename,
     decode_filename,
-    decode_filename_legacy,
     validate_doi,
     normalize_doi
 )
@@ -136,44 +134,6 @@ class TestFilenameEncoding(unittest.TestCase):
                 decoded = decode_filename(encoded)
                 self.assertEqual(decoded, original)
 
-    def test_decode_legacy_format(self):
-        """Test decoding legacy encoded filenames."""
-        test_cases = [
-            ("10.1111$1$1467-6478.00040", "10.1111/1467-6478.00040"),
-            ("test$2$file", "test:file"),
-            ("test$3$file", "test?file"),
-            ("test$4$file", "test*file"),
-            ("test$5$file", "test|file"),
-            ("test$6$file", "test<file"),
-            ("test$7$file", "test>file"),
-            ("test$8$file", 'test"file'),
-            ("test$9$file", "test\\file"),
-        ]
-
-        for encoded, expected in test_cases:
-            with self.subTest(encoded=encoded):
-                # Suppress deprecation warning in tests
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", DeprecationWarning)
-                    decoded = decode_filename_legacy(encoded)
-                self.assertEqual(decoded, expected)
-
-    def test_decode_legacy_raises_deprecation_warning(self):
-        """Test that legacy decoder raises deprecation warning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            decode_filename_legacy("10.1111$1$test")
-
-            self.assertEqual(len(w), 1)
-            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
-            self.assertIn("deprecated", str(w[0].message).lower())
-
-    def test_decode_legacy_empty_raises_error(self):
-        """Test that legacy decoder raises error on empty string."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            with self.assertRaises(ValueError):
-                decode_filename_legacy("")
 
 
 class TestDOIValidation(unittest.TestCase):

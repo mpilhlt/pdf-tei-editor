@@ -304,6 +304,52 @@ npm run docs:clean
 
 Removes all generated documentation files.
 
+## Programmatic API Access
+
+### Environment Variables for CLI Scripts
+
+All CLI scripts and external tools that access the HTTP API should support these environment variables (from `.env` file):
+
+```bash
+# API credentials
+API_USER=admin
+API_PASSWORD=admin
+
+# API base URL (default: http://localhost:8000)
+API_BASE_URL=http://localhost:8000
+```
+
+**Example usage:**
+
+```bash
+# Create .env file with credentials
+cat > .env << EOF
+API_USER=admin
+API_PASSWORD=admin
+API_BASE_URL=http://localhost:8000
+EOF
+
+# Run CLI script (will read credentials from .env)
+node bin/batch-extract.js /path/to/pdfs --collection my_collection --extractor mock-extractor
+
+# Or override via CLI parameters
+node bin/batch-extract.js /path/to/pdfs \
+  --user admin \
+  --password admin \
+  --base-url http://localhost:8000 \
+  --collection my_collection \
+  --extractor mock-extractor
+```
+
+**CLI scripts should:**
+- Accept optional `--env <path>` parameter (default: `./.env`)
+- Support `--user`, `--password`, `--base-url` CLI parameters that override env vars
+- Use SHA-256 password hashing for authentication (matching frontend)
+- Make authenticated requests with `X-Session-ID` header
+
+**Example implementations:**
+- [bin/batch-extract.js](bin/batch-extract.js) - Batch PDF metadata extraction
+
 ## Best Practices
 
 ### For Developers

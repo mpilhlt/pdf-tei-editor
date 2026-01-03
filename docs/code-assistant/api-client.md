@@ -279,6 +279,68 @@ test('auth login calls correct endpoint', async () => {
 });
 ```
 
+## Programmatic API Access (CLI Scripts)
+
+### Environment Variables for HTTP API Access
+
+When creating CLI scripts or external tools that access the HTTP API programmatically, support these standard environment variables:
+
+```bash
+# API credentials
+API_USER=admin
+API_PASSWORD=admin
+
+# API base URL (default: http://localhost:8000)
+API_BASE_URL=http://localhost:8000
+```
+
+**Standard pattern for CLI scripts:**
+
+```javascript
+import dotenv from 'dotenv';
+import { createHash } from 'crypto';
+
+// Load .env file
+dotenv.config({ path: envPath });
+
+// Get credentials from env or CLI args
+const username = cliUser || process.env.API_USER;
+const password = cliPassword || process.env.API_PASSWORD;
+const baseUrl = cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
+
+// Hash password (SHA-256, matching frontend)
+function hashPassword(password) {
+  return createHash('sha256').update(password).digest('hex');
+}
+
+// Login and get session
+const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    username,
+    passwd_hash: hashPassword(password)
+  })
+});
+const { sessionId } = await response.json();
+
+// Make authenticated requests with X-Session-ID header
+await fetch(`${baseUrl}/api/v1/files/list`, {
+  headers: { 'X-Session-ID': sessionId }
+});
+```
+
+**CLI parameter conventions:**
+
+- `--env <path>` - Path to .env file (default: `./.env`)
+- `--user <username>` - Override API_USER from env
+- `--password <password>` - Override API_PASSWORD from env
+- `--base-url <url>` - Override API_BASE_URL from env
+
+**Example implementations:**
+
+- [bin/batch-extract.js](../../bin/batch-extract.js) - Batch PDF metadata extraction
+
 ## Best Practices
 
 ### DO ✅
@@ -288,6 +350,7 @@ test('auth login calls correct endpoint', async () => {
 - **Commit generated client**: Check in with router changes
 - **Handle errors at transport layer**: Let `callApi` manage retries
 - **Add JSDoc to shims**: Type annotations in wrapper functions
+- **Support standard env vars in CLI scripts**: Use API_USER, API_PASSWORD, API_BASE_URL
 
 ### DON'T ❌
 

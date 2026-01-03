@@ -4,8 +4,9 @@ Configuration management utilities for PDF-TEI-Editor.
 This module provides framework-agnostic configuration utilities with dependency injection.
 
 High-level API (recommended - uses settings injection):
-    from fastapi_app.lib import config
+    from fastapi_app.lib.config_utils import get_config
 
+    config = get_config()
     value = config.get('key', default='fallback')
     config.set('key', value)
     config.delete('key')
@@ -374,7 +375,7 @@ def _get_default_config() -> Config:
 
 
 # Module-level config instance for convenience
-# Usage: from fastapi_app.lib import config
+# Usage: from fastapi_app.lib.config_utils import get_config
 _config_instance = None
 
 

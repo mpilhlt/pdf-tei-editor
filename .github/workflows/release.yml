@@ -2,37 +2,54 @@ name: Create Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
-  test:
-    uses: ./.github/workflows/pr-tests.yml
-
   release:
-    needs: test
+    # Only run if the latest commit has a version tag
+    if: startsWith(github.ref, 'refs/heads/main')
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
+      has_tag: ${{ steps.get_tag.outputs.has_tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for changelog generation
 
+      - name: Get tag for current commit
+        id: get_tag
+        run: |
+          TAG=$(git tag --points-at HEAD | grep '^v' | head -n 1)
+          if [ -n "$TAG" ]; then
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            echo "has_tag=true" >> $GITHUB_OUTPUT
+            echo "Found tag: $TAG"
+          else
+            echo "has_tag=false" >> $GITHUB_OUTPUT
+            echo "No version tag found on HEAD"
+          fi
+
       - name: Get previous tag
+        if: steps.get_tag.outputs.has_tag == 'true'
         id: previoustag
         run: |
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${{ github.ref_name }}$" | head -n 1)
+          CURRENT_TAG="${{ steps.get_tag.outputs.tag }}"
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -n 1)
           echo "tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
           echo "Previous tag: $PREVIOUS_TAG"
 
       - name: Generate changelog
+        if: steps.get_tag.outputs.has_tag == 'true'
         id: changelog
         run: |
           PREVIOUS_TAG="${{ steps.previoustag.outputs.tag }}"
-          CURRENT_TAG="${{ github.ref_name }}"
+          CURRENT_TAG="${{ steps.get_tag.outputs.tag }}"
 
           if [ -z "$PREVIOUS_TAG" ]; then
             # First release - get all commits
@@ -131,8 +148,10 @@ jobs:
           cat changelog.md
 
       - name: Create GitHub Release
+        if: steps.get_tag.outputs.has_tag == 'true'
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.get_tag.outputs.tag }}
           body_path: changelog.md
           draft: false
           prerelease: false
@@ -140,6 +159,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker-build:
+    if: needs.release.outputs.has_tag == 'true'
     needs: release
     uses: ./.github/workflows/docker-image.yml
     secrets: inherit

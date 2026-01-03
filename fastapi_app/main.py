@@ -48,7 +48,8 @@ async def lifespan(app: FastAPI):
 
     # Now load config and sync settings between environment and config
     # Priority: Environment variables > config.json
-    from .lib import config
+    from .lib.config_utils import get_config
+    config = get_config()
     config_data = config.load()
 
     if "FASTAPI_APPLICATION_MODE" in os.environ:
@@ -236,7 +237,8 @@ web_root = project_root / 'app' / 'web'
 # Development mode routes (conditionally mounted)
 # In development, serve source files, node_modules, and tests
 settings = get_settings()
-from .lib import config
+from .lib.config_utils import get_config
+config = get_config()
 config_data = config.load()
 is_dev_mode = config_data.get("application", {}).get("mode", "development") == "development"
 

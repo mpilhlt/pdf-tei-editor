@@ -36,7 +36,9 @@
       "Bash(uv sync:*)",
       "Bash(xargs cat:*)",
       "Bash(uv run python:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "Bash(gh run view:*)"
     ],
     "deny": [],
     "ask": []

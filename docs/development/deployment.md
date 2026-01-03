@@ -429,5 +429,5 @@ sudo chcon -R -t container_file_t /opt/pdf-tei-editor/data
 
 - **User Manual:** [Docker Deployment Guide](../user-manual/docker-deployment.md) - Common deployment scenarios
 - **Developer:** [Testing Guide](./testing.md) - Container testing
-- **Developer:** [CI/CD Pipeline](../code-assistant/ci.md) - Automated builds
+- **Developer:** [CI/CD Pipeline](./ci-cd-pipeline.md) - Automated builds
 - **Reference:** [Nginx Cache Control](./nginx-cache-control.md) - API caching implementation

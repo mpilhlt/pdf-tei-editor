@@ -242,4 +242,86 @@ describe('Extraction API E2E Tests', () => {
     }
   });
 
+  test('POST /api/extract should assign PDF and TEI to specified collection', async () => {
+    // Login as admin to access metadata endpoint
+    const adminSession = await login('admin', 'admin', BASE_URL);
+    assert.ok(adminSession, 'Should have admin session');
+
+    // First upload a PDF file
+    const pdfContent = Buffer.from('%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n2 0 obj\n<<\n/Type /Pages\n/Kids [3 0 R]\n/Count 1\n>>\nendobj\n3 0 obj\n<<\n/Type /Page\n/Parent 2 0 R\n/MediaBox [0 0 612 792]\n/Contents 4 0 R\n>>\nendobj\n4 0 obj\n<<\n/Length 44\n>>\nstream\nBT\n/F1 12 Tf\n100 700 Td\n(Test PDF) Tj\nET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\n0000000214 00000 n\ntrailer\n<<\n/Size 5\n/Root 1 0 R\n>>\nstartxref\n307\n%%EOF');
+
+    // Upload PDF
+    const uploadResponse = await fetch(`${BASE_URL}/api/v1/files/upload`, {
+      method: 'POST',
+      headers: {
+        'X-Session-ID': adminSession.sessionId
+      },
+      body: (() => {
+        const formData = new FormData();
+        const blob = new Blob([pdfContent], { type: 'application/pdf' });
+        formData.append('file', blob, 'test-extraction.pdf');
+        return formData;
+      })()
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      assert.fail(`PDF upload failed with status ${uploadResponse.status}: ${errorText}`);
+    }
+    const uploadData = await uploadResponse.json();
+    const pdfStableId = uploadData.filename;
+
+    logger.success(`Uploaded PDF: ${pdfStableId}`);
+
+    // Extract with specific collection
+    const extractResponse = await authenticatedApiCall(
+      adminSession.sessionId,
+      '/extract',
+      'POST',
+      {
+        extractor: 'mock-extractor',
+        file_id: pdfStableId,
+        options: {
+          collection: 'test_collection',
+          doi: '10.1234/test.collection'
+        }
+      },
+      BASE_URL
+    );
+
+    assert.ok(extractResponse, 'Should receive extraction response');
+    assert.ok(extractResponse.xml, 'Should have xml hash in response');
+    assert.ok(extractResponse.pdf, 'Should have pdf stable_id in response');
+
+    logger.success(`Extraction completed, TEI: ${extractResponse.xml}, PDF: ${extractResponse.pdf}`);
+
+    // Get file metadata for both PDF and TEI using admin-only metadata endpoint
+    const pdfDetailsResponse = await authenticatedApiCall(
+      adminSession.sessionId,
+      `/files/${extractResponse.pdf}/metadata`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    const teiDetailsResponse = await authenticatedApiCall(
+      adminSession.sessionId,
+      `/files/${extractResponse.xml}/metadata`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    // Verify both files are in the correct collection
+    assert.ok(pdfDetailsResponse.doc_collections, 'PDF should have doc_collections');
+    assert.ok(pdfDetailsResponse.doc_collections.includes('test_collection'),
+      `PDF should be in test_collection, got: ${JSON.stringify(pdfDetailsResponse.doc_collections)}`);
+
+    assert.ok(teiDetailsResponse.doc_collections, 'TEI should have doc_collections');
+    assert.ok(teiDetailsResponse.doc_collections.includes('test_collection'),
+      `TEI should be in test_collection, got: ${JSON.stringify(teiDetailsResponse.doc_collections)}`);
+
+    logger.success('Both PDF and TEI files are in the correct collection');
+  });
+
 });

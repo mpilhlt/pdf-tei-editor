@@ -354,17 +354,20 @@ def _save_pdf_extraction_result(
             # Use DOI/doc_id if available
             pdf_label = tei_metadata['doc_id']
 
-        # Update PDF file with extracted metadata
-        if doc_metadata or pdf_label:
+        # Update PDF file with extracted metadata and collection
+        if doc_metadata or pdf_label or doc_collections:
             updates = FileUpdate()
             if doc_metadata:
                 updates.doc_metadata = doc_metadata
             if pdf_label:
                 updates.label = pdf_label
+            # Sync PDF's collection to match TEI file's collection
+            if doc_collections:
+                updates.doc_collections = doc_collections
 
             try:
                 repo.update_file(pdf_metadata.id, updates)
-                logger.info(f"Updated PDF metadata: {pdf_metadata.id[:8]}... label='{pdf_label}'")
+                logger.info(f"Updated PDF metadata: {pdf_metadata.id[:8]}... label='{pdf_label}', collections={doc_collections}")
             except Exception as e:
                 logger.warning(f"Failed to update PDF metadata: {e}")
 

@@ -1,13 +1,10 @@
 name: Build and Push Docker Image
 
 on:
-  push:
-    branches:
-      - main
   workflow_call:
 
 concurrency:
-  group: ${{ github.ref }}
+  group: docker-build-${{ github.ref }}
 #  cancel-in-progress: true
 
 
@@ -22,17 +19,21 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Extract version from tag
         id: version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          # Get tag pointing at HEAD
+          TAG=$(git tag --points-at HEAD | grep '^v' | head -n 1)
+          if [ -n "$TAG" ]; then
+            echo "tag=${TAG#v}" >> $GITHUB_OUTPUT
             echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "Found tag: $TAG"
           else
             echo "tag=latest" >> $GITHUB_OUTPUT
             echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "No version tag found"
           fi
 
       - name: Build and push
@@ -43,8 +44,9 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           image: ${{ secrets.DOCKERHUB_USERNAME }}/pdf-tei-editor
           registry: docker.io
-          pushImage: ${{ github.event_name != 'pull_request' }}
+          pushImage: true
           tags: ${{ steps.version.outputs.is_tag == 'true' && format('{0},latest', steps.version.outputs.tag) || 'latest' }}
+          target: production
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
