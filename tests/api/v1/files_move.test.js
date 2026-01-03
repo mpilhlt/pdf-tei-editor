@@ -45,9 +45,6 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
       if (docGroup.source && docGroup.source.file_type === 'pdf') {
         testState.testDocId = docGroup.doc_id;
         testState.pdfHash = docGroup.source.id;
-        if (docGroup.artifacts && docGroup.artifacts.length > 0) {
-          testState.teiHash = docGroup.artifacts[0].id;
-        }
         break;
       }
     }
@@ -56,14 +53,15 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
       throw new Error('Could not find PDF fixture for move test');
     }
 
-    // If no TEI artifact exists, create one
-    if (!testState.teiHash) {
-      const teiContent = `<?xml version="1.0" encoding="UTF-8"?>
+    // ALWAYS create a fresh TEI artifact for testing to avoid interference from other tests
+    // Use unique content to prevent hash collisions with other tests
+    const uniqueId = Date.now();
+    const teiContent = `<?xml version="1.0" encoding="UTF-8"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader>
     <fileDesc>
       <titleStmt>
-        <title>Test document for move test</title>
+        <title>Test document for move test ${uniqueId}</title>
       </titleStmt>
       <publicationStmt>
         <p>Test publication</p>
@@ -76,37 +74,34 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
   <text>
     <body>
       <div>
-        <p>Test content for move operations</p>
+        <p>Test content for move operations - unique ID: ${uniqueId}</p>
       </div>
     </body>
   </text>
 </TEI>`;
 
-      const saveResponse = await authenticatedApiCall(
-        session.sessionId,
-        '/files/save',
-        'POST',
-        {
-          file_id: testState.testDocId,
-          xml_string: teiContent,
-          new_version: false
-        },
-        BASE_URL
-      );
+    const saveResponse = await authenticatedApiCall(
+      session.sessionId,
+      '/files/save',
+      'POST',
+      {
+        file_id: testState.testDocId,
+        xml_string: teiContent,
+        new_version: false
+      },
+      BASE_URL
+    );
 
-      testState.teiHash = saveResponse.file_id;
+    testState.teiHash = saveResponse.file_id;
 
-      // Release lock after creating file
-      await authenticatedApiCall(
-        session.sessionId,
-        '/files/release_lock',
-        'POST',
-        { file_id: testState.teiHash },
-        BASE_URL
-      );
-
-      logger.success(`Created TEI artifact for move tests: ${testState.teiHash}`);
-    }
+    // Release lock after creating file
+    await authenticatedApiCall(
+      session.sessionId,
+      '/files/release_lock',
+      'POST',
+      { file_id: testState.teiHash },
+      BASE_URL
+    );
 
     logger.success(`Setup complete - PDF: ${testState.pdfHash}, TEI: ${testState.teiHash}`);
   });
@@ -136,12 +131,43 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
   test('POST /api/files/move should also move all TEI files for the document', async () => {
     const session = await getSession();
 
-    // Use _inbox which reviewer has access to via default group
-    const newCollection = '_inbox';
+    // Create a fresh TEI artifact for this specific test to ensure we have something to verify
+    const uniqueId = Date.now() + Math.random();
+    const teiContent = `<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Test TEI for move verification ${uniqueId}</title>
+      </titleStmt>
+      <editionStmt>
+        <edition>
+          <idno type="fileref">${testState.testDocId}</idno>
+        </edition>
+      </editionStmt>
+      <publicationStmt><p>Test</p></publicationStmt>
+      <sourceDesc><p>Test</p></sourceDesc>
+    </fileDesc>
+  </teiHeader>
+  <text><body><p>Content ${uniqueId}</p></body></text>
+</TEI>`;
+
+    const saveResp = await authenticatedApiCall(session.sessionId, '/files/save', 'POST', {
+      file_id: testState.testDocId,
+      xml_string: teiContent,
+      new_version: false
+    }, BASE_URL);
+
+    await authenticatedApiCall(session.sessionId, '/files/release_lock', 'POST', {
+      file_id: saveResp.file_id
+    }, BASE_URL);
+
+    // Use a different collection than the first test (_inbox) to verify all TEI files are moved
+    const newCollection = 'default';
 
     const result = await authenticatedApiCall(session.sessionId, '/files/move', 'POST', {
       pdf_id: testState.pdfHash,
-      xml_id: testState.teiHash,
+      xml_id: saveResp.file_id,
       destination_collection: newCollection
     }, BASE_URL);
 
@@ -158,7 +184,7 @@ describe('File Move API E2E Tests', { concurrency: 1 }, () => {
 
     // Verify ALL TEI files are also in new collection by checking artifacts
     const teiArtifacts = movedDoc.artifacts || [];
-    assert(teiArtifacts.length > 0, 'Should have at least one TEI artifact');
+    assert(teiArtifacts.length > 0, 'Should have at least one TEI artifact (just created one)');
 
     logger.success(`All ${teiArtifacts.length} TEI file(s) moved with PDF to collection ${newCollection}`);
   });
