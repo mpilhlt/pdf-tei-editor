@@ -37,14 +37,15 @@ class DatabaseManager:
         Ensure database file and schema exist.
 
         Creates database file and initializes schema if needed.
+        Runs any pending migrations automatically.
         This method is idempotent - safe to call multiple times.
         """
         # Ensure parent directory exists
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create database and initialize schema
+        # Create database and initialize schema (including migrations)
         with self.get_connection() as conn:
-            initialize_database(conn, self.logger)
+            initialize_database(conn, self.logger, db_path=self.db_path)
 
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:

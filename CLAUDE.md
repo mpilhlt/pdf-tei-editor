@@ -70,6 +70,9 @@ Before using any method on a class or module:
 - **NEVER modify the database schema directly** - create a versioned migration instead
 - Migrations provide automatic backups, rollback support, and version tracking
 - See `fastapi_app/lib/migrations/versions/m001_locks_file_id.py` for a complete example
+- **When adding a new database**, use the centralized migration runner - see [docs/development/adding-new-databases.md](docs/development/adding-new-databases.md)
+  - Call `run_migrations_if_needed()` from `fastapi_app/lib/migration_runner.py` in your database initialization
+  - This ensures migrations run automatically on application startup for all databases
 
 ### TEI Document Processing
 

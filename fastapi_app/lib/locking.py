@@ -17,9 +17,6 @@ import logging
 
 LOCK_TIMEOUT_SECONDS = 90
 
-# Track if migrations have been run
-_migrations_run = False
-
 
 @contextmanager
 def get_db_connection(db_dir: Path, logger: logging.Logger):
@@ -55,20 +52,17 @@ def get_db_connection(db_dir: Path, logger: logging.Logger):
 def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
     """
     Initialize the locks database with the required schema.
-    Runs migrations first, then creates tables and indexes if they don't exist.
+    Creates tables and indexes, and runs any pending migrations.
 
     Args:
         db_dir: Directory containing locks.db
         logger: Logger instance
     """
-    global _migrations_run
-
     db_path = db_dir / "locks.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Ensure database file exists (migrations need it)
+    # Create database and schema if it doesn't exist
     if not db_path.exists():
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        # Create empty database with minimal schema (migration will fix it)
         with sqlite3.connect(str(db_path)) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS locks (
@@ -80,39 +74,24 @@ def init_locks_db(db_dir: Path, logger: logging.Logger) -> None:
             """)
             conn.commit()
 
-    # Run migrations FIRST
-    # Check if migrations are needed by looking at the schema
-    needs_migration = False
-    with sqlite3.connect(str(db_path)) as conn:
-        cursor = conn.execute("PRAGMA table_info(locks)")
-        columns = {row[1] for row in cursor.fetchall()}
-        # If file_hash exists but file_id doesn't, we need migration
-        needs_migration = 'file_hash' in columns and 'file_id' not in columns
+    # Run migrations using centralized runner
+    from fastapi_app.lib.migration_runner import run_migrations_if_needed
+    from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
 
-    if needs_migration or not _migrations_run:
-        from fastapi_app.lib.migrations import MigrationManager
-        from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
+    try:
+        run_migrations_if_needed(
+            db_path=db_path,
+            migrations=ALL_MIGRATIONS,
+            logger=logger
+        )
+    except Exception as e:
+        logger.error(f"Failed to run migrations for locks.db: {e}")
+        raise
 
-        try:
-            manager = MigrationManager(db_path, logger)
-            for migration_class in ALL_MIGRATIONS:
-                manager.register_migration(migration_class(logger))
-
-            applied = manager.run_migrations()
-            if applied > 0:
-                logger.info(f"Applied {applied} database migrations")
-
-            _migrations_run = True
-        except Exception as e:
-            logger.error(f"Failed to run migrations: {e}")
-            raise
-
-    # Now create/update indexes with current structure
-    # Use direct sqlite3 connection to avoid recursion issues
+    # Create/update indexes with current structure
     try:
         with sqlite3.connect(str(db_path)) as conn:
-            # Table should already exist (either from above or migration)
-            # Just ensure indexes exist with current schema
+            # Ensure indexes exist with current schema
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_file_id
                 ON locks(file_id)

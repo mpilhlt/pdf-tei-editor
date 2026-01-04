@@ -94,7 +94,7 @@ INITIAL_SYNC_METADATA = [
 ]
 
 
-def initialize_database(conn: sqlite3.Connection, logger=None) -> None:
+def initialize_database(conn: sqlite3.Connection, logger=None, db_path=None) -> None:
     """
     Initialize database schema with all tables and indexes.
 
@@ -104,11 +104,14 @@ def initialize_database(conn: sqlite3.Connection, logger=None) -> None:
     - All necessary indexes
     - Initial sync metadata
 
+    Also runs any pending migrations if db_path is provided.
+
     This function is idempotent - safe to call multiple times.
 
     Args:
         conn: SQLite database connection
         logger: Optional logger instance
+        db_path: Optional path to database file (needed for migrations)
 
     Raises:
         sqlite3.Error: If database initialization fails
@@ -138,6 +141,18 @@ def initialize_database(conn: sqlite3.Connection, logger=None) -> None:
 
         if logger:
             logger.info("Database schema initialized successfully")
+
+        # Run migrations if db_path provided
+        if db_path:
+            from pathlib import Path
+            from .migration_runner import run_migrations_if_needed
+            from .migrations.versions import ALL_MIGRATIONS
+
+            run_migrations_if_needed(
+                db_path=Path(db_path),
+                migrations=ALL_MIGRATIONS,
+                logger=logger
+            )
 
     except sqlite3.Error as e:
         if logger:

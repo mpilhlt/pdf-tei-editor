@@ -215,7 +215,47 @@ class TestMigrationXXX(unittest.TestCase):
 
 ## Running Migrations
 
-Migrations run automatically when the application starts. You can also run them manually:
+### Automatic Migration (Recommended)
+
+Migrations run automatically when the application starts for all databases. This is handled by the centralized migration runner.
+
+If you're adding a new database, see [Adding New Databases](adding-new-databases.md) for how to integrate automatic migrations.
+
+### Manual Migration (CLI)
+
+Use the `bin/run-migration.py` script to run migrations manually:
+
+```bash
+# Run all pending migrations
+uv run python bin/run-migration.py data/db/metadata.db
+
+# Show migration history
+uv run python bin/run-migration.py data/db/metadata.db --history
+```
+
+### Manual Migration (Python)
+
+For advanced use cases, you can run migrations programmatically using the centralized runner:
+
+```python
+from pathlib import Path
+from fastapi_app.lib.migration_runner import run_migrations_if_needed
+from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
+import logging
+
+logger = logging.getLogger(__name__)
+db_path = Path("data/db/metadata.db")
+
+# Run migrations (idempotent - safe to call multiple times)
+applied = run_migrations_if_needed(
+    db_path=db_path,
+    migrations=ALL_MIGRATIONS,
+    logger=logger
+)
+print(f"Applied {applied} migrations")
+```
+
+Or use the MigrationManager directly for more control:
 
 ```python
 from pathlib import Path
@@ -224,7 +264,7 @@ from fastapi_app.lib.migrations.versions import ALL_MIGRATIONS
 import logging
 
 logger = logging.getLogger(__name__)
-db_path = Path("data/db/my_database.db")
+db_path = Path("data/db/metadata.db")
 
 # Initialize manager
 manager = MigrationManager(db_path, logger)
