@@ -28,6 +28,8 @@ async def view_history(
     x_session_id: str | None = Header(None, alias="X-Session-ID"),
     session_manager=Depends(get_session_manager),
     auth_manager=Depends(get_auth_manager),
+    db=Depends(get_db),
+    file_storage=Depends(get_file_storage)
 ):
     """
     View annotation history as HTML page with nested tables.
@@ -62,9 +64,7 @@ async def view_history(
         raise HTTPException(status_code=401, detail="User not found")
 
     try:
-        db = get_db()
         file_repo = FileRepository(db)
-        file_storage = get_file_storage()
 
         # Get doc_id from the PDF's stable_id or file hash
         doc_id = file_repo.get_doc_id_by_file_id(pdf)
@@ -181,7 +181,9 @@ async def view_history(
 @router.get("/export")
 async def export_csv(
     pdf: str = Query(..., description="PDF stable_id or file hash"),
-    variant: str = Query("all", description="Model variant filter")
+    variant: str = Query("all", description="Model variant filter"),
+    db=Depends(get_db),
+    file_storage=Depends(get_file_storage)
 ):
     """
     Export annotation history as CSV file.
@@ -196,9 +198,7 @@ async def export_csv(
     from fastapi_app.plugins.annotation_history.plugin import AnnotationHistoryPlugin
 
     try:
-        db = get_db()
         file_repo = FileRepository(db)
-        file_storage = get_file_storage()
 
         # Get doc_id from the PDF's stable_id or file hash
         doc_id = file_repo.get_doc_id_by_file_id(pdf)

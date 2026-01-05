@@ -459,14 +459,7 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
         mock_tei_file.stable_id = "test-stable-id"
 
         # Mock dependencies
-        with (
-            patch("fastapi_app.plugins.annotation_history.routes.get_db") as mock_get_db,
-            patch("fastapi_app.plugins.annotation_history.routes.get_file_storage") as mock_storage,
-            patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class,
-        ):
-            # Setup mock database
-            mock_get_db.return_value = MagicMock()
-
+        with patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class:
             # Setup mock repository
             mock_repo = MagicMock()
             mock_repo.get_doc_id_by_file_id.return_value = "test-doc-id"
@@ -474,9 +467,7 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
             mock_repo_class.return_value = mock_repo
 
             # Setup mock file storage
-            mock_storage_instance = MagicMock()
-            mock_storage_instance.read_file.return_value = tei_xml.encode("utf-8")
-            mock_storage.return_value = mock_storage_instance
+            self.mock_storage.read_file.return_value = tei_xml.encode("utf-8")
 
             # Make request with session_id
             response = self.client.get(
@@ -504,9 +495,6 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
             patch("fastapi_app.plugins.annotation_history.routes.get_db") as mock_get_db,
             patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class,
         ):
-            # Setup mock database
-            mock_get_db.return_value = MagicMock()
-
             # Setup mock repository to return None
             mock_repo = MagicMock()
             mock_repo.get_doc_id_by_file_id.return_value = None
@@ -558,14 +546,7 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
         mock_tei_file.stable_id = "test-stable-id"
 
         # Mock dependencies
-        with (
-            patch("fastapi_app.plugins.annotation_history.routes.get_db") as mock_get_db,
-            patch("fastapi_app.plugins.annotation_history.routes.get_file_storage") as mock_storage,
-            patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class,
-        ):
-            # Setup mock database
-            mock_get_db.return_value = MagicMock()
-
+        with patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class:
             # Setup mock repository
             mock_repo = MagicMock()
             mock_repo.get_doc_id_by_file_id.return_value = "test-doc-id"
@@ -573,9 +554,7 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
             mock_repo_class.return_value = mock_repo
 
             # Setup mock file storage
-            mock_storage_instance = MagicMock()
-            mock_storage_instance.read_file.return_value = tei_xml.encode("utf-8")
-            mock_storage.return_value = mock_storage_instance
+            self.mock_storage.read_file.return_value = tei_xml.encode("utf-8")
 
             # Make request
             response = self.client.get(
@@ -628,22 +607,14 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
         mock_tei_file.stable_id = "test-stable-id"
 
         # Mock dependencies
-        with (
-            patch("fastapi_app.plugins.annotation_history.routes.get_db") as mock_get_db,
-            patch("fastapi_app.plugins.annotation_history.routes.get_file_storage") as mock_storage,
-            patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class,
-        ):
-            # Setup mock database
-            mock_get_db.return_value = MagicMock()
-
+        with patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_doc_id_by_file_id.return_value = "test-doc-id"
             mock_repo.get_files_by_doc_id.return_value = [mock_tei_file]
             mock_repo_class.return_value = mock_repo
 
-            mock_storage_instance = MagicMock()
-            mock_storage_instance.read_file.return_value = tei_xml.encode("utf-8")
-            mock_storage.return_value = mock_storage_instance
+            # Setup mock file storage
+            self.mock_storage.read_file.return_value = tei_xml.encode("utf-8")
 
             # Request with variant=all
             response = self.client.get(
@@ -659,13 +630,7 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
 
     def test_export_csv_pdf_not_found(self):
         """Test CSV export with non-existent PDF."""
-        with (
-            patch("fastapi_app.plugins.annotation_history.routes.get_db") as mock_get_db,
-            patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class,
-        ):
-            # Setup mock database
-            mock_get_db.return_value = MagicMock()
-
+        with patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class:
             # Setup mock repository to return None
             mock_repo = MagicMock()
             mock_repo.get_doc_id_by_file_id.return_value = None
@@ -683,13 +648,7 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
 
     def test_export_csv_no_tei_files(self):
         """Test CSV export when no TEI files exist."""
-        with (
-            patch("fastapi_app.plugins.annotation_history.routes.get_db") as mock_get_db,
-            patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class,
-        ):
-            # Setup mock database
-            mock_get_db.return_value = MagicMock()
-
+        with patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class:
             # Setup mock repository with no TEI files
             mock_repo = MagicMock()
             mock_repo.get_doc_id_by_file_id.return_value = "test-doc-id"
@@ -745,22 +704,14 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
         mock_tei_standard.stable_id = "standard-stable-id"
 
         # Mock dependencies
-        with (
-            patch("fastapi_app.plugins.annotation_history.routes.get_db") as mock_get_db,
-            patch("fastapi_app.plugins.annotation_history.routes.get_file_storage") as mock_storage,
-            patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class,
-        ):
-            # Setup mock database
-            mock_get_db.return_value = MagicMock()
-
+        with patch("fastapi_app.plugins.annotation_history.routes.FileRepository") as mock_repo_class:
             mock_repo = MagicMock()
             mock_repo.get_doc_id_by_file_id.return_value = "test-doc-id"
             mock_repo.get_files_by_doc_id.return_value = [mock_tei_grobid, mock_tei_standard]
             mock_repo_class.return_value = mock_repo
 
-            mock_storage_instance = MagicMock()
-            mock_storage_instance.read_file.return_value = tei_xml.encode("utf-8")
-            mock_storage.return_value = mock_storage_instance
+            # Setup mock file storage
+            self.mock_storage.read_file.return_value = tei_xml.encode("utf-8")
 
             # Request with variant=grobid filter
             response = self.client.get(
