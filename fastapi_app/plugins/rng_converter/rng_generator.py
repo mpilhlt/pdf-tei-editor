@@ -1,159 +1,63 @@
 """
-RelaxNG Schema Inference Extractor
+RelaxNG Schema Generation Module.
 
-This extractor analyzes XML documents and generates RelaxNG schemas
-that describe their structure, including validation instructions.
+This module contains the logic for generating RelaxNG schemas from XML documents.
 """
 
-import os
-import hashlib
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from lxml import etree
-from collections import defaultdict, Counter
-from flask import request
-
-from . import BaseExtractor
+from collections import defaultdict
 
 
-class RelaxNGExtractor(BaseExtractor):
-    """RelaxNG schema inference from XML documents."""
+def generate_rng_schema(
+    xml_content: str,
+    variant: str,
+    base_url: str,
+    options: Dict[str, Any] = None
+) -> str:
+    """
+    Generate RelaxNG schema from XML content.
 
-    @classmethod
-    def get_info(cls) -> Dict[str, Any]:
-        """Return information about the RelaxNG extractor."""
-        return {
-            "id": "rng",
-            "name": "RelaxNG Schema Generator",
-            "description": "Generate RelaxNG schema from XML document structure",
-            "input": ["xml"],
-            "output": ["relaxng-schema"],
-            "options": {
-                "schema_strictness": {
-                    "type": "select",
-                    "label": "Schema Strictness",
-                    "description": "How strict the generated schema should be",
-                    "default": "balanced",
-                    "values": ["strict", "balanced", "permissive"]
-                },
-                "include_namespaces": {
-                    "type": "boolean",
-                    "label": "Include Namespaces",
-                    "description": "Whether to include namespace definitions in schema",
-                    "default": True
-                },
-                "add_documentation": {
-                    "type": "boolean",
-                    "label": "Add Documentation",
-                    "description": "Include documentation comments in the schema",
-                    "default": True
-                }
-            }
-        }
+    Args:
+        xml_content: XML content to analyze
+        variant: Variant name for schema URL
+        base_url: Base URL for validation instructions
+        options: Generation options
 
-    @classmethod
-    def is_available(cls) -> bool:
-        """Check if the extractor dependencies are available."""
-        try:
-            # lxml is already imported and available
-            return True
-        except ImportError:
-            return False
+    Returns:
+        RelaxNG schema as XML string
+    """
+    options = options or {}
 
-    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
-                options: Dict[str, Any] = None) -> str:
-        """
-        Generate RelaxNG schema from XML content.
+    try:
+        # Parse the input XML
+        root = etree.fromstring(xml_content.encode('utf-8'))
 
-        Args:
-            pdf_path: Not used for this extractor
-            xml_content: XML content to analyze
-            options: Extraction options
+        # Generate schema structure
+        schema_analyzer = SchemaAnalyzer(options)
+        schema_structure = schema_analyzer.analyze(root)
 
-        Returns:
-            RelaxNG schema as XML string
+        # Generate RelaxNG schema
+        schema_generator = RelaxNGGenerator(options)
+        rng_schema = schema_generator.generate(schema_structure)
 
-        Raises:
-            ValueError: If xml_content is not provided
-            RuntimeError: If schema generation fails
-        """
-        if not xml_content:
-            raise ValueError("xml_content is required for RelaxNG schema generation")
+        # Format final schema
+        return _format_final_schema(rng_schema, options)
 
-        options = options or {}
+    except etree.XMLSyntaxError as e:
+        raise RuntimeError(f"Invalid XML syntax: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Schema generation failed: {e}")
 
-        try:
-            # Parse the input XML
-            root = etree.fromstring(xml_content.encode('utf-8'))
 
-            # Generate schema structure
-            schema_analyzer = SchemaAnalyzer(options)
-            schema_structure = schema_analyzer.analyze(root)
+def _format_final_schema(rng_schema: str, options: Dict[str, Any]) -> str:
+    """Format the final schema."""
+    header = '<?xml version="1.0" encoding="UTF-8"?>'
 
-            # Generate RelaxNG schema
-            schema_generator = RelaxNGGenerator(options)
-            rng_schema = schema_generator.generate(schema_structure)
+    # Add RelaxNG schema validation
+    relaxng_validation = '<?xml-model href="https://relaxng.org/relaxng.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>'
 
-            # Extract variant_id for stable URL generation
-            variant_id = options.get('variant_id')
-            if not variant_id:
-                raise ValueError("variant_id is required in options for RNG extraction")
-
-            # Add validation instructions with variant-based stable URL
-            validation_comment = self._generate_validation_comment(variant_id, options)
-
-            # Combine schema with validation instructions
-            return self._format_final_schema(rng_schema, validation_comment, options)
-
-        except etree.XMLSyntaxError as e:
-            raise RuntimeError(f"Invalid XML syntax: {e}")
-        except Exception as e:
-            raise RuntimeError(f"Schema generation failed: {e}")
-
-    def _get_base_url(self, options: Dict[str, Any]) -> str:
-        """Get the base URL from options or fall back to localhost."""
-        # Check if base_url was provided in options (from FastAPI request)
-        if 'base_url' in options:
-            return options['base_url']
-
-        # Fallback to localhost if no base_url provided
-        return "http://localhost:3001"
-
-    def _generate_validation_comment(self, variant: str, options: Dict[str, Any]) -> str:
-        """
-        Generate validation instruction comment with stable variant-based URL.
-
-        Args:
-            variant: The variant name (e.g., 'grobid', 'gemini')
-            options: Extraction options containing base_url
-
-        Returns:
-            XML comment with validation instructions
-        """
-        # Get dynamic base URL
-        base_url = self._get_base_url(options)
-
-        # Use clean schema endpoint URL
-        schema_url = f"{base_url}/api/v1/schema/rng/{variant}"
-
-        validation_instruction = f"""
-<!--
-To validate TEI documents against this schema, add this processing instruction
-to the beginning of your TEI document (after the XML declaration):
-<?xml-model href="{schema_url}" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>
--->"""
-        return validation_instruction
-
-    def _format_final_schema(self, rng_schema: str, validation_comment: str, options: Dict[str, Any]) -> str:
-        """Format the final schema with validation instructions."""
-        header = '<?xml version="1.0" encoding="UTF-8"?>'
-
-        # Add RelaxNG schema validation
-        relaxng_validation = '<?xml-model href="https://relaxng.org/relaxng.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>'
-
-        if options.get('add_documentation', True):
-            return f"{header}\n{relaxng_validation}\n{validation_comment}\n{rng_schema}"
-        else:
-            return f"{header}\n{relaxng_validation}\n{rng_schema}"
+    return f"{header}\n{relaxng_validation}\n{rng_schema}"
 
 
 class SchemaAnalyzer:

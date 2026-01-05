@@ -168,7 +168,6 @@ from .routers import (
     extraction,
     sync,
     sse,
-    schema,
     collections,
     users,
     groups,
@@ -200,7 +199,6 @@ api_v1.include_router(files_import.router)  # Import endpoint
 api_v1.include_router(files_metadata.router)  # Metadata update endpoint
 api_v1.include_router(sync.router)  # Phase 6: Sync endpoints
 api_v1.include_router(sse.router)  # Phase 6: SSE stream
-api_v1.include_router(schema.router)  # Schema serving (before files_serve)
 api_v1.include_router(plugins.router)  # Plugin system endpoints
 api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
 

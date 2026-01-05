@@ -40,7 +40,38 @@ export class PluginSandbox {
    */
   _createMessageHandler() {
     return async (event) => {
-      // Security: verify origin if needed
+      // Handle download requests
+      if (event.data && event.data.type === 'DOWNLOAD_REQUEST') {
+        const { requestId, url } = event.data;
+        try {
+          // Fetch with credentials
+          const response = await fetch(url, {
+            credentials: 'include'
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const blob = await response.blob();
+
+          // Send blob back to iframe
+          event.source.postMessage({
+            type: 'DOWNLOAD_RESPONSE',
+            requestId,
+            blob
+          }, '*');
+        } catch (error) {
+          event.source.postMessage({
+            type: 'DOWNLOAD_RESPONSE',
+            requestId,
+            error: error.message
+          }, '*');
+        }
+        return;
+      }
+
+      // Handle sandbox commands
       if (!event.data || event.data.type !== 'SANDBOX_COMMAND') {
         return;
       }
