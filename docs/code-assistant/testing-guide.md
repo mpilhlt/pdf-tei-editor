@@ -136,6 +136,38 @@ class TestMyRoute(unittest.IsolatedAsyncioTestCase):
 - Trying to patch dependency-injected functions with `@patch` instead of using `dependency_overrides`
 - Patching at definition location instead of import location
 - Forgetting to mock functions called inside routes that aren't dependency-injected
+- **Calling functions directly instead of using dependency injection** - Routes should use `Depends(get_db)` and `Depends(get_file_storage)` as parameters, not call `db = get_db()` inside the function body. This ensures proper mocking via `dependency_overrides` and prevents database access failures in CI environments where databases may not exist
+
+**Best Practice - Always Use Dependency Injection:**
+
+Routes should declare all dependencies as parameters using `Depends()`:
+
+```python
+# ✅ CORRECT - Use dependency injection
+@router.get("/export")
+async def export_csv(
+    pdf: str = Query(...),
+    db=Depends(get_db),
+    file_storage=Depends(get_file_storage)
+):
+    file_repo = FileRepository(db)
+    # ... use db and file_storage ...
+
+# ❌ WRONG - Direct function calls
+@router.get("/export")
+async def export_csv(
+    pdf: str = Query(...)
+):
+    db = get_db()  # Can't be mocked via dependency_overrides
+    file_storage = get_file_storage()  # Fails in CI if database doesn't exist
+```
+
+This pattern:
+
+- Enables proper mocking via `app.dependency_overrides` in tests
+- Prevents CI failures when databases/resources don't exist
+- Aligns with FastAPI best practices
+- Matches patterns in existing routes (edit_history plugin)
 
 **Authentication Testing Pattern:**
 
