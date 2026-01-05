@@ -274,7 +274,7 @@ def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
         file_metadata: File metadata object
 
     Returns:
-        List of revision entries
+        List of revision entries (one per change element)
     """
     try:
         from fastapi_app.lib.tei_utils import extract_tei_metadata, get_annotator_name
@@ -291,43 +291,45 @@ def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
             "title", "Untitled"
         )
 
-        # Get the last change element
-        last_change = root.find(".//tei:revisionDesc/tei:change[last()]", ns)
+        # Get ALL change elements
+        change_elements = root.findall(".//tei:revisionDesc/tei:change", ns)
 
-        if last_change is None:
+        if not change_elements:
             return []
-
-        # Extract change information
-        when = last_change.get("when", "")
-        who_attr = last_change.get("who", "")
-        who_id = who_attr.lstrip("#")
-
-        # Look up full name from respStmt using @xml:id
-        who_name = get_annotator_name(root, who_attr)
-
-        # Get description from text content or desc subelement
-        desc_elem = last_change.find("tei:desc", ns)
-        if desc_elem is not None and desc_elem.text:
-            description = desc_elem.text.strip()
-        elif last_change.text:
-            description = last_change.text.strip()
-        else:
-            description = "No description"
-
-        # Parse timestamp
-        try:
-            timestamp = datetime.fromisoformat(when.replace("Z", "+00:00"))
-            # Remove timezone info for consistent comparison
-            if timestamp.tzinfo is not None:
-                timestamp = timestamp.replace(tzinfo=None)
-        except (ValueError, AttributeError):
-            timestamp = datetime.now()
 
         # Get doc_id from file metadata
         doc_id = file_metadata.doc_id or "Unknown"
 
-        return [
-            {
+        # Extract all changes
+        results = []
+        for change in change_elements:
+            # Extract change information
+            when = change.get("when", "")
+            who_attr = change.get("who", "")
+            who_id = who_attr.lstrip("#")
+
+            # Look up full name from respStmt using @xml:id
+            who_name = get_annotator_name(root, who_attr)
+
+            # Get description from text content or desc subelement
+            desc_elem = change.find("tei:desc", ns)
+            if desc_elem is not None and desc_elem.text:
+                description = desc_elem.text.strip()
+            elif change.text:
+                description = change.text.strip()
+            else:
+                description = "No description"
+
+            # Parse timestamp
+            try:
+                timestamp = datetime.fromisoformat(when.replace("Z", "+00:00"))
+                # Remove timezone info for consistent comparison
+                if timestamp.tzinfo is not None:
+                    timestamp = timestamp.replace(tzinfo=None)
+            except (ValueError, AttributeError):
+                timestamp = datetime.now()
+
+            results.append({
                 "timestamp": timestamp,
                 "date_str": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
                 "doc_id": doc_id,
@@ -336,8 +338,9 @@ def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
                 "who_id": who_id,
                 "who": who_name,
                 "stable_id": file_metadata.stable_id,
-            }
-        ]
+            })
+
+        return results
 
     except Exception as e:
         logger.error(f"Error extracting revision info: {e}")
