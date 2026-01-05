@@ -17,6 +17,7 @@ from ..lib.tei_utils import (
     create_tei_header,
     create_edition_stmt,
     create_revision_desc_with_status,
+    create_schema_processing_instruction,
     serialize_tei_with_formatted_header
 )
 from ..lib.debug_utils import log_extraction_response, log_xml_parsing_error
@@ -91,8 +92,8 @@ class GrobidTrainingExtractor(BaseExtractor):
         grobid_server_url = os.environ.get("GROBID_SERVER_URL", "")
         return grobid_server_url != ""
     
-    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None, 
-                options: Dict[str, Any] = None) -> str:
+    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
+                options: Optional[Dict[str, Any]] = None) -> str:
         """
         Extract training data from PDF using GROBID.
         
@@ -168,7 +169,7 @@ class GrobidTrainingExtractor(BaseExtractor):
             grobid_doc = etree.fromstring(error_xml.encode('utf-8'))
         
         # Create new TEI document with proper namespace (no schema validation)
-        tei_doc = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})
+        tei_doc = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})  # type: ignore[dict-item]
         
         # Get DOI metadata if available
         doi = options.get("doi", "")
@@ -181,14 +182,17 @@ class GrobidTrainingExtractor(BaseExtractor):
         
         # Create TEI header
         tei_header = create_tei_header(doi, metadata)
-        
+        assert tei_header is not None
+
         # Add custom elements to header
         timestamp = datetime.datetime.now().isoformat() + "Z"
-        
+
         # Add editionStmt after titleStmt with fileref
         fileDesc = tei_header.find("fileDesc")
+        assert fileDesc is not None
         titleStmt = fileDesc.find("titleStmt")
-        edition_stmt = create_edition_stmt(timestamp, f"{variant_id} [{flavor}]")
+        assert titleStmt is not None
+        edition_stmt = create_edition_stmt(timestamp, f"Extraction ({variant_id}/{flavor})")
 
         # Add fileref to edition - use doc_id from options if provided, otherwise extract from PDF path
         file_id = options.get('doc_id')
@@ -197,9 +201,9 @@ class GrobidTrainingExtractor(BaseExtractor):
             file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
         
         edition = edition_stmt.find("edition")
-        if edition is not None:
-            fileref_elem = etree.SubElement(edition, "idno", type="fileref")
-            fileref_elem.text = file_id
+        assert edition is not None
+        fileref_elem = etree.SubElement(edition, "idno", type="fileref")
+        fileref_elem.text = file_id
         
         titleStmt.addnext(edition_stmt)
         
@@ -213,10 +217,11 @@ class GrobidTrainingExtractor(BaseExtractor):
         appInfo = etree.SubElement(encodingDesc, "appInfo")
         
         # PDF-TEI-Editor application
-        pdf_tei_app = etree.SubElement(appInfo, "application", 
-                                      version="1.0", 
+        pdf_tei_app = etree.SubElement(appInfo, "application",
+                                      version="1.0",
                                       ident="pdf-tei-editor",
                                       type="editor")
+        etree.SubElement(pdf_tei_app, "label").text = "PDF-TEI Editor"
         etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
         
         # GROBID extractor application
@@ -240,13 +245,13 @@ class GrobidTrainingExtractor(BaseExtractor):
         etree.SubElement(grobid_app, "ref", target="https://github.com/kermitt2/grobid")
         
         tei_header.append(encodingDesc)
-        
+
         # Replace revisionDesc with GROBID-specific version
         existing_revisionDesc = tei_header.find("revisionDesc")
         if existing_revisionDesc is not None:
             tei_header.remove(existing_revisionDesc)
         
-        revision_desc = create_revision_desc_with_status(timestamp, "draft", "Generated with createTraining API")
+        revision_desc = create_revision_desc_with_status(timestamp, "extraction", "Generated with createTraining API")
         tei_header.append(revision_desc)
         
         # Add header to new document
@@ -259,9 +264,9 @@ class GrobidTrainingExtractor(BaseExtractor):
             # Try with TEI namespace (for error XML)
             grobid_text = grobid_doc.find("{http://www.tei-c.org/ns/1.0}text")
         
-        print(f"DEBUG: grobid_doc root tag: {grobid_doc.tag}")
-        print(f"DEBUG: grobid_doc children: {[child.tag for child in grobid_doc]}")
-        print(f"DEBUG: Found grobid_text: {grobid_text is not None}")
+        #print(f"DEBUG: grobid_doc root tag: {grobid_doc.tag}")
+        #print(f"DEBUG: grobid_doc children: {[child.tag for child in grobid_doc]}")
+        #print(f"DEBUG: Found grobid_text: {grobid_text is not None}")
         
         if grobid_text is not None:
             # Check if this is an error text element (contains error notes)
@@ -300,14 +305,20 @@ class GrobidTrainingExtractor(BaseExtractor):
             p_elem = etree.SubElement(div_elem, "p")
             p_elem.text = "No text content available."
         
+        # Create processing instruction for schema validation
+        processing_instructions = []
+        schema_url = f'https://mpilhlt.github.io/grobid-footnote-flavour/schema/{variant_id}.rng'
+        schema_pi = create_schema_processing_instruction(schema_url)
+        processing_instructions.append(schema_pi)
+
         # Serialize with selective formatting: pretty-print header but preserve text content
-        result_xml = serialize_tei_with_formatted_header(tei_doc)
-        
+        result_xml = serialize_tei_with_formatted_header(tei_doc, processing_instructions)
+
         # Replace CDATA placeholder with actual CDATA section containing unescaped XML
         if "CDATA_PLACEHOLDER_FOR_INVALID_XML" in result_xml:
             cdata_content = f"<![CDATA[\n{training_tei_content}\n]]>"
             result_xml = result_xml.replace("CDATA_PLACEHOLDER_FOR_INVALID_XML", cdata_content)
-        
+
         return result_xml
     
     
@@ -333,7 +344,7 @@ class GrobidTrainingExtractor(BaseExtractor):
         """Create training data using GROBID createTraining API with retry logic."""
         import logging
         from urllib.parse import urlparse
-        from requests.exceptions import ConnectionError, RequestException
+        from requests.exceptions import ConnectionError, RequestException  # type: ignore[import-untyped]
 
         logger = logging.getLogger(__name__)
         print(f"Creating training data from {pdf_path} via GROBID")

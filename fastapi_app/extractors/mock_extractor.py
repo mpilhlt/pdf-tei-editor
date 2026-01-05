@@ -8,7 +8,13 @@ from typing import Dict, Any, Optional
 from lxml import etree
 
 from . import BaseExtractor
-from ..lib.tei_utils import create_tei_document, create_tei_header, serialize_tei_with_formatted_header
+from ..lib.tei_utils import (
+    create_tei_document,
+    create_tei_header,
+    create_revision_desc_with_status,
+    create_schema_processing_instruction,
+    serialize_tei_with_formatted_header
+)
 
 
 class MockExtractor(BaseExtractor):
@@ -57,7 +63,7 @@ class MockExtractor(BaseExtractor):
         return app_mode == "testing"
 
     def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
-                options: Dict[str, Any] = None) -> str:
+                options: Optional[Dict[str, Any]] = None) -> str:
         """
         Mock extraction that returns a simple TEI document.
 
@@ -75,12 +81,13 @@ class MockExtractor(BaseExtractor):
         if options is None:
             options = {}
 
-        # Create TEI document with RelaxNG schema
-        tei_doc = create_tei_document("relaxng")
+        # Create TEI document
+        tei_doc = create_tei_document()
 
         # Create basic TEI header
         doi = options.get("doi", "")
         tei_header = create_tei_header(doi, {})
+        assert tei_header is not None
 
         # Add editionStmt with fileref
         timestamp = datetime.datetime.now().isoformat() + "Z"
@@ -94,7 +101,9 @@ class MockExtractor(BaseExtractor):
                 file_id = f"mock-extracted-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         fileDesc = tei_header.find("fileDesc")
+        assert fileDesc is not None
         titleStmt = fileDesc.find("titleStmt")
+        assert titleStmt is not None
 
         # Create editionStmt
         editionStmt = etree.Element("editionStmt")
@@ -121,6 +130,7 @@ class MockExtractor(BaseExtractor):
                                       version="1.0",
                                       ident="pdf-tei-editor",
                                       type="editor")
+        etree.SubElement(pdf_tei_app, "label").text = "PDF-TEI Editor"
         etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
 
         # Mock extractor application
@@ -138,6 +148,15 @@ class MockExtractor(BaseExtractor):
         variant_label.text = variant_id
 
         tei_header.append(encodingDesc)
+
+        # Replace revisionDesc with mock-specific version
+        existing_revisionDesc = tei_header.find("revisionDesc")
+        if existing_revisionDesc is not None:
+            tei_header.remove(existing_revisionDesc)
+
+        revision_desc = create_revision_desc_with_status(timestamp, "extraction", "Generated with mock extractor for testing")
+        tei_header.append(revision_desc)
+
         tei_doc.append(tei_header)
 
         # Create mock content with sample references
@@ -166,5 +185,12 @@ class MockExtractor(BaseExtractor):
             date_imprint = etree.SubElement(imprint, "date", type="published", when=f"202{i}")
             date_imprint.text = f"202{i}"
 
+        # Create processing instruction for schema validation
+        processing_instructions = []
+        # Mock extractor uses a mock schema URL for testing
+        schema_url = f'https://example.com/schema/{variant_id}.rng'
+        schema_pi = create_schema_processing_instruction(schema_url)
+        processing_instructions.append(schema_pi)
+
         # Serialize to XML with formatted header
-        return serialize_tei_with_formatted_header(tei_doc)
+        return serialize_tei_with_formatted_header(tei_doc, processing_instructions)

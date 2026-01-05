@@ -9,6 +9,8 @@ Tests that extractors set the correct fileref (doc_id) in extracted TEI.
 """
 
 import unittest
+import tempfile
+import json
 from pathlib import Path
 import sys
 from lxml import etree
@@ -80,6 +82,66 @@ class TestExtractionFileref(unittest.TestCase):
         self.assertIsNotNone(fileref_elem, "fileref element should exist")
         self.assertTrue(fileref_elem.text.startswith("mock-extracted-"),
                        "fileref should be auto-generated when no PDF path")
+
+
+class TestExtractionSchemaProcessingInstructions(unittest.TestCase):
+    """Test that extractors add schema processing instructions correctly."""
+
+    def test_mock_extractor_includes_processing_instruction(self):
+        """Test that MockExtractor includes schema processing instruction."""
+        extractor = MockExtractor()
+
+        result = extractor.extract(
+            pdf_path="/path/to/test.pdf",
+            options={'variant_id': 'mock-default'}
+        )
+
+        # Check for processing instruction
+        self.assertIn('<?xml-model', result)
+        self.assertIn('mock-default.rng', result)
+        self.assertIn('type="application/xml"', result)
+        self.assertIn('schematypens="http://relaxng.org/ns/structure/1.0"', result)
+
+        # Processing instruction should come before TEI element
+        pi_pos = result.find('<?xml-model')
+        tei_pos = result.find('<TEI')
+        self.assertLess(pi_pos, tei_pos, "Processing instruction should come before TEI element")
+
+
+
+class TestExtractionRevisionDesc(unittest.TestCase):
+    """Test that extractors add revisionDesc with change element."""
+
+    def test_mock_extractor_includes_revision_desc(self):
+        """Test that MockExtractor includes revisionDesc with change element."""
+        extractor = MockExtractor()
+
+        result = extractor.extract(
+            pdf_path="/path/to/test.pdf",
+            options={}
+        )
+
+        # Parse the result
+        root = etree.fromstring(result.encode('utf-8'))
+        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
+
+        # Check for revisionDesc
+        revision_desc = root.find('.//tei:revisionDesc', ns)
+        self.assertIsNotNone(revision_desc, "revisionDesc should exist")
+
+        # Check for change element
+        change_elem = revision_desc.find('.//tei:change', ns)
+        self.assertIsNotNone(change_elem, "change element should exist in revisionDesc")
+
+        # Check attributes
+        self.assertIsNotNone(change_elem.get('when'), "change element should have 'when' attribute")
+        self.assertEqual(change_elem.get('status'), 'extraction', "change element should have status='extraction'")
+
+        # Check desc element inside change
+        desc_elem = change_elem.find('tei:desc', ns)
+        self.assertIsNotNone(desc_elem, "desc element should exist inside change")
+        self.assertIsNotNone(desc_elem.text, "desc element should have text content")
+        self.assertIn("mock extractor", desc_elem.text.lower(), "desc text should mention mock extractor")
 
 
 if __name__ == '__main__':
