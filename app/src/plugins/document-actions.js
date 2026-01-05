@@ -13,7 +13,7 @@ import { app } from '../app.js'
 import ui, { updateUi } from '../ui.js'
 import {
   client, logger, dialog, authentication,
-  xmlEditor, sync, accessControl, testLog, fileselection
+  xmlEditor, sync, accessControl, testLog, fileselection, config
 } from '../app.js'
 import FiledataPlugin from './filedata.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
@@ -432,28 +432,55 @@ async function saveRevision(state) {
       revDlg.persId.value = userData.username
       revDlg.persName.value = userData.fullname
 
-      // Pre-fill status from current TEI document
+      // Get current status from TEI document
       const xmlDoc = xmlEditor.getXmlTree()
+      let currentStatus = 'draft'
       if (xmlDoc) {
         const lastChange = xmlDoc.querySelector('revisionDesc change:last-of-type')
         if (lastChange) {
-          const currentStatus = lastChange.getAttribute('status') || 'draft'
-          revDlg.status.value = currentStatus
-        } else {
-          revDlg.status.value = 'draft'
+          currentStatus = lastChange.getAttribute('status') || 'draft'
         }
       }
 
-      // Disable restricted status options based on user role
-      const isReviewer = userHasRole(userData, ["admin", "reviewer"])
-      const restrictedOptions = ['approved', 'candidate', 'published']
-      Array.from(revDlg.status.querySelectorAll('sl-option')).forEach(option => {
-        if (!isReviewer && restrictedOptions.includes(option.value)) {
-          option.disabled = true
+      // Dynamically populate status options based on configuration
+      const lifecycleOrder = await config.get('annotation.lifecycle.order')
+
+      // Collect allowed statuses for user's roles
+      const userRoles = userData.groups || []
+      let allowedStatuses = []
+
+      for (const role of userRoles) {
+        const roleStatuses = await config.get(`annotation.lifecycle.role.${role}`)
+        if (roleStatuses) {
+          allowedStatuses = [...allowedStatuses, ...roleStatuses]
         }
-      })
+      }
+
+      // Remove duplicates
+      allowedStatuses = [...new Set(allowedStatuses)]
+
+      // Always include current status if not already in allowed list
+      if (!allowedStatuses.includes(currentStatus)) {
+        allowedStatuses.push(currentStatus)
+      }
+
+      // Clear existing options
+      revDlg.status.innerHTML = ''
+
+      // Add options from lifecycle order, enabling only allowed statuses
+      for (const status of lifecycleOrder) {
+        const option = document.createElement('sl-option')
+        option.value = status
+        option.textContent = status.charAt(0).toUpperCase() + status.slice(1)
+        option.disabled = !allowedStatuses.includes(status)
+        revDlg.status.appendChild(option)
+      }
+
+      // Set current status as selected
+      revDlg.status.value = currentStatus
 
       // Show/hide gold version checkbox based on user role
+      const isReviewer = userHasRole(userData, ["admin", "reviewer"])
       revDlg.saveAsGold.style.display = isReviewer ? 'block' : 'none'
       revDlg.saveAsGold.checked = false
     }

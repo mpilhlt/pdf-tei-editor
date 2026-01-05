@@ -18,6 +18,7 @@ Usage:
 """
 
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -26,11 +27,27 @@ from typing import Optional
 _migrations_run_for: set[str] = set()
 
 
+def _is_test_environment() -> bool:
+    """
+    Detect if running in a test environment.
+
+    Returns:
+        True if running tests, False otherwise
+    """
+    # Check if pytest or unittest is running
+    return any(
+        arg.endswith(('pytest', 'unittest', 'test.py', '.test.js'))
+        or 'test' in arg
+        for arg in sys.argv
+    )
+
+
 def run_migrations_if_needed(
     db_path: Path,
     migrations: list,
     logger=None,
-    force: bool = False
+    force: bool = False,
+    skip_backup: Optional[bool] = None
 ) -> int:
     """
     Run migrations on a database if needed.
@@ -45,6 +62,8 @@ def run_migrations_if_needed(
         migrations: List of migration classes to register
         logger: Optional logger instance
         force: If True, bypass per-process cache and always check for pending migrations
+        skip_backup: If True, skip database backup before migrations. If None (default),
+                     automatically skips backups in test environments
 
     Returns:
         Number of migrations applied (0 if none needed)
@@ -59,6 +78,10 @@ def run_migrations_if_needed(
         )
     """
     from fastapi_app.lib.migrations import MigrationManager
+
+    # Auto-detect test environment if skip_backup not explicitly set
+    if skip_backup is None:
+        skip_backup = _is_test_environment()
 
     # Convert path to string for cache key
     db_path_str = str(db_path.resolve())
@@ -113,7 +136,7 @@ def run_migrations_if_needed(
                 manager.register_migration(migration_class(logger))
 
             # Run pending migrations
-            applied = manager.run_migrations()
+            applied = manager.run_migrations(skip_backup=skip_backup)
 
             if applied > 0 and logger:
                 logger.info(f"Applied {applied} migration(s) to {db_path.name}")
