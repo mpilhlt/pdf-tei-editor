@@ -137,9 +137,67 @@ class TestMyRoute(unittest.IsolatedAsyncioTestCase):
 - Patching at definition location instead of import location
 - Forgetting to mock functions called inside routes that aren't dependency-injected
 
+**Authentication Testing Pattern:**
+
+When testing routes that require authentication (via `session_id` query parameter or `X-Session-ID` header), set up default authentication in `setUp()`:
+
+```python
+def setUp(self):
+    """Set up test fixtures."""
+    from fastapi import FastAPI
+    from myapp.routes import router
+    from fastapi_app.lib.dependencies import (
+        get_auth_manager,
+        get_session_manager,
+        get_db,
+        get_file_storage,
+    )
+
+    self.app = FastAPI()
+    self.app.include_router(router)
+
+    # Create mocks for dependencies
+    self.mock_session_manager = MagicMock()
+    self.mock_auth_manager = MagicMock()
+    self.mock_db = MagicMock()
+    self.mock_storage = MagicMock()
+
+    # Mock valid authentication by default
+    self.mock_session_manager.is_session_valid.return_value = True
+    self.mock_auth_manager.get_user_by_session_id.return_value = MagicMock(
+        username="testuser",
+        groups=["*"]  # Wildcard access
+    )
+
+    # Override dependencies
+    self.app.dependency_overrides[get_session_manager] = lambda: self.mock_session_manager
+    self.app.dependency_overrides[get_auth_manager] = lambda: self.mock_auth_manager
+    self.app.dependency_overrides[get_db] = lambda: self.mock_db
+    self.app.dependency_overrides[get_file_storage] = lambda: self.mock_storage
+
+    self.client = TestClient(self.app)
+```
+
+Then include `session_id` in test requests:
+
+```python
+response = self.client.get(
+    "/api/my-endpoint",
+    params={"session_id": "test-session", "other_param": "value"}
+)
+```
+
+**Why This Pattern:**
+
+- Routes using `Depends(get_session_manager)` and `Depends(get_auth_manager)` require dependency overrides
+- Setting up valid authentication in `setUp()` makes all tests pass authentication by default
+- Individual tests can override these defaults to test authentication failures
+- Must include `session_id` parameter in requests to satisfy route authentication requirements
+
 **See Also:**
 
 - [fastapi_app/plugins/edit_history/tests/test_edit_history_export.py](../../fastapi_app/plugins/edit_history/tests/test_edit_history_export.py) - Complete example with authentication, authorization, and data mocking
+- [fastapi_app/plugins/annotation_history/tests/test_annotation_history.py](../../fastapi_app/plugins/annotation_history/tests/test_annotation_history.py) - Routes requiring authentication via dependency injection
 
 ### API Integration Tests
 

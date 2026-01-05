@@ -113,7 +113,7 @@ async def view_progress(
                 continue
 
         # Prepare table data
-        headers = ["Document ID", "Annotations", "Last Change", "Last Annotator"]
+        headers = ["Document ID", "Annotations", "Last Change", "Last Annotator", "Status"]
         rows = []
 
         # Sort by doc_id and include all documents even if they have no annotations
@@ -124,6 +124,7 @@ async def view_progress(
             annotation_links = []
             newest_change_desc = ""
             newest_annotator = ""
+            newest_status = ""
             newest_timestamp = None
 
             for ann in annotations:
@@ -140,16 +141,19 @@ async def view_progress(
                     newest_timestamp = ann_timestamp
                     newest_change_desc = ann.get("last_change_desc", "")
                     newest_annotator = ann.get("last_annotator", "")
+                    newest_status = ann.get("last_change_status", "")
 
             annotations_cell = ", ".join(annotation_links) if annotation_links else "No annotations"
             last_change_cell = escape_html(newest_change_desc) if newest_change_desc else ""
             last_annotator_cell = escape_html(newest_annotator) if newest_annotator else ""
+            status_cell = escape_html(newest_status) if newest_status else ""
 
             rows.append([
                 escape_html(doc_id),
                 annotations_cell,
                 last_change_cell,
-                last_annotator_cell
+                last_annotator_cell,
+                status_cell
             ])
 
         # Generate HTML page
@@ -270,7 +274,7 @@ async def export_csv(
 
         # Write header
         writer.writerow(
-            ["Document ID", "Annotation Label", "Revision Count", "Last Change", "Last Annotator"]
+            ["Document ID", "Annotation Label", "Revision Count", "Last Change", "Last Annotator", "Status"]
         )
 
         # Write data - sort by doc_id and include all documents even if they have no annotations
@@ -279,7 +283,7 @@ async def export_csv(
 
             if not annotations:
                 # Document with no annotations
-                writer.writerow([doc_id, "", "", "", ""])
+                writer.writerow([doc_id, "", "", "", "", ""])
             else:
                 # Sort annotations by label for consistent output
                 annotations.sort(key=lambda x: x["annotation_label"])
@@ -291,6 +295,7 @@ async def export_csv(
                         ann["revision_count"],
                         ann.get("last_change_desc", ""),
                         ann.get("last_annotator", ""),
+                        ann.get("last_change_status", ""),
                     ])
 
         # Create streaming response

@@ -117,6 +117,7 @@ class AnnotationProgressPlugin(Plugin):
 
             last_change_desc = ""
             last_annotator = ""
+            last_change_status = ""
             last_change_timestamp = None
 
             if last_change is not None:
@@ -130,6 +131,9 @@ class AnnotationProgressPlugin(Plugin):
                 # Get annotator name
                 who_id = last_change.get("who", "")
                 last_annotator = get_annotator_name(root, who_id)
+
+                # Get status attribute
+                last_change_status = last_change.get("status", "draft")
 
                 # Get timestamp for comparison
                 when = last_change.get("when", "")
@@ -148,6 +152,7 @@ class AnnotationProgressPlugin(Plugin):
                 "stable_id": file_metadata.stable_id,
                 "last_change_desc": last_change_desc,
                 "last_annotator": last_annotator,
+                "last_change_status": last_change_status,
                 "last_change_timestamp": last_change_timestamp,
             }
 

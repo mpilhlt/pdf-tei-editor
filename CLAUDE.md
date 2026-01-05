@@ -193,6 +193,7 @@ This difference exists because the backend test runner filters files before pass
 - **NEVER make up non-existing APIs** - Before using any method on a class or module instance, ALWAYS verify that the method exists with the exact signature you're using. Read the class definition or module exports first. If a needed API doesn't exist, implement it rather than assuming it exists
 - **File identifiers on the client** - ALWAYS use `stable_id` (nanoid) when referencing files in client-side code (frontend plugins, HTML output, JavaScript). NEVER use `file_id` (content hash) on the client. The `stable_id` is the permanent identifier for files, while `file_id` is only used internally for storage and deduplication
 - **Check testing guide before writing/debugging tests** - ALWAYS consult [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing new tests or debugging test failures. It contains critical patterns, helper functions, and known issues (like Shoelace component testing). For Python unit tests of FastAPI routes, see the section on dependency overrides vs @patch decorators
+- **Testing authenticated routes** - When writing tests for routes that use `Depends(get_session_manager)` and `Depends(get_auth_manager)`, ALWAYS use `app.dependency_overrides` in `setUp()` to mock these dependencies with valid authentication by default, and include `session_id` parameter in test requests. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) Authentication Testing Pattern section
 - **Check backend plugin guide when creating backend plugins** - ALWAYS consult [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) before creating or modifying backend plugins. It contains the plugin architecture, patterns, and Shadow DOM handling requirements
 - **CI/CD Workflow Changes** - ALWAYS consult [docs/development/ci-cd-pipeline.md](docs/development/ci-cd-pipeline.md) before modifying GitHub Actions workflows. The document describes the test execution strategy, release process, and dependencies between workflows
 - **Suppress expected error output in tests** - When tests validate error handling that logs errors or warnings, ALWAYS use `assertLogs` context manager to suppress console output. This keeps test output clean and verifies the error is logged. Example: `with self.assertLogs('module.name', level='ERROR') as cm:` wrapping the code that produces expected errors. Never let expected errors pollute test output.
@@ -240,6 +241,78 @@ When implementing a new feature, follow this workflow:
 - When asked to document best practices for contributors, add information to [docs/development/contributing.md](docs/development/contributing.md)
 - This includes commit message conventions, code quality requirements, pull request guidelines, testing requirements, and release processes
 - Use conventional commit format: `<type>: <description>` where type is feat, fix, docs, refactor, test, or chore
+
+## Backend Plugin Output Pattern
+
+**IMPORTANT: When creating backend plugins that generate HTML or CSV output, ALWAYS use custom routes instead of returning content directly from plugin endpoints.**
+
+### Pattern for HTML/CSV Output
+
+1. **Plugin endpoint returns URLs** (not HTML/CSV content):
+
+   ```python
+   async def analyze(self, context, params: dict) -> dict:
+       """Return URLs pointing to custom routes."""
+       pdf_id = params.get("pdf")
+       variant = params.get("variant")
+
+       view_url = f"/api/plugins/my-plugin/view?pdf={pdf_id}&variant={variant}"
+       export_url = f"/api/plugins/my-plugin/export?pdf={pdf_id}&variant={variant}"
+
+       return {
+           "outputUrl": view_url,    # For HTML view
+           "exportUrl": export_url,  # For CSV export
+           "pdf": pdf_id,
+           "variant": variant
+       }
+   ```
+
+2. **Custom routes generate content** (in `routes.py`):
+
+   ```python
+   @router.get("/view", response_class=HTMLResponse)
+   async def view_history(
+       pdf: str = Query(...),
+       variant: str = Query("all"),
+       session_id: str | None = Query(None),
+       x_session_id: str | None = Header(None, alias="X-Session-ID"),
+       session_manager=Depends(get_session_manager),
+       auth_manager=Depends(get_auth_manager),
+   ):
+       """Generate HTML page with results."""
+       # Authenticate user
+       # Process data
+       # Generate HTML using generate_datatable_page() or custom template
+       return HTMLResponse(content=html)
+
+   @router.get("/export")
+   async def export_csv(
+       pdf: str = Query(...),
+       variant: str = Query("all")
+   ):
+       """Generate CSV export."""
+       # Process data
+       # Generate CSV
+       return StreamingResponse(
+           iter([csv_content]),
+           media_type="text/csv",
+           headers={"Content-Disposition": f"attachment; filename=export.csv"}
+       )
+   ```
+
+### Why This Pattern
+
+- **Proper authentication**: Routes can use FastAPI's dependency injection for session validation
+- **Better script execution**: HTML pages in iframes load JavaScript naturally
+- **Separation of concerns**: Plugin coordinates, route generates
+- **Reusable utilities**: Use `generate_datatable_page()` from `fastapi_app.lib.plugin_tools`
+
+### Reference Examples
+
+- `fastapi_app/plugins/edit_history/` - Collection-based edit history with DataTables
+- `fastapi_app/plugins/annotation_history/` - Document-based annotation history with nested tables
+
+See [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) for complete documentation.
 
 ## Completion documents and summaries
 
