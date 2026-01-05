@@ -119,6 +119,7 @@ class EditHistoryPlugin(Plugin):
             # Extract change information
             when = last_change.get("when", "")
             who_id = last_change.get("who", "")
+            status = last_change.get("status", "draft")
 
             # Look up full name from respStmt using @xml:id
             who_name = get_annotator_name(root, who_id)
@@ -154,6 +155,7 @@ class EditHistoryPlugin(Plugin):
                     "doc_label": doc_label,
                     "description": description,
                     "who": who_name,
+                    "status": status,
                     "stable_id": file_metadata.stable_id,
                 }
             ]

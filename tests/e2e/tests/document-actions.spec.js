@@ -417,4 +417,231 @@ test.describe('Document Actions', () => {
       await page.close();
     }
   });
+
+  test('should pre-fill status from last change element', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      // Login as reviewer
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+
+      // Select documents
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.waitForTimeout(1000);
+
+      // Click save revision button
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.saveRevision.click();
+      });
+
+      // Wait for dialog to open
+      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+
+      // Verify status select is present and has a value
+      const statusState = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return {
+          exists: Boolean(ui.newRevisionChangeDialog.status),
+          value: ui.newRevisionChangeDialog.status.value,
+          optionsCount: ui.newRevisionChangeDialog.status.querySelectorAll('sl-option').length
+        };
+      });
+      debugLog('Status select state:', statusState);
+      expect(statusState.exists).toBe(true);
+      expect(statusState.optionsCount).toBe(5); // draft, checked, approved, candidate, published
+      expect(['draft', 'checked', 'approved', 'candidate', 'published']).toContain(statusState.value);
+
+      // Close the dialog
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newRevisionChangeDialog.cancel.click();
+      });
+
+      debugLog('Status pre-fill test completed successfully');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+      await page.close();
+    }
+  });
+
+  test('should restrict status options for annotators', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      // Login as annotator (not reviewer)
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+
+      // Select documents
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.waitForTimeout(1000);
+
+      // Click save revision button
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.saveRevision.click();
+      });
+
+      // Wait for dialog to open
+      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+
+      // Check which options are disabled
+      const optionStates = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        const options = Array.from(ui.newRevisionChangeDialog.status.querySelectorAll('sl-option'));
+        return options.map(opt => ({
+          value: opt.value,
+          disabled: opt.disabled
+        }));
+      });
+      debugLog('Status options for annotator:', optionStates);
+
+      // Verify restricted options are disabled
+      const approvedOpt = optionStates.find(o => o.value === 'approved');
+      const candidateOpt = optionStates.find(o => o.value === 'candidate');
+      const publishedOpt = optionStates.find(o => o.value === 'published');
+      const draftOpt = optionStates.find(o => o.value === 'draft');
+      const checkedOpt = optionStates.find(o => o.value === 'checked');
+
+      expect(approvedOpt?.disabled).toBe(true);
+      expect(candidateOpt?.disabled).toBe(true);
+      expect(publishedOpt?.disabled).toBe(true);
+      expect(draftOpt?.disabled).toBe(false);
+      expect(checkedOpt?.disabled).toBe(false);
+
+      // Close the dialog
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newRevisionChangeDialog.cancel.click();
+      });
+
+      debugLog('Status restriction test completed successfully');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+      await page.close();
+    }
+  });
+
+  test('should allow all status options for reviewers', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      // Login as reviewer
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+
+      // Select documents
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.waitForTimeout(1000);
+
+      // Click save revision button
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.saveRevision.click();
+      });
+
+      // Wait for dialog to open
+      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+
+      // Check all options are enabled
+      const optionStates = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        const options = Array.from(ui.newRevisionChangeDialog.status.querySelectorAll('sl-option'));
+        return options.map(opt => ({
+          value: opt.value,
+          disabled: opt.disabled
+        }));
+      });
+      debugLog('Status options for reviewer:', optionStates);
+
+      // Verify all options are enabled
+      optionStates.forEach(opt => {
+        expect(opt.disabled).toBe(false);
+      });
+
+      // Close the dialog
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newRevisionChangeDialog.cancel.click();
+      });
+
+      debugLog('Status options test for reviewer completed successfully');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+      await page.close();
+    }
+  });
+
+  test('should save status to change element', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      // Login as reviewer
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+
+      // Select documents
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.waitForTimeout(1000);
+
+      // Click save revision button
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.saveRevision.click();
+      });
+
+      // Wait for dialog to open
+      await page.waitForSelector('sl-dialog[name="newRevisionChangeDialog"][open]', { timeout: 5000 });
+
+      // Fill out the form with a specific status
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newRevisionChangeDialog.changeDesc.value = 'E2E test status save';
+        ui.newRevisionChangeDialog.status.value = 'checked';
+      });
+
+      // Submit the revision dialog
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newRevisionChangeDialog.submit.click();
+      });
+
+      // Wait for revision to be saved and verify status
+      const revisionLog = await waitForTestMessage(consoleLogs, 'REVISION_SAVED', 20000);
+      debugLog('Revision saved with status:', revisionLog.value);
+      expect(revisionLog.value).toHaveProperty('changeDescription', 'E2E test status save');
+      expect(revisionLog.value).toHaveProperty('status', 'checked');
+
+      debugLog('Status save test completed successfully');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+      await page.close();
+    }
+  });
 });

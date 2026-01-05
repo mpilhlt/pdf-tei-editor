@@ -107,7 +107,7 @@ async def view_history(
         history_entries.sort(key=lambda x: x["timestamp"], reverse=True)
 
         # Prepare table data
-        headers = ["Change Date", "Document ID", "Extraction Label", "Change Description", "Who"]
+        headers = ["Change Date", "Document ID", "Extraction Label", "Change Description", "Who", "Status"]
         rows = []
         for entry in history_entries:
             # Make extraction label clickable
@@ -118,7 +118,8 @@ async def view_history(
                 escape_html(entry["doc_id"]),
                 doc_link,
                 escape_html(entry["description"]),
-                escape_html(entry["who"])
+                escape_html(entry["who"]),
+                escape_html(entry.get("status", ""))
             ])
 
         # Generate HTML page
@@ -234,7 +235,7 @@ async def export_csv(
 
         # Write header
         writer.writerow(
-            ["Change Date", "Document ID", "Extraction Label", "Change Description", "Annotator ID", "Annotator Name"]
+            ["Change Date", "Document ID", "Extraction Label", "Change Description", "Annotator ID", "Annotator Name", "Status"]
         )
 
         # Write data
@@ -247,6 +248,7 @@ async def export_csv(
                     entry["description"],
                     entry.get("who_id", ""),
                     entry["who"],
+                    entry.get("status", ""),
                 ]
             )
 

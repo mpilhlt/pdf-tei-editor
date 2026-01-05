@@ -5,7 +5,7 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginConfig } from '../modules/plugin-manager.js'
- * @import { SlButton, SlInput, SlDialog, SlCheckbox } from '../ui.js'
+ * @import { SlButton, SlInput, SlDialog, SlCheckbox, SlSelect } from '../ui.js'
  * @import { RespStmt, RevisionChange, Edition} from '../modules/tei-utils.js'
  */
 
@@ -87,6 +87,7 @@ let currentState = null
  * @property {SlInput} persId - Person ID input
  * @property {SlInput} persName - Person name input
  * @property {SlInput} changeDesc - Change description input
+ * @property {SlSelect} status - Status select
  * @property {SlCheckbox} saveAsGold - Save as gold version checkbox
  * @property {SlButton} submit - Submit button
  * @property {SlButton} cancel - Cancel button
@@ -431,8 +432,28 @@ async function saveRevision(state) {
       revDlg.persId.value = userData.username
       revDlg.persName.value = userData.fullname
 
-      // Show/hide gold version checkbox based on user role
+      // Pre-fill status from current TEI document
+      const xmlDoc = xmlEditor.getXmlTree()
+      if (xmlDoc) {
+        const lastChange = xmlDoc.querySelector('revisionDesc change:last-of-type')
+        if (lastChange) {
+          const currentStatus = lastChange.getAttribute('status') || 'draft'
+          revDlg.status.value = currentStatus
+        } else {
+          revDlg.status.value = 'draft'
+        }
+      }
+
+      // Disable restricted status options based on user role
       const isReviewer = userHasRole(userData, ["admin", "reviewer"])
+      const restrictedOptions = ['approved', 'candidate', 'published']
+      Array.from(revDlg.status.querySelectorAll('sl-option')).forEach(option => {
+        if (!isReviewer && restrictedOptions.includes(option.value)) {
+          option.disabled = true
+        }
+      })
+
+      // Show/hide gold version checkbox based on user role
       revDlg.saveAsGold.style.display = isReviewer ? 'block' : 'none'
       revDlg.saveAsGold.checked = false
     }
@@ -440,7 +461,14 @@ async function saveRevision(state) {
     await new Promise((resolve, reject) => {
       revDlg.submit.addEventListener('click', resolve, { once: true })
       revDlg.cancel.addEventListener('click', reject, { once: true })
-      revDlg.addEventListener('sl-hide', reject, { once: true })
+      // Only reject on dialog hide, not on nested component events
+      const handleHide = (e) => {
+        // Check if the hide event is from the dialog itself, not a child component
+        if (e.target === revDlg) {
+          reject()
+        }
+      }
+      revDlg.addEventListener('sl-hide', handleHide, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
@@ -460,7 +488,7 @@ async function saveRevision(state) {
 
   /** @type {RevisionChange} */
   const revisionChange = {
-    status: "draft",
+    status: revDlg.status.value,
     persId: revDlg.persId.value,
     desc: revDlg.changeDesc.value
   }
@@ -479,7 +507,10 @@ async function saveRevision(state) {
     const filedata = FiledataPlugin.getInstance()
     await filedata.saveXml(state.xml)
 
-    testLog('REVISION_SAVED', { changeDescription: revDlg.changeDesc.value });
+    testLog('REVISION_SAVED', {
+      changeDescription: revDlg.changeDesc.value,
+      status: revDlg.status.value
+    });
 
     // Verify revision was added to XML content (self-contained for bundle removal)
     testLog('REVISION_IN_XML_VERIFIED', {
@@ -535,7 +566,13 @@ async function createNewVersion(state) {
     await new Promise((resolve, reject) => {
       newVersiondialog.submit.addEventListener('click', resolve, { once: true })
       newVersiondialog.cancel.addEventListener('click', reject, { once: true })
-      newVersiondialog.addEventListener('sl-hide', reject, { once: true })
+      // Only reject on dialog hide, not on nested component events
+      const handleHide = (e) => {
+        if (e.target === newVersiondialog) {
+          reject()
+        }
+      }
+      newVersiondialog.addEventListener('sl-hide', handleHide, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
@@ -692,7 +729,13 @@ async function editFileMetadata(state) {
     await new Promise((resolve, reject) => {
       metadataDlg.submit.addEventListener('click', resolve, { once: true })
       metadataDlg.cancel.addEventListener('click', reject, { once: true })
-      metadataDlg.addEventListener('sl-hide', reject, { once: true })
+      // Only reject on dialog hide, not on nested component events
+      const handleHide = (e) => {
+        if (e.target === metadataDlg) {
+          reject()
+        }
+      }
+      metadataDlg.addEventListener('sl-hide', handleHide, { once: true })
     })
   } catch (e) {
     console.warn("User cancelled")
