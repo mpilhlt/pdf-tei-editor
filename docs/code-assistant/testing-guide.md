@@ -611,7 +611,36 @@ await expect(checkbox).toHaveAttribute('checked', '');  // Checked
 await expect(checkbox).not.toHaveAttribute('checked'); // Unchecked
 ```
 
-This applies to all Shoelace components (`<sl-button>`, `<sl-checkbox>`, `<sl-input>`, etc.).
+**Dialog Button Clicks:**
+
+Shoelace dialogs require a short delay before button clicks to ensure the dialog is fully rendered and interactive:
+
+```javascript
+// Wait for dialog to open
+await page.waitForSelector('sl-dialog[name="myDialog"][open]', { timeout: 5000 });
+
+// Fill in form fields
+await page.evaluate(() => {
+  const ui = window.ui;
+  ui.myDialog.inputField.value = 'test value';
+});
+
+// CRITICAL: Add 500ms delay before clicking submit
+await page.waitForTimeout(500);
+
+await page.evaluate(() => {
+  const ui = window.ui;
+  ui.myDialog.submit.click();
+});
+```
+
+**Why this is needed:**
+
+- Shoelace dialogs use Shadow DOM and animation
+- Clicking too quickly can result in the click being ignored
+- 500ms ensures the dialog is fully interactive
+
+This applies to all Shoelace dialog buttons (`<sl-button>` inside `<sl-dialog>`).
 
 ## Critical: Always Use Helper Functions
 

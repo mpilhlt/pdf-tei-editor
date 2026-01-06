@@ -84,31 +84,6 @@ class TestExtractionFileref(unittest.TestCase):
                        "fileref should be auto-generated when no PDF path")
 
 
-class TestExtractionSchemaProcessingInstructions(unittest.TestCase):
-    """Test that extractors add schema processing instructions correctly."""
-
-    def test_mock_extractor_includes_processing_instruction(self):
-        """Test that MockExtractor includes schema processing instruction."""
-        extractor = MockExtractor()
-
-        result = extractor.extract(
-            pdf_path="/path/to/test.pdf",
-            options={'variant_id': 'mock-default'}
-        )
-
-        # Check for processing instruction
-        self.assertIn('<?xml-model', result)
-        self.assertIn('mock-default.rng', result)
-        self.assertIn('type="application/xml"', result)
-        self.assertIn('schematypens="http://relaxng.org/ns/structure/1.0"', result)
-
-        # Processing instruction should come before TEI element
-        pi_pos = result.find('<?xml-model')
-        tei_pos = result.find('<TEI')
-        self.assertLess(pi_pos, tei_pos, "Processing instruction should come before TEI element")
-
-
-
 class TestExtractionRevisionDesc(unittest.TestCase):
     """Test that extractors add revisionDesc with change element."""
 

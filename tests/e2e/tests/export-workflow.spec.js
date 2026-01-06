@@ -14,6 +14,7 @@ const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*404', // Temporary workaround, should be removed
   'Failed to load resource.*401.*UNAUTHORIZED',
   'Failed to load resource.*400.*BAD REQUEST',
+  'Failed to load resource.*ERR_NETWORK_IO_SUSPENDED', // Headless browser network suspension
   'offsetParent is not set.*cannot scroll'
 ];
 

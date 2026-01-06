@@ -263,14 +263,28 @@ test.describe('Document Actions', () => {
       // Wait a moment for state to update
       await page.waitForTimeout(1000);
 
-      // Get initial file ID for later verification
-      const initialXmlId = await page.evaluate(() => {
+      // Get initial file ID and gold status for later verification
+      const initialFileInfo = await page.evaluate(() => {
         /** @type {any} */
         const app = /** @type {any} */(window).app;
         const state = app.getCurrentState();
-        return state.xml;
+        const xmlId = state.xml;
+
+        // Check if current file is gold
+        let isCurrentlyGold = false;
+        for (const doc of state.fileData) {
+          if (doc.artifacts) {
+            const artifact = doc.artifacts.find(a => a.id === xmlId);
+            if (artifact) {
+              isCurrentlyGold = artifact.is_gold_standard === true;
+              break;
+            }
+          }
+        }
+
+        return { xmlId, isCurrentlyGold };
       });
-      debugLog('Initial XML ID:', initialXmlId);
+      debugLog('Initial file info:', initialFileInfo);
 
       // Click save revision button
       await page.evaluate(() => {
@@ -295,7 +309,8 @@ test.describe('Document Actions', () => {
       debugLog('Checkbox state:', checkboxState);
       expect(checkboxState.exists).toBe(true);
       expect(checkboxState.visible).toBe(true);
-      expect(checkboxState.checked).toBe(false);
+      // Checkbox should be checked if the current file is already gold, unchecked otherwise
+      expect(checkboxState.checked).toBe(initialFileInfo.isCurrentlyGold);
 
       // Fill out the revision form and check the gold checkbox
       await page.evaluate(() => {
@@ -323,7 +338,7 @@ test.describe('Document Actions', () => {
       // Wait for gold standard to be set
       const goldLog = await waitForTestMessage(consoleLogs, 'GOLD_STANDARD_SET', 10000);
       expect(goldLog.value).toHaveProperty('fileId');
-      expect(goldLog.value.fileId).toBe(initialXmlId);
+      expect(goldLog.value.fileId).toBe(initialFileInfo.xmlId);
 
       // Verify the file is now marked as gold in the UI
       // Wait a moment for file data to reload
@@ -378,12 +393,39 @@ test.describe('Document Actions', () => {
       // Navigate and login as annotator (not a reviewer)
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
 
-      // Select the first available PDF and XML documents
+      // Select first document and create a new version (non-gold) to work with
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
-
-      // Wait a moment for state to update
       await page.waitForTimeout(1000);
+
+      // Create a new version from the gold file
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.createNewVersion.click();
+      });
+
+      // Wait for new version dialog
+      await page.waitForSelector('sl-dialog[name="newVersionDialog"][open]', { timeout: 5000 });
+
+      // Fill in version details
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newVersionDialog.versionName.value = 'Test Version for Annotator';
+        ui.newVersionDialog.editionNote.value = 'Created for test';
+      });
+
+      await page.waitForTimeout(500);
+
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newVersionDialog.submit.click();
+      });
+
+      // Wait for version creation
+      await page.waitForTimeout(3000);
 
       // Click save revision button
       await page.evaluate(() => {
@@ -488,10 +530,39 @@ test.describe('Document Actions', () => {
       // Login as annotator (not reviewer)
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
 
-      // Select documents
+      // Select first document and create a new version (non-gold) to work with
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
       await page.waitForTimeout(1000);
+
+      // Create a new version from the gold file
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.documentActions.createNewVersion.click();
+      });
+
+      // Wait for new version dialog
+      await page.waitForSelector('sl-dialog[name="newVersionDialog"][open]', { timeout: 5000 });
+
+      // Fill in version details
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newVersionDialog.versionName.value = 'Test Version for Status Check';
+        ui.newVersionDialog.editionNote.value = 'Created for test';
+      });
+
+      await page.waitForTimeout(500);
+
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.newVersionDialog.submit.click();
+      });
+
+      // Wait for version creation
+      await page.waitForTimeout(3000);
 
       // Click save revision button
       await page.evaluate(() => {
