@@ -108,10 +108,9 @@ class AnnotationHistoryPlugin(Plugin):
                 "title", "Untitled"
             )
 
-            # Check if this is a gold standard file
-            is_gold = getattr(file_metadata, "is_gold_standard", False) or tei_metadata.get(
-                "is_gold_standard", False
-            )
+            # Check if this is a gold standard file (use database as source of truth)
+            # Note: TEI status="published" does NOT mean gold standard
+            is_gold = getattr(file_metadata, "is_gold_standard", False)
 
             # Extract ALL change elements
             ns = {"tei": "http://www.tei-c.org/ns/1.0"}
@@ -148,9 +147,11 @@ class AnnotationHistoryPlugin(Plugin):
                     }
                 )
 
-            # Get last change for collapsed view summary
+            # Get last change for collapsed view summary (most recent = highest date)
             if revisions:
-                last_change = revisions[-1]
+                # Sort by date_raw descending to get most recent first
+                sorted_revisions = sorted(revisions, key=lambda r: r["date_raw"] or "", reverse=True)
+                last_change = sorted_revisions[0]
             else:
                 last_change = {
                     "desc": "",
@@ -165,6 +166,7 @@ class AnnotationHistoryPlugin(Plugin):
                 "is_gold": is_gold,
                 "variant": getattr(file_metadata, "variant", ""),
                 "stable_id": file_metadata.stable_id,
+                "doc_id": getattr(file_metadata, "doc_id", ""),
                 "last_change": last_change,
                 "revisions": revisions,  # All changes in chronological order
             }
@@ -479,14 +481,16 @@ function collapseAll() {
         writer = csv.writer(output)
 
         # Write header row
-        headers = ["Title", "Gold", "Change", "Annotator", "Status", "Date"]
+        headers = ["Stable ID", "Doc ID", "Title", "Gold", "Change", "Annotator", "Status", "Date"]
         if show_variant_column:
-            headers.insert(2, "Variant")
+            headers.insert(4, "Variant")
         writer.writerow(headers)
 
         # Write data rows
         for doc in documents:
             # Base values that will be repeated for child rows
+            stable_id = doc.get("stable_id", "")
+            doc_id = doc.get("doc_id", "")
             title = doc["title"]
             gold = "Yes" if doc["is_gold"] else "No"
             variant = doc.get("variant", "")
@@ -494,6 +498,8 @@ function collapseAll() {
             # Write a row for each revision
             for revision in doc["revisions"]:
                 row = [
+                    stable_id,
+                    doc_id,
                     title,
                     gold,
                 ]
@@ -503,7 +509,7 @@ function collapseAll() {
                     revision["desc"],
                     revision["annotator"],
                     revision["status"],
-                    revision["date"],
+                    revision["date_raw"],  # Use ISO date format for CSV
                 ])
                 writer.writerow(row)
 
