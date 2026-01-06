@@ -182,18 +182,26 @@ The `--grep` parameter works **differently** for API vs E2E tests:
   - Example: `--grep "files_save"` runs `tests/api/v1/files_save.test.js`
   - Example: `--grep "caching"` runs `tests/api/v1/files_serve_caching.test.js`
   - Use file name patterns when debugging API tests
+  - Implementation: backend-test-runner filters files before passing to Node.js
 
 - **E2E tests** (`npm run test:e2e -- --grep "xxx"`): Matches **test names** (test descriptions)
   - Example: `--grep "should upload"` runs all tests with "upload" in the test name
   - Example: `--grep "new version"` runs tests like `test('should create new version', ...)`
   - Use test description patterns when debugging E2E tests
+  - Implementation: Playwright receives the grep pattern directly and matches against test descriptions
+  - **To run specific test files**, pass file paths as positional arguments: `node tests/e2e-runner.js tests/e2e/tests/auth-workflow.spec.js`
 
 **Quick rule:**
 
 - `*.test.js` (API) → grep by **file path**
-- `*.spec.js` (E2E) → grep by **test name**
+- `*.spec.js` (E2E) → grep by **test name** OR pass file paths directly
 
-This difference exists because the backend test runner filters files before passing to Node.js, while Playwright receives the grep pattern directly.
+**Smart test runner:**
+
+The smart-test-runner automatically uses the correct approach:
+
+- For API tests: constructs `--grep` with file path patterns
+- For E2E tests: passes test file paths as positional arguments (not via --grep)
 
 ## Important Reminders
 
