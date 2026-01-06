@@ -487,7 +487,10 @@ async function saveRevision(state) {
       // Show/hide gold version checkbox based on user role
       const isReviewer = userHasRole(userData, ["admin", "reviewer"])
       revDlg.saveAsGold.style.display = isReviewer ? 'block' : 'none'
-      revDlg.saveAsGold.checked = false
+
+      // Pre-check if current document is already a gold version
+      const isCurrentlyGold = state.xml ? isGoldFile(state.xml) : false
+      revDlg.saveAsGold.checked = isCurrentlyGold
     }
     // Wait for dialog to be fully visible (attach listener before showing)
     const dialogShown = new Promise(resolve => revDlg.addEventListener('sl-after-show', resolve, { once: true }))
