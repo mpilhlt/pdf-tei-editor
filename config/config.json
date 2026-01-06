@@ -46,6 +46,7 @@
     "unfinished",
     "draft",
     "checked",
+    "in-review",
     "approved",
     "candidate",
     "published"
@@ -58,6 +59,7 @@
   ],
   "annotation.lifecycle.role.annotator.type": "array",
   "annotation.lifecycle.role.reviewer": [
+    "in-review",
     "approved",
     "candidate",
     "published"
