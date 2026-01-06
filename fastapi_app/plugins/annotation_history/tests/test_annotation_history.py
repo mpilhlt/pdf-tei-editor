@@ -285,6 +285,7 @@ class TestAnnotationHistoryPlugin(unittest.IsolatedAsyncioTestCase):
                 "is_gold": True,
                 "variant": "grobid",
                 "stable_id": "stable-1",
+                "doc_id": "test-doc-1",
                 "last_change": {
                     "desc": "Final review",
                     "annotator": "annotator1",
@@ -314,6 +315,7 @@ class TestAnnotationHistoryPlugin(unittest.IsolatedAsyncioTestCase):
                 "is_gold": False,
                 "variant": "standard",
                 "stable_id": "stable-2",
+                "doc_id": "test-doc-2",
                 "last_change": {
                     "desc": "First draft",
                     "annotator": "annotator2",
@@ -336,13 +338,14 @@ class TestAnnotationHistoryPlugin(unittest.IsolatedAsyncioTestCase):
         # Test with variant column
         csv = self.plugin._generate_csv(documents, show_variant_column=True)
 
-        # Check header
-        self.assertIn("Title,Gold,Variant,Change,Annotator,Status,Date", csv)
+        # Check header with Stable ID and Doc ID
+        self.assertIn("Stable ID,Doc ID,Title,Gold,Variant,Change,Annotator,Status,Date", csv)
 
         # Check data rows - parent values should be repeated for each revision
-        self.assertIn("Test Document A,Yes,grobid,Initial annotation,annotator1,draft", csv)
-        self.assertIn("Test Document A,Yes,grobid,Final review,annotator1,approved", csv)
-        self.assertIn("Test Document B,No,standard,First draft,annotator2,draft", csv)
+        # Date should be in ISO format (date_raw)
+        self.assertIn("stable-1,test-doc-1,Test Document A,Yes,grobid,Initial annotation,annotator1,draft,2024-01-15", csv)
+        self.assertIn("stable-1,test-doc-1,Test Document A,Yes,grobid,Final review,annotator1,approved,2024-01-25", csv)
+        self.assertIn("stable-2,test-doc-2,Test Document B,No,standard,First draft,annotator2,draft,2024-01-10", csv)
 
         # Count rows (header + 3 data rows)
         lines = csv.strip().split('\n')
@@ -356,6 +359,7 @@ class TestAnnotationHistoryPlugin(unittest.IsolatedAsyncioTestCase):
                 "is_gold": False,
                 "variant": "standard",
                 "stable_id": "stable-1",
+                "doc_id": "test-doc-1",
                 "last_change": {
                     "desc": "Review",
                     "annotator": "annotator1",
@@ -378,11 +382,11 @@ class TestAnnotationHistoryPlugin(unittest.IsolatedAsyncioTestCase):
         csv = self.plugin._generate_csv(documents, show_variant_column=False)
 
         # Check header without Variant column
-        self.assertIn("Title,Gold,Change,Annotator,Status,Date", csv)
+        self.assertIn("Stable ID,Doc ID,Title,Gold,Change,Annotator,Status,Date", csv)
         self.assertNotIn("Variant", csv.split('\n')[0])
 
-        # Check data row
-        self.assertIn("Test Document,No,Review,annotator1,checked", csv)
+        # Check data row with ISO date
+        self.assertIn("stable-1,test-doc-1,Test Document,No,Review,annotator1,checked,2024-01-20", csv)
 
 
 class TestAnnotationHistoryRoutes(unittest.TestCase):
@@ -568,11 +572,12 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
             self.assertIn("attachment; filename=annotation_history_test-pdf-id.csv",
                          response.headers["content-disposition"])
 
-            # Verify CSV content
+            # Verify CSV content with ISO dates and new columns
             csv_content = response.text
-            self.assertIn("Title,Gold,Change,Annotator,Status,Date", csv_content)
-            self.assertIn("Test Document v1,No,Initial annotation,annotator1,draft", csv_content)
-            self.assertIn("Test Document v1,No,Final review,annotator2,checked", csv_content)
+            self.assertIn("Stable ID,Doc ID,Title,Gold,Change,Annotator,Status,Date", csv_content)
+            # Note: stable_id and doc_id will be in the CSV but we don't know exact values in mock
+            self.assertIn("Test Document v1,No,Initial annotation,annotator1,draft,2024-01-15", csv_content)
+            self.assertIn("Test Document v1,No,Final review,annotator2,checked,2024-01-20", csv_content)
 
     def test_export_csv_with_variant_column(self):
         """Test CSV export includes Variant column when variant=all."""
@@ -622,10 +627,10 @@ class TestAnnotationHistoryRoutes(unittest.TestCase):
                 params={"pdf": "test-pdf-id", "variant": "all"}
             )
 
-            # Verify Variant column is present
+            # Verify Variant column is present with new columns
             self.assertEqual(response.status_code, 200)
             csv_content = response.text
-            self.assertIn("Title,Gold,Variant,Change,Annotator,Status,Date", csv_content)
+            self.assertIn("Stable ID,Doc ID,Title,Gold,Variant,Change,Annotator,Status,Date", csv_content)
             self.assertIn("grobid", csv_content)
 
     def test_export_csv_pdf_not_found(self):

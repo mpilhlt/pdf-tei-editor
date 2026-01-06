@@ -10,7 +10,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
-import { addEdition, encodeXmlEntities } from '../../../app/src/modules/tei-utils.js';
+import { addEdition, encodeXmlEntities, ensureExtractorVariant } from '../../../app/src/modules/tei-utils.js';
 
 describe('TEI Utils', () => {
   describe('addEdition', () => {
@@ -172,6 +172,180 @@ V1 - corrected
       const expected = `<root>Test &quot;quoted&quot; and &apos;apostrophe&apos; text</root>`;
       const result = encodeXmlEntities(input, { encodeQuotes: true });
       assert.strictEqual(result, expected);
+    });
+  });
+
+  describe('ensureExtractorVariant', () => {
+    it('should add variant to existing appInfo with extractor application', () => {
+      const xmlString = `<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Test Document</title>
+      </titleStmt>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="pdf-tei-editor" type="editor">
+          <label>PDF-TEI-Editor</label>
+          <ref target="https://github.com/mpilhlt/pdf-tei-editor"/>
+        </application>
+        <application version="0.8.3-SNAPSHOT" ident="GROBID" when="2025-08-07T14:15:00.573667Z" type="extractor">
+          <label>A machine learning software for extracting information from scholarly documents</label>
+          <desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+          <label type="revision">e13aa19</label>
+          <label type="flavor">article/dh-law-footnotes</label>
+          <ref target="https://github.com/kermitt2/grobid"/>
+        </application>
+      </appInfo>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`;
+
+      const dom = new JSDOM(xmlString, { contentType: 'text/xml' });
+      const xmlDoc = dom.window.document;
+
+      ensureExtractorVariant(xmlDoc, 'grobid.training.segmentation');
+
+      // Check that variant-id label was added to extractor application
+      const extractorApp = xmlDoc.querySelector('application[type="extractor"]');
+      assert.ok(extractorApp, 'Extractor application should exist');
+
+      const variantLabel = extractorApp.querySelector('label[type="variant-id"]');
+      assert.ok(variantLabel, 'Variant-id label should exist');
+      assert.strictEqual(
+        variantLabel.textContent,
+        'grobid.training.segmentation',
+        'Variant should match'
+      );
+
+      // Check that other labels are preserved
+      const revisionLabel = extractorApp.querySelector('label[type="revision"]');
+      assert.ok(revisionLabel, 'Revision label should be preserved');
+      assert.strictEqual(revisionLabel.textContent, 'e13aa19');
+
+      const flavorLabel = extractorApp.querySelector('label[type="flavor"]');
+      assert.ok(flavorLabel, 'Flavor label should be preserved');
+      assert.strictEqual(flavorLabel.textContent, 'article/dh-law-footnotes');
+    });
+
+    it('should update existing variant-id when already present', () => {
+      const xmlString = `<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Test Document</title>
+      </titleStmt>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="0.8.3-SNAPSHOT" ident="GROBID" type="extractor">
+          <label>GROBID</label>
+          <label type="variant-id">old-variant</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`;
+
+      const dom = new JSDOM(xmlString, { contentType: 'text/xml' });
+      const xmlDoc = dom.window.document;
+
+      ensureExtractorVariant(xmlDoc, 'grobid.training.segmentation');
+
+      const variantLabel = xmlDoc.querySelector('label[type="variant-id"]');
+      assert.ok(variantLabel, 'Variant-id label should exist');
+      assert.strictEqual(
+        variantLabel.textContent,
+        'grobid.training.segmentation',
+        'Variant should be updated'
+      );
+
+      // Should only have one variant-id label
+      const variantLabels = xmlDoc.querySelectorAll('label[type="variant-id"]');
+      assert.strictEqual(variantLabels.length, 1, 'Should have exactly one variant-id label');
+    });
+
+    it('should create appInfo and extractor application when missing', () => {
+      const xmlString = `<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Test Document</title>
+      </titleStmt>
+    </fileDesc>
+  </teiHeader>
+</TEI>`;
+
+      const dom = new JSDOM(xmlString, { contentType: 'text/xml' });
+      const xmlDoc = dom.window.document;
+
+      ensureExtractorVariant(xmlDoc, 'grobid.training.segmentation');
+
+      // Check structure was created
+      const encodingDesc = xmlDoc.querySelector('encodingDesc');
+      assert.ok(encodingDesc, 'encodingDesc should be created');
+
+      const appInfo = encodingDesc.querySelector('appInfo');
+      assert.ok(appInfo, 'appInfo should be created');
+
+      const extractorApp = appInfo.querySelector('application[type="extractor"]');
+      assert.ok(extractorApp, 'Extractor application should be created');
+
+      const variantLabel = extractorApp.querySelector('label[type="variant-id"]');
+      assert.ok(variantLabel, 'Variant-id label should be created');
+      assert.strictEqual(
+        variantLabel.textContent,
+        'grobid.training.segmentation',
+        'Variant should match'
+      );
+    });
+
+    it('should create extractor application when appInfo exists but no extractor', () => {
+      const xmlString = `<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Test Document</title>
+      </titleStmt>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="1.0" ident="pdf-tei-editor" type="editor">
+          <label>PDF-TEI-Editor</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+  </teiHeader>
+</TEI>`;
+
+      const dom = new JSDOM(xmlString, { contentType: 'text/xml' });
+      const xmlDoc = dom.window.document;
+
+      ensureExtractorVariant(xmlDoc, 'grobid.training.segmentation');
+
+      // Check that extractor application was added
+      const applications = xmlDoc.querySelectorAll('application');
+      assert.strictEqual(applications.length, 2, 'Should have two applications');
+
+      const extractorApp = xmlDoc.querySelector('application[type="extractor"]');
+      assert.ok(extractorApp, 'Extractor application should be created');
+
+      const variantLabel = extractorApp.querySelector('label[type="variant-id"]');
+      assert.ok(variantLabel, 'Variant-id label should be created');
+      assert.strictEqual(
+        variantLabel.textContent,
+        'grobid.training.segmentation',
+        'Variant should match'
+      );
+
+      // Check that editor application is still present
+      const editorApp = xmlDoc.querySelector('application[type="editor"]');
+      assert.ok(editorApp, 'Editor application should be preserved');
     });
   });
 });

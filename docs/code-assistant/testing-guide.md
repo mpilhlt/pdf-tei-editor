@@ -370,15 +370,37 @@ npm run test:e2e -- --grep "save.*revision"
 # → Runs: test('should save current revision', ...), etc.
 ```
 
-**Why:** Playwright's `--grep` is passed directly to the test runner and matches `test()` descriptions.
+**Alternative: Run specific test files directly**
+
+Instead of using `--grep` with test names, you can pass test file paths as positional arguments:
+
+```bash
+# Run single test file
+node tests/e2e-runner.js tests/e2e/tests/app-loading.spec.js
+
+# Run multiple test files
+node tests/e2e-runner.js tests/e2e/tests/auth-workflow.spec.js tests/e2e/tests/export-workflow.spec.js
+
+# Combine with options
+node tests/e2e-runner.js --headed tests/e2e/tests/auth-workflow.spec.js
+```
+
+**Why:** Playwright's `--grep` matches `test()` descriptions, not file paths. The smart-test-runner automatically uses file paths when selecting specific tests.
 
 ### Rule of Thumb for Code Assistants
 
 - **Debugging API tests**: Use file name patterns → `--grep "files_save"`
-- **Debugging E2E tests**: Use test name patterns → `--grep "should upload"`
+- **Debugging E2E tests**: Use test name patterns → `--grep "should upload"` OR pass file paths directly
 - **When in doubt**: Check test file extension:
   - `*.test.js` → API test → grep by file path
-  - `*.spec.js` → E2E test → grep by test name
+  - `*.spec.js` → E2E test → grep by test name OR pass file paths
+
+### Smart Test Runner Behavior
+
+The `smart-test-runner.js` automatically uses the correct approach:
+
+- **API tests**: Constructs `--grep` patterns with file paths
+- **E2E tests**: Passes test file paths as positional arguments (NOT via --grep)
 
 ## Writing Tests
 

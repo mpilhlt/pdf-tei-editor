@@ -646,9 +646,22 @@ async function createNewVersion(state) {
     // Keep reference to current file (used to determine doc_id for the new version)
     const currentFileId = state.xml
 
+    // Get the source file's variant to preserve it in the new version
+    const sourceFile = getFileDataById(currentFileId, state.fileData)
+    const sourceVariant = sourceFile?.variant
+
     // Modify the header FIRST, before saving as new version
     // This ensures the new version has unique content (won't conflict with existing content hash)
     await addTeiHeaderInfo(respStmt, editionStmt)
+
+    // Ensure variant is preserved in the XML if the source file had a variant
+    if (sourceVariant) {
+      const xmlDoc = xmlEditor.getXmlTree()
+      if (xmlDoc) {
+        tei_utils.ensureExtractorVariant(xmlDoc, sourceVariant)
+        await xmlEditor.updateEditorFromXmlTree()
+      }
+    }
 
     // Mark editor as clean to prevent autosave from triggering
     // (addTeiHeaderInfo updates the editor, which triggers editorUpdateDelayed and autosave)

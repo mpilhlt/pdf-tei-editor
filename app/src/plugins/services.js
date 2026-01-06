@@ -357,7 +357,7 @@ async function downloadXml(state) {
   a.href = url
 
   const fileData = getFileDataById(state.xml);
-  let filename = fileData?.file?.fileref || state.xml;
+  let filename = fileData?.file?.doc_id || state.xml;
 
   // Add variant name to filename if variant exists
   // The item could be a version or gold file which has variant
