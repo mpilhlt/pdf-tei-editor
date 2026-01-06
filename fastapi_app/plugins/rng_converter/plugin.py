@@ -26,7 +26,7 @@ class RngConverterPlugin(Plugin):
             "description": "Generate RelaxNG schema from TEI document structure",
             "version": "1.0.0",
             "category": "converter",
-            "required_roles": ["user"],
+            "required_roles": ["reviewer"],
             "endpoints": [
                 {
                     "name": "convert_to_rng",
