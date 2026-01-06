@@ -682,6 +682,73 @@ export function getDocumentMetadata(xmlDoc) {
     // Convert "GROBID" to lowercase to match extractor IDs
     metadata.extractor_id = metadata.extractor_id.toLowerCase();
   }
-  
+
   return metadata;
+}
+
+/**
+ * Ensures the extractor variant metadata is present in the TEI XML.
+ * This preserves the variant when creating new versions from existing files.
+ *
+ * @param {Document} xmlDoc - The XML DOM Document object
+ * @param {string} variantId - The variant ID to set (e.g., "grobid.training.segmentation")
+ */
+export function ensureExtractorVariant(xmlDoc, variantId) {
+  const teiHeader = getTeiHeader(xmlDoc);
+  let encodingDesc = teiHeader.getElementsByTagName('encodingDesc')[0];
+
+  // Create encodingDesc if it doesn't exist
+  if (!encodingDesc) {
+    encodingDesc = xmlDoc.createElementNS(teiNamespaceURI, 'encodingDesc');
+    // Insert after fileDesc (TEI standard order)
+    const fileDesc = teiHeader.getElementsByTagName('fileDesc')[0];
+    if (fileDesc && fileDesc.nextSibling) {
+      teiHeader.insertBefore(encodingDesc, fileDesc.nextSibling);
+    } else {
+      teiHeader.appendChild(encodingDesc);
+    }
+  }
+
+  let appInfo = encodingDesc.getElementsByTagName('appInfo')[0];
+
+  // Create appInfo if it doesn't exist
+  if (!appInfo) {
+    appInfo = xmlDoc.createElementNS(teiNamespaceURI, 'appInfo');
+    encodingDesc.appendChild(appInfo);
+  }
+
+  // Find or create the extractor application element
+  let extractorApp = null;
+  const applications = appInfo.getElementsByTagName('application');
+  for (const app of applications) {
+    if (app.getAttribute('type') === 'extractor') {
+      extractorApp = app;
+      break;
+    }
+  }
+
+  if (!extractorApp) {
+    extractorApp = xmlDoc.createElementNS(teiNamespaceURI, 'application');
+    extractorApp.setAttribute('type', 'extractor');
+    appInfo.appendChild(extractorApp);
+  }
+
+  // Find or create the variant label element
+  let variantLabel = null;
+  const labels = extractorApp.getElementsByTagName('label');
+  for (const label of labels) {
+    if (label.getAttribute('type') === 'variant-id') {
+      variantLabel = label;
+      break;
+    }
+  }
+
+  if (!variantLabel) {
+    variantLabel = xmlDoc.createElementNS(teiNamespaceURI, 'label');
+    variantLabel.setAttribute('type', 'variant-id');
+    extractorApp.appendChild(variantLabel);
+  }
+
+  // Set the variant ID
+  variantLabel.textContent = variantId;
 }
