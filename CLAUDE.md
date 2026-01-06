@@ -73,6 +73,7 @@ Before using any method on a class or module:
 - **When adding a new database**, use the centralized migration runner - see [docs/development/adding-new-databases.md](docs/development/adding-new-databases.md)
   - Call `run_migrations_if_needed()` from `fastapi_app/lib/migration_runner.py` in your database initialization
   - This ensures migrations run automatically on application startup for all databases
+- **Migration tests location** - ALWAYS place migration tests in `fastapi_app/lib/migrations/tests/` directory (not in the main test suite). These tests are for manual verification and should not run automatically in CI/CD. Name test files as `test_migration_XXX.py` where XXX is the migration number
 
 ### TEI Document Processing
 

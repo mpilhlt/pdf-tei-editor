@@ -241,6 +241,42 @@ def normalize_doi(doi: str) -> str:
 # Filesystem encoding utilities
 # ==============================
 
+def is_filename_encoded(filename: str) -> bool:
+    """
+    Check if a filename is already encoded.
+
+    Detects encoding markers:
+    - Double underscore (__) where original had forward slash
+    - Dollar-sign patterns ($XX$) for special characters
+
+    Args:
+        filename: Filename to check
+
+    Returns:
+        True if filename appears to be already encoded, False otherwise
+
+    Examples:
+        >>> is_filename_encoded("10.1111__1467-6478.00040")
+        True
+        >>> is_filename_encoded("10.1234__test$3A$file")
+        True
+        >>> is_filename_encoded("10.1111/1467-6478.00040")
+        False
+        >>> is_filename_encoded("simple-filename.txt")
+        False
+    """
+    # Check for $XX$ encoding pattern
+    if re.search(r'\$[0-9A-F]{2}\$', filename):
+        return True
+
+    # Check for __ (encoded slash) combined with DOI-like pattern
+    # If it has __ and looks like a DOI prefix, it's likely encoded
+    if '__' in filename and re.match(r'^10\.\d+__', filename):
+        return True
+
+    return False
+
+
 def encode_filename(doc_id: str) -> str:
     """
     Encode a document ID (e.g., DOI) to a filesystem-safe filename.
