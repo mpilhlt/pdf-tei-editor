@@ -185,12 +185,5 @@ class MockExtractor(BaseExtractor):
             date_imprint = etree.SubElement(imprint, "date", type="published", when=f"202{i}")
             date_imprint.text = f"202{i}"
 
-        # Create processing instruction for schema validation
-        processing_instructions = []
-        # Mock extractor uses a mock schema URL for testing
-        schema_url = f'https://example.com/schema/{variant_id}.rng'
-        schema_pi = create_schema_processing_instruction(schema_url)
-        processing_instructions.append(schema_pi)
-
-        # Serialize to XML with formatted header
-        return serialize_tei_with_formatted_header(tei_doc, processing_instructions)
+        # Serialize to XML with formatted header (no schema validation for mock extractor)
+        return serialize_tei_with_formatted_header(tei_doc, [])

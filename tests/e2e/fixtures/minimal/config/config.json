@@ -39,5 +39,25 @@
     "application.login-message": "",
     "application.login-message.type": "string",
     "debug.enabled": true,
-    "debug.enabled.type": "boolean"
+    "debug.enabled.type": "boolean",
+    "annotation.lifecycle.order": [
+        "extraction",
+        "draft",
+        "checked",
+        "approved",
+        "candidate",
+        "published"
+    ],
+    "annotation.lifecycle.order.type": "array",
+    "annotation.lifecycle.role.annotator": [
+        "draft",
+        "checked"
+    ],
+    "annotation.lifecycle.role.annotator.type": "array",
+    "annotation.lifecycle.role.reviewer": [
+        "approved",
+        "candidate",
+        "published"
+    ],
+    "annotation.lifecycle.role.reviewer.type": "array"
 }

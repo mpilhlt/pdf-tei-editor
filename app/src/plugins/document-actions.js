@@ -446,13 +446,18 @@ async function saveRevision(state) {
       const lifecycleOrder = await config.get('annotation.lifecycle.order')
 
       // Collect allowed statuses for user's roles
-      const userRoles = userData.groups || []
+      const userRoles = userData.roles || []
       let allowedStatuses = []
 
       for (const role of userRoles) {
-        const roleStatuses = await config.get(`annotation.lifecycle.role.${role}`)
-        if (roleStatuses) {
-          allowedStatuses = [...allowedStatuses, ...roleStatuses]
+        try {
+          const roleStatuses = await config.get(`annotation.lifecycle.role.${role}`)
+          if (roleStatuses) {
+            allowedStatuses = [...allowedStatuses, ...roleStatuses]
+          }
+        } catch (e) {
+          // Skip roles without lifecycle configuration
+          continue
         }
       }
 
@@ -484,7 +489,10 @@ async function saveRevision(state) {
       revDlg.saveAsGold.style.display = isReviewer ? 'block' : 'none'
       revDlg.saveAsGold.checked = false
     }
+    // Wait for dialog to be fully visible (attach listener before showing)
+    const dialogShown = new Promise(resolve => revDlg.addEventListener('sl-after-show', resolve, { once: true }))
     revDlg.show()
+    await dialogShown
     await new Promise((resolve, reject) => {
       revDlg.submit.addEventListener('click', resolve, { once: true })
       revDlg.cancel.addEventListener('click', reject, { once: true })
@@ -498,6 +506,10 @@ async function saveRevision(state) {
       revDlg.addEventListener('sl-hide', handleHide, { once: true })
     })
   } catch (e) {
+    if (e instanceof Error) {
+      console.error("Error in saveRevision:", e)
+      throw e
+    }
     console.warn("User cancelled")
     return
   } finally {
@@ -589,7 +601,10 @@ async function createNewVersion(state) {
       newVersiondialog.persId.value =  userData.username
       newVersiondialog.persName.value = userData.fullname
     }
+    // Wait for dialog to be fully visible (attach listener before showing)
+    const dialogShown = new Promise(resolve => newVersiondialog.addEventListener('sl-after-show', resolve, { once: true }))
     newVersiondialog.show()
+    await dialogShown
     await new Promise((resolve, reject) => {
       newVersiondialog.submit.addEventListener('click', resolve, { once: true })
       newVersiondialog.cancel.addEventListener('click', reject, { once: true })
@@ -752,7 +767,10 @@ async function editFileMetadata(state) {
   metadataDlg.source.value = biblEl?.textContent || ""
 
   try {
+    // Wait for dialog to be fully visible (attach listener before showing)
+    const dialogShown = new Promise(resolve => metadataDlg.addEventListener('sl-after-show', resolve, { once: true }))
     metadataDlg.show()
+    await dialogShown
     await new Promise((resolve, reject) => {
       metadataDlg.submit.addEventListener('click', resolve, { once: true })
       metadataDlg.cancel.addEventListener('click', reject, { once: true })

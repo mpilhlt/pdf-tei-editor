@@ -21,10 +21,11 @@ test.describe('Debug - Simple Load', () => {
     try {
       // Print console messages in real-time for debugging
       let lastIndex = 0;
+      let messages = [];
       const printInterval = setInterval(() => {
         while (lastIndex < consoleLogs.length) {
           const { type, text } = consoleLogs[lastIndex];
-          console.log(`[Browser ${type}]:`, text);
+          messages.push(`[Browser ${type}]:${text}`);
           lastIndex++;
         }
       }, 100);
@@ -38,12 +39,10 @@ test.describe('Debug - Simple Load', () => {
       });
 
       // Navigate
-      console.log('Navigating to /...');
       await page.goto('/');
 
       // Wait for body
       await expect(page.locator('body')).toBeVisible();
-      console.log('Body is visible');
 
       // Wait for app to load
       await page.waitForTimeout(3000);
@@ -51,27 +50,12 @@ test.describe('Debug - Simple Load', () => {
       // Stop the print interval
       clearInterval(printInterval);
 
-      // Print any remaining messages
-      while (lastIndex < consoleLogs.length) {
-        const { type, text } = consoleLogs[lastIndex];
-        console.log(`[Browser ${type}]:`, text);
-        lastIndex++;
-      }
-
-      // Log summary
-      console.log('\n=== Console Messages ===');
-      consoleLogs.forEach(({ type, text }) => {
-        console.log(`  [${type}] ${text}`);
-      });
-
-      console.log('\n=== Page Errors ===');
-      pageErrors.forEach(({ message, stack }) => {
-        console.log(`  Message: ${message}`);
-        console.log(`  Stack: ${stack}`);
-      });
-
       // Check for JavaScript page errors (uncaught exceptions)
       expect(pageErrors, `Page errors: ${JSON.stringify(pageErrors)}`).toHaveLength(0);
+      
+      // Check that we have logged browser messages
+      expect(messages.length > 0, `No browser messages`).toBe(true);
+      
     } finally {
       // Clean up error monitoring
       stopErrorMonitoring();

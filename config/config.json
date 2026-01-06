@@ -43,6 +43,7 @@
   "schema.base-url": "https://mpilhlt.github.io/grobid-footnote-flavour/schema",
   "annotation.lifecycle.order": [
     "extraction",
+    "unfinished",
     "draft",
     "checked",
     "approved",
@@ -52,6 +53,7 @@
   "annotation.lifecycle.order.type": "array",
   "annotation.lifecycle.role.annotator": [
     "draft",
+    "unfinished",
     "checked"
   ],
   "annotation.lifecycle.role.annotator.type": "array",

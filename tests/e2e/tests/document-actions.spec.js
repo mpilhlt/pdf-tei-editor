@@ -101,6 +101,8 @@ test.describe('Document Actions', () => {
         ui.newVersionDialog.editionNote.value = 'Created via E2E test';
       });
 
+      await page.waitForTimeout(500);
+
       // Submit the new version dialog
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
@@ -189,6 +191,8 @@ test.describe('Document Actions', () => {
       debugLog(uiState2)
       expect(uiState2.saveRevisionButtonEnabled).toBe(true);
 
+      await page.waitForTimeout(500);
+
       // Click save revision button
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
@@ -207,6 +211,8 @@ test.describe('Document Actions', () => {
         ui.newRevisionChangeDialog.persId.value = 'testuser';
         ui.newRevisionChangeDialog.persName.value = 'Test User';
       });
+
+      await page.waitForTimeout(500);
 
       // Submit the revision dialog
       await page.evaluate(() => {
@@ -300,6 +306,8 @@ test.describe('Document Actions', () => {
         ui.newRevisionChangeDialog.persName.value = 'Test User';
         ui.newRevisionChangeDialog.saveAsGold.checked = true;
       });
+
+      await page.waitForTimeout(500);
 
       // Submit the revision dialog
       await page.evaluate(() => {
@@ -453,8 +461,8 @@ test.describe('Document Actions', () => {
       });
       debugLog('Status select state:', statusState);
       expect(statusState.exists).toBe(true);
-      expect(statusState.optionsCount).toBe(5); // draft, checked, approved, candidate, published
-      expect(['draft', 'checked', 'approved', 'candidate', 'published']).toContain(statusState.value);
+      expect(statusState.optionsCount).toBe(6); // extraction, draft, checked, approved, candidate, published
+      expect(['extraction', 'draft', 'checked', 'approved', 'candidate', 'published']).toContain(statusState.value);
 
       // Close the dialog
       await page.evaluate(() => {
@@ -571,9 +579,16 @@ test.describe('Document Actions', () => {
       });
       debugLog('Status options for reviewer:', optionStates);
 
-      // Verify all options are enabled
+      // Verify we have all 6 status options
+      expect(optionStates.length).toBe(6);
+
+      // Verify all options are enabled (reviewers have both reviewer and annotator roles)
+      // Expected: 
+      // - extraction => false
+      // - draft, checked (annotator) => true
+      // - approved, candidate, published (reviewer) = true
       optionStates.forEach(opt => {
-        expect(opt.disabled).toBe(false);
+        expect(opt.disabled).toBe(opt.value === "extraction");
       });
 
       // Close the dialog
@@ -623,11 +638,15 @@ test.describe('Document Actions', () => {
         ui.newRevisionChangeDialog.status.value = 'checked';
       });
 
+      await page.waitForTimeout(500);
+
       // Submit the revision dialog
       await page.evaluate(() => {
         /** @type {namedElementsTree} */
         const ui = /** @type {any} */(window).ui;
+        console.warn("Clicking!!")
         ui.newRevisionChangeDialog.submit.click();
+        console.warn("Clicked!!")
       });
 
       // Wait for revision to be saved and verify status
