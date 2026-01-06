@@ -150,6 +150,28 @@ if not user_has_access:
 - Import settings with `from fastapi_app.config import get_settings` (not `fastapi_app.lib.settings`)
 - See [fastapi_app/routers/files_save.py](fastapi_app/routers/files_save.py) for reference implementation
 
+### Configuration Access
+
+**ALWAYS use the high-level config API** to retrieve configuration values. Do NOT use `ConfigManager` directly.
+
+```python
+from fastapi_app.lib.config_utils import get_config
+
+# Get config instance
+config = get_config()
+
+# Get configuration values with defaults
+value = config.get('annotation.lifecycle.order', default=[])
+timeout = config.get('session.timeout', default=3600)
+```
+
+**Key Points:**
+
+- Use `get_config()` to get the config instance (lazy initialization)
+- Use `config.get(key, default)` to retrieve any configuration value
+- The config instance handles initialization and caching automatically
+- Never instantiate `ConfigManager` directly - use `get_config()` instead
+
 ### Test Filtering: --grep Behavior
 
 **CRITICAL for debugging tests efficiently:**
