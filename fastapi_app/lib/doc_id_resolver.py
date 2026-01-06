@@ -227,14 +227,17 @@ class DocIdResolver:
                 logger.debug(f"Resolved PDF {pdf_path.name} → {metadata['fileref']} from TEI fileref")
                 return (metadata['fileref'], 'fileref')
 
-        # Strategy 2: Extract DOI from PDF filename
+        # Strategy 2: Use filename stem as doc_id (always)
+        # The doc_id must match the filename stem exactly, even if it's an encoded DOI
+        # DOI extraction is done separately for metadata purposes
+        doc_id = pdf_path.stem
+
+        # Detect if this looks like an encoded DOI for doc_id_type
         doi = self.extract_doi_from_filename(pdf_path.name)
         if doi:
-            logger.debug(f"Resolved PDF {pdf_path.name} → {doi} from filename")
-            return (doi, 'doi')
+            logger.debug(f"Resolved PDF {pdf_path.name} → {doc_id} (detected as DOI)")
+            return (doc_id, 'doi')
 
-        # Strategy 3: Use filename as custom ID
-        doc_id = pdf_path.stem
         logger.debug(f"Resolved PDF {pdf_path.name} → {doc_id} (custom ID)")
         return (doc_id, 'custom')
 

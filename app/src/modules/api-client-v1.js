@@ -1,7 +1,7 @@
 /**
  * Auto-generated API client for PDF-TEI Editor API v1
  *
- * Generated from OpenAPI schema at 2026-01-05T20:33:55.622Z
+ * Generated from OpenAPI schema at 2026-01-06T17:44:17.836Z
  *
  * DO NOT EDIT MANUALLY - regenerate using: npm run generate-client
  */
@@ -1082,9 +1082,18 @@ export class ApiClientV1 {
   }
 
   /**
-   * Create a new version from an uploaded temp file.
-   * Note: This endpoint requires temp file upload mechanism to be implemented.
-   * Currently deferred as upload handling needs to be designed.
+   * Create a new version from an uploaded TEI file in temp storage.
+   * Reads a TEI XML file from the upload directory, extracts metadata (fileref,
+   * variant) from the XML, and creates a new version for the document. The
+   * file_id parameter can be provided as a hint if the TEI lacks a fileref.
+   * Args:
+   * request_data: Dict containing:
+   * - temp_filename (str): Name of uploaded file in upload directory
+   * - file_id (str, optional): Hint for doc_id if fileref not in XML
+   * Returns:
+   * SaveFileResponse with status ("new", "new_gold", "saved") and stable_id
+   * Raises:
+   * HTTPException: 404 if temp file not found, 400 if invalid XML
    *
    * @param {Object<string, any>} requestBody
    * @returns {Promise<SaveFileResponse>}

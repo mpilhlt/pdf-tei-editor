@@ -69,7 +69,8 @@
         "js-plugin": "^1.1.0",
         "markdown-it": "^14.1.0",
         "pdfjs-dist": "5.4.449",
-        "uuid": "^11.1.0"
+        "uuid": "^11.1.0",
+        "xml2js": "^0.6.2"
     },
     "resolutions": {
         "@codemirror/state": "6.5.2"

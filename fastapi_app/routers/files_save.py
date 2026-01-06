@@ -530,10 +530,22 @@ async def create_version_from_upload(
     file_storage: FileStorage = Depends(get_file_storage)
 ):
     """
-    Create a new version from an uploaded temp file.
+    Create a new version from an uploaded TEI file in temp storage.
 
-    Note: This endpoint requires temp file upload mechanism to be implemented.
-    Currently deferred as upload handling needs to be designed.
+    Reads a TEI XML file from the upload directory, extracts metadata (fileref,
+    variant) from the XML, and creates a new version for the document. The
+    file_id parameter can be provided as a hint if the TEI lacks a fileref.
+
+    Args:
+        request_data: Dict containing:
+            - temp_filename (str): Name of uploaded file in upload directory
+            - file_id (str, optional): Hint for doc_id if fileref not in XML
+
+    Returns:
+        SaveFileResponse with status ("new", "new_gold", "saved") and stable_id
+
+    Raises:
+        HTTPException: 404 if temp file not found, 400 if invalid XML
     """
     import os
     import re
@@ -552,10 +564,10 @@ async def create_version_from_upload(
     if not temp_filepath.exists():
         raise HTTPException(status_code=404, detail=f"Temporary file {temp_filename} not found")
 
-    # Read XML content and strip XML declaration
+    # Read XML content
     with open(temp_filepath, "r", encoding="utf-8") as f:
         xml_content = f.read()
-        xml_content = re.sub(r'<\?xml.*\?>', '', xml_content).strip()
+        #xml_content = re.sub(r'<\?xml.*\?>', '', xml_content).strip()
 
     # Clean up temp file
     temp_filepath.unlink()
