@@ -154,7 +154,9 @@ ALL_MIGRATIONS = [
 
 ### 3. Test the Migration
 
-Create comprehensive tests in `tests/unit/fastapi/`:
+Create comprehensive tests in `fastapi_app/lib/migrations/tests/`:
+
+**IMPORTANT:** Migration tests should NOT be part of the main test suite. They are for manual verification only and should be placed in the migration directory structure.
 
 ```python
 """
@@ -163,6 +165,7 @@ Unit tests for migration XXX.
 @testCovers fastapi_app/lib/migrations/versions/mXXX_description.py
 """
 
+import logging
 import unittest
 import sqlite3
 import tempfile
@@ -176,6 +179,9 @@ class TestMigrationXXX(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
         self.db_path = Path(self.temp_dir) / "test.db"
+        # Create logger configured to suppress expected warnings
+        self.logger = logging.getLogger("test_migration_XXX")
+        self.logger.setLevel(logging.ERROR)  # Suppress INFO and WARNING
 
     def tearDown(self):
         import shutil
@@ -189,8 +195,8 @@ class TestMigrationXXX(unittest.TestCase):
             conn.commit()
 
         # Run migration
-        manager = MigrationManager(self.db_path)
-        manager.register_migration(MigrationXXX_Description())
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(MigrationXXX_Description(self.logger))
         applied = manager.run_migrations(skip_backup=True)
 
         self.assertEqual(applied, 1)
@@ -203,14 +209,26 @@ class TestMigrationXXX(unittest.TestCase):
 
     def test_migration_is_idempotent(self):
         # Run migration twice
-        manager = MigrationManager(self.db_path)
-        manager.register_migration(MigrationXXX_Description())
+        manager = MigrationManager(self.db_path, self.logger)
+        manager.register_migration(MigrationXXX_Description(self.logger))
 
         applied1 = manager.run_migrations(skip_backup=True)
         applied2 = manager.run_migrations(skip_backup=True)
 
         self.assertEqual(applied1, 1)
         self.assertEqual(applied2, 0)  # Not re-applied
+```
+
+Save this file as `fastapi_app/lib/migrations/tests/test_migration_XXX.py`.
+
+To run the migration tests manually:
+
+```bash
+# Run specific migration test
+uv run python -m pytest fastapi_app/lib/migrations/tests/test_migration_XXX.py -v
+
+# Run all migration tests
+uv run python -m pytest fastapi_app/lib/migrations/tests/ -v
 ```
 
 ## Running Migrations

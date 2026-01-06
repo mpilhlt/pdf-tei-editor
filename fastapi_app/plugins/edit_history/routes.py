@@ -309,6 +309,7 @@ def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
             when = change.get("when", "")
             who_attr = change.get("who", "")
             who_id = who_attr.lstrip("#")
+            status = change.get("status", "")
 
             # Look up full name from respStmt using @xml:id
             who_name = get_annotator_name(root, who_attr)
@@ -339,6 +340,7 @@ def _extract_revision_info(xml_content: str, file_metadata) -> list[dict]:
                 "description": description,
                 "who_id": who_id,
                 "who": who_name,
+                "status": status,
                 "stable_id": file_metadata.stable_id,
             })
 
