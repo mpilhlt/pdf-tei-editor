@@ -10,35 +10,21 @@ from typing import Dict, Any, List, Optional
 from lxml import etree
 
 
-def create_tei_document(schema_type: str = "relaxng",
-                       schema_location: str = "https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/heads/main/schema/rng/tei-bib.rng") -> etree.Element:
+def create_tei_document() -> etree._Element:  # type: ignore[name-defined]
     """
-    Create a TEI document root element with schema validation.
-
-    Args:
-        schema_type: "relaxng" or "xmlschema"
-        schema_location: URL to the schema file
+    Create a TEI document root element
 
     Returns:
         TEI root element
-    """
-    tei = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})
 
-    if schema_type == "xmlschema":
-        # XSD schema validation
-        tei.set(
-            "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
-            f"http://www.tei-c.org/ns/1.0 {schema_location}",
-        )
-    elif schema_type == "relaxng":
-        # RelaxNG schema validation - mark for processing instruction
-        tei.set("_relaxng_schema", schema_location)
+    """
+    tei = etree.Element("TEI", nsmap={None: "http://www.tei-c.org/ns/1.0"})  # type: ignore[dict-item]
 
     return tei
 
 
 def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
-                     applications: Optional[List[Dict[str, str]]] = None) -> etree.Element:
+                     applications: Optional[List[Dict[str, str]]] = None) -> etree._Element:  # type: ignore[name-defined]
     """
     Create a TEI header with metadata.
 
@@ -117,7 +103,7 @@ def create_tei_header(doi: str = "", metadata: Optional[Dict[str, Any]] = None,
     return teiHeader
 
 
-def create_edition_stmt(date: str, title: str) -> etree.Element:
+def create_edition_stmt(date: str, title: str) -> etree._Element:  # type: ignore[name-defined]
     """
     Create an editionStmt element with date and title.
 
@@ -137,7 +123,7 @@ def create_edition_stmt(date: str, title: str) -> etree.Element:
     return editionStmt
 
 
-def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, timestamp: str, variant_id: str = "grobid-segmentation") -> etree.Element:
+def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, timestamp: str, variant_id: str = "grobid-segmentation") -> etree._Element:  # type: ignore[name-defined]
     """
     Create an encodingDesc element with GROBID application info.
 
@@ -183,7 +169,7 @@ def create_encoding_desc_with_grobid(grobid_version: str, grobid_revision: str, 
     return encodingDesc
 
 
-def create_revision_desc_with_status(timestamp: str, status: str, description: str) -> etree.Element:
+def create_revision_desc_with_status(timestamp: str, status: str, description: str) -> etree._Element:  # type: ignore[name-defined]
     """
     Create a revisionDesc element with change tracking.
 
@@ -202,7 +188,7 @@ def create_revision_desc_with_status(timestamp: str, status: str, description: s
     return revisionDesc
 
 
-def serialize_tei_xml(tei_doc: etree.Element) -> str:
+def serialize_tei_xml(tei_doc: etree._Element) -> str:  # type: ignore[name-defined]
     """
     Serialize TEI document to XML string with proper formatting and schema processing instructions.
 
@@ -254,7 +240,20 @@ def remove_whitespace(element):
         remove_whitespace(child)
 
 
-def serialize_tei_with_formatted_header(tei_doc: etree.Element, processing_instructions: list = None) -> str:
+def create_schema_processing_instruction(schema_url: str) -> str:
+    """
+    Create an xml-model processing instruction for schema validation.
+
+    Args:
+        schema_url: Complete URL to the RelaxNG schema file
+
+    Returns:
+        Processing instruction string with the schema reference
+    """
+    return f'<?xml-model href="{schema_url}" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>'
+
+
+def serialize_tei_with_formatted_header(tei_doc: etree._Element, processing_instructions: Optional[list] = None) -> str:  # type: ignore[name-defined]
     """
     Serialize TEI document with selective formatting:
     - Pretty-print the teiHeader for readability
@@ -347,7 +346,7 @@ def serialize_tei_with_formatted_header(tei_doc: etree.Element, processing_instr
     return '\n'.join(result_lines)
 
 
-def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
+def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: ignore[name-defined]
     """
     Extract metadata from TEI document for database storage.
 
@@ -382,7 +381,7 @@ def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
             metadata['doc_id_type'] = 'fileref'
         else:
             # No doc_id found - caller must provide fallback
-            metadata['doc_id'] = None
+            metadata['doc_id'] = None  # type: ignore[assignment]
             metadata['doc_id_type'] = 'custom'
 
     # Also extract fileref separately for PDF matching (even if DOI exists)
@@ -413,7 +412,7 @@ def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
                 authors.append(author)
 
     if authors:
-        metadata['authors'] = authors
+        metadata['authors'] = authors  # type: ignore[assignment]
 
     # Extract publication date
     date_elem = tei_root.find('.//tei:publicationStmt/tei:date[@type="publication"]', ns)
@@ -447,7 +446,7 @@ def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
                 is_gold = True
                 break
 
-    metadata['is_gold_standard'] = is_gold
+    metadata['is_gold_standard'] = is_gold  # type: ignore[assignment]
 
     # Extract edition title (preferred for labels)
     edition_title_elem = tei_root.find('.//tei:editionStmt/tei:edition/tei:title', ns)
@@ -477,12 +476,12 @@ def extract_tei_metadata(tei_root: etree.Element) -> Dict[str, Any]:
     if 'publisher' in metadata:
         doc_metadata['publisher'] = metadata['publisher']
 
-    metadata['doc_metadata'] = doc_metadata
+    metadata['doc_metadata'] = doc_metadata  # type: ignore[assignment]
 
     return metadata
 
 
-def get_annotator_name(tei_root: etree.Element, who_id: str) -> str:
+def get_annotator_name(tei_root: etree._Element, who_id: str) -> str:  # type: ignore[name-defined]
     """
     Look up annotator full name from @who ID reference.
 

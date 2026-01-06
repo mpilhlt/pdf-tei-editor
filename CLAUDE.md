@@ -150,6 +150,28 @@ if not user_has_access:
 - Import settings with `from fastapi_app.config import get_settings` (not `fastapi_app.lib.settings`)
 - See [fastapi_app/routers/files_save.py](fastapi_app/routers/files_save.py) for reference implementation
 
+### Configuration Access
+
+**ALWAYS use the high-level config API** to retrieve configuration values. Do NOT use `ConfigManager` directly.
+
+```python
+from fastapi_app.lib.config_utils import get_config
+
+# Get config instance
+config = get_config()
+
+# Get configuration values with defaults
+value = config.get('annotation.lifecycle.order', default=[])
+timeout = config.get('session.timeout', default=3600)
+```
+
+**Key Points:**
+
+- Use `get_config()` to get the config instance (lazy initialization)
+- Use `config.get(key, default)` to retrieve any configuration value
+- The config instance handles initialization and caching automatically
+- Never instantiate `ConfigManager` directly - use `get_config()` instead
+
 ### Test Filtering: --grep Behavior
 
 **CRITICAL for debugging tests efficiently:**
@@ -194,6 +216,7 @@ This difference exists because the backend test runner filters files before pass
 - **File identifiers on the client** - ALWAYS use `stable_id` (nanoid) when referencing files in client-side code (frontend plugins, HTML output, JavaScript). NEVER use `file_id` (content hash) on the client. The `stable_id` is the permanent identifier for files, while `file_id` is only used internally for storage and deduplication
 - **Check testing guide before writing/debugging tests** - ALWAYS consult [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) before writing new tests or debugging test failures. It contains critical patterns, helper functions, and known issues (like Shoelace component testing). For Python unit tests of FastAPI routes, see the section on dependency overrides vs @patch decorators
 - **Testing authenticated routes** - When writing tests for routes that use `Depends(get_session_manager)` and `Depends(get_auth_manager)`, ALWAYS use `app.dependency_overrides` in `setUp()` to mock these dependencies with valid authentication by default, and include `session_id` parameter in test requests. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) Authentication Testing Pattern section
+- **FastAPI routes must use dependency injection** - ALWAYS use `Depends(get_db)` and `Depends(get_file_storage)` as route parameters, NEVER call `db = get_db()` or `file_storage = get_file_storage()` inside route functions. This enables proper test mocking via `app.dependency_overrides` and prevents CI failures when databases don't exist. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for details
 - **Check backend plugin guide when creating backend plugins** - ALWAYS consult [docs/code-assistant/backend-plugins.md](docs/code-assistant/backend-plugins.md) before creating or modifying backend plugins. It contains the plugin architecture, patterns, and Shadow DOM handling requirements
 - **CI/CD Workflow Changes** - ALWAYS consult [docs/development/ci-cd-pipeline.md](docs/development/ci-cd-pipeline.md) before modifying GitHub Actions workflows. The document describes the test execution strategy, release process, and dependencies between workflows
 - **Suppress expected error output in tests** - When tests validate error handling that logs errors or warnings, ALWAYS use `assertLogs` context manager to suppress console output. This keeps test output clean and verifies the error is logged. Example: `with self.assertLogs('module.name', level='ERROR') as cm:` wrapping the code that produces expected errors. Never let expected errors pollute test output.
@@ -205,6 +228,7 @@ This difference exists because the backend test runner filters files before pass
 - **UI elements are always available after `updateUi()`** - After calling `updateUi()`, assume all UI elements are properly registered in the ui object. NEVER use defensive optional chaining (`ui.foo?.bar`), existence checks (`if (ui.foo)`), or nullish coalescing (`ui.foo ?? fallback`) when accessing UI elements defined in typedefs - if elements are missing, it indicates a logic error that needs fixing. The app should fail hard, not silently continue.
 - **Tooltip wrappers don't need names** - SlTooltip components are wrappers and don't need `name` attributes. Only the element inside (like a button) needs a name
 - **Programmatic checkbox changes don't fire events** - Setting `checkbox.checked` programmatically does NOT trigger `sl-change` events in Shoelace components. Must manually update state when programmatically changing checkbox states
+- **Shoelace dialog button clicks require delay** - ALWAYS add `await page.waitForTimeout(500)` before clicking buttons in Shoelace dialogs. Shoelace dialogs use Shadow DOM and animations, and clicking too quickly results in the click being ignored. See [docs/code-assistant/testing-guide.md](docs/code-assistant/testing-guide.md) for the pattern
 - **Use testLog() for E2E test validation** - Don't rely on DOM queries
 - **User notifications** - Use `notify(message, variant, icon)` from `app/src/modules/sl-utils.js` for toast notifications. Variants: "primary", "success", "warning", "danger". Common icons: "check-circle", "exclamation-triangle", "exclamation-octagon", "info-circle"
 - **Reload file data** - Use `FiledataPlugin.getInstance().reload({ refresh: true })` to reload file data from the server. Import `FiledataPlugin` from `../plugins.js`

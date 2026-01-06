@@ -267,7 +267,8 @@ def generate_datatable_page(
     default_sort_dir: str = "desc",
     enable_sandbox_client: bool = True,
     custom_css: str = "",
-    custom_js: str = ""
+    custom_js: str = "",
+    extra_content_before_table: str = ""
 ) -> str:
     """
     Generate a complete HTML page with a DataTables-powered table.
@@ -283,6 +284,7 @@ def generate_datatable_page(
         enable_sandbox_client: Include sandbox client script for inter-window communication
         custom_css: Additional CSS to include in <style> tag
         custom_js: Additional JavaScript to run after DataTable initialization
+        extra_content_before_table: Additional HTML content to insert before the table
 
     Returns:
         Complete HTML document as string
@@ -357,6 +359,8 @@ def generate_datatable_page(
 </head>
 <body>
     <h1>{escape_html(title)}</h1>
+
+    {extra_content_before_table}
 
     <table id="{table_id}" class="display stripe hover">
         <thead>

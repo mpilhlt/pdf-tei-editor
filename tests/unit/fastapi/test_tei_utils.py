@@ -3,8 +3,14 @@ Unit tests for TEI utilities.
 """
 
 import unittest
+import tempfile
+import json
+from pathlib import Path
 from lxml import etree
-from fastapi_app.lib.tei_utils import serialize_tei_with_formatted_header
+from fastapi_app.lib.tei_utils import (
+    serialize_tei_with_formatted_header,
+    create_schema_processing_instruction
+)
 
 
 class TestSerializeTeiWithFormattedHeader(unittest.TestCase):
@@ -200,6 +206,35 @@ class TestProcessingInstructionsExtraction(unittest.TestCase):
         self.assertEqual(len(pis), 1)
         self.assertIn('grobid.training.segmentation.rng', pis[0])
         self.assertIn('http://relaxng.org/ns/structure/1.0', pis[0])
+
+
+class TestCreateSchemaProcessingInstruction(unittest.TestCase):
+    """Test create_schema_processing_instruction function."""
+
+    def test_creates_correct_processing_instruction(self):
+        """Test that the function creates a valid processing instruction."""
+        schema_url = "https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.segmentation.rng"
+        result = create_schema_processing_instruction(schema_url)
+
+        expected = '<?xml-model href="https://mpilhlt.github.io/grobid-footnote-flavour/schema/grobid.training.segmentation.rng" type="application/xml" schematypens="http://relaxng.org/ns/structure/1.0"?>'
+        self.assertEqual(result, expected)
+
+    def test_works_with_llamore_schema(self):
+        """Test that it works with llamore schema URLs."""
+        schema_url = "https://mpilhlt.github.io/llamore/schema/llamore.rng"
+        result = create_schema_processing_instruction(schema_url)
+
+        self.assertIn("llamore.rng", result)
+        self.assertIn('type="application/xml"', result)
+        self.assertIn('schematypens="http://relaxng.org/ns/structure/1.0"', result)
+
+    def test_works_with_mock_schema(self):
+        """Test that it works with mock extractor schema URLs."""
+        schema_url = "https://example.com/schema/mock-default.rng"
+        result = create_schema_processing_instruction(schema_url)
+
+        self.assertIn("mock-default.rng", result)
+        self.assertIn('type="application/xml"', result)
 
 
 if __name__ == '__main__':

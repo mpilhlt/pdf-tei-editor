@@ -4,7 +4,7 @@
  */
 
 import { logger } from '../app.js'
-import { getFileDataByHash } from './file-data-utils.js'
+import { getFileDataById } from './file-data-utils.js'
 
 /**
  * Checks if user has one or more specific roles
@@ -171,8 +171,13 @@ export function userHasAnnotatorRole(user) {
 export function isGoldFile(hash) {
   if (!hash) return false
   try {
-    const fileData = getFileDataByHash(hash)
-    return fileData?.type === 'gold'
+    const fileData = getFileDataById(hash)
+    if (!fileData) return false
+    // For artifacts, check is_gold_standard property
+    if (fileData.type === 'artifact') {
+      return fileData.item.is_gold_standard === true
+    }
+    return false
   } catch (error) {
     logger.warn(`Error checking if file is gold: ${String(error)}`)
     return false
@@ -187,8 +192,13 @@ export function isGoldFile(hash) {
 export function isVersionFile(hash) {
   if (!hash) return false
   try {
-    const fileData = getFileDataByHash(hash)
-    return fileData?.type === 'version'
+    const fileData = getFileDataById(hash)
+    if (!fileData) return false
+    // For artifacts, check that it's NOT a gold standard (i.e., it's a version)
+    if (fileData.type === 'artifact') {
+      return fileData.item.is_gold_standard === false
+    }
+    return false
   } catch (error) {
     logger.warn(`Error checking if file is version: ${String(error)}`)
     return false
@@ -289,8 +299,8 @@ export function canEditFile(user, fileId) {
     }
 
     // Get file metadata for additional access control checks
-    const fileData = getFileDataByHash(fileId)
-    if (!fileData || fileData.type === 'pdf' || !('metadata' in fileData.item) || !fileData.item.metadata?.access_control) {
+    const fileData = getFileDataById(fileId)
+    if (!fileData || fileData.type === 'source' || !('metadata' in fileData.item) || !fileData.item.metadata?.access_control) {
       // No metadata found or no access control info - role-based restrictions already checked above
       logger.debug('No access control metadata found for file')
       return true

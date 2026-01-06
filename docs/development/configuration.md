@@ -78,7 +78,10 @@ Provides a `Config` class and module-level configuration instance:
 **High-Level API (recommended)**:
 
 ```python
-from fastapi_app.lib import config
+from fastapi_app.lib.config_utils import get_config
+
+# Get config instance (lazy initialization)
+config = get_config()
 
 # Get configuration values
 value = config.get('session.timeout', default=3600)
@@ -93,7 +96,7 @@ success, message = config.delete('old.key')
 config_data = config.load()
 ```
 
-The module-level `config` instance is preconfigured with settings.db_dir, so you don't need to pass directory paths.
+The `get_config()` function returns a module-level config instance preconfigured with settings.db_dir, so you don't need to pass directory paths.
 
 **Alternative - Custom Config Instance**:
 
@@ -117,17 +120,20 @@ value = custom_config.get('key')
 
 #### Using Configuration in Backend Routes
 
-Configuration is accessed via the module-level `config` instance:
+Configuration is accessed via `get_config()`:
 
 ```python
 from fastapi import APIRouter
-from fastapi_app.lib import config
+from fastapi_app.lib.config_utils import get_config
 
 router = APIRouter()
 
 @router.get("/my-endpoint")
 async def my_endpoint():
-    # Get configuration values directly
+    # Get config instance
+    config = get_config()
+
+    # Get configuration values
     timeout = config.get('session.timeout', default=3600)
     mode = config.get('application.mode', default='production')
 
@@ -161,11 +167,14 @@ db_dir = settings.db_dir        # Path property
 **Setting Config Values**:
 
 ```python
-from fastapi_app.lib import config
+from fastapi_app.lib.config_utils import get_config
 from fastapi import HTTPException
 
 @router.post("/custom-config")
 async def set_custom(key: str, value: str):
+    # Get config instance
+    config = get_config()
+
     # Write custom config value (validates constraints)
     success, message = config.set(key, value)
 

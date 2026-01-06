@@ -8,13 +8,19 @@ from lxml import etree
 
 from . import BaseExtractor
 from ..lib.doi_utils import fetch_doi_metadata
-from ..lib.tei_utils import create_tei_document, create_tei_header, serialize_tei_with_formatted_header
+from ..lib.tei_utils import (
+    create_tei_document,
+    create_tei_header,
+    create_revision_desc_with_status,
+    create_schema_processing_instruction,
+    serialize_tei_with_formatted_header
+)
 from ..lib.debug_utils import log_extraction_response, log_xml_parsing_error
 import datetime
 
 # Try to import LLamore dependencies
 try:
-    from llamore import GeminiExtractor, LineByLinePrompter, TeiBiblStruct
+    from llamore import GeminiExtractor, LineByLinePrompter, TeiBiblStruct  # type: ignore[import-untyped]
     LLAMORE_AVAILABLE = True
 except ImportError:
     LLAMORE_AVAILABLE = False
@@ -26,7 +32,7 @@ class LLamoreExtractor(BaseExtractor):
     """LLamore-based reference extraction from PDF files."""
 
     @classmethod
-    def get_models() -> list:
+    def get_models(cls) -> list:
         return [GEMINI_MODEL] 
     
     @classmethod
@@ -92,8 +98,8 @@ class LLamoreExtractor(BaseExtractor):
         gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         return gemini_api_key != ""
     
-    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None, 
-                options: Dict[str, Any] = None) -> str:
+    def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
+                options: Optional[Dict[str, Any]] = None) -> str:
         """
         Extract references from PDF using LLamore.
         
@@ -114,8 +120,8 @@ class LLamoreExtractor(BaseExtractor):
         if options is None:
             options = {}
             
-        # Create TEI document with RelaxNG schema
-        tei_doc = create_tei_document("relaxng")
+        # Create TEI document
+        tei_doc = create_tei_document()
         
         # Create TEI header with metadata
         doi = options.get("doi", "")
@@ -128,7 +134,8 @@ class LLamoreExtractor(BaseExtractor):
         
         # Create basic TEI header
         tei_header = create_tei_header(doi, metadata)
-        
+        assert tei_header is not None
+
         # Add editionStmt with fileref
         timestamp = datetime.datetime.now().isoformat() + "Z"
         # Use doc_id from options if provided, otherwise extract from PDF path
@@ -136,9 +143,11 @@ class LLamoreExtractor(BaseExtractor):
         if not file_id:
             pdf_name = os.path.basename(pdf_path)
             file_id = os.path.splitext(pdf_name)[0]  # Remove .pdf extension
-        
+
         fileDesc = tei_header.find("fileDesc")
+        assert fileDesc is not None
         titleStmt = fileDesc.find("titleStmt")
+        assert titleStmt is not None
         
         # Create editionStmt
         editionStmt = etree.Element("editionStmt")
@@ -146,7 +155,7 @@ class LLamoreExtractor(BaseExtractor):
         date_elem = etree.SubElement(edition, "date", when=timestamp)
         date_elem.text = datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M:%S")
         title_elem = etree.SubElement(edition, "title")
-        title_elem.text = "LLamore reference extraction"
+        title_elem.text = "Extraction (llamore-gemini)"
         fileref_elem = etree.SubElement(edition, "idno", type="fileref")
         fileref_elem.text = file_id
         
@@ -161,10 +170,11 @@ class LLamoreExtractor(BaseExtractor):
         appInfo = etree.SubElement(encodingDesc, "appInfo")
         
         # PDF-TEI-Editor application
-        pdf_tei_app = etree.SubElement(appInfo, "application", 
-                                      version="1.0", 
+        pdf_tei_app = etree.SubElement(appInfo, "application",
+                                      version="1.0",
                                       ident="pdf-tei-editor",
                                       type="editor")
+        etree.SubElement(pdf_tei_app, "label").text = "PDF-TEI Editor"
         etree.SubElement(pdf_tei_app, "ref", target="https://github.com/mpilhlt/pdf-tei-editor")
         
         # LLamore extractor application
@@ -183,8 +193,17 @@ class LLamoreExtractor(BaseExtractor):
         prompter_label = etree.SubElement(llamore_app, "label", type="prompter")
         prompter_label.text = "LineByLinePrompter"
         etree.SubElement(llamore_app, "ref", target="https://github.com/mpilhlt/llamore")
-        
+
         tei_header.append(encodingDesc)
+
+        # Replace revisionDesc with LLamore-specific version
+        existing_revisionDesc = tei_header.find("revisionDesc")
+        if existing_revisionDesc is not None:
+            tei_header.remove(existing_revisionDesc)
+
+        revision_desc = create_revision_desc_with_status(timestamp, "extraction", "Generated with LLamore")
+        tei_header.append(revision_desc)
+
         tei_doc.append(tei_header)
         
         # Extract references
@@ -195,12 +214,21 @@ class LLamoreExtractor(BaseExtractor):
         log_extraction_response("llamore", pdf_path, refs_xml, ".references.xml")
         
         standOff = etree.SubElement(tei_doc, "standOff")
-        standOff.append(listBibl.getchildren()[0])
-        
+        # Use list() instead of deprecated getchildren()
+        children = list(listBibl)
+        if children:
+            standOff.append(children[0])
+
+        # Create processing instruction for schema validation
+        processing_instructions = []
+        schema_url = 'https://mpilhlt.github.io/llamore/schema/llamore.rng'
+        schema_pi = create_schema_processing_instruction(schema_url)
+        processing_instructions.append(schema_pi)
+
         # Serialize to XML with formatted header
-        return serialize_tei_with_formatted_header(tei_doc)
+        return serialize_tei_with_formatted_header(tei_doc, processing_instructions)
     
-    def _extract_refs_from_pdf(self, pdf_path: str, options: Dict[str, Any]) -> etree.Element:
+    def _extract_refs_from_pdf(self, pdf_path: str, options: Dict[str, Any]) -> etree._Element:  # type: ignore[name-defined]
         """Extract references from PDF using LLamore."""
         print(f"Extracting references from {pdf_path} via LLamore/Gemini")
         
