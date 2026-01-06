@@ -758,11 +758,11 @@ class SmartTestRunner {
     }
 
     // Build E2E command (Playwright frontend tests)
-    let e2eCommand = null;
     let e2eCommands = [];
     if (testsToRun.e2e && testsToRun.e2e.length > 0) {
-      const testFiles = testsToRun.e2e.map(f => f.replace('tests/e2e/', '').replace('.spec.js', '')).join('|');
-      const grepArg = `--grep "${testFiles}"`;
+      // Pass test files as positional arguments to e2e-runner
+      // NOTE: Do NOT use --grep with file paths - Playwright --grep matches test NAMES, not file paths
+      const testFilesArg = testsToRun.e2e.join(' ');
       const { vars: e2eVars, files: e2eFiles } = this.categorizeEnvVars(e2eEnvVars);
 
       // Check for conflicting .env files
@@ -780,10 +780,11 @@ class SmartTestRunner {
       const browsers = options.browser ? options.browser.split(',').map(b => b.trim()) : ['chromium'];
 
       // Create E2E test suite entry for each browser
-      const baseExtraArgs = [grepArg, envArgsStr, envFileArg].filter(Boolean).join(' ');
+      // Test files must come AFTER options to e2e-runner (but will be placed before Playwright options internally)
+      const baseExtraArgs = [envArgsStr, envFileArg].filter(Boolean).join(' ');
       e2eCommands = browsers.map(browser => ({
         name: `E2E tests (${browser})`,
-        command: `node tests/e2e-runner.js  --browser ${browser} ${baseExtraArgs}`.trim(),
+        command: `node tests/e2e-runner.js --browser ${browser} ${baseExtraArgs} ${testFilesArg}`.trim(),
         tap: false
       }));
     }

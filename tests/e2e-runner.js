@@ -58,6 +58,10 @@ const program = createTestRunnerCommand({
     'node tests/e2e-runner.js --keep-db --grep "upload"',
     'node tests/e2e-runner.js --grep "should create new version"',
     '',
+    '# Run specific test files',
+    'node tests/e2e-runner.js tests/e2e/tests/app-loading.spec.js',
+    'node tests/e2e-runner.js tests/e2e/tests/auth-workflow.spec.js tests/e2e/tests/export-workflow.spec.js',
+    '',
     '# Debug with browser visible',
     'node tests/e2e-runner.js --headed --debugger',
     '',
@@ -74,9 +78,13 @@ const program = createTestRunnerCommand({
   ],
 });
 
+// Accept test file paths as positional arguments
+program.arguments('[testFiles...]');
+
 // Parse arguments - Commander handles --help automatically
 program.parse(process.argv);
 const cliOptions = program.opts();
+const testFiles = program.args;
 
 /**
  * @typedef {Object} ServerOptions
@@ -97,9 +105,10 @@ const cliOptions = program.opts();
  * @property {boolean} debugMessages - Enable debug output
  * @property {boolean} debugOnFailure - Capture debug artifacts on failure
  * @property {number} workers - Number of parallel workers
- * @property {string|null} grep - Test filter pattern
- * @property {string|null} grepInvert - Test exclude pattern
+ * @property {string|null} grep - Test filter pattern (matches test names)
+ * @property {string|null} grepInvert - Test exclude pattern (matches test names)
  * @property {boolean} failFast - Abort on first failure
+ * @property {string[]} testFiles - Specific test files to run
  */
 
 /**
@@ -294,6 +303,11 @@ class PlaywrightRunner {
     // Build Playwright command
     const cmd = ['playwright', 'test'];
 
+    // Add test files as positional arguments (must come before options)
+    if (options.testFiles && options.testFiles.length > 0) {
+      cmd.push(...options.testFiles);
+    }
+
     if (options.browser) {
       cmd.push(`--project=${options.browser}`);
     }
@@ -403,6 +417,7 @@ class PlaywrightRunner {
       grep: cliOptions.grep || null,
       grepInvert: cliOptions.grepInvert || null,
       failFast: cliOptions.failFast,
+      testFiles: testFiles || [],
     };
 
     try {

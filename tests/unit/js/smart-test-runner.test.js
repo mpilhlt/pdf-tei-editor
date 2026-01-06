@@ -797,4 +797,85 @@ class TestExample(unittest.TestCase):
     }
   });
 
+  test('should pass E2E test files as positional arguments, not via --grep', async () => {
+    const runner = new SmartTestRunner();
+
+    // Mock getTestsToRun to return E2E tests
+    const originalGetTestsToRun = runner.getTestsToRun;
+    runner.getTestsToRun = async (options) => {
+      return {
+        tests: {
+          js: [],
+          py: [],
+          api: [],
+          e2e: [
+            'tests/e2e/tests/app-loading.spec.js',
+            'tests/e2e/tests/auth-workflow.spec.js'
+          ]
+        },
+        analysisResult: {
+          dependencies: {
+            'tests/e2e/tests/app-loading.spec.js': {
+              dependencies: ['app/src/app.js'],
+              alwaysRun: false,
+              envVars: []
+            },
+            'tests/e2e/tests/auth-workflow.spec.js': {
+              dependencies: ['app/src/plugins/authentication.js'],
+              alwaysRun: false,
+              envVars: []
+            }
+          },
+          alwaysRunTests: []
+        }
+      };
+    };
+
+    try {
+      // Capture console output
+      let capturedOutput = '';
+      const originalLog = console.log;
+      console.log = (...args) => {
+        capturedOutput += args.join(' ') + '\n';
+      };
+
+      try {
+        await runner.run({ dryRun: true });
+
+        // Verify E2E command passes test files as positional arguments
+        assert(
+          capturedOutput.includes('node tests/e2e-runner.js'),
+          'Should use e2e-runner'
+        );
+        assert(
+          capturedOutput.includes('tests/e2e/tests/app-loading.spec.js'),
+          'Should include first test file as positional argument'
+        );
+        assert(
+          capturedOutput.includes('tests/e2e/tests/auth-workflow.spec.js'),
+          'Should include second test file as positional argument'
+        );
+
+        // Verify --grep is NOT used with file paths
+        assert(
+          !capturedOutput.includes('--grep "tests/e2e'),
+          'Should NOT use --grep with file paths (Playwright --grep matches test names, not files)'
+        );
+        assert(
+          !capturedOutput.includes('--grep "app-loading'),
+          'Should NOT use --grep with file name patterns'
+        );
+
+        console.log = originalLog; // Restore for this output
+        console.log('E2E command generation verification passed');
+        console.log('Test files are passed as positional arguments (not via --grep)');
+
+      } finally {
+        console.log = originalLog;
+      }
+    } finally {
+      runner.getTestsToRun = originalGetTestsToRun;
+    }
+  });
+
 });
