@@ -129,15 +129,21 @@ export class XMLEditor extends EventEmitter {
 
   /**
    * The original XML document, when in merge view mode
-   * @type {string} 
+   * @type {string}
    */
   #original = ''
 
   /**
-   * interval to update the merge buttons
-   * @type {ReturnType<typeof setInterval>|null}
+   * MutationObserver for merge view buttons
+   * @type {MutationObserver|null}
    */
-  #updateMergButtonsInterval = null
+  #mergeViewObserver = null
+
+  /**
+   * Edition titles for merge view buttons
+   * @type {{current: string, incoming: string} | null}
+   */
+  #mergeViewTitles = null
 
   /**  @type {XMLSerializer} */
   #serializer; // an XMLSerializer object or one with a compatible API
@@ -473,11 +479,15 @@ export class XMLEditor extends EventEmitter {
     if (this.isMergeViewActive()) {
       await this.hideMergeView()
     }
-    
-    // fetch xml if it is a path 
+
+    // fetch xml if it is a path
     const diff = await this.#fetchXml(xmlPathOrString);
 
-    // create and display merge view with the original 
+    // Extract edition titles from both documents
+    const currentTitle = this.#extractEditionTitle(this.#original, false);
+    const incomingTitle = this.#extractEditionTitle(diff, true);
+
+    // create and display merge view with the original
     this.#mergeViewExt = unifiedMergeView({
       original: diff,
       diffConfig: { scanLimit: 50000, timeout: 20000 }
@@ -487,12 +497,11 @@ export class XMLEditor extends EventEmitter {
       effects: this.#mergeViewCompartment.reconfigure([this.#mergeViewExt])
     });
 
-    // Overwrite the default button labels
-    
-    this.#updateMergButtonsInterval = setInterval(() => {
-      $$('button[name="accept"]').forEach(b => b.innerHTML = 'Keep')
-      $$('button[name="reject"]').forEach(b => b.innerHTML = 'Change')
-    }, 200)
+    // Store titles for button updates
+    this.#mergeViewTitles = { current: currentTitle, incoming: incomingTitle };
+
+    // Set up MutationObserver to update button labels when DOM changes
+    this.#setupMergeViewObserver();
 
     // notify listeners
     this.emit(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW)
@@ -521,18 +530,20 @@ export class XMLEditor extends EventEmitter {
     if (!this.#mergeViewExt) {
       return;
     }
-    // stop updating the buttons
-    
-    if (this.#updateMergButtonsInterval) {
-      clearInterval(this.#updateMergButtonsInterval)
-      this.#updateMergButtonsInterval = null
+
+    // Disconnect the mutation observer
+    if (this.#mergeViewObserver) {
+      this.#mergeViewObserver.disconnect();
+      this.#mergeViewObserver = null;
     }
+
     // remove the merge view
     this.#view.dispatch({
       effects: this.#mergeViewCompartment.reconfigure([])
     });
     this.#mergeViewExt = null;
     this.#original = '';
+    this.#mergeViewTitles = null;
 
     // notify listeners
     this.emit(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW)
@@ -1317,6 +1328,105 @@ export class XMLEditor extends EventEmitter {
     const { syntaxToDom, domToSyntax } = maps;
     this.#syntaxToDom = syntaxToDom;
     this.#domToSyntax = domToSyntax;
+  }
+
+  /**
+   * Extracts edition title from TEI XML string
+   * @param {string} xmlString - XML string to parse
+   * @param {boolean} isIncoming - True if this is the incoming document (for fallback label)
+   * @returns {string} - Edition title or fallback
+   */
+  #extractEditionTitle(xmlString, isIncoming = false) {
+    const fallback = isIncoming ? 'Incoming' : 'Current';
+
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlString, 'application/xml');
+
+      // Check for parser errors
+      const errorNode = doc.querySelector('parsererror');
+      if (errorNode) {
+        return fallback;
+      }
+
+      // Define namespace resolver for TEI
+      const namespaceResolver = (prefix) => {
+        const namespaces = {
+          'tei': 'http://www.tei-c.org/ns/1.0'
+        };
+        return namespaces[prefix] || null;
+      };
+
+      // XPath with namespace: /TEI/teiHeader/fileDesc/editionStmt/edition/title
+      const result = doc.evaluate(
+        '//tei:teiHeader/tei:fileDesc/tei:editionStmt/tei:edition/tei:title',
+        doc,
+        namespaceResolver,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+
+      const titleNode = result.singleNodeValue;
+      if (titleNode && titleNode.textContent && titleNode.textContent.trim()) {
+        return titleNode.textContent.trim();
+      }
+
+      return fallback;
+    } catch (error) {
+      console.warn('Error extracting edition title:', error);
+      return fallback;
+    }
+  }
+
+  /**
+   * Sets up MutationObserver to update merge view button labels
+   */
+  #setupMergeViewObserver() {
+    if (!this.#mergeViewTitles) {
+      return;
+    }
+
+    const { current, incoming } = this.#mergeViewTitles;
+
+    // Function to update button labels and tooltips
+    const updateButtons = () => {
+      const acceptButtons = document.querySelectorAll('button[name="accept"]');
+      const rejectButtons = document.querySelectorAll('button[name="reject"]');
+
+      acceptButtons.forEach(b => {
+        if (b.innerHTML !== current) {
+          b.innerHTML = current;
+        }
+        b.title = `Accept "${current}"`;
+      });
+
+      rejectButtons.forEach(b => {
+        if (b.innerHTML !== incoming) {
+          b.innerHTML = incoming;
+        }
+        b.title = `Accept "${incoming}"`;
+      });
+    };
+
+    // Initial update with delay to ensure DOM is ready
+    setTimeout(updateButtons, 100);
+
+    // Also try immediate update
+    updateButtons();
+
+    // Set up MutationObserver to watch for DOM changes
+    this.#mergeViewObserver = new MutationObserver(() => {
+      updateButtons();
+    });
+
+    // Observe the editor element for changes in its subtree
+    const editorElement = this.#view.dom;
+    if (editorElement) {
+      this.#mergeViewObserver.observe(editorElement, {
+        childList: true,
+        subtree: true
+      });
+    }
   }
 }
 

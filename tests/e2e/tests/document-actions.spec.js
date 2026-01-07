@@ -116,6 +116,36 @@ test.describe('Document Actions', () => {
       expect(newVersionLog.value).toHaveProperty('newFileId');
       //expect(newVersionLog.value.newFileId).not.toBe(newVersionLog.value.oldFileId); // ??
 
+      // Wait for the new version to be loaded and state fully updated
+      const versionLoadedLog = await waitForTestMessage(consoleLogs, 'NEW_VERSION_LOADED', 10000);
+      expect(versionLoadedLog.value).toHaveProperty('fileId');
+      expect(versionLoadedLog.value.editorReadOnly).toBe(false);
+
+      // Wait for buttons to be enabled (state update propagation to UI)
+      // Poll for button state rather than fixed timeout since onStateUpdate handlers run async
+      await page.waitForFunction(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return !ui.toolbar.documentActions.saveRevision.disabled &&
+               !ui.toolbar.documentActions.createNewVersion.disabled &&
+               !ui.toolbar.documentActions.editMetadata.disabled;
+      }, { timeout: 5000 });
+
+      // Verify that buttons are enabled after creating new version (not read-only)
+      const buttonsEnabledAfterCreate = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return {
+          saveRevision: !ui.toolbar.documentActions.saveRevision.disabled,
+          createNewVersion: !ui.toolbar.documentActions.createNewVersion.disabled,
+          editMetadata: !ui.toolbar.documentActions.editMetadata.disabled
+        };
+      });
+
+      expect(buttonsEnabledAfterCreate.saveRevision).toBe(true);
+      expect(buttonsEnabledAfterCreate.createNewVersion).toBe(true);
+      expect(buttonsEnabledAfterCreate.editMetadata).toBe(true);
+
       debugLog('New version creation test completed successfully');
 
       // Note: We don't delete the created version here because:

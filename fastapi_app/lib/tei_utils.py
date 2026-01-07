@@ -481,6 +481,111 @@ def extract_tei_metadata(tei_root: etree._Element) -> Dict[str, Any]:  # type: i
     return metadata
 
 
+def build_pdf_label_from_metadata(doc_metadata: Dict[str, Any]) -> Optional[str]:
+    """
+    Build a human-readable label for a PDF from extracted metadata.
+
+    Format: "Author (Year) Title" with fallbacks to partial formats.
+
+    Args:
+        doc_metadata: Dictionary with 'title', 'authors', 'date' keys
+
+    Returns:
+        Formatted label string or None if no title available
+    """
+    if 'title' not in doc_metadata:
+        return None
+
+    title = doc_metadata['title']
+
+    # Extract author (first author's family name)
+    author_part = ""
+    if 'authors' in doc_metadata and doc_metadata['authors']:
+        first_author = doc_metadata['authors'][0]
+        if 'family' in first_author:
+            author_part = first_author['family']
+
+    # Extract date/year
+    date_part = ""
+    if 'date' in doc_metadata:
+        date_part = f"({doc_metadata['date']})"
+
+    # Build label with author and date first, then title
+    if author_part and date_part:
+        return f"{author_part} {date_part} {title}"
+    elif author_part:
+        return f"{author_part} {title}"
+    elif date_part:
+        return f"{date_part} {title}"
+    else:
+        return title
+
+
+def update_pdf_metadata_from_tei(
+    pdf_file,
+    tei_metadata: Dict[str, Any],
+    file_repo,
+    logger,
+    doc_collections: Optional[list] = None
+) -> bool:
+    """
+    Update PDF file metadata from extracted TEI metadata.
+
+    Updates:
+    - doc_metadata: Full metadata dict (title, authors, date, journal, publisher)
+    - label: Human-readable label formatted as "Author (Year) Title"
+    - doc_collections: Optional collection list to sync
+
+    Args:
+        pdf_file: PDF file object from FileRepository
+        tei_metadata: Metadata dict from extract_tei_metadata()
+        file_repo: FileRepository instance
+        logger: Logger instance
+        doc_collections: Optional collection list to sync to PDF
+
+    Returns:
+        True if update was attempted, False if no updates needed
+    """
+    from ..lib.models import FileUpdate
+
+    # Get doc_metadata that was extracted
+    doc_metadata = tei_metadata.get('doc_metadata', {})
+
+    # Build a label for the PDF from metadata
+    pdf_label = build_pdf_label_from_metadata(doc_metadata)
+
+    # Fallback to DOI/doc_id if no label from metadata
+    if not pdf_label and tei_metadata.get('doc_id'):
+        pdf_label = tei_metadata['doc_id']
+
+    # Update PDF file with extracted metadata and collection
+    # Only update if there's actual data to set (avoid overwriting with empty values)
+    has_metadata = bool(doc_metadata)  # Only update if dict is non-empty
+    has_updates = has_metadata or pdf_label or doc_collections
+
+    if has_updates:
+        updates = FileUpdate()
+        if has_metadata:
+            updates.doc_metadata = doc_metadata
+        if pdf_label:
+            updates.label = pdf_label
+        if doc_collections:
+            updates.doc_collections = doc_collections
+
+        try:
+            file_repo.update_file(pdf_file.id, updates)
+            logger.info(
+                f"Updated PDF metadata: {pdf_file.id[:8]}... "
+                f"label='{pdf_label}', collections={doc_collections}"
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to update PDF metadata: {e}")
+            return False
+
+    return False
+
+
 def get_annotator_name(tei_root: etree._Element, who_id: str) -> str:  # type: ignore[name-defined]
     """
     Look up annotator full name from @who ID reference.

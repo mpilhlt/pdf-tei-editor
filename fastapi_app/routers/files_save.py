@@ -26,7 +26,9 @@ from ..lib.dependencies import (
     get_file_repository,
     get_file_storage,
     require_authenticated_user,
-    get_session_id
+    get_session_id,
+    get_sse_service,
+    get_session_manager
 )
 from ..lib.file_repository import FileRepository
 from ..lib.file_storage import FileStorage
@@ -38,6 +40,9 @@ from ..lib.models import FileCreate, FileUpdate
 from ..lib.models_files import SaveFileRequest, SaveFileResponse
 from ..lib.tei_utils import serialize_tei_with_formatted_header
 from ..lib.xml_utils import encode_xml_entities
+from ..lib.sse_service import SSEService
+from ..lib.sessions import SessionManager
+from ..lib.sse_utils import broadcast_to_other_sessions
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
@@ -225,7 +230,9 @@ async def save_file(
     user: dict = Depends(require_authenticated_user),
     session_id: str = Depends(get_session_id),
     file_repo: FileRepository = Depends(get_file_repository),
-    file_storage: FileStorage = Depends(get_file_storage)
+    file_storage: FileStorage = Depends(get_file_storage),
+    sse_service: SSEService = Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager)
 ):
     """
     Save TEI XML file with version management.
@@ -401,6 +408,32 @@ async def save_file(
                     )
                 )
 
+        # Update PDF metadata from TEI (only for gold standard files)
+            if existing_file.is_gold_standard and tei_metadata:
+                pdf_file = file_repo.get_pdf_for_document(doc_id)
+                if pdf_file:
+                    from ..lib.tei_utils import update_pdf_metadata_from_tei
+                    update_pdf_metadata_from_tei(
+                        pdf_file,
+                        tei_metadata,
+                        file_repo,
+                        logger_inst,
+                        doc_collections=doc_collections
+                    )
+
+            # Notify other sessions about file update
+            broadcast_to_other_sessions(
+                sse_service=sse_service,
+                session_manager=session_manager,
+                current_session_id=session_id,
+                event_type="fileDataChanged",
+                data={
+                    "reason": "file_saved",
+                    "stable_id": existing_file.stable_id
+                },
+                logger=logger_inst
+            )
+
             return SaveFileResponse(status="saved", file_id=existing_file.stable_id)
 
         elif request.new_version or (not existing_file and existing_gold and existing_gold.variant == variant):
@@ -413,7 +446,7 @@ async def save_file(
 
         # Get next version number
             latest_version = file_repo.get_latest_tei_version(doc_id, variant)
-            next_version = (latest_version.version + 1) if latest_version else 1
+            next_version = ((latest_version.version or 0) + 1) if latest_version else 1
 
             logger_inst.info(f"Creating version {next_version} for doc_id={doc_id}, variant={variant}")
 
@@ -462,6 +495,19 @@ async def save_file(
             if not acquire_lock(created_file.stable_id, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
 
+            # Notify other sessions about new version
+            broadcast_to_other_sessions(
+                sse_service=sse_service,
+                session_manager=session_manager,
+                current_session_id=session_id,
+                event_type="fileDataChanged",
+                data={
+                    "reason": "file_created",
+                    "stable_id": created_file.stable_id
+                },
+                logger=logger_inst
+            )
+
             status = "new"
             return SaveFileResponse(status=status, file_id=created_file.stable_id)
 
@@ -508,6 +554,30 @@ async def save_file(
         # Now acquire lock using stable_id
             if not acquire_lock(created_file.stable_id, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
+
+        # Update PDF metadata from TEI (for new gold standard)
+            if pdf_file and tei_metadata:
+                from ..lib.tei_utils import update_pdf_metadata_from_tei
+                update_pdf_metadata_from_tei(
+                    pdf_file,
+                    tei_metadata,
+                    file_repo,
+                    logger_inst,
+                    doc_collections=doc_collections
+                )
+
+            # Notify other sessions about new gold standard
+            broadcast_to_other_sessions(
+                sse_service=sse_service,
+                session_manager=session_manager,
+                current_session_id=session_id,
+                event_type="fileDataChanged",
+                data={
+                    "reason": "file_created",
+                    "stable_id": created_file.stable_id
+                },
+                logger=logger_inst
+            )
 
             status = "new_gold"
             return SaveFileResponse(status=status, file_id=created_file.stable_id)

@@ -293,3 +293,58 @@ sl-menu[name="pluginsMenu"] small {
 #pdf-toolbar, #xml-toolbar {
   z-index: 0 !important;
 }
+
+/* CodeMirror Merge View - Neutral Color Scheme */
+
+/* Deleted chunks and lines - use blue tones instead of red */
+.cm-deletedChunk {
+  background-color: #e3f2fd !important; /* Light blue background */
+}
+
+.cm-deletedLine {
+  background-color: #e3f2fd !important;
+}
+
+.cm-deletedLine del {
+  background-color: #bbdefb !important; /* Slightly darker blue for del elements */
+  text-decoration: line-through;
+}
+
+.cm-deletedText {
+  background-color: #90caf9 !important; /* Even darker blue for deleted text */
+}
+
+/* Inserted/changed lines - use orange tones instead of green */
+.cm-insertedLine {
+  background-color: #fff3e0 !important; /* Light orange background */
+}
+
+.cm-changedLine ins,
+.cm-insertedLine ins {
+  background-color: #ffe0b2 !important; /* Slightly darker orange for ins elements */
+  text-decoration: none;
+}
+
+.cm-changedText {
+  background-color: #ffcc80 !important; /* Even darker orange for changed text */
+}
+
+/* Button styling to match neutral theme */
+.cm-chunkButtons button[name="accept"],
+.cm-chunkButtons button[name="reject"] {
+  max-width: 10vw !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  color: white !important;
+}
+
+.cm-chunkButtons button[name="accept"] {
+  background-color: #2196f3 !important; /* Blue (matches deleted/current) */
+  border-color: #1976d2 !important;
+}
+
+.cm-chunkButtons button[name="reject"] {
+  background-color: #ff9800 !important; /* Orange (matches inserted/incoming) */
+  border-color: #f57c00 !important;
+}

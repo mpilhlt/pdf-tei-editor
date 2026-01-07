@@ -27,11 +27,16 @@ from ..lib.models_files import (
 from ..lib.dependencies import (
     get_file_repository,
     get_session_id,
-    get_current_user
+    get_current_user,
+    get_sse_service,
+    get_session_manager
 )
 from ..lib.access_control import check_file_access
 from ..config import get_settings
 from ..lib.logging_utils import get_logger
+from ..lib.sse_service import SSEService
+from ..lib.sessions import SessionManager
+from ..lib.sse_utils import broadcast_to_other_sessions
 
 
 logger = get_logger(__name__)
@@ -93,7 +98,9 @@ def acquire_lock_endpoint(
     request: AcquireLockRequest,
     repo: FileRepository = Depends(get_file_repository),
     session_id: str = Depends(get_session_id),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    sse_service: SSEService = Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager)
 ) -> str:
     """
     Acquire a lock for editing.
@@ -103,6 +110,8 @@ def acquire_lock_endpoint(
         repo: File repository (injected)
         session_id: Current session ID (injected)
         current_user: Current user dict (injected)
+        sse_service: SSE service (injected)
+        session_manager: Session manager (injected)
 
     Returns:
         "OK" string on success (matches Flask API)
@@ -132,6 +141,21 @@ def acquire_lock_endpoint(
     settings = get_settings()
     if acquire_lock(file_metadata.stable_id, session_id, settings.db_dir, logger):
         logger.info(f"[LOCK API] Session {session_id_short}... successfully acquired lock for file {file_metadata.stable_id}...")
+
+        # Notify all other sessions about the lock acquisition
+        broadcast_to_other_sessions(
+            sse_service=sse_service,
+            session_manager=session_manager,
+            current_session_id=session_id,
+            event_type="fileDataChanged",
+            data={
+                "reason": "lock_acquired",
+                "stable_id": file_metadata.stable_id,
+                "locked_by": current_user.get("username")
+            },
+            logger=logger
+        )
+
         return "OK"
 
     # Could not acquire lock
@@ -146,7 +170,9 @@ def acquire_lock_endpoint(
 def release_lock_endpoint(
     request: ReleaseLockRequest,
     repo: FileRepository = Depends(get_file_repository),
-    session_id: str = Depends(get_session_id)
+    session_id: str = Depends(get_session_id),
+    sse_service: SSEService = Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager)
 ):
     """
     Release a lock.
@@ -175,6 +201,18 @@ def release_lock_endpoint(
     result = release_lock(file_metadata.stable_id, session_id, settings.db_dir, logger)
 
     if result["status"] == "success":
+        # Notify all other sessions that lock was released
+        broadcast_to_other_sessions(
+            sse_service=sse_service,
+            session_manager=session_manager,
+            current_session_id=session_id,
+            event_type="lockReleased",
+            data={
+                "stable_id": file_metadata.stable_id
+            },
+            logger=logger
+        )
+
         return ReleaseLockResponse(
             action=result["action"],
             message=result["message"]

@@ -20,10 +20,16 @@ from ..lib.models_files import DeleteFilesRequest, DeleteFilesResponse
 from ..lib.dependencies import (
     get_file_repository,
     get_file_storage,
-    require_authenticated_user
+    require_authenticated_user,
+    get_session_id,
+    get_sse_service,
+    get_session_manager
 )
 from ..lib.access_control import check_file_access
 from ..lib.logging_utils import get_logger
+from ..lib.sse_service import SSEService
+from ..lib.sessions import SessionManager
+from ..lib.sse_utils import broadcast_to_other_sessions
 
 
 logger = get_logger(__name__)
@@ -35,7 +41,10 @@ def delete_files(
     body: DeleteFilesRequest,
     repo: FileRepository = Depends(get_file_repository),
     storage: FileStorage = Depends(get_file_storage),
-    current_user: dict = Depends(require_authenticated_user)
+    current_user: dict = Depends(require_authenticated_user),
+    session_id: str = Depends(get_session_id),
+    sse_service: SSEService = Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager)
 ) -> DeleteFilesResponse:
     """
     Delete files (soft delete with reference counting).
@@ -60,6 +69,8 @@ def delete_files(
     """
     logger.debug(f"Deleting {len(body.files)} files, user={current_user}")
 
+    deleted_stable_ids = []
+
     for file_id in body.files:
         # Skip empty identifiers (including whitespace-only)
         if not file_id or not file_id.strip():
@@ -83,9 +94,24 @@ def delete_files(
         logger.info(f"Soft deleting file: {file_id} (hash: {file_metadata.id[:16]}...)")
         try:
             repo.delete_file(file_metadata.id)
+            deleted_stable_ids.append(file_metadata.stable_id)
 
         except ValueError as e:
             logger.error(f"Failed to delete file {file_id}: {e}")
             # Continue with other files
+
+    # Notify other sessions about deletions
+    if deleted_stable_ids:
+        broadcast_to_other_sessions(
+            sse_service=sse_service,
+            session_manager=session_manager,
+            current_session_id=session_id,
+            event_type="fileDataChanged",
+            data={
+                "reason": "files_deleted",
+                "stable_ids": deleted_stable_ids
+            },
+            logger=logger
+        )
 
     return DeleteFilesResponse(result="ok")
