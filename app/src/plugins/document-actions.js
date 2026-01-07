@@ -684,10 +684,9 @@ async function createNewVersion(state) {
     // Reload the file data first to include the new version
     await fileselection.reload({refresh:true})
 
-    // Then update state to reflect the new file_id
-    // (editor already has the correct content from addTeiHeaderInfo)
-    // This will trigger file-selection update with the refreshed fileData
-    await app.updateState({ xml: newFileId })
+    // Load the new file using services.load() to properly acquire lock and reset read-only state
+    // This ensures editorReadOnly is correctly set based on lock status
+    await services.load({ xml: newFileId })
 
     notify("Document was duplicated. You are now editing the copy.")
 

@@ -116,6 +116,22 @@ test.describe('Document Actions', () => {
       expect(newVersionLog.value).toHaveProperty('newFileId');
       //expect(newVersionLog.value.newFileId).not.toBe(newVersionLog.value.oldFileId); // ??
 
+      // Verify that buttons are enabled after creating new version (not read-only)
+      await page.waitForTimeout(1000); // Wait for state update
+      const buttonsEnabledAfterCreate = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return {
+          saveRevision: !ui.toolbar.documentActions.saveRevision.disabled,
+          createNewVersion: !ui.toolbar.documentActions.createNewVersion.disabled,
+          editMetadata: !ui.toolbar.documentActions.editMetadata.disabled
+        };
+      });
+
+      expect(buttonsEnabledAfterCreate.saveRevision).toBe(true);
+      expect(buttonsEnabledAfterCreate.createNewVersion).toBe(true);
+      expect(buttonsEnabledAfterCreate.editMetadata).toBe(true);
+
       debugLog('New version creation test completed successfully');
 
       // Note: We don't delete the created version here because:
