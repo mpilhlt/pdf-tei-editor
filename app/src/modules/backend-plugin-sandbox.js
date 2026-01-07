@@ -7,6 +7,7 @@
 
 import { services } from '../plugins.js';
 import { openDocumentAtLine as xmlEditorOpenDocumentAtLine } from '../plugins/xmleditor.js';
+import { findCorrespondingSource } from '../modules/file-data-utils.js';
 
 /**
  * @import { ApplicationState } from '../state.js'
@@ -124,11 +125,25 @@ export class PluginSandbox {
   }
 
   /**
-   * Open a document by updating xml state and closing dialog
-   * @param {string} stableId - Document stable ID
+   * Open a document by updating xml and pdf state and closing dialog
+   * @param {string} stableId - Document stable ID (typically a TEI file)
+   *
+   * This method loads both the TEI document and its corresponding PDF source file.
+   * If the stable ID corresponds to a TEI artifact, the associated PDF source is
+   * automatically loaded alongside it to keep the UI in sync.
    */
   async openDocument(stableId) {
-    await services.load({xml: stableId});
+    // Get the corresponding PDF for this TEI file
+    const state = this.context.getCurrentState();
+    const fileData = state.fileData;
+    const sourceInfo = fileData ? findCorrespondingSource(fileData, stableId) : null;
+    const pdfId = sourceInfo?.sourceId;
+
+    // Load both XML and PDF
+    await services.load({
+      xml: stableId,
+      pdf: pdfId || undefined
+    });
     this.closeDialog();
   }
 

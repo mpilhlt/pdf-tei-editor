@@ -156,7 +156,7 @@ async def view_progress(
         avg_progress = (total_progress_sum / total_docs) if total_docs > 0 else 0
 
         # Prepare table data
-        headers = ["Document ID", "Annotations", "Last Change", "Last Annotator", "Status"]
+        headers = ["Document ID", "Annotations", "Last Change", "Last Annotator", "Status", "Date"]
         rows = []
 
         # Sort by doc_id and include all documents even if they have no annotations
@@ -193,12 +193,18 @@ async def view_progress(
             # Create visual status indicator
             status_cell = _create_status_indicator(newest_status, lifecycle_order)
 
+            # Format timestamp for display (human-readable)
+            date_cell = ""
+            if newest_timestamp:
+                date_cell = newest_timestamp.strftime("%Y-%m-%d %H:%M")
+
             rows.append([
                 escape_html(doc_id),
                 annotations_cell,
                 last_change_cell,
                 last_annotator_cell,
-                status_cell
+                status_cell,
+                date_cell
             ])
 
         # Generate summary card HTML
@@ -405,7 +411,7 @@ async def export_csv(
 
         # Write header
         writer.writerow(
-            ["Document ID", "Annotation Label", "Revision Count", "Last Change", "Last Annotator", "Status"]
+            ["Document ID", "Annotation Label", "Revision Count", "Last Change", "Last Annotator", "Status", "Date"]
         )
 
         # Write data - sort by doc_id and include all documents even if they have no annotations
@@ -414,12 +420,22 @@ async def export_csv(
 
             if not annotations:
                 # Document with no annotations
-                writer.writerow([doc_id, "", "", "", "", ""])
+                writer.writerow([doc_id, "", "", "", "", "", ""])
             else:
                 # Sort annotations by label for consistent output
                 annotations.sort(key=lambda x: x["annotation_label"])
 
                 for ann in annotations:
+                    # Format timestamp as timezone-aware ISO format with Z suffix
+                    date_str = ""
+                    timestamp = ann.get("last_change_timestamp")
+                    if timestamp:
+                        # Assume UTC if no timezone info (since we stripped it during parsing)
+                        from datetime import timezone
+                        if timestamp.tzinfo is None:
+                            timestamp = timestamp.replace(tzinfo=timezone.utc)
+                        date_str = timestamp.isoformat().replace("+00:00", "Z")
+
                     writer.writerow([
                         doc_id,
                         ann["annotation_label"],
@@ -427,6 +443,7 @@ async def export_csv(
                         ann.get("last_change_desc", ""),
                         ann.get("last_annotator", ""),
                         ann.get("last_change_status", ""),
+                        date_str,
                     ])
 
         # Create streaming response

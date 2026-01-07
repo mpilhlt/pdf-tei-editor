@@ -67,6 +67,8 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
 
     def test_extract_annotation_info(self):
         """Test annotation info extraction from TEI XML."""
+        from datetime import datetime
+
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader>
@@ -87,9 +89,9 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
       </sourceDesc>
     </fileDesc>
     <revisionDesc>
-      <change when="2024-01-01T10:00:00" status="created">First version</change>
-      <change when="2024-01-02T10:00:00" status="updated">Second version</change>
-      <change when="2024-01-03T10:00:00" status="updated">Third version</change>
+      <change when="2024-01-01T10:00:00Z" status="created">First version</change>
+      <change when="2024-01-02T10:00:00Z" status="updated">Second version</change>
+      <change when="2024-01-03T10:00:00Z" status="reviewed">Third version</change>
     </revisionDesc>
   </teiHeader>
   <text>
@@ -108,6 +110,11 @@ class TestAnnotationProgressPlugin(unittest.TestCase):
         self.assertEqual(result["annotation_label"], "Test Annotation")
         self.assertEqual(result["revision_count"], 3)
         self.assertEqual(result["stable_id"], "test-stable-id")
+        self.assertEqual(result["last_change_status"], "reviewed")
+        self.assertIsNotNone(result["last_change_timestamp"])
+        # Verify timestamp is parsed correctly (timezone stripped)
+        expected_timestamp = datetime(2024, 1, 3, 10, 0, 0)
+        self.assertEqual(result["last_change_timestamp"], expected_timestamp)
 
     def test_extract_annotation_info_no_edition_title(self):
         """Test annotation info extraction with no edition title."""
