@@ -688,6 +688,9 @@ async function createNewVersion(state) {
     // This ensures editorReadOnly is correctly set based on lock status
     await services.load({ xml: newFileId })
 
+    // Log after state is fully updated for E2E tests
+    testLog('NEW_VERSION_LOADED', { fileId: newFileId, editorReadOnly: app.getCurrentState().editorReadOnly });
+
     notify("Document was duplicated. You are now editing the copy.")
 
     // sync the new file to the WebDav server
