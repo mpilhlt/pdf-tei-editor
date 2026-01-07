@@ -58,6 +58,57 @@ const createTeiXml = (docId, content, variant = null) => {
 </TEI>`;
 };
 
+// TEI XML with full metadata for PDF update tests
+const createTeiXmlWithMetadata = (docId, variant = null) => {
+  const variantLabel = variant ? `<label type="variant-id">${variant}</label>` : '';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title level="a">Machine Learning in Digital Humanities</title>
+        <author>
+          <persName>
+            <forename>Jane</forename>
+            <surname>Smith</surname>
+          </persName>
+        </author>
+      </titleStmt>
+      <editionStmt>
+        <edition>
+          <title>Test Edition</title>
+          <idno type="fileref">${docId}</idno>
+        </edition>
+      </editionStmt>
+      <publicationStmt>
+        <publisher>Academic Press</publisher>
+        <date type="publication">2023</date>
+        <idno type="DOI">10.1234/ml.dh.2023</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>
+          <title level="j">Digital Humanities Quarterly</title>
+        </bibl>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="0.7.1" ident="GROBID" type="extractor">
+          ${variantLabel}
+        </application>
+      </appInfo>
+    </encodingDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <div>
+        <p>Sample content for metadata testing</p>
+      </div>
+    </body>
+  </text>
+</TEI>`;
+};
+
 describe('Files Save API E2E Tests', () => {
   let reviewerSession = null;
   let annotatorSession = null;
@@ -588,6 +639,233 @@ describe('Files Save API E2E Tests', () => {
       '/files/release_lock',
       'POST',
       { file_id: response2.file_id },
+      BASE_URL
+    );
+  });
+
+  // Test: PDF metadata updates when saving gold standard TEI
+  test('POST /api/files/save should update PDF metadata when saving gold standard TEI with full metadata', async () => {
+    const metadataTestDocId = `test-pdf-metadata-${testRunId}`;
+
+    // First, upload a PDF file using the upload endpoint
+    const pdfContent = Buffer.from('%PDF-1.4 fake pdf content for metadata test');
+    const formData = new FormData();
+    formData.append('file', new Blob([pdfContent], { type: 'application/pdf' }), `${metadataTestDocId}.pdf`);
+
+    const uploadResponse = await fetch(`${BASE_URL}/api/v1/files/upload`, {
+      method: 'POST',
+      headers: {
+        'X-Session-ID': reviewerSession.sessionId
+      },
+      body: formData
+    });
+
+    assert.ok(uploadResponse.ok, 'PDF upload should succeed');
+    const uploadResult = await uploadResponse.json();
+    const pdfFileId = uploadResult.file_id;
+    logger.info(`Uploaded PDF with file_id: ${pdfFileId}`);
+
+    // Get initial PDF metadata (should have no label or doc_metadata)
+    const initialMetadataResponse = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      `/files/metadata?file_id=${pdfFileId}`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    logger.info(`Initial PDF metadata: label="${initialMetadataResponse.label}", has doc_metadata=${!!initialMetadataResponse.doc_metadata}`);
+
+    // Now save a gold standard TEI with full metadata
+    const teiXml = createTeiXmlWithMetadata(metadataTestDocId, 'grobid-segmentation');
+
+    const saveResponse = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/save',
+      'POST',
+      {
+        file_id: metadataTestDocId,
+        xml_string: teiXml,
+        new_version: false
+      },
+      BASE_URL
+    );
+
+    assert.ok(saveResponse, 'Should save TEI file');
+    assert.strictEqual(saveResponse.status, 'new_gold', 'Should create new gold standard');
+    const teiFileId = saveResponse.file_id;
+    logger.success(`Created gold TEI with file_id: ${teiFileId}`);
+
+    // Get updated PDF metadata
+    const updatedMetadataResponse = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      `/files/metadata?file_id=${pdfFileId}`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    // Verify PDF metadata was updated
+    assert.ok(updatedMetadataResponse.label, 'PDF should have a label after TEI save');
+    assert.strictEqual(
+      updatedMetadataResponse.label,
+      'Smith (2023) Machine Learning in Digital Humanities',
+      'PDF label should be formatted as "Author (Year) Title"'
+    );
+
+    assert.ok(updatedMetadataResponse.doc_metadata, 'PDF should have doc_metadata');
+    assert.strictEqual(
+      updatedMetadataResponse.doc_metadata.title,
+      'Machine Learning in Digital Humanities',
+      'PDF doc_metadata should include title'
+    );
+    assert.strictEqual(
+      updatedMetadataResponse.doc_metadata.date,
+      '2023',
+      'PDF doc_metadata should include date'
+    );
+    assert.strictEqual(
+      updatedMetadataResponse.doc_metadata.publisher,
+      'Academic Press',
+      'PDF doc_metadata should include publisher'
+    );
+
+    logger.success('PDF metadata correctly updated from gold TEI');
+
+    // Cleanup
+    await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/release_lock',
+      'POST',
+      { file_id: teiFileId },
+      BASE_URL
+    );
+
+    await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/delete',
+      'POST',
+      { files: [teiFileId, pdfFileId] },
+      BASE_URL
+    );
+  });
+
+  // Test: Version files should NOT update PDF metadata
+  test('POST /api/files/save should NOT update PDF metadata when saving version (non-gold) TEI', async () => {
+    const versionTestDocId = `test-version-no-update-${testRunId}`;
+
+    // Upload PDF
+    const pdfContent = Buffer.from('%PDF-1.4 fake pdf for version test');
+    const formData = new FormData();
+    formData.append('file', new Blob([pdfContent], { type: 'application/pdf' }), `${versionTestDocId}.pdf`);
+
+    const uploadResponse = await fetch(`${BASE_URL}/api/v1/files/upload`, {
+      method: 'POST',
+      headers: {
+        'X-Session-ID': reviewerSession.sessionId
+      },
+      body: formData
+    });
+
+    const uploadResult = await uploadResponse.json();
+    const pdfFileId = uploadResult.file_id;
+
+    // Create gold standard first with basic metadata
+    const goldTeiXml = createTeiXml(versionTestDocId, 'Gold content');
+    const goldSaveResponse = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/save',
+      'POST',
+      {
+        file_id: versionTestDocId,
+        xml_string: goldTeiXml,
+        new_version: false
+      },
+      BASE_URL
+    );
+
+    const goldFileId = goldSaveResponse.file_id;
+
+    // Release lock on gold file
+    await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/release_lock',
+      'POST',
+      { file_id: goldFileId },
+      BASE_URL
+    );
+
+    // Get PDF metadata after gold save
+    const afterGoldMetadata = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      `/files/metadata?file_id=${pdfFileId}`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    const goldLabel = afterGoldMetadata.label;
+    logger.info(`PDF label after gold save: "${goldLabel}"`);
+
+    // Now create a version with DIFFERENT metadata (as annotator)
+    const versionTeiXml = createTeiXmlWithMetadata(versionTestDocId);
+    const versionSaveResponse = await authenticatedApiCall(
+      annotatorSession.sessionId,
+      '/files/save',
+      'POST',
+      {
+        file_id: versionTestDocId,
+        xml_string: versionTeiXml,
+        new_version: true
+      },
+      BASE_URL
+    );
+
+    assert.strictEqual(versionSaveResponse.status, 'new', 'Should create new version');
+    const versionFileId = versionSaveResponse.file_id;
+    logger.info(`Created version TEI with file_id: ${versionFileId}`);
+
+    // Get PDF metadata after version save
+    const afterVersionMetadata = await authenticatedApiCall(
+      reviewerSession.sessionId,
+      `/files/metadata?file_id=${pdfFileId}`,
+      'GET',
+      null,
+      BASE_URL
+    );
+
+    // Verify PDF metadata was NOT changed by version save
+    assert.strictEqual(
+      afterVersionMetadata.label,
+      goldLabel,
+      'PDF label should NOT change when saving version TEI'
+    );
+
+    // The metadata should NOT have been updated with the version's metadata
+    if (afterVersionMetadata.doc_metadata) {
+      assert.notStrictEqual(
+        afterVersionMetadata.doc_metadata.title,
+        'Machine Learning in Digital Humanities',
+        'PDF metadata should NOT be updated from version TEI'
+      );
+    }
+
+    logger.success('PDF metadata correctly NOT updated from version TEI');
+
+    // Cleanup
+    await authenticatedApiCall(
+      annotatorSession.sessionId,
+      '/files/release_lock',
+      'POST',
+      { file_id: versionFileId },
+      BASE_URL
+    );
+
+    await authenticatedApiCall(
+      reviewerSession.sessionId,
+      '/files/delete',
+      'POST',
+      { files: [goldFileId, versionFileId, pdfFileId] },
       BASE_URL
     );
   });

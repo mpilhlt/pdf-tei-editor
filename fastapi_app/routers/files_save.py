@@ -401,6 +401,19 @@ async def save_file(
                     )
                 )
 
+        # Update PDF metadata from TEI (only for gold standard files)
+            if existing_file.is_gold_standard and tei_metadata:
+                pdf_file = file_repo.get_pdf_for_document(doc_id)
+                if pdf_file:
+                    from ..lib.tei_utils import update_pdf_metadata_from_tei
+                    update_pdf_metadata_from_tei(
+                        pdf_file,
+                        tei_metadata,
+                        file_repo,
+                        logger_inst,
+                        doc_collections=doc_collections
+                    )
+
             return SaveFileResponse(status="saved", file_id=existing_file.stable_id)
 
         elif request.new_version or (not existing_file and existing_gold and existing_gold.variant == variant):
@@ -413,7 +426,7 @@ async def save_file(
 
         # Get next version number
             latest_version = file_repo.get_latest_tei_version(doc_id, variant)
-            next_version = (latest_version.version + 1) if latest_version else 1
+            next_version = ((latest_version.version or 0) + 1) if latest_version else 1
 
             logger_inst.info(f"Creating version {next_version} for doc_id={doc_id}, variant={variant}")
 
@@ -508,6 +521,17 @@ async def save_file(
         # Now acquire lock using stable_id
             if not acquire_lock(created_file.stable_id, session_id, settings.db_dir, logger_inst):
                 raise HTTPException(status_code=423, detail="Failed to acquire lock")
+
+        # Update PDF metadata from TEI (for new gold standard)
+            if pdf_file and tei_metadata:
+                from ..lib.tei_utils import update_pdf_metadata_from_tei
+                update_pdf_metadata_from_tei(
+                    pdf_file,
+                    tei_metadata,
+                    file_repo,
+                    logger_inst,
+                    doc_collections=doc_collections
+                )
 
             status = "new_gold"
             return SaveFileResponse(status=status, file_id=created_file.stable_id)

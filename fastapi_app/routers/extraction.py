@@ -320,56 +320,14 @@ def _save_pdf_extraction_result(
 
     # Update PDF metadata from extracted TEI
     if tei_metadata:
-        from ..lib.models import FileUpdate
-
-        # Get doc_metadata that was extracted
-        doc_metadata = tei_metadata.get('doc_metadata', {})
-
-        # Build a label for the PDF from metadata
-        # Priority: title, DOI, or keep existing
-        pdf_label = None
-        if 'title' in doc_metadata:
-            title = doc_metadata['title']
-            # Format: Author (Year) Title
-            author_part = ""
-            if 'authors' in doc_metadata and doc_metadata['authors']:
-                first_author = doc_metadata['authors'][0]
-                if 'family' in first_author:
-                    author_part = first_author['family']
-
-            date_part = ""
-            if 'date' in doc_metadata:
-                date_part = f"({doc_metadata['date']})"
-
-            # Build label with author and date first, then title
-            if author_part and date_part:
-                pdf_label = f"{author_part} {date_part} {title}"
-            elif author_part:
-                pdf_label = f"{author_part} {title}"
-            elif date_part:
-                pdf_label = f"{date_part} {title}"
-            else:
-                pdf_label = title
-        elif tei_metadata.get('doc_id'):
-            # Use DOI/doc_id if available
-            pdf_label = tei_metadata['doc_id']
-
-        # Update PDF file with extracted metadata and collection
-        if doc_metadata or pdf_label or doc_collections:
-            updates = FileUpdate()
-            if doc_metadata:
-                updates.doc_metadata = doc_metadata
-            if pdf_label:
-                updates.label = pdf_label
-            # Sync PDF's collection to match TEI file's collection
-            if doc_collections:
-                updates.doc_collections = doc_collections
-
-            try:
-                repo.update_file(pdf_metadata.id, updates)
-                logger.info(f"Updated PDF metadata: {pdf_metadata.id[:8]}... label='{pdf_label}', collections={doc_collections}")
-            except Exception as e:
-                logger.warning(f"Failed to update PDF metadata: {e}")
+        from ..lib.tei_utils import update_pdf_metadata_from_tei
+        update_pdf_metadata_from_tei(
+            pdf_metadata,
+            tei_metadata,
+            repo,
+            logger,
+            doc_collections=doc_collections
+        )
 
     logger.info(f"Saved extraction result: {tei_hash[:8]}... (doc_id={pdf_metadata.doc_id}, variant={variant}, label={label})")
 
