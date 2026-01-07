@@ -402,6 +402,11 @@ async function update(state) {
   if (!state.xml) {
     xmlEditor.clear()
     xmlEditor.setReadOnly(true)
+    // Clear visual indicators when no document is loaded
+    ui.xmlEditor.classList.remove("editor-readonly")
+    if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
+      ui.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id)
+    }
     return
   }
 
@@ -409,16 +414,22 @@ async function update(state) {
   if (state.editorReadOnly !== xmlEditor.isReadOnly()) {
     xmlEditor.setReadOnly(state.editorReadOnly)
     logger.debug(`Setting editor read-only state to ${state.editorReadOnly}`)
-    if (state.editorReadOnly) {
+  }
+
+  // Update visual indicators based on state (always, to handle lock conflicts)
+  if (state.editorReadOnly) {
+    if (!ui.xmlEditor.classList.contains("editor-readonly")) {
       ui.xmlEditor.classList.add("editor-readonly")
-      if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.add(readOnlyStatusWidget, 'left', 5)
-      }
-    } else {
+    }
+    if (readOnlyStatusWidget && !readOnlyStatusWidget.isConnected) {
+      ui.xmlEditor.statusbar.add(readOnlyStatusWidget, 'left', 5)
+    }
+  } else {
+    if (ui.xmlEditor.classList.contains("editor-readonly")) {
       ui.xmlEditor.classList.remove("editor-readonly")
-      if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
-        ui.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id)
-      }
+    }
+    if (readOnlyStatusWidget && readOnlyStatusWidget.isConnected) {
+      ui.xmlEditor.statusbar.removeById(readOnlyStatusWidget.id)
     }
   }
 
